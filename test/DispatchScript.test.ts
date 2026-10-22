@@ -17,6 +17,7 @@ import {
 
 const script = fileURLToPath(new URL("../scripts/dispatch-session.ts", import.meta.url));
 const origin = "http://localhost:7172";
+const existingCwd = "/srv/piano/existing";
 
 function fixture(t: TestContext) {
   const dir = mkdtempSync(join(tmpdir(), "piano-dispatch-"));
@@ -97,6 +98,69 @@ async function peer(t: TestContext) {
         const message = decodeClientMessage(payload.toString());
         requests.push(message);
         if (message._tag === "ping") send({ _tag: "pong", nonce: message.nonce });
+        // One existing session, "portable-session", running in `existingCwd`.
+        if (message._tag === "session_status" && "sessionId" in message.target)
+          send({
+            _tag: "session_status",
+            requestId: message.requestId,
+            result:
+              message.target.sessionId === "portable-session"
+                ? {
+                    status: "ready",
+                    sessions: [
+                      {
+                        sessionId: "portable-session",
+                        cwd: existingCwd,
+                        projectId: null,
+                        disposition: "running",
+                        since: null,
+                        needs: null,
+                        lastAnswer: null,
+                        changes: null,
+                      },
+                    ],
+                  }
+                : { status: "error", detail: "Piano does not list this session." },
+          });
+        if (message._tag === "select") {
+          const cursor = {
+            cwd: message.cwd,
+            sessionId: "portable-session",
+            generation: "generation",
+            sequence: 1,
+          };
+          send({
+            _tag: "selected",
+            selectionId: message.selectionId,
+            cwd: message.cwd,
+            sessionId: message.sessionId,
+            hosted: true,
+            cursor,
+            snapshot: {
+              messages: [],
+              dialogs: [],
+              state: { sessionId: "portable-session", isStreaming: true },
+            },
+          });
+        }
+        if (
+          message._tag === "act" &&
+          (message.action._tag === "prompt" || message.action._tag === "steer")
+        )
+          send({
+            _tag: "session",
+            selectionId: message.selectionId,
+            cursor: {
+              cwd: existingCwd,
+              sessionId: "portable-session",
+              generation: "generation",
+              sequence: 2,
+            },
+            event: {
+              _tag: "submission",
+              submission: { id: 2, inputId: message.action.inputId, outcome: "queued" },
+            },
+          });
         if (message._tag === "create_session") {
           const cursor = {
             cwd: message.cwd,
@@ -214,4 +278,46 @@ test("invalid configuration and input fail before network side effects and reser
   assert.equal((await run([f.prompt, f.cwd, out], p.url)).code, 2);
   assert.equal(existsSync(out), false);
   assert.deepEqual(p.requests, []);
+});
+
+test("CLI follows up on a session Piano lists, in its directory, and prints Pi's handling", async (t) => {
+  const f = fixture(t);
+  const p = await peer(t);
+  for (const [extra, delivery, action] of [
+    [[], "follow-up", "prompt"],
+    [["--steer"], "steer", "steer"],
+  ] as const) {
+    const result = await run(["follow-up", "portable-session", f.prompt, ...extra], p.url);
+    assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      sessionId: "portable-session",
+      delivery,
+      submission: "queued",
+      link: `${origin}/s/portable-session`,
+    });
+    const act = p.requests.filter((m) => m._tag === "act").at(-1);
+    assert.ok(act?._tag === "act");
+    assert.equal(act.action._tag, action);
+    assert.ok(act.action._tag === "prompt" || act.action._tag === "steer");
+    assert.equal(act.action.text, "Reply with exactly: PORTABLE");
+    const select = p.requests.filter((m) => m._tag === "select").at(-1);
+    assert.ok(select?._tag === "select");
+    assert.equal(select.cwd, existingCwd, "the session is addressed in Piano's directory");
+  }
+  assert.equal(p.requests.filter((m) => m._tag === "act").length, 2);
+});
+
+test("a follow-up to an unknown session or with a blank prompt sends nothing", async (t) => {
+  const f = fixture(t);
+  const p = await peer(t);
+  const unknown = await run(["follow-up", "missing-session", f.prompt], p.url);
+  assert.equal(unknown.code, 2);
+  assert.match(unknown.stderr, /does not list/);
+  writeFileSync(f.prompt, "  \n");
+  assert.equal((await run(["follow-up", "portable-session", f.prompt], p.url)).code, 2);
+  assert.equal((await run(["status", "portable-session", "--steer"], p.url)).code, 2);
+  assert.deepEqual(
+    p.requests.filter((m) => m._tag !== "session_status" && m._tag !== "ping"),
+    [],
+  );
 });

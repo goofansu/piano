@@ -15,6 +15,8 @@ import { createHash } from "node:crypto";
 import {
   type Attribution,
   type CreatedWorktree,
+  type FollowUpDelivery,
+  type FollowUpResult,
   type SessionCreation,
   type SessionHandle,
   type SessionObservation,
@@ -31,6 +33,7 @@ import { liveActivityOf } from "../../shared/sessionStatus.ts";
 import { turnEnding } from "../../shared/turnEnding.ts";
 import {
   type ClientMessage,
+  type PromptSubmission,
   type RenderMsg,
   type ServerMessage,
   type SessionClosure,
@@ -57,6 +60,8 @@ export interface StartRequest {
 
 export type {
   Attribution,
+  FollowUpDelivery,
+  FollowUpResult,
   SessionCreation,
   SessionHandle,
   SessionObservation,
@@ -922,6 +927,140 @@ export function waitSessions(
         attention.abort();
       return result;
     }),
+  );
+}
+
+// ── Sending a follow-up ─────────────────────────────────────────────────────
+
+export interface FollowUpRequest {
+  /** Piano's spelling of the session's directory, as a status read reports it. */
+  readonly cwd: string;
+  readonly sessionId: string;
+  readonly text: string;
+  readonly delivery: FollowUpDelivery;
+}
+
+/** A follow-up waits this long for Pi's handling of the message. */
+const FOLLOW_UP_DEADLINE_MS = 30_000;
+/** After Piano reports a failed send, how long its own submission frame may still arrive. */
+const FAILURE_GRACE_MS = 1_000;
+
+/**
+ * Sends `text` to an existing session the way the composer does: select it, then one `act`
+ * (starting a stopped Pi, with the session's own model and effort). The `act` is sent at most
+ * once. A loss before it re-selects; a loss after it reports `uncertain` and never resends, since
+ * Pi may already hold the message (INV-02).
+ */
+export function sendFollowUp(
+  request: FollowUpRequest,
+  environment: SocketEnvironment,
+  signal?: AbortSignal,
+): Promise<FollowUpResult> {
+  const { cwd, sessionId, text, delivery } = request;
+  return observe<FollowUpResult>(
+    environment,
+    { deadlineMs: FOLLOW_UP_DEADLINE_MS, signal },
+    (link, settle) => {
+      let selectionId: string | null = null;
+      let inputId: string | null = null;
+      let failed = false;
+      const result = (
+        submission: FollowUpResult["submission"],
+        detail?: string,
+      ): FollowUpResult => ({
+        sessionId,
+        delivery,
+        submission,
+        ...(detail === undefined ? {} : { detail }),
+      });
+      const unsent = (detail: string) => result("not_sent", detail);
+      const unconfirmed = (detail: string) =>
+        result("uncertain", `${detail} Read the session's status before sending again.`);
+      /** Before the act, nothing reached Piano; after it, Pi may hold the message. */
+      const ended = (before: string, after: string) =>
+        inputId === null ? unsent(before) : unconfirmed(after);
+      /** Settles on this message's own final submission; `submitting` is not an outcome. */
+      const apply = (submission: PromptSubmission | undefined) => {
+        if (inputId === null || submission?.inputId !== inputId) return;
+        if (submission.outcome !== "submitting")
+          settle(result(submission.outcome, submission.detail));
+      };
+      return {
+        connected: () => {
+          if (inputId !== null) {
+            settle(unconfirmed("The connection was lost after the message was sent."));
+            return;
+          }
+          // Nothing was sent yet: attaching again is safe.
+          selectionId = link.nonce();
+          link.send({ _tag: "select", selectionId, cwd, sessionId });
+        },
+        disconnected: (fatal) => {
+          const detail = "The connection was dropped for a frame over the delivery limit.";
+          if (fatal) settle(ended(detail, detail));
+        },
+        message: (message) => {
+          if (selectionId === null || selectionOf(message) !== selectionId) return;
+          switch (message._tag) {
+            case "selected":
+              if (inputId === null) {
+                if (message.sessionId !== sessionId) {
+                  settle(unsent("Piano did not open this session."));
+                  return;
+                }
+                // The selection is a claim on this connection; the act must reuse it.
+                inputId = selectionId;
+                link.send({
+                  _tag: "act",
+                  selectionId,
+                  action: {
+                    _tag: delivery === "steer" ? "steer" : "prompt",
+                    text,
+                    inputId,
+                  },
+                  start: {},
+                });
+                return;
+              }
+              // A stopped session started by the act is shown again under this selection.
+              apply(message.snapshot.state.submission);
+              return;
+            case "session": {
+              const event = message.event;
+              if (event._tag === "submission") apply(event.submission);
+              else if (event._tag === "state") apply(event.state.submission);
+              else if (event._tag === "snapshot") apply(event.snapshot.state.submission);
+              return;
+            }
+            case "selection_rejected":
+            case "selection_failed":
+            case "error":
+              if (inputId === null) {
+                settle(unsent(message.message));
+                return;
+              }
+              // Piano reports a failure apart from the session's frames; Pi's own verdict on the
+              // message, when there is one, may still be on its way.
+              if (failed) return;
+              failed = true;
+              link.after(FAILURE_GRACE_MS, () => settle(unconfirmed(message.message)));
+              return;
+            default:
+              return;
+          }
+        },
+        deadline: () =>
+          ended(
+            "Piano did not open the session before the deadline.",
+            "Pi did not acknowledge the message before the deadline.",
+          ),
+        aborted: () =>
+          ended(
+            "The follow-up was abandoned before it was sent.",
+            "Observation was abandoned after the message was sent.",
+          ),
+      };
+    },
   );
 }
 

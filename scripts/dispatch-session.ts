@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-/** Start a Piano session, or read sessions' status, from a terminal, over the same dispatch modules
- * the Pi extension uses. Piano places the directory: a linked worktree is listed under its main
+/** Start a Piano session, send a running one a follow-up, or read sessions' status, from a
+ * terminal, over the same dispatch modules the Pi extension uses. Piano places the directory: a linked worktree is listed under its main
  * checkout's folder, and `--worktree` has Piano create a new one first. */
 import { closeSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -12,6 +12,7 @@ import {
 import {
   readStatus,
   type StatusTarget,
+  sendFollowUp,
   startSession,
   withLinks,
 } from "../extensions/piano-sessions/SessionDispatch.ts";
@@ -19,6 +20,7 @@ import { ThinkingLevel } from "../shared/wire.ts";
 
 const levels = ThinkingLevel.literals.join(", ");
 const usage = `Usage: node scripts/dispatch-session.ts <prompt-file> <cwd> [out-file] [options]
+       node scripts/dispatch-session.ts follow-up <sessionId> <prompt-file> [--steer] [--ws-url URL] [--origin ORIGIN]
        node scripts/dispatch-session.ts status <sessionId> [--ws-url URL] [--origin ORIGIN]
        node scripts/dispatch-session.ts list --project <projectId> [--ws-url URL] [--origin ORIGIN]
 
@@ -30,15 +32,18 @@ Options:
   --hooks               With --worktree, run approved Worktrunk hooks (default: off)
   --model provider/id   New session model; omitted uses Piano's default
   --thinkingLevel LEVEL  ${levels}; omitted uses Piano's default
+  --steer               With follow-up, steer the current run at Pi's next tool boundary instead
+                        of waiting for it to finish
   --project ID          With list, the project whose active sessions to read
   --help               Show this help
 
 A start prints its JSON to stdout, and optionally saves it exclusively to out-file.
+follow-up prints Pi's handling of the message (submission) and the session link.
 status prints one session's status JSON; list prints one status JSON object per line.
 Exit codes: 0 result reported (inspect creation/submission), 1 unexpected failure,
 2 invalid input/configuration (including a session or project Piano does not list),
 3 output already exists.
-Never automatically retry an uncertain dispatch; inspect Piano first.`;
+Never automatically retry an uncertain dispatch or follow-up; inspect Piano first.`;
 
 class CliError extends Error {
   readonly exitCode: number;
@@ -60,6 +65,7 @@ function argumentsFromCommandLine() {
         thinkingLevel: { type: "string" },
         worktree: { type: "string" },
         hooks: { type: "boolean" },
+        steer: { type: "boolean" },
         project: { type: "string" },
       },
     });
@@ -70,6 +76,17 @@ function argumentsFromCommandLine() {
 
 const sessionLink = (origin: string, sessionId: string) =>
   new URL(`/s/${encodeURIComponent(sessionId)}`, origin).href;
+
+/** The prompt file's text; an unreadable or blank file is invalid input. */
+function promptFrom(file: string) {
+  try {
+    const prompt = readFileSync(file, "utf8");
+    if (!prompt.trim()) throw new Error("prompt file must not be empty");
+    return prompt;
+  } catch (error) {
+    throw new CliError(2, (error as Error).message);
+  }
+}
 
 const isThinkingLevel = (value: string): value is ThinkingLevel =>
   (ThinkingLevel.literals as readonly string[]).includes(value);
@@ -94,6 +111,28 @@ async function main() {
     return config;
   };
   const command = positionals[0];
+  if (values.steer && command !== "follow-up")
+    throw new CliError(2, "--steer belongs to follow-up");
+  if (command === "follow-up") {
+    if (positionals.length !== 3 || values.project !== undefined) throw new CliError(2, usage);
+    const sessionId = positionals[1]!;
+    const text = promptFrom(positionals[2]!);
+    const { origin } = configured();
+    // The status read names the session's directory, and refuses a session Piano does not list.
+    const reply = await readStatus({ sessionId }, nodeSocketEnvironment(configured()));
+    if (reply.status === "error") throw new CliError(2, reply.detail);
+    const result = await sendFollowUp(
+      {
+        cwd: reply.sessions[0]!.cwd,
+        sessionId,
+        text,
+        delivery: values.steer ? "steer" : "follow-up",
+      },
+      nodeSocketEnvironment(configured()),
+    );
+    console.log(JSON.stringify({ ...result, link: sessionLink(origin, sessionId) }, null, 2));
+    return;
+  }
   if (command === "status" || command === "list") {
     let target: StatusTarget;
     if (command === "status") {
@@ -129,14 +168,12 @@ async function main() {
   const { origin } = configured();
   const [promptFile, rawCwd, outFile] = positionals;
   const cwd = resolve(rawCwd);
-  let prompt: string;
   try {
     if (!statSync(cwd).isDirectory()) throw new Error("cwd must be a directory");
-    prompt = readFileSync(promptFile, "utf8");
-    if (!prompt.trim()) throw new Error("prompt file must not be empty");
   } catch (error) {
     throw new CliError(2, (error as Error).message);
   }
+  const prompt = promptFrom(promptFile);
   let output: number | undefined;
   if (outFile !== undefined) {
     try {
