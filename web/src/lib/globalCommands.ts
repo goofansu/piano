@@ -4,11 +4,16 @@
  * View menu and the New session page's trust toggle render these instead of each deciding.
  */
 // Relative, not @shared: module tests load this file directly in Node.
-import type { ClientCommand, Project } from "../../../shared/wire.ts";
+import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.ts";
-import { findProject } from "./projectCommands.ts";
+import {
+  deleteProjectCommand,
+  findProject,
+  type ProjectCommandOf,
+  projectSettingsCommand,
+} from "./projectCommands.ts";
 import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
 import { focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
@@ -62,10 +67,8 @@ export type GlobalCommandIntent =
   | { kind: "settings"; section?: SettingsSection }
   /** Open the New session page, for `projectId` when given. */
   | { kind: "new-session"; projectId?: string }
-  /** Open the project's settings page. */
-  | { kind: "project-settings"; projectId: string }
-  /** Ask before deleting the project. */
-  | { kind: "delete-project"; project: Project }
+  /** A project home's Project settings or Delete project, as the project's own menu runs it. */
+  | ProjectHomeCommand["intent"]
   /** Send this registry or Pi change. */
   | { kind: "send"; command: ClientCommand }
   | { kind: "toggle-sidebar" }
@@ -131,28 +134,29 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
   };
 }
 
-/** On a project's home, its header menu's Project settings and Delete project; the home itself starts sessions. */
-function projectSettingsRow(state: AppState): GlobalCommand[] {
+type ProjectHomeCommand = ProjectCommandOf<
+  "project-settings" | "delete-project",
+  "settings" | "delete"
+>;
+
+/**
+ * On a project's home, its header menu's Project settings and Delete project, as the project's
+ * commands describe them; the home itself starts sessions.
+ */
+function projectHomeRows(state: AppState): GlobalCommand[] {
   const project = state.view.kind === "project" ? findProject(state, state.view.projectId) : null;
   if (!project) return [];
+  const row = (id: GlobalCommandId, c: ProjectHomeCommand): GlobalCommand => ({
+    id,
+    label: c.label,
+    icon: c.icon,
+    group: "navigate",
+    enabled: c.enabled,
+    intent: c.intent,
+  });
   return [
-    {
-      id: "project-settings",
-      label: "Project settings",
-      icon: "settings",
-      group: "navigate",
-      enabled: true,
-      intent: { kind: "project-settings", projectId: project.id },
-    },
-    {
-      id: "delete-project",
-      label: "Delete project",
-      icon: "delete",
-      group: "navigate",
-      // It asks first; the deletion itself changes the registry, so it waits for a connection.
-      enabled: state.connected,
-      intent: { kind: "delete-project", project },
-    },
+    row("project-settings", projectSettingsCommand(project)),
+    row("delete-project", deleteProjectCommand(state, project)),
   ];
 }
 
@@ -201,7 +205,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       enabled: true,
       intent: { kind: "new-session" },
     },
-    ...projectSettingsRow(state),
+    ...projectHomeRows(state),
     ...(trust ? [trust] : []),
     {
       id: "toggle-sidebar",
