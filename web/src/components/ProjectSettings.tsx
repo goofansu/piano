@@ -1,6 +1,7 @@
 import { type ClientCommand, PROJECT_INSTRUCTIONS_MAX, type Project } from "@shared/wire";
 import { MoreHorizontalIcon } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
 import {
   DropdownMenu,
@@ -83,6 +84,18 @@ function ProjectSettingsForm({
   });
   const save = projectSettingsSave(state, project.id, draft);
   const remove = projectCommand(state, project, "delete");
+  // A save answers once the registry holds it; a refused one is already told by the client.
+  const [saving, setSaving] = useState<typeof draft | null>(null);
+  useEffect(() => {
+    if (
+      saving &&
+      project.name === saving.name.trim() &&
+      (project.instructions ?? "") === saving.instructions.trim()
+    ) {
+      toast.success("Project saved");
+      setSaving(null);
+    }
+  }, [saving, project]);
   return (
     <>
       <ProjectHeader
@@ -125,7 +138,9 @@ function ProjectSettingsForm({
           id={formId}
           onSubmit={(event) => {
             event.preventDefault();
-            if (save.allowed) for (const command of save.commands) send(command);
+            if (!save.allowed) return;
+            for (const command of save.commands) send(command);
+            setSaving(draft);
           }}
         >
           <FieldGroup>
