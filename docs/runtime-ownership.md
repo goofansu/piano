@@ -1,6 +1,6 @@
 # Runtime ownership behind PiSessions
 
-PIN-11 follows the [transport failure audit](research/pin-10-transport-failures.md).
+PIN-11 follows the [transport failure policy](#transport-failure-policy-pin-10).
 The public interface remains `PiSessions.open/probe/history` and a session's
 `events/act/state/commands` plus `prepareRelease` (PIN-99: preview admission/cleanup before scope
 release). Callers and behavioral tests do not import PiTransport.
@@ -58,9 +58,35 @@ Existing `DialogLifecycle`, `SessionDelivery` and `SessionReadbacks` tests prote
 claim-before-transport, atomic attachment/sequence and stale-readback contracts. The compile-only
 `test/SessionPublication.types.ts` additionally rejects direct mutation and unguarded dialog opening.
 
-## Verification (historical PIN-11 refactor)
+## Transport failure policy (PIN-10)
 
-PIN-99 lifecycle evidence is [recorded separately](research/pin-99-preview-lifetime.md).
+Contracts: INV-02/03/04/05/11. Pi RPC record validation is in the
+[PIN-7 failure policy](research/2026-10-12-pi-rpc-failures.md).
+
+| Boundary | Recovery policy |
+| --- | --- |
+| Pi stdout framing, JSON/envelope, record capacity, reader failure or premature EOF | Fail the session, settle pending requests/writes, end queues, kill the unusable child. No replay. |
+| Pi stdin sink failure | Use the same terminal failure path, after failing writes/requests as transport-uncertain. Raw cause text is not delivered. |
+| Pi record consumer | Unexpected processing failure terminates the child and publishes closure after the consumer signals completion. Scope interruption is ordinary shutdown, not failure. |
+| Pi exit observation | Unexpected failure terminates the child with a fixed diagnostic; ordinary scope interruption is not a crash. |
+| Pi stderr reader | Continue RPC, with one server warning that exit diagnostics may be incomplete. Stderr is diagnostic-only; do not expose raw reader causes. |
+| Kill after failure / shutdown | Best-effort kill errors remain suppressed: terminal state is already settled, and the scoped process resource still owns cleanup. Do not replace the original failure with a kill race. |
+| RPC acknowledgement / write deadline | Report uncertain delivery, retain uncertainty for retirement, never retry a mutation. Capacity refusal is rejected before delivery, not uncertain. |
+| Dialog deadline / abort cancellation | `resolveDialog` claims once and publishes written/uncertain/not-sent before returning its typed failure. Timer/abort callers suppress that already-reported error to continue resolving other dialogs. Exit resolution sends nothing. |
+| Usage/context/state readbacks | Continue with retained values and existing refresh-error state. Obsolete observations cannot overwrite newer operations. Optional run-ledger reads retain last usage on failure; cursor reset retries only a read, never a mutation. |
+| Socket reader | Peer close and scope interruption end the client scope normally. Unexpected read/dispatch failure sends 1011 with reconnect guidance. Session-owned Pi work survives; reconnect is snapshot-only. |
+| Socket close write | Best effort: a dead peer cannot receive its close reason. Client scope still closes. No resend. |
+| Bounded socket delivery | Overflow/encoding/write failure or missing ack resolves the first close reason. 1009 means oversized view; 1013 means reconnect for a snapshot. Writer failure never retries frames. |
+| Client session attachment | DeliveryOverflow closes the socket via output. Stream completion detaches and releases readiness; next action may reopen an exited session. The trailing `Effect.ignore` has no remaining typed error after overflow handling (it does not catch defects). |
+| Client catalog/host/sidebar subscriptions | Their streams/send have no typed failures; trailing `Effect.ignore` is redundant, not a hidden transport recovery policy. Actual socket writes belong to bounded delivery above. |
+| SessionHosts observer | Retry snapshot subscription on delivery overflow so exit ownership is not lost. This retries observation only; cached-state persistence failures are already warned, not retried as user mutations. |
+| Registry committed-write listeners | Keep catch-and-warn: SQL/config commit already succeeded. Failing the caller would falsely imply rollback and encourage duplicate mutation. |
+| Generic subprocess group kill | Suppress already-exited process/group races; completion/timeout/abort still settles the original command. |
+
+No permanent UI warning reports these failures. Failure text appears only when the corresponding
+session or connection fails, and no raw transport cause is copied into a diagnostic.
+
+## Verification (historical PIN-11 refactor)
 
 Based on `82b042c` plus this extraction, Node v24.21.0, installed dependencies unchanged:
 `npm test` passed all 381 tests; `npm run typecheck` and `npm run lint` passed.

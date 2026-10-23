@@ -13,7 +13,10 @@ coverage percentage.
    For a bug, reproduce it before fixing it when feasible. Do not invent a reproduction result.
 3. Make one coherent change, run the relevant check and inspect the actual outcome. When adding
    behavior tests, work in small red/green increments instead of speculative test batches.
-4. Retain evidence tied to the tested revision (including dirty changes), environment and commands.
+4. Retain evidence tied to the tested revision (including dirty changes), environment and commands,
+   on the PR: summarize it in the description and attach output, screenshots or recordings with
+   `gh pr comment --attach`. Do not commit evidence to the repository; see
+   [Completion evidence](#completion-evidence).
    For regressions, show failure before the fix and success after it when feasible; verify that the
    failure was the intended defect, not a broken fixture or missing dependency.
 5. Stop when the acceptance claim and relevant risk are covered and required gates pass. Broaden
@@ -162,6 +165,25 @@ JS
 ±1. Keep the output with the screenshot: the screenshot shows the row, the numbers show it is
 aligned.
 
+## Folder and registry benchmark
+
+`test/performance-folder-registry.mjs` measures folder-picker and registry latency and event-loop
+stalls against a scratch backend:
+
+```sh
+node test/performance-folder-registry.mjs <scratchpad>/piano-performance.json
+# Short controlled slow-folder reproduction (adds 1 ms to each filesystem metadata operation):
+PIANO_BENCH_SLOW_ONLY=1 node test/performance-folder-registry.mjs <scratchpad>/piano-performance-slow.json
+```
+
+Run it uncontended, apart from the test suite and browser checks. It requires Node 24, Git and Linux
+`ss`. It starts `server/main.ts` on an ephemeral loopback port with a temporary SQLite registry,
+isolated home/config/Pi directories and `test/fake-pi.mjs`, then deletes its scratch data after
+stopping its own child; no credentials or model calls. JSON and backend logs are written beside the
+output path, whose parent directory must exist. To compare before and after a change, copy
+`test/performance-{folder-registry,monitor}.mjs` into a separate checkout of the base revision and
+run them there too; never against a running checkout or the real registry.
+
 ## Completion evidence
 
 For code or dependency changes, run `npm test`, `npm run typecheck` and `npm run lint` as the repository baseline.
@@ -173,6 +195,11 @@ In the PR, summarize what changed, what evidence supports it, the tested revisio
 any material gaps. Mention whether a regression test was added or why existing coverage/inspection
 was sufficient. Short explanations are enough; do not create a second evidence database in the
 registry or a large ritual for small edits.
+
+Evidence belongs to the PR, not the repository. Do not commit per-issue verification reports,
+captured output, screenshots or recordings, including under `docs/`; `docs/research/` holds
+research notes. When a change settles a lasting policy or contract, record it in the document that
+owns that area, such as [runtime ownership](runtime-ownership.md).
 
 Never weaken a required assertion just to make a change green. Changes to acceptance criteria,
 tests or gates must expose the intended contract change for review. Distinguish a failing check

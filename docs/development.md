@@ -52,5 +52,4 @@ access model.
 Dependency security relies on reviewing Dependabot alerts and security-update pull requests, not on
 a CI audit gate. An owner must turn on **Dependabot alerts** and **Dependabot security updates**
 under **Settings → Security → Advanced Security**. The exe.dev integration cannot read or change
-those settings (it gets HTTP 403), so whether they are on is unverified. See the
-[audit findings and policy](research/pin-16-audit.md).
+those settings (it gets HTTP 403), so whether they are on is unverified.
