@@ -11,6 +11,16 @@ const { adapter } = fakeAdapter(platform, stateRoot, {
   lostReply: false,
   hangOnSubmit: true,
 });
-await adapter.request({ action: "start", workspace, command: ["/bin/false"] }, stateRoot, {
-  origin: "https://test.exe.xyz",
-});
+await adapter.request(
+  { action: "start", workspace, command: ["/bin/false"] },
+  stateRoot,
+  {
+    origin: "https://test.exe.xyz",
+  },
+  {
+    generation: "test-generation",
+    sessionId: "test-session",
+    workspace,
+    endpoint: "/unused-test-socket",
+  },
+);

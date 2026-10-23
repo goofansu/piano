@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// Short-lived JSON adapter; systemd, not this process, owns the app.
+// Session client, or read-only/explicit legacy-stop recovery without an owner.
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { PreviewAdapter, type PreviewConfig, type PreviewRequest } from "./PreviewAdapter.ts";
+import { ownerRequest } from "./PreviewClient.ts";
 
 process.umask(0o077);
 try {
@@ -18,7 +19,11 @@ try {
     ? JSON.parse(await readFile(process.env.PIANO_PREVIEW_CONFIG, "utf8"))
     : {};
   const root = process.env.PIANO_PREVIEW_STATE ?? join(homedir(), ".local/state/piano/previews");
-  console.log(JSON.stringify(await new PreviewAdapter().request(request, root, config)));
+  console.log(
+    process.env.PIANO_PREVIEW_OWNER
+      ? await ownerRequest(process.env.PIANO_PREVIEW_OWNER, request)
+      : JSON.stringify(await new PreviewAdapter().request(request, root, config)),
+  );
 } catch (error) {
   console.log(
     JSON.stringify({

@@ -16,10 +16,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
-import { createServer, type Server } from "node:net";
+import { createConnection, createServer, type Server } from "node:net";
 import { isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
 export interface PreviewRequest {
@@ -46,7 +47,15 @@ interface LaunchSpec {
   origin: string;
   path: string;
 }
+/** Trusted by the session broker, never taken from tool arguments. Not a reusable PID. */
+export interface PreviewOwnerIdentity {
+  generation: string;
+  sessionId: string;
+  workspace: string;
+  endpoint: string;
+}
 interface Intent {
+  owner?: PreviewOwnerIdentity;
   serviceId: string;
   instanceId: string;
   unit: string;
@@ -55,6 +64,8 @@ interface Intent {
   port: number;
   createdAt: number;
   invocation?: string;
+  /** Retained for launchd's asynchronous bootout confirmation; never used to signal a PID. */
+  processGroup?: number;
 }
 /** The app's lifecycle in the same words on every supervisor. */
 export type PreviewState = "starting" | "running" | "exited" | "failed" | "stopping" | "not-loaded";
@@ -208,6 +219,21 @@ function httpStatus(port: number, path: string, host: string): Promise<number> {
     request.on("error", reject);
     request.on("close", () => clearTimeout(timer));
     request.end();
+  });
+}
+
+/** Only kernel refusal/absence proves the old generation endpoint is gone. A timeout or any
+ * other observation failure is unknown, so another session must still report a conflict. */
+function ownerGone(endpoint: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection(endpoint);
+    const done = (gone: boolean) => {
+      socket.destroy();
+      resolve(gone);
+    };
+    socket.setTimeout(1000, () => done(false));
+    socket.on("connect", () => done(false));
+    socket.on("error", (error) => done(["ENOENT", "ECONNREFUSED"].includes(code(error) ?? "")));
   });
 }
 
@@ -378,7 +404,7 @@ class Systemd implements Supervisor {
       "--user",
       `--unit=${record.unit}`,
       "--service-type=exec",
-      "--remain-after-exit",
+      ...(record.owner ? [] : ["--remain-after-exit"]),
       "--expand-environment=no",
       `--working-directory=${record.workspace}`,
       "--property=Restart=no",
@@ -410,6 +436,13 @@ class Systemd implements Supervisor {
         .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
     );
     const active = raw.ActiveState;
+    if (
+      !raw.LoadState ||
+      !["active", "activating", "deactivating", "failed", "inactive", "reloading"].includes(active)
+    )
+      throw new Error(
+        "Supervisor state is incomplete or unknown; retain ownership and retry observation.",
+      );
     const state: PreviewState =
       raw.LoadState === "not-found"
         ? "not-loaded"
@@ -417,7 +450,7 @@ class Systemd implements Supervisor {
           ? raw.SubState === "exited"
             ? "exited"
             : "running"
-          : active === "activating"
+          : active === "activating" || active === "reloading"
             ? "starting"
             : active === "deactivating"
               ? "stopping"
@@ -575,16 +608,20 @@ class Launchd implements Supervisor {
     const raw: Record<string, string> = Object.fromEntries(
       [...output.matchAll(/^\t([a-z ]+) = (.*)$/gm)].map((match) => [match[1], match[2]]),
     );
+    if (!raw.state)
+      throw new Error("Supervisor state is incomplete; retain ownership and retry observation.");
     const runs = Number(raw.runs ?? 0);
     const exit = raw["last exit code"];
     const state: PreviewState =
       raw.state === "running"
         ? "running"
-        : exit === "0"
-          ? "exited"
-          : runs === 0 || exit === undefined || exit.startsWith("(never")
-            ? "starting"
-            : "failed";
+        : raw["last terminating signal"]
+          ? "failed"
+          : exit === "0"
+            ? "exited"
+            : runs === 0 || exit === undefined || exit.startsWith("(never")
+              ? "starting"
+              : "failed";
     return { state, invocation: runs > 0 ? `run-${runs}` : undefined, raw };
   }
 
@@ -636,7 +673,7 @@ class Launchd implements Supervisor {
       if (exitStatus(error) !== 3) throw error;
     }
     // bootout returns at once; launchd sends TERM, then KILL after ExitTimeOut (5s).
-    const leader = Number(state.raw.pid);
+    const leader = Number(state.raw.pid ?? record.processGroup);
     if (Number.isInteger(leader) && leader > 1) {
       const deadline = performance.now() + 10000;
       while (this.groupAlive(leader)) {
@@ -739,8 +776,10 @@ export class PreviewAdapter {
     const invocation = state.invocation;
     if (record.invocation && invocation && invocation !== record.invocation)
       throw new Error("Supervisor invocation changed unexpectedly; refusing to adopt or stop it.");
-    if (invocation && !record.invocation) {
-      record.invocation = invocation;
+    const group = this.platform === "darwin" ? Number(state.raw.pid) : undefined;
+    if ((invocation && !record.invocation) || (group && !record.processGroup)) {
+      record.invocation ??= invocation;
+      if (group && group > 1) record.processGroup ??= group;
       await save(path, record);
     }
     return state;
@@ -778,6 +817,13 @@ export class PreviewAdapter {
     }
     return {
       ...record,
+      owner: record.owner
+        ? {
+            sessionId: record.owner.sessionId,
+            generation: record.owner.generation,
+            workspace: record.owner.workspace,
+          }
+        : undefined,
       spec: { ...record.spec, env: Object.keys(record.spec.env) },
       state: state.state,
       supervisor: state.raw,
@@ -792,7 +838,12 @@ export class PreviewAdapter {
     };
   }
 
-  async request(request: PreviewRequest, stateRoot: string, config: PreviewConfig) {
+  async request(
+    request: PreviewRequest,
+    stateRoot: string,
+    config: PreviewConfig,
+    owner?: PreviewOwnerIdentity,
+  ) {
     // Unsupported hosts fail before locking or any launch intent, without affecting Piano.
     const supervisor = this.supervisor;
     if (!supervisor || this.uid <= 0) throw new Error(unsupported);
@@ -801,7 +852,41 @@ export class PreviewAdapter {
     const root = await realpath(stateRoot);
     const mutex = await lock(root);
     try {
-      return await this.handle(supervisor, request, root, config);
+      return await this.handle(supervisor, request, root, config, owner);
+    } finally {
+      unlock(mutex);
+    }
+  }
+
+  /** Serializes owner retirement with every launch/replace, using retained canonical identity.
+   * On idle, errors mean active/unknown, never proof of absence. Explicit cleanup throws. */
+  async retire(owner: PreviewOwnerIdentity, stateRoot: string, idle = false): Promise<boolean> {
+    await mkdir(stateRoot, { recursive: true, mode: 0o700 });
+    const root = await realpath(stateRoot);
+    const mutex = await lock(root);
+    try {
+      const serviceId = `piano-preview-${hash(owner.workspace).slice(0, 24)}`;
+      const path = join(root, `${serviceId}.json`);
+      let record: Intent;
+      try {
+        record = JSON.parse(await readFile(path, "utf8"));
+      } catch (error) {
+        if (code(error) === "ENOENT") return true;
+        throw error;
+      }
+      if (record.owner?.generation !== owner.generation) return true;
+      const supervisor = this.supervisor;
+      if (!supervisor) throw new Error(unsupported);
+      await supervisor.check();
+      if (idle) {
+        const state = await this.current(supervisor, record, path);
+        if (!["exited", "failed", "not-loaded"].includes(state.state)) return false;
+      }
+      await this.stop(supervisor, record, path, root, serviceId);
+      return true;
+    } catch (error) {
+      if (idle) return false;
+      throw error;
     } finally {
       unlock(mutex);
     }
@@ -823,7 +908,8 @@ export class PreviewAdapter {
         throw new Error(
           `Unit not loaded yet; its submission may still be in flight. Re-observe after ${SUBMISSION_GRACE_SECONDS} seconds.`,
         );
-      await supervisor.forget(record, root);
+      if (record.processGroup) await supervisor.stop(record, before, root);
+      else await supervisor.forget(record, root);
       await unlink(path);
       return {
         serviceId,
@@ -844,9 +930,17 @@ export class PreviewAdapter {
     request: PreviewRequest,
     root: string,
     config: PreviewConfig,
+    owner?: PreviewOwnerIdentity,
   ) {
-    const workspace = await realpath(request.workspace);
-    if (!(await stat(workspace)).isDirectory()) throw new Error("workspace must be a directory");
+    // Retained canonical identity also works after the checkout is removed.
+    const workspace =
+      owner?.workspace ??
+      (await realpath(request.workspace).catch((error) => {
+        // Recovery of a legacy intent may need its saved canonical path after checkout removal.
+        if (code(error) === "ENOENT" && request.action !== "start" && isAbsolute(request.workspace))
+          return request.workspace;
+        throw error;
+      }));
     const serviceId = `piano-preview-${hash(workspace).slice(0, 24)}`;
     const path = join(root, `${serviceId}.json`);
     let record: Intent | undefined;
@@ -859,6 +953,26 @@ export class PreviewAdapter {
       return record
         ? this.observe(supervisor, record, path, root)
         : { serviceId, workspace, status: "absent" };
+    if (record && record.owner?.generation !== owner?.generation) {
+      // A restart may clear a *confirmed dead* generation, never adopt its app. Legacy records
+      // have no owner and always require an explicit stop with the pre-upgrade helper.
+      if (owner && request.action === "start" && record.owner) {
+        const state = await this.current(supervisor, record, path);
+        if (
+          ["exited", "failed", "not-loaded"].includes(state.state) &&
+          (await ownerGone(record.owner.endpoint))
+        ) {
+          await this.stop(supervisor, record, path, root, serviceId);
+          record = undefined;
+        }
+      }
+      if (record)
+        throw new Error(
+          record.owner
+            ? `Preview ownership conflict: session ${record.owner.sessionId}, generation ${record.owner.generation} owns this workspace. Ownership cannot transfer. Stop through that owner if still live, or wait for owner-death cleanup and retry after confirmed exit.`
+            : "Legacy independent preview: stop this exact instance with scripts/preview.ts before upgrading/retrying. It cannot be adopted or automatically terminated.",
+        );
+    }
     if (request.action === "stop") {
       if (!request.instanceId)
         throw new Error("stop requires the exact instanceId returned by start/status");
@@ -867,6 +981,11 @@ export class PreviewAdapter {
       return this.stop(supervisor, record, path, root, serviceId);
     }
     if (request.action !== "start") throw new Error("action must be start, status or stop");
+    if (!owner)
+      throw new Error(
+        "Start requires a live Piano session owner. Use piano_preview in that session.",
+      );
+    if (!(await stat(workspace)).isDirectory()) throw new Error("workspace must be a directory");
     // Without a command, a start means "the launch this workspace already has".
     const requested =
       record && request.command === undefined
@@ -904,6 +1023,7 @@ export class PreviewAdapter {
     const port = await choosePort(config, root, spec.origin);
     const instanceId = randomUUID().replaceAll("-", "");
     record = {
+      owner,
       serviceId,
       instanceId,
       unit: supervisor.unit(serviceId, instanceId),
@@ -914,7 +1034,18 @@ export class PreviewAdapter {
     };
     await save(path, record); // Durable intent BEFORE submission; never blindly replay it.
     try {
-      await supervisor.submit(record, appArgv(record), root);
+      await supervisor.submit(
+        record,
+        [
+          process.execPath,
+          fileURLToPath(new URL("./preview-runner.ts", import.meta.url)),
+          owner.endpoint,
+          owner.generation,
+          record.instanceId,
+          ...appArgv(record),
+        ],
+        root,
+      );
     } catch (error) {
       return {
         ...(await this.observe(supervisor, record, path, root)),

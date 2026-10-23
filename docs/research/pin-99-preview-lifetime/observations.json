@@ -1,0 +1,171 @@
+{
+  "revision": "976720654e245a3f992134f358f8d3eeba9c5afa",
+  "platform": "Linux 6.12.113 x86_64; systemd 255; Node 24.22.0",
+  "observations": [
+    {
+      "instanceId": "af6e0042a4294092b461b044c0a645cb",
+      "owner": {
+        "sessionId": "4e0294e3-a58f-49ae-9cc7-f54b6b50b9d9",
+        "generation": "bc17b55e-481b-4a74-b828-b29bb9b388a5",
+        "workspace": "/tmp/piano-preview-MVDAPm/app"
+      },
+      "port": 9400,
+      "state": "running",
+      "ready": true,
+      "invocation": "2ecddebedcc747b4aebe001916852e8f"
+    },
+    {
+      "instanceId": "af6e0042a4294092b461b044c0a645cb",
+      "stopped": true
+    },
+    {
+      "after": "explicit tool stop",
+      "cleanupMs": 1,
+      "instanceId": "af6e0042a4294092b461b044c0a645cb",
+      "pids": [
+        339048,
+        339055,
+        339056
+      ]
+    },
+    {
+      "after": "explicit stop permits idle retirement",
+      "pid": 339000
+    },
+    {
+      "instanceId": "f2680092732a48158f9e85a6292b031a",
+      "owner": {
+        "sessionId": "4e0294e3-a58f-49ae-9cc7-f54b6b50b9d9",
+        "generation": "7992e2e0-f2a1-4369-85ff-6a3770ffb225",
+        "workspace": "/tmp/piano-preview-MVDAPm/app"
+      },
+      "port": 9400,
+      "state": "running",
+      "ready": true,
+      "invocation": "c277d74c7a6d4f69a59a37dd687c71b8"
+    },
+    {
+      "after": "owning Pi SIGKILL, no browser or reopen",
+      "cleanupMs": 5028,
+      "instanceId": "f2680092732a48158f9e85a6292b031a",
+      "pids": [
+        340095,
+        340104,
+        340105
+      ]
+    },
+    {
+      "instanceId": "61f5c8e7f1ef4b7d89c2f27d2e5f3150",
+      "owner": {
+        "sessionId": "4e0294e3-a58f-49ae-9cc7-f54b6b50b9d9",
+        "generation": "9c6ccfff-145d-43be-b172-6534aa3643c2",
+        "workspace": "/tmp/piano-preview-MVDAPm/app"
+      },
+      "port": 9400,
+      "state": "running",
+      "ready": true,
+      "invocation": "cb833c6f57c6430da02621c4032f2a10"
+    },
+    {
+      "after": "Piano SIGTERM before restart",
+      "cleanupMs": 0,
+      "instanceId": "61f5c8e7f1ef4b7d89c2f27d2e5f3150",
+      "pids": [
+        340537,
+        340544,
+        340545
+      ]
+    },
+    {
+      "instanceId": "fc3103f10d7b4e4e8dc27fff882fd86b",
+      "owner": {
+        "sessionId": "4e0294e3-a58f-49ae-9cc7-f54b6b50b9d9",
+        "generation": "763a6dc3-516f-4fe5-80b6-e281777f3be3",
+        "workspace": "/tmp/piano-preview-MVDAPm/app"
+      },
+      "port": 9400,
+      "state": "running",
+      "ready": true,
+      "invocation": "28497c35d6ba4e4f8633338937b13757"
+    },
+    {
+      "after": "Piano SIGKILL before restart",
+      "cleanupMs": 5327,
+      "instanceId": "fc3103f10d7b4e4e8dc27fff882fd86b",
+      "pids": [
+        341023,
+        341030,
+        341031
+      ]
+    },
+    {
+      "instanceId": "212a1cd2cf474b2db8e9951cb922aa8f",
+      "owner": {
+        "sessionId": "4e0294e3-a58f-49ae-9cc7-f54b6b50b9d9",
+        "generation": "18f3000a-098d-4cdc-8574-87bbdd014c0f",
+        "workspace": "/tmp/piano-preview-MVDAPm/app"
+      },
+      "port": 9400,
+      "state": "running",
+      "ready": true,
+      "invocation": "aee28a33132e4eb28c9b8f182eeb9ac6"
+    },
+    {
+      "after": "Archive through command palette",
+      "cleanupMs": 5028,
+      "instanceId": "212a1cd2cf474b2db8e9951cb922aa8f",
+      "pids": [
+        341597,
+        341604,
+        341606
+      ]
+    },
+    {
+      "instanceId": "a57785a22ead4dc99053116511636ea8",
+      "owner": {
+        "sessionId": "36c92a04-35cf-4c2c-bb5d-8550d82fa574",
+        "generation": "22f21c50-efad-45df-9a3c-344fffbd130a",
+        "workspace": "/tmp/piano-preview-MVDAPm/app"
+      },
+      "port": 9400,
+      "state": "running",
+      "ready": true,
+      "invocation": "e1af7f480c9447f2b4ac281dc6b829c7"
+    },
+    {
+      "after": "Delete through command palette and confirmation",
+      "cleanupMs": 5230,
+      "instanceId": "a57785a22ead4dc99053116511636ea8",
+      "pids": [
+        341955,
+        341962,
+        341963
+      ]
+    },
+    {
+      "instanceId": "e0020bd68abf4ae58c2ff08323843185",
+      "owner": {
+        "sessionId": "cc45897d-5901-470a-90e7-9281ef6b9534",
+        "generation": "4e37fce0-12e3-4ac0-86fb-ee2019f203f3",
+        "workspace": "/tmp/piano-preview-MVDAPm/app"
+      },
+      "port": 9400,
+      "state": "running",
+      "ready": true,
+      "invocation": "bef08b0b08294acaafba22e3cdb4ae3b"
+    },
+    {
+      "after": "Archive after checkout removal uses retained ownership",
+      "cleanupMs": 5027,
+      "instanceId": "e0020bd68abf4ae58c2ff08323843185",
+      "pids": [
+        342330,
+        342337,
+        342338
+      ]
+    },
+    {
+      "cleanup": "e0020bd68abf4ae58c2ff08323843185"
+    }
+  ]
+}

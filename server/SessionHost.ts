@@ -23,12 +23,15 @@ export interface SessionHost {
   /** Busy as of now: an admitted action is in flight or Pi is not quiescent (INV-02/03). */
   readonly busy: Effect.Effect<boolean>;
   /** Not closing, not busy, and without activity for `idleMs`. */
-  readonly idle: (idleMs: number) => Effect.Effect<boolean>;
+  readonly idle: (idleMs: number) => Effect.Effect<boolean, PiSessionError>;
   /**
    * Stop the child and mirror its final facts; returns how it closed. The caller holds the
    * ownership lock through actual process exit, not just close intent.
    */
-  readonly close: (closure?: SessionClosure) => Effect.Effect<SessionClosure>;
+  readonly close: (
+    closure?: SessionClosure,
+    shutdown?: boolean,
+  ) => Effect.Effect<SessionClosure, PiSessionError>;
 }
 
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
@@ -141,12 +144,21 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
       return closing;
     },
     busy,
-    idle: (idleMs) =>
-      Effect.gen(function* () {
-        if (closing || (yield* Clock.currentTimeMillis) - lastActivity < idleMs) return false;
-        return !(yield* busy);
-      }),
-    close: Effect.fn("SessionHost.close")(function* (closure?: SessionClosure) {
+    idle: Effect.fn("SessionHost.idle")(function* (idleMs: number) {
+      if (closing || (yield* Clock.currentTimeMillis) - lastActivity < idleMs) return false;
+      if (yield* busy) return false;
+      return yield* raw.prepareRelease(true);
+    }),
+    close: Effect.fn("SessionHost.close")(function* (closure?: SessionClosure, shutdown = false) {
+      // Do not claim archive/delete succeeded, or drop this owner, if cleanup is uncertain.
+      // The broker fences launches immediately; repeated close retries the retained identity.
+      yield* raw
+        .prepareRelease()
+        .pipe(
+          Effect.catchTag("PiSessionError", (error) =>
+            shutdown ? Effect.logWarning(error.detail) : Effect.fail(error),
+          ),
+        );
       closing = true;
       yield* Scope.close(scope, Exit.void);
       // PiSessions announces how its child stopped, including whether a release interrupted work.

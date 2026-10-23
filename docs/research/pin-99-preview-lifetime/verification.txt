@@ -1,0 +1,68 @@
+Runtime revision: 976720654e245a3f992134f358f8d3eeba9c5afa
+Final suite additionally includes test/PreviewOwner.test.ts blob a56cedf4ed53b7d81eb4fe2a5bc1462b77423fc8 (idle/start race); no runtime change.
+Environment: Linux 6.12.113 x86_64 / Node v24.22.0 / systemd 255 / Pi 1.4.0 / Effect 4.0.5 / agent-browser 0.39.2
+UTC completion: 2026-10-23
+
+$ npm run typecheck
+
+> piano@0.1.0 typecheck
+> tsc -p tsconfig.json && npm --prefix web run typecheck
+
+
+> web@0.0.0 typecheck
+> tsc -b
+
+
+$ npm run lint
+
+> piano@0.1.0 lint
+> biome check . && npm run lint:tailwind
+
+Checked 401 files in 516ms. No fixes applied.
+
+> piano@0.1.0 lint:tailwind
+> eslint --no-inline-config --max-warnings 0 web/src
+
+
+$ npm test
+✔ a late runner cannot spawn against a dead endpoint (93.042785ms)
+✔ a late runner cannot spawn against another generation (84.489697ms)
+✔ [linux] trusted generation, ownership conflict and independent workspaces (268.561459ms)
+✔ [linux] active and failed observations guard idle; explicit stop permits retirement (137.621841ms)
+✔ [linux] cleanup retains identity after checkout deletion, is retryable and fences launches (24.605703ms)
+✔ [linux] late cleanup cannot stop a replacement generation; reopen never adopts (126.418473ms)
+✔ [linux] legacy instances are neither adopted nor automatically terminated (24.16175ms)
+✔ [linux] idle racing admitted startup waits and cannot retire its live owner (1094.985141ms)
+✔ [linux] aborting tool observation leaves admitted launch with its owner (26.050231ms)
+✔ [linux] admitted startup/replace versus idle and owner death cannot escape cleanup (28.272142ms)
+✔ [darwin] trusted generation, ownership conflict and independent workspaces (164.537515ms)
+✔ [darwin] active and failed observations guard idle; explicit stop permits retirement (151.390824ms)
+✔ [darwin] cleanup retains identity after checkout deletion, is retryable and fences launches (24.304193ms)
+✔ [darwin] late cleanup cannot stop a replacement generation; reopen never adopts (137.31295ms)
+✔ [darwin] legacy instances are neither adopted nor automatically terminated (19.305734ms)
+✔ [darwin] idle racing admitted startup waits and cannot retire its live owner (1067.895605ms)
+✔ [darwin] aborting tool observation leaves admitted launch with its owner (86.66802ms)
+✔ [darwin] admitted startup/replace versus idle and owner death cannot escape cleanup (27.574378ms)
+✔ INV-02/06: archive/delete retain the session on preview cleanup failure; explicit release retries (101.989681ms)
+ℹ tests 1032
+ℹ suites 0
+ℹ pass 1017
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 15
+ℹ todo 0
+ℹ duration_ms 63921.956238
+
+$ node test/browser/start-session.mjs <evidence-dir>
+PASS start-session (28.6s), evidence in /home/exedev/piano.goofansu-pin-99-tie-managed-preview-lifetime-to-its-owning-sessions-pi/.scratch/pin99-evidence/start-session
+
+$ node test/browser/open-session.mjs <evidence-dir>
+Preparing worktree (new branch 'feat-live')
+Preparing worktree (new branch 'feat-gone')
+Reopened 60 turns: 5 browser layouts
+Session header (live): Live worktreeFolder: apiWorktree: live/Git branch: feat-live·Project: QA ProjectNot running
+Session header (gone): Gone worktreeFolder: apiWorktree: gone/Git branch: feat-gone·Project: QA ProjectRead-only
+PASS open-session (93.8s), evidence in /home/exedev/piano.goofansu-pin-99-tie-managed-preview-lifetime-to-its-owning-sessions-pi/.scratch/pin99-evidence/open-session
+
+$ node test/browser/preview.mjs <evidence-dir>
+PASS preview (134.2s), evidence in /home/exedev/piano.goofansu-pin-99-tie-managed-preview-lifetime-to-its-owning-sessions-pi/.scratch/pin99-evidence/preview-final

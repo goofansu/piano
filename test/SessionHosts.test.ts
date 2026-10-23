@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -16,6 +17,7 @@ import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { ownerRequest } from "../scripts/PreviewClient.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
@@ -40,7 +42,14 @@ const cli = {
   cli: new URL("./fake-host-pi.mjs", import.meta.url).pathname,
   extraArgs: ["--audit", audit],
 };
-type Record = { event: string; pid: number; sessionId: string; command?: string; text?: string };
+type Record = {
+  event: string;
+  pid: number;
+  sessionId: string;
+  command?: string;
+  text?: string;
+  previewOwner?: string;
+};
 const records = (id: string): Record[] =>
   readFileSync(audit, "utf8")
     .trim()
@@ -510,6 +519,48 @@ test("INV-02: release holds ownership through blocked shutdown; a late close can
     }),
     { holdShutdown: true },
   );
+});
+
+test("INV-02/06: archive/delete retain the session on preview cleanup failure; explicit release retries", async () => {
+  const stateRoot = join(root, "broken-preview-state");
+  mkdirSync(stateRoot);
+  const previous = process.env.PIANO_PREVIEW_STATE;
+  process.env.PIANO_PREVIEW_STATE = stateRoot;
+  const id = "preview-cleanup-failure";
+  const intent = join(
+    stateRoot,
+    `piano-preview-${createHash("sha256").update(realpathSync(cwd)).digest("hex").slice(0, 24)}.json`,
+  );
+  try {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        const registry = yield* Registry;
+        yield* registered(id);
+        const endpoint = records(id).find((r) => r.event === "spawn")?.previewOwner;
+        assert.ok(endpoint);
+        writeFileSync(intent, "corrupt launch intent");
+        // A live tool admission makes this owner responsible even when its observation fails.
+        yield* Effect.promise(() =>
+          assert.rejects(ownerRequest(endpoint, { action: "start", command: ["/bin/false"] })),
+        );
+        for (const operation of ["archive", "delete"] as const) {
+          const error = yield* hosts[operation](cwd, id).pipe(Effect.flip);
+          assert.match(error.detail, /Preview cleanup failed/);
+          const reference = (yield* registry.get).sessions.find((s) => s.sessionId === id);
+          assert.ok(reference && !reference.archived, "failed cleanup does not change retention");
+          assert.equal(records(id).filter((r) => r.event === "exit").length, 0);
+        }
+        rmSync(intent);
+        yield* hosts.release(cwd, id);
+        assert.equal(yield* hosts.get(cwd, id), undefined);
+        assert.ok((yield* registry.get).sessions.some((s) => s.sessionId === id));
+      }),
+    );
+  } finally {
+    if (previous === undefined) delete process.env.PIANO_PREVIEW_STATE;
+    else process.env.PIANO_PREVIEW_STATE = previous;
+  }
 });
 
 for (const operation of ["archive", "delete"] as const)

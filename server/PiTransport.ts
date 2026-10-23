@@ -72,7 +72,11 @@ const debug = (...a: unknown[]) => {
   if (process.env.PIANO_DEBUG) console.error("[PiTransport]", ...projectDisplay(a));
 };
 
-const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<string>, cwd: string) {
+const spawn = Effect.fn("PiTransport.spawn")(function* (
+  args: ReadonlyArray<string>,
+  cwd: string,
+  lifetime?: { env: Record<string, string>; onExit: () => void },
+) {
   const cli = yield* PiCli;
   const timeoutMs = yield* PiRequestTimeoutMs;
   debug("spawning", cli.node, cli.cli, args);
@@ -123,6 +127,8 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
         [SESSION_WS_URL]: undefined,
         [SESSION_ORIGIN]: undefined,
         ...cli.env,
+        PIANO_PREVIEW_OWNER: undefined,
+        ...lifetime?.env,
       },
       stdin: "pipe",
       stdout: "pipe",
@@ -197,6 +203,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
   const finish = Effect.fn("PiTransport.finish")(function* (closure: SessionClosure) {
     if (closed) return;
     closed = true;
+    lifetime?.onExit();
     const reason = closure.detail;
     yield* Deferred.succeed(exited, closure);
     for (const d of pending.values()) {
@@ -344,6 +351,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (args: ReadonlyArray<stri
   // Orderly shutdown: close stdin, give Pi a moment, then kill.
   yield* Effect.addFinalizer(() =>
     Effect.gen(function* () {
+      lifetime?.onExit();
       if (closed) return;
       yield* Queue.end(stdin);
       const done = yield* Deferred.await(exited).pipe(Effect.timeoutOption("3 seconds"));

@@ -16,6 +16,8 @@ import {
 import { createServer } from "node:http";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { PreviewAdapter } from "../../scripts/PreviewAdapter.ts";
 import { run } from "./harness.mjs";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -41,19 +43,12 @@ writeFileSync(
     ports: Array.from({ length: 80 }, (_, i) => 9400 + i),
   }),
 );
-const command = [
-  process.execPath,
-  join(ROOT, "node_modules/vite/bin/vite.js"),
-  "--host",
-  "127.0.0.1",
-  "--port",
-  "{port}",
-  "--strictPort",
-];
+let command;
 const observations = [];
 let app;
 let held;
 let repo;
+let canonicalRepo;
 const env = { PIANO_PREVIEW_CONFIG: config, PIANO_PREVIEW_STATE: state };
 const request = (args) =>
   JSON.parse(
@@ -64,6 +59,36 @@ const request = (args) =>
       timeout: 120_000,
     }),
   );
+const running = (pid) => {
+  try {
+    if (process.platform === "linux")
+      return !/^[ZX]/.test(readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1]);
+    return !execFileSync("/bin/ps", ["-o", "stat=", "-p", String(pid)], { encoding: "utf8" })
+      .trim()
+      .startsWith("Z");
+  } catch {
+    return false;
+  }
+};
+const piProcesses = () =>
+  existsSync(join(scratch, "pi.jsonl"))
+    ? readFileSync(join(scratch, "pi.jsonl"), "utf8").trim().split("\n").map(JSON.parse)
+    : [];
+const piFor = (preview) =>
+  piProcesses().findLast((p) => p.endpoint.endsWith(`/${preview.owner.generation}`));
+const gone = async (preview, after) => {
+  const began = Date.now();
+  while (preview.testPids.some(running)) {
+    assert.ok(Date.now() - began < 15000, `${after}: app/children survived owner death`);
+    await delay(100);
+  }
+  observations.push({
+    after,
+    cleanupMs: Date.now() - began,
+    instanceId: preview.instanceId,
+    pids: preview.testPids,
+  });
+};
 const model = createServer(async (req, res) => {
   let input = "";
   for await (const part of req) input += part;
@@ -92,7 +117,9 @@ const model = createServer(async (req, res) => {
             arguments: JSON.stringify(
               prompt === "status"
                 ? { action: "status" }
-                : { action: "start", command, env: appEnv },
+                : prompt === "stop"
+                  ? { action: "stop", instanceId: app.instanceId }
+                  : { action: "start", command, env: appEnv },
             ),
           },
         },
@@ -100,12 +127,16 @@ const model = createServer(async (req, res) => {
     };
   } else {
     app = JSON.parse(tool.content);
+    if (app.ready)
+      app.testPids = JSON.parse(readFileSync(join(repo, "app-processes.json"), "utf8"));
     observations.push(app);
     delta = {
       role: "assistant",
       content: app.ready
         ? `PREVIEW_READY: [Open preview](${app.url})\nInstance ${app.instanceId}`
-        : `PREVIEW_FAILED: ${tool.content}`,
+        : app.stopped
+          ? "PREVIEW_STOPPED"
+          : `PREVIEW_FAILED: ${tool.content}`,
     };
   }
   res.writeHead(200, { "content-type": "text/event-stream" });
@@ -123,7 +154,9 @@ const shim = join(scratch, "pi.mjs");
 writeFileSync(
   shim,
   `
-const keep = new Set(['PATH','HOME','PI_CODING_AGENT_DIR','PI_CODING_AGENT_SESSION_DIR','PIANO_SESSION_WS_URL','PIANO_SESSION_ORIGIN','PIANO_PREVIEW_CONFIG','PIANO_PREVIEW_STATE']);
+import { appendFileSync } from 'node:fs';
+if (process.env.PIANO_PREVIEW_OWNER) appendFileSync(${JSON.stringify(join(scratch, "pi.jsonl"))}, JSON.stringify({ pid: process.pid, endpoint: process.env.PIANO_PREVIEW_OWNER })+'\\n');
+const keep = new Set(['PATH','HOME','PI_CODING_AGENT_DIR','PI_CODING_AGENT_SESSION_DIR','PIANO_SESSION_WS_URL','PIANO_SESSION_ORIGIN','PIANO_PREVIEW_CONFIG','PIANO_PREVIEW_STATE','PIANO_PREVIEW_OWNER']);
 for (const key of Object.keys(process.env)) if (!keep.has(key)) delete process.env[key];
 process.env.PI_OFFLINE='1';
 await import(${JSON.stringify(join(ROOT, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js"))});
@@ -134,7 +167,20 @@ try {
     "preview",
     ({ repository, root }) => {
       repo = repository("app");
+      canonicalRepo = realpathSync(repo);
       writeFileSync(join(repo, "index.html"), "<h1>Preview journey v1</h1>");
+      command = [process.execPath, join(repo, "app.mjs"), "{port}"];
+      writeFileSync(
+        join(repo, "app.mjs"),
+        `
+import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+process.on('SIGTERM', () => {});
+const vite = spawn(process.execPath, [${JSON.stringify(join(ROOT, "node_modules/vite/bin/vite.js"))}, '--host', '127.0.0.1', '--port', process.argv[2], '--strictPort'], { stdio: 'inherit' });
+const stubborn = spawn(process.execPath, ['-e', 'process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'], { stdio: 'ignore' });
+writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubborn.pid]));
+`,
+      );
       writeFileSync(
         join(root, "agent/models.json"),
         JSON.stringify({
@@ -183,6 +229,10 @@ try {
         assert.equal(app.workspace, realpathSync(repo));
         assert.equal(app.url, `${origin}:${app.port}/`);
         const identity = app.instanceId;
+        const sessionPath = new URL(await page.ab("get", "url")).pathname;
+        const first = app;
+        const firstPi = piFor(first);
+        assert.ok(firstPi && running(firstPi.pid));
         await page.capture("1-settled-preview-link");
         const link = await page.evaluate(
           "[...document.querySelectorAll('a')].find(a => a.textContent === 'Open preview')?.outerHTML",
@@ -207,18 +257,106 @@ try {
         assert.equal(request({ action: "status" }).instanceId, identity);
         await page.ab("close");
         assert.equal(request({ action: "status" }).ready, true);
-        await page.restartBackend(); // releases real Pi, then starts a new isolated Piano on the same DB
-        const status = request({ action: "status" });
-        assert.equal(status.instanceId, identity);
-        assert.equal(status.invocation, app.invocation);
-        assert.equal(status.ready, true);
-        observations.push({
-          after: "settlement, abort, browser disconnect, Pi release, Piano restart",
-          ...status,
+        // Wait beyond the scratch idle deadline with no browser attached.
+        await delay(4000);
+        assert.ok(running(firstPi.pid), "preview pins an otherwise idle Pi");
+        assert.equal(request({ action: "status" }).instanceId, identity);
+        await page.open("/new"); // switching away does not release the owner
+        assert.equal(request({ action: "status" }).ready, true);
+        await page.open(sessionPath);
+        await page.until("!!document.querySelector('[aria-label=Message]')");
+        await page.ab("fill", '[aria-label="Message"]', "stop");
+        await page.click("button", "Send");
+        await page.see("PREVIEW_STOPPED");
+        await gone(first, "explicit tool stop");
+        const idleDeadline = Date.now() + 15000;
+        while (running(firstPi.pid)) {
+          assert.ok(Date.now() < idleDeadline, "stopped preview permits idle retirement");
+          await delay(100);
+        }
+        observations.push({ after: "explicit stop permits idle retirement", pid: firstPi.pid });
+
+        const launch = async () => {
+          const before = observations.length;
+          await page.open(sessionPath);
+          await page.until("!!document.querySelector('[aria-label=Message]')");
+          await page.ab("fill", '[aria-label="Message"]', "Run again");
+          await page.click("button", "Send");
+          for (let i = 0; observations.length === before || !app.ready; i++) {
+            assert.ok(i < 300, "new preview ready");
+            await delay(100);
+          }
+          await page.until(
+            "!!document.querySelector('[aria-label=Message]') && !document.querySelector('[aria-label=Stop]')",
+          );
+          return app;
+        };
+        const killed = await launch();
+        assert.notEqual(killed.owner.generation, first.owner.generation);
+        await page.ab("close");
+        process.kill(piFor(killed).pid, "SIGKILL");
+        await gone(killed, "owning Pi SIGKILL, no browser or reopen");
+
+        const shutdown = await launch();
+        await page.ab("close");
+        await page.restartBackend({
+          beforeRestart: () => gone(shutdown, "Piano SIGTERM before restart"),
         });
-        assert.equal(request({ action: "start", command, env: appEnv }).instanceId, identity);
-        await page.open("/new");
-        await page.capture("4-scratch-piano-restarted");
+        assert.notEqual(request({ action: "status" }).ready, true);
+        const crashed = await launch();
+        await page.ab("close");
+        await page.restartBackend({
+          signal: "SIGKILL",
+          beforeRestart: () => gone(crashed, "Piano SIGKILL before restart"),
+        });
+        const dead = request({ action: "status" });
+        assert.notEqual(dead.ready, true);
+        await page.open(sessionPath);
+        await page.until("!!document.querySelector('[aria-label=Message]')");
+        assert.notEqual(
+          request({ action: "status" }).ready,
+          true,
+          "reopen never adopts/relaunches",
+        );
+        await page.capture("4-reopened-without-preview");
+
+        const chooseCommand = async (label) => {
+          await page.press("Mod+K");
+          await page.ab("fill", "[cmdk-input]", label);
+          await page.until(
+            "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
+          );
+          await page.click("option", label);
+        };
+        const archived = await launch();
+        await chooseCommand("Archive");
+        await gone(archived, "Archive through command palette");
+        await page.capture("5-archived");
+        const create = async () => {
+          const count = observations.length;
+          await page.open("/new");
+          await page.ab("fill", '[aria-label="First message"]', "Run this app");
+          await page.until("document.querySelector('[aria-label=Send]')?.disabled === false");
+          await page.click("button", "Send");
+          for (let i = 0; observations.length === count || !app.ready; i++) {
+            assert.ok(i < 300, "fresh session preview ready");
+            await delay(100);
+          }
+          await page.until(
+            "!!document.querySelector('[aria-label=Message]') && !document.querySelector('[aria-label=Stop]')",
+          );
+          return app;
+        };
+        const deleted = await create();
+        await chooseCommand("Delete");
+        await page.see("Delete this session?");
+        await page.click("button", "Delete");
+        await gone(deleted, "Delete through command palette and confirmation");
+        await page.capture("6-deleted");
+        const missing = await create();
+        rmSync(repo, { recursive: true, force: true });
+        await chooseCommand("Archive");
+        await gone(missing, "Archive after checkout removal uses retained ownership");
       } finally {
         // Clean up even when a launch succeeded but its reply never reached the scripted model.
         for (const file of existsSync(state)
@@ -226,9 +364,9 @@ try {
           : []) {
           // Stop first: an assertion must never leave a scratch app running.
           const record = JSON.parse(readFileSync(join(state, file), "utf8"));
-          observations.push(request({ action: "stop", instanceId: record.instanceId }));
-          assert.equal(request({ action: "stop", instanceId: record.instanceId }).stopped, false);
-          assert.equal(record.workspace, realpathSync(repo));
+          await new PreviewAdapter().retire(record.owner, state);
+          observations.push({ cleanup: record.instanceId });
+          assert.equal(record.workspace, canonicalRepo);
         }
         writeFileSync(join(evidence, "observations.json"), JSON.stringify(observations, null, 2));
       }
@@ -237,6 +375,7 @@ try {
       backendEnv: {
         ...env,
         PIANO_PI_CLI: shim,
+        PIANO_IDLE_MINUTES: "0.0333333333",
         PIANO_PI_ARGS:
           "--offline --no-builtin-tools --no-skills --no-prompt-templates --no-context-files",
       },
