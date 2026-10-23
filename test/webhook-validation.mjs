@@ -10,12 +10,12 @@ await run(
     await page.open("/settings/webhooks");
     await page.click("button", "Add webhook");
     await page.ab("fill", "#webhook-url", "https://example.com/webhook");
-    await page.click("button", "Save webhook");
+    await page.click("button", "Add webhook");
     await page.until('!document.querySelector("[role=dialog]")');
     await page.click("button", "Webhook actions example.com");
     await page.click("menuitem", "Edit");
     await page.click("checkbox", "session.completed");
-    await page.click("button", "Save webhook");
+    await page.click("button", "Save");
     await page.see("Select at least one event.");
     await page.capture("events-error");
     const state = await page.evaluate(
@@ -31,14 +31,14 @@ await run(
       "selecting an event clears its validation error",
     );
     await page.ab("fill", "#webhook-url", "http://example.com/webhook");
-    await page.click("button", "Save webhook");
+    await page.click("button", "Save");
     await page.until(
       `document.querySelector('#webhook-url').getAttribute('aria-invalid') === 'true'`,
     );
     await page.capture("url-error");
     console.log("Invalid HTTP URL flagged");
     await page.ab("fill", "#webhook-url", "https://example.com/webhook");
-    await page.click("button", "Save webhook");
+    await page.click("button", "Save");
     await page.until('!document.querySelector("[role=dialog]")');
     console.log("Corrected webhook saved");
   },
