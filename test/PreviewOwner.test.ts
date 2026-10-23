@@ -88,8 +88,12 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       );
     return { root, workspace, state, host, adapter, launched, stops, open, owner, call, config };
   }
+  // A running app's ownership is discovered from the real host (/proc on Linux, ps and lsof on
+  // macOS), so cases that observe one run only on their native platform.
+  const foreign = process.platform !== platform;
 
   test(`[${platform}] trusted generation, ownership conflict and independent workspaces`, async (t) => {
+    if (foreign) return t.skip("needs native process ownership");
     const f = await fixture(t);
     const app = await f.call();
     assert.equal(app.workspace, f.owner.identity.workspace);
@@ -205,6 +209,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
   });
 
   test(`[${platform}] idle racing admitted startup waits and cannot retire its live owner`, async (t) => {
+    if (foreign) return t.skip("needs native process ownership");
     const f = await fixture(t);
     let proceed!: () => void;
     let entered!: () => void;
