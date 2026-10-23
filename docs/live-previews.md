@@ -173,7 +173,7 @@ With functioning kernel/supervisor scheduling, the death path is EOF/transport e
 plus at most the supervisor's five-second kill grace (macOS owner-loss group kill is immediate).
 This is not a hard real-time guarantee against a frozen OS/supervisor or uninterruptible kernel I/O.
 The native journey requires all app/child processes gone within 15s, before any reopen or restart.
-[PIN-99 evidence](research/pin-99-preview-lifetime.md) records measured Linux times and the native
+[PR #228](https://github.com/goofansu/piano/pull/228) records measured Linux times and the native
 macOS verification gap; simulated adapter contracts do not prove launchd kernel behavior.
 
 No automatic relaunch occurs after restart/reopen. A subsequent **explicit** start may confirm a terminal old intent **and an absent/refused old owner endpoint** before clearing it and
