@@ -184,12 +184,13 @@ function WebhookEditor({
     hook?.events ?? ["session.completed"],
   );
   const [active, setActive] = useState(hook?.active ?? true);
+  const [eventsError, setEventsError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!events.length) {
-      setError("Select at least one event.");
+      setEventsError(true);
       return;
     }
     setBusy(true);
@@ -283,6 +284,9 @@ function WebhookEditor({
                   </Field>
                 ))}
               </FieldGroup>
+              {eventsError && !events.length && (
+                <FieldError role="alert">Select at least one event.</FieldError>
+              )}
             </FieldSet>
             <Field orientation="horizontal">
               <Switch id="webhook-active" checked={active} onCheckedChange={setActive} />
