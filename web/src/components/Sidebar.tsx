@@ -46,7 +46,7 @@ import type { RadioChoice } from "@/lib/commands";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
-import { openProjectCommand, projectCommands, sessionProjectMenu } from "@/lib/projectCommands";
+import { projectCommands, sessionProjectMenu } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import { sessionRowMenu } from "@/lib/sessionCommands";
 import type { SidebarSection } from "@/lib/sidebarList";
@@ -485,13 +485,8 @@ function ProjectGroup({
   const commands = project ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
   const remove = commands.find((c) => c.id === "delete");
-  // Open project first: the group's name only folds it, so the menu is the way to the project's home.
-  const menu = project
-    ? [
-        { ...openProjectCommand(project), label: "Open project" },
-        ...commands.filter((c) => c.id !== "new-session" && c.id !== "delete"),
-      ]
-    : [];
+  // The group's name only folds it; its New session in project button opens the project's home.
+  const menu = commands.filter((c) => c.id !== "new-session" && c.id !== "delete");
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <div className={groupRow}>

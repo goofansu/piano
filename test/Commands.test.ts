@@ -67,19 +67,23 @@ test("enabled commands reach the effect their intent names", () => {
       ),
       ["openNew", undefined, undefined],
     ],
-    [byId(projectCommands(online, launch), "new-session"), ["openNew", undefined, "p1"]],
+    [byId(projectCommands(online, launch), "new-session"), ["openProject", "p1"]],
     [openProjectCommand(launch), ["openProject", "p1"]],
+    [
+      byId(projectCommands(online, launch), "rename"),
+      ["openForm", { kind: "project", dialog: { project: launch } }],
+    ],
+    [byId(projectCommands(online, launch), "settings"), ["openProjectSettings", "p1"]],
     [
       byId(
         globalCommands(
           { ...online, view: { kind: "project", projectId: "p1" } },
           { settingsOpen: false, view: { groupBy: "date", sortBy: "recent" } },
         ),
-        "new-session-in-project",
+        "project-settings",
       ),
-      ["openNew", undefined, "p1"],
+      ["openProjectSettings", "p1"],
     ],
-    [byId(projectCommands(online, launch), "settings"), ["openProjectSettings", "p1"]],
     [
       byId(projectCommands(online, launch), "delete"),
       ["openForm", { kind: "delete-project", project: launch }],

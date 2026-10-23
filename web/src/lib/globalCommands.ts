@@ -26,7 +26,6 @@ export type GlobalCommandId =
   | "settings"
   | `settings-${SettingsSection}`
   | "new-session"
-  | "new-session-in-project"
   | "project-settings"
   | "trust"
   | "toggle-sidebar"
@@ -128,19 +127,11 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
   };
 }
 
-/** On a project's home, New session in project and its header's Project settings button. */
-function projectNewSession(state: AppState): GlobalCommand[] {
+/** On a project's home, its header's Project settings button; the home itself starts sessions. */
+function projectSettingsRow(state: AppState): GlobalCommand[] {
   const project = state.view.kind === "project" ? findProject(state, state.view.projectId) : null;
   if (!project) return [];
   return [
-    {
-      id: "new-session-in-project",
-      label: "New session in project",
-      icon: "new",
-      group: "navigate",
-      enabled: true,
-      intent: { kind: "new-session", projectId: project.id },
-    },
     {
       id: "project-settings",
       label: "Project settings",
@@ -154,7 +145,7 @@ function projectNewSession(state: AppState): GlobalCommand[] {
 
 /**
  * Global commands, in the palette's order: Home or Settings (whichever is not open), each Settings
- * section, New session, New session in project on a project's home, trust for the directory the main pane is about, Toggle sidebar, the
+ * section, New session, Project settings on a project's home, trust for the directory the main pane is about, Toggle sidebar, the
  * appearances, then each sidebar grouping and sort, with the current one of each checked.
  */
 export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
@@ -197,7 +188,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       enabled: true,
       intent: { kind: "new-session" },
     },
-    ...projectNewSession(state),
+    ...projectSettingsRow(state),
     ...(trust ? [trust] : []),
     {
       id: "toggle-sidebar",

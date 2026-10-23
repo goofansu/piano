@@ -1,4 +1,6 @@
+import { type ClientCommand, PROJECT_INSTRUCTIONS_MAX, type Project } from "@shared/wire";
 import { MoreHorizontalIcon } from "lucide-react";
+import { useId, useState } from "react";
 import { useCommands } from "@/components/CommandHost";
 import {
   DropdownMenu,
@@ -9,32 +11,41 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { ProjectHeader } from "@/components/ProjectHome";
 import { ProjectCommandIconView } from "@/components/Projects";
-import { SettingsList, SettingsSkeleton, settingsRow } from "@/components/SettingsSectionFrame";
+import { SettingsSkeleton } from "@/components/SettingsSectionFrame";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { ProjectCommand } from "@/lib/projectCommands";
-import { findProject, projectCommand, projectSettingsRows } from "@/lib/projectCommands";
+import { Textarea } from "@/components/ui/textarea";
+import { findProject, projectCommand, projectSettingsSave } from "@/lib/projectCommands";
 import type { AppState } from "@/store";
 
+const title = <h1 className="truncate text-sm font-medium">Project settings</h1>;
+
 /**
- * A project's settings, as Settings pages are: hairline-divided rows that each say what they hold
- * and end with the action that changes it, and the project's menu in the header for Delete.
+ * A project's settings: its name and instructions, edited in place and saved together by the
+ * header's Save, the page's one primary action; Delete waits in the header's project menu.
  */
-export function ProjectSettings({ state, projectId }: { state: AppState; projectId: string }) {
-  const { run } = useCommands();
+export function ProjectSettings({
+  state,
+  projectId,
+  send,
+}: {
+  state: AppState;
+  projectId: string;
+  send: (command: ClientCommand) => void;
+}) {
   const project = findProject(state, projectId);
   if (!state.registryLoaded)
     return (
       <>
-        <ProjectHeader>
-          <h1 className="truncate text-sm font-medium">Project settings</h1>
-        </ProjectHeader>
+        <ProjectHeader>{title}</ProjectHeader>
         <Column>
-          <SettingsSkeleton label="Loading project…" className="late-enter flex flex-col gap-2">
-            <Skeleton className="h-28 w-full rounded-lg" />
+          <SettingsSkeleton label="Loading project…" className="late-enter flex flex-col gap-6">
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-56 w-full rounded-lg" />
           </SettingsSkeleton>
         </Column>
       </>
@@ -51,50 +62,95 @@ export function ProjectSettings({ state, projectId }: { state: AppState; project
         </Empty>
       </>
     );
-  const { rename, instructions } = projectSettingsRows(state, project);
+  // A draft belongs to one project: opening another project's settings starts from its own.
+  return <ProjectSettingsForm key={project.id} state={state} project={project} send={send} />;
+}
+
+function ProjectSettingsForm({
+  state,
+  project,
+  send,
+}: {
+  state: AppState;
+  project: Project;
+  send: (command: ClientCommand) => void;
+}) {
+  const { run } = useCommands();
+  const formId = useId();
+  const [draft, setDraft] = useState({
+    name: project.name,
+    instructions: project.instructions ?? "",
+  });
+  const save = projectSettingsSave(state, project.id, draft);
   const remove = projectCommand(state, project, "delete");
   return (
     <>
       <ProjectHeader
         actions={
-          remove && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Project menu for ${project.name}`}
-                >
-                  <MoreHorizontalIcon />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    disabled={!remove.enabled}
-                    onSelect={() => run(remove)}
+          <div className="flex shrink-0 items-center gap-1">
+            <Button type="submit" form={formId} size="sm" disabled={!save.allowed}>
+              Save
+            </Button>
+            {remove && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Project menu for ${project.name}`}
                   >
-                    <ProjectCommandIconView icon={remove.icon} /> {remove.label}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )
+                    <MoreHorizontalIcon />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={!remove.enabled}
+                      onSelect={() => run(remove)}
+                    >
+                      <ProjectCommandIconView icon={remove.icon} /> {remove.label}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         }
       >
-        <h1 className="truncate text-sm font-medium">Project settings</h1>
+        {title}
       </ProjectHeader>
       <Column>
-        <SettingsList>
-          <Row title="Name" value={project.name} action={rename} run={run} />
-          <Row
-            title="Instructions"
-            value={project.instructions?.split("\n", 1)[0]}
-            action={instructions}
-            run={run}
-          />
-        </SettingsList>
+        <form
+          id={formId}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (save.allowed) for (const command of save.commands) send(command);
+          }}
+        >
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor={`${formId}-name`}>Name</FieldLabel>
+              <Input
+                id={`${formId}-name`}
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                maxLength={200}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${formId}-instructions`}>Instructions</FieldLabel>
+              <Textarea
+                id={`${formId}-instructions`}
+                value={draft.instructions}
+                onChange={(e) => setDraft({ ...draft, instructions: e.target.value })}
+                maxLength={PROJECT_INSTRUCTIONS_MAX}
+                className="min-h-56 font-mono"
+              />
+            </Field>
+          </FieldGroup>
+        </form>
       </Column>
     </>
   );
@@ -106,40 +162,5 @@ function Column({ children }: { children: React.ReactNode }) {
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
       <div className="mx-auto flex max-w-2xl flex-col gap-6">{children}</div>
     </div>
-  );
-}
-
-/** One setting: its name, its value (or None), and the action that changes it. */
-function Row({
-  title,
-  value,
-  action,
-  run,
-}: {
-  title: string;
-  value: string | undefined;
-  action: ProjectCommand;
-  run: (command: ProjectCommand) => void;
-}) {
-  return (
-    <Item role="listitem" className={settingsRow}>
-      <ItemContent className="min-w-0">
-        <ItemTitle>{title}</ItemTitle>
-        <ItemDescription className={value ? "truncate" : "text-ink-3"}>
-          {value ?? "None"}
-        </ItemDescription>
-      </ItemContent>
-      <ItemActions className="shrink-0">
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label={action.ariaLabel}
-          disabled={!action.enabled}
-          onClick={() => run(action)}
-        >
-          {action.label}
-        </Button>
-      </ItemActions>
-    </Item>
   );
 }

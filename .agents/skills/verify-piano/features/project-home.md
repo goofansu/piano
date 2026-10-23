@@ -8,7 +8,9 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 ## Sub-features
 
 - `open-from-header`: the session header's project button opens the session's project home.
-- `open-from-sidebar`: with sidebar Group by Project, "Project menu for <name>" → "Open project".
+- `open-from-sidebar`: with sidebar Group by Project, the group's "New session in <name>" button.
+- `project-menu`: the group's "Project menu for <name>" holds "Rename project" (the project
+  dialog) and "Project settings", then a red "Delete project".
 - `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
 - `member-cards`: one `button[data-slot=item]` card per member session; clicking opens `/s/<id>`.
 - `new-in-project`: the composer above the cards ("First message", placeholder "New session in
@@ -18,11 +20,10 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   ends with the "Project settings" button.
 - `empty`: a project with no sessions shows its header ("0 sessions") and the composer on "Choose a folder".
 - `settings`: "Project settings" (the header button, the project menu, Mod+K on the home) opens
-  `/projects/<id>/settings`: a hairline list with Name (Rename opens the project dialog) and
-  Instructions (first line or "None"; Edit opens a textarea dialog), and the header's "Project
-  menu for <name>" holding a red "Delete project". What reaches Pi needs the real Pi: fake Pi
-  ignores the extension, so check the model's request with a scripted loopback model, as
-  `test/fixtures/RealPiDispatch.ts` does.
+  `/projects/<id>/settings`: Name and Instructions fields, the header's Save (off until a field
+  changes) and its "Project menu for <name>" holding a red "Delete project". What reaches Pi
+  needs the real Pi: fake Pi ignores the extension, so check the model's request with a scripted
+  loopback model, as `test/fixtures/RealPiDispatch.ts` does.
 - `delete`: "Delete project" (the sidebar's project menu, the settings page's menu) asks first,
   saying how many sessions move to "No project"; on the project's own home or settings,
   confirming leaves for the New page.
@@ -31,7 +32,7 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 ## How to get to it (user POV)
 
 - Session page: click the header's project name (accessible name `Project: <name>`).
-- Sidebar: View options → Group by → Project, then the project's menu → Open project.
+- Sidebar: View options → Group by → Project, then the group's "New session in <name>" button.
 - Palette: Mod+K on a session that belongs to a project, type `open project`, choose the row.
 - Address bar: `/projects/<id>`.
 
@@ -59,8 +60,8 @@ Preconditions: a seeded launch (`$S/launch.sh`), `. "$RUN/run.env"`, doctor pass
     ab find role menuitem click --name "Group by Date" --exact;
     ab find role menuitemradio click --name "Project" --exact;
     ab wait --fn "!document.querySelector('[data-radix-popper-content-wrapper]')";
-    ab find role button click --name "Project menu for Empty Project" --exact;
-    ab find role menuitem click --name "Open project" --exact; ab wait --url "**/projects/empty"`
+    ab find role button click --name "New session in Empty Project" --exact;
+    ab wait --url "**/projects/empty"` (the button shows on hover; `find role button` reaches it)
   - Result: `/projects/empty`; the sidebar shows groups "Empty Project", "Verify Project" and "No
     project". Capture `04-empty`.
 - `empty`
@@ -102,7 +103,7 @@ Preconditions: a seeded launch (`$S/launch.sh`), `. "$RUN/run.env"`, doctor pass
 
 - The palette's "Open project: <name>" row comes from the current session's menu, so it exists only
   on a member session's page; on the New page or a loose session it is absent, which is not a bug.
-- The sidebar group name only folds the group; its "Project menu for <name>" is the way home.
+- The sidebar group name only folds the group; its "New session in <name>" button is the way home.
 - "Group by" is a submenu whose trigger's name includes the current choice (`Group by Date`).
 - `ab wait --text "X" --state hidden` is not a valid form; wait on a URL or a `--fn` predicate.
 - Card times are relative ("1 hour ago") and age while you drive.

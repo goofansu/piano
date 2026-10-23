@@ -116,7 +116,7 @@ export default function App() {
                         projectId={state.view.projectId}
                       />
                     ) : state.view.kind === "project-settings" ? (
-                      <ProjectSettings state={state} projectId={state.view.projectId} />
+                      <ProjectSettings state={state} projectId={state.view.projectId} send={send} />
                     ) : state.view.kind === "missing-session" ? (
                       <Empty className="flex-1 px-4" role="alert">
                         <EmptyHeader>

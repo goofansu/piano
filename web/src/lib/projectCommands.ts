@@ -7,7 +7,11 @@
  * deciding.
  */
 // Relative, not @shared: module tests load this file directly in Node.
-import type { ClientCommand, Project } from "../../../shared/wire.ts";
+import {
+  type ClientCommand,
+  PROJECT_INSTRUCTIONS_MAX,
+  type Project,
+} from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { sessionProject } from "./sessionContext.ts";
 import { byName } from "./sidebarView.ts";
@@ -39,26 +43,21 @@ export type ProjectDialog = { project?: Project; assign?: SessionRef };
 export type ProjectCommandId =
   | "new-session"
   | "open-project"
-  | "settings"
   | "rename"
-  | "instructions"
+  | "settings"
   | "delete"
   | "new-project"
   | "assign";
 
-export type ProjectCommandIcon = "new" | "settings" | "edit" | "delete" | "folder" | "remove";
+export type ProjectCommandIcon = "new" | "edit" | "settings" | "delete" | "folder" | "remove";
 
 export type ProjectCommandIntent =
-  /** Open the New session page for the project; it sends nothing. */
-  | { kind: "new-session"; projectId: string }
   /** Open the project's home; it sends nothing. */
   | { kind: "open-project"; projectId: string }
   /** Open the project's settings page; it sends nothing. */
   | { kind: "project-settings"; projectId: string }
   /** Open the project dialog: to rename `dialog.project`, or to create a project (taking `dialog.assign`). */
   | { kind: "project-dialog"; dialog: ProjectDialog }
-  /** Open the dialog for the project's instructions. */
-  | { kind: "project-instructions"; project: Project }
   /** Ask before deleting the project. */
   | { kind: "delete-project"; project: Project }
   /** Send this registry change. */
@@ -75,10 +74,10 @@ export interface ProjectCommand {
 }
 
 /**
- * What a project row offers, in order: New session in the project, Project settings, then Delete.
- * Enablement, one rule per command:
+ * What a project row offers, in order: New session in the project, Rename, Project settings, then
+ * Delete. Enablement, one rule per command:
  * - new session, settings: always; each only opens a page, whose changes wait for a connection.
- * - delete: connected, since it changes the registry.
+ * - rename, delete: connected, since each changes the registry.
  */
 export function projectCommands(state: AppState, project: Project): ProjectCommand[] {
   return [
@@ -88,7 +87,15 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
       ariaLabel: `New session in ${project.name}`,
       icon: "new",
       enabled: true,
-      intent: { kind: "new-session", projectId: project.id },
+      // The project's home starts a session in the project, beside the ones it already has.
+      intent: { kind: "open-project", projectId: project.id },
+    },
+    {
+      id: "rename",
+      label: "Rename project",
+      icon: "edit",
+      enabled: state.connected,
+      intent: { kind: "project-dialog", dialog: { project } },
     },
     projectSettingsCommand(project),
     {
@@ -112,32 +119,37 @@ export function projectSettingsCommand(project: Project): ProjectCommand {
   };
 }
 
+/** What the settings page holds while it is edited. */
+export interface ProjectSettingsDraft {
+  name: string;
+  instructions: string;
+}
+
 /**
- * The settings page's rows: Rename (the project dialog) and Edit instructions (their dialog). Each
- * opens a form, whose saving waits for a connection, so they wait for one too.
+ * Saving the settings page: one registry change per field that differs from the project as saved
+ * now, trimmed. A blank name cannot be saved; blank instructions clear them. Nothing to send, no
+ * connection or instructions over the limit leave Save off.
  */
-export function projectSettingsRows(
+export function projectSettingsSave(
   state: AppState,
-  project: Project,
-): { rename: ProjectCommand; instructions: ProjectCommand } {
-  return {
-    rename: {
-      id: "rename",
-      label: "Rename",
-      ariaLabel: "Rename project",
-      icon: "edit",
-      enabled: state.connected,
-      intent: { kind: "project-dialog", dialog: { project } },
-    },
-    instructions: {
-      id: "instructions",
-      label: "Edit",
-      ariaLabel: "Edit instructions",
-      icon: "edit",
-      enabled: state.connected,
-      intent: { kind: "project-instructions", project },
-    },
-  };
+  projectId: string,
+  draft: ProjectSettingsDraft,
+): { allowed: boolean; commands: ClientCommand[] } {
+  const project = findProject(state, projectId);
+  const name = draft.name.trim();
+  const instructions = draft.instructions.trim();
+  if (!project || !state.connected || !name || instructions.length > PROJECT_INSTRUCTIONS_MAX)
+    return { allowed: false, commands: [] };
+  const commands: ClientCommand[] = [];
+  if (name !== project.name)
+    commands.push({ _tag: "save_project", project: { id: project.id, name } });
+  if (instructions !== (project.instructions ?? ""))
+    commands.push({
+      _tag: "set_project_instructions",
+      id: project.id,
+      instructions: instructions || null,
+    });
+  return { allowed: commands.length > 0, commands };
 }
 
 /** One command of `project`'s. */

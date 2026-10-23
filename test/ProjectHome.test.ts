@@ -103,13 +103,13 @@ test("rows keep their place while the page is open: new ones append, gone ones d
   assert.deepEqual(stableOrder(["b", "a", "c"], ["c", "b"]), ["b", "c"]);
 });
 
-test("on a project's home, Mod+K offers New session in project", () => {
+test("on a project's home, Mod+K offers its Project settings button", () => {
   const ctx = { settingsOpen: false, view: { groupBy: "date", sortBy: "recent" } } as const;
   const row = (s: AppState, id: string) => globalCommands(s, ctx).find((c) => c.id === id);
   const home: AppState = { ...state, view: { kind: "project", projectId: "p1" } };
-  assert.equal(row(home, "new-session-in-project")?.label, "New session in project");
-  assert.deepEqual(row(home, "new-session-in-project")?.intent, {
-    kind: "new-session",
+  assert.equal(row(home, "project-settings")?.label, "Project settings");
+  assert.deepEqual(row(home, "project-settings")?.intent, {
+    kind: "project-settings",
     projectId: "p1",
   });
   assert.deepEqual(
@@ -117,5 +117,5 @@ test("on a project's home, Mod+K offers New session in project", () => {
     { kind: "new-session" },
     "New session stays the same everywhere",
   );
-  assert.equal(row(state, "new-session-in-project"), undefined, "elsewhere the row is absent");
+  assert.equal(row(state, "project-settings"), undefined, "elsewhere the row is absent");
 });
