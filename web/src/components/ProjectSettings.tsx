@@ -84,8 +84,6 @@ export function ProjectSettings({ state, projectId }: { state: AppState; project
         }
       >
         <h1 className="truncate text-sm font-medium">Project settings</h1>
-        {/* Plain project metadata has no dedicated UI primitive. */}
-        <p className="truncate text-xs text-ink-3">{project.name}</p>
       </ProjectHeader>
       <Column>
         <SettingsList>
