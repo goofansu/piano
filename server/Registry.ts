@@ -273,7 +273,7 @@ export class Registry extends Context.Service<
       id: string,
       instructions: string | null,
     ) => Effect.Effect<void, RegistryError>;
-    /** Remove a project in one write; its sessions stay registered, in no project. */
+    /** Remove a project in one write; its sessions stay registered and move to No project. */
     readonly deleteProject: (id: string) => Effect.Effect<void, RegistryError>;
     readonly assignProject: (
       cwd: string,

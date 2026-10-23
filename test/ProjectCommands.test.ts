@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PROJECT_INSTRUCTIONS_MAX, type Project } from "../shared/wire.ts";
+import type { Project } from "../shared/wire.ts";
 import {
   openProjectCommand,
   projectCommands,
   projectDestinations,
-  projectSettingsSave,
+  projectSettingsRows,
   sessionProjectMenu,
 } from "../web/src/lib/projectCommands.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
@@ -60,34 +60,16 @@ test("deleting waits for a connection; opening a page does not", () => {
   }
 });
 
-test("saving project settings sends each changed field, trimmed; blank instructions clear them", () => {
-  const guided: AppState = {
-    ...state,
-    projects: [{ ...launch, instructions: "Answer in French." }],
-  };
-  const save = (draft: { name: string; instructions: string }, s = guided) =>
-    projectSettingsSave(s, "p1", draft);
-  assert.deepEqual(save({ name: " Relaunch ", instructions: "Answer in French." }), {
-    allowed: true,
-    commands: [{ _tag: "save_project", project: { id: "p1", name: "Relaunch" } }],
-  });
-  assert.deepEqual(save({ name: "Launch", instructions: "\n Answer in German. \n" }), {
-    allowed: true,
-    commands: [{ _tag: "set_project_instructions", id: "p1", instructions: "Answer in German." }],
-  });
-  assert.deepEqual(save({ name: "Launch", instructions: "  " }).commands, [
-    { _tag: "set_project_instructions", id: "p1", instructions: null },
-  ]);
-  assert.equal(save({ name: "Relaunch", instructions: "Other" }).commands.length, 2);
-  const refused: [string, { name: string; instructions: string }, AppState?][] = [
-    ["unchanged, trimmed", { name: " Launch ", instructions: " Answer in French.\n" }],
-    ["blank name", { name: "  ", instructions: "Other" }],
-    ["over the limit", { name: "Launch", instructions: "x".repeat(PROJECT_INSTRUCTIONS_MAX + 1) }],
-    ["offline", { name: "Relaunch", instructions: "Other" }, { ...guided, connected: false }],
-    ["deleted meanwhile", { name: "Relaunch", instructions: "Other" }, { ...guided, projects: [] }],
-  ];
-  for (const [why, draft, s] of refused)
-    assert.deepEqual(save(draft, s), { allowed: false, commands: [] }, why);
+test("the settings page renames in the project dialog and edits instructions in theirs, once connected", () => {
+  const { rename, instructions } = projectSettingsRows(state, launch);
+  assert.deepEqual(
+    [rename.label, rename.ariaLabel, instructions.label, instructions.ariaLabel],
+    ["Rename", "Rename project", "Edit", "Edit instructions"],
+  );
+  assert.deepEqual(rename.intent, { kind: "project-dialog", dialog: { project: launch } });
+  assert.deepEqual(instructions.intent, { kind: "project-instructions", project: launch });
+  const offline = projectSettingsRows({ ...state, connected: false }, launch);
+  assert.deepEqual([offline.rename.enabled, offline.instructions.enabled], [false, false]);
 });
 
 test("a session's project menu: Move for a member, Add otherwise, one connection rule for every row", () => {

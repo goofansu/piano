@@ -62,8 +62,8 @@ instruction selection. Separate concurrent writing tasks still need separate wor
 - A project has no goal or description field. An optional goal shipped at first and was removed to
   keep a project to its name. Opening a version-1 registry drops its `goal` column after saving a
   `<database>.v1-backup` copy (see the [configuration and storage](configuration.md#registry-storage)).
-- Deleting a project removes the project and unlinks its sessions, which stay registered in no
-  project. It is not session archive or delete, abort, process release, checkout removal,
+- Deleting a project removes the project and unlinks its sessions, which stay registered and move to
+  No project. It is not session archive or delete, abort, process release, checkout removal,
   verification, approval or proof that the outcome was achieved; running work and direct session
   access remain available. Projects had an archive state at first; it was retired because finished
   projects were rarely revisited, and opening a registry older than version 9 brings each archived

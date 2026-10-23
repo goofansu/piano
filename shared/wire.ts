@@ -761,7 +761,7 @@ export const ClientMessage = Schema.Union([
     project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }),
     assign: Schema.optional(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String })),
   }),
-  /** Delete a project; its sessions stay, in no project. */
+  /** Delete a project; its sessions stay and move to No project. */
   Schema.TaggedStruct("delete_project", { id: Schema.String }),
   /** Replace a project's instructions; null clears them. */
   Schema.TaggedStruct("set_project_instructions", {

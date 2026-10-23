@@ -180,7 +180,7 @@ test("project answers: a new project opens, an edit keeps its id, create-and-ass
   });
 });
 
-test("deleting a project asks first, saying its sessions are kept, in no project", () => {
+test("deleting a project asks first, saying its sessions move to No project", () => {
   const members = (...archived: boolean[]): AppState => ({
     ...online,
     sessionReferences: archived.map((a, i) =>
@@ -190,15 +190,45 @@ test("deleting a project asks first, saying its sessions are kept, in no project
   assert.deepEqual(confirmation(members(false, false, true), deleteProject), {
     title: "Delete this project?",
     description:
-      '"Launch" will be deleted. Its 2 sessions are kept, in no project. This cannot be undone.',
+      '"Launch" is removed from Piano; its 2 sessions move to No project. This cannot be undone.',
     confirmLabel: "Delete",
     destructive: true,
   });
-  assert.match(confirmation(members(false), deleteProject)!.description, /Its session is kept/);
+  assert.equal(
+    confirmation(members(false), deleteProject)!.description,
+    '"Launch" is removed from Piano; its session moves to No project. This cannot be undone.',
+  );
   assert.equal(
     confirmation(members(), deleteProject)!.description,
-    '"Launch" will be deleted. This cannot be undone.',
+    '"Launch" is removed from Piano. This cannot be undone.',
   );
+});
+
+test("instructions save trimmed, clear when blank, and refuse a save that changes nothing", () => {
+  const guided: AppState = {
+    ...online,
+    projects: [{ ...launch, instructions: "Answer in French." }],
+  };
+  const form: CommandForm = { kind: "project-instructions", project: guided.projects[0]! };
+  assert.deepEqual(answerForm(guided, form, "  Answer in German.\n"), {
+    allowed: true,
+    command: { _tag: "set_project_instructions", id: "p1", instructions: "Answer in German." },
+  });
+  assert.deepEqual(answerForm(guided, form, " \n "), {
+    allowed: true,
+    command: { _tag: "set_project_instructions", id: "p1", instructions: null },
+  });
+  for (const text of ["Answer in French.", " Answer in French. \n"])
+    assert.deepEqual(answerForm(guided, form, text), { allowed: false }, JSON.stringify(text));
+  assert.deepEqual(answerForm({ ...guided, connected: false }, form, "Other"), { allowed: false });
+  const empty: CommandForm = { kind: "project-instructions", project: launch };
+  assert.deepEqual(answerForm(online, empty, ""), { allowed: false }, "none to none");
+});
+
+test("the instructions form opens on the saved instructions", () => {
+  const { subject } = forms();
+  subject.open({ kind: "project-instructions", project: { ...launch, instructions: "Be brief." } });
+  assert.equal(subject.getState().text, "Be brief.");
 });
 
 test("deleting the project on screen leaves for the New page; deleting another stays put", () => {

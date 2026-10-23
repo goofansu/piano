@@ -3,7 +3,7 @@
 A project's home at `/projects/<id>` lists its member sessions as cards (title, folder, branch, PR
 number, last activity), newest first, and starts a new session filed in the project. Users reach it
 from the session header, the sidebar's project groups and the Mod+K palette. Deleting a project
-keeps its sessions, in no project; unknown IDs show "Project not found".
+moves its sessions to "No project"; unknown IDs show "Project not found".
 
 ## Sub-features
 
@@ -18,12 +18,14 @@ keeps its sessions, in no project; unknown IDs show "Project not found".
   ends with the "Project settings" button.
 - `empty`: a project with no sessions shows its header ("0 sessions") and the composer on "Choose a folder".
 - `settings`: "Project settings" (the header button, the project menu, Mod+K on the home) opens
-  `/projects/<id>/settings`: Name and Instructions fields saved by the header's Save, which is off
-  until a field changes, and a "Delete project" row. What reaches Pi needs the real Pi: fake Pi
+  `/projects/<id>/settings`: a hairline list with Name (Rename opens the project dialog) and
+  Instructions (first line or "None"; Edit opens a textarea dialog), and the header's "Project
+  menu for <name>" holding a red "Delete project". What reaches Pi needs the real Pi: fake Pi
   ignores the extension, so check the model's request with a scripted loopback model, as
   `test/fixtures/RealPiDispatch.ts` does.
-- `delete`: "Delete project" (the project menu, the settings page) asks first, saying how many
-  sessions are kept; on the project's own home or settings, confirming leaves for the New page.
+- `delete`: "Delete project" (the sidebar's project menu, the settings page's menu) asks first,
+  saying how many sessions move to "No project"; on the project's own home or settings,
+  confirming leaves for the New page.
 - `missing`: an unknown ID shows the alert "Project not found".
 
 ## How to get to it (user POV)
@@ -83,7 +85,7 @@ Preconditions: a seeded launch (`$S/launch.sh`), `. "$RUN/run.env"`, doctor pass
     ab find role menuitem click --name "Delete project" --exact;
     ab wait --text "Delete this project?"`, capture `06-confirm`, then
     `ab find role button click --name "Delete" --exact; ab wait --url "**/new"`
-  - Result: the dialog reads `"Verify Project" will be deleted. Its session is kept, in no
+  - Result: the dialog reads `"Verify Project" is removed from Piano; its session moves to No
     project. This cannot be undone.`; confirming lands on `/new`, the sidebar has no "Verify
     Project" group and "Plan the verification" sits under "No project", and `/s/verify-plan`
     still opens with its history. Capture `06-deleted`. Deleting changes the database; relaunch

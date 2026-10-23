@@ -7,11 +7,7 @@
  * deciding.
  */
 // Relative, not @shared: module tests load this file directly in Node.
-import {
-  type ClientCommand,
-  PROJECT_INSTRUCTIONS_MAX,
-  type Project,
-} from "../../../shared/wire.ts";
+import type { ClientCommand, Project } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { sessionProject } from "./sessionContext.ts";
 import { byName } from "./sidebarView.ts";
@@ -44,11 +40,13 @@ export type ProjectCommandId =
   | "new-session"
   | "open-project"
   | "settings"
+  | "rename"
+  | "instructions"
   | "delete"
   | "new-project"
   | "assign";
 
-export type ProjectCommandIcon = "new" | "settings" | "delete" | "folder" | "remove";
+export type ProjectCommandIcon = "new" | "settings" | "edit" | "delete" | "folder" | "remove";
 
 export type ProjectCommandIntent =
   /** Open the New session page for the project; it sends nothing. */
@@ -57,8 +55,10 @@ export type ProjectCommandIntent =
   | { kind: "open-project"; projectId: string }
   /** Open the project's settings page; it sends nothing. */
   | { kind: "project-settings"; projectId: string }
-  /** Open the project dialog to create a project (taking `dialog.assign`). */
+  /** Open the project dialog: to rename `dialog.project`, or to create a project (taking `dialog.assign`). */
   | { kind: "project-dialog"; dialog: ProjectDialog }
+  /** Open the dialog for the project's instructions. */
+  | { kind: "project-instructions"; project: Project }
   /** Ask before deleting the project. */
   | { kind: "delete-project"; project: Project }
   /** Send this registry change. */
@@ -101,7 +101,7 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
   ];
 }
 
-/** Project settings: the page for `project`'s name, instructions and deletion. */
+/** Project settings: the page for `project`'s name and instructions, and its deletion. */
 export function projectSettingsCommand(project: Project): ProjectCommand {
   return {
     id: "settings",
@@ -112,37 +112,32 @@ export function projectSettingsCommand(project: Project): ProjectCommand {
   };
 }
 
-/** What the settings page holds while it is edited. */
-export interface ProjectSettingsDraft {
-  name: string;
-  instructions: string;
-}
-
 /**
- * Saving the settings page: one registry change per field that differs from the project as saved
- * now, trimmed. A blank name cannot be saved; blank instructions clear them. Nothing to send, no
- * connection or instructions over the limit leave Save off.
+ * The settings page's rows: Rename (the project dialog) and Edit instructions (their dialog). Each
+ * opens a form, whose saving waits for a connection, so they wait for one too.
  */
-export function projectSettingsSave(
+export function projectSettingsRows(
   state: AppState,
-  projectId: string,
-  draft: ProjectSettingsDraft,
-): { allowed: boolean; commands: ClientCommand[] } {
-  const project = findProject(state, projectId);
-  const name = draft.name.trim();
-  const instructions = draft.instructions.trim();
-  if (!project || !state.connected || !name || instructions.length > PROJECT_INSTRUCTIONS_MAX)
-    return { allowed: false, commands: [] };
-  const commands: ClientCommand[] = [];
-  if (name !== project.name)
-    commands.push({ _tag: "save_project", project: { id: project.id, name } });
-  if (instructions !== (project.instructions ?? ""))
-    commands.push({
-      _tag: "set_project_instructions",
-      id: project.id,
-      instructions: instructions || null,
-    });
-  return { allowed: commands.length > 0, commands };
+  project: Project,
+): { rename: ProjectCommand; instructions: ProjectCommand } {
+  return {
+    rename: {
+      id: "rename",
+      label: "Rename",
+      ariaLabel: "Rename project",
+      icon: "edit",
+      enabled: state.connected,
+      intent: { kind: "project-dialog", dialog: { project } },
+    },
+    instructions: {
+      id: "instructions",
+      label: "Edit",
+      ariaLabel: "Edit instructions",
+      icon: "edit",
+      enabled: state.connected,
+      intent: { kind: "project-instructions", project },
+    },
+  };
 }
 
 /** One command of `project`'s. */
