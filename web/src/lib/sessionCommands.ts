@@ -110,7 +110,8 @@ export interface SessionHeaderMenu {
 const ROW_SECTIONS = [["rename", "pin"], ["share"], ["archive", "delete"]] as const;
 const HEADER_SECTIONS = {
   details: ["copy-all"],
-  open: ["changes", "pull-request", "open-preview", "stop-preview"],
+  // The header's preview control carries open and stop; the menu lists neither twice.
+  open: ["changes", "pull-request"],
   manage: ["rename", "pin", "share"],
   destructive: ["archive", "delete"],
 } as const satisfies Record<string, readonly SessionCommandId[]>;

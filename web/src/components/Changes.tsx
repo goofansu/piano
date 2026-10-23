@@ -105,7 +105,7 @@ export function ChangesPanel({
         />
       }
     >
-      <div className="flex flex-col gap-3 p-3">
+      <div className="flex flex-col">
         <SheetBodyView
           body={body}
           onOpenChange={(path, next) => setDisclosure((d) => toggleFile(d, path, next))}
@@ -130,13 +130,13 @@ function SheetBodyView({
       return null;
     case "reading":
       return (
-        <div className="flex items-center gap-2 py-10 text-sm text-ink-2" role="status">
+        <div className="flex items-center gap-2 px-4 py-10 text-sm text-ink-2" role="status">
           <Spinner className="size-4" /> Reading changes…
         </div>
       );
     case "failed":
       return (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="m-4 w-auto">
           <AlertTitle>Changes unavailable</AlertTitle>
           <AlertDescription>{body.detail}</AlertDescription>
         </Alert>
@@ -157,7 +157,7 @@ function SheetBodyView({
       );
     case "files":
       return (
-        <ItemGroup className="gap-2" aria-label="Changed files">
+        <ItemGroup className="gap-0" aria-label="Changed files">
           {body.files.map(({ metadata, initial, open }) => (
             <LiveFile
               key={`${body.changes.workspace.id}:${body.changes.observedAt}:${metadata.path}`}
@@ -270,19 +270,20 @@ function FileSection({
     <Collapsible
       open={open}
       onOpenChange={onOpenChange}
-      className="rounded-lg border border-line"
+      className="border-b border-line"
       data-path={file.path}
     >
-      {/* Sticky within the sheet's scroll area so the file name stays in view while its hunks scroll. */}
+      {/* A flat row, not a card: files read as one list. Sticky within the sheet's scroll area so
+       * the file name stays in view while its hunks scroll. */}
       <Item
         size="sm"
-        className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-0 rounded-lg bg-background p-1"
+        className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-0 rounded-none bg-conversation px-2 py-1"
       >
         <CollapsibleTrigger asChild>
           <Button
             variant="ghost"
             size="sm"
-            className="h-auto min-h-9 min-w-0 justify-start gap-2 whitespace-normal px-2 py-2 text-left font-normal pointer-coarse:min-h-11"
+            className="h-auto min-h-9 min-w-0 justify-start gap-2 whitespace-normal px-2 py-2 text-left font-normal aria-expanded:bg-transparent pointer-coarse:min-h-11"
             aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
           >
             <span className="self-start">
@@ -293,6 +294,12 @@ function FileSection({
                 {filename}
               </ItemTitle>
             </ItemContent>
+            {!file.binary && (
+              <span className="ml-auto shrink-0 self-start font-mono text-xs tabular-nums">
+                <span className="text-ok">+{file.additions}</span>{" "}
+                <span className="text-err">−{file.deletions}</span>
+              </span>
+            )}
           </Button>
         </CollapsibleTrigger>
         {canAsk && (
@@ -308,33 +315,25 @@ function FileSection({
             </IconButton>
           </ItemActions>
         )}
-        <Collapsible className="col-span-full min-w-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 pr-2 pl-7">
-            {directory && (
+        {directory && (
+          <Collapsible className="col-span-full min-w-0">
+            <div className="flex min-w-0 items-center pr-2 pl-7">
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-auto min-h-7 min-w-0 flex-1 justify-start px-0 text-ink-3 pointer-coarse:min-h-11"
+                  className="h-auto min-h-6 min-w-0 flex-1 justify-start px-0 text-ink-3 aria-expanded:bg-transparent pointer-coarse:min-h-11"
                   aria-label={`Full path for ${file.path}`}
                 >
                   <span className="truncate font-mono text-xs font-normal">{directory}</span>
                 </Button>
               </CollapsibleTrigger>
-            )}
-            {!file.binary && (
-              <span className="ml-auto shrink-0 py-1 font-mono text-xs tabular-nums">
-                <span className="text-ok">+{file.additions}</span>{" "}
-                <span className="text-err">−{file.deletions}</span>
-              </span>
-            )}
-          </div>
-          {directory && (
+            </div>
             <CollapsibleContent className="disclosure-content px-2 py-2 font-mono text-xs text-ink-2 [overflow-wrap:anywhere]">
               {file.path}
             </CollapsibleContent>
-          )}
-        </Collapsible>
+          </Collapsible>
+        )}
         {description && (
           <ItemDescription className="col-span-full line-clamp-none px-2 pb-1 text-xs [overflow-wrap:anywhere]">
             {description}

@@ -122,7 +122,12 @@ export function AppLayout({
         data-motion="drawer"
         data-sidebar-dragging={swipe.dragging}
         style={swipe.style}
-        className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1"
+        className={cn(
+          "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1",
+          // With the right sidebar open the two are one sheet, split by a hairline (RightSidebar).
+          // The conversation keeps a readable column; the sidebar gives way when space runs short.
+          "md:[&:has(~[data-slot=layout-panel])]:mr-0 md:[&:has(~[data-slot=layout-panel])]:min-w-[28rem] md:[&:has(~[data-slot=layout-panel])]:rounded-r-none md:[&:has(~[data-slot=layout-panel])]:border-r-0",
+        )}
       >
         {content}
       </main>

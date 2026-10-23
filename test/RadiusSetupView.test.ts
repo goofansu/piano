@@ -37,7 +37,7 @@ test("signed out, the account is offered and neither tool can be set up", () => 
   const signedOut = view({ providers: radius(false) });
   assert.equal(signedOut.account.canSignIn, true);
   assert.equal(signedOut.account.canSignOut, false);
-  assert.equal(signedOut.account.description, "Sign in to set up Radius tools and web search.");
+  assert.equal(signedOut.account.description, undefined);
   assert.equal(signedOut.mcp.install?.enabled, false);
   assert.equal(signedOut.webSearch.install?.enabled, false);
 
@@ -80,16 +80,15 @@ test("removal stays available while signed out", () => {
   assert.equal(signedOut.webSearch.uninstall?.enabled, true);
 });
 
-test("a running web-search change locks every step and words the summary by action", () => {
-  for (const [action, summary, label] of [
-    ["install", "Installing web search…", "Installing…"],
-    ["uninstall", "Uninstalling web search…", "Uninstalling…"],
+test("a running web-search change locks every step and words its row by action", () => {
+  for (const [action, label] of [
+    ["install", "Installing…"],
+    ["uninstall", "Uninstalling…"],
   ] as const) {
     const running = view({
       state: { ...ready, installation: { status: "running", action } },
     });
     assert.equal(running.locked, true);
-    assert.equal(running.tools.summary, summary);
     assert.deepEqual(running.webSearch.change, { action, label });
     assert.equal(running.account.canSignOut, false);
     assert.equal(running.mcp.uninstall?.enabled, false);
@@ -116,15 +115,10 @@ test("a change in flight locks every step and refresh; sign-out is not a setup c
   assert.equal(signingOut.canRefresh, false);
 });
 
-test("the folded summary reports each tool's state", () => {
-  assert.equal(view().tools.summary, "MCP not installed · Web search not installed");
-  assert.equal(
-    view({ state: { ...missing, mcp: { status: "ready" } } }).tools.summary,
-    "MCP installed · Web search not installed",
-  );
+test("both tools ready offers no install", () => {
   const both = view({ state: ready });
-  assert.equal(both.tools.summary, "MCP installed · Web search installed");
-  assert.equal(both.tools.ready, true);
+  assert.equal(both.mcp.ready, true);
+  assert.equal(both.webSearch.ready, true);
   assert.equal(both.mcp.install, undefined);
   assert.equal(both.webSearch.install, undefined);
 });
@@ -214,12 +208,6 @@ test("each tool offers Install until installed and Uninstall while Pi reports it
   });
   assert.equal(installed.mcp.readyLabel, "Installed");
   assert.equal(installed.webSearch.readyLabel, "Installed");
-  // Only web search carries the organization note.
-  assert.equal(installed.mcp.note, undefined);
-  assert.equal(
-    installed.webSearch.note,
-    "An organization owner or admin must enable Web search separately in Radius.",
-  );
 });
 
 test("each uninstall is confirmed in its own tool's words, and MCP changes announce themselves", () => {

@@ -5,14 +5,18 @@ Enter an HTTPS receiver URL, optionally a Bearer token, and select at least one 
 allowed only for loopback hosts (`localhost`, `127.0.0.1`, `[::1]`). URLs cannot contain credentials
 or fragments. Only configure receivers you trust with conversation text.
 
-Rows show the receiver's host, subscriptions, Active switch and last delivery result. The menu
-provides **Edit**, **Send test** and **Delete**. A saved token is never returned: leave the editor's
-token field blank to keep it, enter a replacement, or select **Remove saved token**. Tokens are
-stored as written, not encrypted, in Piano's private SQLite database; protect its backups too.
+Rows show the receiver's host, its events, the Active switch and the last delivery as a status dot
+with the outcome, the HTTP status (or the transport failure) and when. The row menu provides
+**Edit**, **Test** and **Delete**; Delete asks first. A saved token is never returned: the
+editor shows it masked, so leaving the field blank keeps it, typing replaces it, and **Remove** on
+the field clears it when saved.
+Tokens are stored as written, not encrypted, in Piano's private SQLite database; protect its backups
+too.
 
-**Send test** posts `ping` even for an inactive webhook. It carries `ignore: true`, so a receiver
-should acknowledge it without acting. The row shows the HTTP result, or a generic transport/timeout
-failure. Responses are never displayed, since they might echo credentials.
+**Test** posts `ping` even for an inactive webhook. It carries `ignore: true`, so a receiver
+should acknowledge it without acting. The result shows as a toast and on the row: the HTTP status,
+or a generic transport/timeout failure. Responses are never displayed, since they might echo
+credentials.
 
 ## Events
 
@@ -21,7 +25,7 @@ failure. Responses are never displayed, since they might echo credentials.
 | `session.completed` | Successful final response (`response_completed`), including a token-limit ending | `null` |
 | `session.needs_input` | A dialog becomes the session's `needs_input` disposition | `Answer in Piano: <url>` |
 | `session.failed` | Pi closes with `failed`, `exited` or `released_during_work` | `Open session in Piano: <url>` |
-| `ping` | Send test only; not subscribable | `null` |
+| `ping` | Test only; not subscribable | `null` |
 
 Only active, subscribed hooks receive live events. Delivery is immediate: no grace delay, no
 cancellation when someone opens the session, and no saved-history replay. Completion is an agent

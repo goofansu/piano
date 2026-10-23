@@ -12,7 +12,8 @@ so and offer Unarchive; unknown IDs show "Project not found".
 - `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
 - `member-cards`: one `button[data-slot=item]` card per member session; clicking opens `/s/<id>`.
 - `new-in-project`: "New session in project" opens `/projects/<id>/new` with the project chosen.
-- `empty`: a project with no sessions shows only its heading and "New session in project".
+- `header`: the pane header names the project with its session count beneath ("1 session"; "· Archived" when archived) and holds "New session in project".
+- `empty`: a project with no sessions shows only its header ("0 sessions") and "New session in project".
 - `archived`: "This project is archived." with an "Unarchive project" button.
 - `missing`: an unknown ID shows the alert "Project not found".
 

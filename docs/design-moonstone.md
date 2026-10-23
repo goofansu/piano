@@ -145,12 +145,47 @@ pointer and 44px on touch screens.
 A session row is its title alone. Where it runs and which project it belongs to live in the session
 header and the sidebar's groupings, not on every row.
 
-The session header shows where the session runs in Zed's form, `folder ⇄ worktree / ⑂ branch`
-(worktree in mono, without Worktrunk's `folder.` prefix; no worktree segment for the folder itself).
-It runs at full length while it fits. When space runs out, the worktree and branch truncate down to
-about 6rem each, then drop out whole from the right, branch first: the line may wrap, but only its
-first row shows. The folder always stays. The full path is in the session menu; the segments carry
-no tooltips, since they show their own text.
+The session header is the title with where the session runs beneath it, in Zed's form
+`folder ⇄ worktree / ⑂ branch · project` (worktree in mono, without Worktrunk's `folder.` prefix; no
+worktree segment for the folder itself), and at its end its controls: preview, pull request, menu. The session's state is the
+sidebar row's (the keys while it works, a dot otherwise); the header only announces it to screen
+readers, since a state is shown once. The context line runs at full length
+while it fits. When space runs out, the worktree, branch and project truncate down to about 6rem
+each, then drop out whole from the right, project first: the line may wrap, but only its first row
+shows. The folder always stays. The full path is in the session menu; the segments carry no
+tooltips, since they show their own text.
+
+The right sidebar (Changes, an open file) shares the conversation's sheet, split off by a hairline,
+rather than floating as a second card; its header has the same shape, a title with a line beneath
+it. Its remembered width is a preference, not a claim on the conversation: the conversation keeps
+at least 28rem and the sidebar shrinks first, down to its 20rem minimum and never past half the
+viewport.
+
+## Linear
+
+Linear is the design guide: Codex and T3 Code remain references for the web harness around Pi.
+What Piano takes from it, in Moonstone's palette:
+
+- **Structure over ornament.** One header shape everywhere (a title with its context beneath,
+  controls at the end), hairline dividers instead of spaced cards, small quiet controls (28–32px)
+  at the row's end, and the one primary action of a page in its header. Settings pages are
+  groups of hairline-divided rows with no intro line: the rows say what the page does. Piano takes Linear's structure and
+  restraint, not its chrome: the palette, type and radii stay Moonstone's.
+- **State at a glance, once** ([agent interaction guidelines](https://linear.app/developers/aig)
+  §4): the sidebar row says whether Pi is working; a `StatusDot` names an app's state in the
+  preview control and a webhook's last delivery, so one vocabulary covers every state: busy
+  (breathing), ok, warn, err, muted. A state appears in one place. A header dot beside the sidebar
+  row's was tried and removed, as the header mark playing beside the rows was before.
+- **Instant, unobtrusive feedback** (§3): a dot breathes while something is in progress; a refresh
+  control turns its own icon while it reads; a test delivery answers with a toast that names the
+  HTTP status.
+- **Self-evident, so fewer words.** The screen explains itself through structure, names and
+  defaults (Krug's "don't make me think"), not through prose about itself: a control says what it
+  does and no more ("Details", "Add webhook", "Save"), and the words a fact still needs sit beside
+  the control they explain (a field's description, an empty state's one line, a dialog's
+  description line) or wait in a Details popover. A paragraph above a page is the sign a name or
+  layout needs work.
+- **Confirm what cannot be undone.** Deleting a webhook asks first, as Delete session does.
 
 ## Mark
 
@@ -235,6 +270,8 @@ need not hold their content for the exit. Menus and selects exit live, showing t
 | Transcript, streaming output, fold content, loading placeholder, jumps | none | the transcript never moves under the reader; a jump always lands the message 16px under the top |
 | Phone sidebar (`drawer`) | follows the finger 1:1; on release it settles at the finger's speed into a stop (120–420ms); a tap opens or closes it over 300ms on `--ease-drawer` `cubic-bezier(0.32, 0.72, 0, 1)` | a gesture should finish the way it was moving; a tap gets the iOS drawer feel |
 | Desktop sidebar collapse (Mod+B or its button), sidebar rows, right sidebar | none | a keyboard shortcut and frequent navigation should answer at once |
+| Status dot while in progress (`pulse`) | opacity 1 → 0.3 → 1 on the keys' 1.2s `--ease-in-out` loop; still under reduced motion | the one in-progress sign the preview control and deliveries share; opacity alone stays on the compositor |
+| Refresh while reading | the control's own icon turns (`animate-spin`) | the answer arrives where the question was asked, with no second spinner |
 | Settings: section switches, loading placeholders giving way to content, notices that replace them, the sign-in dialog's steps | none | navigation and content arriving answer at once, as in the transcript; Settings' folds share the turning chevron and its dialogs the overlay motion |
 | Keys while Pi works (`key`) | each key dips 1px and dims to 60% in turn, a 1.2s loop on `--ease-in-out` `cubic-bezier(0.77, 0, 0.175, 1)`, keys 0.4s apart; a CSS animation; reduced motion holds them pressed and still | Piano's one ornament says Pi is alive; a still press could equally mean stuck. Only transform and opacity move, and a CSS animation keeps running smoothly while replies stream |
 | New session page entrance | none | seen many times a day, often from the keyboard, with the composer focused to type at once |

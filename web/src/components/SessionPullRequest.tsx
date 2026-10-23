@@ -77,7 +77,7 @@ function SessionPullRequestTrigger({
           <Button
             ref={ref}
             variant="ghost"
-            size={mobile ? "xs" : "lg"}
+            size={mobile ? "xs" : "sm"}
             aria-label={face.ariaLabel}
             aria-description={face.ariaDescription}
           >
@@ -102,7 +102,7 @@ function LoadingPullRequestTrigger({ ref }: { ref: React.Ref<HTMLButtonElement> 
   const mobile = useIsMobile();
   return (
     <PopoverTrigger asChild>
-      <Button ref={ref} variant="ghost" size={mobile ? "xs" : "lg"} aria-label="Pull request">
+      <Button ref={ref} variant="ghost" size={mobile ? "xs" : "sm"} aria-label="Pull request">
         <GitPullRequestIcon
           data-icon="inline-start"
           className="text-muted-foreground"

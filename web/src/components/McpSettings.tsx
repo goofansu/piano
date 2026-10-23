@@ -5,8 +5,10 @@ import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
 import {
   SettingsAlert,
+  SettingsList,
   SettingsSectionFrame,
   SettingsSkeleton,
+  settingsRow,
 } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +16,6 @@ import {
   ItemActions,
   ItemContent,
   ItemDescription,
-  ItemGroup,
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
@@ -112,11 +113,13 @@ export function McpSettings() {
         <SettingsAlert title="MCP setup needs attention">{view.attention}</SettingsAlert>
       )}
       {!view.rows ? (
-        <SettingsSkeleton label="Loading MCP servers…">
-          <Skeleton className="h-20 w-full rounded-xl" />
+        <SettingsSkeleton label="Loading MCP servers…" className="flex flex-col gap-2">
+          {[0, 1].map((row) => (
+            <Skeleton key={row} className="h-14 w-full rounded-lg" />
+          ))}
         </SettingsSkeleton>
       ) : (
-        <ItemGroup className="gap-2">
+        <SettingsList>
           {view.rows.map((row) => {
             const { server } = row;
             return (
@@ -140,7 +143,7 @@ export function McpSettings() {
               />
             );
           })}
-        </ItemGroup>
+        </SettingsList>
       )}
     </SettingsSectionFrame>
   );
@@ -164,7 +167,7 @@ function McpServerItem({
   const logo = SERVER_LOGOS[server.id];
   // Only the name and its actions; a line appears only for a configuration problem the user must fix in Pi.
   return (
-    <Item variant="outline" className="flex-nowrap rounded-xl px-4 sm:px-5">
+    <Item className={settingsRow}>
       {logo && (
         <ItemMedia variant="icon">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -189,6 +192,7 @@ function McpServerItem({
           action === "install" ? (
             <Button
               key={action}
+              variant="outline"
               size="sm"
               disabled={disabled}
               aria-label={`Install ${server.name} MCP`}
@@ -199,6 +203,7 @@ function McpServerItem({
           ) : action === "sign-in" ? (
             <Button
               key={action}
+              variant="outline"
               size="sm"
               disabled={disabled}
               aria-label={`Sign in to ${server.name}`}

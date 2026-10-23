@@ -85,7 +85,8 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
 
 export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {
   const Icon = ICONS[icon];
-  return <Icon />;
+  // Stop is the filled square the composer's Stop shows; hollow, it reads as a checkbox.
+  return <Icon className={icon === "stop" ? "fill-current" : undefined} />;
 }
 
 interface CommandsValue {

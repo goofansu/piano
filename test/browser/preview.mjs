@@ -253,11 +253,11 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         assert.equal(await headerPreview(), RUNNING);
         await page.capture("1b-header-preview");
         await page.click("button", RUNNING);
-        await page.see("Details and logs");
+        await page.see("Details");
         assert.deepEqual(await menuLink(), { href: app.url, target: "_blank" });
         await page.capture("1c-preview-menu");
-        await page.click("menuitem", "Details and logs");
-        await page.see("Recent output");
+        await page.click("menuitem", "Details");
+        await page.see("Output");
         // Enter in the details opens the app; it never stops it.
         await page.until(
           "document.activeElement?.tagName === 'A' && document.activeElement.textContent.includes('Open preview')",
@@ -311,7 +311,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         assert.equal(await headerPreview(), RUNNING);
         assert.equal(request({ action: "status" }).instanceId, identity);
         await page.click("button", RUNNING);
-        await page.see("Details and logs");
+        await page.see("Details");
         assert.deepEqual(await menuLink(), { href: first.url, target: "_blank" });
         await page.capture("2b-reload-same-preview");
         await page.click("menuitem", "Stop preview");

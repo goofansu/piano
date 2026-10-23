@@ -1,6 +1,6 @@
 /**
- * What the Radius section shows and allows: each step's state, which controls are available, the
- * folded tools' summary, and whether the page has settled for announcements. One change, read or
+ * What the Radius section shows and allows: each step's state, which controls are available,
+ * and whether the page has settled for announcements. One change, read or
  * failure at a time locks every step; a step Pi reports as blocked, or one that needs the account,
  * stays unavailable on its own. Each tool's wording — its row, actions, uninstall confirmation and
  * the toast its change earns — lives in `TOOLS` here, so the section renders both tools with one
@@ -45,8 +45,6 @@ export interface RadiusSetupView {
     canSignOut: boolean;
     signingOut: boolean;
   };
-  /** The folded tools: whether both are set up and where they stand. */
-  tools: { ready: boolean; summary: string };
   mcp: RadiusToolView;
   webSearch: RadiusToolView;
   /** Signed in, with both tools ready and no failed web-search change. */
@@ -63,14 +61,11 @@ type RadiusInstall = Exclude<RadiusSetupAction, RadiusUninstall>;
 /** One tool's row: what it is, whether it is installed, and its install and uninstall controls. */
 export interface RadiusToolView {
   title: string;
-  description: string;
   ready: boolean;
   /** Read to screen readers beside the title once ready. */
   readyLabel: string;
   /** Why Pi reports this tool as it does, when it says. */
   detail?: string;
-  /** A standing note under the description. */
-  note?: string;
   /** Offered until the tool is installed. */
   install?: { label: string; ariaLabel: string; enabled: boolean; action: RadiusInstall };
   /** Offered while Pi reports configuration this page can uninstall. */
@@ -86,8 +81,6 @@ export interface RadiusToolView {
 
 interface RadiusToolCopy {
   title: string;
-  description: string;
-  note?: string;
   install: { action: RadiusInstall; ariaLabel: string; done?: string };
   uninstall: {
     action: RadiusUninstall;
@@ -101,7 +94,6 @@ interface RadiusToolCopy {
 const TOOLS = {
   mcp: {
     title: "Radius MCP",
-    description: "Give Pi your Radius tools, using the same sign-in.",
     install: {
       action: "configure-mcp",
       ariaLabel: "Install Radius MCP",
@@ -120,8 +112,6 @@ const TOOLS = {
   },
   webSearch: {
     title: "Web search",
-    description: "Let Pi search the web with the Radius extension.",
-    note: "An organization owner or admin must enable Web search separately in Radius.",
     install: { action: "install-web-search", ariaLabel: "Install web search" },
     uninstall: {
       action: "uninstall-web-search",
@@ -144,11 +134,9 @@ const toolView = (
   const ready = step?.status === "ready";
   return {
     title: copy.title,
-    description: copy.description,
     ready,
     readyLabel: "Installed",
     detail: step?.detail,
-    note: copy.note,
     install: ready
       ? undefined
       : {
@@ -199,24 +187,12 @@ export function radiusSetupView({
     account: {
       signedIn,
       available: !!radius,
-      description: signedIn
-        ? undefined
-        : !radius
-          ? "Radius sign-in is unavailable in this Pi installation."
-          : "Sign in to set up Radius tools and web search.",
+      // Only the state the row cannot show itself: why there is no Sign in button.
+      description:
+        !signedIn && !radius ? "Radius sign-in is unavailable in this Pi installation." : undefined,
       canSignIn: !signedIn && !!radius && !locked,
       canSignOut: signedIn && !locked,
       signingOut,
-    },
-    tools: {
-      ready: mcpReady && webSearchReady,
-      summary: installing
-        ? action === "uninstall"
-          ? "Uninstalling web search…"
-          : "Installing web search…"
-        : `${mcpReady ? "MCP installed" : "MCP not installed"} · ${
-            webSearchReady ? "Web search installed" : "Web search not installed"
-          }`,
     },
     mcp: toolView(TOOLS.mcp, state?.mcp, { locked, signedIn }),
     webSearch: toolView(

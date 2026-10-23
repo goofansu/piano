@@ -790,6 +790,20 @@
 [data-motion="turn"] {
   transition: rotate 150ms var(--ease-out);
 }
+/* A status dot breathes while its state is in progress (Pi working, an app starting, Piano
+ * reconnecting): opacity alone, on the keys' 1.2s clock, so it keeps time on the compositor. */
+[data-motion="pulse"] {
+  animation: status-pulse 1.2s var(--ease-in-out) infinite;
+}
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
 /* The composer's focus and drop ring is a change of colour, so it eases. */
 [data-motion="ring"] {
   transition:
@@ -849,8 +863,9 @@
   [data-motion="turn"] {
     transition: none;
   }
-  /* The keys hold their pressed state instead of playing. */
-  [data-motion="key"] {
+  /* The keys hold their pressed state instead of playing, and a status dot holds its colour. */
+  [data-motion="key"],
+  [data-motion="pulse"] {
     animation: none !important;
   }
   /* The phone sidebar comes to rest at once; finger tracking stays. */
