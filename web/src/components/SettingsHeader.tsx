@@ -1,7 +1,7 @@
 import { ChevronLeftIcon } from "lucide-react";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 
-/** The settings pane's top bar, matching the session header so both panes share one edge. */
+/** The settings pane's top bar: the session header's height and type, so every pane shares one edge and one title. */
 export function SettingsHeader({
   title,
   titleId,
@@ -17,7 +17,7 @@ export function SettingsHeader({
       <ShowSidebarButton className="-ml-2" label="Settings">
         <ChevronLeftIcon />
       </ShowSidebarButton>
-      <h1 id={titleId} className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight">
+      <h1 id={titleId} className="min-w-0 flex-1 truncate text-sm font-medium">
         {title}
       </h1>
       {children}

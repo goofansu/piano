@@ -25,8 +25,8 @@ export function SettingsSectionIcon({ icon }: { icon: SettingsSectionIconName })
 }
 
 /**
- * One Settings section: the header with its actions, a scrolling column of content, and the
- * section's dialogs.
+ * One Settings page: the header with its actions, a scrolling column of content, and the page's
+ * dialogs. No intro line: the rows say what the page does.
  */
 export function SettingsSectionFrame({
   title,
@@ -48,7 +48,7 @@ export function SettingsSectionFrame({
       <SettingsHeader title={title} titleId={titleId}>
         {actions}
       </SettingsHeader>
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
         <section
           id={sectionId}
           aria-labelledby={titleId}
@@ -61,6 +61,62 @@ export function SettingsSectionFrame({
     </section>
   );
 }
+
+/** A titled group on a Settings page: its name and its rows. */
+export function SettingsGroup({
+  id,
+  title,
+  actions,
+  className,
+  children,
+}: {
+  id: string;
+  title: React.ReactNode;
+  /** A control at the title's end, such as Refresh. */
+  actions?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-labelledby={`${id}-title`} className={cn("flex flex-col gap-3", className)}>
+      <div className="flex min-h-8 items-center gap-2">
+        <h2
+          id={`${id}-title`}
+          className="flex min-w-0 flex-1 items-center gap-2 text-base font-medium"
+        >
+          {title}
+        </h2>
+        {actions}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Rows in one bordered list, split by hairlines rather than spaced as cards, as Linear's settings
+ * lists are. Rows are `Item`s with `settingsRow`.
+ */
+export function SettingsList({
+  className,
+  ...props
+}: React.ComponentProps<"div"> & { children: React.ReactNode }) {
+  return (
+    // Its rows are shadcn Items (divs), which a <ul> cannot hold; the role names the list.
+    // biome-ignore lint/a11y/useSemanticElements: see above.
+    <div
+      role="list"
+      className={cn(
+        "flex flex-col divide-y divide-line overflow-hidden rounded-lg border border-line",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** The classes an `Item` takes to sit in a `SettingsList`. */
+export const settingsRow = "flex-nowrap rounded-none px-4 py-3";
 
 /** A section's problem the user can act on. */
 export function SettingsAlert({

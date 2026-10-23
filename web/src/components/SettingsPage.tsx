@@ -11,9 +11,12 @@ import { RadiusSection } from "@/components/RadiusSection";
 import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
 import {
   SettingsAlert,
+  SettingsGroup,
+  SettingsList,
   SettingsSectionFrame,
   SettingsSectionIcon,
   SettingsSkeleton,
+  settingsRow,
 } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,14 +26,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item";
+import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
 import {
   SidebarContent,
   SidebarGroup,
@@ -191,13 +187,7 @@ function ProvidersSettings({
       <div className="flex flex-col gap-8">
         <RadiusSection reveal={revealRadius} />
         {body.kind !== "hidden" && (
-          <section aria-labelledby="settings-other-providers-title" className="flex flex-col gap-3">
-            <h2
-              id="settings-other-providers-title"
-              className="flex min-h-8 items-center text-lg font-semibold"
-            >
-              Other providers
-            </h2>
+          <SettingsGroup id="settings-other-providers" title="Other providers">
             {body.kind === "error" ? (
               <SettingsAlert title="Could not load providers" icon={<AlertCircleIcon />}>
                 <p>Check your connection and try again.</p>
@@ -208,7 +198,7 @@ function ProvidersSettings({
             ) : body.kind === "loading" ? (
               <SettingsSkeleton label="Loading providers…" className="flex flex-col gap-2">
                 {[0, 1, 2].map((row) => (
-                  <Skeleton key={row} className="h-16 w-full" />
+                  <Skeleton key={row} className="h-14 w-full rounded-lg" />
                 ))}
               </SettingsSkeleton>
             ) : body.kind === "empty" ? (
@@ -222,9 +212,9 @@ function ProvidersSettings({
                 </EmptyHeader>
               </Empty>
             ) : (
-              <ItemGroup className="gap-2">
+              <SettingsList>
                 {body.rows.map(({ provider, logo, action }) => (
-                  <Item key={provider.id} role="listitem" variant="outline" className="flex-nowrap">
+                  <Item key={provider.id} role="listitem" className={settingsRow}>
                     {logo && (
                       <ItemMedia variant="icon">
                         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -245,7 +235,7 @@ function ProvidersSettings({
                     </ItemContent>
                     <ItemActions className="shrink-0">
                       <Button
-                        variant={action.primary ? "default" : "ghost"}
+                        variant={action.primary ? "outline" : "ghost"}
                         size="sm"
                         className={action.primary ? undefined : "text-muted-foreground"}
                         disabled={!action.enabled}
@@ -260,9 +250,9 @@ function ProvidersSettings({
                     </ItemActions>
                   </Item>
                 ))}
-              </ItemGroup>
+              </SettingsList>
             )}
-          </section>
+          </SettingsGroup>
         )}
       </div>
     </SettingsSectionFrame>
