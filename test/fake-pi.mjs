@@ -446,6 +446,20 @@ function handle(cmd) {
       return;
     }
     case "prompt": {
+      // Stands in for the piano_preview tool: the request rides this generation's owner socket.
+      if (cmd.message.startsWith("preview ")) {
+        respond(cmd, { disposition: "handled" });
+        import("../scripts/PreviewClient.ts")
+          .then(({ ownerRequest }) =>
+            ownerRequest(process.env.PIANO_PREVIEW_OWNER, JSON.parse(cmd.message.slice(8))),
+          )
+          .then(
+            () => "preview answered",
+            (error) => `preview failed: ${error.message}`,
+          )
+          .then((message) => out({ type: "extension_ui_request", method: "notify", message }));
+        return;
+      }
       if (cmd.message.startsWith("notification ")) {
         respond(cmd, { disposition: "started" });
         if (cmd.message !== "notification finish") {

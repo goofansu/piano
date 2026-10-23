@@ -9,6 +9,12 @@ import {
   type PreviewRequest,
 } from "./PreviewAdapter.ts";
 
+/** An admitted request's adapter outcome, as returned to its caller. */
+export type PreviewObserver = (
+  request: PreviewRequest,
+  outcome: { result: unknown } | { error: unknown },
+) => void;
+
 /** One Pi generation's admission gate and live connections. Browser/tool cancellation never
  * closes it. The service runner must connect before it can spawn, including a late submission
  * after Piano dies. A server crash closes the kernel connections without running JS cleanup. */
@@ -24,6 +30,7 @@ export class PreviewOwner {
   private attempted = false;
   private ending = false;
   private disposed?: Promise<void>;
+  private observer?: PreviewObserver;
 
   private constructor(
     identity: PreviewOwnerIdentity,
@@ -123,6 +130,11 @@ export class PreviewOwner {
     return next;
   }
 
+  /** Hear every admitted request's outcome in order, the session's tool and the browser alike. */
+  observe(observer: PreviewObserver) {
+    this.observer = observer;
+  }
+
   request(request: PreviewRequest) {
     if (this.ending)
       return Promise.reject(new Error("Pi owner is ending; no preview launch admitted."));
@@ -130,12 +142,19 @@ export class PreviewOwner {
     return this.serial(async () => {
       if (this.ending) throw new Error("Pi owner is ending; no preview launch admitted.");
       if (request.action === "start") this.attempted = true;
-      return this.adapter.request(
-        { ...request, workspace: this.identity.workspace },
-        this.root,
-        await this.config(),
-        this.identity,
-      );
+      try {
+        const result = await this.adapter.request(
+          { ...request, workspace: this.identity.workspace },
+          this.root,
+          await this.config(),
+          this.identity,
+        );
+        this.observer?.(request, { result });
+        return result;
+      } catch (error) {
+        this.observer?.(request, { error });
+        throw error;
+      }
     }).finally(() => {
       this.pending--;
     });

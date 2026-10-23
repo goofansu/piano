@@ -18,12 +18,13 @@
  */
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { Cause, Context, Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
+import { Cause, Context, Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
 import { ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
+import type { PreviewAdapter, PreviewConfig } from "../scripts/PreviewAdapter.ts";
 import { PreviewOwner } from "../scripts/PreviewOwner.ts";
 import { withLastKnownStats } from "../shared/sessionProjection.ts";
 import { liveActivityOf } from "../shared/sessionStatus.ts";
@@ -34,6 +35,7 @@ import type {
   SessionActionResult,
   SessionClosure,
   SessionFrame,
+  SessionPreview,
   SessionState,
   SessionStats,
   SlashCommand,
@@ -56,6 +58,7 @@ import {
   stateFactsOf,
 } from "./PiRecords.ts";
 import { type PiLane, PiSessionError, PiTransport } from "./PiTransport.ts";
+import { previewLogs, projectPreview } from "./PreviewProjection.ts";
 import { makeSessionDialogs } from "./SessionDialogs.ts";
 import { makeSessionPublication } from "./SessionPublication.ts";
 import { makeSessionReadbacks } from "./SessionReadbacks.ts";
@@ -217,6 +220,22 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     needsCheckout: true,
     activity: false,
   },
+  // Preview actions never reach Pi. Cleanup and observation use retained identity, so they work
+  // without the checkout; stopping an app must not wait behind ordinary input.
+  preview_status: {
+    priority: false,
+    supersedes: false,
+    blockedWhileStopping: false,
+    needsCheckout: false,
+    activity: false,
+  },
+  preview_stop: {
+    priority: true,
+    supersedes: false,
+    blockedWhileStopping: false,
+    needsCheckout: false,
+    activity: false,
+  },
 };
 
 // ── Implementation ───────────────────────────────────────────────────────────
@@ -242,6 +261,13 @@ export const PiDialogRecoveryMs = Context.Reference<number>("piano/PiDialogRecov
   defaultValue: () => 10 * 60_000,
 });
 
+/** Where preview owners keep intent and reach the host supervisor. Tests substitute the host. */
+export const PreviewOwnerOptions = Context.Reference<{
+  readonly adapter?: PreviewAdapter;
+  readonly root?: string;
+  readonly config?: () => Promise<PreviewConfig>;
+}>("piano/PreviewOwnerOptions", { defaultValue: () => ({}) });
+
 /** Retained state shows nothing Pi could still continue on its own or that awaits an answer. */
 const settled = (snapshot: Snapshot) => liveActivityOf(snapshot)._tag === "idle";
 
@@ -261,11 +287,12 @@ const openSession = (spec: PiSessionSpec) =>
   Effect.gen(function* () {
     // A generation belongs to this concrete Pi open, never a saved ID, PID or browser.
     const generation = randomUUID();
+    const previewOptions = yield* PreviewOwnerOptions;
     const preview =
       process.platform === "linux" || process.platform === "darwin"
         ? yield* Effect.acquireRelease(
             Effect.tryPromise({
-              try: () => PreviewOwner.open(spec, generation),
+              try: () => PreviewOwner.open(spec, generation, previewOptions),
               catch: (error) => new PiSessionError({ reason: "spawn", detail: String(error) }),
             }),
             (owner) =>
@@ -338,6 +365,35 @@ const openSession = (spec: PiSessionSpec) =>
     });
     const { transaction, apply, patchState, announced } = publication;
     let submissionId = 0;
+
+    // This generation's app as its owner last observed it, whether the tool or a browser asked.
+    // Requests are serialized by the owner; the latest observation is what state shows.
+    let observedPreview: SessionPreview | undefined;
+    const previewObserved = yield* Queue.sliding<void>(1);
+    preview?.observe((request, outcome) => {
+      observedPreview = projectPreview(observedPreview, generation, request, outcome);
+      Queue.offerUnsafe(previewObserved, undefined);
+    });
+    const publishPreview = patchState(() => ({ preview: observedPreview }));
+    yield* Queue.take(previewObserved).pipe(
+      Effect.andThen(publishPreview),
+      Effect.forever,
+      Effect.forkIn(sessionScope),
+    );
+    const previewRequest = (
+      request: { action: "status" } | { action: "stop"; instanceId: string },
+    ) =>
+      Effect.tryPromise({
+        try: () => {
+          if (!preview) throw new Error("Previews are not supported on this host.");
+          return preview.request({ ...request, workspace: preview.identity.workspace });
+        },
+        catch: (error) =>
+          new PiSessionError({
+            reason: "rejected",
+            detail: `Preview ${request.action === "stop" ? "stop" : "status"} failed: ${error instanceof Error ? error.message : String(error)}`,
+          }),
+      });
     const progress = makeSessionRecordProgress({ observed: child.observationVersion });
     let initializing = true;
     const initialRefreshes = new Set<RefreshKind>();
@@ -647,6 +703,38 @@ const openSession = (spec: PiSessionSpec) =>
           case "answer":
             yield* dialogs.answer(action);
             return;
+          // A browser re-observes on its own, so failure is an answer, not an error.
+          case "preview_status":
+            return yield* previewRequest({ action: "status" }).pipe(
+              Effect.ensuring(publishPreview),
+              Effect.match({
+                onSuccess: (result): SessionActionResult => ({
+                  _tag: "preview_observed",
+                  ...previewLogs(result, generation),
+                }),
+                onFailure: (error): SessionActionResult => ({
+                  _tag: "preview_observed",
+                  instanceId: observedPreview?.instanceId ?? null,
+                  logs: "",
+                  error: error.detail,
+                }),
+              }),
+            );
+          case "preview_stop": {
+            const { instanceId } = action;
+            const result = yield* previewRequest({ action: "stop", instanceId }).pipe(
+              Effect.ensuring(publishPreview),
+            );
+            const status = (result as { status?: unknown }).status;
+            const outcome = status === "stopped" || status === "cleared" ? status : "not-current";
+            // That instance is gone or replaced: show whatever this generation owns now.
+            if (outcome === "not-current")
+              yield* previewRequest({ action: "status" }).pipe(
+                Effect.ensuring(publishPreview),
+                Effect.ignore,
+              );
+            return { _tag: "preview_stopped", instanceId, outcome };
+          }
         }
       });
 

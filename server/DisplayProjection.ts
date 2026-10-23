@@ -46,6 +46,7 @@ const IDENTITY_FIELDS: ReadonlySet<string> = new Set([
   "currentPath", // WorktreeDiscovery
   "sessionFile", // SessionState
   "placed", // WrittenFile: the name a path inside the workspace places to
+  "instanceId", // SessionPreview and its results: a stop must name the exact instance
 ]);
 
 const isIdentity = (field: unknown) =>

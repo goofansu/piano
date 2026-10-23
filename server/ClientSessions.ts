@@ -243,7 +243,10 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     action: SessionAction,
     start?: StartOptions,
   ) {
-    const session = yield* target(selectionId, start);
+    // Preview actions observe or stop an existing owner's app; they never start Pi, even when an
+    // old or malformed client sends start options with them.
+    const preview = action._tag === "preview_status" || action._tag === "preview_stop";
+    const session = yield* target(selectionId, preview ? undefined : start);
     const result = yield* session.act(action);
     if (result)
       yield* send({
