@@ -179,12 +179,8 @@ What Piano takes from it, in Moonstone's palette:
 - **Instant, unobtrusive feedback** (§3): a dot breathes while something is in progress; a refresh
   control turns its own icon while it reads; a test delivery answers with a toast that names the
   HTTP status.
-- **Self-evident, so fewer words.** The screen explains itself through structure, names and
-  defaults (Krug's "don't make me think"), not through prose about itself: a control says what it
-  does and no more ("Details", "Add webhook", "Save"), and the words a fact still needs sit beside
-  the control they explain (a field's description, an empty state's one line, a dialog's
-  description line) or wait in a Details popover. A paragraph above a page is the sign a name or
-  layout needs work.
+- **Self-evident, so fewer words.** A control says what it does and no more ("Details", "Add
+  webhook", "Save"); the checks every added string passes are [quiet UI](../AGENTS.md#quiet-ui).
 - **Confirm what cannot be undone.** Deleting a webhook asks first, as Delete session does.
 
 ## Mark
