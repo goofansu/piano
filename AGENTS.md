@@ -21,6 +21,9 @@ or mock choreography. Documentation-only changes need document/link review, not 
   (module tests against `test/fake-pi.mjs`, no credentials). All three must pass.
 - **Application behavior:** observe the affected journey through `npx agent-browser` on a
   [scratch instance](#scratch-instance) and keep the output as PR evidence.
+- **UI changes:** list every string, control and action the change adds, from its screenshots,
+  and run each through the [quiet UI](#quiet-ui) checks; take each action once and screenshot its
+  answer. The change is done when every listed item passes or is gone.
 - **Critical paths** (start a session; open and continue one) live in `test/browser/`; add a
   journey there only for a new critical path. `test/browser/style-shots.mjs` is evidence, not a
   journey: run it before and after a shadcn upgrade, a style change or an edit to the `Piano*`
@@ -60,26 +63,40 @@ encodes the scratch path.
 
 Follow Linear's design and interaction language (see [the Linear notes](docs/design-moonstone.md#linear)
 and Linear's [agent interaction guidelines](https://linear.app/developers/aig)); Codex and T3 Code
-remain references for the web harness around Pi, not for how Piano looks. The **quiet UI** rule
-still holds: show only what helps users decide or act — useful values, essential controls, concise
-status. Internal state and diagnostics go in on-demand details, if anywhere. Show a persistent
-warning only for a problem the user can act on; keep correctness in state handling and regression
-checks.
+remain references for the web harness around Pi, not for how Piano looks.
 
-Make each screen **self-evident** (Krug's "don't make me think"): the user learns what a page does
-from its structure, names and defaults, so a row's name, its controls and its state carry the
-explanation. Prose about the screen is the sign a name or layout needs work. Where a fact still
-needs words, the words sit beside the control they explain (a field's description, an empty state's
-one line, a dialog's description line) or wait in a Details popover.
+### Quiet UI
+
+A screen carries only what helps the user decide or act, and explains itself (Krug's "don't make
+me think") through structure, names and defaults. Every string, control and action a change adds
+passes these checks:
+
+- **Kind:** a value, a control's name, a state, or an empty state's one line. Explaining the screen
+  (helper sentences, field descriptions, placeholders, intro lines) means a name or layout needs
+  work: fix that instead. A fact only words can carry waits in a Details popover or a dialog's
+  description line.
+- **Once:** each fact appears once per screen. A header's context line, a title or a placeholder
+  holds only what the screen does not already show.
+- **Same names:** things are named as the UI and [the glossary](docs/glossary.md) already name
+  them, case included ("No project", "Delete project").
+- **Same shape:** a new screen matches an existing screen of its kind (a settings page matches
+  Webhooks); compare their screenshots side by side. A destructive action is the red
+  `destructive` menu item and asks first.
+- **Feedback:** every action answers where it was taken, once the server confirms it: a saved,
+  deleted or sent change ends with a toast that names it ("Project saved", "Session deleted"),
+  a failure with the error's toast, a read in progress with its own control turning.
+- **Details on demand:** internal state and diagnostics go in on-demand details, if anywhere; a
+  persistent warning appears only for a problem the user can act on.
 
 Shared structure, so every pane reads as one app: one header shape on the session, the right
-sidebar and Settings (a title with its context beneath, controls at the end); one status glyph, `StatusDot`,
-for every state (an app preview, a webhook delivery), breathing (`pulse`) only while something is
-in progress, and each state shown once: the sidebar row owns a session's state, so the header
-repeats nothing; a refresh control turns its own icon while it reads; Settings pages are
-`SettingsGroup`s and `SettingsList`s of hairline-divided rows, with no intro line (the rows say
-what the page does), row actions as `outline` buttons and the page's one primary action in its
-header.
+sidebar and Settings (a title, context beneath it when that adds something, controls at the end);
+one status glyph, `StatusDot`, for every state (an app preview, a webhook delivery), breathing
+(`pulse`) only while something is in progress, and each state shown once: the sidebar row owns a
+session's state, so the header repeats nothing; a refresh control turns its own icon while it
+reads; a Settings page listing things (providers, webhooks) is `SettingsGroup`s and
+`SettingsList`s of hairline-divided rows with `outline` row actions and its one primary action
+in its header; editing one thing's few fields (Project settings) is a dialog opened where the
+thing is shown, its fields in place and Save in its footer.
 
 Build UI from shadcn/ui components (the `shadcn` skill: search the registry, add with
 `npx shadcn@latest add`). Hand-written markup is for the case where no standard component exists,
