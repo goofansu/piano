@@ -25,18 +25,20 @@ test("a project's instructions are saved trimmed, kept by a rename, cleared when
   await run(
     Effect.flatMap(Registry, (r) =>
       Effect.andThen(
-        r.setProjectInstructions("launch", "\n  Answer in French.\nKeep it short.  \n"),
-        r.saveProject({ id: "launch", name: "Launch v2" }),
+        r.updateProject("launch", { instructions: "\n  Answer in French.\nKeep it short.  \n" }),
+        r.updateProject("launch", { name: " Launch v2 " }),
       ),
     ),
   );
   assert.deepEqual(await projects(), [
     { id: "launch", name: "Launch v2", instructions: "Answer in French.\nKeep it short." },
   ]);
-  await run(Effect.flatMap(Registry, (r) => r.setProjectInstructions("launch", "   ")));
+  await run(Effect.flatMap(Registry, (r) => r.updateProject("launch", { instructions: "   " })));
   assert.deepEqual(await projects(), [{ id: "launch", name: "Launch v2" }]);
   const failure = await run(
-    Effect.flatMap(Registry, (r) => r.setProjectInstructions("missing", "x").pipe(Effect.flip)),
+    Effect.flatMap(Registry, (r) =>
+      r.updateProject("missing", { instructions: "x" }).pipe(Effect.flip),
+    ),
   );
   assert.match(failure.message, /Project is unavailable/);
 });
@@ -126,7 +128,7 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, ren
       yield* r.assignProject(b, "two", "launch");
       yield* r.assignProject(a, "three", "accessibility");
       yield* r.removeFolder(a);
-      yield* r.saveProject({ ...first, name: "Subscriptions" });
+      yield* r.updateProject(first.id, { name: "Subscriptions" });
       const renamed = yield* r.get;
       assert.equal(renamed.projects.find((p) => p.id === first.id)?.name, "Subscriptions");
       assert.equal(renamed.sessions.filter((s) => s.projectId === "launch").length, 2);
@@ -145,7 +147,7 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, ren
       assert.equal(before.sessions.length, 2);
       yield* r.assignProject(a, "missing", "launch").pipe(Effect.flip);
       yield* r.assignProject(a, "one", "missing").pipe(Effect.flip);
-      yield* r.saveProject({ ...first, name: " " }).pipe(Effect.flip);
+      yield* r.updateProject(first.id, { name: " " }).pipe(Effect.flip);
       assert.deepEqual(yield* r.get, before);
     }),
   );

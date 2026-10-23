@@ -60,7 +60,7 @@ test("deleting waits for a connection; opening the home or settings does not", (
   }
 });
 
-test("saving project settings sends each changed field, trimmed; blank instructions clear them", () => {
+test("saving project settings sends one change with each changed field, trimmed; blank instructions clear them", () => {
   const guided: AppState = {
     ...state,
     projects: [{ ...launch, instructions: "Answer in French." }],
@@ -69,16 +69,20 @@ test("saving project settings sends each changed field, trimmed; blank instructi
     projectSettingsSave(s, "p1", draft);
   assert.deepEqual(save({ name: " Relaunch ", instructions: "Answer in French." }), {
     allowed: true,
-    commands: [{ _tag: "save_project", project: { id: "p1", name: "Relaunch" } }],
+    command: { _tag: "update_project", id: "p1", name: "Relaunch" },
   });
   assert.deepEqual(save({ name: "Launch", instructions: "\n Answer in German. \n" }), {
     allowed: true,
-    commands: [{ _tag: "set_project_instructions", id: "p1", instructions: "Answer in German." }],
+    command: { _tag: "update_project", id: "p1", instructions: "Answer in German." },
   });
-  assert.deepEqual(save({ name: "Launch", instructions: "  " }).commands, [
-    { _tag: "set_project_instructions", id: "p1", instructions: null },
-  ]);
-  assert.equal(save({ name: "Relaunch", instructions: "Other" }).commands.length, 2);
+  assert.deepEqual(save({ name: "Launch", instructions: "  " }), {
+    allowed: true,
+    command: { _tag: "update_project", id: "p1", instructions: null },
+  });
+  assert.deepEqual(save({ name: "Relaunch", instructions: "Other" }), {
+    allowed: true,
+    command: { _tag: "update_project", id: "p1", name: "Relaunch", instructions: "Other" },
+  });
   const refused: [string, { name: string; instructions: string }, AppState?][] = [
     ["unchanged, trimmed", { name: " Launch ", instructions: " Answer in French.\n" }],
     ["blank name", { name: "  ", instructions: "Other" }],
@@ -86,8 +90,7 @@ test("saving project settings sends each changed field, trimmed; blank instructi
     ["offline", { name: "Relaunch", instructions: "Other" }, { ...guided, connected: false }],
     ["deleted meanwhile", { name: "Relaunch", instructions: "Other" }, { ...guided, projects: [] }],
   ];
-  for (const [why, draft, s] of refused)
-    assert.deepEqual(save(draft, s), { allowed: false, commands: [] }, why);
+  for (const [why, draft, s] of refused) assert.deepEqual(save(draft, s), { allowed: false }, why);
 });
 
 test("a session's project menu: Move for a member, Add otherwise, one connection rule for every row", () => {

@@ -823,14 +823,14 @@ test("a member session's Pi gets its project's instructions at each launch; othe
           .filter((r) => r.event === "spawn")
           .map((r) => r.instructions ?? null);
       yield* registry.saveProject({ id: "guided", name: "Guided" });
-      yield* registry.setProjectInstructions("guided", "Answer in French.");
+      yield* registry.updateProject("guided", { instructions: "Answer in French." });
       const member = (yield* hosts.create({ cwd, projectId: "guided", options: {} })).spec
         .sessionId;
       const loose = (yield* hosts.create({ cwd, options: {} })).spec.sessionId;
       assert.deepEqual(launches(member), ["Answer in French."]);
       assert.deepEqual(launches(loose), [null]);
 
-      yield* registry.setProjectInstructions("guided", "Answer in German.");
+      yield* registry.updateProject("guided", { instructions: "Answer in German." });
       assert.deepEqual(launches(member), ["Answer in French."], "a running Pi is not restarted");
       yield* hosts.release(cwd, member);
       yield* hosts.open({ cwd, sessionId: member });

@@ -240,9 +240,15 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
           ),
       unanswered: plainError,
     },
-    set_project_instructions: {
+    update_project: {
       admission: "ordinary",
-      run: ({ id, instructions }) => registry.setProjectInstructions(id, instructions),
+      // Answered as Delete project is: a toast once the registry holds the change.
+      run: ({ id, name, instructions }) =>
+        registry
+          .updateProject(id, { name, instructions })
+          .pipe(
+            Effect.andThen(send({ _tag: "toast", message: "Project saved", level: "success" })),
+          ),
       unanswered: plainError,
     },
     assign_project: {

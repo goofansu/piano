@@ -261,17 +261,22 @@ export class Registry extends Context.Service<
     /** A known project. */
     readonly requireProject: (id: string) => Effect.Effect<Project, RegistryLookupError>;
     /**
-     * Create or rename a project. With `assign`, that session joins it in the same write: one
-     * change announcement, and an unregistered session rejects the whole save.
+     * Create a project (or rename one, as `updateProject` does without refusing an unknown ID).
+     * With `assign`, that session joins it in the same write: one change announcement, and an
+     * unregistered session rejects the whole save.
      */
     readonly saveProject: (
       project: Pick<Project, "id" | "name">,
       assign?: { readonly cwd: string; readonly sessionId: string },
     ) => Effect.Effect<void, RegistryError>;
-    /** Replace a project's instructions, trimmed; null or blank clears them. */
-    readonly setProjectInstructions: (
+    /**
+     * Change a known project's name or instructions in one write, both trimmed. A blank name is
+     * refused; null or blank instructions clear them. An unknown project is refused, so a change
+     * racing its deletion cannot bring it back.
+     */
+    readonly updateProject: (
       id: string,
-      instructions: string | null,
+      change: { readonly name?: string; readonly instructions?: string | null },
     ) => Effect.Effect<void, RegistryError>;
     /** Remove a project in one write; its sessions stay registered and move to No project. */
     readonly deleteProject: (id: string) => Effect.Effect<void, RegistryError>;
@@ -489,7 +494,7 @@ export const RegistryLive = Layer.effect(
             throw new RegistryError({
               detail: "Session reference is unavailable. Refresh and try again.",
             });
-          // Renaming keeps the project's instructions; only `setProjectInstructions` changes them.
+          // Renaming keeps the project's instructions; only `updateProject` changes them.
           const existing = d.projects.find((p) => p.id === parsed.id);
           const next = { ...existing, id: parsed.id, name: parsed.name.trim() };
           const projects = d.projects.some((p) => p.id === next.id)
@@ -502,16 +507,20 @@ export const RegistryLive = Layer.effect(
             : d.sessions;
           return { ...d, projects, sessions };
         }),
-      setProjectInstructions: (id, instructions) =>
+      updateProject: (id, change) =>
         update((d) => {
           if (!d.projects.some((p) => p.id === id))
             throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
-          const text = instructions?.trim();
+          const name = change.name?.trim();
+          if (name === "") throw new RegistryError({ detail: "A project needs a name." });
+          const text = change.instructions?.trim();
           return {
             ...d,
             projects: d.projects.map((p) => {
-              if (p.id !== id || p.instructions === (text || undefined)) return p;
-              const { instructions: _, ...rest } = p;
+              if (p.id !== id) return p;
+              const named = name ? { ...p, name } : p;
+              if (change.instructions === undefined) return named;
+              const { instructions: _, ...rest } = named;
               return text ? { ...rest, instructions: text } : rest;
             }),
           };

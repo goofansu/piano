@@ -17,7 +17,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -39,7 +39,7 @@ import { confirmation } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import { previewObservation } from "@/lib/previewObservation";
-import { findProject, type ProjectSettingsDraft, sessionProjectMenu } from "@/lib/projectCommands";
+import { findProject, sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
 import {
   type SessionCommand,
@@ -198,21 +198,8 @@ export function CommandHost({
   const project = form?.kind === "project" ? form.dialog : undefined;
   // The app whose details are open; another app, even in the same session, never reopens them.
   const [previewDetails, setPreviewDetails] = useState<string | null>(null);
-  // The project whose settings are open, and a save sent from them that the registry has yet to hold.
+  // The project whose settings are open.
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
-  const [savingSettings, setSavingSettings] = useState<{
-    projectId: string;
-    draft: ProjectSettingsDraft;
-  } | null>(null);
-  useEffect(() => {
-    if (!savingSettings) return;
-    const saved = findProject(state, savingSettings.projectId);
-    const { name, instructions } = savingSettings.draft;
-    if (saved?.name === name.trim() && (saved.instructions ?? "") === instructions.trim()) {
-      toast.success("Project saved");
-      setSavingSettings(null);
-    }
-  }, [savingSettings, state]);
 
   const effects: CommandEffects = {
     send,
@@ -337,7 +324,6 @@ export function CommandHost({
         state={state}
         project={findProject(state, settingsFor)}
         send={send}
-        saved={(projectId, draft) => setSavingSettings({ projectId, draft })}
         close={() => setSettingsFor(null)}
       />
     </CommandsContext.Provider>
