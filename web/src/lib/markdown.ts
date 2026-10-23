@@ -302,7 +302,7 @@ function walkMarkdown(
   spend(budget, 0, lines.length);
   let out = "";
   let para: string[] = [];
-  let fence = false;
+  let fence = "";
   let language = "";
   let fl: string[] = [];
   let inList = false;
@@ -349,17 +349,18 @@ function walkMarkdown(
   };
   for (let i = 0; i < lines.length; i++) {
     const ln = lines[i];
-    if (ln.startsWith("```")) {
+    const marker = ln.match(/^(`{3,})(.*)$/);
+    if (marker && (!fence || (marker[1].length >= fence.length && !marker[2].trim()))) {
       if (!fence) {
         if (tbl.length) fT();
         fp();
         fL();
-        fence = true;
-        language = ln.slice(3).trim().toLowerCase();
+        fence = marker[1];
+        language = marker[2].trim().toLowerCase();
         fl = [];
       } else {
         out += `<pre${language === "mermaid" ? ' data-mermaid=""' : ""}><code>${escH(fl.join("\n"))}</code></pre>`;
-        fence = false;
+        fence = "";
       }
       continue;
     }
