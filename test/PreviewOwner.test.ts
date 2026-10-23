@@ -204,6 +204,50 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     );
   });
 
+  test(`[${platform}] idle racing admitted startup waits and cannot retire its live owner`, async (t) => {
+    const f = await fixture(t);
+    let proceed!: () => void;
+    let entered!: () => void;
+    const atConfig = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      proceed = resolve;
+    });
+    const owner = await PreviewOwner.open(
+      { cwd: f.workspace, sessionId: "idle-race" },
+      "idle-race",
+      {
+        adapter: f.adapter,
+        root: f.state,
+        config: async () => {
+          entered();
+          await gate;
+          return f.config;
+        },
+      },
+    );
+    t.after(() => {
+      proceed();
+      f.host.phase = "failed";
+      return owner.prepareRelease();
+    });
+    const starting = owner.request({
+      action: "start",
+      workspace: f.workspace,
+      command: ["/bin/false"],
+      timeoutSeconds: 1,
+    });
+    await atConfig;
+    const idle = owner.prepareRelease(true);
+    f.host.phase = "running";
+    proceed();
+    await starting;
+    assert.equal(await idle, false, "startup wins admission before idle retirement");
+    assert.equal((await f.call(owner, { action: "status" })).state, "running");
+    assert.equal(f.stops.length, 0);
+  });
+
   test(`[${platform}] aborting tool observation leaves admitted launch with its owner`, async (t) => {
     const f = await fixture(t);
     let proceed!: () => void;
