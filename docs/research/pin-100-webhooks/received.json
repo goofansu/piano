@@ -1,0 +1,38 @@
+{
+  "headers": {
+    "host": "127.0.0.1:34581",
+    "connection": "keep-alive",
+    "content-type": "application/json",
+    "user-agent": "Piano-Webhook/1",
+    "x-piano-event": "session.completed",
+    "x-piano-delivery": "cc10d994-1866-43da-b7ef-2d460886d9ef",
+    "x-piano-hook-id": "33fe58f5-fe32-494d-a5a3-eb7f8ba25f9a",
+    "authorization": "[redacted Bearer token]",
+    "accept": "*/*",
+    "accept-language": "*",
+    "sec-fetch-mode": "cors",
+    "accept-encoding": "gzip, deflate",
+    "content-length": "468"
+  },
+  "body": {
+    "source": "piano",
+    "version": 1,
+    "event": "session.completed",
+    "deliveryId": "cc10d994-1866-43da-b7ef-2d460886d9ef",
+    "occurredAt": "2026-10-23T03:59:49.426Z",
+    "action": null,
+    "workspace": {
+      "id": "150a5055-48a9-4b80-bb68-6bf18b506efb",
+      "folder": "repo"
+    },
+    "session": {
+      "id": "aa92cfcc-aacf-4902-bd72-7cdb9b099c27",
+      "title": "fake",
+      "url": "http://127.0.0.1:35047/s/aa92cfcc-aacf-4902-bd72-7cdb9b099c27",
+      "model": "fake/alpha"
+    },
+    "pullRequest": null,
+    "answer": "Private reply",
+    "answerTruncated": false
+  }
+}
