@@ -113,7 +113,7 @@ export function ProjectMenu({
   return (
     <>
       {current && (
-        <DropdownMenuLabel className="max-w-64 truncate font-normal text-muted-foreground">
+        <DropdownMenuLabel className="max-w-64 truncate text-sm font-normal text-muted-foreground">
           {current.name}
           {current.archived && " · Archived"}
         </DropdownMenuLabel>

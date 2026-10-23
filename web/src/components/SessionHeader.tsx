@@ -177,8 +177,15 @@ export function SessionHeader({
                   {menu.manage.map((c) => (
                     <SessionCommandMenuItem key={c.id} command={c} run={run} />
                   ))}
-                  {projectMenu && <ProjectMenu menu={projectMenu} run={run} />}
                 </DropdownMenuGroup>
+                {projectMenu && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <ProjectMenu menu={projectMenu} run={run} />
+                    </DropdownMenuGroup>
+                  </>
+                )}
                 {display && (
                   <>
                     <DropdownMenuSeparator />
