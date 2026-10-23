@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
+import type { FolderView, SessionPreview, SessionState, WorktreeView } from "../shared/wire.ts";
 import {
   type SessionCommandId,
   type SessionHeaderMenu,
@@ -313,4 +313,84 @@ test("Share is Radius-sign-in only and targets the row, independent of selected 
   });
   assert.equal(share(withAvailability("history")).enabled, false);
   assert.equal(share(withAvailability("checkout")).enabled, true);
+});
+
+const app = (preview: Partial<SessionPreview> = {}): SessionPreview => ({
+  instanceId: "i1",
+  state: "running",
+  ready: true,
+  url: "http://localhost:5173/",
+  port: 5173,
+  command: ["npm", "run", "dev"],
+  detail: "",
+  externalAccess: "same-host",
+  observedAt: 0,
+  ...preview,
+});
+const previewIds = (state: AppState) =>
+  sessionCommands(state)
+    .filter((c) => c.id.includes("preview"))
+    .map((c) => [c.id, c.enabled]);
+
+test("preview commands exist only while the selected session's live Pi owns an app", () => {
+  assert.deepEqual(previewIds(base), []);
+  const running = { ...base, session: session("/work/repo.feature", { preview: app() }) };
+  assert.deepEqual(previewIds(running), [
+    ["open-preview", true],
+    ["preview-details", true],
+    ["stop-preview", true],
+  ]);
+  const open = sessionCommands(running).find((c) => c.id === "open-preview");
+  assert.deepEqual(open?.intent, { kind: "open-url", url: "http://localhost:5173/" });
+  assert.equal(open?.detail, "localhost:5173");
+  assert.deepEqual(sessionCommands(running).find((c) => c.id === "stop-preview")?.intent, {
+    kind: "send",
+    command: { _tag: "act", action: { _tag: "preview_stop", instanceId: "i1" } },
+  });
+  assert.deepEqual(
+    sessionHeaderMenu(sessionCommands(running)).open.map((c) => c.id),
+    ["changes", "pull-request", "open-preview", "stop-preview"],
+  );
+
+  // An app that is not answering has nothing to open, but can still be inspected and stopped.
+  const failed = {
+    ...base,
+    session: session("/work/repo.feature", {
+      preview: app({ state: "failed", ready: false, url: null }),
+    }),
+  };
+  assert.deepEqual(previewIds(failed), [
+    ["open-preview", false],
+    ["preview-details", true],
+    ["stop-preview", true],
+  ]);
+  assert.equal(
+    previewIds({ ...running, resync: true }).at(-1)?.[1],
+    false,
+    "stop waits for resync",
+  );
+
+  // A closed or peeked session's last state is not a running app.
+  const closed = session("/work/repo.feature", {
+    preview: app(),
+    closure: { _tag: "released", detail: "" },
+  });
+  assert.deepEqual(previewIds({ ...base, session: closed }), []);
+  const peek = { ...session("/work/repo.feature", { preview: app() }), hosted: false };
+  assert.deepEqual(previewIds({ ...base, session: peek }), []);
+  // Another session's commands never offer this session's app.
+  assert.deepEqual(
+    sessionCommands(running, other).filter((c) => c.id.includes("preview")),
+    [],
+  );
+});
+
+test("archiving a session that owns an app asks first, from the header or its sidebar row", () => {
+  const archive = (state: AppState, target?: typeof other) =>
+    sessionCommands(state, target).find((c) => c.id === "archive")?.intent;
+  assert.equal((archive(base) as { confirm: boolean }).confirm, false);
+  const running = { ...base, session: session("/work/repo.feature", { preview: app() }) };
+  assert.equal((archive(running) as { confirm: boolean }).confirm, true);
+  const background = { ...base, hosts: [{ ...other, streaming: false, preview: true }] };
+  assert.equal((archive(background, other) as { confirm: boolean }).confirm, true);
 });

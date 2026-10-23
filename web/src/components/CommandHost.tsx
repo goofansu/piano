@@ -1,5 +1,6 @@
 import type { ClientCommand } from "@shared/wire";
 import {
+  AppWindowIcon,
   ArchiveIcon,
   CopyIcon,
   FileDiffIcon,
@@ -9,12 +10,14 @@ import {
   PinIcon,
   PinOffIcon,
   PlusIcon,
+  ScrollTextIcon,
   ShareIcon,
+  SquareIcon,
   TextCursorInputIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { createContext, useContext, useRef } from "react";
+import { createContext, useContext, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -26,6 +29,7 @@ import {
 } from "@/components/PianoDialog";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
 import { ProjectDialogView } from "@/components/Projects";
+import { PreviewDetailsDialog } from "@/components/SessionPreview";
 import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
@@ -33,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { confirmation } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
+import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
 import {
@@ -41,6 +46,8 @@ import {
   type SessionTarget,
   sessionCommands,
 } from "@/lib/sessionCommands";
+import { openLink } from "@/lib/sessionLinks";
+import { selectedPreview } from "@/lib/sessionPreview";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
@@ -63,6 +70,9 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   copy: CopyIcon,
   changes: FileDiffIcon,
   "pull-request": GitPullRequestIcon,
+  preview: AppWindowIcon,
+  details: ScrollTextIcon,
+  stop: SquareIcon,
   messages: MessageSquareIcon,
   rename: TextCursorInputIcon,
   pin: PinIcon,
@@ -183,6 +193,8 @@ export function CommandHost({
   const asking = form ? confirmation(state, form) : undefined;
   const sharing = form?.kind === "share-session";
   const project = form?.kind === "project" ? form.dialog : undefined;
+  // The app whose details are open; another app, even in the same session, never reopens them.
+  const [previewDetails, setPreviewDetails] = useState<string | null>(null);
 
   const effects: CommandEffects = {
     send,
@@ -198,6 +210,11 @@ export function CommandHost({
     setAppearance: setTheme,
     copy: (value, label) => void copySessionValue(value, label),
     openForm: forms.open,
+    openUrl: openLink,
+    openPreviewDetails: () => {
+      setPreviewDetails(selectedPreview(state)?.instanceId ?? null);
+      previewObservation.refresh();
+    },
   };
   const run = (command: Command) => {
     runCommand(command, effects);
@@ -289,6 +306,7 @@ export function CommandHost({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PreviewDetailsDialog instanceId={previewDetails} close={() => setPreviewDetails(null)} />
       <ProjectDialogView
         open={!!project}
         dialog={project}

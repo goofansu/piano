@@ -24,6 +24,7 @@ import type { NotifyLevel } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
 import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
+import { previewObservation } from "@/lib/previewObservation";
 import { parseRoute } from "@/lib/routes";
 import { useClient } from "@/lib/useClient";
 import { modelCatalogs } from "@/lib/useModelCatalog";
@@ -55,6 +56,7 @@ export default function App() {
   useEffect(() => modelCatalogs.follow(client), [client]);
   useEffect(() => checkoutRefresh.follow(client), [client]);
   useEffect(() => drafts.follow(client), [client]);
+  useEffect(() => previewObservation.follow(client, notify), [client]);
   const layout = useSidebarLayoutController();
   // The composer's Files popover and the palette's Files group read this one answer.
   const sessionFiles = useSessionFilesController(state);

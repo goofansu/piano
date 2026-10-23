@@ -10,10 +10,12 @@ import {
   sessionCheckoutMissing,
   sessionContext,
   sessionMutable,
+  sessionReady,
   sessionReference,
   sessionWorking,
   workspaceFor,
 } from "./sessionContext.ts";
+import { previewHost, selectedPreview, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
 
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
@@ -25,6 +27,9 @@ export type SessionCommandId =
   | "changes"
   | "wrap-changes"
   | "pull-request"
+  | "open-preview"
+  | "preview-details"
+  | "stop-preview"
   | "messages-only"
   | "rename"
   | "pin"
@@ -37,6 +42,9 @@ export type SessionCommandIcon =
   | "copy"
   | "changes"
   | "pull-request"
+  | "preview"
+  | "details"
+  | "stop"
   | "messages"
   | "rename"
   | "pin"
@@ -52,6 +60,9 @@ export type SessionCommandIntent =
   | { kind: "changes" }
   | { kind: "wrap-changes"; on: boolean }
   | { kind: "pull-request" }
+  /** Open the app in a new tab. */
+  | { kind: "open-url"; url: string }
+  | { kind: "preview-details" }
   /** Turn Messages only on or off. */
   | { kind: "messages-only"; on: boolean }
   /** Without a target the selected session has no Pi session ID yet; such a command is never enabled. */
@@ -99,7 +110,7 @@ export interface SessionHeaderMenu {
 const ROW_SECTIONS = [["rename", "pin"], ["share"], ["archive", "delete"]] as const;
 const HEADER_SECTIONS = {
   details: ["copy-all"],
-  open: ["changes", "pull-request"],
+  open: ["changes", "pull-request", "open-preview", "stop-preview"],
   manage: ["rename", "pin", "share"],
   destructive: ["archive", "delete"],
 } as const satisfies Record<string, readonly SessionCommandId[]>;
@@ -161,6 +172,8 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`).
  * - pull request, copy session ID: the selected session has a Pi session ID.
+ * - open, stop and details of the preview: listed only while the selected session's live Pi owns
+ *   an app; open needs its link, stop needs the attachment (`sessionReady`).
  * - new session here: the checkout is present.
  * - copy and Messages only: always.
  */
@@ -242,6 +255,7 @@ export function sessionCommands(
         keywords: ["pr"],
         intent: { kind: "pull-request" },
       },
+      ...previewCommands(state),
       {
         id: "messages-only",
         label: "Messages only",
@@ -307,7 +321,8 @@ export function sessionCommands(
         intent: {
           kind: "archive",
           target: subject,
-          confirm: !!subject && sessionWorking(state, subject),
+          confirm:
+            !!subject && (sessionWorking(state, subject) || sessionHasPreview(state, subject)),
         },
       },
       {
@@ -332,4 +347,37 @@ export function sessionCommands(
     });
   }
   return commands;
+}
+
+/** The selected session's app commands; none unless its live Pi owns one. */
+function previewCommands(state: AppState): SessionCommand[] {
+  const preview = selectedPreview(state);
+  if (!preview) return [];
+  return [
+    {
+      id: "open-preview",
+      label: "Open preview",
+      icon: "preview",
+      enabled: !!preview.url,
+      keywords: ["app", "run", "localhost"],
+      ...(preview.url && { detail: previewHost(preview.url) }),
+      intent: { kind: "open-url", url: preview.url ?? "" },
+    },
+    {
+      id: "preview-details",
+      label: "Preview details",
+      icon: "details",
+      enabled: true,
+      keywords: ["logs", "app"],
+      intent: { kind: "preview-details" },
+    },
+    {
+      id: "stop-preview",
+      label: "Stop preview",
+      icon: "stop",
+      enabled: sessionReady(state),
+      keywords: ["app", "kill"],
+      intent: { kind: "send", command: stopPreview(preview) },
+    },
+  ];
 }

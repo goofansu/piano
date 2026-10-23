@@ -14,6 +14,7 @@ import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
 import { sessionMutable, sessionWorking, workspaceFor } from "./sessionContext.ts";
+import { sessionHasPreview } from "./sessionPreview.ts";
 
 export interface FormAnswer {
   /** The form may be submitted now; otherwise its submit control is disabled. */
@@ -110,19 +111,32 @@ export interface Confirmation {
  */
 export function confirmation(state: AppState, form: CommandForm): Confirmation | undefined {
   switch (form.kind) {
-    case "archive-session":
+    case "archive-session": {
+      const title = form.target.title || "Untitled";
+      const preview = sessionHasPreview(state, form.target);
+      const stop =
+        preview && !sessionWorking(state, form.target)
+          ? `the app "${title}" started`
+          : `any work still running in "${title}"${preview ? " and the app it started" : ""}`;
       return {
         title: "Stop and archive this session?",
-        description: `This will stop any work still running in "${form.target.title || "Untitled"}" and remove it from the sidebar. Its transcript will be kept. Changes already made to files will not be undone.`,
+        description: `This will stop ${stop} and remove ${preview ? "the session" : "it"} from the sidebar. Its transcript will be kept. Changes already made to files will not be undone.`,
         confirmLabel: "Stop and archive",
         destructive: false,
       };
+    }
     case "delete-session": {
       const working = sessionWorking(state, form.target);
+      const preview = sessionHasPreview(state, form.target);
+      const stop = working
+        ? `This will stop the session and interrupt its current work${preview ? ", and stop the app it started" : ""}. `
+        : preview
+          ? "This will stop the app the session started. "
+          : "";
       return {
         title: "Delete this session?",
-        description: `${working ? "This will stop the session and interrupt its current work. " : ""}"${form.target.title || "Untitled"}" and its transcript are removed from Pi's session store. This cannot be undone.`,
-        confirmLabel: working ? "Stop and delete" : "Delete",
+        description: `${stop}"${form.target.title || "Untitled"}" and its transcript are removed from Pi's session store. This cannot be undone.`,
+        confirmLabel: working || preview ? "Stop and delete" : "Delete",
         destructive: true,
       };
     }

@@ -18,6 +18,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
+import { SessionPreviewControl } from "@/components/SessionPreview";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -125,7 +126,8 @@ export function SessionHeader({
                   )}
                 </div>
               </div>
-              <div className="col-start-2 row-start-2 shrink-0 justify-self-end md:row-span-2 md:row-start-1">
+              <div className="col-start-2 row-start-2 flex shrink-0 items-center gap-1 justify-self-end md:row-span-2 md:row-start-1">
+                <SessionPreviewControl />
                 {pullRequest(menuTrigger)}
               </div>
             </>

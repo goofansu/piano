@@ -60,6 +60,9 @@ export interface CommandEffects {
   setChangesWrap: (on: boolean) => void;
   copy: (value: string, label: string) => void;
   openForm: (form: CommandForm) => void;
+  /** Opens `url` in a new tab, without giving it this page. */
+  openUrl: (url: string) => void;
+  openPreviewDetails: () => void;
 }
 
 /** Carry out `command`'s intent. A disabled command does nothing; the result says whether it ran. */
@@ -112,6 +115,12 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "pull-request":
       effects.openPanel("pr");
+      break;
+    case "open-url":
+      effects.openUrl(intent.url);
+      break;
+    case "preview-details":
+      effects.openPreviewDetails();
       break;
     case "messages-only":
       effects.setMessagesOnly(intent.on);

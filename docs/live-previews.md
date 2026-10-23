@@ -3,7 +3,16 @@
 Ask a Piano session **“Run this app so I can try it.”** Its bundled `piano_preview` tool starts
 one app in that session's canonical workspace. The agent reads repository scripts/instructions,
 reports local readiness and returns an ordinary preview link. **That live Pi process owns the app.**
-No service manifest, skill collection, preview UI or Stop session control is required.
+No service manifest, skill collection or Stop session control is required.
+
+While it owns an app, the session header shows **Preview**: one click opens it in a new tab, and its
+menu holds status, **Details and logs** and **Stop preview**. The command palette offers the same
+rows. Piano reads the app's status from that session's owner, without starting Pi or launching
+anything: once per page attachment, when the person returns to the page and when the menu or details
+open. There is no polling. A failed read shows the status as unknown, not as stopped. Stop names the
+exact instance it observed, so it can never stop a replacement. A saved, closed or restarted session
+shows no preview, even if its transcript still links one. Archive and Delete ask before stopping a
+session that owns an app.
 
 | Event | Outcome |
 | --- | --- |

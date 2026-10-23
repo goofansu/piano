@@ -239,6 +239,45 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         );
         assert.ok(link.includes(app.url), link);
         assert.ok(link.includes('target="_blank"'), link);
+        // The session header offers the same app in one click, without reading the transcript.
+        const headerPreview = async () =>
+          page.evaluate(
+            "(a => a && { href: a.href, target: a.target, label: a.getAttribute('aria-label') })(document.querySelector('header a[aria-label^=\"Open preview\"]'))",
+          );
+        await page.until("!!document.querySelector('header a[aria-label^=\"Open preview\"]')");
+        assert.deepEqual(await headerPreview(), {
+          href: app.url,
+          target: "_blank",
+          label: `Open preview, ${new URL(app.url).host}, in a new tab`,
+        });
+        await page.capture("1b-header-preview");
+        await page.click("button", "Preview status and actions");
+        await page.see("Details and logs");
+        await page.capture("1c-preview-menu");
+        await page.click("menuitem", "Details and logs");
+        await page.see("Recent output");
+        // Enter in the details opens the app; it never stops it.
+        await page.until(
+          "document.activeElement?.tagName === 'A' && document.activeElement.textContent.includes('Open preview')",
+        );
+        // Re-observed on opening: the app's own output, not the agent's transcript.
+        await page.until(
+          "/VITE|ready in/i.test(document.querySelector('[role=dialog] pre')?.textContent ?? '')",
+        );
+        await page.capture("1d-preview-details");
+        await page.press("Escape");
+        await page.until("!document.querySelector('[role=dialog]')");
+        await page.press("Mod+K");
+        await page.ab("fill", "[cmdk-input]", "preview");
+        await page.until(
+          "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
+        );
+        for (const label of ["Open preview", "Preview details", "Stop preview"])
+          await page.until(
+            `[...document.querySelectorAll('[cmdk-item]')].some(o => o.textContent.includes(${JSON.stringify(label)}))`,
+          );
+        await page.capture("1e-palette-preview-commands");
+        await page.press("Escape");
 
         // On a Mac the link itself is opened. External exe.dev login is intentionally not bypassed:
         // there, local browser load is a separate claim.
@@ -265,10 +304,22 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         assert.equal(request({ action: "status" }).ready, true);
         await page.open(sessionPath);
         await page.until("!!document.querySelector('[aria-label=Message]')");
-        await page.ab("fill", '[aria-label="Message"]', "stop");
+        // A reload while the owner lives finds the same instance, without launching another.
+        await page.until("!!document.querySelector('header a[aria-label^=\"Open preview\"]')");
+        assert.equal((await headerPreview()).href, first.url);
+        assert.equal(request({ action: "status" }).instanceId, identity);
+        await page.capture("2b-reload-same-preview");
+        await page.click("button", "Preview status and actions");
+        await page.click("menuitem", "Stop preview");
+        await page.see("Preview stopped");
+        await gone(first, "explicit Stop preview in the session header");
+        await page.until("!document.querySelector('header a[aria-label^=\"Open preview\"]')");
+        assert.equal(observations.filter((o) => o.ready).length, 1, "Stop never relaunches");
+        // Pi stays available: the composer is still live and the session still answers.
+        await page.ab("fill", '[aria-label="Message"]', "status");
         await page.click("button", "Send");
-        await page.see("PREVIEW_STOPPED");
-        await gone(first, "explicit tool stop");
+        await page.see("PREVIEW_FAILED");
+        await page.capture("2c-stopped-session-usable");
         const idleDeadline = Date.now() + 15000;
         while (running(firstPi.pid)) {
           assert.ok(Date.now() < idleDeadline, "stopped preview permits idle retirement");
@@ -318,6 +369,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           true,
           "reopen never adopts/relaunches",
         );
+        assert.equal(await headerPreview(), null, "a restarted Piano shows no stale preview");
         await page.capture("4-reopened-without-preview");
 
         const chooseCommand = async (label) => {
@@ -330,6 +382,10 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         };
         const archived = await launch();
         await chooseCommand("Archive");
+        await page.see("Stop and archive this session?");
+        await page.see("the app");
+        await page.capture("5a-archive-confirms-app");
+        await page.click("button", "Stop and archive");
         await gone(archived, "Archive through command palette");
         await page.capture("5-archived");
         const create = async () => {
@@ -350,12 +406,14 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         const deleted = await create();
         await chooseCommand("Delete");
         await page.see("Delete this session?");
-        await page.click("button", "Delete");
+        await page.see("This will stop the app the session started.");
+        await page.click("button", "Stop and delete");
         await gone(deleted, "Delete through command palette and confirmation");
         await page.capture("6-deleted");
         const missing = await create();
         rmSync(repo, { recursive: true, force: true });
         await chooseCommand("Archive");
+        await page.click("button", "Stop and archive");
         await gone(missing, "Archive after checkout removal uses retained ownership");
       } finally {
         // Clean up even when a launch succeeded but its reply never reached the scripted model.

@@ -203,6 +203,40 @@ export const SessionClosure = Schema.Union([
 ]);
 export type SessionClosure = typeof SessionClosure.Type;
 
+/** States a managed app's supervisor reports, in the same words on launchd and systemd. */
+export const PREVIEW_STATES = [
+  "starting",
+  "running",
+  "exited",
+  "failed",
+  "stopping",
+  "not-loaded",
+] as const;
+
+/**
+ * This session's managed app as its live Pi generation last observed it (ADR 0003). An app never
+ * outlives that generation, so a saved or closed session has none. `unknown`: the supervisor
+ * could not be read, which is neither running nor stopped. Re-observe before relying on it.
+ */
+export const SessionPreview = Schema.Struct({
+  /** Exact instance identity; a stop names it, so it can never stop a replacement. */
+  instanceId: Schema.String,
+  state: Schema.Literals([...PREVIEW_STATES, "unknown"]),
+  /** Local HTTP readiness through the preview hostname, not authenticated external access. */
+  ready: Schema.Boolean,
+  /** Present only while ready. */
+  url: Schema.NullOr(Schema.String),
+  port: Schema.Number,
+  command: Schema.Array(Schema.String),
+  /** The last readiness or observation outcome, as display text. */
+  detail: Schema.String,
+  /** A loopback origin opens on this host; a private exe.dev origin is not checked from here. */
+  externalAccess: Schema.Literals(["same-host", "unverified"]),
+  /** Epoch seconds. */
+  observedAt: Schema.Number,
+});
+export type SessionPreview = typeof SessionPreview.Type;
+
 export const SessionState = Schema.Struct({
   sessionId: Schema.String,
   sessionFile: Schema.optional(Schema.String),
@@ -240,6 +274,8 @@ export const SessionState = Schema.Struct({
   closure: Schema.optional(SessionClosure),
   /** Piano filesystem observation: history is readable, but execution needs the checkout. */
   checkoutMissing: Schema.optional(Schema.Boolean),
+  /** The app this live generation owns, if it has started one and not stopped it. */
+  preview: Schema.optional(SessionPreview),
 });
 export type SessionState = typeof SessionState.Type;
 
@@ -363,6 +399,10 @@ export const SessionAction = Schema.Union([
     confirmed: Schema.optional(Schema.Boolean),
     cancelled: Schema.optional(Schema.Boolean),
   }),
+  /** Re-observe this generation's app without starting Pi or launching anything. */
+  Schema.TaggedStruct("preview_status", {}),
+  /** Stop exactly this instance of this generation's app; Pi stays available. */
+  Schema.TaggedStruct("preview_stop", { instanceId: Schema.String }),
 ]);
 export type SessionAction = typeof SessionAction.Type;
 
@@ -371,6 +411,18 @@ export const SessionActionResult = Schema.Union([
   Schema.TaggedStruct("queue_restored", {
     messages: Schema.Array(QueuedMessage),
     stopError: Schema.optional(Schema.String),
+  }),
+  /** Bounded, redacted logs of the app the observation found; empty when it found none. A failed
+   * observation is `error`, never an absent app: the state then shows the preview as unknown. */
+  Schema.TaggedStruct("preview_observed", {
+    instanceId: Schema.NullOr(Schema.String),
+    logs: Schema.String,
+    error: Schema.optional(Schema.String),
+  }),
+  Schema.TaggedStruct("preview_stopped", {
+    instanceId: Schema.String,
+    /** `not-current`: that instance was already gone or replaced; nothing was stopped. */
+    outcome: Schema.Literals(["stopped", "cleared", "not-current"]),
   }),
 ]);
 export type SessionActionResult = typeof SessionActionResult.Type;
@@ -627,6 +679,8 @@ export const HostInfo = Schema.Struct({
   cwd: Schema.String,
   sessionId: Schema.String,
   streaming: Schema.Boolean,
+  /** This generation owns an app that may still be running; ending Pi stops it. */
+  preview: Schema.optional(Schema.Boolean),
 });
 export type HostInfo = typeof HostInfo.Type;
 

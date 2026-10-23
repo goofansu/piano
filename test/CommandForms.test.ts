@@ -341,3 +341,30 @@ test("a failed share reports the failure and does not publish again", async () =
     error: SHARE_UNCONFIRMED,
   });
 });
+
+test("archive and delete say they stop the app a session started", () => {
+  const owning: AppState = { ...online, hosts: [{ ...other, streaming: false, preview: true }] };
+  assert.deepEqual(confirmation(owning, archive()), {
+    title: "Stop and archive this session?",
+    description:
+      'This will stop the app "Other" started and remove the session from the sidebar. Its transcript will be kept. Changes already made to files will not be undone.',
+    confirmLabel: "Stop and archive",
+    destructive: false,
+  });
+  assert.deepEqual(confirmation(owning, del()), {
+    title: "Delete this session?",
+    description:
+      'This will stop the app the session started. "Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
+    confirmLabel: "Stop and delete",
+    destructive: true,
+  });
+  const both: AppState = { ...online, hosts: [{ ...other, streaming: true, preview: true }] };
+  assert.match(
+    confirmation(both, archive())?.description ?? "",
+    /^This will stop any work still running in "Other" and the app it started and remove the session from the sidebar\./,
+  );
+  assert.match(
+    confirmation(both, del())?.description ?? "",
+    /^This will stop the session and interrupt its current work, and stop the app it started\. /,
+  );
+});

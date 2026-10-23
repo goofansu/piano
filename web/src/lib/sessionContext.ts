@@ -21,7 +21,7 @@ import { findProject } from "./projectCommands.ts";
 import { folderFor, sessionDirectories } from "./sessionCatalog.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
-type SessionRef = { cwd: string; sessionId: string };
+export type SessionRef = { cwd: string; sessionId: string };
 
 /** What the New session directory picker's trigger names. */
 export type DirectoryTrigger =
