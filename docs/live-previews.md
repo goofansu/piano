@@ -5,9 +5,11 @@ one app in that session's canonical workspace. The agent reads repository script
 reports local readiness and returns an ordinary preview link. **That live Pi process owns the app.**
 No service manifest, skill collection or Stop session control is required.
 
-While it owns an app, the session header shows an app icon coloured by its state. It opens a menu
-with the status, **Open preview**, **Copy link**, **Details and logs** and **Stop preview**; the
-command palette offers Open preview, Preview details and Stop preview. Piano reads the app's status
+While it owns an app, the session header shows an app icon in the state's colour, breathing while
+the app starts or stops, with the app's host beside it on desktop (its state while there is no
+link). It opens a menu with the status,
+**Open preview**, **Copy link**, **Details** and **Stop preview**; the command palette offers Open
+preview, Preview details and Stop preview. Piano reads the app's status
 from that session's owner, without starting Pi or launching anything: once per page attachment, when
 the person returns to the page and when the menu or details open. There is no polling. A failed read
 shows the status as unknown, not as stopped. Stop names the exact instance it observed, so it can

@@ -28,9 +28,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusDot, type StatusTone } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
@@ -42,27 +41,19 @@ import {
   selectedPreview,
 } from "@/lib/sessionPreview";
 
-const toneColor: Record<PreviewTone, string> = {
-  ready: "text-ok",
-  pending: "text-muted-foreground",
-  problem: "text-err",
-  idle: "text-muted-foreground",
+/** The app's state in the status dot's vocabulary; work in progress breathes. */
+const dotTone: Record<PreviewTone, StatusTone> = {
+  ready: "ok",
+  pending: "busy",
+  problem: "err",
+  idle: "muted",
 };
-const toneBadge = {
-  ready: "success",
-  pending: "secondary",
-  problem: "error",
-  idle: "secondary",
-} as const;
-
-/** The app icon's colour carries its state; work in progress spins instead. */
-function PreviewIcon({ tone }: { tone: PreviewTone }) {
-  return tone === "pending" ? (
-    <Spinner aria-hidden />
-  ) : (
-    <AppWindowIcon className={toneColor[tone]} aria-hidden />
-  );
-}
+const iconColor: Record<PreviewTone, string> = {
+  ready: "text-ok",
+  pending: "text-busy",
+  problem: "text-err",
+  idle: "text-ink-3",
+};
 
 function usePreviewObservation() {
   return useSyncExternalStore(previewObservation.subscribe, previewObservation.getState);
@@ -90,10 +81,22 @@ function usePreviewCommands() {
   };
 }
 
+/** The dot and the word for the app's state, as the header, the menu and the details show it. */
+function PreviewStatus({ preview, className }: { preview: SessionPreview; className?: string }) {
+  const face = previewFace(preview);
+  return (
+    <span className={className}>
+      <StatusDot tone={dotTone[face.tone]} pulse={face.tone === "pending"} />
+      {face.status}
+    </span>
+  );
+}
+
 /**
  * The session header's preview control, shown only while the selected session's live Pi owns an
- * app: one app icon whose colour carries the app's state. It always opens the menu: status, Open,
- * Copy link, details and Stop. Opening the menu re-observes the app.
+ * app: the app icon in the state's colour, breathing while the app starts or stops, and on desktop
+ * the app's host (or its state while there is no link). It always opens the menu: status, Open,
+ * Copy link, Details and Stop. Opening the menu re-observes the app.
  */
 export function SessionPreviewControl() {
   const mobile = useIsMobile();
@@ -102,6 +105,7 @@ export function SessionPreviewControl() {
   const preview = selectedPreview(state);
   if (!preview) return null;
   const face = previewFace(preview);
+  const label = preview.url ? previewHost(preview.url) : face.label;
   return (
     <DropdownMenu modal={false} onOpenChange={(open) => open && previewObservation.refresh()}>
       <Tooltip>
@@ -109,10 +113,16 @@ export function SessionPreviewControl() {
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size={mobile ? "icon-xs" : "icon-sm"}
+              size={mobile ? "icon-sm" : "sm"}
+              className={mobile ? "size-11" : "max-w-48 gap-2 font-normal"}
               aria-label={`Preview: ${face.status}. Status and actions`}
             >
-              <PreviewIcon tone={face.tone} />
+              <AppWindowIcon
+                className={iconColor[face.tone]}
+                data-motion={face.tone === "pending" ? "pulse" : undefined}
+                aria-hidden
+              />
+              {!mobile && <span className="truncate font-mono text-xs text-ink-2">{label}</span>}
             </Button>
           </TooltipTrigger>
         </DropdownMenuTrigger>
@@ -120,11 +130,9 @@ export function SessionPreviewControl() {
       </Tooltip>
       <DropdownMenuContent align="end" collisionPadding={16} className="w-72">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="text-foreground">{face.status}</span>
-          <span className="truncate font-normal text-muted-foreground">
-            {preview.url
-              ? previewHost(preview.url)
-              : preview.detail || "No link while the app is not answering"}
+          <PreviewStatus preview={preview} className="flex items-center gap-2 text-foreground" />
+          <span className="truncate font-mono font-normal text-muted-foreground">
+            {preview.url ? preview.url : preview.detail || "No link until the app answers"}
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -142,12 +150,12 @@ export function SessionPreviewControl() {
             </>
           )}
           <DropdownMenuItem onSelect={commands.details}>
-            <ScrollTextIcon aria-hidden /> Details and logs
+            <ScrollTextIcon aria-hidden /> Details
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={!commands.canStop} onSelect={commands.stop}>
-          <SquareIcon aria-hidden /> Stop preview
+          <SquareIcon className="fill-current" aria-hidden /> Stop preview
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -164,11 +172,10 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 }
 
 function PreviewFacts({ preview }: { preview: SessionPreview }) {
-  const face = previewFace(preview);
   return (
     <dl className="flex flex-col gap-2">
       <Fact label="Status">
-        <StatusBadge variant={toneBadge[face.tone]}>{face.status}</StatusBadge>
+        <PreviewStatus preview={preview} className="flex items-center gap-2" />
       </Fact>
       <Fact label="Link">
         {preview.url ? (
@@ -176,12 +183,12 @@ function PreviewFacts({ preview }: { preview: SessionPreview }) {
             href={preview.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline-offset-2 hover:underline"
+            className="font-mono text-xs underline-offset-2 hover:underline"
           >
             {preview.url}
           </a>
         ) : (
-          <span className="text-muted-foreground">None while the app is not answering</span>
+          <span className="text-muted-foreground">None until the app answers</span>
         )}
       </Fact>
       {preview.url && <Fact label="Access">{previewAccess(preview)}</Fact>}
@@ -236,8 +243,7 @@ export function PreviewDetailsDialog({
         <DialogHeader>
           <DialogTitle>Preview</DialogTitle>
           <DialogDescription>
-            The app this session started. It runs while this session’s Pi does; archiving or
-            deleting the session stops it.
+            Started by this session. It runs while the session’s Pi does.
           </DialogDescription>
         </DialogHeader>
         {preview && (
@@ -246,25 +252,26 @@ export function PreviewDetailsDialog({
             <section className="flex min-w-0 flex-col gap-2" aria-labelledby="preview-logs">
               <div className="flex items-center justify-between gap-2">
                 <h3 id="preview-logs" className="text-sm font-medium">
-                  Recent output
+                  Output
                 </h3>
                 <Button
                   variant="ghost"
                   size="xs"
+                  aria-busy={observed.refreshing}
                   disabled={observed.refreshing || !sessionReady(state)}
                   onClick={previewObservation.refresh}
                 >
-                  {observed.refreshing ? (
-                    <Spinner data-icon="inline-start" aria-hidden />
-                  ) : (
-                    <RefreshCwIcon data-icon="inline-start" aria-hidden />
-                  )}
+                  <RefreshCwIcon
+                    data-icon="inline-start"
+                    className={observed.refreshing ? "animate-spin" : undefined}
+                    aria-hidden
+                  />
                   Refresh
                 </Button>
               </div>
               {details?.error && <p className="text-sm text-err">{details.error}</p>}
               {/* Plain preformatted output has no dedicated UI primitive. */}
-              <pre className="max-h-64 min-h-16 overflow-auto rounded-md border border-line bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap break-words">
+              <pre className="max-h-64 min-h-16 overflow-auto rounded-md border border-line bg-fill p-3 font-mono text-xs whitespace-pre-wrap break-words">
                 {details?.logs.trim() ||
                   (observed.refreshing || !details ? "Reading output…" : "No output yet.")}
               </pre>
@@ -273,7 +280,8 @@ export function PreviewDetailsDialog({
         )}
         <DialogFooter>
           <Button variant="outline" disabled={!commands.canStop} onClick={commands.stop}>
-            <SquareIcon data-icon="inline-start" aria-hidden /> Stop preview
+            <SquareIcon data-icon="inline-start" className="fill-current" aria-hidden /> Stop
+            preview
           </Button>
           {preview?.url && (
             <Button asChild>
