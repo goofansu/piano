@@ -135,7 +135,6 @@ export function ProjectHome({
             client={client}
             chooseDirectory={chooseDirectory}
             projectId={project.id}
-            placeholder={`New session in ${project.name}`}
           />
           {sessions.length > 0 && (
             <ItemGroup aria-label="Sessions" className="gap-2">

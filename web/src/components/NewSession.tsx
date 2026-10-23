@@ -110,7 +110,6 @@ export function NewSessionComposer({
   chooseDirectory,
   projectId,
   onProjectChange,
-  placeholder,
   className,
   inputClassName,
 }: {
@@ -119,7 +118,6 @@ export function NewSessionComposer({
   chooseDirectory: (cwd: string) => void;
   projectId?: string;
   onProjectChange?: (projectId?: string) => void;
-  placeholder?: string;
   className?: string;
   inputClassName?: string;
 }) {
@@ -184,7 +182,6 @@ export function NewSessionComposer({
           attachmentsDisabled={!state.connected}
           autoFocus={!window.matchMedia("(pointer: coarse)").matches}
           label="First message"
-          placeholder={placeholder}
           inputClassName={cn(composerInput, inputClassName)}
           maxHeight={288}
           model={{

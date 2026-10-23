@@ -13,8 +13,8 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   dialog) and "Project settings", then a red "Delete project".
 - `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
 - `member-cards`: one `button[data-slot=item]` card per member session; clicking opens `/s/<id>`.
-- `new-in-project`: the composer above the cards ("First message", placeholder "New session in
-  <name>") starts in the folder of the most recently active member, at the folder's own checkout;
+- `new-in-project`: the composer above the cards ("First message") starts in the folder of the
+  most recently active member, at the folder's own checkout;
   sending opens the new session, which joins the project.
 - `header`: the pane header names the project with its session count beneath ("1 session") and
   ends with the "Project settings" button.
