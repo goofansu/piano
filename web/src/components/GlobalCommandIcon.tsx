@@ -11,6 +11,7 @@ import {
   ShieldCheckIcon,
   ShieldOffIcon,
   SunIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { SettingsSectionIcon } from "@/components/SettingsSectionFrame";
 import type { GlobalCommandIcon as IconId } from "@/lib/globalCommands";
@@ -28,6 +29,7 @@ const ICONS: Record<Exclude<IconId, SettingsSectionIconName>, LucideIcon> = {
   system: MonitorIcon,
   group: LayoutListIcon,
   sort: ArrowUpDownIcon,
+  delete: Trash2Icon,
 };
 
 /** A global command's icon, as the palette, the View menu and the trust toggle show it; Settings sections keep their own. */

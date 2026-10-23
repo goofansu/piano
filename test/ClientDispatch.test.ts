@@ -767,6 +767,31 @@ test("INV-01: save_project with a session saves both, and an unknown session is 
   );
 });
 
+test("deleting a project tells its browser so; deleting an unknown one is answered as an error", async () => {
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      const { receive } = yield* client;
+      const from = sent.length;
+      yield* yield* receive({ _tag: "delete_project", id: "launch" });
+      assert.deepEqual(answers(from), [
+        { _tag: "toast", message: "Project deleted", level: "success" },
+      ]);
+      assert.deepEqual((yield* registry.get).projects, []);
+      const again = sent.length;
+      yield* yield* receive({ _tag: "delete_project", id: "launch" });
+      assert.deepEqual(answers(again), [
+        {
+          _tag: "error",
+          message: "Project is unavailable. Refresh and try again.",
+          selectionId: undefined,
+        },
+      ]);
+    }),
+  );
+});
+
 test("INV-01: a browser's checkout poll re-observes without resending the sidebar it already has", async () => {
   await run(
     Effect.gen(function* () {

@@ -4,7 +4,7 @@
  * View menu and the New session page's trust toggle render these instead of each deciding.
  */
 // Relative, not @shared: module tests load this file directly in Node.
-import type { ClientCommand } from "../../../shared/wire.ts";
+import type { ClientCommand, Project } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.ts";
@@ -27,6 +27,7 @@ export type GlobalCommandId =
   | `settings-${SettingsSection}`
   | "new-session"
   | "project-settings"
+  | "delete-project"
   | "trust"
   | "toggle-sidebar"
   | `appearance-${Appearance}`
@@ -52,7 +53,8 @@ export type GlobalCommandIcon =
   | "sidebar"
   | Appearance
   | "group"
-  | "sort";
+  | "sort"
+  | "delete";
 
 export type GlobalCommandIntent =
   | { kind: "home" }
@@ -62,6 +64,8 @@ export type GlobalCommandIntent =
   | { kind: "new-session"; projectId?: string }
   /** Open the project's settings page. */
   | { kind: "project-settings"; projectId: string }
+  /** Ask before deleting the project. */
+  | { kind: "delete-project"; project: Project }
   /** Send this registry or Pi change. */
   | { kind: "send"; command: ClientCommand }
   | { kind: "toggle-sidebar" }
@@ -127,7 +131,7 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
   };
 }
 
-/** On a project's home, its header's Project settings button; the home itself starts sessions. */
+/** On a project's home, its header menu's Project settings and Delete project; the home itself starts sessions. */
 function projectSettingsRow(state: AppState): GlobalCommand[] {
   const project = state.view.kind === "project" ? findProject(state, state.view.projectId) : null;
   if (!project) return [];
@@ -139,6 +143,15 @@ function projectSettingsRow(state: AppState): GlobalCommand[] {
       group: "navigate",
       enabled: true,
       intent: { kind: "project-settings", projectId: project.id },
+    },
+    {
+      id: "delete-project",
+      label: "Delete project",
+      icon: "delete",
+      group: "navigate",
+      // It asks first; the deletion itself changes the registry, so it waits for a connection.
+      enabled: state.connected,
+      intent: { kind: "delete-project", project },
     },
   ];
 }

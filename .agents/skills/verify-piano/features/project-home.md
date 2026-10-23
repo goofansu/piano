@@ -17,15 +17,16 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   most recently active member, at the folder's own checkout;
   sending opens the new session, which joins the project.
 - `header`: the pane header names the project with its session count beneath ("1 session") and
-  ends with the "Project settings" button.
+  ends with "Project menu for <name>": "Project settings", then a red "Delete project".
 - `empty`: a project with no sessions shows its header ("0 sessions") and the composer on "Choose a folder".
-- `settings`: "Project settings" (the header button, the project menu, Mod+K on the home) opens a
+- `settings`: "Project settings" (the header menu, the sidebar's project menu, Mod+K on the home) opens a
   dialog in place: Name and Instructions fields, Save off until a field changes; saving closes it
   and toasts "Project saved". Scope selectors to `[role=dialog]`: the page's composer is a
   `textarea` too. What reaches Pi needs the real Pi: fake Pi ignores the extension, so check the
   model's request with a scripted loopback model, as `test/fixtures/RealPiDispatch.ts` does.
-- `delete`: the sidebar project menu's "Delete project" asks first, saying how many sessions move
-  to "No project"; on the project's own home, confirming leaves for the New page.
+- `delete`: "Delete project" (the header menu, the sidebar's project menu, Mod+K on the home) asks
+  first, saying how many sessions move to "No project"; confirming toasts "Project deleted", and on
+  the project's own home leaves for the New page.
 - `missing`: an unknown ID shows the alert "Project not found".
 
 ## How to get to it (user POV)

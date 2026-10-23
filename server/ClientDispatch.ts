@@ -231,7 +231,13 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     },
     delete_project: {
       admission: "ordinary",
-      run: ({ id }) => registry.deleteProject(id),
+      // Answered as Delete session is: a toast once the registry has removed it.
+      run: ({ id }) =>
+        registry
+          .deleteProject(id)
+          .pipe(
+            Effect.andThen(send({ _tag: "toast", message: "Project deleted", level: "success" })),
+          ),
       unanswered: plainError,
     },
     set_project_instructions: {

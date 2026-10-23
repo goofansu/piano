@@ -103,15 +103,21 @@ test("rows keep their place while the page is open: new ones append, gone ones d
   assert.deepEqual(stableOrder(["b", "a", "c"], ["c", "b"]), ["b", "c"]);
 });
 
-test("on a project's home, Mod+K offers its Project settings button", () => {
+test("on a project's home, Mod+K offers its menu's Project settings and Delete project", () => {
   const ctx = { settingsOpen: false, view: { groupBy: "date", sortBy: "recent" } } as const;
   const row = (s: AppState, id: string) => globalCommands(s, ctx).find((c) => c.id === id);
-  const home: AppState = { ...state, view: { kind: "project", projectId: "p1" } };
+  const home: AppState = { ...state, connected: true, view: { kind: "project", projectId: "p1" } };
   assert.equal(row(home, "project-settings")?.label, "Project settings");
   assert.deepEqual(row(home, "project-settings")?.intent, {
     kind: "project-settings",
     projectId: "p1",
   });
+  const project = home.projects.find((p) => p.id === "p1");
+  assert.equal(row(home, "delete-project")?.label, "Delete project");
+  assert.deepEqual(row(home, "delete-project")?.intent, { kind: "delete-project", project });
+  assert.equal(row(home, "delete-project")?.enabled, true);
+  assert.equal(row({ ...home, connected: false }, "delete-project")?.enabled, false);
+  assert.equal(row(state, "delete-project"), undefined, "elsewhere the row is absent");
   assert.deepEqual(
     row(home, "new-session")?.intent,
     { kind: "new-session" },
