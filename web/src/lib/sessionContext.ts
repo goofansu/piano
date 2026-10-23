@@ -181,6 +181,16 @@ export function sessionWorking(state: AppState, target: SessionRef): boolean {
   );
 }
 
+/** Cached live-owner presence, including uncertainty. Never initiates observation. */
+export function sessionHasPreview(state: AppState, target: SessionRef): boolean {
+  const session = state.session;
+  if (session?.cwd === target.cwd && session.sessionId === target.sessionId)
+    return session.hosted && !session.state.closure && !!session.state.preview;
+  return state.hosts.some(
+    (host) => host.cwd === target.cwd && host.sessionId === target.sessionId && host.hasPreview,
+  );
+}
+
 /** Pi cannot run where the checkout or history is gone, and renaming starts Pi. */
 export function sessionCheckoutMissing(state: AppState, target: SessionRef): boolean {
   return (

@@ -3,7 +3,7 @@
 Ask a Piano session **“Run this app so I can try it.”** Its bundled `piano_preview` tool starts
 one app in that session's canonical workspace. The agent reads repository scripts/instructions,
 reports local readiness and returns an ordinary preview link. **That live Pi process owns the app.**
-No service manifest, skill collection, preview UI or Stop session control is required.
+No service manifest, skill collection or Stop session control is required.
 
 | Event | Outcome |
 | --- | --- |
@@ -17,6 +17,24 @@ No service manifest, skill collection, preview UI or Stop session control is req
 
 This reverses PIN-94's independent lifetime; see [ADR 0003](adr/0003-pi-owned-preview-lifetime.md)
 and the mandatory [legacy upgrade procedure](#upgrading-from-pin-94).
+
+## Session controls
+
+When the live owner reports a URL, **Open preview** appears in the session header and the palette's
+Session commands. It opens a new tab; opening it never launches an app or starts Pi. The header's
+session menu offers **Stop preview** and **Preview details** (also in the palette). Details show
+process state, local readiness and external-access uncertainty separately; **Refresh preview** reads
+current status and bounded logs on demand. There is no sidebar polling or terminal.
+
+Stop uses the exact observed instance ID, never a replacement's ID. Pi remains usable, and a
+confirmed stop permits normal idle retirement. Archive/Delete warn that the preview app will stop;
+cleanup failure is an error. Composer Stop still only interrupts generation.
+
+These controls are projections of the live Pi generation, not saved preview associations. Reload or
+reconnect sees that owner's last observation. Tool start/replace/stop completion updates it; details
+refresh observes subsequent exits or readiness changes. An unavailable supervisor is **unknown**,
+not stopped or healthy. Dormant sessions and owners that have exited have no controls and nothing
+relaunches. Controls are hidden on hosts where `piano_preview` is not offered.
 
 ## Hosts and configuration
 

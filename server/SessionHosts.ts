@@ -195,6 +195,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
             cwd: h.session.spec.cwd,
             sessionId: h.session.spec.sessionId,
             streaming: isWorking(state),
+            ...(state.preview && { hasPreview: true }),
           });
         }
         return out;

@@ -281,6 +281,18 @@ test("INV-02/05: starting from a stopped selection attaches before the first pro
       );
       const unstarted = yield* Effect.flip(sessions.act("S", { _tag: "prompt", text: "first" }));
       assert.ok(unstarted._tag === "ActRefused" && unstarted.reason === "not_running");
+      for (const action of [
+        { _tag: "preview_refresh" as const, details: true },
+        { _tag: "preview_stop" as const, instanceId: "old-instance" },
+      ]) {
+        const refused = yield* sessions.act("S", action, { model: "fake/beta" }).pipe(Effect.flip);
+        assert.ok(refused._tag === "ActRefused" && refused.reason === "not_running");
+        assert.deepEqual(
+          yield* hosts.list,
+          [],
+          "preview actions cannot start Pi, even with start options",
+        );
+      }
       yield* sessions.act("S", { _tag: "prompt", text: "first" }, {});
       assert.ok(
         sent.some((m) => m._tag === "selected" && m.selectionId === "S" && m.hosted),

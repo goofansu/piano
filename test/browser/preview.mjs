@@ -215,6 +215,19 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
       return { folders: [repo] };
     },
     async (page) => {
+      const chooseCommand = async (label, keyboard = false) => {
+        await page.press("Mod+K");
+        await page.ab("fill", "[cmdk-input]", label);
+        await page.until(
+          "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
+        );
+        if (keyboard) await page.press("Enter");
+        else await page.click("option", label);
+      };
+      const noPreviewControl = () =>
+        page.until(
+          "![...document.querySelectorAll('header button')].some(b => b.textContent.includes('Open preview'))",
+        );
       try {
         await page.open("/new");
         await page.ab("fill", '[aria-label="First message"]', "Run this app so I can try it.");
@@ -234,15 +247,28 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         const firstPi = piFor(first);
         assert.ok(firstPi && running(firstPi.pid));
         await page.capture("1-settled-preview-link");
-        const link = await page.evaluate(
-          "[...document.querySelectorAll('a')].find(a => a.textContent === 'Open preview')?.outerHTML",
+        await page.until(
+          "[...document.querySelectorAll('header button')].some(b => b.textContent.includes('Open preview'))",
         );
-        assert.ok(link.includes(app.url), link);
-        assert.ok(link.includes('target="_blank"'), link);
+        assert.ok(
+          await page.evaluate("!!document.querySelector('header button [data-icon=inline-end]')"),
+        );
+        await page.click("button", "Session information and actions");
+        await page.click("menuitem", "Preview details");
+        await page.see("Process: running. Local readiness: ready.");
+        await page.see(identity);
+        await page.click("button", "Refresh preview");
+        await page.capture("1a-preview-details");
+        await page.click("button", "Close");
+        await page.click("button", "Open preview");
+        // A real new tab, not a mocked window.open. External auth remains a separate check.
+        const tabs = await page.ab("tab", "list");
+        assert.ok(tabs.includes(new URL(app.url).hostname), tabs);
+        await page.ab("tab", tabs.match(/\bt\d+\b/g).at(-1));
 
         // On a Mac the link itself is opened. External exe.dev login is intentionally not bypassed:
         // there, local browser load is a separate claim.
-        await page.ab("tab", "new", local ? app.url : `http://127.0.0.1:${app.port}/`);
+        await page.ab("open", local ? app.url : `http://127.0.0.1:${app.port}/`);
         await page.see("Preview journey v1");
         await page.capture("2-app-load");
         writeFileSync(join(repo, "index.html"), "<h1>Preview journey v2 HMR</h1>");
@@ -265,10 +291,16 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         assert.equal(request({ action: "status" }).ready, true);
         await page.open(sessionPath);
         await page.until("!!document.querySelector('[aria-label=Message]')");
-        await page.ab("fill", '[aria-label="Message"]', "stop");
-        await page.click("button", "Send");
-        await page.see("PREVIEW_STOPPED");
-        await gone(first, "explicit tool stop");
+        const beforeStop = observations.length;
+        await page.until(
+          "[...document.querySelectorAll('header button')].some(b => b.textContent.includes('Open preview'))",
+        );
+        assert.equal(request({ action: "status" }).instanceId, identity);
+        await page.click("button", "Session information and actions");
+        await page.click("menuitem", "Stop preview");
+        await noPreviewControl();
+        assert.equal(observations.length, beforeStop, "UI stop makes no model/tool call");
+        await gone(first, "Stop preview through header menu");
         const idleDeadline = Date.now() + 15000;
         while (running(firstPi.pid)) {
           assert.ok(Date.now() < idleDeadline, "stopped preview permits idle retirement");
@@ -291,6 +323,15 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           );
           return app;
         };
+        const paletteStopped = await launch();
+        await chooseCommand("Open preview", true);
+        const paletteTabs = await page.ab("tab", "list");
+        assert.ok(paletteTabs.includes(new URL(paletteStopped.url).hostname));
+        await page.ab("tab", paletteTabs.match(/\bt\d+\b/g).at(-1));
+        await page.ab("tab", "close");
+        await chooseCommand("Stop preview", true);
+        await noPreviewControl();
+        await gone(paletteStopped, "Stop preview through keyboard palette");
         const killed = await launch();
         assert.notEqual(killed.owner.generation, first.owner.generation);
         await page.ab("close");
@@ -318,18 +359,13 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           true,
           "reopen never adopts/relaunches",
         );
+        await noPreviewControl();
         await page.capture("4-reopened-without-preview");
-
-        const chooseCommand = async (label) => {
-          await page.press("Mod+K");
-          await page.ab("fill", "[cmdk-input]", label);
-          await page.until(
-            "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
-          );
-          await page.click("option", label);
-        };
         const archived = await launch();
         await chooseCommand("Archive");
+        await page.see("Its preview app will be stopped.");
+        await page.click("button", "Stop and archive");
+        await noPreviewControl();
         await gone(archived, "Archive through command palette");
         await page.capture("5-archived");
         const create = async () => {
@@ -350,12 +386,15 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         const deleted = await create();
         await chooseCommand("Delete");
         await page.see("Delete this session?");
+        await page.see("Its preview app will be stopped.");
         await page.click("button", "Delete");
         await gone(deleted, "Delete through command palette and confirmation");
         await page.capture("6-deleted");
         const missing = await create();
         rmSync(repo, { recursive: true, force: true });
         await chooseCommand("Archive");
+        await page.see("Its preview app will be stopped.");
+        await page.click("button", "Stop and archive");
         await gone(missing, "Archive after checkout removal uses retained ownership");
       } finally {
         // Clean up even when a launch succeeded but its reply never reached the scripted model.

@@ -30,6 +30,8 @@ export interface PreviewRequest {
   env?: Record<string, string>;
   readyPath?: string;
   timeoutSeconds?: number;
+  /** UI refreshes fetch bounded logs only on demand; tool status keeps its existing default. */
+  includeLogs?: boolean;
   instanceId?: string;
   /** The exact current instanceId to stop and launch again, with this request's launch. */
   replace?: string;
@@ -950,8 +952,8 @@ export class PreviewAdapter {
       if (code(error) !== "ENOENT") throw error;
     }
     if (request.action === "status")
-      return record
-        ? this.observe(supervisor, record, path, root)
+      return record && (!owner || record.owner?.generation === owner.generation)
+        ? this.observe(supervisor, record, path, root, request.includeLogs ?? true)
         : { serviceId, workspace, status: "absent" };
     if (record && record.owner?.generation !== owner?.generation) {
       // A restart may clear a *confirmed dead* generation, never adopt its app. Legacy records

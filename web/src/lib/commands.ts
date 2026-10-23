@@ -38,6 +38,7 @@ export function radioChoiceOf<
 
 /** A form the host owns, which asks before anything changes; `answerForm` re-checks its rule. */
 export type CommandForm =
+  | { kind: "preview-details"; target: SessionTarget; selectionId: string }
   | { kind: "rename-session"; target: SessionTarget }
   | { kind: "delete-session"; target: SessionTarget }
   | { kind: "share-session"; target: SessionTarget }
@@ -59,6 +60,7 @@ export interface CommandEffects {
   setMessagesOnly: (on: boolean) => void;
   setChangesWrap: (on: boolean) => void;
   copy: (value: string, label: string) => void;
+  openExternal: (url: string) => void;
   openForm: (form: CommandForm) => void;
 }
 
@@ -67,6 +69,13 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
   if (!command.enabled) return false;
   const intent = command.intent;
   switch (intent.kind) {
+    case "external":
+      effects.openExternal(intent.url);
+      break;
+    case "preview-details":
+      effects.send({ _tag: "act", action: { _tag: "preview_refresh", details: true } });
+      effects.openForm(intent);
+      break;
     case "send":
       effects.send(intent.command);
       break;

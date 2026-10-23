@@ -24,7 +24,8 @@ import { ChildProcessSpawner as Spawner } from "effect/process";
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
-import { PreviewOwner } from "../scripts/PreviewOwner.ts";
+import { PreviewAdapter } from "../scripts/PreviewAdapter.ts";
+import { type PreviewObservation, PreviewOwner } from "../scripts/PreviewOwner.ts";
 import { withLastKnownStats } from "../shared/sessionProjection.ts";
 import { liveActivityOf } from "../shared/sessionStatus.ts";
 import type {
@@ -34,6 +35,7 @@ import type {
   SessionActionResult,
   SessionClosure,
   SessionFrame,
+  SessionPreview,
   SessionState,
   SessionStats,
   SlashCommand,
@@ -182,6 +184,20 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     needsCheckout: false,
     activity: false,
   },
+  preview_refresh: {
+    priority: false,
+    supersedes: false,
+    blockedWhileStopping: false,
+    needsCheckout: false,
+    activity: false,
+  },
+  preview_stop: {
+    priority: true,
+    supersedes: false,
+    blockedWhileStopping: false,
+    needsCheckout: false,
+    activity: false,
+  },
   restore_queue: {
     priority: true,
     supersedes: false,
@@ -254,6 +270,11 @@ const displayed = <A>(effect: Effect.Effect<A, PiSessionError>) =>
     ),
   );
 
+/** Supervisor boundary, shared by tool and browser requests through the live owner. */
+export const PiPreviewAdapter = Context.Reference<PreviewAdapter>("piano/PiPreviewAdapter", {
+  defaultValue: () => new PreviewAdapter(),
+});
+
 const replacedDetail =
   "Pi switched this process to another session, so Piano closed it. Reopen this session to continue; no input was resent.";
 
@@ -261,11 +282,45 @@ const openSession = (spec: PiSessionSpec) =>
   Effect.gen(function* () {
     // A generation belongs to this concrete Pi open, never a saved ID, PID or browser.
     const generation = randomUUID();
+    const adapter = yield* PiPreviewAdapter;
+    const previewEnabled =
+      process.platform === "darwin" ||
+      (process.platform === "linux" && !!process.env.PIANO_PREVIEW_CONFIG);
+    let latestPreview: SessionPreview | null = null;
+    let publishPreview = async () => {};
+    const onObservation = async (observation: PreviewObservation) => {
+      if (!previewEnabled) return;
+      if ("error" in observation) {
+        latestPreview = {
+          state: "unknown",
+          instanceId: latestPreview?.instanceId,
+          url: null,
+          ready: null,
+          externalAccess: "unverified",
+          details: { detail: String(observation.error).slice(-6000), logs: "" },
+        };
+      } else {
+        const { result, request } = observation;
+        if ("state" in result) {
+          latestPreview = {
+            state: result.state,
+            instanceId: result.instanceId,
+            url: result.url,
+            ready: result.ready,
+            externalAccess: result.externalAccess === "same-host" ? "same-host" : "unverified",
+            details: request.includeLogs ? { detail: result.detail, logs: result.logs } : undefined,
+          };
+        } else if (result.status === "not-current") {
+          return; // A stale stop/replace cannot erase or relabel a newer instance.
+        } else latestPreview = null;
+      }
+      await publishPreview();
+    };
     const preview =
-      process.platform === "linux" || process.platform === "darwin"
+      process.platform === "darwin" || process.platform === "linux"
         ? yield* Effect.acquireRelease(
             Effect.tryPromise({
-              try: () => PreviewOwner.open(spec, generation),
+              try: () => PreviewOwner.open(spec, generation, { adapter, onObservation }),
               catch: (error) => new PiSessionError({ reason: "spawn", detail: String(error) }),
             }),
             (owner) =>
@@ -332,11 +387,17 @@ const openSession = (spec: PiSessionSpec) =>
       generation,
       initial: {
         ...opened,
-        state: withLastKnownStats(opened.state, spec.lastKnownStats),
+        state: { ...withLastKnownStats(opened.state, spec.lastKnownStats), preview: latestPreview },
         tools: [],
       },
     });
     const { transaction, apply, patchState, announced } = publication;
+    publishPreview = () =>
+      Effect.runPromise(
+        transaction((tx) =>
+          announced() ? Effect.void : tx.mergeState({ preview: latestPreview }),
+        ),
+      );
     let submissionId = 0;
     const progress = makeSessionRecordProgress({ observed: child.observationVersion });
     let initializing = true;
@@ -514,6 +575,33 @@ const openSession = (spec: PiSessionSpec) =>
           : readbacks.operation();
         const lane = laneOf(action._tag);
         switch (action._tag) {
+          case "preview_refresh":
+          case "preview_stop": {
+            if (!preview || !previewEnabled) return;
+            const result = yield* Effect.tryPromise({
+              try: () =>
+                preview.request(
+                  action._tag === "preview_stop"
+                    ? { action: "stop", workspace: spec.cwd, instanceId: action.instanceId }
+                    : { action: "status", workspace: spec.cwd, includeLogs: !!action.details },
+                ),
+              catch: (error) => new PiSessionError({ reason: "rejected", detail: String(error) }),
+            }).pipe(
+              Effect.catchTag("PiSessionError", (error) =>
+                action._tag === "preview_refresh" ? Effect.succeed(undefined) : Effect.fail(error),
+              ),
+            );
+            if (
+              action._tag === "preview_stop" &&
+              result &&
+              "status" in result &&
+              (result.status === "stopped" ||
+                result.status === "cleared" ||
+                result.status === "not-current")
+            )
+              return { _tag: "preview_stopped", status: result.status };
+            return;
+          }
           case "prompt":
           case "steer": {
             const exchange = yield* exchangeOf(piExchangeFor(action));

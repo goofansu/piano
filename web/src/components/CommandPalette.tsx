@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, ExternalLinkIcon } from "lucide-react";
 import {
   Fragment,
   memo,
@@ -368,7 +368,7 @@ const PaletteResults = memo(function PaletteResults({
                           onSelect={() => run(() => runCommand(r.command))}
                         >
                           {r.kind === "session" ? (
-                            <CommandIcon icon={r.command.icon} />
+                            r.command.icon !== "external" && <CommandIcon icon={r.command.icon} />
                           ) : (
                             <ProjectCommandIconView icon={r.command.icon} />
                           )}{" "}
@@ -381,6 +381,9 @@ const PaletteResults = memo(function PaletteResults({
                             </>
                           ) : (
                             r.label
+                          )}
+                          {r.kind === "session" && r.command.icon === "external" && (
+                            <ExternalLinkIcon data-icon="inline-end" />
                           )}
                           {r.checked && <Current />}
                         </CommandItem>

@@ -149,6 +149,7 @@ export function applySessionEvent(snapshot: Snapshot, event: SessionEvent): Snap
           queuedMessages: [],
           contextIsLastKnown: true,
           closure: event.closure,
+          preview: null,
         },
       };
     case "response_completed":

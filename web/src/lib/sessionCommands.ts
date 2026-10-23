@@ -9,6 +9,7 @@ import {
   isSelectedSession,
   sessionCheckoutMissing,
   sessionContext,
+  sessionHasPreview,
   sessionMutable,
   sessionReference,
   sessionWorking,
@@ -18,6 +19,9 @@ import {
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
 export type SessionCommandId =
+  | "open-preview"
+  | "stop-preview"
+  | "preview-details"
   | "copy-working-directory"
   | "copy-branch"
   | "copy-session-id"
@@ -34,6 +38,9 @@ export type SessionCommandId =
   | "new-session-here";
 
 export type SessionCommandIcon =
+  | "external"
+  | "stop-preview"
+  | "preview-details"
   | "copy"
   | "changes"
   | "pull-request"
@@ -47,6 +54,8 @@ export type SessionCommandIcon =
   | "new";
 
 export type SessionCommandIntent =
+  | { kind: "external"; url: string }
+  | { kind: "preview-details"; target: SessionTarget; selectionId: string }
   | { kind: "send"; command: ClientCommand }
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
@@ -99,7 +108,7 @@ export interface SessionHeaderMenu {
 const ROW_SECTIONS = [["rename", "pin"], ["share"], ["archive", "delete"]] as const;
 const HEADER_SECTIONS = {
   details: ["copy-all"],
-  open: ["changes", "pull-request"],
+  open: ["changes", "pull-request", "preview-details", "stop-preview"],
   manage: ["rename", "pin", "share"],
   destructive: ["archive", "delete"],
 } as const satisfies Record<string, readonly SessionCommandId[]>;
@@ -177,6 +186,40 @@ export function sessionCommands(
   const subject = target ?? (ref && { ...ref, title: sessionReference(state, ref)?.title });
   const commands: SessionCommand[] = [];
   if (selected && session) {
+    const preview = session.hosted && !session.state.closure ? session.state.preview : null;
+    if (preview && subject && state.selectionId) {
+      const enabled = sessionMutable(state, subject);
+      if (preview.url)
+        commands.push({
+          id: "open-preview",
+          label: "Open preview",
+          icon: "external",
+          enabled,
+          intent: { kind: "external", url: preview.url },
+        });
+      commands.push({
+        id: "preview-details",
+        label: "Preview details",
+        icon: "preview-details",
+        enabled,
+        keywords: ["logs", "status", "refresh"],
+        intent: { kind: "preview-details", target: subject, selectionId: state.selectionId },
+      });
+      if (preview.instanceId)
+        commands.push({
+          id: "stop-preview",
+          label: "Stop preview",
+          icon: "stop-preview",
+          enabled,
+          intent: {
+            kind: "send",
+            command: {
+              _tag: "act",
+              action: { _tag: "preview_stop", instanceId: preview.instanceId },
+            },
+          },
+        });
+    }
     const messagesOnly = options.messagesOnly ?? false;
     const all = [
       `Working directory: ${session.cwd}`,
@@ -307,7 +350,8 @@ export function sessionCommands(
         intent: {
           kind: "archive",
           target: subject,
-          confirm: !!subject && sessionWorking(state, subject),
+          confirm:
+            !!subject && (sessionWorking(state, subject) || sessionHasPreview(state, subject)),
         },
       },
       {

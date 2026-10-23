@@ -9,6 +9,23 @@ import {
   type PreviewRequest,
 } from "./PreviewAdapter.ts";
 
+export type PreviewObservation =
+  | {
+      result:
+        | Awaited<ReturnType<PreviewAdapter["request"]>>
+        | { status: "absent"; workspace: string };
+      request: PreviewRequest;
+    }
+  | { error: unknown; request: PreviewRequest };
+
+export interface PreviewOwnerOptions {
+  adapter?: PreviewAdapter;
+  root?: string;
+  config?: () => Promise<PreviewConfig>;
+  /** Runs inside the owner's serial gate, before any newer observation can complete. */
+  onObservation?: (observation: PreviewObservation) => Promise<void>;
+}
+
 /** One Pi generation's admission gate and live connections. Browser/tool cancellation never
  * closes it. The service runner must connect before it can spawn, including a late submission
  * after Piano dies. A server crash closes the kernel connections without running JS cleanup. */
@@ -24,15 +41,10 @@ export class PreviewOwner {
   private attempted = false;
   private ending = false;
   private disposed?: Promise<void>;
+  private readonly options: PreviewOwnerOptions;
 
-  private constructor(
-    identity: PreviewOwnerIdentity,
-    options: {
-      adapter?: PreviewAdapter;
-      root?: string;
-      config?: () => Promise<PreviewConfig>;
-    },
-  ) {
+  private constructor(identity: PreviewOwnerIdentity, options: PreviewOwnerOptions) {
+    this.options = options;
     this.identity = identity;
     this.adapter = options.adapter ?? new PreviewAdapter();
     this.root =
@@ -89,11 +101,7 @@ export class PreviewOwner {
   static async open(
     spec: { cwd: string; sessionId: string },
     generation: string,
-    options: {
-      adapter?: PreviewAdapter;
-      root?: string;
-      config?: () => Promise<PreviewConfig>;
-    } = {},
+    options: PreviewOwnerOptions = {},
   ) {
     const workspace = await realpath(spec.cwd);
     // Short enough for macOS Unix-domain paths, private to the current OS user.
@@ -130,12 +138,24 @@ export class PreviewOwner {
     return this.serial(async () => {
       if (this.ending) throw new Error("Pi owner is ending; no preview launch admitted.");
       if (request.action === "start") this.attempted = true;
-      return this.adapter.request(
-        { ...request, workspace: this.identity.workspace },
-        this.root,
-        await this.config(),
-        this.identity,
-      );
+      try {
+        // An unattempted generation has nothing to observe, even if another generation owns
+        // this workspace. Never consult the supervisor just because a browser selected it.
+        const result =
+          !this.attempted && request.action === "status"
+            ? { status: "absent" as const, workspace: this.identity.workspace }
+            : await this.adapter.request(
+                { ...request, workspace: this.identity.workspace },
+                this.root,
+                await this.config(),
+                this.identity,
+              );
+        await this.options.onObservation?.({ result, request });
+        return result;
+      } catch (error) {
+        await this.options.onObservation?.({ error, request });
+        throw error;
+      }
     }).finally(() => {
       this.pending--;
     });

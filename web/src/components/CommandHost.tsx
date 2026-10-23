@@ -2,14 +2,17 @@ import type { ClientCommand } from "@shared/wire";
 import {
   ArchiveIcon,
   CopyIcon,
+  ExternalLinkIcon,
   FileDiffIcon,
   GitPullRequestIcon,
+  InfoIcon,
   type LucideIcon,
   MessageSquareIcon,
   PinIcon,
   PinOffIcon,
   PlusIcon,
   ShareIcon,
+  SquareIcon,
   TextCursorInputIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -25,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/PianoDialog";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
+import { PreviewDetails } from "@/components/PreviewDetails";
 import { ProjectDialogView } from "@/components/Projects";
 import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
@@ -60,6 +64,9 @@ async function copySessionValue(value: string, label: string) {
 }
 
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
+  external: ExternalLinkIcon,
+  "preview-details": InfoIcon,
+  "stop-preview": SquareIcon,
   copy: CopyIcon,
   changes: FileDiffIcon,
   "pull-request": GitPullRequestIcon,
@@ -198,6 +205,9 @@ export function CommandHost({
     setAppearance: setTheme,
     copy: (value, label) => void copySessionValue(value, label),
     openForm: forms.open,
+    openExternal: (url) => {
+      window.open(url, "_blank", "noopener,noreferrer");
+    },
   };
   const run = (command: Command) => {
     runCommand(command, effects);
@@ -216,6 +226,21 @@ export function CommandHost({
       }}
     >
       {children}
+      <PreviewDetails
+        preview={
+          form?.kind === "preview-details" &&
+          form.selectionId === state.selectionId &&
+          state.session?.hosted &&
+          !state.session.state.closure
+            ? state.session.state.preview
+            : null
+        }
+        close={close}
+        refresh={() => {
+          if (form?.kind === "preview-details" && form.selectionId === state.selectionId)
+            send({ _tag: "act", action: { _tag: "preview_refresh", details: true } });
+        }}
+      />
       <ShareSessionDialog
         open={sharing}
         phase={forms.share}

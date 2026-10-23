@@ -13,7 +13,12 @@ import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
-import { sessionMutable, sessionWorking, workspaceFor } from "./sessionContext.ts";
+import {
+  sessionHasPreview,
+  sessionMutable,
+  sessionWorking,
+  workspaceFor,
+} from "./sessionContext.ts";
 
 export interface FormAnswer {
   /** The form may be submitted now; otherwise its submit control is disabled. */
@@ -41,6 +46,8 @@ export function answerForm(
   { radiusSignedIn = false, newId = () => crypto.randomUUID() }: AnswerContext = {},
 ): FormAnswer {
   switch (form.kind) {
+    case "preview-details":
+      return { allowed: false };
     case "rename-session": {
       const { target } = form;
       const title = text.trim();
@@ -113,7 +120,7 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
     case "archive-session":
       return {
         title: "Stop and archive this session?",
-        description: `This will stop any work still running in "${form.target.title || "Untitled"}" and remove it from the sidebar. Its transcript will be kept. Changes already made to files will not be undone.`,
+        description: `This will stop any work still running in "${form.target.title || "Untitled"}" and remove it from the sidebar. Its transcript will be kept. ${sessionHasPreview(state, form.target) ? "Its preview app will be stopped. " : ""}Changes already made to files will not be undone.`,
         confirmLabel: "Stop and archive",
         destructive: false,
       };
@@ -121,7 +128,7 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
       const working = sessionWorking(state, form.target);
       return {
         title: "Delete this session?",
-        description: `${working ? "This will stop the session and interrupt its current work. " : ""}"${form.target.title || "Untitled"}" and its transcript are removed from Pi's session store. This cannot be undone.`,
+        description: `${working ? "This will stop the session and interrupt its current work. " : ""}${sessionHasPreview(state, form.target) ? "Its preview app will be stopped. " : ""}"${form.target.title || "Untitled"}" and its transcript are removed from Pi's session store. This cannot be undone.`,
         confirmLabel: working ? "Stop and delete" : "Delete",
         destructive: true,
       };
@@ -133,6 +140,7 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
         confirmLabel: "Close",
         destructive: false,
       };
+    case "preview-details":
     case "rename-session":
     case "share-session":
     case "project":

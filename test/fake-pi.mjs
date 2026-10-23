@@ -1,6 +1,6 @@
 // A scripted stand-in for `pi --mode rpc`: speaks the JSONL protocol well enough to
 // exercise PiSessions through its interface. Behaviour is driven by the prompt text.
-import { closeSync, existsSync, readdirSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, readdirSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 const args = process.argv.slice(2);
@@ -162,6 +162,8 @@ const respond = (cmd, data, error) =>
   });
 
 function handle(cmd) {
+  if (args.includes("--preview-audit"))
+    appendFileSync(args[args.indexOf("--preview-audit") + 1], `${JSON.stringify(cmd)}\n`);
   switch (cmd.type) {
     case "get_state":
       if (sessionId === "capacity-records") {
@@ -446,6 +448,12 @@ function handle(cmd) {
       return;
     }
     case "prompt": {
+      if (cmd.message.startsWith("preview ")) {
+        return import("../scripts/PreviewClient.ts").then(async ({ ownerRequest }) => {
+          await ownerRequest(process.env.PIANO_PREVIEW_OWNER, JSON.parse(cmd.message.slice(8)));
+          respond(cmd, { disposition: "handled" });
+        });
+      }
       if (cmd.message.startsWith("notification ")) {
         respond(cmd, { disposition: "started" });
         if (cmd.message !== "notification finish") {

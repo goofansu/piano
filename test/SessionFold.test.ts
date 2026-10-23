@@ -59,6 +59,13 @@ test("INV-02: closure ends activity, queue, partial reply and dialogs, and keeps
       isRetrying: true,
       isStopping: true,
       contextIsLastKnown: false,
+      preview: {
+        state: "running",
+        instanceId: "app",
+        url: "http://localhost:9400/",
+        ready: true,
+        externalAccess: "same-host",
+      },
     },
   });
   const closure = { _tag: "exited", code: 1, detail: "Pi exited with code 1" } as const;
@@ -71,6 +78,7 @@ test("INV-02: closure ends activity, queue, partial reply and dialogs, and keeps
     isStopping: false,
     queuedMessages: [],
     contextIsLastKnown: true,
+    preview: null,
     closure,
   });
   assert.equal(closed.pending, undefined);

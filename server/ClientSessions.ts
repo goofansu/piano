@@ -243,7 +243,12 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     action: SessionAction,
     start?: StartOptions,
   ) {
-    const session = yield* target(selectionId, start);
+    // Preview controls are queries/actions on an existing owner, never permission to start Pi
+    // (even if an old or malformed client includes start options).
+    const session = yield* target(
+      selectionId,
+      action._tag === "preview_refresh" || action._tag === "preview_stop" ? undefined : start,
+    );
     const result = yield* session.act(action);
     if (result)
       yield* send({

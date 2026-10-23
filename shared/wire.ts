@@ -203,7 +203,32 @@ export const SessionClosure = Schema.Union([
 ]);
 export type SessionClosure = typeof SessionClosure.Type;
 
+/** Ephemeral observation of this live Pi generation only; never persisted with history. */
+export const SessionPreview = Schema.Struct({
+  state: Schema.Literals([
+    "starting",
+    "running",
+    "exited",
+    "failed",
+    "stopping",
+    "not-loaded",
+    "unknown",
+  ]),
+  instanceId: Schema.optional(Schema.String),
+  url: Schema.NullOr(Schema.String),
+  ready: Schema.NullOr(Schema.Boolean),
+  externalAccess: Schema.Literals(["same-host", "unverified"]),
+  details: Schema.optional(
+    Schema.Struct({
+      detail: Schema.String,
+      logs: Schema.String,
+    }),
+  ),
+});
+export type SessionPreview = typeof SessionPreview.Type;
+
 export const SessionState = Schema.Struct({
+  preview: Schema.optional(Schema.NullOr(SessionPreview)),
   sessionId: Schema.String,
   sessionFile: Schema.optional(Schema.String),
   sessionName: Schema.optional(Schema.String),
@@ -352,6 +377,8 @@ export const SessionAction = Schema.Union([
   Schema.TaggedStruct("abort", {}),
   Schema.TaggedStruct("stop", {}),
   Schema.TaggedStruct("restore_queue", {}),
+  Schema.TaggedStruct("preview_refresh", { details: Schema.optional(Schema.Boolean) }),
+  Schema.TaggedStruct("preview_stop", { instanceId: Schema.String }),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
   Schema.TaggedStruct("set_thinking_level", { level: ThinkingLevel }),
   /** Name the session in Pi's own history, as `/name` does. */
@@ -368,6 +395,9 @@ export type SessionAction = typeof SessionAction.Type;
 
 /** A command result for its caller, not a broadcast session event. */
 export const SessionActionResult = Schema.Union([
+  Schema.TaggedStruct("preview_stopped", {
+    status: Schema.Literals(["stopped", "cleared", "not-current"]),
+  }),
   Schema.TaggedStruct("queue_restored", {
     messages: Schema.Array(QueuedMessage),
     stopError: Schema.optional(Schema.String),
@@ -624,6 +654,8 @@ export const SessionPullRequestAction = Schema.Union([
 export type SessionPullRequestAction = typeof SessionPullRequestAction.Type;
 
 export const HostInfo = Schema.Struct({
+  /** Cached owner projection only: lets background Archive/Delete warn without observing. */
+  hasPreview: Schema.optional(Schema.Boolean),
   cwd: Schema.String,
   sessionId: Schema.String,
   streaming: Schema.Boolean,

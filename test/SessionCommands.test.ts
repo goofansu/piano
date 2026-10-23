@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
+import { confirmation } from "../web/src/lib/commandForms.ts";
 import {
   type SessionCommandId,
   type SessionHeaderMenu,
@@ -54,6 +55,84 @@ const enabled = (state: AppState, target?: typeof other) =>
   Object.fromEntries(sessionCommands(state, target).map((c) => [c.id, c.enabled])) as Partial<
     Record<SessionCommandId, boolean>
   >;
+
+test("preview commands use only the selected live owner, and retention warns even for background apps", () => {
+  const target = { cwd: "/work/repo.feature", sessionId: "s1" };
+  const state = {
+    ...base,
+    session: session(target.cwd, {
+      isStreaming: false,
+      preview: {
+        state: "running",
+        instanceId: "exact",
+        url: "https://preview.example:9400/",
+        ready: true,
+        externalAccess: "unverified",
+      },
+    }),
+  };
+  const commands = sessionCommands(state);
+  assert.deepEqual(commands.find((c) => c.id === "stop-preview")?.intent, {
+    kind: "send",
+    command: { _tag: "act", action: { _tag: "preview_stop", instanceId: "exact" } },
+  });
+  assert.deepEqual(commands.find((c) => c.id === "open-preview")?.intent, {
+    kind: "external",
+    url: "https://preview.example:9400/",
+  });
+  assert.ok(sessionHeaderMenu(commands).open.some((c) => c.id === "preview-details"));
+  assert.equal(commands.find((c) => c.id === "archive")?.intent.kind, "archive");
+  assert.deepEqual(commands.find((c) => c.id === "archive")?.intent, {
+    kind: "archive",
+    target: { ...target, title: undefined },
+    confirm: true,
+  });
+  for (const kind of ["archive-session", "delete-session"] as const) {
+    assert.match(confirmation(state, { kind, target })!.description, /preview app will be stopped/);
+    assert.match(
+      confirmation(
+        { ...base, hosts: [{ ...other, streaming: false, hasPreview: true }] },
+        { kind, target: other },
+      )!.description,
+      /preview app will be stopped/,
+    );
+  }
+  for (const hidden of [
+    { ...state, session: { ...state.session, hosted: false } },
+    { ...state, session: session(target.cwd) },
+    {
+      ...state,
+      session: session(target.cwd, {
+        ...state.session.state,
+        closure: { _tag: "exited", code: 0, detail: "gone" },
+      }),
+    },
+  ])
+    assert.equal(
+      sessionCommands(hidden).some((c) => c.id.includes("preview")),
+      false,
+    );
+  assert.equal(
+    sessionCommands(state, other).some((c) => c.id.includes("preview")),
+    false,
+  );
+  assert.equal(enabled({ ...state, connected: false })["stop-preview"], false);
+  const unknown = {
+    ...state,
+    session: session(target.cwd, {
+      preview: {
+        state: "unknown",
+        ready: null,
+        url: null,
+        externalAccess: "unverified",
+        instanceId: "exact",
+      },
+    }),
+  };
+  assert.equal(enabled(unknown)["open-preview"], undefined);
+  assert.equal(enabled(unknown)["preview-details"], true);
+  assert.equal(enabled(unknown)["stop-preview"], true);
+});
 
 test("session command availability: settled, disconnected, resyncing, missing checkout, no workspace", () => {
   const settled = enabled(base);

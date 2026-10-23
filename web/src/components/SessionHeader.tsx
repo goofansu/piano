@@ -1,4 +1,10 @@
-import { GitBranchIcon, MoreHorizontalIcon, SplitIcon, TargetIcon } from "lucide-react";
+import {
+  ExternalLinkIcon,
+  GitBranchIcon,
+  MoreHorizontalIcon,
+  SplitIcon,
+  TargetIcon,
+} from "lucide-react";
 import { useRef } from "react";
 import {
   CommandIcon,
@@ -50,6 +56,7 @@ export function SessionHeader({
   } = sessionContext(state);
   const { commands, run } = useSessionCommands();
   const menu = sessionHeaderMenu(commands);
+  const openPreview = commands.find((c) => c.id === "open-preview");
   const projectMenu = useSessionProjectMenu();
   const openProject = projectMenu?.open;
   const { display } = menu;
@@ -136,6 +143,16 @@ export function SessionHeader({
             </>
           )}
         </div>
+        {openPreview && (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!openPreview.enabled}
+            onClick={() => run(openPreview)}
+          >
+            Open preview <ExternalLinkIcon data-icon="inline-end" />
+          </Button>
+        )}
         <span role="status" className="sr-only">
           {status}
         </span>
