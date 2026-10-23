@@ -130,6 +130,9 @@
   --card-foreground: var(--ink);
   --popover: var(--surface-2);
   --popover-foreground: var(--ink);
+  /* A solid surface, hovered: for a control that floats over content, where the translucent
+   * `--accent` fill would tint what lies beneath instead of the control. */
+  --popover-hover: color-mix(in oklch, var(--popover), var(--foreground) 5%);
   --primary: var(--brand);
   --primary-foreground: var(--brand-ink);
   --secondary: var(--fill);
@@ -264,6 +267,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
+  --color-popover-hover: var(--popover-hover);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);

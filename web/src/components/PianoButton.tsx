@@ -3,10 +3,9 @@ import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 
 const variants = {
-  // Hover tints the solid surface instead of swapping it for the translucent accent fill, so
-  // whatever the button floats over never shows through it.
+  // Stays solid on hover, so whatever the button floats over never shows through it.
   "outline-solid":
-    "border border-input bg-popover text-popover-foreground shadow-xs hover:bg-[color-mix(in_oklch,var(--popover),var(--foreground)_5%)]",
+    "border border-input bg-popover text-popover-foreground shadow-xs hover:bg-popover-hover",
   "outline-transparent": "border border-input bg-transparent hover:border-ring",
   "rail-action":
     "border border-line bg-transparent text-ink shadow-none hover:border-brand/25 hover:bg-brand-soft [&_svg]:text-brand",
