@@ -153,6 +153,11 @@ export interface SessionActionPolicy {
   readonly needsCheckout: boolean;
   /** Counts as user activity on the session reference, recorded before admission. */
   readonly activity: boolean;
+  /**
+   * May start a stopped session's Pi when the client sends start options. Preview actions observe
+   * or stop an existing owner's app, so they never do.
+   */
+  readonly startsPi: boolean;
 }
 
 /**
@@ -166,6 +171,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: true,
     needsCheckout: true,
     activity: true,
+    startsPi: true,
   },
   steer: {
     priority: false,
@@ -173,6 +179,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: true,
     needsCheckout: true,
     activity: true,
+    startsPi: true,
   },
   abort: {
     priority: true,
@@ -180,6 +187,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: true,
     needsCheckout: false,
     activity: false,
+    startsPi: true,
   },
   stop: {
     priority: true,
@@ -187,6 +195,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: true,
     needsCheckout: false,
     activity: false,
+    startsPi: true,
   },
   restore_queue: {
     priority: true,
@@ -194,6 +203,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: true,
     needsCheckout: true,
     activity: false,
+    startsPi: true,
   },
   set_model: {
     priority: false,
@@ -201,6 +211,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: false,
     needsCheckout: true,
     activity: false,
+    startsPi: true,
   },
   set_thinking_level: {
     priority: false,
@@ -208,6 +219,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: false,
     needsCheckout: true,
     activity: false,
+    startsPi: true,
   },
   set_name: {
     priority: false,
@@ -215,6 +227,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: false,
     needsCheckout: true,
     activity: false,
+    startsPi: true,
   },
   answer: {
     priority: true,
@@ -222,6 +235,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: false,
     needsCheckout: true,
     activity: false,
+    startsPi: true,
   },
   // Preview actions never reach Pi. Cleanup and observation use retained identity, so they work
   // without the checkout; stopping an app must not wait behind ordinary input.
@@ -231,6 +245,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: false,
     needsCheckout: false,
     activity: false,
+    startsPi: false,
   },
   preview_stop: {
     priority: true,
@@ -238,6 +253,7 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: false,
     needsCheckout: false,
     activity: false,
+    startsPi: false,
   },
 };
 

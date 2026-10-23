@@ -15,7 +15,7 @@ import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Attachment, ServerMessage, SessionAction, StartOptions } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
-import type { PiSession, PiSessionError } from "./PiSessions.ts";
+import { type PiSession, type PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
 import type { RegistryError } from "./Registry.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
 
@@ -243,10 +243,12 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     action: SessionAction,
     start?: StartOptions,
   ) {
-    // Preview actions observe or stop an existing owner's app; they never start Pi, even when an
-    // old or malformed client sends start options with them.
-    const preview = action._tag === "preview_status" || action._tag === "preview_stop";
-    const session = yield* target(selectionId, preview ? undefined : start);
+    // An action its policy forbids from starting Pi ignores start options, even when an old or
+    // malformed client sends them.
+    const session = yield* target(
+      selectionId,
+      sessionActionPolicy[action._tag].startsPi ? start : undefined,
+    );
     const result = yield* session.act(action);
     if (result)
       yield* send({
