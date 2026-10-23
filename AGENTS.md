@@ -94,9 +94,9 @@ one status glyph, `StatusDot`, for every state (an app preview, a webhook delive
 (`pulse`) only while something is in progress, and each state shown once: the sidebar row owns a
 session's state, so the header repeats nothing; a refresh control turns its own icon while it
 reads; a Settings page listing things (providers, webhooks) is `SettingsGroup`s and
-`SettingsList`s of hairline-divided rows with `outline` row actions, and a page editing one
-thing (a project's settings) shows its fields in place; either way the page's one primary action
-sits in its header.
+`SettingsList`s of hairline-divided rows with `outline` row actions and its one primary action
+in its header; editing one thing's few fields (Project settings) is a dialog opened where the
+thing is shown, its fields in place and Save in its footer.
 
 Build UI from shadcn/ui components (the `shadcn` skill: search the registry, add with
 `npx shadcn@latest add`). Hand-written markup is for the case where no standard component exists,
