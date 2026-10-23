@@ -409,7 +409,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         };
         const deleted = await create();
         await chooseCommand("Delete");
-        await page.see("Delete this session?");
+        await page.see("Delete session?");
         await page.see("This will stop the app the session started.");
         await page.click("button", "Stop and delete");
         await gone(deleted, "Delete through command palette and confirmation");

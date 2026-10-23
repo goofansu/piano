@@ -144,8 +144,9 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
         : preview
           ? "This will stop the app the session started. "
           : "";
+      // The name sits in the body, where a long one wraps; the title stays one short line.
       return {
-        title: "Delete this session?",
+        title: "Delete session?",
         description: `${stop}"${form.target.title || "Untitled"}" and its transcript are removed from Pi's session store. This cannot be undone.`,
         confirmLabel: working || preview ? "Stop and delete" : "Delete",
         destructive: true,
@@ -170,8 +171,8 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
             ? "; its session moves to No project"
             : `; its ${count} sessions move to No project`;
       return {
-        title: "Delete this project?",
-        description: `"${form.project.name}" is removed from Piano${moved}. This cannot be undone.`,
+        title: "Delete project?",
+        description: `"${form.project.name}" is deleted${moved}. This cannot be undone.`,
         confirmLabel: "Delete",
         destructive: true,
       };

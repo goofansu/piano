@@ -109,14 +109,14 @@ test("archive, delete and close folder send their registry change", () => {
 test("deleting a working session says it stops the work; an idle one just deletes", () => {
   const working: AppState = { ...online, hosts: [{ ...other, streaming: true }] };
   assert.deepEqual(confirmation(working, del()), {
-    title: "Delete this session?",
+    title: "Delete session?",
     description:
       'This will stop the session and interrupt its current work. "Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
     confirmLabel: "Stop and delete",
     destructive: true,
   });
   assert.deepEqual(confirmation(online, del()), {
-    title: "Delete this session?",
+    title: "Delete session?",
     description:
       '"Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
     confirmLabel: "Delete",
@@ -188,19 +188,18 @@ test("deleting a project asks first, saying its sessions move to No project", ()
     ),
   });
   assert.deepEqual(confirmation(members(false, false, true), deleteProject), {
-    title: "Delete this project?",
-    description:
-      '"Launch" is removed from Piano; its 2 sessions move to No project. This cannot be undone.',
+    title: "Delete project?",
+    description: '"Launch" is deleted; its 2 sessions move to No project. This cannot be undone.',
     confirmLabel: "Delete",
     destructive: true,
   });
   assert.equal(
     confirmation(members(false), deleteProject)!.description,
-    '"Launch" is removed from Piano; its session moves to No project. This cannot be undone.',
+    '"Launch" is deleted; its session moves to No project. This cannot be undone.',
   );
   assert.equal(
     confirmation(members(), deleteProject)!.description,
-    '"Launch" is removed from Piano. This cannot be undone.',
+    '"Launch" is deleted. This cannot be undone.',
   );
 });
 
@@ -396,7 +395,7 @@ test("archive and delete say they stop the app a session started", () => {
     destructive: false,
   });
   assert.deepEqual(confirmation(owning, del()), {
-    title: "Delete this session?",
+    title: "Delete session?",
     description:
       'This will stop the app the session started. "Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
     confirmLabel: "Stop and delete",

@@ -83,9 +83,9 @@ Preconditions: a seeded launch (`$S/launch.sh`), `. "$RUN/run.env"`, doctor pass
   - Action: with Group by Project, on `/projects/verify`,
     `ab find role button click --name "Project menu for Verify Project" --exact;
     ab find role menuitem click --name "Delete project" --exact;
-    ab wait --text "Delete this project?"`, capture `06-confirm`, then
+    ab wait --text "Delete project?"`, capture `06-confirm`, then
     `ab find role button click --name "Delete" --exact; ab wait --url "**/new"`
-  - Result: the dialog reads `"Verify Project" is removed from Piano; its session moves to No
+  - Result: the dialog "Delete project?" reads `"Verify Project" is deleted; its session moves to No
     project. This cannot be undone.`; confirming lands on `/new`, the sidebar has no "Verify
     Project" group and "Plan the verification" sits under "No project", and `/s/verify-plan`
     still opens with its history. Capture `06-deleted`. Deleting changes the database; relaunch
