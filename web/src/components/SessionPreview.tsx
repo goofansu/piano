@@ -114,15 +114,17 @@ export function SessionPreviewControl() {
             <Button
               variant="ghost"
               size={mobile ? "icon-sm" : "sm"}
-              className={mobile ? "size-11" : "max-w-48 gap-2 font-normal"}
+              className={mobile ? "size-11" : "max-w-48"}
               aria-label={`Preview: ${face.status}. Status and actions`}
             >
+              {/* Icon and label as the PR trigger beside it: one size, one weight. */}
               <AppWindowIcon
+                data-icon={mobile ? undefined : "inline-start"}
                 className={iconColor[face.tone]}
                 data-motion={face.tone === "pending" ? "pulse" : undefined}
                 aria-hidden
               />
-              {!mobile && <span className="truncate font-mono text-xs text-ink-2">{label}</span>}
+              {!mobile && <span className="truncate">{label}</span>}
             </Button>
           </TooltipTrigger>
         </DropdownMenuTrigger>

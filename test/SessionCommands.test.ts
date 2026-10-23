@@ -347,9 +347,10 @@ test("preview commands exist only while the selected session's live Pi owns an a
     kind: "send",
     command: { _tag: "act", action: { _tag: "preview_stop", instanceId: "i1" } },
   });
+  // The header's preview control offers open and stop itself; the menu does not repeat them.
   assert.deepEqual(
     sessionHeaderMenu(sessionCommands(running)).open.map((c) => c.id),
-    ["changes", "pull-request", "open-preview", "stop-preview"],
+    ["changes", "pull-request"],
   );
 
   // An app that is not answering has nothing to open, but can still be inspected and stopped.
