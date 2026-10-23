@@ -35,11 +35,14 @@ export interface AppState {
   connected: boolean;
   selectionId: string | null;
   resync: boolean;
-  /** What the main pane shows. The New page's `cwd` is the directory a session started there runs in; it has no other owner. */
+  /**
+   * What the main pane shows. The `cwd` of the New page and of a project's home is the directory a
+   * session started there runs in; it has no other owner.
+   */
   view:
     | { kind: "session" }
     | { kind: "new"; cwd?: string; projectId?: string }
-    | { kind: "project"; projectId: string }
+    | { kind: "project"; projectId: string; cwd?: string }
     | { kind: "missing-session"; sessionId: string };
   folders: FolderView[];
   projects: Project[];
@@ -168,13 +171,17 @@ function reduceAction(s: AppState, a: Action): AppState {
         selectionId: null,
         resync: false,
         selectionFailure: null,
-        view: { kind: "project", projectId: a.projectId },
+        // Opening the home already on screen keeps the directory chosen there.
+        view:
+          s.view.kind === "project" && s.view.projectId === a.projectId
+            ? s.view
+            : { kind: "project", projectId: a.projectId },
         selecting: null,
         session: null,
         pendingCreate: null,
       };
     case "new_directory":
-      return s.view.kind === "new" && s.view.cwd !== a.cwd
+      return (s.view.kind === "new" || s.view.kind === "project") && s.view.cwd !== a.cwd
         ? { ...s, view: { ...s.view, cwd: a.cwd } }
         : s;
     case "missing-session":

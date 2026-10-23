@@ -108,7 +108,12 @@ export default function App() {
                         onProjectChange={(id) => openNew(undefined, id)}
                       />
                     ) : state.view.kind === "project" ? (
-                      <ProjectHome state={state} projectId={state.view.projectId} />
+                      <ProjectHome
+                        state={state}
+                        client={client}
+                        chooseDirectory={chooseDirectory}
+                        projectId={state.view.projectId}
+                      />
                     ) : state.view.kind === "missing-session" ? (
                       <Empty className="flex-1 px-4" role="alert">
                         <EmptyHeader>

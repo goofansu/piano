@@ -1,13 +1,15 @@
 /**
  * The browser's side of the wire: one client per page owns the projected state, the connection,
  * selection correlation, re-selection after reconnect or resync (INV-02/05), which server
- * messages and connection losses become notifications, the New page's default directory, and
+ * messages and connection losses become notifications, the New page's and project home's default
+ * directory, and
  * asking Pi about the focused directory's models and trust. React only subscribes and sends;
  * nothing here depends on render timing.
  */
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
+import { projectStartDirectory } from "./projectHome.ts";
 import { closureNeedsAttention, focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { readStorage, writeStorage } from "./storage.ts";
 import type { Connection, ConnectionHandlers, DisconnectReason, SendDisposition } from "./ws.ts";
@@ -94,8 +96,15 @@ export function createClient({
   newSelectionId = () => crypto.randomUUID(),
   lastDirectory = storedLastDirectory,
 }: ClientOptions): Client {
-  /** A New page opened without a directory or project starts in the last one used, else the first folder. */
+  /**
+   * A New page opened without a directory or project starts in the last one used, else the first
+   * folder; a project's home starts in its most recent member's folder once the registry says which.
+   */
   const withNewPageDirectory = (s: AppState) => {
+    if (s.view.kind === "project" && !s.view.cwd) {
+      const cwd = projectStartDirectory(s, s.view.projectId);
+      return cwd ? reduce(s, { type: "new_directory", cwd }) : s;
+    }
     if (s.view.kind !== "new" || s.view.cwd || s.view.projectId) return s;
     const cwd = lastDirectory.read() || s.folders[0]?.path;
     return cwd ? reduce(s, { type: "new_directory", cwd }) : s;

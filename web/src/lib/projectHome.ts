@@ -7,7 +7,21 @@ import type { Project } from "@shared/wire";
 import { type AppState, sessionKey } from "../store.ts";
 import { findProject } from "./projectCommands.ts";
 import { pullRequestView } from "./pullRequestView.ts";
-import { type SessionEntry, sessionCatalog } from "./sessionCatalog.ts";
+import { folderFor, type SessionEntry, sessionCatalog } from "./sessionCatalog.ts";
+
+/**
+ * Where a session started on a project's home runs by default: the folder of the member session
+ * active most recently, at the folder's own checkout rather than that session's worktree. None
+ * when no member's folder is open; a project spans repositories, so nothing else is guessed.
+ */
+export function projectStartDirectory(state: AppState, projectId: string): string | undefined {
+  let newest: { cwd: string; updatedAt: string } | undefined;
+  for (const ref of state.sessionReferences) {
+    if (ref.projectId !== projectId || ref.archived || !folderFor(state, ref.cwd)) continue;
+    if (!newest || ref.updatedAt > newest.updatedAt) newest = ref;
+  }
+  return newest && folderFor(state, newest.cwd)?.path;
+}
 
 export interface ProjectHomeSession extends SessionEntry {
   /** The saved pull request link's number; the home never reads GitHub for it. */

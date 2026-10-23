@@ -1,10 +1,7 @@
-import { PlusIcon } from "lucide-react";
-import { useRef } from "react";
+import { type ComponentProps, useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
-import { useCommands } from "@/components/CommandHost";
+import { NewSessionComposer } from "@/components/NewSession";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
   Item,
@@ -16,7 +13,6 @@ import {
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
-import { projectCommand } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
@@ -75,9 +71,18 @@ function ProjectHomeSkeleton() {
  * A project's home: its member sessions, newest activity first, each with its title, folder,
  * branch, saved pull request number and last activity. Everything comes from the session catalog the browser already holds.
  */
-export function ProjectHome({ state, projectId }: { state: AppState; projectId: string }) {
-  const { select, openNew } = useNavigation();
-  const { run } = useCommands();
+export function ProjectHome({
+  state,
+  client,
+  chooseDirectory,
+  projectId,
+}: {
+  state: AppState;
+  client: ComponentProps<typeof NewSessionComposer>["client"];
+  chooseDirectory: (cwd: string) => void;
+  projectId: string;
+}) {
+  const { select } = useNavigation();
   const home = projectHome(state, projectId);
   const order = useStableOrder(home.kind === "home" ? home.sessions.map(sessionKey) : []);
 
@@ -96,8 +101,6 @@ export function ProjectHome({ state, projectId }: { state: AppState; projectId: 
     );
 
   const { project } = home;
-  const create = projectCommand(state, project, "new-session");
-  const unarchive = projectCommand(state, project, "unarchive");
   const byKey = new Map(home.sessions.map((s) => [sessionKey(s), s]));
   const sessions = order.flatMap((key) => byKey.get(key) ?? []);
   const now = Date.now();
@@ -105,22 +108,7 @@ export function ProjectHome({ state, projectId }: { state: AppState; projectId: 
   const count = sessions.length;
   return (
     <>
-      <ProjectHeader
-        actions={
-          create && (
-            // On a phone the name keeps the width: the button shows its icon and keeps its name for screen readers.
-            <Button
-              size="sm"
-              className="max-md:size-11 max-md:px-0"
-              disabled={!create.enabled}
-              onClick={() => openNew(undefined, project.id)}
-            >
-              <PlusIcon data-icon="inline-start" />
-              <span className="max-md:sr-only">{create.label}</span>
-            </Button>
-          )
-        }
-      >
+      <ProjectHeader>
         <h1 className="truncate text-sm font-medium">{project.name}</h1>
         {/* Plain project metadata has no dedicated UI primitive. */}
         <p className="truncate text-xs text-ink-3">
@@ -130,22 +118,14 @@ export function ProjectHome({ state, projectId }: { state: AppState; projectId: 
       </ProjectHeader>
       <div className={page}>
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-          {unarchive && (
-            <Alert>
-              <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span>This project is archived.</span>
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0"
-                  disabled={!unarchive.enabled}
-                  onClick={() => run(unarchive)}
-                >
-                  {unarchive.label}
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
+          {/* The session starts here and joins this project; the composer offers Unarchive while it cannot. */}
+          <NewSessionComposer
+            state={state}
+            client={client}
+            chooseDirectory={chooseDirectory}
+            projectId={project.id}
+            placeholder={`New session in ${project.name}`}
+          />
           {sessions.length > 0 && (
             <ItemGroup aria-label="Sessions" className="gap-2">
               {sessions.map((s) => (

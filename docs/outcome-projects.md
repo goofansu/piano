@@ -108,8 +108,10 @@ registry edits, including newly added session references, but does not delete Pi
 A project is a group in the sidebar beside the repositories, and `/projects/<id>` is its home:
 one card per member session, newest activity first, with its title, folder, branch (the one
 Piano registered once Git no longer lists the worktree), saved pull request number and last
-activity. The home draws only from what the browser already holds (PIN-83).
-`/projects/<id>/new` is its New page, where a session started joins it. Closed-directory and archived-session references remain reachable
+activity. The cards draw only from what the browser already holds (PIN-83). Above them, the home
+has the New page's composer: a session started there joins the project, and runs by default in the
+folder of the member session active most recently (at the folder's own checkout), else wherever
+the person picks. `/projects/<id>/new` is its New page, where a session started joins it too. Closed-directory and archived-session references remain reachable
 from the group and from session search.
 
 ## Step 2 — Shared context and instructions, later

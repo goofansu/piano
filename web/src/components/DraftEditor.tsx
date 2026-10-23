@@ -73,6 +73,8 @@ interface Props {
   /** Attaching images is off; defaults to `disabled`. */
   attachmentsDisabled?: boolean;
   label: string;
+  /** Shown while the draft is empty, where the page has no heading that says what to write. */
+  placeholder?: string;
   inputClassName?: string;
   className?: string;
   /** The tallest the textarea grows, in pixels. */
@@ -96,6 +98,7 @@ export function DraftEditor({
   disabled = false,
   attachmentsDisabled = disabled,
   label,
+  placeholder,
   inputClassName,
   className,
   maxHeight,
@@ -139,6 +142,7 @@ export function DraftEditor({
         disabled={disabled}
         rows={1}
         aria-label={label}
+        placeholder={placeholder}
         className={inputClassName}
         onValueChange={editor.setText}
         onKeyDown={(e) => {

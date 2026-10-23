@@ -5,6 +5,7 @@ import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import type { ConnectionHandlers, DisconnectReason } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
 
 /** A client over a fake transport: the test plays the server and the socket's status changes. */
 function harness() {
@@ -665,6 +666,59 @@ test("a fresh New page starts in the last directory used, else the first folder,
   assert.deepEqual(
     project.client.getState().view,
     { kind: "new", projectId: "p1" },
-    "a project's home starts without a directory",
+    "a project's New page starts without a directory",
+  );
+});
+
+test("a project's home starts in its most recent member's folder, at the folder's own checkout", () => {
+  const worktree = (path: string, root: boolean) =>
+    ({ workspace: { id: `ws:${path}`, folder: "/repo", path }, path, root }) as never;
+  const repo = {
+    path: "/repo",
+    name: "repo",
+    worktrees: [worktree("/repo", true), worktree("/repo.sort", false)],
+    discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
+  } as never;
+  const at = (minute: number) => `2026-10-21T08:0${minute}:00Z`;
+  const registry: ServerMessage = {
+    _tag: "registry",
+    folders: [repo],
+    projects: [
+      { id: "p1", name: "Perf", archived: false },
+      { id: "p2", name: "Elsewhere", archived: false },
+    ],
+    sessionReferences: [
+      sessionReference("/repo", "old", { projectId: "p1", updatedAt: at(1) }),
+      sessionReference("/repo.sort", "recent", { projectId: "p1", updatedAt: at(5) }),
+      sessionReference("/closed", "newest", { projectId: "p1", updatedAt: at(9) }),
+      sessionReference("/closed", "only", { projectId: "p2", updatedAt: at(9) }),
+    ],
+  };
+  const home = focusHarness({
+    remembered: "/last",
+    initial: { ...initialState, view: { kind: "project", projectId: "p1" } },
+  });
+  home.status(true);
+  assert.deepEqual(home.asked(), [], "nothing to ask before the registry names the members");
+  home.server(registry);
+  assert.deepEqual(home.client.getState().view, { kind: "project", projectId: "p1", cwd: "/repo" });
+  assert.deepEqual(home.asked(), ["models /repo", "trust /repo"]);
+  home.client.dispatch({ type: "new_directory", cwd: "/repo.sort" });
+  home.server(registry);
+  assert.deepEqual(
+    home.client.getState().view,
+    { kind: "project", projectId: "p1", cwd: "/repo.sort" },
+    "a directory picked on the home stays picked",
+  );
+
+  const elsewhere = focusHarness({
+    remembered: "/last",
+    initial: { ...initialState, view: { kind: "project", projectId: "p2" } },
+  });
+  elsewhere.server(registry);
+  assert.deepEqual(
+    elsewhere.client.getState().view,
+    { kind: "project", projectId: "p2" },
+    "with no member in an open folder, nothing is guessed",
   );
 });

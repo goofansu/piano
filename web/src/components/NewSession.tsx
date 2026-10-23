@@ -66,17 +66,75 @@ interface Props {
   client: WorktreeClient;
   /** Picks the directory the session will run in; the page shows the store's `view.cwd`. */
   chooseDirectory: (cwd: string) => void;
-  /** The project a session started here joins; the page is that project's home. */
+  /** The project a session started here joins. */
   projectId?: string;
   onProjectChange: (projectId?: string) => void;
 }
 
-/** New session: a composer. The first prompt creates the session in the chosen directory with the chosen model and effort. */
+/** New session: a welcome above the composer. */
 export function NewSession({ state, client, chooseDirectory, projectId, onProjectChange }: Props) {
+  const project = findProject(state, projectId);
+  return (
+    <>
+      {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
+      <ShowSidebarButton className="absolute top-2 left-2" />
+      <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
+          <div className="new-session-welcome flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
+            <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex" />
+            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">
+              {project?.name ?? "What should we work on?"}
+            </h1>
+            <p className="mt-2 hidden text-base text-ink-2 md:block">
+              A little progress starts with an idea.
+            </p>
+          </div>
+          <NewSessionComposer
+            state={state}
+            client={client}
+            chooseDirectory={chooseDirectory}
+            projectId={projectId}
+            onProjectChange={onProjectChange}
+            className="shrink-0"
+            inputClassName="new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5"
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * The composer that starts a session, on the New page and on a project's home: where it runs, that
+ * directory's trust, which project it joins (only where `onProjectChange` lets the page change it),
+ * and the first message. The first prompt creates the session in the chosen directory with the
+ * chosen model and effort.
+ */
+export function NewSessionComposer({
+  state,
+  client,
+  chooseDirectory,
+  projectId,
+  onProjectChange,
+  placeholder,
+  className,
+  inputClassName,
+}: {
+  state: AppState;
+  client: WorktreeClient;
+  chooseDirectory: (cwd: string) => void;
+  projectId?: string;
+  onProjectChange?: (projectId?: string) => void;
+  placeholder?: string;
+  className?: string;
+  inputClassName?: string;
+}) {
   const { send } = client;
   const { run } = useCommands();
-  // The client starts a fresh page in the last directory used, else the first folder; opened for a project, it starts without one.
-  const cwd = state.view.kind === "new" ? (state.view.cwd ?? "") : "";
+  // The client starts a fresh New page in the last directory used, else the first folder; a
+  // project's New page starts without one, and its home in its most recent member's folder.
+  const cwd =
+    state.view.kind === "new" || state.view.kind === "project" ? (state.view.cwd ?? "") : "";
   const editor = useDraftEditor(NEW_SESSION_DRAFT);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -110,94 +168,79 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
 
   return (
     <>
-      {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
-      <ShowSidebarButton className="absolute top-2 left-2" />
-      <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
-          <div className="new-session-welcome flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
-            <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex" />
-            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">
-              {project?.name ?? "What should we work on?"}
-            </h1>
-            <p className="mt-2 hidden text-base text-ink-2 md:block">
-              A little progress starts with an idea.
-            </p>
-          </div>
-          <div className="shrink-0">
-            {/* Left: where the session runs, with that directory's trust beside it. Right: which project it joins. */}
-            <div className="mb-2 flex min-w-0 items-center gap-1">
-              <div className="min-w-0 shrink">
-                <DirectorySelect
-                  state={state}
-                  value={cwd}
-                  onChange={chooseDirectory}
-                  onBrowse={() => setPickerOpen(true)}
-                  client={client}
-                />
-              </div>
-              {trust && <TrustToggle command={trust} run={run} />}
-              <ProjectSelect state={state} value={projectId} onChange={onProjectChange} />
-            </div>
-            <DraftEditor
-              editor={editor}
-              completion={completionTarget(state)}
-              attachmentsDisabled={!state.connected}
-              autoFocus={!window.matchMedia("(pointer: coarse)").matches}
-              label="First message"
-              inputClassName={cn(
-                composerInput,
-                "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5",
-              )}
-              maxHeight={288}
-              model={{
-                models,
-                value: choice.model,
-                onChange: choice.onModelChange,
-                effort: choice.effort,
-                onEffortChange: choice.onEffortChange,
-                noDirectory: !cwd,
-              }}
-              onSend={submit}
-              actions={
-                <Button
-                  size="icon"
-                  data-motion="press"
-                  className={composerAction}
-                  aria-label="Send"
-                  disabled={!ready}
-                  onClick={submit}
-                >
-                  <span className="inline-flex">
-                    <ArrowUpIcon />
-                  </span>
-                </Button>
-              }
+      <div className={className}>
+        {/* Left: where the session runs, with that directory's trust beside it. Right: which project it joins. */}
+        <div className="mb-2 flex min-w-0 items-center gap-1">
+          <div className="min-w-0 shrink">
+            <DirectorySelect
+              state={state}
+              value={cwd}
+              onChange={chooseDirectory}
+              onBrowse={() => setPickerOpen(true)}
+              client={client}
             />
-            {folder?.discovery.status === "error" && (
-              <Alert data-motion="fade" variant="destructive" className="mt-2">
-                <AlertDescription>
-                  Git status unavailable. Open Worktrees to inspect and refresh.
-                </AlertDescription>
-              </Alert>
-            )}
-            {unarchive && (
-              <Alert data-motion="fade" className="mt-2">
-                <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span>This project is archived.</span>
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="h-auto p-0"
-                    disabled={!unarchive.enabled}
-                    onClick={() => run(unarchive)}
-                  >
-                    {unarchive.label}
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
           </div>
+          {trust && <TrustToggle command={trust} run={run} />}
+          {onProjectChange && (
+            <ProjectSelect state={state} value={projectId} onChange={onProjectChange} />
+          )}
         </div>
+        <DraftEditor
+          editor={editor}
+          completion={completionTarget(state)}
+          attachmentsDisabled={!state.connected}
+          autoFocus={!window.matchMedia("(pointer: coarse)").matches}
+          label="First message"
+          placeholder={placeholder}
+          inputClassName={cn(composerInput, inputClassName)}
+          maxHeight={288}
+          model={{
+            models,
+            value: choice.model,
+            onChange: choice.onModelChange,
+            effort: choice.effort,
+            onEffortChange: choice.onEffortChange,
+            noDirectory: !cwd,
+          }}
+          onSend={submit}
+          actions={
+            <Button
+              size="icon"
+              data-motion="press"
+              className={composerAction}
+              aria-label="Send"
+              disabled={!ready}
+              onClick={submit}
+            >
+              <span className="inline-flex">
+                <ArrowUpIcon />
+              </span>
+            </Button>
+          }
+        />
+        {folder?.discovery.status === "error" && (
+          <Alert data-motion="fade" variant="destructive" className="mt-2">
+            <AlertDescription>
+              Git status unavailable. Open Worktrees to inspect and refresh.
+            </AlertDescription>
+          </Alert>
+        )}
+        {unarchive && (
+          <Alert data-motion="fade" className="mt-2">
+            <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>This project is archived.</span>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0"
+                disabled={!unarchive.enabled}
+                onClick={() => run(unarchive)}
+              >
+                {unarchive.label}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
       <FolderPicker
         open={pickerOpen}
