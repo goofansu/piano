@@ -125,8 +125,8 @@ entire history as shared context. This is a separate slice after grouping proves
 
 **Shipped first: plain project instructions.** A project has optional instructions, one text of
 up to 20,000 characters kept in Piano's database (registry version 10) and edited, with the name,
-on the project's settings page at `/projects/<id>/settings` (its home's header, the project menu or
-Mod+K: "Project settings"), which also deletes the project. Each time Piano starts Pi for a
+in the Project settings dialog (its home's header, the project menu or Mod+K on the home). Each
+time Piano starts Pi for a
 member session, new or reopened, it passes the project's current instructions in the child's
 environment, and Piano's own extension adds them on every run as a `project_instructions` system
 prompt section. Pi's own sections, including the user's and the checkout's `APPEND_SYSTEM.md`,

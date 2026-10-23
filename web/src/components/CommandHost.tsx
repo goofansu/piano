@@ -17,7 +17,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { createContext, useContext, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/PianoDialog";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
+import { ProjectSettingsDialog } from "@/components/ProjectSettings";
 import { ProjectDialogView } from "@/components/Projects";
 import { PreviewDetailsDialog } from "@/components/SessionPreview";
 import { ShareSessionDialog } from "@/components/ShareSessionDialog";
@@ -38,7 +39,7 @@ import { confirmation } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import { previewObservation } from "@/lib/previewObservation";
-import { sessionProjectMenu } from "@/lib/projectCommands";
+import { findProject, type ProjectSettingsDraft, sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
 import {
   type SessionCommand,
@@ -171,15 +172,8 @@ export function CommandHost({
   send: (command: ClientCommand) => void;
   children: React.ReactNode;
 }) {
-  const {
-    openNew,
-    openProject,
-    openProjectSettings,
-    openPanel,
-    openSettings,
-    closeSettings,
-    settings,
-  } = useNavigation();
+  const { openNew, openProject, openPanel, openSettings, closeSettings, settings } =
+    useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [changesWrap, setChangesWrap] = useChangesWrap();
   const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
@@ -204,6 +198,21 @@ export function CommandHost({
   const project = form?.kind === "project" ? form.dialog : undefined;
   // The app whose details are open; another app, even in the same session, never reopens them.
   const [previewDetails, setPreviewDetails] = useState<string | null>(null);
+  // The project whose settings are open, and a save sent from them that the registry has yet to hold.
+  const [settingsFor, setSettingsFor] = useState<string | null>(null);
+  const [savingSettings, setSavingSettings] = useState<{
+    projectId: string;
+    draft: ProjectSettingsDraft;
+  } | null>(null);
+  useEffect(() => {
+    if (!savingSettings) return;
+    const saved = findProject(state, savingSettings.projectId);
+    const { name, instructions } = savingSettings.draft;
+    if (saved?.name === name.trim() && (saved.instructions ?? "") === instructions.trim()) {
+      toast.success("Project saved");
+      setSavingSettings(null);
+    }
+  }, [savingSettings, state]);
 
   const effects: CommandEffects = {
     send,
@@ -211,7 +220,7 @@ export function CommandHost({
     openSettings,
     openNew,
     openProject,
-    openProjectSettings,
+    openProjectSettings: setSettingsFor,
     openPanel,
     toggleSidebar: sidebar.toggle,
     setView,
@@ -325,6 +334,13 @@ export function CommandHost({
         edit={forms.edit}
         submit={forms.submit}
         close={close}
+      />
+      <ProjectSettingsDialog
+        state={state}
+        project={findProject(state, settingsFor)}
+        send={send}
+        saved={(projectId, draft) => setSavingSettings({ projectId, draft })}
+        close={() => setSettingsFor(null)}
       />
     </CommandsContext.Provider>
   );

@@ -43,7 +43,6 @@ export interface AppState {
     | { kind: "session" }
     | { kind: "new"; cwd?: string; projectId?: string }
     | { kind: "project"; projectId: string; cwd?: string }
-    | { kind: "project-settings"; projectId: string }
     | { kind: "missing-session"; sessionId: string };
   folders: FolderView[];
   projects: Project[];
@@ -107,8 +106,6 @@ export type Action =
   | { type: "new"; cwd?: string; projectId?: string }
   /** Opens a project's home. */
   | { type: "project"; projectId: string }
-  /** Opens a project's settings page. */
-  | { type: "project-settings"; projectId: string }
   /** Picks the New page's directory; ignored on any other view. */
   | { type: "new_directory"; cwd: string }
   | { type: "missing-session"; sessionId: string };
@@ -179,17 +176,6 @@ function reduceAction(s: AppState, a: Action): AppState {
           s.view.kind === "project" && s.view.projectId === a.projectId
             ? s.view
             : { kind: "project", projectId: a.projectId },
-        selecting: null,
-        session: null,
-        pendingCreate: null,
-      };
-    case "project-settings":
-      return {
-        ...s,
-        selectionId: null,
-        resync: false,
-        selectionFailure: null,
-        view: { kind: "project-settings", projectId: a.projectId },
         selecting: null,
         session: null,
         pendingCreate: null,

@@ -6,7 +6,6 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
 import { ProjectHome } from "@/components/ProjectHome";
-import { ProjectSettings } from "@/components/ProjectSettings";
 import { SessionPanel } from "@/components/SessionPanel";
 import { SessionView } from "@/components/SessionView";
 import { SettingsNavigation, SettingsPage } from "@/components/SettingsPage";
@@ -115,8 +114,6 @@ export default function App() {
                         chooseDirectory={chooseDirectory}
                         projectId={state.view.projectId}
                       />
-                    ) : state.view.kind === "project-settings" ? (
-                      <ProjectSettings state={state} projectId={state.view.projectId} send={send} />
                     ) : state.view.kind === "missing-session" ? (
                       <Empty className="flex-1 px-4" role="alert">
                         <EmptyHeader>

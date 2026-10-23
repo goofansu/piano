@@ -207,7 +207,6 @@ test("deleting a project asks first, saying its sessions move to No project", ()
 test("deleting the project on screen leaves for the New page; deleting another stays put", () => {
   for (const [view, leaves] of [
     [{ kind: "project", projectId: "p1" }, true],
-    [{ kind: "project-settings", projectId: "p1" }, true],
     [{ kind: "new", projectId: "p1" }, true],
     [{ kind: "project", projectId: "p2" }, false],
     [{ kind: "session" }, false],

@@ -59,8 +59,6 @@ export interface Navigation {
   openNew: (cwd?: string, projectId?: string) => void;
   /** A project's home. */
   openProject: (projectId: string) => void;
-  /** A project's settings page. */
-  openProjectSettings: (projectId: string) => void;
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
   openPanel: (panel: Panel) => void;
@@ -73,8 +71,6 @@ export interface Navigation {
 export function initialView(route: Route): AppState["view"] {
   if (route.kind === "session") return { kind: "session" };
   if (route.kind === "project") return { kind: "project", projectId: route.projectId };
-  if (route.kind === "project-settings")
-    return { kind: "project-settings", projectId: route.projectId };
   return { kind: "new", projectId: route.kind === "new" ? route.projectId : undefined };
 }
 
@@ -83,7 +79,6 @@ export type RouteDecision =
   | { kind: "settings"; section: SettingsSection }
   | { kind: "new"; projectId?: string }
   | { kind: "project"; projectId: string }
-  | { kind: "project-settings"; projectId: string }
   /** Back or forward onto the New page already on screen keeps whatever directory it had. */
   | { kind: "keep" }
   | { kind: "select"; cwd: string; sessionId: string }
@@ -100,10 +95,6 @@ export function decideRoute(route: Route, state: AppState): RouteDecision {
     return state.view.kind === "project" && state.view.projectId === route.projectId
       ? { kind: "keep" }
       : { kind: "project", projectId: route.projectId };
-  if (route.kind === "project-settings")
-    return state.view.kind === "project-settings" && state.view.projectId === route.projectId
-      ? { kind: "keep" }
-      : { kind: "project-settings", projectId: route.projectId };
   if (!state.registryLoaded) return { kind: "wait" };
   const session = catalogEntry(state, route.sessionId);
   return session
@@ -130,13 +121,11 @@ export function addressFor(
       ? { kind: "new", projectId: state.view.projectId }
       : state.view.kind === "project"
         ? { kind: "project", projectId: state.view.projectId }
-        : state.view.kind === "project-settings"
-          ? { kind: "project-settings", projectId: state.view.projectId }
-          : state.view.kind === "missing-session"
-            ? { kind: "session", sessionId: state.view.sessionId }
-            : current?.sessionId
-              ? { kind: "session", sessionId: current.sessionId }
-              : null;
+        : state.view.kind === "missing-session"
+          ? { kind: "session", sessionId: state.view.sessionId }
+          : current?.sessionId
+            ? { kind: "session", sessionId: current.sessionId }
+            : null;
   if (!route) return null;
   const path = routePath(settings ? { kind: "settings", section: settings } : route);
   // The bare root is an alias for /new and a query string carries nothing: replace those, push real moves.
@@ -150,11 +139,9 @@ export function addressFor(
       ? "Session not found"
       : route.kind === "project"
         ? findProject(state, route.projectId)?.name || "Project"
-        : route.kind === "project-settings"
-          ? `${findProject(state, route.projectId)?.name || "Project"} settings`
-          : route.kind === "new"
-            ? findProject(state, route.projectId)?.name || "New session"
-            : catalogEntry(state, route.sessionId)?.title || "Session";
+        : route.kind === "new"
+          ? findProject(state, route.projectId)?.name || "New session"
+          : catalogEntry(state, route.sessionId)?.title || "Session";
   return { path, mode, title: `${title} - Piano` };
 }
 
@@ -217,8 +204,6 @@ export function createNavigation({
       client.dispatch({ type: "new", projectId: decision.projectId });
     else if (decision.kind === "project")
       client.dispatch({ type: "project", projectId: decision.projectId });
-    else if (decision.kind === "project-settings")
-      client.dispatch({ type: "project-settings", projectId: decision.projectId });
     else if (decision.kind === "select") select(decision.cwd, decision.sessionId);
     else if (decision.kind === "missing")
       client.dispatch({ type: "missing-session", sessionId: decision.sessionId });
@@ -309,12 +294,6 @@ export function createNavigation({
       batch(() => {
         set({ settings: null });
         client.dispatch({ type: "project", projectId });
-        moved();
-      }),
-    openProjectSettings: (projectId) =>
-      batch(() => {
-        set({ settings: null });
-        client.dispatch({ type: "project-settings", projectId });
         moved();
       }),
     openSettings: (section = "providers") =>

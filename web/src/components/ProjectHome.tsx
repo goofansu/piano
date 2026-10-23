@@ -32,7 +32,7 @@ const page =
   "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:px-6 md:py-8";
 
 /** The pane's header, shaped like the session header: the name with a line beneath it, actions at the end. */
-export function ProjectHeader({
+function ProjectHeader({
   children,
   actions,
 }: {
