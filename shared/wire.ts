@@ -756,17 +756,21 @@ export const ClientMessage = Schema.Union([
     refresh: Schema.optional(Schema.Boolean),
     requestId: Schema.optional(Schema.String),
   }),
-  /** Create or rename a project; with `assign`, that session joins it in the same registry write. */
+  /** Create a project; with `assign`, that session joins it in the same registry write. */
   Schema.TaggedStruct("save_project", {
     project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }),
     assign: Schema.optional(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String })),
   }),
   /** Delete a project; its sessions stay and move to No project. */
   Schema.TaggedStruct("delete_project", { id: Schema.String }),
-  /** Replace a project's instructions; null clears them. */
-  Schema.TaggedStruct("set_project_instructions", {
+  /**
+   * Change a known project's name or instructions in one registry write, answered with a toast.
+   * Null instructions clear them; an unknown project is refused, never recreated.
+   */
+  Schema.TaggedStruct("update_project", {
     id: Schema.String,
-    instructions: Schema.NullOr(ProjectInstructions),
+    name: Schema.optional(Project.fields.name),
+    instructions: Schema.optional(Schema.NullOr(ProjectInstructions)),
   }),
   Schema.TaggedStruct("assign_project", {
     cwd: Schema.String,

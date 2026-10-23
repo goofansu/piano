@@ -112,37 +112,39 @@ export function projectSettingsCommand(project: Project): ProjectCommand {
   };
 }
 
-/** What the settings page holds while it is edited. */
+/** What the settings dialog holds while it is edited. */
 export interface ProjectSettingsDraft {
   name: string;
   instructions: string;
 }
 
 /**
- * Saving the settings page: one registry change per field that differs from the project as saved
- * now, trimmed. A blank name cannot be saved; blank instructions clear them. Nothing to send, no
- * connection or instructions over the limit leave Save off.
+ * Saving the settings dialog: one registry change carrying each field that differs from the project
+ * as saved now, trimmed. A blank name cannot be saved; blank instructions clear them. Nothing to
+ * send, no connection or instructions over the limit leave Save off. The server answers the save.
  */
 export function projectSettingsSave(
   state: AppState,
   projectId: string,
   draft: ProjectSettingsDraft,
-): { allowed: boolean; commands: ClientCommand[] } {
+): { allowed: false } | { allowed: true; command: ClientCommand } {
   const project = findProject(state, projectId);
   const name = draft.name.trim();
   const instructions = draft.instructions.trim();
   if (!project || !state.connected || !name || instructions.length > PROJECT_INSTRUCTIONS_MAX)
-    return { allowed: false, commands: [] };
-  const commands: ClientCommand[] = [];
-  if (name !== project.name)
-    commands.push({ _tag: "save_project", project: { id: project.id, name } });
-  if (instructions !== (project.instructions ?? ""))
-    commands.push({
-      _tag: "set_project_instructions",
+    return { allowed: false };
+  const renamed = name !== project.name;
+  const instructed = instructions !== (project.instructions ?? "");
+  if (!renamed && !instructed) return { allowed: false };
+  return {
+    allowed: true,
+    command: {
+      _tag: "update_project",
       id: project.id,
-      instructions: instructions || null,
-    });
-  return { allowed: commands.length > 0, commands };
+      ...(renamed && { name }),
+      ...(instructed && { instructions: instructions || null }),
+    },
+  };
 }
 
 /** One command of `project`'s. */

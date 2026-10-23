@@ -16,21 +16,18 @@ import type { AppState } from "@/store";
 
 /**
  * A project's settings: its name and instructions, saved together. The command host owns the one
- * instance (which project is open) and confirms a save once the registry holds it.
+ * instance (which project is open); the server answers the save with a toast.
  */
 export function ProjectSettingsDialog({
   state,
   project,
   send,
-  saved,
   close,
 }: {
   state: AppState;
   /** The project being edited; undefined while the dialog is closed. */
   project: Project | undefined;
   send: (command: ClientCommand) => void;
-  /** The draft was sent; the host confirms it once the registry holds it. */
-  saved: (projectId: string, draft: ProjectSettingsDraft) => void;
   close: () => void;
 }) {
   return (
@@ -43,7 +40,6 @@ export function ProjectSettingsDialog({
             state={state}
             project={project}
             send={send}
-            saved={saved}
             close={close}
           />
         )}
@@ -56,13 +52,11 @@ function ProjectSettingsForm({
   state,
   project,
   send,
-  saved,
   close,
 }: {
   state: AppState;
   project: Project;
   send: (command: ClientCommand) => void;
-  saved: (projectId: string, draft: ProjectSettingsDraft) => void;
   close: () => void;
 }) {
   const id = useId();
@@ -77,8 +71,7 @@ function ProjectSettingsForm({
       onSubmit={(event) => {
         event.preventDefault();
         if (!save.allowed) return;
-        for (const command of save.commands) send(command);
-        saved(project.id, draft);
+        send(save.command);
         close();
       }}
     >

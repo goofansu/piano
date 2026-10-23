@@ -590,8 +590,8 @@ const refusals: {
     { _tag: "delete_project", id: "p" },
     { _tag: "error", message: "REFUSED" },
   ],
-  set_project_instructions: [
-    { _tag: "set_project_instructions", id: "p", instructions: "Be brief." },
+  update_project: [
+    { _tag: "update_project", id: "p", instructions: "Be brief." },
     { _tag: "error", message: "REFUSED" },
   ],
   assign_project: [
@@ -788,6 +788,40 @@ test("deleting a project tells its browser so; deleting an unknown one is answer
           selectionId: undefined,
         },
       ]);
+    }),
+  );
+});
+
+test("INV-01: saving a project's settings is one write answered with a toast; an unknown project is refused, not recreated", async () => {
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      const { receive } = yield* client;
+      const from = sent.length;
+      yield* yield* receive({
+        _tag: "update_project",
+        id: "launch",
+        name: " Relaunch ",
+        instructions: " Answer in French. ",
+      });
+      assert.deepEqual(answers(from), [
+        { _tag: "toast", message: "Project saved", level: "success" },
+      ]);
+      assert.deepEqual((yield* registry.get).projects, [
+        { id: "launch", name: "Relaunch", instructions: "Answer in French." },
+      ]);
+      yield* registry.deleteProject("launch");
+      const again = sent.length;
+      yield* yield* receive({ _tag: "update_project", id: "launch", name: "Back" });
+      assert.deepEqual(answers(again), [
+        {
+          _tag: "error",
+          message: "Project is unavailable. Refresh and try again.",
+          selectionId: undefined,
+        },
+      ]);
+      assert.deepEqual((yield* registry.get).projects, []);
     }),
   );
 });
