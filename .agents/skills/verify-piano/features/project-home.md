@@ -9,8 +9,8 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 
 - `open-from-header`: the session header's project button opens the session's project home.
 - `open-from-sidebar`: with sidebar Group by Project, the group's "New session in <name>" button.
-- `project-menu`: the group's "Project menu for <name>" holds "Rename project" (the project
-  dialog) and "Project settings", then a red "Delete project".
+- `project-menu`: the group's "Project menu for <name>" holds "Project settings", then a red
+  "Delete project", as the home's header menu does.
 - `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
 - `member-cards`: one `button[data-slot=item]` card per member session; clicking opens `/s/<id>`.
 - `new-in-project`: the composer above the cards ("First message") starts in the folder of the

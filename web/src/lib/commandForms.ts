@@ -88,10 +88,10 @@ export function answerForm(
           : {}),
       };
     case "project": {
-      const { project, assign } = form.dialog;
+      const { assign } = form.dialog;
       const name = text.trim();
       if (!state.connected || !name) return { allowed: false };
-      const id = project?.id ?? newId();
+      const id = newId();
       return {
         allowed: true,
         // One message, so the project and its new session arrive in one registry write.
@@ -100,7 +100,7 @@ export function answerForm(
           project: { id, name },
           assign: assign && { cwd: assign.cwd, sessionId: assign.sessionId },
         },
-        ...(!project && !assign ? { openProject: id } : {}),
+        ...(!assign ? { openProject: id } : {}),
       };
     }
   }
@@ -217,7 +217,7 @@ export interface CommandForms {
   subscribe: (listener: () => void) => () => void;
   /** The open form's answer as of now; `{ allowed: false }` when none is open. */
   answer: () => FormAnswer;
-  /** Open `form`, replacing any open one. Rename starts from the title, a project edit from its name. */
+  /** Open `form`, replacing any open one. Rename starts from the session's title. */
   open: (form: CommandForm) => void;
   edit: (text: string) => void;
   /**
@@ -283,12 +283,7 @@ export function createCommandForms({
     open: (form) =>
       set({
         form,
-        text:
-          form.kind === "rename-session"
-            ? (form.target.title ?? "")
-            : form.kind === "project"
-              ? (form.dialog.project?.name ?? "")
-              : "",
+        text: form.kind === "rename-session" ? (form.target.title ?? "") : "",
         share: { phase: "confirm" },
       }),
     edit: (text) => {

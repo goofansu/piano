@@ -148,19 +148,12 @@ test("archive and close folder name their subject; an untitled session reads Unt
   assert.equal(confirmation(online, { kind: "project", dialog: {} }), undefined);
 });
 
-test("project answers: a new project opens, an edit keeps its id, create-and-assign stays put", () => {
+test("project answers: a new project opens, create-and-assign stays put", () => {
   assert.deepEqual(answerForm(online, { kind: "project", dialog: {} }, " Ship ", { newId }), {
     allowed: true,
     command: { _tag: "save_project", project: { id: "new-id", name: "Ship" }, assign: undefined },
     openProject: "new-id",
   });
-  assert.deepEqual(
-    answerForm(online, { kind: "project", dialog: { project: launch } }, "Relaunch", { newId }),
-    {
-      allowed: true,
-      command: { _tag: "save_project", project: { id: "p1", name: "Relaunch" }, assign: undefined },
-    },
-  );
   assert.deepEqual(
     answerForm(online, { kind: "project", dialog: { assign: other } }, "Ship", { newId }),
     {
@@ -293,15 +286,15 @@ test("an allowed form sends its answer once, then closes", () => {
   }
 });
 
-test("rename starts from the session's title, and a project edit from its name", () => {
+test("rename starts from the session's title, and a new project from nothing", () => {
   const { subject } = forms();
   subject.open(rename());
   assert.equal(subject.getState().text, "Other");
   assert.equal(subject.answer().allowed, false);
   subject.open(rename({ cwd: "/repo", sessionId: "s2" }));
   assert.equal(subject.getState().text, "");
-  subject.open({ kind: "project", dialog: { project: launch } });
-  assert.equal(subject.getState().text, "Launch");
+  subject.open({ kind: "project", dialog: {} });
+  assert.equal(subject.getState().text, "");
   subject.open(del());
   assert.equal(subject.getState().text, "");
 });
@@ -322,7 +315,7 @@ test("an untitled selected session renames from the same empty title in the head
   assert.equal(subject.answer().allowed, true);
 });
 
-test("creating a project opens it; creating one for a session or editing one does not", () => {
+test("creating a project opens it; creating one for a session does not", () => {
   const created = forms();
   created.subject.open({ kind: "project", dialog: {} });
   created.subject.edit(" Ship ");
@@ -333,7 +326,7 @@ test("creating a project opens it; creating one for a session or editing one doe
   assert.deepEqual(created.opened, ["new-id"]);
   assert.equal(created.subject.getState().form, null);
 
-  for (const dialog of [{ assign: other }, { project: launch }]) {
+  for (const dialog of [{ assign: other }]) {
     const { subject, opened, sent } = forms();
     subject.open({ kind: "project", dialog });
     subject.edit("Ship");

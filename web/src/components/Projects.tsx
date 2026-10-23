@@ -4,7 +4,6 @@ import {
   FolderInputIcon,
   FolderMinusIcon,
   type LucideIcon,
-  PencilIcon,
   PlusIcon,
   SettingsIcon,
   Trash2Icon,
@@ -39,7 +38,6 @@ import type {
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   new: PlusIcon,
   settings: SettingsIcon,
-  edit: PencilIcon,
   delete: Trash2Icon,
   folder: FolderIcon,
   remove: FolderMinusIcon,
@@ -157,7 +155,6 @@ export function ProjectDialogView({
   submit: () => void;
   close: () => void;
 }) {
-  const editing = !!dialog?.project;
   const nameInput = useRef<HTMLInputElement>(null);
   return (
     <Dialog open={open} onOpenChange={(open) => !open && close()}>
@@ -179,7 +176,7 @@ export function ProjectDialogView({
           }}
         >
           <DialogHeader>
-            <DialogTitle>{editing ? "Rename project" : "New project"}</DialogTitle>
+            <DialogTitle>New project</DialogTitle>
           </DialogHeader>
           <FieldGroup>
             <Field>
@@ -200,7 +197,7 @@ export function ProjectDialogView({
               Cancel
             </Button>
             <Button type="submit" disabled={!allowed}>
-              {editing ? "Rename" : dialog?.assign ? "Create and add session" : "Create project"}
+              {dialog?.assign ? "Create and add session" : "Create project"}
             </Button>
           </DialogFooter>
         </form>

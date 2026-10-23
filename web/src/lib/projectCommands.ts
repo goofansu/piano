@@ -37,26 +37,25 @@ export function projectDestinations(
 
 type SessionRef = { cwd: string; sessionId: string };
 
-/** The one project dialog: create or rename a project. With `assign`, the saved project also takes that session. */
-export type ProjectDialog = { project?: Project; assign?: SessionRef };
+/** The New project dialog. With `assign`, the created project also takes that session. */
+export type ProjectDialog = { assign?: SessionRef };
 
 export type ProjectCommandId =
   | "new-session"
   | "open-project"
-  | "rename"
   | "settings"
   | "delete"
   | "new-project"
   | "assign";
 
-export type ProjectCommandIcon = "new" | "edit" | "settings" | "delete" | "folder" | "remove";
+export type ProjectCommandIcon = "new" | "settings" | "delete" | "folder" | "remove";
 
 export type ProjectCommandIntent =
   /** Open the project's home; it sends nothing. */
   | { kind: "open-project"; projectId: string }
-  /** Open the project's settings page; it sends nothing. */
+  /** Open the project's settings dialog; it sends nothing. */
   | { kind: "project-settings"; projectId: string }
-  /** Open the project dialog: to rename `dialog.project`, or to create a project (taking `dialog.assign`). */
+  /** Open the New project dialog, which creates a project (taking `dialog.assign`). */
   | { kind: "project-dialog"; dialog: ProjectDialog }
   /** Ask before deleting the project. */
   | { kind: "delete-project"; project: Project }
@@ -74,10 +73,11 @@ export interface ProjectCommand {
 }
 
 /**
- * What a project row offers, in order: New session in the project, Rename, Project settings, then
- * Delete. Enablement, one rule per command:
- * - new session, settings: always; each only opens a page, whose changes wait for a connection.
- * - rename, delete: connected, since each changes the registry.
+ * What a project row offers, in order: New session in the project, Project settings (its name and
+ * instructions), then Delete. Enablement, one rule per command:
+ * - new session, settings: always; each only opens a page or dialog, whose changes wait for a
+ *   connection.
+ * - delete: connected, since it changes the registry.
  */
 export function projectCommands(state: AppState, project: Project): ProjectCommand[] {
   return [
@@ -90,13 +90,6 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
       // The project's home starts a session in the project, beside the ones it already has.
       intent: { kind: "open-project", projectId: project.id },
     },
-    {
-      id: "rename",
-      label: "Rename project",
-      icon: "edit",
-      enabled: state.connected,
-      intent: { kind: "project-dialog", dialog: { project } },
-    },
     projectSettingsCommand(project),
     {
       id: "delete",
@@ -108,7 +101,7 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
   ];
 }
 
-/** Project settings: the page for `project`'s name and instructions, and its deletion. */
+/** Project settings: the dialog for `project`'s name and instructions. */
 export function projectSettingsCommand(project: Project): ProjectCommand {
   return {
     id: "settings",

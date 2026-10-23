@@ -40,25 +40,20 @@ test("the sidebar's menu leaves out the current project; the New page keeps it",
   assert.deepEqual(newPage(launch), ["Billing", "Launch"], "the current project is not repeated");
 });
 
-test("a project's menu offers Rename, Project settings and Delete; its New session in project opens its home", () => {
+test("a project's menu offers Project settings and Delete; its New session in project opens its home", () => {
   assert.deepEqual(
     projectCommands(state, launch).map((c) => c.label),
-    ["New session in project", "Rename project", "Project settings", "Delete project"],
+    ["New session in project", "Project settings", "Delete project"],
   );
   assert.deepEqual(byId(launch)["new-session"]?.intent, { kind: "open-project", projectId: "p1" });
-  assert.deepEqual(byId(launch).rename?.intent, {
-    kind: "project-dialog",
-    dialog: { project: launch },
-  });
   assert.deepEqual(byId(launch).settings?.intent, { kind: "project-settings", projectId: "p1" });
   assert.deepEqual(byId(launch).delete?.intent, { kind: "delete-project", project: launch });
 });
 
-test("renaming and deleting wait for a connection; opening a page does not", () => {
+test("deleting waits for a connection; opening the home or settings does not", () => {
   const offline = { ...state, connected: false };
   for (const project of [launch, billing]) {
     const commands = byId(project, offline);
-    assert.equal(commands.rename?.enabled, false, project.name);
     assert.equal(commands.delete?.enabled, false, project.name);
     assert.equal(commands["new-session"]?.enabled, true, project.name);
     assert.equal(commands.settings?.enabled, true, project.name);
