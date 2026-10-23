@@ -62,6 +62,8 @@ Covers INV-01–06 and INV-11–12.
   without renaming every existing worktree type.
 - Expose Worktrunk state, revision/dirty identity and diff alongside the session.
 - Track app/process cwd, lifecycle, logs and preview identity. Make active workspace unmistakable.
+  Managed previews bind to one live Pi generation under [ADR 0003](adr/0003-pi-owned-preview-lifetime.md)
+  (PIN-99, before PIN-95’s preview UI); browser lifecycle never owns them.
 - Rebuild revision capture with its first evidence consumer, and keep separate evidence-store
   ownership. Future verification should reuse project tooling rather than require a
   Piano-specific check-definition format. The custom

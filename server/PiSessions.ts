@@ -24,6 +24,7 @@ import { ChildProcessSpawner as Spawner } from "effect/process";
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
+import { PreviewOwner } from "../scripts/PreviewOwner.ts";
 import { withLastKnownStats } from "../shared/sessionProjection.ts";
 import { liveActivityOf } from "../shared/sessionStatus.ts";
 import type {
@@ -81,6 +82,9 @@ export interface PiSessionSpec {
 
 export interface PiSession {
   readonly spec: PiSessionSpec;
+  /** Fence preview admission before scope release. Idle returns false for active/unknown apps;
+   * explicit release cleans up or fails honestly, leaving ownership available for retry. */
+  readonly prepareRelease: (idle?: boolean) => Effect.Effect<boolean, PiSessionError>;
   /** Atomic snapshot/cursor first, then contiguous live frames until closed.
    * A subscriber exceeding 256 queued frames / 8 MiB fails DeliveryOverflow;
    * attach again for a current snapshot, never replay commands or old deltas. */
@@ -255,10 +259,28 @@ const replacedDetail =
 
 const openSession = (spec: PiSessionSpec) =>
   Effect.gen(function* () {
-    const child = yield* PiTransport.spawn(sessionArgs(spec), spec.cwd);
-    const sessionScope = yield* Effect.scope;
-    // A generation belongs to this open, never to a browser or subscription.
+    // A generation belongs to this concrete Pi open, never a saved ID, PID or browser.
     const generation = randomUUID();
+    const preview =
+      process.platform === "linux" || process.platform === "darwin"
+        ? yield* Effect.acquireRelease(
+            Effect.tryPromise({
+              try: () => PreviewOwner.open(spec, generation),
+              catch: (error) => new PiSessionError({ reason: "spawn", detail: String(error) }),
+            }),
+            (owner) =>
+              Effect.promise(() => owner.prepareRelease()).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(`Preview cleanup failed: ${String(cause)}`),
+                ),
+              ),
+          )
+        : undefined;
+    const child = yield* PiTransport.spawn(sessionArgs(spec), spec.cwd, {
+      env: preview ? { PIANO_PREVIEW_OWNER: preview.identity.endpoint } : {},
+      onExit: () => preview?.disconnect(),
+    });
+    const sessionScope = yield* Effect.scope;
     const recoveryMs = yield* PiDialogRecoveryMs;
 
     // Every entry so far, for the dispatching session. Pi's get_entries answers in
@@ -642,6 +664,16 @@ const openSession = (spec: PiSessionSpec) =>
     const actionCapacity = makeInboundCapacity(inboundLimits.requests);
     const session: PiSession = {
       spec,
+      prepareRelease: Effect.fn("PiSessions.prepareRelease")(function* (idle?: boolean) {
+        return yield* Effect.tryPromise({
+          try: () => preview?.prepareRelease(idle) ?? Promise.resolve(true),
+          catch: (error) =>
+            new PiSessionError({
+              reason: "rejected",
+              detail: `Preview cleanup failed: ${String(error)}`,
+            }),
+        });
+      }),
       events,
       act: (action) =>
         Effect.uninterruptibleMask((restore) =>

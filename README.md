@@ -50,8 +50,9 @@ saves the file as it is on disk. Click the link again to reread. See
 
 On macOS, or on a configured private exe.dev host, ask **“Run this app so I can try it.”** The
 agent launches an app in the session's workspace and returns a preview link (on a Mac,
-`http://localhost:<port>/`). It keeps running after the reply;
-ask the agent to stop the exact instance when finished. See [setup and limits](docs/live-previews.md).
+`http://localhost:<port>/`). It keeps running after the reply, Stop and browser disconnect,
+but ends with its owning Pi process (including archive/delete or Piano shutdown).
+Ask the agent to stop the exact instance when finished. See [setup and limits](docs/live-previews.md).
 
 ### Dispatch work to another session
 

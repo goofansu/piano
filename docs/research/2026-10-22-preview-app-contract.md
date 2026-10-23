@@ -4,6 +4,10 @@ Source inspection: 2026-10-22, revision `2b0ab6e1abc2bc9be499e85449e36235d807aff
 Linux/exe.dev checkout. This note distinguishes the implemented contract from app-side
 recommendations; no app was launched and no external access was verified.
 
+PIN-99 update: the app-facing foreground/port/environment contract below remains valid. Reuse is
+now restricted to the same live Pi generation; competing sessions get an ownership conflict.
+[ADR 0003](../adr/0003-pi-owned-preview-lifetime.md) supersedes independent supervisor lifetime.
+
 ## Answer
 
 **Provide one foreground launch command and one browser-facing HTTP endpoint, not necessarily

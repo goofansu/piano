@@ -56,9 +56,30 @@ for (const [platform, name] of supervisors) {
       hangOnSubmit: false,
     };
     const { adapter, launched, stops } = fakeAdapter(platform, stateRoot, host);
+    const owner = {
+      generation: "test-generation",
+      sessionId: "test-session",
+      workspace,
+      endpoint: "/unused-test-socket",
+    };
     const call = (changes: Partial<PreviewRequest> = {}) =>
-      adapter.request({ ...request, ...changes }, stateRoot, config);
-    return { root, workspace, stateRoot, config, request, adapter, host, launched, stops, call };
+      adapter.request({ ...request, ...changes }, stateRoot, config, {
+        ...owner,
+        workspace: changes.workspace ?? workspace,
+      });
+    return {
+      root,
+      workspace,
+      stateRoot,
+      config,
+      request,
+      adapter,
+      host,
+      launched,
+      stops,
+      call,
+      owner,
+    };
   }
 
   /** Points the saved preview at a listener this test owns, as if the app had bound it. */
@@ -341,7 +362,7 @@ for (const [platform, name] of supervisors) {
       const [a, b] = (
         await Promise.all([
           f.call(),
-          f.adapter.request({ ...f.request, workspace: alias }, stateAlias, f.config),
+          f.adapter.request({ ...f.request, workspace: alias }, stateAlias, f.config, f.owner),
         ])
       ).map(observation);
       assert.equal(a.instanceId, b.instanceId);
@@ -414,7 +435,12 @@ test("[systemd] Linux without a configured origin launches nothing", {
     hangOnSubmit: false,
   });
   await assert.rejects(
-    adapter.request({ action: "start", workspace: root, command: ["/bin/false"] }, stateRoot, {}),
+    adapter.request(
+      { action: "start", workspace: root, command: ["/bin/false"] },
+      stateRoot,
+      {},
+      { generation: "test", sessionId: "test", workspace: root, endpoint: "/unused" },
+    ),
     /Configure origin/,
   );
   assert.equal(launched.length, 0);
@@ -451,7 +477,7 @@ test("the tool is offered only where a supervisor can own the app", () => {
     registerPreview(
       { registerTool: (tool: (typeof tools)[number]) => tools.push(tool) } as never,
       platform,
-      env,
+      { PIANO_PREVIEW_OWNER: "/test-owner", ...env },
     );
     return tools;
   };

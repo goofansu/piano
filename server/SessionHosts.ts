@@ -209,9 +209,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         key: string,
         host: SessionHost,
         closure?: SessionClosure,
+        shutdown = false,
       ) {
         if (hosts.get(key) !== host) return;
-        exits.set(key, yield* host.close(closure));
+        exits.set(key, yield* host.close(closure, shutdown));
         hosts.delete(key);
         yield* invalidateHistory;
         yield* announce;
@@ -268,6 +269,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                 onExit: (closure) =>
                   owned(
                     Semaphore.withPermits(lock, 1)(Effect.suspend(() => close(key, host, closure))),
+                  ).pipe(
+                    Effect.catchTag("PiSessionError", (error) => Effect.logWarning(error.detail)),
                   ),
               }).pipe(
                 Scope.provide(layerScope),
@@ -485,12 +488,20 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               }),
             );
           }
-        }).pipe(Effect.delay(Math.min(15_000, options.idleMs)), Effect.forever, Effect.forkScoped);
+        }).pipe(
+          Effect.catchTag("PiSessionError", (error) => Effect.logWarning(error.detail)),
+          Effect.delay(Math.min(15_000, options.idleMs)),
+          Effect.forever,
+          Effect.forkScoped,
+        );
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           stopping = true;
-          for (const [key, host] of hosts) yield* close(key, host);
+          for (const [key, host] of hosts)
+            yield* close(key, host, undefined, true).pipe(
+              Effect.catchTag("PiSessionError", (error) => Effect.logWarning(error.detail)),
+            );
         }),
       );
       return SessionHosts.of({

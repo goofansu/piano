@@ -167,14 +167,15 @@ export async function run(name, setup, journey, options = {}) {
   const page = {
     ab,
     /** Restart only this harness's recorded backend; retain its isolated database and Pi history. */
-    restartBackend: async () => {
+    restartBackend: async ({ signal = "SIGTERM", beforeRestart = async () => {} } = {}) => {
       const previous = children[0];
       const exited =
         previous.exitCode !== null || previous.signalCode !== null
           ? Promise.resolve()
           : new Promise((done) => previous.once("exit", done));
-      previous.kill("SIGTERM");
+      previous.kill(signal);
       await exited;
+      await beforeRestart();
       children[0] = relaunch.get(previous)();
       for (let attempt = 0; ; attempt++) {
         try {

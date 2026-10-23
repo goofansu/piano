@@ -79,7 +79,7 @@ const persist = (message) => {
   messages.push(message);
   out({ type: "message_end", message });
 };
-audit("spawn");
+audit("spawn", { previewOwner: process.env.PIANO_PREVIEW_OWNER });
 process.on("exit", (code) => audit("exit", { code }));
 process.on("SIGUSR1", () => {
   audit("crash");

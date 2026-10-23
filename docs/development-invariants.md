@@ -28,10 +28,15 @@ At most one live Pi child owns a canonical checkout/session identity. Refresh, d
 tabs do not start duplicate children or resubmit work. Browser disconnect, abort, session release and
 background-job cancellation are separate operations. Idle retirement requires actual quiescence,
 including no pending dialogs, queued work, retry or compaction that can continue automatically.
+Under [ADR 0003](adr/0003-pi-owned-preview-lifetime.md), a managed preview pins one concrete Pi
+generation during startup, running, stopping or uncertain observation. The app cannot outlive that
+owner: release/archive/delete or Pi/Piano death cleans its process scope, even without finalizers.
+Turn completion and composer Stop are not release. Reopen/restart never adopts or relaunches it.
 
 **Verify:** disconnect during a run, reconnect from two tabs and observe one child and one execution.
 A worker exit is reported as an exit; restarting from a session file is not presented as continuation
-of the interrupted shell command.
+of the interrupted shell command. Force-kill Pi and separately Piano: observe bounded preview
+cleanup without reopening. Failed cleanup must refuse archive/delete, not claim success.
 
 **Guardrail:** do not let a browser connection own child stdin or independently open a TUI writer for
 the same active session. Future automatic retry of submissions needs stable submission identities
@@ -110,7 +115,10 @@ writing tasks use separate workspaces; multiple writing sessions in one workspac
 ownership/handoff policy.
 
 **Verify:** two workspaces run similar applications; each preview and check uses the intended one.
-Switching the selected workspace cannot relabel an older process or artifact as current.
+Switching the selected workspace cannot relabel an older process or artifact as current. A managed
+app has exactly one trusted owner generation; another session in the same workspace gets a conflict,
+not reuse/replace/transfer. Stale cleanup cannot stop a new generation. Cleanup uses retained exact
+identity even after checkout removal; independent legacy instances require explicit stop, not adoption.
 
 **Guardrail:** conversation fork does not imply code fork. Record the relationship explicitly.
 A reviewer inspects an immutable candidate or separate checkout, never an unexplained moving target.
