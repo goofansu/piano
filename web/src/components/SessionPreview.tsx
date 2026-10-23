@@ -1,7 +1,6 @@
 import type { SessionPreview } from "@shared/wire";
 import {
   AppWindowIcon,
-  ChevronDownIcon,
   CopyIcon,
   ExternalLinkIcon,
   RefreshCwIcon,
@@ -56,11 +55,12 @@ const toneBadge = {
   idle: "secondary",
 } as const;
 
+/** The app icon's colour carries its state; work in progress spins instead. */
 function PreviewIcon({ tone }: { tone: PreviewTone }) {
   return tone === "pending" ? (
-    <Spinner data-icon="inline-start" aria-hidden />
+    <Spinner aria-hidden />
   ) : (
-    <AppWindowIcon data-icon="inline-start" className={toneColor[tone]} aria-hidden />
+    <AppWindowIcon className={toneColor[tone]} aria-hidden />
   );
 }
 
@@ -77,11 +77,6 @@ async function copyLink(url: string) {
   }
 }
 
-/**
- * The session header's preview control, shown only while the selected session's live Pi owns an
- * app. A running app opens in one click; the chevron (or the whole control while it is not
- * answering) holds its status, details and Stop. Opening the menu re-observes the app.
- */
 /** The selected session's preview commands, run through the host like any other surface's. */
 function usePreviewCommands() {
   const { commands, run } = useSessionCommands();
@@ -95,6 +90,11 @@ function usePreviewCommands() {
   };
 }
 
+/**
+ * The session header's preview control, shown only while the selected session's live Pi owns an
+ * app: one app icon whose colour carries the app's state. It always opens the menu: status, Open,
+ * Copy link, details and Stop. Opening the menu re-observes the app.
+ */
 export function SessionPreviewControl() {
   const mobile = useIsMobile();
   const { state } = useCommands();
@@ -102,29 +102,21 @@ export function SessionPreviewControl() {
   const preview = selectedPreview(state);
   if (!preview) return null;
   const face = previewFace(preview);
-  const size = mobile ? "xs" : "lg";
-  const menu = (
+  return (
     <DropdownMenu modal={false} onOpenChange={(open) => open && previewObservation.refresh()}>
       <Tooltip>
         <DropdownMenuTrigger asChild>
           <TooltipTrigger asChild>
-            {preview.url ? (
-              <Button
-                variant="ghost"
-                size={mobile ? "icon-xs" : "icon-sm"}
-                className="-ml-1.5"
-                aria-label="Preview status and actions"
-              >
-                <ChevronDownIcon aria-hidden />
-              </Button>
-            ) : (
-              <Button variant="ghost" size={size} aria-label={`Preview: ${face.status}`}>
-                <PreviewIcon tone={face.tone} /> {face.label}
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size={mobile ? "icon-xs" : "icon-sm"}
+              aria-label={`Preview: ${face.status}. Status and actions`}
+            >
+              <PreviewIcon tone={face.tone} />
+            </Button>
           </TooltipTrigger>
         </DropdownMenuTrigger>
-        <TooltipContent>Preview status and actions</TooltipContent>
+        <TooltipContent>Preview: {face.status}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" collisionPadding={16} className="w-72">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
@@ -159,28 +151,6 @@ export function SessionPreviewControl() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-  if (!preview.url) return menu;
-  return (
-    <div className="flex items-center">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button asChild variant="ghost" size={size}>
-            <a
-              href={preview.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Open preview, ${previewHost(preview.url)}, in a new tab`}
-            >
-              <PreviewIcon tone={face.tone} /> {face.label}
-              <ExternalLinkIcon data-icon="inline-end" aria-hidden />
-            </a>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Open {previewHost(preview.url)} in a new tab</TooltipContent>
-      </Tooltip>
-      {menu}
-    </div>
   );
 }
 

@@ -239,20 +239,22 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         );
         assert.ok(link.includes(app.url), link);
         assert.ok(link.includes('target="_blank"'), link);
-        // The session header offers the same app in one click, without reading the transcript.
-        const headerPreview = async () =>
+        // The session header names the app's state and offers it without reading the transcript.
+        const RUNNING = "Preview: Running. Status and actions";
+        const headerPreview = () =>
           page.evaluate(
-            "(a => a && { href: a.href, target: a.target, label: a.getAttribute('aria-label') })(document.querySelector('header a[aria-label^=\"Open preview\"]'))",
+            "document.querySelector('header button[aria-label^=\"Preview:\"]')?.getAttribute('aria-label') ?? null",
           );
-        await page.until("!!document.querySelector('header a[aria-label^=\"Open preview\"]')");
-        assert.deepEqual(await headerPreview(), {
-          href: app.url,
-          target: "_blank",
-          label: `Open preview, ${new URL(app.url).host}, in a new tab`,
-        });
+        const menuLink = () =>
+          page.evaluate(
+            "(a => a && { href: a.href, target: a.target })([...document.querySelectorAll('[role=menu] a')].find(a => a.textContent.includes('Open preview')))",
+          );
+        await page.until("!!document.querySelector('header button[aria-label^=\"Preview:\"]')");
+        assert.equal(await headerPreview(), RUNNING);
         await page.capture("1b-header-preview");
-        await page.click("button", "Preview status and actions");
+        await page.click("button", RUNNING);
         await page.see("Details and logs");
+        assert.deepEqual(await menuLink(), { href: app.url, target: "_blank" });
         await page.capture("1c-preview-menu");
         await page.click("menuitem", "Details and logs");
         await page.see("Recent output");
@@ -305,15 +307,17 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.open(sessionPath);
         await page.until("!!document.querySelector('[aria-label=Message]')");
         // A reload while the owner lives finds the same instance, without launching another.
-        await page.until("!!document.querySelector('header a[aria-label^=\"Open preview\"]')");
-        assert.equal((await headerPreview()).href, first.url);
+        await page.until("!!document.querySelector('header button[aria-label^=\"Preview:\"]')");
+        assert.equal(await headerPreview(), RUNNING);
         assert.equal(request({ action: "status" }).instanceId, identity);
+        await page.click("button", RUNNING);
+        await page.see("Details and logs");
+        assert.deepEqual(await menuLink(), { href: first.url, target: "_blank" });
         await page.capture("2b-reload-same-preview");
-        await page.click("button", "Preview status and actions");
         await page.click("menuitem", "Stop preview");
         await page.see("Preview stopped");
         await gone(first, "explicit Stop preview in the session header");
-        await page.until("!document.querySelector('header a[aria-label^=\"Open preview\"]')");
+        await page.until("!document.querySelector('header button[aria-label^=\"Preview:\"]')");
         assert.equal(observations.filter((o) => o.ready).length, 1, "Stop never relaunches");
         // Pi stays available: the composer is still live and the session still answers.
         await page.ab("fill", '[aria-label="Message"]', "status");
