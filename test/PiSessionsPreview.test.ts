@@ -40,7 +40,12 @@ test("live preview projection, generation isolation, exact stop and honest uncer
     lostReply: false,
     hangOnSubmit: false,
   };
-  const { adapter, launched, stops } = fakeAdapter("linux", stateRoot, host);
+  const { adapter, launched, stops } = fakeAdapter(
+    process.platform === "darwin" ? "darwin" : "linux",
+    stateRoot,
+    host,
+  );
+  const command = [process.execPath, "-e", "process.exit(1)"];
   const audit = join(root, "audit.jsonl");
   const rpc = () => readFile(audit, "utf8");
   const layer = PiSessionsLive.pipe(Layer.provide(NodeServices.layer));
@@ -67,7 +72,7 @@ test("live preview projection, generation isolation, exact stop and honest uncer
       host.unavailable = false;
       yield* session.act({
         _tag: "prompt",
-        text: `preview ${JSON.stringify({ action: "start", command: ["/bin/false"] })}`,
+        text: `preview ${JSON.stringify({ action: "start", command })}`,
       });
       const first = (yield* session.state).preview!;
       assert.equal(first.state, "failed");
@@ -95,7 +100,7 @@ test("live preview projection, generation isolation, exact stop and honest uncer
       const independent = yield* sessions.open({ cwd: otherCwd, sessionId: "independent" });
       yield* independent.act({
         _tag: "prompt",
-        text: `preview ${JSON.stringify({ action: "start", command: ["/bin/false"] })}`,
+        text: `preview ${JSON.stringify({ action: "start", command })}`,
       });
       const independentPreview = (yield* independent.state).preview!;
       assert.notEqual(independentPreview.instanceId, first.instanceId);
@@ -128,7 +133,7 @@ test("live preview projection, generation isolation, exact stop and honest uncer
       host.phase = "failed";
       yield* session.act({
         _tag: "prompt",
-        text: `preview ${JSON.stringify({ action: "start", replace: first.instanceId, command: ["/bin/false"] })}`,
+        text: `preview ${JSON.stringify({ action: "start", replace: first.instanceId, command })}`,
       });
       const next = (yield* session.state).preview!;
       assert.notEqual(next.instanceId, first.instanceId);
