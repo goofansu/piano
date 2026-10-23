@@ -21,9 +21,9 @@ or mock choreography. Documentation-only changes need document/link review, not 
   (module tests against `test/fake-pi.mjs`, no credentials). All three must pass.
 - **Application behavior:** observe the affected journey through `npx agent-browser` on a
   [scratch instance](#scratch-instance) and keep the output as PR evidence.
-- **UI changes:** list every string and control the change adds, from its screenshots, and run
-  each through the [quiet UI](#quiet-ui) checks. The change is done when every listed item passes
-  or is gone.
+- **UI changes:** list every string, control and action the change adds, from its screenshots,
+  and run each through the [quiet UI](#quiet-ui) checks; take each action once and screenshot its
+  answer. The change is done when every listed item passes or is gone.
 - **Critical paths** (start a session; open and continue one) live in `test/browser/`; add a
   journey there only for a new critical path. `test/browser/style-shots.mjs` is evidence, not a
   journey: run it before and after a shadcn upgrade, a style change or an edit to the `Piano*`
@@ -68,8 +68,8 @@ remain references for the web harness around Pi, not for how Piano looks.
 ### Quiet UI
 
 A screen carries only what helps the user decide or act, and explains itself (Krug's "don't make
-me think") through structure, names and defaults. Every string and control a change adds passes
-these checks:
+me think") through structure, names and defaults. Every string, control and action a change adds
+passes these checks:
 
 - **Kind:** a value, a control's name, a state, or an empty state's one line. Explaining the screen
   (helper sentences, field descriptions, placeholders, intro lines) means a name or layout needs
@@ -82,6 +82,9 @@ these checks:
 - **Same shape:** a new screen matches an existing screen of its kind (a settings page matches
   Webhooks); compare their screenshots side by side. A destructive action is the red
   `destructive` menu item and asks first.
+- **Feedback:** every action answers where it was taken, once the server confirms it: a saved,
+  deleted or sent change ends with a toast that names it ("Project saved", "Session deleted"),
+  a failure with the error's toast, a read in progress with its own control turning.
 - **Details on demand:** internal state and diagnostics go in on-demand details, if anywhere; a
   persistent warning appears only for a problem the user can act on.
 
