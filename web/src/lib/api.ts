@@ -28,6 +28,11 @@ import {
 } from "../../../shared/wire.ts";
 
 export type { RadiusSetupAction };
+export const listWebhooks = (options?: RequestOptions) => call(Endpoints.webhooks, {}, options);
+export const saveWebhook = (body: import("../../../shared/webhooks.ts").WebhookSave) =>
+  call(Endpoints.saveWebhook, { body });
+export const removeWebhook = (id: string) => call(Endpoints.removeWebhook, { body: { id } });
+export const testWebhook = (id: string) => call(Endpoints.testWebhook, { body: { id } });
 
 /**
  * Every failed request: the server's own `error` message when it sent one, otherwise the

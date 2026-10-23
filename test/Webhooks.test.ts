@@ -1,0 +1,440 @@
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, test } from "node:test";
+import { NodeServices } from "@effect/platform-node";
+import { Effect, Fiber, Layer, Logger, type Scope, Stream } from "effect";
+import { AllowedOrigins } from "../server/OriginPolicy.ts";
+import { PiCli } from "../server/PiCli.ts";
+import { PiSessionsLive } from "../server/PiSessions.ts";
+import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
+import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
+import { WebhookFetch, Webhooks, WebhooksLive } from "../server/Webhooks.ts";
+import { emptySnapshot } from "../shared/sessionProjection.ts";
+import { WEBHOOK_EVENTS, type WebhookPayload, type WebhookSave } from "../shared/webhooks.ts";
+import type { Snapshot } from "../shared/wire.ts";
+
+const root = mkdtempSync(join(tmpdir(), "piano-webhooks-"));
+const cwd = join(root, "checkout");
+mkdirSync(cwd);
+process.env.PI_CODING_AGENT_DIR = join(root, "agent");
+process.env.PI_CODING_AGENT_SESSION_DIR = join(root, "sessions");
+mkdirSync(process.env.PI_CODING_AGENT_SESSION_DIR);
+after(() => rmSync(root, { recursive: true, force: true }));
+const input: WebhookSave = {
+  url: "https://receiver.example/events",
+  events: ["session.completed"],
+  active: true,
+};
+type Received = { url: string; headers: Headers; body: WebhookPayload };
+const receive =
+  (requests: Received[]): typeof fetch =>
+  async (url, init) => {
+    requests.push({
+      url: String(url),
+      headers: new Headers(init?.headers),
+      body: JSON.parse(String(init?.body)),
+    });
+    return new Response(null, { status: 204 });
+  };
+const run = <A, E>(
+  name: string,
+  work: Effect.Effect<A, E, Webhooks | Registry | Scope.Scope>,
+  fetch: typeof globalThis.fetch = globalThis.fetch,
+) =>
+  Effect.runPromise(
+    work.pipe(
+      Effect.scoped,
+      Effect.provide(WebhooksLive.pipe(Layer.provideMerge(RegistryLive))),
+      Effect.provideService(RegistryDatabasePath, join(root, `${name}.db`)),
+      Effect.provideService(WebhookFetch, fetch),
+      Effect.provideService(AllowedOrigins, new Set(["https://piano.example"])),
+    ),
+  );
+const wait = (condition: () => boolean) =>
+  Effect.gen(function* () {
+    while (!condition()) yield* Effect.sleep(5);
+  }).pipe(Effect.timeout("5 seconds"));
+const snapshot: Snapshot = {
+  ...emptySnapshot("s"),
+  messages: [{ id: "a", role: "assistant", text: "x".repeat(2001), stopReason: "stop" }],
+};
+const registered = Effect.gen(function* () {
+  const registry = yield* Registry;
+  yield* registry.addSession(cwd, "s", "Test session");
+  return registry;
+});
+
+test("webhook preferences survive restart; token is write-only, preserved, replaced and cleared", async () => {
+  let id = "";
+  const requests: Received[] = [];
+  await run(
+    "persist",
+    Effect.gen(function* () {
+      const hooks = yield* Webhooks;
+      const saved = yield* hooks.save({ ...input, token: "private-canary" });
+      id = saved.id;
+      assert.equal(saved.hasToken, true);
+      assert.equal(JSON.stringify(saved).includes("private-canary"), false);
+      assert.equal(JSON.stringify(yield* hooks.list).includes("private-canary"), false);
+      assert.equal(JSON.stringify(yield* (yield* Registry).get).includes("private-canary"), false);
+      yield* hooks.save({ ...input, id, active: false, url: "https://changed.example/hook" });
+    }),
+    receive(requests),
+  );
+  await run(
+    "persist",
+    Effect.gen(function* () {
+      const hooks = yield* Webhooks;
+      assert.deepEqual(
+        (yield* hooks.list).map((h) => [h.id, h.active, h.url, h.hasToken, h.lastDelivery]),
+        [[id, false, "https://changed.example/hook", true, null]],
+      );
+      yield* hooks.test(id);
+      assert.equal(requests.at(-1)!.headers.get("authorization"), "Bearer private-canary");
+      yield* hooks.save({ ...input, id, token: "replacement" });
+      yield* hooks.test(id);
+      assert.equal(requests.at(-1)!.headers.get("authorization"), "Bearer replacement");
+      yield* hooks.save({ ...input, id, token: null });
+    }),
+    receive(requests),
+  );
+  await run(
+    "persist",
+    Effect.gen(function* () {
+      const hooks = yield* Webhooks;
+      assert.equal((yield* hooks.list)[0].hasToken, false);
+      yield* hooks.test(id);
+      assert.equal(requests.at(-1)!.headers.has("authorization"), false);
+      yield* hooks.remove(id);
+    }),
+    receive(requests),
+  );
+  await run(
+    "persist",
+    Effect.gen(function* () {
+      assert.deepEqual(yield* (yield* Webhooks).list, []);
+    }),
+  );
+});
+
+test("subscription/active filtering is paired with positive delivery; payloads are bounded, explicit and path-free", async () => {
+  const requests: Received[] = [];
+  await run(
+    "payload",
+    Effect.gen(function* () {
+      const registry = yield* registered;
+      const entry = (yield* registry.get).sessions[0];
+      yield* registry.setSessionLink(entry, "pullRequest", {
+        url: "https://github.com/acme/project/pull/123",
+        source: "manual",
+      });
+      const hooks = yield* Webhooks;
+      const completed = yield* hooks.save({ ...input, token: "secret-canary" });
+      const all = yield* hooks.save({ ...input, events: WEBHOOK_EVENTS });
+      const inactive = yield* hooks.save({ ...input, active: false, events: WEBHOOK_EVENTS });
+      yield* hooks.emit("session.completed", cwd, "s", snapshot);
+      const dialog: Snapshot = {
+        ...emptySnapshot("s"),
+        dialogs: [
+          {
+            id: "d",
+            generation: "g",
+            receivedAt: 0,
+            deadlineAt: 9999,
+            deadlineKind: "pi-timeout",
+            method: "select",
+            title: "Choose",
+            options: ["yes", "no"],
+          },
+        ],
+      };
+      yield* hooks.emit("session.needs_input", cwd, "s", dialog);
+      yield* hooks.emit("session.failed", cwd, "s", {
+        ...snapshot,
+        state: {
+          ...snapshot.state,
+          closure: {
+            _tag: "exited",
+            code: 3,
+            detail: `Failed in ${cwd} /tmp/elsewhere secret-canary`,
+          },
+        },
+      });
+      // Tests share the same per-hook lane: their ping is a barrier for prior deliveries.
+      yield* hooks.test(completed.id);
+      yield* hooks.test(all.id);
+      yield* hooks.test(inactive.id);
+      const live = requests.filter((r) => r.body.event !== "ping");
+      assert.equal(live.filter((r) => r.headers.get("x-piano-hook-id") === completed.id).length, 1);
+      assert.equal(live.filter((r) => r.headers.get("x-piano-hook-id") === all.id).length, 3);
+      assert.equal(live.filter((r) => r.headers.get("x-piano-hook-id") === inactive.id).length, 0);
+      const body = live[0].body;
+      assert.equal(body.answer, "x".repeat(2000));
+      assert.equal(body.answerTruncated, true);
+      assert.equal(body.action, null);
+      assert.equal(body.source, "piano");
+      assert.equal(body.version, 1);
+      assert.deepEqual(body.session, {
+        id: "s",
+        title: "Test session",
+        url: "https://piano.example/s/s",
+        model: null,
+      });
+      assert.deepEqual(body.pullRequest, {
+        number: 123,
+        url: "https://github.com/acme/project/pull/123",
+        state: null,
+      });
+      assert.equal(body.workspace?.folder, "checkout");
+      const question = live.find((r) => r.body.event === "session.needs_input")!.body;
+      assert.equal(question.action, "Answer in Piano: https://piano.example/s/s");
+      assert.deepEqual(question.question, {
+        kind: "select",
+        title: "Choose",
+        message: null,
+        options: ["yes", "no"],
+      });
+      const failure = live.find((r) => r.body.event === "session.failed")!.body;
+      assert.equal(failure.failure?.reason, "exited");
+      assert.equal(failure.failure?.exitCode, 3);
+      assert.equal(failure.action, "Open session in Piano: https://piano.example/s/s");
+      assert.equal(JSON.stringify(failure).includes(cwd), false);
+      assert.equal(JSON.stringify(failure).includes("/tmp/"), false);
+      assert.equal(JSON.stringify(failure).includes("secret-canary"), false);
+      const ping = requests.at(-1)!.body;
+      assert.equal(ping.ignore, true);
+      assert.equal(ping.workspace, null);
+      assert.equal(ping.session, null);
+      assert.equal(ping.pullRequest, null);
+      assert.equal(ping.action, null);
+      const ids = new Set(requests.map((r) => r.body.deliveryId));
+      assert.equal(ids.size, requests.length);
+      for (const r of requests) {
+        assert.match(r.body.deliveryId, /^[0-9a-f-]{36}$/);
+        assert.equal(r.headers.get("x-piano-delivery"), r.body.deliveryId);
+        assert.equal(r.headers.get("x-piano-event"), r.body.event);
+        assert.equal(r.headers.get("user-agent"), "Piano-Webhook/1");
+        assert.equal(r.headers.get("content-type"), "application/json");
+        assert.ok(r.body.occurredAt);
+        assert.equal("cwd" in r.body, false);
+        assert.equal("summary" in r.body, false);
+        assert.equal("hookId" in r.body, false);
+      }
+      yield* registry.setSessionLink((yield* registry.get).sessions[0], "pullRequest", null);
+      yield* hooks.emit("session.completed", cwd, "s", {
+        ...snapshot,
+        messages: [{ ...snapshot.messages[0], text: "short" }],
+      });
+      yield* hooks.test(completed.id);
+      const short = requests.find((r) => r.body.answer === "short")!.body;
+      assert.equal(short.answerTruncated, false);
+      assert.equal(short.pullRequest, null);
+    }),
+    receive(requests),
+  );
+});
+
+test("URL and token validation refuse unsafe transport without echoing secrets", async () => {
+  await run(
+    "validation",
+    Effect.gen(function* () {
+      const hooks = yield* Webhooks;
+      for (const url of [
+        "http://receiver.example",
+        "https://user:private-canary@example.com",
+        "file:///tmp/private-canary",
+        "https://example.com/#private-canary",
+      ]) {
+        const result = yield* hooks.save({ ...input, url }).pipe(Effect.result);
+        assert.equal(result._tag, "Failure");
+        assert.equal(JSON.stringify(result).includes("private-canary"), false);
+      }
+      assert.equal(
+        (yield* hooks.save({ ...input, events: [] }).pipe(Effect.result))._tag,
+        "Failure",
+      );
+      assert.equal(
+        (yield* hooks
+          .save({ ...input, token: "private-canary\r\nInjected: yes" })
+          .pipe(Effect.result))._tag,
+        "Failure",
+      );
+      for (const url of ["http://127.0.0.1:1234", "http://localhost:1234", "http://[::1]:1234"])
+        yield* hooks.save({ ...input, url });
+    }),
+  );
+});
+
+test("admission stays bounded under a stalled receiver; overflow and transport errors never log secrets", async () => {
+  const requests: Received[] = [];
+  const logs: unknown[] = [];
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let first = true;
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    const response = await receive(requests)(url, init);
+    if (first) {
+      first = false;
+      await held;
+      throw new Error("private-canary https://receiver.example/events payload");
+    }
+    return response;
+  };
+  await run(
+    "capacity",
+    Effect.gen(function* () {
+      yield* registered;
+      const hooks = yield* Webhooks;
+      const hook = yield* hooks.save({ ...input, token: "private-canary" });
+      const test = yield* hooks.test(hook.id).pipe(Effect.forkChild);
+      yield* wait(() => requests.length === 1);
+      for (let i = 0; i < 100; i++) yield* hooks.emit("session.completed", cwd, "s", snapshot);
+      assert.equal(
+        requests.length,
+        1,
+        "admission did not wait for delivery or start unbounded fetches",
+      );
+      assert.equal(
+        (yield* hooks.test(hook.id).pipe(Effect.result))._tag,
+        "Failure",
+        "test reports overflow too",
+      );
+      release();
+      assert.equal((yield* Fiber.join(test)).status, "failed");
+      yield* wait(() => requests.length === 33);
+      yield* hooks.test(hook.id);
+      assert.equal(requests.filter((r) => r.body.event === "session.completed").length, 32);
+      assert.ok(logs.length > 0, "overflow is logged");
+      assert.doesNotMatch(JSON.stringify(logs), /private-canary|receiver\.example|payload/);
+    }).pipe(
+      Effect.provide(
+        Logger.layer([
+          Logger.make(({ message }) => {
+            logs.push(message);
+          }),
+        ]),
+      ),
+    ),
+    fetch,
+  );
+});
+
+test("real HTTP: redirects/non-2xx fail, a dead receiver times out at 10s without blocking other hooks", {
+  timeout: 20000,
+}, async () => {
+  const paths: string[] = [];
+  const server = createServer((req, res) => {
+    paths.push(req.url!);
+    if (req.url === "/dead") return;
+    if (req.url === "/redirect") {
+      res.writeHead(302, { Location: "/leak" });
+      res.end();
+    } else {
+      res.writeHead(req.url === "/fail" ? 500 : 204);
+      res.end();
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const url = `http://127.0.0.1:${address.port}`;
+  try {
+    await run(
+      "http",
+      Effect.gen(function* () {
+        const hooks = yield* Webhooks;
+        const slow = yield* hooks.save({ ...input, url: `${url}/dead` });
+        const fast = yield* hooks.save({ ...input, url: `${url}/ok` });
+        const started = Date.now();
+        const dead = yield* hooks.test(slow.id).pipe(Effect.forkChild);
+        yield* wait(() => paths.includes("/dead"));
+        assert.equal((yield* hooks.test(fast.id).pipe(Effect.timeout(2000))).httpStatus, 204);
+        for (const path of ["redirect", "fail"]) {
+          const hook = yield* hooks.save({ ...input, url: `${url}/${path}` });
+          const result = yield* hooks.test(hook.id);
+          assert.equal(result.status, "failed");
+          assert.equal(result.httpStatus, path === "fail" ? 500 : null);
+        }
+        const timedOut = yield* Fiber.join(dead);
+        assert.equal(timedOut.status, "failed");
+        assert.equal(timedOut.httpStatus, null);
+        assert.ok(Date.now() - started >= 9900);
+        assert.deepEqual(paths.sort(), ["/dead", "/fail", "/ok", "/redirect"]);
+      }),
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("live fake-Pi completion/dialog/exit drive the worker once; opening history never replays", async () => {
+  const requests: Received[] = [];
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const hooks = yield* Webhooks,
+        hosts = yield* SessionHosts;
+      yield* registered;
+      const all = yield* hooks.save({ ...input, events: WEBHOOK_EVENTS });
+      const complete = yield* hooks.save(input);
+      const inactive = yield* hooks.save({ ...input, events: WEBHOOK_EVENTS, active: false });
+      const session = yield* hosts.open({ cwd, sessionId: "s" });
+      yield* session.act({ _tag: "prompt", text: "notification success" });
+      yield* wait(() => requests.filter((r) => r.body.event === "session.completed").length === 2);
+      // A new attachment only observes a snapshot; no completion replay or cancellation.
+      yield* session.events.pipe(Stream.take(1), Stream.runCollect);
+      yield* session.act({ _tag: "prompt", text: "ask choose" });
+      yield* wait(() => requests.some((r) => r.body.event === "session.needs_input"));
+      yield* session.act({ _tag: "abort" });
+      yield* session.act({ _tag: "prompt", text: "crash now" }).pipe(Effect.ignore);
+      yield* wait(() => requests.some((r) => r.body.event === "session.failed"));
+      yield* hosts.read(cwd, "s");
+      for (const hook of [all, complete, inactive]) yield* hooks.test(hook.id);
+      const live = requests.filter((r) => r.body.event !== "ping");
+      assert.deepEqual(
+        live.filter((r) => r.headers.get("x-piano-hook-id") === all.id).map((r) => r.body.event),
+        WEBHOOK_EVENTS,
+      );
+      assert.deepEqual(
+        live
+          .filter((r) => r.headers.get("x-piano-hook-id") === complete.id)
+          .map((r) => r.body.event),
+        ["session.completed"],
+      );
+      assert.equal(live.filter((r) => r.headers.get("x-piano-hook-id") === inactive.id).length, 0);
+      yield* (yield* Registry).addSession(cwd, "released");
+      const working = yield* hosts.open({ cwd, sessionId: "released" });
+      yield* working.act({ _tag: "prompt", text: "ask before release" });
+      yield* wait(() =>
+        requests.some(
+          (r) => r.body.session?.id === "released" && r.body.event === "session.needs_input",
+        ),
+      );
+      yield* hosts.release(cwd, "released");
+      yield* wait(() => requests.some((r) => r.body.failure?.reason === "released_during_work"));
+    }).pipe(
+      Effect.timeout("10 seconds"),
+      Effect.scoped,
+      Effect.provide(
+        SessionHostsLive({ idleMs: 0 }).pipe(
+          Layer.provide(PiSessionsLive),
+          Layer.provideMerge(RegistryLive),
+          Layer.provide(NodeServices.layer),
+        ),
+      ),
+      Effect.provideService(RegistryDatabasePath, join(root, "live.db")),
+      Effect.provideService(WebhookFetch, receive(requests)),
+      Effect.provideService(PiCli, {
+        node: process.execPath,
+        cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
+        extraArgs: [],
+      }),
+      Effect.provideService(AllowedOrigins, new Set(["https://piano.example"])),
+    ),
+  );
+});

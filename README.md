@@ -62,6 +62,12 @@ prepared worktrees for concurrent writing tasks. See [session dispatch](docs/ses
 for setup, checkout semantics and bounded observation, or use the bundled
 [terminal dispatch script](docs/session-dispatch.md#from-a-terminal-linux-and-macos).
 
+### Send session events to a webhook
+
+Open **Settings → Webhooks**, click **Add webhook**, enter your receiver URL and optional Bearer
+token, and choose the events to send. Use **Send test** to check delivery. See
+[payloads, delivery limits and privacy](docs/webhooks.md).
+
 ### Configure
 
 Piano reads environment variables such as `PORT`, `HOST`, `PIANO_DB_PATH` and

@@ -39,6 +39,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WebhookSettings } from "@/components/WebhookSettings";
 import { providersSettingsView } from "@/lib/providersSettingsView";
 import {
   SETTINGS_PAGES,
@@ -128,6 +129,7 @@ export function SettingsPage({
       <ProvidersSettings revealRadius={section === "radius" ? request : undefined} />
     ),
     mcp: () => <McpSettings />,
+    webhooks: () => <WebhookSettings />,
   };
   return pages[page]();
 }
