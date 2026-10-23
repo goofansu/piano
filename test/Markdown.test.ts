@@ -242,6 +242,26 @@ test("consecutive quoted lines form one quote, including blank lines and lists",
   );
 });
 
+test("embedded Markdown keeps shorter fences and their contents in one code block", () => {
+  const body = "#### Note\n```diff\n- old.md\n+ new.md\n```\n[inside](https://inside.test)";
+  const source = `\`\`\`\`markdown\n${body}\n\`\`\`\`\nAfter`;
+  assert.equal(renderMarkdown(source), `<pre><code>${body}</code></pre><p>After</p>`);
+  assert.deepEqual(markdownLinks(source), []);
+});
+
+test("closing fences need enough backticks and no info string, including while streaming", () => {
+  const body = "```js\n[inside](https://inside.test)\n``";
+  for (const closing of ["", "\n```", "\n`````  "]) {
+    const source = `\`\`\`markdown\n${body}${closing}`;
+    assert.equal(renderMarkdown(source), `<pre><code>${body}</code></pre>`);
+    assert.deepEqual(markdownLinks(source), []);
+  }
+  assert.deepEqual(
+    markdownLinks("````\n[inside](https://inside.test)\n````\n[outside](https://outside.test)"),
+    [{ url: "https://outside.test", label: "outside", kind: "markdown" }],
+  );
+});
+
 test("only closed Mermaid fences are eligible for diagram rendering", () => {
   assert.equal(
     renderMarkdown("```mermaid\ngraph LR\nA-->B"),
