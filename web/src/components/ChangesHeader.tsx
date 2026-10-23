@@ -1,5 +1,5 @@
 import { CHANGES_INITIAL_PATCH_BYTES } from "@shared/wire";
-import { InfoIcon, RefreshCwIcon, XIcon } from "lucide-react";
+import { InfoIcon, RefreshCwIcon } from "lucide-react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { IconButton } from "@/components/IconButton";
 import {
@@ -9,15 +9,17 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/PianoPopover";
+import { PanelHeader } from "@/components/RightSidebar";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Spinner } from "@/components/ui/spinner";
 import { Toggle } from "@/components/ui/toggle";
 import { type ChangesSheetView, FILE_PATCH_LIMIT } from "@/lib/changesView";
 import { abbrevHome } from "@/lib/format";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 
-/** The Changes header follows panel width, including a narrow column on a desktop. */
+/**
+ * The Changes header: the title with the branch beneath it, then a toolbar with the size of the
+ * change and the view controls. What is compared and when lives in Details.
+ */
 export function ChangesHeader({
   sheet,
   canRefresh,
@@ -33,71 +35,66 @@ export function ChangesHeader({
 }) {
   const [wrap, setWrap] = useChangesWrap();
   return (
-    <header className="@container shrink-0">
-      {/* Plain comparison metadata and panel controls have no dedicated shadcn layout. */}
-      <div className="grid min-w-0 grid-cols-1 @min-[37.5rem]:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="col-span-full flex min-w-0 flex-wrap items-center gap-x-2 px-3 pt-2">
-          <h2 className="grow text-sm font-medium">Changes</h2>
-          <div className="flex min-w-0 max-w-full flex-wrap items-center">
+    <div className="shrink-0">
+      <PanelHeader
+        label="Changes"
+        close={close}
+        actions={
+          <>
             <IconButton
-              label="Refresh changes"
+              label={sheet.refreshing ? "Refreshing changes…" : "Refresh changes"}
+              aria-busy={sheet.refreshing}
               disabled={!canRefresh}
               onClick={refresh}
               className="pointer-coarse:size-11"
             >
-              <RefreshCwIcon />
+              {/* The icon turns while Git is read, the one in-progress sign every refresh shares. */}
+              <RefreshCwIcon className={sheet.refreshing ? "animate-spin" : undefined} />
             </IconButton>
             <ChangesDetails sheet={sheet} />
-            <IconButton label="Close changes" onClick={close} className="pointer-coarse:size-11">
-              <XIcon />
-            </IconButton>
-          </div>
-        </div>
-        {/* Like SessionHeader: truncate a secondary segment, then hide it whole when it wraps.
-         * Details keeps the complete branch available to touch and keyboard users. */}
-        <div className="mx-3 mb-3 flex h-[1lh] @max-[18rem]:h-auto min-w-0 flex-wrap items-center gap-x-1.5 overflow-hidden text-xs text-ink-3 @min-[37.5rem]:mb-2 @min-[37.5rem]:self-center">
-          <span className="max-w-full shrink-0">Working tree vs HEAD</span>
-          {sheet.branch && (
-            <span className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1.5 @max-[18rem]:hidden">
-              <span aria-hidden>·</span>
-              <BranchLabel branch={sheet.branch} />
-            </span>
+          </>
+        }
+      >
+        <h2 className="text-sm font-medium">Changes</h2>
+        <div className="flex min-w-0 items-center text-xs text-ink-3">
+          {sheet.branch ? (
+            <BranchLabel branch={sheet.branch} className="min-w-0" />
+          ) : (
+            <span className="truncate">Working tree vs HEAD</span>
           )}
         </div>
-        <Separator className="@min-[37.5rem]:hidden" />
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1 pr-2 pl-3 @min-[37.5rem]:pt-0 @min-[37.5rem]:pb-2 @min-[37.5rem]:pl-0">
-          <div className="flex min-w-0 items-center gap-2 text-xs text-ink-2">
-            <span role="status">{sheet.status}</span>
-            {sheet.refreshing && <Spinner className="size-3 shrink-0" />}
-          </div>
-          <div className="flex min-w-0 max-w-full flex-wrap items-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={sheet.body.kind !== "files"}
-              onClick={toggleEvery}
-              className="pointer-coarse:min-h-11"
-            >
-              {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
-            </Button>
-            <Toggle
-              size="sm"
-              pressed={wrap}
-              onPressedChange={setWrap}
-              className="pointer-coarse:min-h-11"
-            >
-              Wrap
-            </Toggle>
-          </div>
+      </PanelHeader>
+      {/* Plain comparison status and view controls have no dedicated shadcn layout. */}
+      <div className="flex h-10 min-w-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
+        <span role="status" className="min-w-0 truncate">
+          {sheet.status}
+        </span>
+        <div className="flex shrink-0 items-center">
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={sheet.body.kind !== "files"}
+            onClick={toggleEvery}
+            className="text-ink-2 pointer-coarse:min-h-11"
+          >
+            {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
+          </Button>
+          <Toggle
+            size="sm"
+            pressed={wrap}
+            onPressedChange={setWrap}
+            className="h-6 min-w-0 px-2 text-xs text-ink-2 pointer-coarse:min-h-11"
+          >
+            Wrap
+          </Toggle>
         </div>
-        {sheet.staleNote && (
-          <p role="status" className="col-span-full px-3 pb-2 text-xs text-ink-2">
-            {sheet.staleNote.text}
-          </p>
-        )}
       </div>
-      <Separator />
-    </header>
+      {sheet.staleNote && (
+        <p role="status" className="border-b border-line px-4 py-2 text-xs text-ink-2">
+          {sheet.staleNote.text}
+        </p>
+      )}
+    </div>
   );
 }
 

@@ -40,7 +40,7 @@ export function SessionHeader({
   const mobile = useIsMobile();
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
-  // `folder ⇄ worktree / ⑂ branch`; omit the redundant worktree segment for the root checkout.
+  // `folder ⇄ worktree / ⑂ branch · project`; omit the redundant worktree segment for the root checkout.
   const {
     title,
     branch,
@@ -68,67 +68,62 @@ export function SessionHeader({
   );
   return (
     <>
-      {/* Outside the transcript scroller: stays visible without an overlay or scroll listener. */}
+      {/* Outside the transcript scroller: stays visible without an overlay or scroll listener.
+       * The title, with where the session runs beneath it; its controls at the end. */}
       <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 md:px-6">
         <ShowSidebarButton className="-ml-2" />
         <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
           {cwd ? (
             <>
-              <div className="col-span-2 flex min-w-0 flex-col gap-1 md:col-span-1">
-                <h1 className="truncate text-sm font-medium">{session ? title : "New session"}</h1>
-              </div>
-              {/* Plain workspace metadata has no dedicated UI primitive. */}
-              <div className="col-start-1 row-start-2 flex min-w-0 items-center gap-2">
-                {/* Full length while it fits. When space runs short each segment truncates to about 6rem, then
-                drops out whole from the end: the line may wrap, but only its first row shows. The project is
-                optional context, so it comes last and drops first; it is the way to the project's home. */}
-                <div className="flex h-[1lh] min-w-0 flex-1 flex-wrap items-center gap-x-1.5 overflow-hidden text-xs text-muted-foreground">
-                  <p className="max-w-full shrink-0 truncate">
-                    <span className="sr-only">{worktree ? "Folder: " : "Working directory: "}</span>
-                    {folder}
+              <h1 className="col-span-2 truncate text-sm font-medium md:col-span-1">
+                {session ? title : "New session"}
+              </h1>
+              {/* Plain workspace metadata has no dedicated UI primitive. Full length while it fits;
+               * when space runs short each segment truncates to about 6rem, then drops out whole from
+               * the end: the line may wrap, but only its first row shows. The project is optional
+               * context, so it comes last and drops first; it is the way to the project's home. */}
+              <div className="col-start-1 row-start-2 flex h-[1lh] min-w-0 flex-wrap items-center gap-x-1.5 overflow-hidden text-xs text-ink-3">
+                <p className="max-w-full shrink-0 truncate">
+                  <span className="sr-only">{worktree ? "Folder: " : "Working directory: "}</span>
+                  {folder}
+                </p>
+                {worktree && (
+                  <p className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1 font-mono">
+                    <SplitIcon aria-hidden="true" className="size-3 shrink-0 rotate-90" />
+                    <span className="sr-only">Worktree: </span>
+                    <span className="truncate">{worktree}</span>
                   </p>
-                  {worktree && (
-                    <p className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1 font-mono">
-                      <SplitIcon aria-hidden="true" className="size-3 shrink-0 rotate-90" />
-                      <span className="sr-only">Worktree: </span>
-                      <span className="truncate">{worktree}</span>
-                    </p>
-                  )}
-                  {branch && (
-                    <p className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1.5 font-mono">
-                      {(folder || worktree) && (
-                        <span aria-hidden="true" className="font-sans text-ink-3/60">
-                          /
-                        </span>
-                      )}
-                      <span className="flex min-w-0 items-center gap-1">
-                        <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
-                        <span className="sr-only">Git branch: </span>
-                        <span className="truncate">{branch}</span>
+                )}
+                {branch && (
+                  <p className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1.5 font-mono">
+                    {(folder || worktree) && (
+                      <span aria-hidden="true" className="font-sans text-ink-3/60">
+                        /
                       </span>
-                    </p>
-                  )}
-                  {openProject && projectMenu?.current && (
-                    <span className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1.5">
-                      <span aria-hidden="true" className="text-ink-3/60">
-                        ·
-                      </span>
-                      <button
-                        type="button"
-                        className="flex min-w-0 items-center gap-1 rounded outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={() => run(openProject)}
-                      >
-                        <TargetIcon aria-hidden="true" className="size-3 shrink-0" />
-                        <span className="sr-only">Project: </span>
-                        <span className="truncate">{projectMenu.current.name}</span>
-                      </button>
+                    )}
+                    <span className="flex min-w-0 items-center gap-1">
+                      <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
+                      <span className="sr-only">Git branch: </span>
+                      <span className="truncate">{branch}</span>
                     </span>
-                  )}
-                </div>
-              </div>
-              <div className="col-start-2 row-start-2 flex shrink-0 items-center gap-1 justify-self-end md:row-span-2 md:row-start-1">
-                <SessionPreviewControl />
-                {pullRequest(menuTrigger)}
+                  </p>
+                )}
+                {openProject && projectMenu?.current && (
+                  <span className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1.5">
+                    <span aria-hidden="true" className="text-ink-3/60">
+                      ·
+                    </span>
+                    <button
+                      type="button"
+                      className="flex min-w-0 items-center gap-1 rounded-sm outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => run(openProject)}
+                    >
+                      <TargetIcon aria-hidden="true" className="size-3 shrink-0" />
+                      <span className="sr-only">Project: </span>
+                      <span className="truncate">{projectMenu.current.name}</span>
+                    </button>
+                  </span>
+                )}
               </div>
             </>
           ) : (
@@ -138,70 +133,75 @@ export function SessionHeader({
             </>
           )}
         </div>
+        {/* The sidebar row shows the session's state; here it is only announced. */}
         <span role="status" className="sr-only">
           {status}
         </span>
-        {mobile ? (
-          <Sheet>
-            <SheetTrigger asChild>{menuButton}</SheetTrigger>
-            <MobileSessionSheet key={sessionId} />
-          </Sheet>
-        ) : (
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>{menuButton}</DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              collisionPadding={16}
-              className="w-96 max-w-[calc(100vw-2rem)]"
-            >
-              <DropdownMenuGroup className="flex items-start">
-                <SessionDetails className="px-2" cwd={session?.cwd} sessionId={sessionId} />
-                {menu.details.map((c) => (
-                  <DropdownMenuItem
-                    key={c.id}
-                    className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5"
-                    aria-label={c.label}
-                    onSelect={() => run(c)}
-                  >
-                    <CommandIcon icon={c.icon} />
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                {menu.open.map((c) => (
-                  <SessionCommandMenuItem key={c.id} command={c} run={run} />
-                ))}
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                {menu.manage.map((c) => (
-                  <SessionCommandMenuItem key={c.id} command={c} run={run} />
-                ))}
-                {projectMenu && <ProjectMenu menu={projectMenu} run={run} />}
-              </DropdownMenuGroup>
-              {display && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuGroup>
-                    <DropdownMenuCheckboxItem
-                      checked={!!display.checked}
-                      onCheckedChange={() => run(display)}
+        <div className="flex shrink-0 items-center gap-0.5 self-start md:self-center">
+          <SessionPreviewControl />
+          {pullRequest(menuTrigger)}
+          {mobile ? (
+            <Sheet>
+              <SheetTrigger asChild>{menuButton}</SheetTrigger>
+              <MobileSessionSheet key={sessionId} />
+            </Sheet>
+          ) : (
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>{menuButton}</DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                collisionPadding={16}
+                className="w-96 max-w-[calc(100vw-2rem)]"
+              >
+                <DropdownMenuGroup className="flex items-start">
+                  <SessionDetails className="px-2" cwd={session?.cwd} sessionId={sessionId} />
+                  {menu.details.map((c) => (
+                    <DropdownMenuItem
+                      key={c.id}
+                      className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5"
+                      aria-label={c.label}
+                      onSelect={() => run(c)}
                     >
-                      <CommandIcon icon={display.icon} /> {display.label}
-                    </DropdownMenuCheckboxItem>
-                  </DropdownMenuGroup>
-                </>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                {menu.destructive.map((c) => (
-                  <SessionCommandMenuItem key={c.id} command={c} run={run} />
-                ))}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+                      <CommandIcon icon={c.icon} />
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  {menu.open.map((c) => (
+                    <SessionCommandMenuItem key={c.id} command={c} run={run} />
+                  ))}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  {menu.manage.map((c) => (
+                    <SessionCommandMenuItem key={c.id} command={c} run={run} />
+                  ))}
+                  {projectMenu && <ProjectMenu menu={projectMenu} run={run} />}
+                </DropdownMenuGroup>
+                {display && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuCheckboxItem
+                        checked={!!display.checked}
+                        onCheckedChange={() => run(display)}
+                      >
+                        <CommandIcon icon={display.icon} /> {display.label}
+                      </DropdownMenuCheckboxItem>
+                    </DropdownMenuGroup>
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  {menu.destructive.map((c) => (
+                    <SessionCommandMenuItem key={c.id} command={c} run={run} />
+                  ))}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </header>
     </>
   );

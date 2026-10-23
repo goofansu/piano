@@ -19,10 +19,11 @@ const ownKeys = (event: ReactKeyboardEvent<HTMLElement>) => {
 };
 
 /**
- * The right sidebar: a session's Changes or an open file. On desktop it is a second sheet beside
- * the conversation, resizable from its left edge and remembered; below the breakpoint it is a
- * full-width sheet over the page. Hand-written: stock Sidebar's fixed geometry cannot sit in flow
- * beside the inset conversation (see AppLayout), and no shadcn panel is nonmodal.
+ * The right sidebar: a session's Changes or an open file. On desktop it shares the conversation's
+ * sheet, split off by a hairline as Linear's side panel is, resizable from that edge and
+ * remembered; below the breakpoint it is a full-width sheet over the page. Hand-written: stock
+ * Sidebar's fixed geometry cannot sit in flow beside the inset conversation (see AppLayout), and
+ * no shadcn panel is nonmodal.
  */
 export function RightSidebar({
   label,
@@ -40,10 +41,11 @@ export function RightSidebar({
   title: ReactNode;
   /** A viewer-specific heading; the shell still owns scrolling, sizing and dismissal. */
   header?: ReactNode;
+  /** Secondary words under the title. */
   description?: ReactNode;
   /** Controls at the header's end, before Close. */
   actions?: ReactNode;
-  /** File controls in a separate row below the title at every width. */
+  /** View controls in a row below the title at every width. */
   toolbar?: ReactNode;
   footer?: ReactNode;
   close: () => void;
@@ -53,27 +55,17 @@ export function RightSidebar({
   const frame = (
     <>
       {header ?? (
-        <header className="flex shrink-0 items-center gap-2 border-b border-line py-3 pr-3 pl-4">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
-            <h2 className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink">
-              {title}
-            </h2>
-            {description && (
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-ink-3">
-                {description}
-              </div>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {actions}
-            <IconButton label={`Close ${label.toLowerCase()}`} onClick={close}>
-              <XIcon />
-            </IconButton>
-          </div>
-        </header>
+        <PanelHeader label={label} close={close} actions={actions}>
+          <h2 className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink">{title}</h2>
+          {description && (
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-ink-3">
+              {description}
+            </div>
+          )}
+        </PanelHeader>
       )}
       {toolbar && (
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line pr-3 pl-4">
+        <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4">
           {toolbar}
         </div>
       )}
@@ -99,6 +91,35 @@ export function RightSidebar({
       </Sheet>
     );
   return <DesktopColumn label={label} close={close} frame={frame} />;
+}
+
+/** The panel's header, shaped like the session header: a title with a line beneath it, then controls, then Close. */
+export function PanelHeader({
+  label,
+  actions,
+  close,
+  children,
+}: {
+  label: string;
+  actions?: ReactNode;
+  close: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <header className="flex shrink-0 items-center gap-2 border-b border-line py-3 pr-3 pl-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-1 py-0.5">{children}</div>
+      <div className="flex shrink-0 items-center gap-0.5">
+        {actions}
+        <IconButton
+          label={`Close ${label.toLowerCase()}`}
+          onClick={close}
+          className="pointer-coarse:size-11"
+        >
+          <XIcon />
+        </IconButton>
+      </div>
+    </header>
+  );
 }
 
 function DesktopColumn({
@@ -152,7 +173,9 @@ function DesktopColumn({
           close();
         } else ownKeys(event);
       }}
-      className="relative my-2 mr-2 flex max-w-[60vw] min-w-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-conversation shadow-1"
+      // The remembered width is a preference, not a claim on the conversation's room: the column
+      // shrinks (down to its minimum) before the conversation does (AppLayout).
+      className="relative my-2 mr-2 flex max-w-[50vw] min-w-80 shrink flex-col overflow-hidden rounded-r-2xl border border-line bg-conversation shadow-1"
     >
       {/* No standard shadcn resize handle supports a remembered pixel width; mirrors the sidebar's. */}
       {/* biome-ignore lint/a11y/useSemanticElements: interactive window splitter, not a thematic break. */}

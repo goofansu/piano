@@ -171,13 +171,18 @@ export function WorkspaceFile({
       title={
         <>
           <Icon className="size-4 shrink-0 text-ink-3" aria-hidden />
-          <span className="min-w-0 break-all font-mono text-xs font-normal" title={path}>
+          <span className="min-w-0 truncate font-mono text-xs font-normal" title={path}>
             {path}
           </span>
         </>
       }
       actions={
-        <IconButton label="Download file" disabled={!result || saving} onClick={save}>
+        <IconButton
+          label="Download file"
+          disabled={!result || saving}
+          onClick={save}
+          className="pointer-coarse:size-11"
+        >
           <DownloadIcon />
         </IconButton>
       }
