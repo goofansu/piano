@@ -66,4 +66,3 @@ PASS open-session (93.8s), evidence in /home/exedev/piano.goofansu-pin-99-tie-ma
 
 $ node test/browser/preview.mjs <evidence-dir>
 PASS preview (134.2s), evidence in /home/exedev/piano.goofansu-pin-99-tie-managed-preview-lifetime-to-its-owning-sessions-pi/.scratch/pin99-evidence/preview-final
-
