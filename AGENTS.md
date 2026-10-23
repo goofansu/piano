@@ -142,6 +142,12 @@ ground. When no candidate qualifies, report "no useful candidates" and stop.
 and **Develop**, how a developer sets up the project and starts developing. Put reference and
 explanation in `docs/` and link to it from the guide that needs it.
 
+## Branches
+
+Start each new branch in its own worktree. In Claude Code, run `/worktrunk:wt-switch-create`,
+which moves the session into the new worktree. Elsewhere, run `wt switch -c <branch>`
+(`wt switch -h` lists the options) and run every later command from that worktree's directory.
+
 ## Deploy
 
 Rebuild, restart or deploy only when the user asks. On an exe.dev VM, follow
