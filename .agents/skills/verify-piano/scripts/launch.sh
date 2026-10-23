@@ -7,7 +7,7 @@
 #   --fake-pi browser  test/browser/fake-pi.mjs (default): echoes, "hold" runs until Stop, audits
 #   --fake-pi dialogs  test/fake-pi.mjs: "ask..." opens an input dialog, "crash..." exits Pi
 # Env: VERIFY_SCRATCH (default /tmp/verify-piano), VERIFY_EVIDENCE (default
-#   ~/verify-piano-evidence), VERIFY_RUN_ID, VERIFY_PORT, VERIFY_WEB_PORT.
+#   ${TMPDIR:-/tmp}/verify-piano-evidence), VERIFY_RUN_ID, VERIFY_PORT, VERIFY_WEB_PORT.
 set -euo pipefail
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -31,7 +31,7 @@ esac
 
 RUN_ID=${VERIFY_RUN_ID:-$(date +%Y%m%d-%H%M%S)-$$}
 RUN=$SCRATCH_ROOT/$RUN_ID
-EVIDENCE=${VERIFY_EVIDENCE:-$HOME/verify-piano-evidence}/$RUN_ID
+EVIDENCE=${VERIFY_EVIDENCE:-${TMPDIR:-/tmp}/verify-piano-evidence}/$RUN_ID
 [ -e "$RUN" ] && die "$RUN already exists"
 [ -d "$ROOT/node_modules" ] || (cd "$ROOT" && npm ci --no-audit --no-fund)
 

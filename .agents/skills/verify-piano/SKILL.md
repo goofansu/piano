@@ -53,7 +53,7 @@ READY registry over ws://127.0.0.1:<ui-port>/ws: 1 folder(s)
 api      http://127.0.0.1:<api-port>  (server pid <pid>)
 ui       http://127.0.0.1:<ui-port>  (vite pid <pid>)
 database /tmp/verify-piano/<run-id>/db/piano.db  seeded=1  fake-pi=browser
-evidence /home/exedev/verify-piano-evidence/<run-id>
+evidence /tmp/verify-piano-evidence/<run-id>
 RUN=/tmp/verify-piano/<run-id>
 ```
 
@@ -152,8 +152,9 @@ after `web/dist` was built (then the running backend or UI predates the checkout
 
 ## Evidence
 
-Evidence goes to `~/verify-piano-evidence/<run-id>/` (`VERIFY_EVIDENCE` overrides the parent),
-outside the run dir, so Cleanup keeps it.
+Evidence goes to `${TMPDIR:-/tmp}/verify-piano-evidence/<run-id>/` (`VERIFY_EVIDENCE` overrides
+the parent), outside the run dir, so Cleanup keeps it. System temp cleanup may remove it later;
+set `VERIFY_EVIDENCE` to a persistent directory when longer retention is needed.
 
 ```bash
 $S/capture.sh "$RUN" <feature-id> <step>
