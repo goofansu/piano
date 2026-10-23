@@ -34,7 +34,7 @@ const online: AppState = {
 };
 const offline: AppState = { ...online, connected: false };
 const resyncing: AppState = { ...online, resync: true };
-const launch: Project = { id: "p1", name: "Launch", archived: false };
+const launch: Project = { id: "p1", name: "Launch" };
 const newId = () => "new-id";
 const withWorkspace: AppState = {
   ...online,
@@ -53,6 +53,7 @@ const archive = (target: SessionTarget = other): CommandForm => ({
   target,
 });
 const closeFolder: CommandForm = { kind: "close-folder", folder: { path: "/repo", name: "repo" } };
+const deleteProject: CommandForm = { kind: "delete-project", project: launch };
 
 test("rename sends the trimmed new title, and refuses an empty or unchanged one", () => {
   assert.deepEqual(answerForm(online, rename(), "  Renamed  "), {
@@ -66,7 +67,7 @@ test("rename sends the trimmed new title, and refuses an empty or unchanged one"
 });
 
 test("a form answered after the connection drops is refused", () => {
-  for (const form of [rename(), del(), archive(), closeFolder])
+  for (const form of [rename(), del(), archive(), closeFolder, deleteProject])
     assert.deepEqual(answerForm(offline, form, "Renamed"), { allowed: false }, form.kind);
 });
 
@@ -179,6 +180,43 @@ test("project answers: a new project opens, an edit keeps its id, create-and-ass
   });
 });
 
+test("deleting a project asks first, saying its sessions are kept, in no project", () => {
+  const members = (...archived: boolean[]): AppState => ({
+    ...online,
+    sessionReferences: archived.map((a, i) =>
+      sessionReference("/repo", `m${i}`, { projectId: "p1", archived: a }),
+    ),
+  });
+  assert.deepEqual(confirmation(members(false, false, true), deleteProject), {
+    title: "Delete this project?",
+    description:
+      '"Launch" will be deleted. Its 2 sessions are kept, in no project. This cannot be undone.',
+    confirmLabel: "Delete",
+    destructive: true,
+  });
+  assert.match(confirmation(members(false), deleteProject)!.description, /Its session is kept/);
+  assert.equal(
+    confirmation(members(), deleteProject)!.description,
+    '"Launch" will be deleted. This cannot be undone.',
+  );
+});
+
+test("deleting the project on screen leaves for the New page; deleting another stays put", () => {
+  for (const [view, leaves] of [
+    [{ kind: "project", projectId: "p1" }, true],
+    [{ kind: "new", projectId: "p1" }, true],
+    [{ kind: "project", projectId: "p2" }, false],
+    [{ kind: "session" }, false],
+  ] as const) {
+    const { subject, sent, left, setState } = forms();
+    setState({ ...withWorkspace, view });
+    subject.open(deleteProject);
+    assert.equal(subject.submit(), true);
+    assert.deepEqual(sent, [{ _tag: "delete_project", id: "p1" }]);
+    assert.equal(left(), leaves ? 1 : 0, JSON.stringify(view));
+  }
+});
+
 test("Share needs Radius and a registered workspace", () => {
   const share: CommandForm = { kind: "share-session", target: other };
   assert.equal(answerForm(withWorkspace, share, "", { radiusSignedIn: false }).allowed, false);
@@ -198,6 +236,7 @@ function forms(
   const sent: ClientCommand[] = [];
   const opened: string[] = [];
   const published: [string, string][] = [];
+  let leaving = 0;
   const subject = createCommandForms({
     getState: () => state,
     radiusSignedIn: () => true,
@@ -207,12 +246,14 @@ function forms(
       return share(workspaceId, sessionId);
     },
     openProject: (id) => opened.push(id),
+    openNew: () => leaving++,
     newId,
   });
   return {
     subject,
     sent,
     opened,
+    left: () => leaving,
     published,
     setState: (next: AppState) => {
       state = next;
@@ -225,7 +266,7 @@ const settled = () => new Promise((resolve) => setImmediate(resolve));
 test("a form submitted after the connection drops stays open and sends nothing", () => {
   const share: CommandForm = { kind: "share-session", target: other };
   const newProject: CommandForm = { kind: "project", dialog: {} };
-  for (const form of [rename(), del(), archive(), closeFolder, share, newProject]) {
+  for (const form of [rename(), del(), archive(), closeFolder, share, newProject, deleteProject]) {
     const { subject, sent, published, setState } = forms();
     subject.open(form);
     subject.edit("Renamed");

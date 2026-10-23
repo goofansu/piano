@@ -43,7 +43,7 @@ Code uses the same words: `folders` for locations and `projects`/`projectId` for
    its working directory/worktree. Starting outside a project remains supported.
 3. Return to the project and find those sessions together. Opening one still identifies its actual
    workspace and shows only that workspace's changes.
-4. Rename, move/remove a session association, or archive/reopen the project without moving code,
+4. Rename, move/remove a session association, or delete the project without moving code,
    changing session history or stopping running work.
 
 The initial membership rule is **zero or one project per session**. This is a
@@ -54,7 +54,7 @@ instruction selection. Separate concurrent writing tasks still need separate wor
 
 ### Scope and boundaries
 
-- Persist a stable project identity, name, archive state and explicit session
+- Persist a stable project identity, name and explicit session
   associations in the registry. Reuse existing session/workspace references; no transcript copies,
   evidence bundles, synthesized Pi sessions or required project directory.
 - Derive the participating locations from member sessions initially. Do not add a separate repository
@@ -62,9 +62,12 @@ instruction selection. Separate concurrent writing tasks still need separate wor
 - A project has no goal or description field. An optional goal shipped at first and was removed to
   keep a project to its name. Opening a version-1 registry drops its `goal` column after saving a
   `<database>.v1-backup` copy (see the [configuration and storage](configuration.md#registry-storage)).
-- Archiving affects project visibility only. It is not session archive, abort, process release,
-  checkout removal, verification, approval or proof that the outcome was achieved. Unarchiving restores
-  the grouping; running work and direct session access remain available.
+- Deleting a project removes the project and unlinks its sessions, which stay registered in no
+  project. It is not session archive or delete, abort, process release, checkout removal,
+  verification, approval or proof that the outcome was achieved; running work and direct session
+  access remain available. Projects had an archive state at first; it was retired because finished
+  projects were rarely revisited, and opening a registry older than version 9 brings each archived
+  project back as an ordinary one with its members.
 - Unlinking a session does not delete it. Closing a repository does not cascade-delete the outcome
   project or its associations. A missing checkout/history is an explicit unavailable state, not
   a reason to silently recreate or drop the reference. Explicit session-reference removal must also
@@ -93,7 +96,7 @@ In scratch repositories and a separate registry, observe through the browser:
 - One project groups sessions from two repositories; a second project uses another session from one
   of those same repositories. Switching groups never switches a session's cwd or relabels its diff.
 - An empty project and an ungrouped session are usable; reload/restart preserves memberships.
-- Moving/unlinking a session and archiving/reopening a project preserve conversation access and
+- Moving/unlinking a session and deleting a project preserve conversation access and
   running execution. Unavailable members are explained without silent data loss.
 - Migrating an old registry preserves its existing references, leaves sessions ungrouped, and has a
   usable backup. A malformed registry is not overwritten.
@@ -152,7 +155,7 @@ This plan deliberately does not select a Pi injection mechanism or promise arbit
 | INV-01 | Registry owns grouping/references, not Pi history, Git facts or evidence. |
 | INV-02–05 | Navigation and membership changes do not duplicate/restart execution, replay prompts or mix session events. |
 | INV-06–08 | Grouping does not create/remove checkouts, change workspace identity or produce a combined multi-repository revision. |
-| INV-09–10 | Archive/organization is not verification or approval; future shared requirements retain versioned acceptance semantics. |
+| INV-09–10 | Deletion/organization is not verification or approval; future shared requirements retain versioned acceptance semantics. |
 | INV-11–13 | Project membership grants no trust/authorization; shared instructions preserve Pi loading and remain skill-agnostic. |
 
 No automatic multi-repository execution, cross-repository merge transaction, inherited permissions,

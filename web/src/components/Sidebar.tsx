@@ -484,11 +484,12 @@ function ProjectGroup({
   const members = sessions;
   const commands = project ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
+  const remove = commands.find((c) => c.id === "delete");
   // Open project first: the group's name only folds it, so the menu is the way to the project's home.
   const menu = project
     ? [
         { ...openProjectCommand(project), label: "Open project" },
-        ...commands.filter((c) => c.id !== "new-session"),
+        ...commands.filter((c) => c.id !== "new-session" && c.id !== "delete"),
       ]
     : [];
   return (
@@ -500,7 +501,7 @@ function ProjectGroup({
             <span
               className={cn(
                 "min-w-0 flex-1 truncate text-sm font-medium",
-                !project || project.archived ? "text-ink-3" : "text-ink-2",
+                project ? "text-ink-2" : "text-ink-3",
               )}
             >
               {project?.name ?? "No project"}
@@ -538,6 +539,21 @@ function ProjectGroup({
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuGroup>
+              {/* Delete sits apart, as on a session's menu: the one destructive row. */}
+              {remove && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={!remove.enabled}
+                      onSelect={() => run(remove)}
+                    >
+                      <ProjectCommandIconView icon={remove.icon} /> {remove.label}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}

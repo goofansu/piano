@@ -113,12 +113,11 @@ export function ProjectHome({
         {/* Plain project metadata has no dedicated UI primitive. */}
         <p className="truncate text-xs text-ink-3">
           {count === 1 ? "1 session" : `${count} sessions`}
-          {project.archived && " · Archived"}
         </p>
       </ProjectHeader>
       <div className={page}>
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-          {/* The session starts here and joins this project; the composer offers Unarchive while it cannot. */}
+          {/* A session started here joins this project. */}
           <NewSessionComposer
             state={state}
             client={client}

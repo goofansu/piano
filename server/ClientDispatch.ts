@@ -229,9 +229,9 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       run: ({ project, assign }) => registry.saveProject(project, assign),
       unanswered: plainError,
     },
-    archive_project: {
+    delete_project: {
       admission: "ordinary",
-      run: ({ id, archived }) => registry.archiveProject(id, archived),
+      run: ({ id }) => registry.deleteProject(id),
       unanswered: plainError,
     },
     assign_project: {

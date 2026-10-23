@@ -221,10 +221,9 @@ const firstMessage: NewSessionSituation = {
   catalog: {},
   cwd: "/repo",
   model: "fake/alpha",
-  projectOpen: true,
 };
 
-test("the New page sends its first message only with a connection, a directory whose models loaded, a model, an open project and a sendable draft", () => {
+test("the New page sends its first message only with a connection, a directory whose models loaded, a model and a sendable draft", () => {
   assert.equal(newSessionReady(firstMessage), true);
   assert.equal(
     newSessionReady({ ...firstMessage, text: "", images: { items: [image], busy: false } }),
@@ -237,7 +236,6 @@ test("the New page sends its first message only with a connection, a directory w
     ["models failed to load", { catalog: { error: "pi exited" } }],
     ["no directory", { cwd: "  " }],
     ["no model", { model: undefined }],
-    ["archived project", { projectOpen: false }],
     ["blank draft", { text: " \n" }],
     ["image still being read", { images: { items: [image], busy: true } }],
   ];

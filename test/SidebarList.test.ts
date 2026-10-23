@@ -31,7 +31,7 @@ const loaded: AppState = { ...initialState, registryLoaded: true };
 const registry: AppState = {
   ...loaded,
   folders: [folder("/repo", ["/repo", "/work/repo.feature"]), folder("/other")],
-  projects: [{ id: "p1", name: "Launch", archived: false }],
+  projects: [{ id: "p1", name: "Launch" }],
   sessionReferences: [sessionReference("/work/repo.feature", "s1", { projectId: "p1" })],
 };
 const view = (groupBy: GroupBy): SidebarView => ({ groupBy, sortBy: "name" });
@@ -220,13 +220,8 @@ test("sidebar list: cached rows still follow every catalog fact", () => {
     },
     {
       name: "project rename",
-      patch: { projects: [{ id: "p1", name: "Renamed", archived: false }] },
+      patch: { projects: [{ id: "p1", name: "Renamed" }] },
       check: (list) => assert.equal(rows(list)[1]?.project?.name, "Renamed"),
-    },
-    {
-      name: "project archive",
-      patch: { projects: [{ id: "p1", name: "Launch", archived: true }] },
-      check: (list) => assert.deepEqual(titles(rows(list)), ["Alpha"]),
     },
     {
       name: "folder removal",
@@ -409,15 +404,9 @@ test("sidebar list: a pinned session shows only under Pinned, even when its fold
   assert.deepEqual(rows("date").sections, [["date:Yesterday", ["Unfiled"]]]);
 });
 
-test("sidebar list: an active project without members is listed with the No project group, not the empty state", () => {
+test("sidebar list: a project without members is listed with the No project group, not the empty state", () => {
   const { model } = sidebar();
-  const state: AppState = {
-    ...loaded,
-    projects: [
-      { id: "launch", name: "Launch", archived: false },
-      { id: "old", name: "Old", archived: true },
-    ],
-  };
+  const state: AppState = { ...loaded, projects: [{ id: "launch", name: "Launch" }] };
   const list = model.list(state, view("project"));
   assert.equal(list.body?.kind, "sections");
   if (list.body?.kind === "sections")
@@ -428,9 +417,7 @@ test("sidebar list: an active project without members is listed with the No proj
         ["project:", undefined],
       ],
     );
-  // Archived projects are not listed, so they alone leave the grouping empty.
-  const archivedOnly = { ...state, projects: [{ id: "old", name: "Old", archived: true }] };
-  assert.equal(model.list(archivedOnly, view("project")).body?.kind, "empty");
+  assert.equal(model.list({ ...state, projects: [] }, view("project")).body?.kind, "empty");
 });
 
 test("sidebar list: selecting a session opens the section holding it: its folder (from any worktree), its project, or Pinned", () => {
@@ -512,7 +499,7 @@ test("sidebar list: a registry refresh never reopens a section the user collapse
   model.toggle("project:p1", false);
   const filedElsewhere: AppState = {
     ...selected,
-    projects: [...registry.projects, { id: "p2", name: "Other", archived: false }],
+    projects: [...registry.projects, { id: "p2", name: "Other" }],
     sessionReferences: [sessionReference("/work/repo.feature", "s1", { projectId: "p2" })],
   };
   model.sync(filedElsewhere, view("project"));
@@ -563,7 +550,7 @@ test("sidebar list: a project created after the registry loaded opens; existing 
   const { model } = sidebar();
   const withProjects = (...ids: string[]): AppState => ({
     ...registry,
-    projects: ids.map((id) => ({ id, name: id, archived: false })),
+    projects: ids.map((id) => ({ id, name: id })),
   });
   model.sync(withProjects("p1"), view("project"));
   model.sync(withProjects("p1"), view("project"));

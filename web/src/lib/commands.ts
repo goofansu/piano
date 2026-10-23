@@ -4,7 +4,7 @@
  * that is not enabled, whichever surface offered it. `CommandHost` supplies the effects.
  */
 // Relative, not @shared: module tests load this file directly in Node.
-import type { ClientCommand } from "../../../shared/wire.ts";
+import type { ClientCommand, Project } from "../../../shared/wire.ts";
 import type { FolderCommand } from "./folderCommands.ts";
 import type { Appearance, GlobalCommand } from "./globalCommands.ts";
 import type { Panel } from "./navigation.ts";
@@ -43,7 +43,8 @@ export type CommandForm =
   | { kind: "share-session"; target: SessionTarget }
   | { kind: "archive-session"; target: SessionTarget }
   | { kind: "close-folder"; folder: { path: string; name: string } }
-  | { kind: "project"; dialog: ProjectDialog };
+  | { kind: "project"; dialog: ProjectDialog }
+  | { kind: "delete-project"; project: Project };
 
 /** What running a command can do; the host binds each to navigation, the client, and its own forms. */
 export interface CommandEffects {
@@ -102,6 +103,9 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "close-folder":
       effects.openForm({ kind: "close-folder", folder: intent.folder });
+      break;
+    case "delete-project":
+      effects.openForm({ kind: "delete-project", project: intent.project });
       break;
     case "copy":
       effects.copy(intent.value, intent.label);

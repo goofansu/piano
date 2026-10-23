@@ -62,7 +62,7 @@ await run(
     return {
       folders: [cwd],
       worktrees,
-      projects: [{ id: "qa", name: "QA Project", archived: false }],
+      projects: [{ id: "qa", name: "QA Project" }],
       sessions: [
         reference("login-bug", "Fix the login bug", 0.063),
         reference("release-notes", "Release notes", 0.63),

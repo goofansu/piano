@@ -20,7 +20,7 @@ they put `~/node/bin` and `~/.local/bin` (Node 24, `wt`) on `PATH` themselves. T
 
 ```bash
 S=.agents/skills/verify-piano/scripts
-$S/launch.sh                      # seeded: folder repo, 3 projects, 2 saved sessions
+$S/launch.sh                      # seeded: folder repo, 2 projects, 2 saved sessions
 $S/launch.sh --empty              # empty database: nothing registered
 $S/launch.sh --fake-pi dialogs    # test/fake-pi.mjs: "ask ..." opens a dialog, "crash ..." exits
 ```
@@ -62,8 +62,8 @@ Then `. "$RUN/run.env"` gives `RUN`, `EVIDENCE`, `REPO`, `DB`, `AUDIT`, `API_URL
 `PIANO_SESSION_ORIGIN` for the dispatch CLI. A launch that fails prints the log tail; run Cleanup on
 the printed run dir anyway.
 
-Seed data (seeded runs): folder `repo`; projects `verify` "Verify Project", `empty` "Empty
-Project", `archived` "Archived Project" (archived); sessions `verify-plan` "Plan the verification"
+Seed data (seeded runs): folder `repo`; projects `verify` "Verify Project" and `empty` "Empty
+Project"; sessions `verify-plan` "Plan the verification"
 (project `verify`, saved PR link `#222`) and `verify-loose` "Loose session" (no project), each with
 Pi history `What is 2 + 2? (<title>)` / `Answer 4.`; "Plan the verification" also holds one
 successful Pi `write` of `src/answer.ts` (hand-written, since fake Pi makes no tool calls).

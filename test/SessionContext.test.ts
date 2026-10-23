@@ -58,7 +58,7 @@ const base: AppState = {
   view: { kind: "session" },
   folders: [folder],
   workspaces: [ws("/repo"), ws("/work/repo.feature"), ws("/closed")],
-  projects: [{ id: "p1", name: "Launch", archived: false }],
+  projects: [{ id: "p1", name: "Launch" }],
   sessionReferences: [
     sessionReference("/work/repo.feature", "s1", {
       title: "Registry title",

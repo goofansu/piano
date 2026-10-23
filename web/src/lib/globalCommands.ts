@@ -8,7 +8,7 @@ import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.ts";
-import { canStartSessionIn, findProject } from "./projectCommands.ts";
+import { findProject } from "./projectCommands.ts";
 import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
 import { focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
@@ -135,7 +135,7 @@ function projectNewSession(state: AppState): GlobalCommand[] {
       label: "New session in project",
       icon: "new",
       group: "navigate",
-      enabled: canStartSessionIn(state, project.id),
+      enabled: true,
       intent: { kind: "new-session", projectId: project.id },
     },
   ];

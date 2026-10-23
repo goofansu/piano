@@ -23,6 +23,8 @@ export interface FormAnswer {
   command?: ClientCommand;
   /** A new project, not created for a session, opens once it is saved. */
   openProject?: string;
+  /** A deleted project's home or New page, when on screen, gives way to the plain New page. */
+  leaveProject?: string;
   /** What submitting a share form publishes; present exactly when an allowed share form. */
   share?: { workspaceId: string; sessionId: string };
 }
@@ -76,6 +78,15 @@ export function answerForm(
     case "close-folder":
       if (!state.connected) return { allowed: false };
       return { allowed: true, command: { _tag: "remove_folder", path: form.folder.path } };
+    case "delete-project":
+      if (!state.connected) return { allowed: false };
+      return {
+        allowed: true,
+        command: { _tag: "delete_project", id: form.project.id },
+        ...("projectId" in state.view && state.view.projectId === form.project.id
+          ? { leaveProject: form.project.id }
+          : {}),
+      };
     case "project": {
       const { project, assign } = form.dialog;
       const name = text.trim();
@@ -147,6 +158,23 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
         confirmLabel: "Close",
         destructive: false,
       };
+    case "delete-project": {
+      const count = state.sessionReferences.filter(
+        (s) => s.projectId === form.project.id && !s.archived,
+      ).length;
+      const kept =
+        count === 0
+          ? ""
+          : count === 1
+            ? " Its session is kept, in no project."
+            : ` Its ${count} sessions are kept, in no project.`;
+      return {
+        title: "Delete this project?",
+        description: `"${form.project.name}" will be deleted.${kept} This cannot be undone.`,
+        confirmLabel: "Delete",
+        destructive: true,
+      };
+    }
     case "rename-session":
     case "share-session":
     case "project":
@@ -177,6 +205,8 @@ export interface CommandFormsOptions {
   /** Publish a session to Radius; resolves once the publication is confirmed. */
   share: (workspaceId: string, sessionId: string) => Promise<SessionShare>;
   openProject: (id: string) => void;
+  /** The plain New page, with no project. */
+  openNew: () => void;
   newId?: () => string;
 }
 
@@ -208,6 +238,7 @@ export function createCommandForms({
   send,
   share,
   openProject,
+  openNew,
   newId,
 }: CommandFormsOptions): CommandForms {
   let state = CLOSED;
@@ -276,6 +307,7 @@ export function createCommandForms({
       send(answered.command);
       set(CLOSED);
       if (answered.openProject) openProject(answered.openProject);
+      if (answered.leaveProject) openNew();
       return true;
     },
     cancel: () => {

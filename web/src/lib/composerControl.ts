@@ -160,8 +160,6 @@ export interface NewSessionSituation {
   catalog: Pick<ModelCatalog, "error"> | null;
   cwd: string;
   model: string | undefined;
-  /** The chosen project, if any, takes new sessions. */
-  projectOpen: boolean;
 }
 
 /** The first message can create a session; the button and the send key both obey it. */
@@ -171,7 +169,6 @@ export const newSessionReady = (s: NewSessionSituation): boolean =>
   !s.catalog.error &&
   s.cwd.trim().length > 0 &&
   !!s.model &&
-  s.projectOpen &&
   sendable({ text: s.text, images: s.images });
 
 /** Creates the session in `cwd`, joining `projectId`, with the first message. */

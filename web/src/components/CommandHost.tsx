@@ -184,13 +184,14 @@ export function CommandHost({
     radiusSignedIn,
     send,
     openProject: (id) => openNew(undefined, id),
+    openNew: () => openNew(),
   });
   const { form } = forms;
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renaming = form?.kind === "rename-session" ? form.target : null;
   const close = forms.cancel;
   const answer = forms.answer();
-  // Archive, delete and close folder share one confirm dialog; `confirmation` decides its wording.
+  // Archive, delete, close folder and delete project share one confirm dialog; `confirmation` decides its wording.
   const asking = form ? confirmation(state, form) : undefined;
   const sharing = form?.kind === "share-session";
   const project = form?.kind === "project" ? form.dialog : undefined;

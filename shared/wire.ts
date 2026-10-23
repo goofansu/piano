@@ -501,7 +501,6 @@ export const sameWorkspace = (a: Workspace, b: Workspace) =>
 export const Project = Schema.Struct({
   id: Schema.String.check(Schema.isMinLength(1)),
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
-  archived: Schema.Boolean,
 });
 export type Project = typeof Project.Type;
 /** A session's pull request as the registry saves it; GitHub owns the facts behind it. */
@@ -754,7 +753,8 @@ export const ClientMessage = Schema.Union([
     project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }),
     assign: Schema.optional(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String })),
   }),
-  Schema.TaggedStruct("archive_project", { id: Schema.String, archived: Schema.Boolean }),
+  /** Delete a project; its sessions stay, in no project. */
+  Schema.TaggedStruct("delete_project", { id: Schema.String }),
   Schema.TaggedStruct("assign_project", {
     cwd: Schema.String,
     sessionId: Schema.String,

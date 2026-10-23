@@ -42,13 +42,7 @@ import { WorktreesPopover } from "@/components/Worktrees";
 import { newSessionCommand, newSessionReady } from "@/lib/composerControl";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
 import { NEW_SESSION_DRAFT } from "@/lib/messageDraft";
-import {
-  canStartSessionIn,
-  findProject,
-  newProjectCommand,
-  projectCommand,
-  projectDestinations,
-} from "@/lib/projectCommands";
+import { findProject, newProjectCommand, projectDestinations } from "@/lib/projectCommands";
 import { folderFor } from "@/lib/sessionCatalog";
 import { completionTarget, directoryChoices } from "@/lib/sessionContext";
 import { composerAction, composerInput, picker } from "@/lib/styles";
@@ -139,8 +133,6 @@ export function NewSessionComposer({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const folder = folderFor(state, cwd);
-  const project = findProject(state, projectId);
-  const unarchive = project && projectCommand(state, project, "unarchive");
   const trust = trustCommand(state, cwd);
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
@@ -154,15 +146,16 @@ export function NewSessionComposer({
     catalog,
     cwd,
     model: choice.model,
-    projectOpen: canStartSessionIn(state, projectId),
   });
 
   const submit = () => {
     // A creation that is sent switches the main pane to the new session at once, so this page never
     // shows a pending state; one known not sent keeps the draft and the pick here.
     if (!ready) return;
+    // A project deleted while it was chosen is no longer joined.
+    const join = findProject(state, projectId)?.id;
     choice.submit((start) =>
-      editor.submit((message) => send(newSessionCommand({ cwd, projectId }, message, start))),
+      editor.submit((message) => send(newSessionCommand({ cwd, projectId: join }, message, start))),
     );
   };
 
@@ -222,22 +215,6 @@ export function NewSessionComposer({
           <Alert data-motion="fade" variant="destructive" className="mt-2">
             <AlertDescription>
               Git status unavailable. Open Worktrees to inspect and refresh.
-            </AlertDescription>
-          </Alert>
-        )}
-        {unarchive && (
-          <Alert data-motion="fade" className="mt-2">
-            <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span>This project is archived.</span>
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0"
-                disabled={!unarchive.enabled}
-                onClick={() => run(unarchive)}
-              >
-                {unarchive.label}
-              </Button>
             </AlertDescription>
           </Alert>
         )}

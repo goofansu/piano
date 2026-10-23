@@ -52,7 +52,7 @@ const home: AppState = {
       discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
     },
   ],
-  projects: [{ id: "launch", name: "Launch", archived: false }],
+  projects: [{ id: "launch", name: "Launch" }],
   sessionReferences: references,
 };
 const selected: SessionView = {
@@ -150,7 +150,7 @@ test("a search ranks groups by their best row; blank input keeps the declared or
 });
 
 test("Session commands offer the session's project membership, named as the menu's buttons", () => {
-  const billing = { id: "billing", name: "Billing", archived: false };
+  const billing = { id: "billing", name: "Billing" };
   const loose: AppState = { ...inSession, projects: [...inSession.projects, billing] };
   const member: AppState = {
     ...loose,
@@ -197,9 +197,9 @@ test("Session commands offer the session's project membership, named as the menu
 });
 
 test("Session commands reach the session's project home, as the header's project link does", () => {
-  const archived: AppState = {
+  const member: AppState = {
     ...inSession,
-    projects: [{ id: "launch", name: "Launch", archived: true }],
+    projects: [{ id: "launch", name: "Launch" }],
     sessionReferences: references.map((r) =>
       r.sessionId === "s1" ? { ...r, projectId: "launch" } : r,
     ),
@@ -209,11 +209,11 @@ test("Session commands reach the session's project home, as the header's project
     return group?.id === "session" ? group.rows.find((r) => r.key === "project:open") : undefined;
   };
   assert.equal(open(inSession), undefined, "a session in no project has no project to open");
-  const row = open(archived);
+  const row = open(member);
   assert.equal(row?.label, "Open project: Launch");
-  assert.equal(row?.enabled, true, "an archived project's home offers Unarchive");
+  assert.equal(row?.enabled, true);
   assert.deepEqual(row?.command.intent, { kind: "open-project", projectId: "launch" });
-  assert.ok(open({ ...archived, connected: false })?.enabled, "it only navigates");
+  assert.ok(open({ ...member, connected: false })?.enabled, "it only navigates");
 });
 
 test("search uses direct command synonyms, not related topics or opposite display choices", () => {

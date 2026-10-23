@@ -27,9 +27,8 @@ const sessions = [
 seedRegistry(database, {
   folders: [repo],
   projects: [
-    { id: "verify", name: "Verify Project", archived: false },
-    { id: "empty", name: "Empty Project", archived: false },
-    { id: "archived", name: "Archived Project", archived: true },
+    { id: "verify", name: "Verify Project" },
+    { id: "empty", name: "Empty Project" },
   ],
   sessions,
 } as never);

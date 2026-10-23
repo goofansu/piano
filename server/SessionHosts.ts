@@ -371,7 +371,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       const destination = Effect.fn("SessionHosts.destination")(
         function* (spec: CreateSpec) {
           // Registry writes run before the ownership lock; an unavailable project registers nothing.
-          if (spec.projectId !== undefined) yield* registry.requireActiveProject(spec.projectId);
+          if (spec.projectId !== undefined) yield* registry.requireProject(spec.projectId);
           return spec.worktree
             ? yield* placeWorktree(spec.cwd, spec.worktree)
             : yield* place(spec.cwd);

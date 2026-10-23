@@ -586,8 +586,8 @@ const refusals: {
     { _tag: "save_project", project: { id: "p", name: "P" } },
     { _tag: "error", message: "REFUSED" },
   ],
-  archive_project: [
-    { _tag: "archive_project", id: "p", archived: true },
+  delete_project: [
+    { _tag: "delete_project", id: "p" },
     { _tag: "error", message: "REFUSED" },
   ],
   assign_project: [
@@ -757,7 +757,7 @@ test("INV-01: save_project with a session saves both, and an unknown session is 
         assign: { cwd, sessionId: "one" },
       });
       const data = yield* registry.get;
-      assert.deepEqual(data.projects, [{ id: "launch", name: "Launch", archived: false }]);
+      assert.deepEqual(data.projects, [{ id: "launch", name: "Launch" }]);
       assert.equal(data.sessions.find((s) => s.sessionId === "one")?.projectId, "launch");
     }),
   );

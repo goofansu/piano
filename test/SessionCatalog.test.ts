@@ -40,10 +40,7 @@ const folder: FolderView = {
 const state: AppState = {
   ...initialState,
   folders: [folder],
-  projects: [
-    { id: "launch", name: "Launch", archived: false },
-    { id: "old", name: "Old", archived: true },
-  ],
+  projects: [{ id: "launch", name: "Launch" }],
   sessionReferences: [
     ref("/repo", "open-unfiled", "Open unfiled", { branch: "main" }),
     ref("/work/repo.feature", "open-member", "Open member", {
@@ -56,16 +53,13 @@ const state: AppState = {
       unavailable: "checkout",
     }),
     ref("/closed/app", "closed-unfiled", "Closed unfiled"),
-    ref("/closed/app", "closed-old-member", "Closed member of an archived project", {
-      projectId: "old",
-    }),
     ref("/closed/app", "lost", "Lost history", { projectId: "launch", unavailable: "history" }),
     ref("/repo", "archived", "Archived", { archived: true }),
   ],
 };
 const ids = (items: ReadonlyArray<{ sessionId: string }>) => items.map((s) => s.sessionId).sort();
 
-test("every sidebar grouping lists the same sessions: open folders' sessions and members of open projects", () => {
+test("every sidebar grouping lists the same sessions: open folders' sessions and project members", () => {
   const listed = sessionCatalog(state).filter((s) => s.listed);
   const expected = ["closed-member", "lost", "open-member", "open-unfiled"];
   assert.deepEqual(
@@ -79,9 +73,9 @@ test("every sidebar grouping lists the same sessions: open folders' sessions and
     "Date shows a closed folder's project member too",
   );
   assert.deepEqual(ids(sortSessions(listed, "recent")), expected);
-  const active = state.projects.filter((p) => !p.archived);
+
   assert.deepEqual(
-    ids(projectGroups(active, listed, "recent").flatMap((g) => g.sessions)),
+    ids(projectGroups(state.projects, listed, "recent").flatMap((g) => g.sessions)),
     expected,
   );
   assert.deepEqual(
@@ -95,7 +89,6 @@ test("the palette reaches every session that is not archived, with its folder, b
   const all = sessionCatalog(state);
   assert.deepEqual(ids(all), [
     "closed-member",
-    "closed-old-member",
     "closed-unfiled",
     "lost",
     "open-member",

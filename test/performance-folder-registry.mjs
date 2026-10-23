@@ -105,7 +105,7 @@ try {
       now = new Date().toISOString();
     seedRegistry(dbPath, {
       folders: paths,
-      projects: [{ id: "bench", name: "Initial", archived: false }],
+      projects: [{ id: "bench", name: "Initial" }],
       sessions: Array.from({ length: sessions }, (_, i) => ({
         cwd: paths[i % folders],
         sessionId: `saved-${i}`,

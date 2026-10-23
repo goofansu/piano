@@ -684,8 +684,8 @@ test("a project's home starts in its most recent member's folder, at the folder'
     _tag: "registry",
     folders: [repo],
     projects: [
-      { id: "p1", name: "Perf", archived: false },
-      { id: "p2", name: "Elsewhere", archived: false },
+      { id: "p1", name: "Perf" },
+      { id: "p2", name: "Elsewhere" },
     ],
     sessionReferences: [
       sessionReference("/repo", "old", { projectId: "p1", updatedAt: at(1) }),

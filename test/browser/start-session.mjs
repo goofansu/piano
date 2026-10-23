@@ -8,7 +8,7 @@ await run(
   "start-session",
   ({ repository }) => ({
     folders: [repository("api"), repository("web")],
-    projects: [{ id: "launch", name: "Launch", archived: false }],
+    projects: [{ id: "launch", name: "Launch" }],
   }),
   async (page) => {
     await page.open("/new");

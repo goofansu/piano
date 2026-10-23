@@ -9,8 +9,8 @@ matching feature file. How to launch, check, drive, capture and clean up is in
 - An instance from `$S/launch.sh` (seeded unless a file says `--empty` or `--fake-pi dialogs`),
   with `. "$RUN/run.env"` loaded in the driving shell.
 - `$S/doctor.sh "$RUN"` exits 0.
-- Seed: folder `repo` (`$REPO`); projects `verify` "Verify Project", `empty` "Empty Project",
-  `archived` "Archived Project" (archived); sessions `verify-plan` "Plan the verification" (project
+- Seed: folder `repo` (`$REPO`); projects `verify` "Verify Project" and `empty` "Empty Project";
+  sessions `verify-plan` "Plan the verification" (project
   `verify`, PR link `#222`, last active 1 hour ago) and `verify-loose` "Loose session" (no project,
   20 minutes ago), each with history `What is 2 + 2? (<title>)` / `Answer 4.`.
 - Fake Pi `test/browser/fake-pi.mjs` replies `echo: <prompt>`; a prompt of exactly `hold` keeps
@@ -56,7 +56,7 @@ Keep implementation details out; name user paths, handles, required state, comma
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
   home; read history and cost; follow up; stop a running reply.
 - [Project home](./project-home.md): `/projects/<id>` from the sidebar, palette and session
-  header; member cards, order, PR number, live append, empty, archived and missing projects, the
+  header; member cards, order, PR number, live append, empty, deleted and missing projects, the
   no-request cost rule, 390px layout.
 - [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
   `status` and `list --project`, and its refusals.

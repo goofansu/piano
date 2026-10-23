@@ -79,7 +79,7 @@ function page(url: string) {
     server({
       _tag: "registry",
       folders: [],
-      projects: [{ id: "p1", name: "Launch", archived: false }],
+      projects: [{ id: "p1", name: "Launch" }],
       sessionReferences: [
         sessionReference("/scratch", "a", { title: "Alpha" }),
         sessionReference("/scratch", "b", { title: "Beta" }),

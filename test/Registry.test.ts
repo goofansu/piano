@@ -52,8 +52,8 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
       { id: "alias-id", folder: alias, path: alias },
     ],
     projects: [
-      { id: "project-1", name: "Launch", archived: false },
-      { id: "project-2", name: "Old", archived: true },
+      { id: "project-1", name: "Launch" },
+      { id: "project-2", name: "Old" },
     ],
     sessions: [
       {
@@ -83,11 +83,12 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
     ],
   };
   seedRegistry(f.dbPath, original);
-  // Reshape it as an older Piano left it: version 1, with a project goal. Opening upgrades it in place.
+  // Reshape it as an older Piano left it: version 1, with a project goal and an archived project.
+  // Opening upgrades it in place, and the archived project comes back as an ordinary one.
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
-      "ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
+      "ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)); UPDATE projects SET archived = 1 WHERE id = 'project-2'; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
     );
   } finally {
     legacy.close();
@@ -96,13 +97,13 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 8);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 9);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
         .all()
         .map((c) => c.name),
-      ["id", "name", "archived", "position"],
+      ["id", "name", "position"],
     );
     assert.equal(backup.prepare("PRAGMA user_version").get()!.user_version, 1);
     assert.equal(
@@ -246,7 +247,7 @@ test("INV-01: a session with every optional field set, linked without an API hos
     folders: [folder],
     worktrees: [],
     workspaces: [{ id: "folder-id", folder, path: folder }],
-    projects: [{ id: "project-1", name: "Launch", archived: false }],
+    projects: [{ id: "project-1", name: "Launch" }],
     sessions: [
       {
         cwd: folder,
@@ -429,7 +430,7 @@ for (const version of [4, 5, 6]) {
     assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 8);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 9);
       assert.deepEqual(
         stored
           .prepare(
@@ -560,14 +561,13 @@ test("INV-01: initial membership never changes an existing reference or restrict
       const r = yield* Registry;
       yield* r.saveProject({ id: "launch", name: "Launch" });
       yield* r.addSession(cwd, "one", "Original", "launch");
-      yield* r.archiveProject("launch", true);
       const before = yield* r.get;
       for (const projectId of ["launch", "missing", undefined])
         yield* r.addSession(cwd, "one", "Replacement", projectId);
       assert.deepEqual(
         yield* r.get,
         before,
-        "re-registering is a no-op, even after the initial project is archived",
+        "re-registering is a no-op, even naming a missing project",
       );
       yield* r.assignProject(cwd, "one", null);
       yield* r.addSession(cwd, "one", undefined, "launch");
@@ -580,14 +580,14 @@ test("INV-01: initial membership never changes an existing reference or restrict
       assert.equal(
         (yield* r.get).sessions[0].projectId,
         "launch",
-        "existing sessions may still be assigned to an archived project",
+        "a session can join the project again",
       );
       const failure = yield* r
         .addSession(cwd, "missing-project", undefined, "missing")
         .pipe(Effect.flip);
       assert.equal(
         failure.detail,
-        "Project is unavailable or archived. Choose a current project before starting.",
+        "Project is unavailable. Choose a current project before starting.",
       );
       assert.equal((yield* r.get).sessions.length, 1);
     }),
@@ -661,7 +661,7 @@ test("INV-01: competing backends cannot overwrite each other's committed metadat
       /another writer/,
     );
     assert.deepEqual((await second.runPromise(b.get)).projects, []);
-    assert.deepEqual((await f.get()).projects, [{ id: "one", name: "First", archived: false }]);
+    assert.deepEqual((await f.get()).projects, [{ id: "one", name: "First" }]);
   } finally {
     await first.dispose();
     await second.dispose();
@@ -672,7 +672,7 @@ test("PIN-50: metadata writes share unchanged collections and rows; value-equal 
   const f = fixture(t),
     cwd = `${f.root}/alias/../folder`;
   seedRegistry(f.dbPath, {
-    projects: [{ id: "project", name: "Project", archived: false }],
+    projects: [{ id: "project", name: "Project" }],
     sessions: ["one", "two"].map((sessionId) => ({
       cwd,
       sessionId,
@@ -716,7 +716,6 @@ test("PIN-50: metadata writes share unchanged collections and rows; value-equal 
         const revision = () => db.prepare("SELECT revision FROM registry_meta").get()!.revision;
         const priorRevision = revision();
         yield* r.saveProject({ id: "project", name: "Project" });
-        yield* r.archiveProject("project", false);
         yield* r.assignProject(cwd, "one", null);
         yield* r.removeFolder("/missing");
         yield* r.removeSession(cwd, "missing");
@@ -772,7 +771,7 @@ for (const name of ["projects", "workspaces", "folders", "worktrees", "sessions"
     const workspaces = paths.map((path, i) => ({ id: `w${i}`, path, folder: path }));
     seedRegistry(f.dbPath, {
       workspaces,
-      projects: name === "projects" ? paths.map((id) => ({ id, name: id, archived: false })) : [],
+      projects: name === "projects" ? paths.map((id) => ({ id, name: id })) : [],
       folders: name === "folders" ? paths : [],
       worktrees:
         name === "worktrees"

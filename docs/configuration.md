@@ -106,7 +106,8 @@ repository facts, so neither is in the registry.
 
 Piano refuses to start on a corrupt database, an unrecognized one, or one from a newer Piano. It
 never resets a database. It upgrades an older database in place when it opens it, and the current
-schema is version 8, which adds user-configured [webhooks](webhooks.md). Version 7 drops retired
+schema is version 9, which retires project archive: each archived project comes back as an
+ordinary one. Version 8 adds user-configured [webhooks](webhooks.md). Version 7 drops retired
 notification preference tables without changing session data. Before it upgrades a version 1 database, which still has project goals, Piano
 writes a private copy to `<database>.v1-backup`. An older Piano can open that copy but not the
 upgraded file.

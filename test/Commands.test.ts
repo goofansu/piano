@@ -13,7 +13,7 @@ import {
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
 
-const launch: Project = { id: "p1", name: "Launch", archived: false };
+const launch: Project = { id: "p1", name: "Launch" };
 const folder = { path: "/repo", name: "repo" };
 const online: AppState = {
   ...initialState,
@@ -42,10 +42,6 @@ test("a disabled command does nothing, whichever surface offers it", () => {
   const disabled: Command[] = [
     trustCommand(offline, "/repo")!,
     ...projectCommands(offline, launch).filter((c) => c.id !== "new-session"),
-    projectCommands(
-      { ...online, projects: [{ ...launch, archived: true }] },
-      { ...launch, archived: true },
-    )[0]!,
     newProjectCommand(offline),
     assignProjectCommand(offline, other, "p1"),
     folderCommands(offline, folder).close,
@@ -88,8 +84,8 @@ test("enabled commands reach the effect their intent names", () => {
       ["openForm", { kind: "project", dialog: { project: launch } }],
     ],
     [
-      byId(projectCommands(online, launch), "archive"),
-      ["send", { _tag: "archive_project", id: "p1", archived: true }],
+      byId(projectCommands(online, launch), "delete"),
+      ["openForm", { kind: "delete-project", project: launch }],
     ],
     [
       newProjectCommand(online, other),

@@ -13,7 +13,6 @@ import {
   type PreferenceStorage,
   parseJson,
 } from "./preference.ts";
-import { activeProjects } from "./projectCommands.ts";
 import { folderFor, type SessionEntry, sessionCatalog } from "./sessionCatalog.ts";
 import { sessionReference } from "./sessionContext.ts";
 import {
@@ -186,10 +185,8 @@ function buildList(
         })),
       );
     case "project": {
-      // Archived projects are not listed; a place for archived projects and sessions is still to be designed.
-      const active = activeProjects(state);
-      const groups = projectGroups(active, listed, view.sortBy);
-      if (active.length === 0 && groups.every((g) => g.sessions.length === 0))
+      const groups = projectGroups(state.projects, listed, view.sortBy);
+      if (state.projects.length === 0 && groups.every((g) => g.sessions.length === 0))
         return empty(NO_SESSIONS);
       return sections(
         groups.map(({ project, sessions }) => {

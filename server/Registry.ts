@@ -258,17 +258,18 @@ export class Registry extends Context.Service<
     >;
     /** Succeeds only for a folder the person added (exact path spelling). */
     readonly requireFolder: (path: string) => Effect.Effect<void, RegistryLookupError>;
-    /** A known project that is not archived. */
-    readonly requireActiveProject: (id: string) => Effect.Effect<Project, RegistryLookupError>;
+    /** A known project. */
+    readonly requireProject: (id: string) => Effect.Effect<Project, RegistryLookupError>;
     /**
      * Create or rename a project. With `assign`, that session joins it in the same write: one
      * change announcement, and an unregistered session rejects the whole save.
      */
     readonly saveProject: (
-      project: Omit<Project, "archived">,
+      project: Project,
       assign?: { readonly cwd: string; readonly sessionId: string },
     ) => Effect.Effect<void, RegistryError>;
-    readonly archiveProject: (id: string, archived: boolean) => Effect.Effect<void, RegistryError>;
+    /** Remove a project in one write; its sessions stay registered, in no project. */
+    readonly deleteProject: (id: string) => Effect.Effect<void, RegistryError>;
     readonly assignProject: (
       cwd: string,
       sessionId: string,
@@ -463,25 +464,21 @@ export const RegistryLive = Layer.effect(
                 }),
               ),
         ),
-      requireActiveProject: (id) =>
+      requireProject: (id) =>
         Effect.flatMap(Ref.get(state), (d) => {
-          const project = d.projects.find((p) => p.id === id && !p.archived);
+          const project = d.projects.find((p) => p.id === id);
           return project
             ? Effect.succeed(project)
             : Effect.fail(
                 new RegistryLookupError({
                   subject: "project",
-                  detail:
-                    "Project is unavailable or archived. Choose a current project before starting.",
+                  detail: "Project is unavailable. Choose a current project before starting.",
                 }),
               );
         }),
       saveProject: (project, assign) =>
         update((d) => {
-          const parsed = Schema.decodeUnknownSync(Project)({
-            ...project,
-            archived: d.projects.find((p) => p.id === project.id)?.archived ?? false,
-          });
+          const parsed = Schema.decodeUnknownSync(Project)(project);
           if (!parsed.name.trim()) throw new RegistryError({ detail: "A project needs a name." });
           if (assign && !d.sessions.some(isSession(assign.cwd, assign.sessionId)))
             throw new RegistryError({
@@ -498,11 +495,17 @@ export const RegistryLive = Layer.effect(
             : d.sessions;
           return { ...d, projects, sessions };
         }),
-      archiveProject: (id, archived) =>
+      deleteProject: (id) =>
         update((d) => {
           if (!d.projects.some((p) => p.id === id))
             throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
-          return { ...d, projects: d.projects.map((p) => (p.id === id ? { ...p, archived } : p)) };
+          return {
+            ...d,
+            projects: d.projects.filter((p) => p.id !== id),
+            sessions: d.sessions.map((s) =>
+              s.projectId === id ? { ...s, projectId: undefined } : s,
+            ),
+          };
         }),
       assignProject: (cwd, sessionId, projectId) =>
         update((d) => {
@@ -559,10 +562,9 @@ export const RegistryLive = Layer.effect(
       addSession: (cwd, sessionId, title, projectId) =>
         update((d) => {
           if (d.sessions.some(isSession(cwd, sessionId))) return d;
-          if (projectId !== undefined && !d.projects.some((p) => p.id === projectId && !p.archived))
+          if (projectId !== undefined && !d.projects.some((p) => p.id === projectId))
             throw new RegistryError({
-              detail:
-                "Project is unavailable or archived. Choose a current project before starting.",
+              detail: "Project is unavailable. Choose a current project before starting.",
             });
           const t = now();
           return {

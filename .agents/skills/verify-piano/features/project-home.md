@@ -2,8 +2,8 @@
 
 A project's home at `/projects/<id>` lists its member sessions as cards (title, folder, branch, PR
 number, last activity), newest first, and starts a new session filed in the project. Users reach it
-from the session header, the sidebar's project groups and the Mod+K palette. Archived projects say
-so and offer Unarchive; unknown IDs show "Project not found".
+from the session header, the sidebar's project groups and the Mod+K palette. Deleting a project
+keeps its sessions, in no project; unknown IDs show "Project not found".
 
 ## Sub-features
 
@@ -14,9 +14,10 @@ so and offer Unarchive; unknown IDs show "Project not found".
 - `new-in-project`: the composer above the cards ("First message", placeholder "New session in
   <name>") starts in the folder of the most recently active member, at the folder's own checkout;
   sending opens the new session, which joins the project.
-- `header`: the pane header names the project with its session count beneath ("1 session"; "· Archived" when archived).
+- `header`: the pane header names the project with its session count beneath ("1 session").
 - `empty`: a project with no sessions shows its header ("0 sessions") and the composer on "Choose a folder".
-- `archived`: "This project is archived." with an "Unarchive project" button.
+- `delete`: the project menu's "Delete project" asks first, saying how many sessions are kept; on
+  the project's own home, confirming leaves for the New page.
 - `missing`: an unknown ID shows the alert "Project not found".
 
 ## How to get to it (user POV)
@@ -52,8 +53,8 @@ Preconditions: a seeded launch (`$S/launch.sh`), `. "$RUN/run.env"`, doctor pass
     ab wait --fn "!document.querySelector('[data-radix-popper-content-wrapper]')";
     ab find role button click --name "Project menu for Empty Project" --exact;
     ab find role menuitem click --name "Open project" --exact; ab wait --url "**/projects/empty"`
-  - Result: `/projects/empty`; the sidebar shows groups "Empty Project", "Verify Project", "No
-    project" and no "Archived Project". Capture `04-empty`.
+  - Result: `/projects/empty`; the sidebar shows groups "Empty Project", "Verify Project" and "No
+    project". Capture `04-empty`.
 - `empty`
   - Action: read the page.
   - Result: main text starts `Empty Project` / `0 sessions` / `Choose a folder`, and no card.
@@ -70,10 +71,17 @@ Preconditions: a seeded launch (`$S/launch.sh`), `. "$RUN/run.env"`, doctor pass
   - Result: combobox "Directory" read `repo` before sending, and no "Project" button; the send
     lands on `/s/<new id>`, and back on `/projects/verify` the header reads `2 sessions` with the
     new card first. Capture `05-new-in-project`. Sending changes the database; relaunch afterwards.
-- `archived`
-  - Action: `ab open "$WEB_URL/projects/archived"; ab wait --text "This project is archived."`
-  - Result: main text `Archived Project`, `This project is archived.`, `Unarchive project`.
-    Capture `06-archived`. Clicking Unarchive changes the database; relaunch afterwards.
+- `delete`
+  - Action: with Group by Project, on `/projects/verify`,
+    `ab find role button click --name "Project menu for Verify Project" --exact;
+    ab find role menuitem click --name "Delete project" --exact;
+    ab wait --text "Delete this project?"`, capture `06-confirm`, then
+    `ab find role button click --name "Delete" --exact; ab wait --url "**/new"`
+  - Result: the dialog reads `"Verify Project" will be deleted. Its session is kept, in no
+    project. This cannot be undone.`; confirming lands on `/new`, the sidebar has no "Verify
+    Project" group and "Plan the verification" sits under "No project", and `/s/verify-plan`
+    still opens with its history. Capture `06-deleted`. Deleting changes the database; relaunch
+    afterwards.
 - `missing`
   - Action: `ab open "$WEB_URL/projects/nope"; ab wait --text "Project not found"`
   - Result: `ab eval "document.querySelector('[role=alert]')?.innerText"` is

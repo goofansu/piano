@@ -13,6 +13,7 @@ export function useCommandForms(deps: {
   radiusSignedIn: boolean;
   send: (command: ClientCommand) => void;
   openProject: (id: string) => void;
+  openNew: () => void;
 }): CommandForms & CommandFormsState {
   const latest = useRef(deps);
   latest.current = deps;
@@ -23,6 +24,7 @@ export function useCommandForms(deps: {
       send: (command) => latest.current.send(command),
       share: shareSession,
       openProject: (id) => latest.current.openProject(id),
+      openNew: () => latest.current.openNew(),
     }),
   );
   const state = useSyncExternalStore(forms.subscribe, forms.getState);

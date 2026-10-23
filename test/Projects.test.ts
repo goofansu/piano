@@ -12,7 +12,52 @@ import {
 } from "../server/Registry.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
-test("INV-01/07: grouping preserves identities and survives closing, moving, archiving and restart", async (t) => {
+test("INV-01/07: deleting a project keeps its sessions, in no project, across a restart", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "piano-projects-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = join(root, "registry.db");
+  const cwd = join(root, "api");
+  const session = (sessionId: string, projectId?: string) => ({
+    cwd,
+    sessionId,
+    createdAt: "then",
+    updatedAt: "now",
+    archived: false,
+    ...(projectId ? { projectId } : {}),
+  });
+  seedRegistry(path, {
+    folders: [cwd],
+    projects: [
+      { id: "launch", name: "Launch" },
+      { id: "other", name: "Other" },
+    ],
+    sessions: [session("one", "launch"), session("two", "other"), session("three", "launch")],
+  });
+  const run = <A, E>(effect: Effect.Effect<A, E, Registry>) =>
+    Effect.runPromise(
+      effect.pipe(Effect.provide(RegistryLive), Effect.provideService(RegistryDatabasePath, path)),
+    );
+  await run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.deleteProject("launch");
+      const failure = yield* r.deleteProject("launch").pipe(Effect.flip);
+      assert.match(failure.message, /Project is unavailable/);
+    }),
+  );
+  const reopened = await run(Effect.flatMap(Registry, (r) => r.get));
+  assert.deepEqual(reopened.projects, [{ id: "other", name: "Other" }]);
+  assert.deepEqual(
+    reopened.sessions.map((s) => [s.sessionId, s.projectId]),
+    [
+      ["one", undefined],
+      ["two", "other"],
+      ["three", undefined],
+    ],
+  );
+});
+
+test("INV-01/07: grouping preserves identities and survives closing, moving, renaming and restart", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "piano-projects-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const path = join(root, "registry.db");
@@ -44,7 +89,7 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, arc
       assert.deepEqual(seeded.sessions, sessions);
       assert.deepEqual(seeded.folders, old.folders);
       assert.deepEqual(seeded.projects, []);
-      const first = { id: "launch", name: "Launch subscriptions", archived: false };
+      const first = { id: "launch", name: "Launch subscriptions" };
       yield* r.saveProject(first);
       yield* r.saveProject({ id: "accessibility", name: "Improve accessibility" });
       yield* r.saveProject({ id: "empty", name: "Empty project" });
@@ -52,19 +97,15 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, arc
       yield* r.assignProject(b, "two", "launch");
       yield* r.assignProject(a, "three", "accessibility");
       yield* r.removeFolder(a);
-      yield* r.archiveProject(first.id, true);
-      // An editor opened before archive cannot implicitly reopen the grouping.
       yield* r.saveProject({ ...first, name: "Subscriptions" });
-      const archived = yield* r.get;
-      assert.equal(archived.projects.find((p) => p.id === first.id)?.archived, true);
-      assert.equal(archived.sessions.filter((s) => s.projectId === "launch").length, 2);
+      const renamed = yield* r.get;
+      assert.equal(renamed.projects.find((p) => p.id === first.id)?.name, "Subscriptions");
+      assert.equal(renamed.sessions.filter((s) => s.projectId === "launch").length, 2);
       assert.deepEqual(
-        archived.sessions.map(({ projectId, ...s }) => s),
+        renamed.sessions.map(({ projectId, ...s }) => s),
         sessions,
       );
-      assert.deepEqual(archived.workspaces, old.workspaces);
-      yield* r.archiveProject(first.id, false);
-      assert.equal((yield* r.get).projects.find((p) => p.id === first.id)?.name, "Subscriptions");
+      assert.deepEqual(renamed.workspaces, old.workspaces);
       yield* r.assignProject(a, "one", "accessibility");
       yield* r.assignProject(b, "two", null);
       yield* r.removeSession(a, "three");
@@ -117,7 +158,7 @@ test("INV-01/05: saving a project with a session is one write, announced once, o
 
       yield* r.saveProject({ id: "launch", name: "Launch" }, { cwd, sessionId: "one" });
       assert.equal(heard.length, 1, "the project and its session arrive in one announcement");
-      assert.deepEqual(heard[0].projects, [{ id: "launch", name: "Launch", archived: false }]);
+      assert.deepEqual(heard[0].projects, [{ id: "launch", name: "Launch" }]);
       assert.equal(heard[0].sessions.find((s) => s.sessionId === "one")?.projectId, "launch");
     }).pipe(
       Effect.scoped,

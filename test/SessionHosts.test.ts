@@ -765,16 +765,15 @@ test("INV-02/03: hung readbacks time out visibly without blocking a later dialog
   );
 });
 
-const unavailableProject =
-  "Project is unavailable or archived. Choose a current project before starting.";
+const unavailableProject = "Project is unavailable. Choose a current project before starting.";
 
-test("INV-01: creating with an archived or unknown project registers no folder, reference or child", async () => {
+test("INV-01: creating with a deleted or unknown project registers no folder, reference or child", async () => {
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
       yield* registry.saveProject({ id: "old", name: "Old" });
-      yield* registry.archiveProject("old", true);
+      yield* registry.deleteProject("old");
       for (const projectId of ["old", "missing", ""]) {
         const error = yield* hosts.create({ cwd, projectId, options: {} }).pipe(Effect.flip);
         assert.ok(error instanceof SessionNotCreated);
@@ -788,16 +787,16 @@ test("INV-01: creating with an archived or unknown project registers no folder, 
   );
 });
 
-test("INV-01/02: a project archived after preflight refuses registration before Pi starts", async () => {
+test("INV-01/02: a project deleted after preflight refuses registration before Pi starts", async () => {
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
       yield* registry.saveProject({ id: "launch", name: "Launch" });
-      // Another tab archives the project once creation has passed its check and registered the folder.
+      // Another tab deletes the project once creation has passed its check and registered the folder.
       yield* registry.onChange((before, after) =>
         after.folders.length > before.folders.length
-          ? registry.archiveProject("launch", true).pipe(Effect.orDie)
+          ? registry.deleteProject("launch").pipe(Effect.orDie)
           : Effect.void,
       );
       const error = yield* hosts

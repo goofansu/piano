@@ -1,13 +1,12 @@
 import type { Project } from "@shared/wire";
 import {
-  ArchiveIcon,
-  ArchiveRestoreIcon,
   FolderIcon,
   FolderInputIcon,
   FolderMinusIcon,
   type LucideIcon,
   PencilIcon,
   PlusIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { useRef } from "react";
 import {
@@ -39,8 +38,7 @@ import type {
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   new: PlusIcon,
   edit: PencilIcon,
-  archive: ArchiveIcon,
-  unarchive: ArchiveRestoreIcon,
+  delete: Trash2Icon,
   folder: FolderIcon,
   remove: FolderMinusIcon,
 };
@@ -84,10 +82,7 @@ export function ProjectDestinationItems<D extends { project: Project; command?: 
                 onSelect={() => onPick(d)}
               >
                 <FolderIcon />
-                <span className="truncate">
-                  {d.project.name}
-                  {d.project.archived && " · Archived"}
-                </span>
+                <span className="truncate">{d.project.name}</span>
               </DropdownMenuItem>
             ))}
           </DropdownMenuGroup>
@@ -115,7 +110,6 @@ export function ProjectMenu({
       {current && (
         <DropdownMenuLabel className="max-w-64 truncate text-sm font-normal text-muted-foreground">
           {current.name}
-          {current.archived && " · Archived"}
         </DropdownMenuLabel>
       )}
       <DropdownMenuSub>

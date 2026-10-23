@@ -16,29 +16,18 @@ export function findProject(state: AppState, id: string | null | undefined): Pro
   return id ? state.projects.find((p) => p.id === id) : undefined;
 }
 
-/** Projects the sidebar lists and pickers offer: archived ones stay out until unarchived. */
-export function activeProjects(state: AppState): Project[] {
-  return state.projects.filter((p) => !p.archived);
-}
-
 /**
  * What a project picker offers, by name as the sidebar lists projects. The sidebar's menu moves a
  * session away from `current`, so it leaves `current` out; the New page names its choice, so it
- * keeps `current`, even archived, and can move away from it.
+ * keeps `current` and can move away from it.
  */
 export function projectDestinations(
   state: AppState,
   current: Project | undefined,
   { keepCurrent }: { keepCurrent: boolean },
 ): Project[] {
-  const choices = activeProjects(state).filter((p) => p.id !== current?.id);
-  if (current && keepCurrent) choices.push(current);
+  const choices = state.projects.filter((p) => keepCurrent || p.id !== current?.id);
   return choices.sort((a, b) => byName(a.name, b.name));
-}
-
-/** A session can start in no project or in an active one; an archived project takes no new sessions. */
-export function canStartSessionIn(state: AppState, projectId: string | null | undefined): boolean {
-  return !findProject(state, projectId)?.archived;
 }
 
 type SessionRef = { cwd: string; sessionId: string };
@@ -50,12 +39,11 @@ export type ProjectCommandId =
   | "new-session"
   | "open-project"
   | "edit"
-  | "archive"
-  | "unarchive"
+  | "delete"
   | "new-project"
   | "assign";
 
-export type ProjectCommandIcon = "new" | "edit" | "archive" | "unarchive" | "folder" | "remove";
+export type ProjectCommandIcon = "new" | "edit" | "delete" | "folder" | "remove";
 
 export type ProjectCommandIntent =
   /** Open the New session page for the project; it sends nothing. */
@@ -64,6 +52,8 @@ export type ProjectCommandIntent =
   | { kind: "open-project"; projectId: string }
   /** Open the project dialog: to rename `dialog.project`, or to create a project (taking `dialog.assign`). */
   | { kind: "project-dialog"; dialog: ProjectDialog }
+  /** Ask before deleting the project. */
+  | { kind: "delete-project"; project: Project }
   /** Send this registry change. */
   | { kind: "send"; command: ClientCommand };
 
@@ -78,20 +68,19 @@ export interface ProjectCommand {
 }
 
 /**
- * What a project row offers, in order: New session in the project, Edit, then Archive or Unarchive
- * (whichever applies). Enablement, one rule per command:
- * - new session: `canStartSessionIn`; it only opens the New session page, whose send waits for a connection.
- * - edit, archive, unarchive: connected, since each changes the registry.
+ * What a project row offers, in order: New session in the project, Edit, then Delete. Enablement,
+ * one rule per command:
+ * - new session: always; it only opens the New session page, whose send waits for a connection.
+ * - edit, delete: connected, since each changes the registry.
  */
 export function projectCommands(state: AppState, project: Project): ProjectCommand[] {
-  const archive = !project.archived;
   return [
     {
       id: "new-session",
       label: "New session in project",
       ariaLabel: `New session in ${project.name}`,
       icon: "new",
-      enabled: canStartSessionIn(state, project.id),
+      enabled: true,
       intent: { kind: "new-session", projectId: project.id },
     },
     {
@@ -102,19 +91,16 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
       intent: { kind: "project-dialog", dialog: { project } },
     },
     {
-      id: archive ? "archive" : "unarchive",
-      label: archive ? "Archive project" : "Unarchive project",
-      icon: archive ? "archive" : "unarchive",
+      id: "delete",
+      label: "Delete project",
+      icon: "delete",
       enabled: state.connected,
-      intent: {
-        kind: "send",
-        command: { _tag: "archive_project", id: project.id, archived: archive },
-      },
+      intent: { kind: "delete-project", project },
     },
   ];
 }
 
-/** One command of `project`'s, when it currently applies (Archive and Unarchive exclude each other). */
+/** One command of `project`'s. */
 export function projectCommand(
   state: AppState,
   project: Project,
@@ -124,10 +110,8 @@ export function projectCommand(
 }
 
 /**
- * Open `project`'s home, its branches and other member sessions: the way back from one of its sessions.
- * Unlike New session in project, which an archived project disables because it takes no new
- * sessions, this stays enabled: an archived project's home is where it offers Unarchive. It only
- * navigates, so it does not wait for a connection either.
+ * Open `project`'s home, its branches and other member sessions: the way back from one of its
+ * sessions. It only navigates, so it does not wait for a connection.
  */
 export function openProjectCommand(project: Project): ProjectCommand {
   return {
@@ -200,7 +184,7 @@ export interface SessionProjectMenu {
   entry: { label: "Move to project" | "Add to project"; enabled: boolean };
   /** New project, which files the session in the project it creates. */
   create: ProjectCommand;
-  /** Active projects other than the current one, by name. */
+  /** Projects other than the current one, by name. */
   destinations: ProjectDestination[];
   remove: ProjectCommand | undefined;
 }

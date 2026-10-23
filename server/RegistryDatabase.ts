@@ -9,7 +9,7 @@ const schema = `
   INSERT INTO registry_meta VALUES (1, 0);
   CREATE TABLE projects (
     id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL CHECK (length(trim(name)) > 0),
-    archived INTEGER NOT NULL CHECK (archived IN (0, 1)), position INTEGER NOT NULL
+    position INTEGER NOT NULL
   ) STRICT;
   CREATE TABLE workspaces (
     id TEXT PRIMARY KEY NOT NULL CHECK (length(id) > 0), path TEXT NOT NULL UNIQUE,
@@ -67,11 +67,11 @@ const pullRequestState = (link: Item<"sessions">["pullRequest"]) =>
 const codecs: { readonly [K in Collection]: Table<K> } = {
   projects: {
     name: "projects",
-    columns: ["id", "name", "archived", "position"],
+    columns: ["id", "name", "position"],
     keys: 1,
     key: (p) => [p.id],
-    encode: (p, i) => [p.id, p.name, Number(p.archived), i],
-    decode: (r) => ({ id: r.id as string, name: r.name as string, archived: Boolean(r.archived) }),
+    encode: (p, i) => [p.id, p.name, i],
+    decode: (r) => ({ id: r.id as string, name: r.name as string }),
   },
   workspaces: {
     name: "workspaces",
@@ -286,7 +286,14 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         db.exec(
           "ALTER TABLE sessions ADD COLUMN radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)); PRAGMA user_version = 4;",
         );
-      } else if (version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8)
+      } else if (
+        version !== 4 &&
+        version !== 5 &&
+        version !== 6 &&
+        version !== 7 &&
+        version !== 8 &&
+        version !== 9
+      )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
         );
@@ -302,6 +309,15 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           events TEXT NOT NULL CHECK (json_valid(events)),
           active INTEGER NOT NULL CHECK (active IN (0, 1)), created_at TEXT NOT NULL
         ) STRICT; PRAGMA user_version = 8;`);
+      // Version 9 retires project archive: an archived project comes back as an ordinary one, its
+      // sessions still its members. A database created since never had the column.
+      if (Number(version) < 9) {
+        const archive = db
+          .prepare("SELECT 1 FROM pragma_table_info('projects') WHERE name = 'archived'")
+          .get();
+        if (archive) db.exec("ALTER TABLE projects DROP COLUMN archived;");
+        db.exec("PRAGMA user_version = 9;");
+      }
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -328,6 +344,9 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
     const write = (change: () => void) => {
       db.exec("BEGIN IMMEDIATE");
       try {
+        // References are checked at commit: deleting a project unlinks its sessions in the same
+        // write, and rows are removed before the rows that pointed at them are updated.
+        db.exec("PRAGMA defer_foreign_keys = ON");
         const updated = db
           .prepare("UPDATE registry_meta SET revision = revision + 1 WHERE id = 1 AND revision = ?")
           .run(revision);

@@ -200,7 +200,6 @@ export function MobileSessionSheet() {
             {projects.current && (
               <p className="truncate px-3 py-1 text-xs text-muted-foreground">
                 {projects.current.name}
-                {projects.current.archived && " · Archived"}
               </p>
             )}
             {projects.remove && (

@@ -26,8 +26,8 @@ const state: AppState = {
   registryLoaded: true,
   folders: [folder],
   projects: [
-    { id: "p1", name: "Performance tuning", archived: false },
-    { id: "p2", name: "Other", archived: false },
+    { id: "p1", name: "Performance tuning" },
+    { id: "p2", name: "Other" },
   ],
   sessionReferences: [
     sessionReference("/repo", "newton", {
@@ -103,7 +103,7 @@ test("rows keep their place while the page is open: new ones append, gone ones d
   assert.deepEqual(stableOrder(["b", "a", "c"], ["c", "b"]), ["b", "c"]);
 });
 
-test("on a project's home, Mod+K offers its New session in project button, disabled once archived", () => {
+test("on a project's home, Mod+K offers New session in project", () => {
   const ctx = { settingsOpen: false, view: { groupBy: "date", sortBy: "recent" } } as const;
   const row = (s: AppState, id: string) => globalCommands(s, ctx).find((c) => c.id === id);
   const home: AppState = { ...state, view: { kind: "project", projectId: "p1" } };
@@ -116,13 +116,6 @@ test("on a project's home, Mod+K offers its New session in project button, disab
     row(home, "new-session")?.intent,
     { kind: "new-session" },
     "New session stays the same everywhere",
-  );
-  assert.equal(
-    row(
-      { ...home, projects: [{ id: "p1", name: "Performance tuning", archived: true }] },
-      "new-session-in-project",
-    )?.enabled,
-    false,
   );
   assert.equal(row(state, "new-session-in-project"), undefined, "elsewhere the row is absent");
 });
