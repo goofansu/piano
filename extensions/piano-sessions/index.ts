@@ -9,6 +9,8 @@ import {
   DISPATCH_ENTRY,
   DISPATCHED_FROM_FLAG,
   DISPOSITIONS,
+  PROJECT_INSTRUCTIONS_ENV,
+  PROJECT_INSTRUCTIONS_SECTION,
   type SessionHandle,
   type SessionStatus,
   START_TOOL,
@@ -186,6 +188,13 @@ export default function pianoSessions(pi: ExtensionAPI) {
   };
   pi.on("session_before_switch", refuseReplacement);
   pi.on("session_before_fork", refuseReplacement);
+  // The project's instructions, in a section of their own: Pi keeps the directory's
+  // APPEND_SYSTEM.md, which its --append-system-prompt would replace.
+  const instructions = process.env[PROJECT_INSTRUCTIONS_ENV];
+  if (instructions)
+    pi.on("before_agent_start", (event) => {
+      event.systemPromptOptions.sections[PROJECT_INSTRUCTIONS_SECTION] = instructions;
+    });
   const config = dispatchConfiguration();
   // No sockets at factory time: Pi also loads extensions for catalog probes and discovery.
   if (!config) return;

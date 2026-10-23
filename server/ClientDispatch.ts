@@ -234,6 +234,11 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       run: ({ id }) => registry.deleteProject(id),
       unanswered: plainError,
     },
+    set_project_instructions: {
+      admission: "ordinary",
+      run: ({ id, instructions }) => registry.setProjectInstructions(id, instructions),
+      unanswered: plainError,
+    },
     assign_project: {
       admission: "ordinary",
       run: ({ cwd, sessionId, projectId }) => registry.assignProject(cwd, sessionId, projectId),

@@ -39,11 +39,12 @@ export type ProjectCommandId =
   | "new-session"
   | "open-project"
   | "edit"
+  | "instructions"
   | "delete"
   | "new-project"
   | "assign";
 
-export type ProjectCommandIcon = "new" | "edit" | "delete" | "folder" | "remove";
+export type ProjectCommandIcon = "new" | "edit" | "instructions" | "delete" | "folder" | "remove";
 
 export type ProjectCommandIntent =
   /** Open the New session page for the project; it sends nothing. */
@@ -54,6 +55,8 @@ export type ProjectCommandIntent =
   | { kind: "project-dialog"; dialog: ProjectDialog }
   /** Ask before deleting the project. */
   | { kind: "delete-project"; project: Project }
+  /** Open the project's instructions to edit. */
+  | { kind: "project-instructions"; project: Project }
   /** Send this registry change. */
   | { kind: "send"; command: ClientCommand };
 
@@ -68,10 +71,10 @@ export interface ProjectCommand {
 }
 
 /**
- * What a project row offers, in order: New session in the project, Edit, then Delete. Enablement,
- * one rule per command:
+ * What a project row offers, in order: New session in the project, Edit, Edit instructions, then
+ * Delete. Enablement, one rule per command:
  * - new session: always; it only opens the New session page, whose send waits for a connection.
- * - edit, delete: connected, since each changes the registry.
+ * - edit, instructions, delete: connected, since each changes the registry.
  */
 export function projectCommands(state: AppState, project: Project): ProjectCommand[] {
   return [
@@ -90,6 +93,7 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
       enabled: state.connected,
       intent: { kind: "project-dialog", dialog: { project } },
     },
+    projectInstructionsCommand(state, project),
     {
       id: "delete",
       label: "Delete project",
@@ -98,6 +102,17 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
       intent: { kind: "delete-project", project },
     },
   ];
+}
+
+/** Edit instructions: the dialog for what Pi adds to the system prompt of `project`'s sessions. */
+export function projectInstructionsCommand(state: AppState, project: Project): ProjectCommand {
+  return {
+    id: "instructions",
+    label: "Edit instructions",
+    icon: "instructions",
+    enabled: state.connected,
+    intent: { kind: "project-instructions", project },
+  };
 }
 
 /** One command of `project`'s. */

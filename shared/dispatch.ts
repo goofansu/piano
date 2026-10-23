@@ -173,3 +173,7 @@ export const DISPATCHED_FROM_FLAG = "piano-dispatched-from";
 /** The launch environment that tells the extension how to reach the Piano that spawned it. */
 export const SESSION_WS_URL = "PIANO_SESSION_WS_URL";
 export const SESSION_ORIGIN = "PIANO_SESSION_ORIGIN";
+/** The session's project instructions, set for each launch of a project member's Pi. */
+export const PROJECT_INSTRUCTIONS_ENV = "PIANO_PROJECT_INSTRUCTIONS";
+/** The system prompt section the extension puts them in. */
+export const PROJECT_INSTRUCTIONS_SECTION = "project_instructions";

@@ -201,6 +201,33 @@ test("deleting a project asks first, saying its sessions are kept, in no project
   );
 });
 
+test("instructions save trimmed, clear when blank, and refuse a save that changes nothing", () => {
+  const guided: AppState = {
+    ...online,
+    projects: [{ ...launch, instructions: "Answer in French." }],
+  };
+  const form: CommandForm = { kind: "project-instructions", project: guided.projects[0]! };
+  assert.deepEqual(answerForm(guided, form, "  Answer in German.\n"), {
+    allowed: true,
+    command: { _tag: "set_project_instructions", id: "p1", instructions: "Answer in German." },
+  });
+  assert.deepEqual(answerForm(guided, form, " \n "), {
+    allowed: true,
+    command: { _tag: "set_project_instructions", id: "p1", instructions: null },
+  });
+  for (const text of ["Answer in French.", " Answer in French. \n"])
+    assert.deepEqual(answerForm(guided, form, text), { allowed: false }, JSON.stringify(text));
+  assert.deepEqual(answerForm({ ...guided, connected: false }, form, "Other"), { allowed: false });
+  const empty: CommandForm = { kind: "project-instructions", project: launch };
+  assert.deepEqual(answerForm(online, empty, ""), { allowed: false }, "none to none");
+});
+
+test("the instructions form opens on the saved instructions", () => {
+  const { subject } = forms();
+  subject.open({ kind: "project-instructions", project: { ...launch, instructions: "Be brief." } });
+  assert.equal(subject.getState().text, "Be brief.");
+});
+
 test("deleting the project on screen leaves for the New page; deleting another stays put", () => {
   for (const [view, leaves] of [
     [{ kind: "project", projectId: "p1" }, true],

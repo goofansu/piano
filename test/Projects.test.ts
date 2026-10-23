@@ -12,6 +12,35 @@ import {
 } from "../server/Registry.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
+test("a project's instructions are saved trimmed, kept by a rename, cleared when blank, across a restart", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "piano-projects-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = join(root, "registry.db");
+  seedRegistry(path, { projects: [{ id: "launch", name: "Launch" }] });
+  const run = <A, E>(effect: Effect.Effect<A, E, Registry>) =>
+    Effect.runPromise(
+      effect.pipe(Effect.provide(RegistryLive), Effect.provideService(RegistryDatabasePath, path)),
+    );
+  const projects = () => run(Effect.flatMap(Registry, (r) => r.get)).then((d) => d.projects);
+  await run(
+    Effect.flatMap(Registry, (r) =>
+      Effect.andThen(
+        r.setProjectInstructions("launch", "\n  Answer in French.\nKeep it short.  \n"),
+        r.saveProject({ id: "launch", name: "Launch v2" }),
+      ),
+    ),
+  );
+  assert.deepEqual(await projects(), [
+    { id: "launch", name: "Launch v2", instructions: "Answer in French.\nKeep it short." },
+  ]);
+  await run(Effect.flatMap(Registry, (r) => r.setProjectInstructions("launch", "   ")));
+  assert.deepEqual(await projects(), [{ id: "launch", name: "Launch v2" }]);
+  const failure = await run(
+    Effect.flatMap(Registry, (r) => r.setProjectInstructions("missing", "x").pipe(Effect.flip)),
+  );
+  assert.match(failure.message, /Project is unavailable/);
+});
+
 test("INV-01/07: deleting a project keeps its sessions, in no project, across a restart", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "piano-projects-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

@@ -9,7 +9,7 @@ const schema = `
   INSERT INTO registry_meta VALUES (1, 0);
   CREATE TABLE projects (
     id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL CHECK (length(trim(name)) > 0),
-    position INTEGER NOT NULL
+    position INTEGER NOT NULL, instructions TEXT
   ) STRICT;
   CREATE TABLE workspaces (
     id TEXT PRIMARY KEY NOT NULL CHECK (length(id) > 0), path TEXT NOT NULL UNIQUE,
@@ -67,11 +67,15 @@ const pullRequestState = (link: Item<"sessions">["pullRequest"]) =>
 const codecs: { readonly [K in Collection]: Table<K> } = {
   projects: {
     name: "projects",
-    columns: ["id", "name", "position"],
+    columns: ["id", "name", "instructions", "position"],
     keys: 1,
     key: (p) => [p.id],
-    encode: (p, i) => [p.id, p.name, i],
-    decode: (r) => ({ id: r.id as string, name: r.name as string }),
+    encode: (p, i) => [p.id, p.name, p.instructions ?? null, i],
+    decode: (r) => ({
+      id: r.id as string,
+      name: r.name as string,
+      ...(r.instructions === null ? {} : { instructions: r.instructions as string }),
+    }),
   },
   workspaces: {
     name: "workspaces",
@@ -292,7 +296,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 6 &&
         version !== 7 &&
         version !== 8 &&
-        version !== 9
+        version !== 9 &&
+        version !== 10
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -317,6 +322,14 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           .get();
         if (archive) db.exec("ALTER TABLE projects DROP COLUMN archived;");
         db.exec("PRAGMA user_version = 9;");
+      }
+      // Version 10 adds project instructions; a database created since already has the column.
+      if (Number(version) < 10) {
+        const instructions = db
+          .prepare("SELECT 1 FROM pragma_table_info('projects') WHERE name = 'instructions'")
+          .get();
+        if (!instructions) db.exec("ALTER TABLE projects ADD COLUMN instructions TEXT;");
+        db.exec("PRAGMA user_version = 10;");
       }
       db.exec("COMMIT");
     } catch (error) {

@@ -1,7 +1,9 @@
 import { type ComponentProps, useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
+import { useCommands } from "@/components/CommandHost";
 import { NewSessionComposer } from "@/components/NewSession";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
+import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
   Item,
@@ -13,6 +15,7 @@ import {
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
+import { projectInstructionsCommand } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
@@ -83,6 +86,7 @@ export function ProjectHome({
   projectId: string;
 }) {
   const { select } = useNavigation();
+  const { run } = useCommands();
   const home = projectHome(state, projectId);
   const order = useStableOrder(home.kind === "home" ? home.sessions.map(sessionKey) : []);
 
@@ -101,6 +105,7 @@ export function ProjectHome({
     );
 
   const { project } = home;
+  const editInstructions = projectInstructionsCommand(state, project);
   const byKey = new Map(home.sessions.map((s) => [sessionKey(s), s]));
   const sessions = order.flatMap((key) => byKey.get(key) ?? []);
   const now = Date.now();
@@ -125,6 +130,25 @@ export function ProjectHome({
             projectId={project.id}
             placeholder={`New session in ${project.name}`}
           />
+          <Item variant="outline" size="sm" className="flex-nowrap">
+            <ItemContent className="min-w-0">
+              <ItemTitle>Instructions</ItemTitle>
+              <ItemDescription className="truncate text-xs">
+                {project.instructions?.split("\n", 1)[0] ?? "None"}
+              </ItemDescription>
+            </ItemContent>
+            <ItemActions>
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label={editInstructions.label}
+                disabled={!editInstructions.enabled}
+                onClick={() => run(editInstructions)}
+              >
+                Edit
+              </Button>
+            </ItemActions>
+          </Item>
           {sessions.length > 0 && (
             <ItemGroup aria-label="Sessions" className="gap-2">
               {sessions.map((s) => (

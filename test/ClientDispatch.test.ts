@@ -590,6 +590,10 @@ const refusals: {
     { _tag: "delete_project", id: "p" },
     { _tag: "error", message: "REFUSED" },
   ],
+  set_project_instructions: [
+    { _tag: "set_project_instructions", id: "p", instructions: "Be brief." },
+    { _tag: "error", message: "REFUSED" },
+  ],
   assign_project: [
     { _tag: "assign_project", cwd, sessionId: "x", projectId: null },
     { _tag: "error", message: "REFUSED" },

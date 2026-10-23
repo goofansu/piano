@@ -49,6 +49,7 @@ type Record = {
   command?: string;
   text?: string;
   previewOwner?: string;
+  instructions?: string;
 };
 const records = (id: string): Record[] =>
   readFileSync(audit, "utf8")
@@ -809,6 +810,37 @@ test("INV-01/02: a project deleted after preflight refuses registration before P
       assert.deepEqual(yield* hosts.list, [], "no rejected child is started");
     }),
     { fakePi: "create-raced" },
+  );
+});
+
+test("a member session's Pi gets its project's instructions at each launch; other sessions get none", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      const launches = (id: string) =>
+        records(id)
+          .filter((r) => r.event === "spawn")
+          .map((r) => r.instructions ?? null);
+      yield* registry.saveProject({ id: "guided", name: "Guided" });
+      yield* registry.setProjectInstructions("guided", "Answer in French.");
+      const member = (yield* hosts.create({ cwd, projectId: "guided", options: {} })).spec
+        .sessionId;
+      const loose = (yield* hosts.create({ cwd, options: {} })).spec.sessionId;
+      assert.deepEqual(launches(member), ["Answer in French."]);
+      assert.deepEqual(launches(loose), [null]);
+
+      yield* registry.setProjectInstructions("guided", "Answer in German.");
+      assert.deepEqual(launches(member), ["Answer in French."], "a running Pi is not restarted");
+      yield* hosts.release(cwd, member);
+      yield* hosts.open({ cwd, sessionId: member });
+      assert.deepEqual(launches(member), ["Answer in French.", "Answer in German."]);
+
+      yield* registry.assignProject(cwd, member, null);
+      yield* hosts.release(cwd, member);
+      yield* hosts.open({ cwd, sessionId: member });
+      assert.equal(launches(member).at(-1), null, "a session that left the project gets none");
+    }),
   );
 });
 

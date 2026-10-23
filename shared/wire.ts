@@ -498,9 +498,17 @@ export const sameWorkspace = (a: Workspace, b: Workspace) =>
 
 // ── Sidebar views ───────────────────────────────────────────────────────────
 
+/** Project instructions' length limit, in UTF-16 code units, as the browser counts them. */
+export const PROJECT_INSTRUCTIONS_MAX = 20_000;
+export const ProjectInstructions = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(PROJECT_INSTRUCTIONS_MAX),
+);
 export const Project = Schema.Struct({
   id: Schema.String.check(Schema.isMinLength(1)),
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+  /** Added to Pi's system prompt for the project's sessions whenever Piano starts their Pi. */
+  instructions: Schema.optional(ProjectInstructions),
 });
 export type Project = typeof Project.Type;
 /** A session's pull request as the registry saves it; GitHub owns the facts behind it. */
@@ -755,6 +763,11 @@ export const ClientMessage = Schema.Union([
   }),
   /** Delete a project; its sessions stay, in no project. */
   Schema.TaggedStruct("delete_project", { id: Schema.String }),
+  /** Replace a project's instructions; null clears them. */
+  Schema.TaggedStruct("set_project_instructions", {
+    id: Schema.String,
+    instructions: Schema.NullOr(ProjectInstructions),
+  }),
   Schema.TaggedStruct("assign_project", {
     cwd: Schema.String,
     sessionId: Schema.String,

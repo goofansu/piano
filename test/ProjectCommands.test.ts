@@ -39,10 +39,10 @@ test("the sidebar's menu leaves out the current project; the New page keeps it",
   assert.deepEqual(newPage(launch), ["Billing", "Launch"], "the current project is not repeated");
 });
 
-test("a project offers New session in it, Edit and Delete, which asks before it sends", () => {
+test("a project offers New session in it, Edit, Edit instructions and Delete, which asks before it sends", () => {
   assert.deepEqual(
     projectCommands(state, launch).map((c) => c.label),
-    ["New session in project", "Edit project", "Delete project"],
+    ["New session in project", "Edit project", "Edit instructions", "Delete project"],
   );
   assert.deepEqual(byId(launch)["new-session"]?.intent, { kind: "new-session", projectId: "p1" });
   assert.deepEqual(byId(launch).delete?.intent, { kind: "delete-project", project: launch });

@@ -16,6 +16,10 @@ keeps its sessions, in no project; unknown IDs show "Project not found".
   sending opens the new session, which joins the project.
 - `header`: the pane header names the project with its session count beneath ("1 session").
 - `empty`: a project with no sessions shows its header ("0 sessions") and the composer on "Choose a folder".
+- `instructions`: the Instructions row under the composer shows the first line, or "None"; its
+  "Edit instructions" button (also in the project menu and Mod+K on the home) opens a textarea
+  dialog. What reaches Pi needs the real Pi: fake Pi ignores the extension, so check the model's
+  request with a scripted loopback model, as `test/fixtures/RealPiDispatch.ts` does.
 - `delete`: the project menu's "Delete project" asks first, saying how many sessions are kept; on
   the project's own home, confirming leaves for the New page.
 - `missing`: an unknown ID shows the alert "Project not found".

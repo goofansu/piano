@@ -26,6 +26,7 @@ type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
 import type { PreviewAdapter, PreviewConfig } from "../scripts/PreviewAdapter.ts";
 import { PreviewOwner } from "../scripts/PreviewOwner.ts";
+import { PROJECT_INSTRUCTIONS_ENV } from "../shared/dispatch.ts";
 import { withLastKnownStats } from "../shared/sessionProjection.ts";
 import { liveActivityOf } from "../shared/sessionStatus.ts";
 import type {
@@ -81,6 +82,8 @@ export interface PiSessionSpec {
   readonly dispatchedFrom?: string;
   /** Seed only display statistics while Pi's authoritative readback is pending. */
   readonly lastKnownStats?: SessionStats;
+  /** The session's project instructions, which Piano's extension adds to Pi's system prompt. */
+  readonly projectInstructions?: string;
 }
 
 export interface PiSession {
@@ -304,7 +307,14 @@ const openSession = (spec: PiSessionSpec) =>
           )
         : undefined;
     const child = yield* PiTransport.spawn(sessionArgs(spec), spec.cwd, {
-      env: preview ? { PIANO_PREVIEW_OWNER: preview.identity.endpoint } : {},
+      env: {
+        ...(preview ? { PIANO_PREVIEW_OWNER: preview.identity.endpoint } : {}),
+        // In the environment, not argv: Pi's own --append-system-prompt would replace the
+        // directory's APPEND_SYSTEM.md, and argv shows in other users' process listings.
+        ...(spec.projectInstructions
+          ? { [PROJECT_INSTRUCTIONS_ENV]: spec.projectInstructions }
+          : {}),
+      },
       onExit: () => preview?.disconnect(),
     });
     const sessionScope = yield* Effect.scope;

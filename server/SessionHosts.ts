@@ -264,8 +264,22 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                   .addSession(ref.cwd, spec.sessionId, spec.name, creation.projectId)
                   .pipe(Effect.mapError((e) => rejected(e.detail)));
               const lock = yield* lockFor(key);
+              // The project's instructions as of this launch; an edit reaches the next one.
+              const data = yield* registry.get;
+              const projectId = data.sessions.find(
+                (s) => s.cwd === ref.cwd && s.sessionId === spec.sessionId,
+              )?.projectId;
+              const projectInstructions = data.projects.find(
+                (p) => p.id === projectId,
+              )?.instructions;
               const host: SessionHost = yield* makeSessionHost({
-                spec: { ...spec, cwd: ref.cwd, sessionFile: ref.file, lastKnownStats: ref.stats },
+                spec: {
+                  ...spec,
+                  cwd: ref.cwd,
+                  sessionFile: ref.file,
+                  lastKnownStats: ref.stats,
+                  projectInstructions,
+                },
                 lock,
                 onChange: announce,
                 // Retire only this incarnation. A late event must never close a replacement.

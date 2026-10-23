@@ -265,8 +265,13 @@ export class Registry extends Context.Service<
      * change announcement, and an unregistered session rejects the whole save.
      */
     readonly saveProject: (
-      project: Project,
+      project: Pick<Project, "id" | "name">,
       assign?: { readonly cwd: string; readonly sessionId: string },
+    ) => Effect.Effect<void, RegistryError>;
+    /** Replace a project's instructions, trimmed; null or blank clears them. */
+    readonly setProjectInstructions: (
+      id: string,
+      instructions: string | null,
     ) => Effect.Effect<void, RegistryError>;
     /** Remove a project in one write; its sessions stay registered, in no project. */
     readonly deleteProject: (id: string) => Effect.Effect<void, RegistryError>;
@@ -484,7 +489,9 @@ export const RegistryLive = Layer.effect(
             throw new RegistryError({
               detail: "Session reference is unavailable. Refresh and try again.",
             });
-          const next = { ...parsed, name: parsed.name.trim() };
+          // Renaming keeps the project's instructions; only `setProjectInstructions` changes them.
+          const existing = d.projects.find((p) => p.id === parsed.id);
+          const next = { ...existing, id: parsed.id, name: parsed.name.trim() };
           const projects = d.projects.some((p) => p.id === next.id)
             ? d.projects.map((p) => (p.id === next.id ? next : p))
             : [...d.projects, next];
@@ -494,6 +501,20 @@ export const RegistryLive = Layer.effect(
               )
             : d.sessions;
           return { ...d, projects, sessions };
+        }),
+      setProjectInstructions: (id, instructions) =>
+        update((d) => {
+          if (!d.projects.some((p) => p.id === id))
+            throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
+          const text = instructions?.trim();
+          return {
+            ...d,
+            projects: d.projects.map((p) => {
+              if (p.id !== id || p.instructions === (text || undefined)) return p;
+              const { instructions: _, ...rest } = p;
+              return text ? { ...rest, instructions: text } : rest;
+            }),
+          };
         }),
       deleteProject: (id) =>
         update((d) => {
