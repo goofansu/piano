@@ -264,6 +264,7 @@ export function CommandHost({
         <DialogContent
           className="sm:max-w-md"
           showCloseButton={false}
+          aria-describedby={undefined}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             renameInputRef.current?.focus();
@@ -278,9 +279,6 @@ export function CommandHost({
           >
             <DialogHeader>
               <DialogTitle>Rename session</DialogTitle>
-              <DialogDescription>
-                Pi records the name with the session, so it also appears in Pi's own session list.
-              </DialogDescription>
             </DialogHeader>
             <FieldGroup>
               <Field>

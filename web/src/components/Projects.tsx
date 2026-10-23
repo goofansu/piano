@@ -27,7 +27,7 @@ import {
   DropdownMenuSubTrigger,
 } from "@/components/PianoDropdownMenu";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type {
   ProjectCommand,
@@ -161,8 +161,10 @@ export function ProjectDialogView({
   const nameInput = useRef<HTMLInputElement>(null);
   return (
     <Dialog open={open} onOpenChange={(open) => !open && close()}>
+      {/* One field, shaped as Rename session is: the title names it, Cancel closes it. */}
       <DialogContent
         className="sm:max-w-md"
+        showCloseButton={false}
         aria-describedby={undefined}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
@@ -181,12 +183,13 @@ export function ProjectDialogView({
           </DialogHeader>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="project-name">Name</FieldLabel>
               <Input
                 id="project-name"
                 ref={nameInput}
+                aria-label="Project name"
                 value={name}
                 onChange={(e) => edit(e.target.value)}
+                onFocus={(event) => event.target.select()}
                 maxLength={200}
                 required
               />
