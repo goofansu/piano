@@ -58,10 +58,28 @@ encodes the scratch path.
 
 ## Design
 
-Follow Codex/T3 Code's **quiet UI**: show only what helps users decide or act — useful values,
-essential controls, concise status. Internal state and diagnostics go in on-demand details, if
-anywhere. Show a persistent warning only for a problem the user can act on; keep correctness in
-state handling and regression checks.
+Follow Linear's design and interaction language (see [the Linear notes](docs/design-moonstone.md#linear)
+and Linear's [agent interaction guidelines](https://linear.app/developers/aig)); Codex and T3 Code
+remain references for the web harness around Pi, not for how Piano looks. The **quiet UI** rule
+still holds: show only what helps users decide or act — useful values, essential controls, concise
+status. Internal state and diagnostics go in on-demand details, if anywhere. Show a persistent
+warning only for a problem the user can act on; keep correctness in state handling and regression
+checks.
+
+Make each screen **self-evident** (Krug's "don't make me think"): the user learns what a page does
+from its structure, names and defaults, so a row's name, its controls and its state carry the
+explanation. Prose about the screen is the sign a name or layout needs work. Where a fact still
+needs words, the words sit beside the control they explain (a field's description, an empty state's
+one line, a dialog's description line) or wait in a Details popover.
+
+Shared structure, so every pane reads as one app: one header shape on the session, the right
+sidebar and Settings (a title with its context beneath, controls at the end); one status glyph, `StatusDot`,
+for every state (an app preview, a webhook delivery), breathing (`pulse`) only while something is
+in progress, and each state shown once: the sidebar row owns a session's state, so the header
+repeats nothing; a refresh control turns its own icon while it reads; Settings pages are
+`SettingsGroup`s and `SettingsList`s of hairline-divided rows, with no intro line (the rows say
+what the page does), row actions as `outline` buttons and the page's one primary action in its
+header.
 
 Build UI from shadcn/ui components (the `shadcn` skill: search the registry, add with
 `npx shadcn@latest add`). Hand-written markup is for the case where no standard component exists,
