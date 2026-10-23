@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { returnFocusForKeyboard } from "@/lib/pointerClose";
 import {
   type PullRequestView,
   pullRequestForm,
@@ -212,8 +213,12 @@ export function SessionPullRequestControl({
     if (showingDetails) closeRef.current?.focus();
   }, [showingDetails]);
   const onOpenChange = (open: boolean) => (open ? pr.open() : pr.close());
-  // Closing returns to whichever control can reopen this: the PR button once linked, else the menu.
+  // A keyboard close returns focus to whichever control can reopen this: the PR button once
+  // linked, else the menu. A pointer close leaves focus where the click put it; moving it would
+  // dismiss the non-modal menu that the click just opened.
   const restoreFocus = (event: Event) => {
+    returnFocusForKeyboard(event);
+    if (event.defaultPrevented) return;
     event.preventDefault();
     (view ? triggerRef : menuTrigger).current?.focus();
   };
