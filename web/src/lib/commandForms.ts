@@ -9,10 +9,9 @@
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { SessionShare } from "../../../shared/share.ts";
-import { type ClientCommand, PROJECT_INSTRUCTIONS_MAX } from "../../../shared/wire.ts";
+import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
-import { findProject } from "./projectCommands.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
 import { sessionMutable, sessionWorking, workspaceFor } from "./sessionContext.ts";
 import { sessionHasPreview } from "./sessionPreview.ts";
@@ -37,7 +36,7 @@ export interface AnswerContext {
   newId?: () => string;
 }
 
-/** Answer `form` with its text input (the session title, project name or instructions; unused by confirmations). */
+/** Answer `form` with its text input (the session title or project name; unused by confirmations). */
 export function answerForm(
   state: AppState,
   form: CommandForm,
@@ -79,25 +78,6 @@ export function answerForm(
     case "close-folder":
       if (!state.connected) return { allowed: false };
       return { allowed: true, command: { _tag: "remove_folder", path: form.folder.path } };
-    case "project-instructions": {
-      // Compared with the instructions as saved now, not as they were when the form opened.
-      const saved = findProject(state, form.project.id)?.instructions ?? "";
-      const instructions = text.trim();
-      if (
-        !state.connected ||
-        instructions === saved ||
-        instructions.length > PROJECT_INSTRUCTIONS_MAX
-      )
-        return { allowed: false };
-      return {
-        allowed: true,
-        command: {
-          _tag: "set_project_instructions",
-          id: form.project.id,
-          instructions: instructions || null,
-        },
-      };
-    }
     case "delete-project":
       if (!state.connected) return { allowed: false };
       return {
@@ -198,7 +178,6 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
     case "rename-session":
     case "share-session":
     case "project":
-    case "project-instructions":
       return undefined;
   }
 }
@@ -212,7 +191,7 @@ export type SharePhase =
 export interface CommandFormsState {
   /** The open form; `null` when none is. */
   form: CommandForm | null;
-  /** The form's text input: the session title, project name or project instructions. */
+  /** The form's text input: the session title or project name. */
   text: string;
   /** The share form's phase; `confirm` for every other form. */
   share: SharePhase;
@@ -307,9 +286,7 @@ export function createCommandForms({
             ? (form.target.title ?? "")
             : form.kind === "project"
               ? (form.dialog.project?.name ?? "")
-              : form.kind === "project-instructions"
-                ? (form.project.instructions ?? "")
-                : "",
+              : "",
         share: { phase: "confirm" },
       }),
     edit: (text) => {

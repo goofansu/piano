@@ -189,6 +189,20 @@ test("a project's address opens its home; its New page has an address of its own
   assert.deepEqual(fresh.client.getState().view, { kind: "new", projectId: "p1" });
 });
 
+test("a project's settings page has its own address and title, and Back returns to its home", () => {
+  const p = page("/projects/p1");
+  p.registry();
+  p.navigation.openProjectSettings("p1");
+  assert.deepEqual(p.entries, ["/projects/p1", "/projects/p1/settings"]);
+  assert.deepEqual(p.client.getState().view, { kind: "project-settings", projectId: "p1" });
+  assert.equal(p.title(), "Launch settings - Piano");
+  p.back();
+  assert.deepEqual(p.client.getState().view, { kind: "project", projectId: "p1" });
+
+  const direct = page("/projects/p1/settings");
+  assert.deepEqual(direct.client.getState().view, { kind: "project-settings", projectId: "p1" });
+});
+
 test("back and forward apply the address bar's route; back onto the same New page keeps its directory", () => {
   const p = page("/new");
   p.registry();

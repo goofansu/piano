@@ -41,7 +41,7 @@ test("a disabled command does nothing, whichever surface offers it", () => {
   const offline = { ...online, connected: false };
   const disabled: Command[] = [
     trustCommand(offline, "/repo")!,
-    ...projectCommands(offline, launch).filter((c) => c.id !== "new-session"),
+    ...projectCommands(offline, launch).filter((c) => c.id === "delete"),
     newProjectCommand(offline),
     assignProjectCommand(offline, other, "p1"),
     folderCommands(offline, folder).close,
@@ -79,10 +79,7 @@ test("enabled commands reach the effect their intent names", () => {
       ),
       ["openNew", undefined, "p1"],
     ],
-    [
-      byId(projectCommands(online, launch), "edit"),
-      ["openForm", { kind: "project", dialog: { project: launch } }],
-    ],
+    [byId(projectCommands(online, launch), "settings"), ["openProjectSettings", "p1"]],
     [
       byId(projectCommands(online, launch), "delete"),
       ["openForm", { kind: "delete-project", project: launch }],

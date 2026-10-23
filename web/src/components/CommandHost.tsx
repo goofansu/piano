@@ -28,7 +28,7 @@ import {
   DialogTitle,
 } from "@/components/PianoDialog";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
-import { ProjectDialogView, ProjectInstructionsDialogView } from "@/components/Projects";
+import { ProjectDialogView } from "@/components/Projects";
 import { PreviewDetailsDialog } from "@/components/SessionPreview";
 import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
@@ -171,8 +171,15 @@ export function CommandHost({
   send: (command: ClientCommand) => void;
   children: React.ReactNode;
 }) {
-  const { openNew, openProject, openPanel, openSettings, closeSettings, settings } =
-    useNavigation();
+  const {
+    openNew,
+    openProject,
+    openProjectSettings,
+    openPanel,
+    openSettings,
+    closeSettings,
+    settings,
+  } = useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [changesWrap, setChangesWrap] = useChangesWrap();
   const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
@@ -195,7 +202,6 @@ export function CommandHost({
   const asking = form ? confirmation(state, form) : undefined;
   const sharing = form?.kind === "share-session";
   const project = form?.kind === "project" ? form.dialog : undefined;
-  const instructions = form?.kind === "project-instructions" ? form.project : undefined;
   // The app whose details are open; another app, even in the same session, never reopens them.
   const [previewDetails, setPreviewDetails] = useState<string | null>(null);
 
@@ -205,6 +211,7 @@ export function CommandHost({
     openSettings,
     openNew,
     openProject,
+    openProjectSettings,
     openPanel,
     toggleSidebar: sidebar.toggle,
     setView,
@@ -314,14 +321,6 @@ export function CommandHost({
         open={!!project}
         dialog={project}
         name={forms.text}
-        allowed={answer.allowed}
-        edit={forms.edit}
-        submit={forms.submit}
-        close={close}
-      />
-      <ProjectInstructionsDialogView
-        project={instructions}
-        instructions={forms.text}
         allowed={answer.allowed}
         edit={forms.edit}
         submit={forms.submit}

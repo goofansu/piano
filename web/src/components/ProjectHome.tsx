@@ -1,9 +1,10 @@
 import { type ComponentProps, useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
+import { IconButton } from "@/components/IconButton";
 import { NewSessionComposer } from "@/components/NewSession";
+import { ProjectCommandIconView } from "@/components/Projects";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
-import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
   Item,
@@ -15,7 +16,7 @@ import {
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
-import { projectInstructionsCommand } from "@/lib/projectCommands";
+import { projectSettingsCommand } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
@@ -31,7 +32,7 @@ const page =
   "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:px-6 md:py-8";
 
 /** The pane's header, shaped like the session header: the name with a line beneath it, actions at the end. */
-function ProjectHeader({
+export function ProjectHeader({
   children,
   actions,
 }: {
@@ -105,7 +106,7 @@ export function ProjectHome({
     );
 
   const { project } = home;
-  const editInstructions = projectInstructionsCommand(state, project);
+  const settings = projectSettingsCommand(project);
   const byKey = new Map(home.sessions.map((s) => [sessionKey(s), s]));
   const sessions = order.flatMap((key) => byKey.get(key) ?? []);
   const now = Date.now();
@@ -113,7 +114,13 @@ export function ProjectHome({
   const count = sessions.length;
   return (
     <>
-      <ProjectHeader>
+      <ProjectHeader
+        actions={
+          <IconButton label={settings.label} onClick={() => run(settings)}>
+            <ProjectCommandIconView icon={settings.icon} />
+          </IconButton>
+        }
+      >
         <h1 className="truncate text-sm font-medium">{project.name}</h1>
         {/* Plain project metadata has no dedicated UI primitive. */}
         <p className="truncate text-xs text-ink-3">
@@ -130,25 +137,6 @@ export function ProjectHome({
             projectId={project.id}
             placeholder={`New session in ${project.name}`}
           />
-          <Item variant="outline" size="sm" className="flex-nowrap">
-            <ItemContent className="min-w-0">
-              <ItemTitle>Instructions</ItemTitle>
-              <ItemDescription className="truncate text-xs">
-                {project.instructions?.split("\n", 1)[0] ?? "None"}
-              </ItemDescription>
-            </ItemContent>
-            <ItemActions>
-              <Button
-                variant="outline"
-                size="sm"
-                aria-label={editInstructions.label}
-                disabled={!editInstructions.enabled}
-                onClick={() => run(editInstructions)}
-              >
-                Edit
-              </Button>
-            </ItemActions>
-          </Item>
           {sessions.length > 0 && (
             <ItemGroup aria-label="Sessions" className="gap-2">
               {sessions.map((s) => (
