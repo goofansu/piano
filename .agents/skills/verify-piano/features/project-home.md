@@ -11,9 +11,11 @@ so and offer Unarchive; unknown IDs show "Project not found".
 - `open-from-sidebar`: with sidebar Group by Project, "Project menu for <name>" → "Open project".
 - `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
 - `member-cards`: one `button[data-slot=item]` card per member session; clicking opens `/s/<id>`.
-- `new-in-project`: "New session in project" opens `/projects/<id>/new` with the project chosen.
-- `header`: the pane header names the project with its session count beneath ("1 session"; "· Archived" when archived) and holds "New session in project".
-- `empty`: a project with no sessions shows only its header ("0 sessions") and "New session in project".
+- `new-in-project`: the composer above the cards ("First message", placeholder "New session in
+  <name>") starts in the folder of the most recently active member, at the folder's own checkout;
+  sending opens the new session, which joins the project.
+- `header`: the pane header names the project with its session count beneath ("1 session"; "· Archived" when archived).
+- `empty`: a project with no sessions shows its header ("0 sessions") and the composer on "Choose a folder".
 - `archived`: "This project is archived." with an "Unarchive project" button.
 - `missing`: an unknown ID shows the alert "Project not found".
 
@@ -36,7 +38,7 @@ Preconditions: a seeded launch (`$S/launch.sh`), `. "$RUN/run.env"`, doctor pass
     ab find role button click --name "Project: Verify Project" --exact; ab wait --url "**/projects/verify"`
   - Result: `ab get url` ends in `/projects/verify`, `ab get title` is `Verify Project - Piano`, and
     `ab eval "document.querySelector('main').innerText"` starts with `Verify Project` and
-    `New session in project`. Capture `02-home`.
+    `1 session`, then the composer's directory `repo`. Capture `02-home`.
 - `member-cards`
   - Action: read the cards, then open the only one.
     `ab eval "[...document.querySelectorAll('main button[data-slot=item]')].map(b => b.innerText.replace(/\n+/g, ' | '))"`;
@@ -54,7 +56,7 @@ Preconditions: a seeded launch (`$S/launch.sh`), `. "$RUN/run.env"`, doctor pass
     project" and no "Archived Project". Capture `04-empty`.
 - `empty`
   - Action: read the page.
-  - Result: main text is exactly `Empty Project` / `New session in project`.
+  - Result: main text starts `Empty Project` / `0 sessions` / `Choose a folder`, and no card.
 - `open-from-palette`
   - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4."; ab press Control+k;
     ab wait "[cmdk-input]"; ab fill "[cmdk-input]" "open project";
@@ -63,10 +65,11 @@ Preconditions: a seeded launch (`$S/launch.sh`), `. "$RUN/run.env"`, doctor pass
   - Result: `/projects/verify`. On `/s/verify-loose` (no project) the same query offers no "Open
     project" row, only "Add to project: ..." rows.
 - `new-in-project`
-  - Action: on `/projects/verify`, `ab find role button click --name "New session in project" --exact;
-    ab wait --url "**/projects/verify/new"`
-  - Result: heading `Verify Project`, combobox "Directory" reading "Choose a folder", the "Project"
-    button and combobox "First message". Capture `05-new-in-project`.
+  - Action: on `/projects/verify`, `ab fill '[aria-label="First message"]' "from project home";
+    ab click '[aria-label="Send"]'; ab wait --text "echo: from project home"`
+  - Result: combobox "Directory" read `repo` before sending, and no "Project" button; the send
+    lands on `/s/<new id>`, and back on `/projects/verify` the header reads `2 sessions` with the
+    new card first. Capture `05-new-in-project`. Sending changes the database; relaunch afterwards.
 - `archived`
   - Action: `ab open "$WEB_URL/projects/archived"; ab wait --text "This project is archived."`
   - Result: main text `Archived Project`, `This project is archived.`, `Unarchive project`.
