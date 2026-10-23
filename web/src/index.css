@@ -795,6 +795,11 @@
 [data-motion="pulse"] {
   animation: status-pulse 1.2s var(--ease-in-out) infinite;
 }
+/* A glyph that breathes for a read in flight waits as `.late-enter` does, so a quick read never
+ * flickers it; only a wait the user can feel shows motion. */
+[data-motion="pulse"][data-late] {
+  animation-delay: 600ms;
+}
 @keyframes status-pulse {
   0%,
   100% {

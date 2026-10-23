@@ -109,6 +109,17 @@ test("the trigger names the PR by number with its status, else reads as PR", () 
     ariaDescription: "Status unavailable",
     tooltip: "Pull request",
   });
+  assert.deepEqual(pullRequestTrigger(pullRequestView(linked(null), now)!, true), {
+    label: "#42",
+    ariaLabel: "Pull request #42",
+    ariaDescription: "Loading",
+    tooltip: "Pull request",
+  });
+  assert.equal(
+    pullRequestTrigger(pullRequestView(linked(pr()), now)!, true).ariaDescription,
+    "Open",
+    "a refresh keeps the known status",
+  );
   const unnamed: SessionPullRequest = {
     link: { url: "https://github.com/", source: "manual" },
     pullRequest: null,

@@ -58,17 +58,24 @@ const signalIcons: Record<SignalOutcome, { Icon: LucideIcon; color: string }> = 
   review_required: { Icon: MessageSquareIcon, color: "text-muted-foreground" },
 };
 
-/** One associated PR, not transcript references or a decorative link stack. */
+/**
+ * One associated PR, not transcript references or a decorative link stack. Named from the
+ * registry's link as soon as the session has one; the icon breathes, as a status dot does, only
+ * while the user waits on a read: the first one, or one while the details are open. A refresh
+ * on returning to the tab or when work stops keeps valid facts on screen, so it is silent.
+ */
 function SessionPullRequestTrigger({
   view,
+  loading,
   ref,
 }: {
   view: PullRequestView;
+  loading: boolean;
   ref: React.Ref<HTMLButtonElement>;
 }) {
   const mobile = useIsMobile();
   const { status } = view;
-  const face = pullRequestTrigger(view);
+  const face = pullRequestTrigger(view, loading);
   const Icon = status ? states[status.state].Icon : GitPullRequestIcon;
   return (
     <Tooltip>
@@ -80,9 +87,12 @@ function SessionPullRequestTrigger({
             size={mobile ? "xs" : "sm"}
             aria-label={face.ariaLabel}
             aria-description={face.ariaDescription}
+            aria-busy={loading || undefined}
           >
             <Icon
               data-icon="inline-start"
+              data-motion={loading ? "pulse" : undefined}
+              data-late=""
               className={status ? states[status.state].color : "text-muted-foreground"}
               aria-hidden
             />{" "}
@@ -94,23 +104,6 @@ function SessionPullRequestTrigger({
         <p className="text-wrap">{face.tooltip}</p>
       </TooltipContent>
     </Tooltip>
-  );
-}
-
-/** Anchors details opened before the first read lands; the read replaces it with the real trigger. */
-function LoadingPullRequestTrigger({ ref }: { ref: React.Ref<HTMLButtonElement> }) {
-  const mobile = useIsMobile();
-  return (
-    <PopoverTrigger asChild>
-      <Button ref={ref} variant="ghost" size={mobile ? "xs" : "sm"} aria-label="Pull request">
-        <GitPullRequestIcon
-          data-icon="inline-start"
-          className="text-muted-foreground"
-          aria-hidden
-        />{" "}
-        PR
-      </Button>
-    </PopoverTrigger>
   );
 }
 
@@ -205,11 +198,15 @@ export function SessionPullRequestControl({
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const link = pr.value?.link;
-  const view = pullRequestView(pr.value);
+  // The registry's link names the PR before its first read lands; the read adds GitHub's facts.
+  const loaded = pr.value !== undefined;
+  const view = pullRequestView(
+    pr.value ?? (pr.registered ? { link: pr.registered, pullRequest: null } : undefined),
+  );
   const popoverOpen = pr.surface === "details" || pr.surface === "editing";
   // The registry's link decides that details show; until the first read lands they are loading.
   const showingDetails = pr.linked && pr.surface === "details";
+  const waiting = pr.loading && (!loaded || showingDetails);
   // Opening, cancel and successful discovery replace the focused form controls.
   useEffect(() => {
     if (showingDetails) closeRef.current?.focus();
@@ -218,7 +215,7 @@ export function SessionPullRequestControl({
   // Closing returns to whichever control can reopen this: the PR button once linked, else the menu.
   const restoreFocus = (event: Event) => {
     event.preventDefault();
-    (link ? triggerRef : menuTrigger).current?.focus();
+    (view ? triggerRef : menuTrigger).current?.focus();
   };
   return (
     <>
@@ -235,11 +232,7 @@ export function SessionPullRequestControl({
         </DialogContent>
       </Dialog>
       <Popover open={popoverOpen} onOpenChange={onOpenChange}>
-        {view ? (
-          <SessionPullRequestTrigger view={view} ref={triggerRef} />
-        ) : (
-          showingDetails && <LoadingPullRequestTrigger ref={triggerRef} />
-        )}
+        {view && <SessionPullRequestTrigger view={view} loading={waiting} ref={triggerRef} />}
         <PopoverContent
           onCloseAutoFocus={restoreFocus}
           align="start"
@@ -270,12 +263,12 @@ export function SessionPullRequestControl({
               <XIcon />
             </Button>
           </PopoverHeader>
-          {showingDetails && !view ? (
+          {showingDetails && !loaded ? (
             <PullRequestDetailsSkeleton />
           ) : view && showingDetails ? (
             <>
-              {/* Plain PR facts, not a second card inside the popover. */}
-              <div className="flex min-w-0 flex-col gap-2">
+              {/* Plain PR facts, not a second card inside the popover; they fade in over the skeleton they replace. */}
+              <div data-motion="fade" className="flex min-w-0 flex-col gap-2">
                 <PopoverTitle id={titleId}>
                   <a
                     href={view.url}

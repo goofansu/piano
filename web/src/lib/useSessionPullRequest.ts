@@ -49,6 +49,8 @@ export function useSessionPullRequest(
   return {
     value: current ? state.value : undefined,
     linked: current && state.linked,
+    registered: current ? state.link : undefined,
+    loading: current && state.loading,
     busy: current && state.busy,
     finding: current && state.finding,
     surface: current && panel.open ? state.surface : "closed",

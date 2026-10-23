@@ -30,6 +30,10 @@ export interface SessionPullRequestState {
   value: SessionPullRequest | undefined;
   /** The registry links the session; its details may show before the first read lands. */
   linked: boolean;
+  /** The registry's link, as the catalog reports it: the trigger names it before the first read lands. */
+  link: RegistryLink | null | undefined;
+  /** A read is in flight; with no `value` yet it is the first, which the trigger shows. */
+  loading: boolean;
   /** An explicit change is in flight. */
   busy: boolean;
   /** "Find from branch" is in flight. */
@@ -171,7 +175,7 @@ export function createSessionPullRequest({
     changing = false;
   const listeners = new Set<() => void>();
   const derive = (): SessionPullRequestState => {
-    const { key, value, error, mutating } = observation.getState();
+    const { key, value, error, loading, mutating } = observation.getState();
     const read = error
       ? fallback(sameLink(value?.link, link) ? value : undefined, link, error)
       : value;
@@ -183,6 +187,8 @@ export function createSessionPullRequest({
       key,
       value: current ? read : undefined,
       linked: linked(),
+      link,
+      loading,
       busy: mutating,
       finding,
       surface,

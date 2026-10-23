@@ -92,13 +92,14 @@ export interface PullRequestTrigger {
   tooltip: string;
 }
 
-/** The header button that opens a linked PR's details. */
-export function pullRequestTrigger(view: PullRequestView): PullRequestTrigger {
+/** The header button that opens a linked PR's details; `loading` while GitHub's facts are being read. */
+export function pullRequestTrigger(view: PullRequestView, loading = false): PullRequestTrigger {
   const { number, status, title } = view;
+  const missing = loading ? "Loading" : STATUS_UNAVAILABLE;
   return {
     label: number ? `#${number}` : "PR",
     ariaLabel: number ? `Pull request #${number}` : "PR",
-    ariaDescription: number ? (status?.label ?? STATUS_UNAVAILABLE) : undefined,
+    ariaDescription: number ? (status?.label ?? missing) : undefined,
     tooltip: title ?? "Pull request",
   };
 }

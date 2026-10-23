@@ -235,6 +235,29 @@ test("opening a linked session before its first read lands shows its details thr
   assert.equal(pi.requests.length, 1);
 });
 
+test("the registry's link names the PR before its first read lands, and a refresh keeps the facts while it runs", async () => {
+  const { pi, pr } = setup(registered);
+  assert.deepEqual(pr.getState().link, registered, "the header can name the PR from the link");
+  assert.equal(pr.getState().loading, true, "the first read is in flight");
+  assert.equal(pr.getState().value, undefined, "no facts yet");
+  pi.last().resolve(linked);
+  await settle();
+  assert.equal(pr.getState().loading, false);
+  assert.deepEqual(pr.getState().value, linked);
+
+  pr.observe("w1", "s1", registered, true);
+  assert.equal(pi.requests.length, 2, "work starting reads again");
+  assert.equal(pr.getState().loading, true, "the refresh is in flight");
+  assert.deepEqual(pr.getState().value, linked, "the facts stay while it runs");
+  pi.last().resolve(linked);
+  await settle();
+  assert.equal(pr.getState().loading, false);
+
+  pr.observe("w1", "s1", null, true);
+  assert.equal(pr.getState().link, null, "a removed link is reported as removed");
+  assert.equal(pr.getState().value, undefined);
+});
+
 test("opening details reuses the loaded facts without replacing a background read", async () => {
   const { pi, pr } = setup(registered);
   pi.last().resolve(linked);
