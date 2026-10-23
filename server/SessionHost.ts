@@ -4,7 +4,9 @@
  * closing itself when its child exits. SessionHosts keys hosts by checkout and owns their locks.
  */
 import { Clock, Deferred, Effect, Exit, Fiber, Scope, Semaphore, Stream } from "effect";
-import type { SessionClosure } from "../shared/wire.ts";
+import { applySessionEvent } from "../shared/sessionProjection.ts";
+import { dispositionOf } from "../shared/sessionStatus.ts";
+import type { SessionClosure, Snapshot } from "../shared/wire.ts";
 import {
   type PiSession,
   PiSessionError,
@@ -14,6 +16,7 @@ import {
 } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
 import { SessionReferences } from "./SessionReferences.ts";
+import { Webhooks } from "./Webhooks.ts";
 
 export interface SessionHost {
   /** Pi's session, with `act` admitted by this host. */
@@ -67,11 +70,12 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
 }): Effect.fn.Return<
   SessionHost,
   PiSessionError,
-  PiSessions | Registry | SessionReferences | Scope.Scope
+  PiSessions | Registry | SessionReferences | Webhooks | Scope.Scope
 > {
   const sessions = yield* PiSessions;
   const registry = yield* Registry;
   const references = yield* SessionReferences;
+  const webhooks = yield* Webhooks;
   const observerScope = yield* Effect.scope;
   const { lock } = options;
 
@@ -171,9 +175,29 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
 
   yield* mirrorStats;
   const ready = yield* Deferred.make<void>();
+  let observed: Snapshot | undefined;
   yield* session.events.pipe(
     Stream.runForEach((event) =>
       Effect.gen(function* () {
+        const previousDialog = observed && dispositionOf(observed, true).dialog;
+        observed =
+          event._tag === "snapshot"
+            ? event.snapshot
+            : observed
+              ? applySessionEvent(observed, event)
+              : undefined;
+        if (observed && event._tag !== "snapshot") {
+          const dialog = dispositionOf(observed, true).dialog;
+          if (event._tag === "response_completed")
+            yield* webhooks.emit("session.completed", raw.spec.cwd, raw.spec.sessionId, observed);
+          if (
+            dialog &&
+            (dialog.id !== previousDialog?.id || dialog.generation !== previousDialog?.generation)
+          )
+            yield* webhooks.emit("session.needs_input", raw.spec.cwd, raw.spec.sessionId, observed);
+          if (event._tag === "closed" && event.closure._tag !== "released")
+            yield* webhooks.emit("session.failed", raw.spec.cwd, raw.spec.sessionId, observed);
+        }
         // Signal attachment before taking ownership's lock: the opener holds it until ready.
         if (event._tag === "snapshot") yield* Deferred.succeed(ready, undefined);
         if (event._tag === "state" || event._tag === "snapshot")

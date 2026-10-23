@@ -2,7 +2,7 @@
 import { chmodSync, closeSync, lstatSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
-import type { RegistryData } from "./Registry.ts";
+import type { RegistryData, StoredWebhook } from "./Registry.ts";
 
 const schema = `
   CREATE TABLE registry_meta (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL);
@@ -286,16 +286,22 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         db.exec(
           "ALTER TABLE sessions ADD COLUMN radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)); PRAGMA user_version = 4;",
         );
-      } else if (version !== 4 && version !== 5 && version !== 6 && version !== 7)
+      } else if (version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8)
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
         );
       // Version 7 retires both historical notification stores. Older databases can skip
       // preference conversion: no destination is read or used after this migration.
-      if (version !== 7)
+      if (Number(version) < 7)
         db.exec(
           "DROP TABLE IF EXISTS notification_webhooks; DROP TABLE IF EXISTS notification_settings; PRAGMA user_version = 7;",
         );
+      if (Number(version) < 8)
+        db.exec(`CREATE TABLE IF NOT EXISTS webhooks (
+          id TEXT PRIMARY KEY NOT NULL, url TEXT NOT NULL, token TEXT,
+          events TEXT NOT NULL CHECK (json_valid(events)),
+          active INTEGER NOT NULL CHECK (active IN (0, 1)), created_at TEXT NOT NULL
+        ) STRICT; PRAGMA user_version = 8;`);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -339,6 +345,34 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
     };
     return {
       data,
+      webhooks: (): StoredWebhook[] =>
+        db
+          .prepare("SELECT * FROM webhooks ORDER BY created_at, id")
+          .all()
+          .map((r) => ({
+            id: r.id as string,
+            url: r.url as string,
+            token: r.token as string | null,
+            events: JSON.parse(r.events as string),
+            active: Boolean(r.active),
+            createdAt: r.created_at as string,
+          })),
+      saveWebhook: (hook: StoredWebhook) =>
+        write(() => {
+          db.prepare(`INSERT INTO webhooks (id, url, token, events, active, created_at) VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET url=excluded.url, token=excluded.token, events=excluded.events, active=excluded.active`).run(
+            hook.id,
+            hook.url,
+            hook.token,
+            JSON.stringify(hook.events),
+            Number(hook.active),
+            hook.createdAt,
+          );
+        }),
+      removeWebhook: (id: string) =>
+        write(() => {
+          db.prepare("DELETE FROM webhooks WHERE id = ?").run(id);
+        }),
       close: () => db.close(),
       save: (before: RegistryData, after: RegistryData) => write(() => persist(db, before, after)),
     };

@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, type Scope, Semaphore } from "effect";
 import { RadiusShareLink } from "../shared/share.ts";
+import type { WebhookEvent } from "../shared/webhooks.ts";
 import { Project, SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { directoryPath } from "./PiEnv.ts";
@@ -81,6 +82,16 @@ const sameReference = (entry: SessionEntry, expected: SessionEntry, link?: Sessi
   entry.createdAt === expected.createdAt &&
   (!entry.archived || expected.archived) &&
   (link === undefined || entry[link] === expected[link]);
+
+/** Private integration credentials, deliberately outside RegistryData and its listeners. */
+export interface StoredWebhook {
+  readonly id: string;
+  readonly url: string;
+  readonly token: string | null;
+  readonly events: readonly WebhookEvent[];
+  readonly active: boolean;
+  readonly createdAt: string;
+}
 
 export interface RegistryData {
   readonly version: 2;
@@ -226,6 +237,9 @@ export class Registry extends Context.Service<
   Registry,
   {
     readonly get: Effect.Effect<RegistryData>;
+    readonly webhooks: Effect.Effect<readonly StoredWebhook[], RegistryError>;
+    readonly saveWebhook: (hook: StoredWebhook) => Effect.Effect<void, RegistryError>;
+    readonly removeWebhook: (id: string) => Effect.Effect<void, RegistryError>;
     /**
      * Hear about every write that changes the data, for the listener's scope. The writer
      * waits for its listeners, so whatever they publish is out before the write returns;
@@ -398,6 +412,22 @@ export const RegistryLive = Layer.effect(
 
     return Registry.of({
       get: Ref.get(state),
+      webhooks: Effect.try({
+        try: database.webhooks,
+        catch: () => new RegistryError({ detail: "Could not read webhooks." }),
+      }),
+      saveWebhook: Effect.fn("Registry.saveWebhook")(function* (hook) {
+        yield* Effect.try({
+          try: () => database.saveWebhook(hook),
+          catch: () => new RegistryError({ detail: "Could not save webhook." }),
+        });
+      }),
+      removeWebhook: Effect.fn("Registry.removeWebhook")(function* (id) {
+        yield* Effect.try({
+          try: () => database.removeWebhook(id),
+          catch: () => new RegistryError({ detail: "Could not delete webhook." }),
+        });
+      }),
       onChange: (listener) =>
         Effect.acquireRelease(
           Effect.sync(() => {
