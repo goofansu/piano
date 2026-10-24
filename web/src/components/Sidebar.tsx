@@ -105,11 +105,14 @@ export function Sidebar({ state }: Props) {
         );
       case "date":
         return (
-          <section key={s.key} aria-label={s.label}>
-            {/* No standalone shadcn heading fits this noninteractive list section. */}
-            <h2 className="px-2 pt-3 pb-2 text-xs font-medium text-muted-foreground">{s.label}</h2>
-            <SessionList sessions={s.sessions} {...groupProps} />
-          </section>
+          <PlainGroup
+            key={s.key}
+            label={s.label}
+            sessions={s.sessions}
+            open={s.open}
+            onOpenChange={onOpenChange}
+            select={select}
+          />
         );
       case "list":
         return <SessionList key={s.key} sessions={s.sessions} {...groupProps} />;
@@ -169,30 +172,14 @@ export function Sidebar({ state }: Props) {
       <ScrollArea className="min-h-0 flex-1">
         <nav className="relative px-(--gutter) pb-4" aria-label="Sessions">
           {pinned && (
-            <Collapsible
+            <PlainGroup
+              label="Pinned"
+              sessions={pinned.sessions}
               open={pinned.open}
               onOpenChange={(open) => toggle(pinned.key, open)}
-              aria-label="Pinned"
+              select={select}
               className="mb-1"
-            >
-              <div className={groupRow}>
-                <CollapsibleTrigger asChild>
-                  <button type="button" className={groupTrigger}>
-                    <Chevron open={pinned.open} />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">
-                      Pinned
-                    </span>
-                  </button>
-                </CollapsibleTrigger>
-              </div>
-              <CollapsibleContent className="disclosure-content">
-                <SessionRows
-                  className="flex flex-col gap-1 py-1"
-                  sessions={pinned.sessions}
-                  select={select}
-                />
-              </CollapsibleContent>
-            </Collapsible>
+            />
           )}
           {list()}
         </nav>
@@ -466,6 +453,36 @@ function SessionList({
   select,
 }: Omit<GroupProps, "open" | "onOpenChange"> & { sessions: readonly SessionEntry[] }) {
   return <SessionRows className="flex flex-col gap-1" sessions={sessions} select={select} />;
+}
+
+/** Pinned and each date group: the same disclosure row as a folder or project, with nothing to act on. */
+function PlainGroup({
+  label,
+  sessions,
+  open,
+  onOpenChange,
+  select,
+  className,
+}: Omit<GroupProps, "state"> & {
+  label: string;
+  sessions: readonly SessionEntry[];
+  className?: string;
+}) {
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} aria-label={label} className={className}>
+      <div className={groupRow}>
+        <CollapsibleTrigger asChild>
+          <button type="button" className={groupTrigger}>
+            <Chevron open={open} />
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">{label}</span>
+          </button>
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent className="disclosure-content">
+        <SessionRows className="flex flex-col gap-1 py-1" sessions={sessions} select={select} />
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 /** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */

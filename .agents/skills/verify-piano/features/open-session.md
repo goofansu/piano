@@ -25,7 +25,7 @@ with "Stop".
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { $S/ab.sh "$RUN" "$@"; }`. Run the harness journey first.
+`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Run the harness journey first.
 
 - Harness
   - Command: `node test/browser/open-session.mjs "$EVIDENCE/open-session/harness"`

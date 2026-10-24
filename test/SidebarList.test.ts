@@ -482,7 +482,7 @@ test("sidebar list: a registry refresh never reopens a section the user collapse
   assert.equal(isOpen(model.list(refreshed, view("folder")), "/repo"), false);
   assert.equal(changes(), seen, "a repeat changes nothing, so nothing is stored or rendered again");
   // Leaving for a grouping without an owner, or an unregistered folder, and back does not reopen it.
-  model.sync(refreshed, view("date"));
+  model.sync(refreshed, view("none"));
   model.sync(selecting(registry, "/unregistered", "s3"), view("folder"));
   model.sync(refreshed, view("folder"));
   assert.equal(isOpen(model.list(refreshed, view("folder")), "/repo"), false);
@@ -564,6 +564,50 @@ test("sidebar list: a project created after the registry loaded opens; existing 
     false,
     "a later refresh does not reopen it",
   );
+});
+
+test("sidebar list: date sections start open, remember a collapse per browser, and open for a selected session", () => {
+  const { model, items, changes } = sidebar({}, new Date(2026, 9, 2, 12));
+  const today = sessionReference("/repo", "today", {
+    title: "Today",
+    updatedAt: new Date(2026, 9, 2, 9).toISOString(),
+  });
+  const earlier = sessionReference("/repo", "earlier", {
+    title: "Earlier",
+    updatedAt: new Date(2026, 9, 1, 9).toISOString(),
+  });
+  const state: AppState = { ...registry, sessionReferences: [today, earlier] };
+  const chosen = view("date");
+  assert.deepEqual(openness(model.list(state, chosen)), [
+    ["date:Today", true],
+    ["date:Yesterday", true],
+  ]);
+
+  model.toggle("date:Yesterday", false);
+  assert.deepEqual(openness(model.list(state, chosen)), [
+    ["date:Today", true],
+    ["date:Yesterday", false],
+  ]);
+  const reloaded = sidebar(Object.fromEntries(items), new Date(2026, 9, 2, 12)).model;
+  assert.equal(isOpen(reloaded.list(state, chosen), "date:Yesterday"), false, "the next load");
+  // Collapsing a date group leaves folders and projects as they were.
+  assert.deepEqual(JSON.parse(items.get("piano.openProjects") ?? "[]"), []);
+
+  // Selecting a session in a collapsed date group opens it; the same selection again does not.
+  const selected = selecting(state, "/repo", "earlier");
+  model.sync(selected, chosen);
+  assert.equal(isOpen(model.list(selected, chosen), "date:Yesterday"), true);
+  model.toggle("date:Yesterday", false);
+  const seen = changes();
+  model.sync({ ...selected, sessionReferences: [today, earlier] }, chosen);
+  assert.equal(isOpen(model.list(selected, chosen), "date:Yesterday"), false, "a refresh");
+  assert.equal(changes(), seen);
+
+  // A session not yet in the registry (a new one) belongs to Today.
+  model.toggle("date:Today", false);
+  const fresh = selecting(state, "/repo", null);
+  model.sync(fresh, chosen);
+  assert.equal(isOpen(model.list(fresh, chosen), "date:Today"), true);
 });
 
 test("sidebar list: date sections roll over at local midnight and after the page wakes", () => {

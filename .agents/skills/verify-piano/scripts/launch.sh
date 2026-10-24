@@ -43,7 +43,7 @@ WEB_PORT=${VERIFY_WEB_PORT:-$(free_port)}
 [ "$PORT" != "$WEB_PORT" ] || die "backend and UI need different ports"
 for p in "$PORT" "$WEB_PORT"; do
   case "$p" in 7070 | 8000 | 8001 | 5173) die "port $p belongs to a real Piano or its dev server; pick another" ;; esac
-  [ -z "$(ss -Hltn "sport = :$p")" ] || die "port $p is already in use"
+  [ -z "$(listeners "$p")" ] || die "port $p is already in use"
 done
 
 mkdir -p "$RUN"/home "$RUN"/pi-agent "$RUN"/pi-sessions "$RUN"/db "$RUN"/logs "$EVIDENCE"
@@ -90,15 +90,15 @@ export PIANO_SESSION_ORIGIN=$WEB_URL
 EOF
 
 cd "$ROOT"
-env -u PIANO_API_SOCKET -u PIANO_SESSION_WS_URL -u PIANO_SESSION_ORIGIN \
+detach env -u PIANO_API_SOCKET -u PIANO_SESSION_WS_URL -u PIANO_SESSION_ORIGIN \
   HOME="$RUN/home" HOST=127.0.0.1 PORT="$PORT" PIANO_DB_PATH="$DB" \
   PI_CODING_AGENT_DIR="$RUN/pi-agent" PI_CODING_AGENT_SESSION_DIR="$RUN/pi-sessions" PI_OFFLINE=1 \
   PIANO_ALLOWED_ORIGINS="$WEB_URL,$API_URL" PIANO_PI_CLI="$PI_CLI" PIANO_PI_ARGS= \
   PIANO_TEST_AUDIT="$RUN/audit.jsonl" \
-  setsid node server/main.ts > "$RUN/logs/server.log" 2>&1 < /dev/null &
+  node server/main.ts > "$RUN/logs/server.log" 2>&1 < /dev/null &
 SERVER_PID=$!
 cd "$ROOT/web"
-PIANO_DEV_BACKEND=$API_URL setsid node "$ROOT/node_modules/vite/bin/vite.js" \
+PIANO_DEV_BACKEND=$API_URL detach node "$ROOT/node_modules/vite/bin/vite.js" \
   --host 127.0.0.1 --port "$WEB_PORT" --strictPort > "$RUN/logs/web.log" 2>&1 < /dev/null &
 WEB_PID=$!
 cd "$ROOT"

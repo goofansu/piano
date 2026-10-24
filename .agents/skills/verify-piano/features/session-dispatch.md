@@ -30,7 +30,7 @@ link a person can open.
 
 Preconditions: a seeded launch, `. "$RUN/run.env"` (exports `PIANO_SESSION_WS_URL=ws://127.0.0.1:$WEB_PORT/ws`
 and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatch hello" > "$RUN/prompt.txt"`;
-`mkdir -p "$EVIDENCE/session-dispatch"`; `ab() { $S/ab.sh "$RUN" "$@"; }`.
+`mkdir -p "$EVIDENCE/session-dispatch"`; `ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`.
 
 - `start`
   - Command: `node scripts/dispatch-session.ts "$RUN/prompt.txt" "$REPO" > "$EVIDENCE/session-dispatch/start.json"; echo $?`
@@ -55,7 +55,7 @@ and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatch hello" > "$
     `start`.
 - Then open the link: `ab open <link>; ab wait --text "echo: dispatch hello"`; capture
   `01-dispatched`.
-- `needs-input` (relaunch with `$S/launch.sh --fake-pi dialogs`)
+- `needs-input` (relaunch with `.agents/skills/verify-piano/scripts/launch.sh --fake-pi dialogs`)
   - Command: `echo "ask for a value" > "$RUN/ask.txt"; node scripts/dispatch-session.ts "$RUN/ask.txt" "$REPO"`,
     then `status <id>`.
   - Result: `ab open <link>` shows the dialog "Enter a value"; `ab snapshot -i` gives the ref of

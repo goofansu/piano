@@ -24,7 +24,7 @@ opening a file viewer.
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { $S/ab.sh "$RUN" "$@"; }`. Make the workspace dirty through the files, as Pi would:
+`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Make the workspace dirty through the files, as Pi would:
 `echo 'export const answer = 5;' > "$REPO/src/answer.ts"; echo note > "$REPO/new.txt"`.
 The seeded "Plan the verification" history contains one successful Pi `write` of `src/answer.ts`.
 

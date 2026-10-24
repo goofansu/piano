@@ -9,4 +9,4 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_run "${1:-}"
 shift
-exec timeout "${VERIFY_AB_TIMEOUT:-60}" npx -y "agent-browser@${AB_VERSION}" --session "$AB_SESSION" "$@"
+with_timeout "${VERIFY_AB_TIMEOUT:-60}" npx -y "agent-browser@${AB_VERSION}" --session "$AB_SESSION" "$@"
