@@ -180,9 +180,9 @@ export const PROJECT_INSTRUCTIONS_SECTION = "project_instructions";
 /** The session's preview owner endpoint, set for each launch where previews are supported. */
 export const PREVIEW_OWNER_ENV = "PIANO_PREVIEW_OWNER";
 /**
- * Every variable Piano sets for a launch of Pi. A spawned Pi starts with all of them cleared and
- * gets only what its own launch sets, so a Piano started inside another session never passes on
- * that parent's values. `.agents/skills/verify-piano/scripts/launch.sh` repeats this list.
+ * Every variable Piano sets for a launch of Pi. No child of Piano inherits them
+ * (`server/ChildEnvironment.ts`): a spawned Pi gets only what its own launch sets, so a Piano
+ * started inside another session never passes on that parent's values.
  */
 export const LAUNCH_ENV = [
   SESSION_WS_URL,
