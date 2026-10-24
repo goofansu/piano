@@ -22,7 +22,7 @@ import { FolderWorktrees, FolderWorktreesLive } from "./FolderWorktrees.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, RegistryError } from "./Registry.ts";
-import { makeSessionHost, mirrorSession, type SessionHost } from "./SessionHost.ts";
+import { type CloseHow, makeSessionHost, mirrorSession, type SessionHost } from "./SessionHost.ts";
 import {
   checkoutMissing,
   type SessionLocation,
@@ -220,11 +220,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       const close = Effect.fn("SessionHosts.close")(function* (
         key: string,
         host: SessionHost,
-        closure?: SessionClosure,
-        shutdown = false,
+        how?: CloseHow,
       ) {
         if (hosts.get(key) !== host) return;
-        exits.set(key, yield* host.close(closure, shutdown));
+        exits.set(key, yield* host.close(how));
         hosts.delete(key);
         yield* invalidateHistory;
         yield* announce;
@@ -302,7 +301,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                 // The observer reaches this only after taking the lock this open holds.
                 onExit: (closure) =>
                   owned(
-                    Semaphore.withPermits(lock, 1)(Effect.suspend(() => close(key, host, closure))),
+                    Semaphore.withPermits(
+                      lock,
+                      1,
+                    )(Effect.suspend(() => close(key, host, { closure }))),
                   ).pipe(
                     Effect.catchTag("PiSessionError", (error) => Effect.logWarning(error.detail)),
                   ),
@@ -535,7 +537,9 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           Effect.gen(function* () {
             // Discover the final file AFTER shutdown; a last response may have persisted it.
             const final = host
-              ? yield* close(key, host).pipe(Effect.andThen(references.resolve(ref.cwd, id)))
+              ? yield* close(key, host, { requested: true }).pipe(
+                  Effect.andThen(references.resolve(ref.cwd, id)),
+                )
               : ref;
             yield* remove ? references.remove(final) : references.archive(final);
           }),
@@ -562,7 +566,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         Effect.gen(function* () {
           stopping = true;
           for (const [key, host] of hosts)
-            yield* close(key, host, undefined, true).pipe(
+            yield* close(key, host, { shutdown: true }).pipe(
               Effect.catchTag("PiSessionError", (error) => Effect.logWarning(error.detail)),
             );
         }),
