@@ -13,7 +13,7 @@ import {
   RegistryLive,
 } from "../server/Registry.ts";
 import { openRegistryDatabase } from "../server/RegistryDatabase.ts";
-import { decodeClientMessage, SESSION_TITLE_MAX } from "../shared/wire.ts";
+import { decodeClientMessage, PROJECT_NAME_MAX, SESSION_TITLE_MAX } from "../shared/wire.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
 function fixture(t: TestContext) {
@@ -866,4 +866,11 @@ test("a start name over the title limit is refused like a rename", () => {
     });
   assert.doesNotThrow(() => decodeClientMessage(act("t".repeat(SESSION_TITLE_MAX))));
   assert.throws(() => decodeClientMessage(act("t".repeat(10_000))));
+});
+
+test("a project name fits the wire limit as the registry saves it: trimmed", () => {
+  const save = (name: string) =>
+    JSON.stringify({ _tag: "save_project", project: { id: "p", name } });
+  assert.doesNotThrow(() => decodeClientMessage(save(` ${"n".repeat(PROJECT_NAME_MAX)} `)));
+  assert.throws(() => decodeClientMessage(save("n".repeat(PROJECT_NAME_MAX + 1))));
 });
