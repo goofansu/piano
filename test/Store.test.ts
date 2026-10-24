@@ -88,7 +88,7 @@ test("INV-05: superseded selection, duplicate, cross-session and gapped frames n
   deliver(selection("b", "b3", 0, "restarted"));
   assert.equal(state.session?.cursor?.generation, "restarted");
   assert.equal(state.resync, false);
-  state = reduce(state, { type: "new" });
+  state = reduce(state, { type: "open", page: { kind: "new" } });
   const newPage = state;
   deliver(selection("b", "b3", 100, "restarted"));
   assert.equal(state, newPage, "returning to New invalidates selection responses too");

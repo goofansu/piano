@@ -1,11 +1,12 @@
 /**
- * What is on screen and how it maps to the address bar. The client owns the main pane's view
- * (session, New page, missing session); navigation owns what sits over it (Settings, the selected
- * session's right sidebar and PR, the palette), reconciles the address bar's route with the
- * registry once it loads, and keeps the URL and title following the screen. Sessions are
- * addressed by ID, never by directory. Nothing here depends on render timing.
+ * What is on screen and how it maps to the address bar. The client owns the main pane's view (a
+ * session or a page); navigation owns what sits over it (Settings, the selected session's right
+ * sidebar and PR, the palette), reconciles the address bar's route with the registry once it
+ * loads, and keeps the URL and title following the screen. A page's address and title are decided
+ * once, in `pageAddress`. Sessions are addressed by ID, never by directory. Nothing here depends on
+ * render timing.
  */
-import { type AppState, sessionKey } from "../store.ts";
+import { type AppState, type Page, sessionKey } from "../store.ts";
 import type { Client } from "./client.ts";
 import { findProject } from "./projectCommands.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
@@ -69,43 +70,69 @@ export interface Navigation {
   setPalette: (open: boolean) => void;
 }
 
+/** A route that opens a page; a session needs the registry to find its directory, and Settings sits over the view. */
+type PageRoute = Exclude<Route, { kind: "session" | "settings" }>;
+
+function routePage(route: PageRoute): Page {
+  switch (route.kind) {
+    case "new":
+      return { kind: "new", projectId: route.projectId };
+    case "projects":
+      return { kind: "projects" };
+    case "project":
+      return { kind: "project", projectId: route.projectId };
+  }
+}
+
+/** A page's address and title; Session not found keeps the missing session's address. */
+function pageAddress(state: AppState, page: Page): { route: Route; title: string } {
+  switch (page.kind) {
+    case "new":
+      return {
+        route: { kind: "new", projectId: page.projectId },
+        title: findProject(state, page.projectId)?.name || "New session",
+      };
+    case "projects":
+      return { route: { kind: "projects" }, title: "Projects" };
+    case "project":
+      return {
+        route: { kind: "project", projectId: page.projectId },
+        title: findProject(state, page.projectId)?.name || "Project",
+      };
+    case "missing-session":
+      return { route: { kind: "session", sessionId: page.sessionId }, title: "Session not found" };
+  }
+}
+
 /** The client's first view for a route, so a session URL never renders the New page while the registry loads. */
 export function initialView(route: Route): AppState["view"] {
   if (route.kind === "session") return { kind: "session" };
-  if (route.kind === "projects") return { kind: "projects" };
-  if (route.kind === "project") return { kind: "project", projectId: route.projectId };
-  return { kind: "new", projectId: route.kind === "new" ? route.projectId : undefined };
+  return route.kind === "settings" ? { kind: "new" } : routePage(route);
 }
 
 export type RouteDecision =
   | { kind: "wait" }
   | { kind: "settings"; section: SettingsSection }
-  | { kind: "new"; projectId?: string }
-  | { kind: "projects" }
-  | { kind: "project"; projectId: string }
-  /** Back or forward onto the New page already on screen keeps whatever directory it had. */
+  | { kind: "open"; page: Page }
+  /** Back or forward onto the page already on screen keeps it as it is, such as the New page's directory. */
   | { kind: "keep" }
-  | { kind: "select"; cwd: string; sessionId: string }
-  | { kind: "missing"; sessionId: string };
+  | { kind: "select"; cwd: string; sessionId: string };
 
 /** What applying a route to the current state means. A session needs its directory, which only the registry knows. */
 export function decideRoute(route: Route, state: AppState): RouteDecision {
   if (route.kind === "settings") return { kind: "settings", section: route.section };
-  if (route.kind === "new")
-    return state.view.kind === "new" && state.view.projectId === route.projectId
+  if (route.kind !== "session") {
+    const page = routePage(route);
+    const shown = state.view.kind === "session" ? null : pageAddress(state, state.view).route;
+    return shown && routePath(shown) === routePath(route)
       ? { kind: "keep" }
-      : { kind: "new", projectId: route.projectId };
-  if (route.kind === "projects")
-    return state.view.kind === "projects" ? { kind: "keep" } : { kind: "projects" };
-  if (route.kind === "project")
-    return state.view.kind === "project" && state.view.projectId === route.projectId
-      ? { kind: "keep" }
-      : { kind: "project", projectId: route.projectId };
+      : { kind: "open", page };
+  }
   if (!state.registryLoaded) return { kind: "wait" };
   const session = catalogEntry(state, route.sessionId);
   return session
     ? { kind: "select", cwd: session.cwd, sessionId: session.sessionId }
-    : { kind: "missing", sessionId: route.sessionId };
+    : { kind: "open", page: { kind: "missing-session", sessionId: route.sessionId } };
 }
 
 export interface Address {
@@ -121,38 +148,24 @@ export function addressFor(
   settings: SettingsSection | null,
   currentPathname: string,
 ): Address | null {
-  const current = state.session ?? state.selecting;
-  const route: Route | null =
-    state.view.kind === "new"
-      ? { kind: "new", projectId: state.view.projectId }
-      : state.view.kind === "projects"
-        ? { kind: "projects" }
-        : state.view.kind === "project"
-          ? { kind: "project", projectId: state.view.projectId }
-          : state.view.kind === "missing-session"
-            ? { kind: "session", sessionId: state.view.sessionId }
-            : current?.sessionId
-              ? { kind: "session", sessionId: current.sessionId }
-              : null;
-  if (!route) return null;
-  const path = routePath(settings ? { kind: "settings", section: settings } : route);
+  const sessionId = (state.session ?? state.selecting)?.sessionId;
+  const shown: { route: Route; title: string } | null =
+    state.view.kind !== "session"
+      ? pageAddress(state, state.view)
+      : sessionId
+        ? {
+            route: { kind: "session", sessionId },
+            title: catalogEntry(state, sessionId)?.title || "Session",
+          }
+        : null;
+  if (!shown) return null;
+  const path = routePath(settings ? { kind: "settings", section: settings } : shown.route);
   // The bare root is an alias for /new and a query string carries nothing: replace those, push real moves.
   const mode =
     currentPathname === "/" || currentPathname === "/settings" || currentPathname === path
       ? "replace"
       : "push";
-  const title = settings
-    ? "Settings"
-    : state.view.kind === "missing-session"
-      ? "Session not found"
-      : route.kind === "projects"
-        ? "Projects"
-        : route.kind === "project"
-          ? findProject(state, route.projectId)?.name || "Project"
-          : route.kind === "new"
-            ? findProject(state, route.projectId)?.name || "New session"
-            : catalogEntry(state, route.sessionId)?.title || "Session";
-  return { path, mode, title: `${title} - Piano` };
+  return { path, mode, title: `${settings ? "Settings" : shown.title} - Piano` };
 }
 
 const panelOwner = (s: AppState) => (s.session ? sessionKey(s.session) : null);
@@ -210,14 +223,8 @@ export function createNavigation({
     // Applying a settings route, on load or on back/forward, is a request of its own.
     if (decision.kind === "settings")
       set({ settings: decision.section, settingsRequest: state.settingsRequest + 1 });
-    else if (decision.kind === "new")
-      client.dispatch({ type: "new", projectId: decision.projectId });
-    else if (decision.kind === "projects") client.dispatch({ type: "projects" });
-    else if (decision.kind === "project")
-      client.dispatch({ type: "project", projectId: decision.projectId });
+    else if (decision.kind === "open") client.dispatch({ type: "open", page: decision.page });
     else if (decision.kind === "select") select(decision.cwd, decision.sessionId);
-    else if (decision.kind === "missing")
-      client.dispatch({ type: "missing-session", sessionId: decision.sessionId });
   };
 
   function settle() {
@@ -262,6 +269,14 @@ export function createNavigation({
     }
   }
 
+  /** A user's move to a page; it leaves Settings. */
+  const open = (page: Page) =>
+    batch(() => {
+      set({ settings: null });
+      client.dispatch({ type: "open", page });
+      moved();
+    });
+
   const closeSettings = () =>
     batch(() => {
       set({ settings: null });
@@ -295,24 +310,9 @@ export function createNavigation({
       };
     },
     select,
-    openNew: (cwd, projectId) =>
-      batch(() => {
-        set({ settings: null });
-        client.dispatch({ type: "new", cwd, projectId });
-        moved();
-      }),
-    openProjects: () =>
-      batch(() => {
-        set({ settings: null });
-        client.dispatch({ type: "projects" });
-        moved();
-      }),
-    openProject: (projectId) =>
-      batch(() => {
-        set({ settings: null });
-        client.dispatch({ type: "project", projectId });
-        moved();
-      }),
+    openNew: (cwd, projectId) => open({ kind: "new", cwd, projectId }),
+    openProjects: () => open({ kind: "projects" }),
+    openProject: (projectId) => open({ kind: "project", projectId }),
     openSettings: (section = "providers") =>
       batch(() => {
         // Asking for the section already open is still a request; what it reveals is revealed again.
