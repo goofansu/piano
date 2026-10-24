@@ -62,6 +62,7 @@ import { Switch } from "@/components/ui/switch";
 import { listWebhooks, removeWebhook, saveWebhook, testWebhook } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { useObservation } from "@/lib/useObservation";
+import { useSetupActions } from "@/lib/useSetupActions";
 
 const host = (url: string) => {
   try {
@@ -71,6 +72,10 @@ const host = (url: string) => {
   }
 };
 
+/** What a delivery's receiver answered: its HTTP status, or the transport failure. */
+const deliveryDetail = (result: WebhookDelivery) =>
+  result.httpStatus === null ? result.detail : `HTTP ${result.httpStatus}`;
+
 /** The last delivery as one line: its outcome, the HTTP status or the failure, and when. */
 export function deliveryFace(
   result: WebhookDelivery | null,
@@ -78,16 +83,19 @@ export function deliveryFace(
 ): { tone: StatusTone; text: string } {
   if (!result) return { tone: "muted", text: "No deliveries yet" };
   const outcome = result.status === "delivered" ? "Delivered" : "Failed";
-  const detail = result.httpStatus === null ? result.detail : `HTTP ${result.httpStatus}`;
+  const detail = deliveryDetail(result);
   return {
     tone: result.status === "delivered" ? "ok" : "err",
     text: [outcome, detail, timeAgo(result.occurredAt, now)].filter(Boolean).join(" · "),
   };
 }
 
-/** A test's outcome as a toast: the HTTP status, or the transport failure. */
+/**
+ * A test's outcome as a toast: the HTTP status, or the transport failure. A failed delivery is the
+ * test's result, so it answers here rather than as the change's failure.
+ */
 const testToast = (result: WebhookDelivery) => {
-  const detail = result.httpStatus === null ? result.detail : `HTTP ${result.httpStatus}`;
+  const detail = deliveryDetail(result);
   if (result.status === "delivered") toast.success(`Test delivered${detail ? ` · ${detail}` : ""}`);
   else toast.error(`Test failed${detail ? ` · ${detail}` : ""}`);
 };
@@ -95,26 +103,19 @@ const testToast = (result: WebhookDelivery) => {
 export function WebhookSettings() {
   const observed = useObservation("webhooks", (signal) => listWebhooks({ signal }));
   const [editing, setEditing] = useState<Webhook | "new" | null>(null);
-  const [removing, setRemoving] = useState<Webhook>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  // Row changes answer with a toast, failures included; only a failed load stays on the page.
+  const actions = useSetupActions<Webhook>({
+    refresh: () => void observed.refresh(),
+    success: (text) => toast.success(text),
+    failure: (text) => toast.error(text),
+  });
+  const removing = actions.confirmation;
+  const busy = actions.running !== undefined;
   // The last-delivery line changes as sessions finish; a short poll keeps it current while open.
   useEffect(() => {
     const timer = setInterval(() => void observed.refresh(), 3000);
     return () => clearInterval(timer);
   }, [observed.refresh]);
-  const act = async (operation: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await operation();
-      await observed.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not change the webhook.");
-    } finally {
-      setBusy(false);
-    }
-  };
   const now = Date.now();
   return (
     <SettingsSectionFrame
@@ -131,7 +132,7 @@ export function WebhookSettings() {
             <WebhookEditor
               hook={editing === "new" ? undefined : editing}
               close={() => setEditing(null)}
-              saved={() => void observed.refresh()}
+              refresh={() => void observed.refresh()}
             />
           )}
           <RemovalDialog
@@ -141,20 +142,23 @@ export function WebhookSettings() {
             action="Delete"
             progress="Deleting…"
             busy={busy}
-            cancel={() => setRemoving(undefined)}
+            cancel={actions.cancel}
             confirm={() => {
               const hook = removing;
               if (!hook) return;
-              void act(() => removeWebhook(hook.id)).then(() => setRemoving(undefined));
+              void actions.run({
+                id: `remove:${hook.id}`,
+                run: () => removeWebhook(hook.id),
+                done: "Webhook deleted",
+                fallback: "Could not delete webhook.",
+              });
             }}
           />
         </>
       }
     >
-      {(error || observed.failure) && (
-        <SettingsAlert title="Webhooks need attention">
-          {error ?? "Could not load webhooks."}
-        </SettingsAlert>
+      {observed.failure && (
+        <SettingsAlert title="Webhooks need attention">Could not load webhooks.</SettingsAlert>
       )}
       {!observed.value ? (
         <SettingsSkeleton label="Loading webhooks…" className="flex flex-col gap-2">
@@ -183,17 +187,23 @@ export function WebhookSettings() {
               now={now}
               disabled={busy}
               setActive={(active) =>
-                void act(() =>
-                  saveWebhook({ id: hook.id, url: hook.url, events: hook.events, active }),
-                )
+                void actions.run({
+                  id: `active:${hook.id}`,
+                  run: () =>
+                    saveWebhook({ id: hook.id, url: hook.url, events: hook.events, active }),
+                  done: active ? "Webhook turned on" : "Webhook turned off",
+                  fallback: "Could not save webhook.",
+                })
               }
               edit={() => setEditing(hook)}
               test={() =>
-                void act(async () => {
-                  testToast(await testWebhook(hook.id));
+                void actions.run({
+                  id: `test:${hook.id}`,
+                  run: async () => testToast(await testWebhook(hook.id)),
+                  fallback: "Could not test webhook.",
                 })
               }
-              remove={() => setRemoving(hook)}
+              remove={() => actions.confirm(hook)}
             />
           ))}
         </SettingsList>
@@ -275,11 +285,12 @@ function WebhookRow({
 function WebhookEditor({
   hook,
   close,
-  saved,
+  refresh,
 }: {
   hook?: Webhook;
   close: () => void;
-  saved: () => void;
+  /** Re-reads the list once a save settles. */
+  refresh: () => void;
 }) {
   const [url, setUrl] = useState(hook?.url ?? "");
   const [token, setToken] = useState("");
@@ -289,32 +300,30 @@ function WebhookEditor({
   );
   const [active, setActive] = useState(hook?.active ?? true);
   const [eventsError, setEventsError] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  // A failed save stays in the open dialog, on its fields; a saved one closes it with a toast.
+  const actions = useSetupActions({ refresh, success: (text) => toast.success(text) });
+  const busy = actions.running !== undefined;
+  const error = actions.error;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!events.length) {
       setEventsError(true);
       return;
     }
-    setBusy(true);
-    setError(undefined);
-    try {
-      await saveWebhook({
-        id: hook?.id,
-        url,
-        token: clearToken ? null : token || undefined,
-        events,
-        active,
-      });
-      setToken("");
-      saved();
-      close();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save the webhook.");
-    } finally {
-      setBusy(false);
-    }
+    const saved = await actions.run({
+      id: "save",
+      run: () =>
+        saveWebhook({
+          id: hook?.id,
+          url,
+          token: clearToken ? null : token || undefined,
+          events,
+          active,
+        }),
+      done: hook ? "Webhook saved" : "Webhook added",
+      fallback: "Could not save webhook.",
+    });
+    if (saved) close();
   };
   return (
     <Dialog
