@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { PROJECT_INSTRUCTIONS_MAX, type Project } from "../shared/wire.ts";
 import {
   openProjectCommand,
+  type ProjectDraft,
   projectCommands,
   projectDestinations,
   projectSettingsSave,
@@ -65,8 +66,7 @@ test("saving project settings sends one change with each changed field, trimmed;
     ...state,
     projects: [{ ...launch, instructions: "Answer in French." }],
   };
-  const save = (draft: { name: string; instructions: string }, s = guided) =>
-    projectSettingsSave(s, "p1", draft);
+  const save = (draft: ProjectDraft, s = guided) => projectSettingsSave(s, "p1", draft);
   assert.deepEqual(save({ name: " Relaunch ", instructions: "Answer in French." }), {
     allowed: true,
     command: { _tag: "update_project", id: "p1", name: "Relaunch" },
@@ -83,7 +83,7 @@ test("saving project settings sends one change with each changed field, trimmed;
     allowed: true,
     command: { _tag: "update_project", id: "p1", name: "Relaunch", instructions: "Other" },
   });
-  const refused: [string, { name: string; instructions: string }, AppState?][] = [
+  const refused: [string, ProjectDraft, AppState?][] = [
     ["unchanged, trimmed", { name: " Launch ", instructions: " Answer in French.\n" }],
     ["blank name", { name: "  ", instructions: "Other" }],
     ["over the limit", { name: "Launch", instructions: "x".repeat(PROJECT_INSTRUCTIONS_MAX + 1) }],

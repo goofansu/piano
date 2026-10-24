@@ -149,52 +149,35 @@ test("archive and close folder name their subject; an untitled session reads Unt
 });
 
 test("project answers: a new project opens, create-and-assign stays put", () => {
-  assert.deepEqual(answerForm(online, { kind: "project", dialog: {} }, " Ship ", { newId }), {
+  const newProject = (draft: { name: string; instructions?: string }, s = online, dialog = {}) =>
+    answerForm(s, { kind: "project", dialog }, { instructions: "", ...draft }, { newId });
+  assert.deepEqual(newProject({ name: " Ship " }), {
     allowed: true,
     command: { _tag: "save_project", project: { id: "new-id", name: "Ship" }, assign: undefined },
     openProject: "new-id",
   });
-  assert.deepEqual(
-    answerForm(online, { kind: "project", dialog: { assign: other } }, "Ship", { newId }),
-    {
-      allowed: true,
-      command: {
-        _tag: "save_project",
-        project: { id: "new-id", name: "Ship" },
-        assign: { cwd: "/repo", sessionId: "s2" },
-      },
-    },
-  );
-  assert.deepEqual(answerForm(online, { kind: "project", dialog: {} }, "  ", { newId }), {
-    allowed: false,
-  });
-  // Instructions travel in the same save, trimmed; blank ones are left out; over the limit refuses.
-  assert.deepEqual(
-    answerForm(online, { kind: "project", dialog: {} }, "Ship", {
-      newId,
-      instructions: "\n Reply in French. \n",
-    }).command,
-    {
+  assert.deepEqual(newProject({ name: "Ship" }, online, { assign: other }), {
+    allowed: true,
+    command: {
       _tag: "save_project",
-      project: { id: "new-id", name: "Ship", instructions: "Reply in French." },
-      assign: undefined,
+      project: { id: "new-id", name: "Ship" },
+      assign: { cwd: "/repo", sessionId: "s2" },
     },
-  );
-  assert.deepEqual(
-    answerForm(online, { kind: "project", dialog: {} }, "Ship", { newId, instructions: "  " })
-      .command,
-    { _tag: "save_project", project: { id: "new-id", name: "Ship" }, assign: undefined },
-  );
-  assert.equal(
-    answerForm(online, { kind: "project", dialog: {} }, "Ship", {
-      newId,
-      instructions: "x".repeat(20_001),
-    }).allowed,
-    false,
-  );
-  assert.deepEqual(answerForm(offline, { kind: "project", dialog: {} }, "Ship", { newId }), {
-    allowed: false,
   });
+  assert.deepEqual(newProject({ name: "  " }), { allowed: false });
+  // Instructions travel in the same save, trimmed; blank ones are left out; over the limit refuses.
+  assert.deepEqual(newProject({ name: "Ship", instructions: "\n Reply in French. \n" }).command, {
+    _tag: "save_project",
+    project: { id: "new-id", name: "Ship", instructions: "Reply in French." },
+    assign: undefined,
+  });
+  assert.deepEqual(newProject({ name: "Ship", instructions: "  " }).command, {
+    _tag: "save_project",
+    project: { id: "new-id", name: "Ship" },
+    assign: undefined,
+  });
+  assert.equal(newProject({ name: "Ship", instructions: "x".repeat(20_001) }).allowed, false);
+  assert.deepEqual(newProject({ name: "Ship" }, offline), { allowed: false });
 });
 
 test("deleting a project asks first, saying its sessions move to No project", () => {
@@ -289,6 +272,7 @@ test("a form submitted after the connection drops stays open and sends nothing",
     const { subject, sent, published, setState } = forms();
     subject.open(form);
     subject.edit("Renamed");
+    subject.editProject({ name: "Renamed", instructions: "" });
     setState({ ...withWorkspace, connected: false });
     assert.equal(subject.submit(), false, form.kind);
     assert.equal(subject.getState().form, form, form.kind);
@@ -342,8 +326,7 @@ test("an untitled selected session renames from the same empty title in the head
 test("creating a project opens it; creating one for a session does not", () => {
   const created = forms();
   created.subject.open({ kind: "project", dialog: {} });
-  created.subject.edit(" Ship ");
-  created.subject.editInstructions("Reply in French.");
+  created.subject.editProject({ name: " Ship ", instructions: "Reply in French." });
   assert.equal(created.subject.submit(), true);
   assert.deepEqual(created.sent, [
     {
@@ -354,15 +337,14 @@ test("creating a project opens it; creating one for a session does not", () => {
   ]);
   assert.deepEqual(created.opened, ["new-id"]);
   assert.equal(created.subject.getState().form, null);
-  // The next opening starts clean; instructions belong to the project form alone.
-  created.subject.open({ kind: "rename-session", target: other });
-  created.subject.editInstructions("ignored");
-  assert.equal(created.subject.getState().instructions, "");
+  // The next opening starts clean.
+  created.subject.open({ kind: "project", dialog: {} });
+  assert.equal(created.subject.answer().allowed, false);
 
   for (const dialog of [{ assign: other }]) {
     const { subject, opened, sent } = forms();
     subject.open({ kind: "project", dialog });
-    subject.edit("Ship");
+    subject.editProject({ name: "Ship", instructions: "" });
     assert.equal(subject.submit(), true);
     assert.equal(sent.length, 1);
     assert.deepEqual(opened, []);
