@@ -2,9 +2,9 @@
  * One browser client's requests and the server-wide updates it hears, without the socket.
  * Session requests go to the client's ClientSessions; the rest run their SessionHosts,
  * WorkspaceCommands, Registry or DirectoryFacts step here and answer through the client's
- * output. Each request kind is described once, in `requests`: how it is admitted, its work, and
- * the one reply its sender awaits when capacity refuses it or it fails. A refused or failed
- * request never ends the connection.
+ * output. Each request kind is described once, in `requests`: how it is admitted, its work, the
+ * toast that confirms a change once its work succeeds, and the one reply its sender awaits when
+ * capacity refuses it or it fails. A refused or failed request never ends the connection.
  */
 import { Cause, Effect, Stream } from "effect";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
@@ -58,6 +58,12 @@ type RequestPolicy<R extends ClientRequest> = {
    * the way the browser settles that request: by selection, worktree request ID or folder.
    */
   readonly unanswered: (request: R, reason: Unanswered) => ServerMessage;
+  /**
+   * The success toast that ends a change once its work has succeeded, naming it as the UI does
+   * ("Project saved"); a function when the name depends on the request or the registry. Null for
+   * a request answered otherwise: reads, controls, selections, and changes with their own reply.
+   */
+  readonly confirmed: string | ((request: R) => Effect.Effect<string>) | null;
 } & (
   | {
       readonly admission: Exclude<Admission, "claim"> | ((request: R) => "ordinary" | "control");
@@ -117,6 +123,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       admission: "immediate",
       run: ({ nonce }) => send({ _tag: "pong", nonce }),
       unanswered: plainError,
+      confirmed: null,
     },
     select: {
       admission: "claim",
@@ -125,6 +132,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         reason._tag === "refused"
           ? { _tag: "selection_rejected", selectionId, message: unansweredText(reason) }
           : { _tag: "selection_failed", selectionId, message: unansweredText(reason) },
+      confirmed: null,
     },
     create_session: {
       admission: "claim",
@@ -150,6 +158,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         (reason._tag === "failed" && reason.error instanceof SessionNotCreated)
           ? { _tag: "selection_rejected", selectionId, message: unansweredText(reason) }
           : { _tag: "error", message: unansweredText(reason), selectionId },
+      confirmed: null,
     },
     // A read: it answers every outcome, an unknown session or project included.
     session_status: {
@@ -167,6 +176,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         requestId,
         result: { status: "error", detail: unansweredText(reason) },
       }),
+      confirmed: null,
     },
     act: {
       admission: ({ action }) =>
@@ -177,8 +187,14 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         message: unansweredText(reason),
         selectionId,
       }),
+      confirmed: null,
     },
-    registry: { admission: "ordinary", run: () => sidebar.refresh, unanswered: plainError },
+    registry: {
+      admission: "ordinary",
+      run: () => sidebar.refresh,
+      unanswered: plainError,
+      confirmed: null,
+    },
     worktrees: {
       admission: "ordinary",
       run: ({ folder, requestId }) =>
@@ -199,6 +215,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
           detail: unansweredText(reason),
         },
       }),
+      confirmed: null,
     },
     models: {
       admission: "ordinary",
@@ -222,50 +239,47 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         requestId,
         message: unansweredText(reason),
       }),
+      confirmed: null,
     },
-    // Answered as Delete project is: a toast once the registry holds the new project. Every
-    // client's sidebar hears the write on its own.
+    // Every client's sidebar hears a registry write on its own; the sender also gets the toast.
     save_project: {
       admission: "ordinary",
-      run: ({ project, assign }) =>
-        registry
-          .saveProject(project, assign)
-          .pipe(
-            Effect.andThen(send({ _tag: "toast", message: "Project created", level: "success" })),
-          ),
+      run: ({ project, assign }) => registry.saveProject(project, assign),
       unanswered: plainError,
+      confirmed: "Project created",
     },
     delete_project: {
       admission: "ordinary",
-      // Answered as Delete session is: a toast once the registry has removed it.
-      run: ({ id }) =>
-        registry
-          .deleteProject(id)
-          .pipe(
-            Effect.andThen(send({ _tag: "toast", message: "Project deleted", level: "success" })),
-          ),
+      run: ({ id }) => registry.deleteProject(id),
       unanswered: plainError,
+      confirmed: "Project deleted",
     },
     update_project: {
       admission: "ordinary",
-      // Answered as Delete project is: a toast once the registry holds the change.
-      run: ({ id, name, instructions }) =>
-        registry
-          .updateProject(id, { name, instructions })
-          .pipe(
-            Effect.andThen(send({ _tag: "toast", message: "Project saved", level: "success" })),
-          ),
+      run: ({ id, name, instructions }) => registry.updateProject(id, { name, instructions }),
       unanswered: plainError,
+      confirmed: "Project saved",
     },
+    // Add to project and Move to project both send this, so the toast names where it went.
     assign_project: {
       admission: "ordinary",
       run: ({ cwd, sessionId, projectId }) => registry.assignProject(cwd, sessionId, projectId),
       unanswered: plainError,
+      confirmed: ({ projectId }) =>
+        projectId === null
+          ? Effect.succeed("Session removed from project")
+          : registry.requireProject(projectId).pipe(
+              Effect.map((project) => `Session moved to ${project.name}`),
+              // Deleted since the move: the move still happened.
+              Effect.orElseSucceed(() => "Session moved"),
+            ),
     },
     remove_folder: {
       admission: "ordinary",
       run: ({ path }) => registry.removeFolder(path),
       unanswered: plainError,
+      // The folder's action is Close.
+      confirmed: "Folder closed",
     },
     trust: {
       admission: "ordinary",
@@ -276,6 +290,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         yield* send({ _tag: "trust", ...(yield* facts.trust(cwd)) });
       }),
       unanswered: plainError,
+      confirmed: null,
     },
     set_trust: {
       admission: "ordinary",
@@ -296,6 +311,8 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         cwd: path,
         message: unansweredText(reason),
       }),
+      // The decision's own notice is its toast: it says what Pi now holds.
+      confirmed: null,
     },
     // The command answers every outcome, failures included, and has the sidebar rediscover.
     create_worktree: {
@@ -305,6 +322,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
           .createWorktree(folder, branch, { hooks })
           .pipe(Effect.flatMap((result) => send({ _tag: "worktree_result", requestId, result }))),
       unanswered: worktreeUnanswered,
+      confirmed: null,
     },
     add_worktree: {
       admission: "ordinary",
@@ -313,26 +331,33 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
           .addWorktree(folder, path)
           .pipe(Effect.flatMap((result) => send({ _tag: "worktree_result", requestId, result }))),
       unanswered: worktreeUnanswered,
+      confirmed: null,
     },
+    // Pi owns the name, so a stopped session is started for it.
     rename_session: {
       admission: "ordinary",
-      run: ({ cwd, sessionId, title }) => sessions.rename(cwd, sessionId, title),
+      run: ({ cwd, sessionId, title }) => hosts.rename(cwd, sessionId, title),
       unanswered: plainError,
+      confirmed: "Session renamed",
     },
+    // Pinning answers in place: the row moves to Pinned.
     pin_session: {
       admission: "ordinary",
       run: ({ cwd, sessionId, pinned }) => registry.pinSession(cwd, sessionId, pinned),
       unanswered: plainError,
+      confirmed: null,
     },
     archive_session: {
       admission: "ordinary",
       run: ({ cwd, sessionId }) => sessions.retire(cwd, sessionId, "archive"),
       unanswered: plainError,
+      confirmed: "Session archived",
     },
     delete_session: {
       admission: "ordinary",
       run: ({ cwd, sessionId }) => sessions.retire(cwd, sessionId, "delete"),
       unanswered: plainError,
+      confirmed: "Session deleted",
     },
   };
   /** The policy for `request`'s own kind; TypeScript cannot correlate the lookup by itself. */
@@ -354,12 +379,25 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     yield* send(policyOf(request).unanswered(request, reason));
   });
 
-  /** Runs a request's work; any failure but interruption settles the request instead. */
+  /** The toast that ends `request` once its work has succeeded, if its kind confirms one. */
+  const confirm = (request: ClientRequest): Effect.Effect<void> => {
+    const { confirmed } = policyOf(request);
+    if (confirmed === null) return Effect.void;
+    const message = typeof confirmed === "string" ? Effect.succeed(confirmed) : confirmed(request);
+    return message.pipe(
+      Effect.flatMap((message) => send({ _tag: "toast", level: "success", message })),
+    );
+  };
+
+  /**
+   * Runs a request's work and confirms it; any failure but interruption settles the request
+   * instead, without the confirmation.
+   */
   const answered =
     (request: ClientRequest) =>
     <A, E>(work: Effect.Effect<A, E>): Effect.Effect<void> =>
       work.pipe(
-        Effect.asVoid,
+        Effect.andThen(confirm(request)),
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.void

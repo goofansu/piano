@@ -879,3 +879,116 @@ test("INV-01: a browser's checkout poll re-observes without resending the sideba
     }),
   );
 });
+
+/**
+ * Every change a browser sends, with the toast that confirms it once the server has made it and
+ * a request of the same kind that fails. A failed change is answered by its error alone: no
+ * toast says it happened. Folders close idempotently, so closing one has no failing request.
+ */
+const confirmations: ReadonlyArray<{
+  readonly done: ClientRequest;
+  readonly toast: string;
+  readonly fails?: readonly [ClientRequest, RegExp];
+}> = [
+  {
+    done: { _tag: "save_project", project: { id: "next", name: "Next" } },
+    toast: "Project created",
+    fails: [
+      {
+        _tag: "save_project",
+        project: { id: "ghost", name: "Ghost" },
+        assign: { cwd, sessionId: "missing" },
+      },
+      /Session reference is unavailable/,
+    ],
+  },
+  {
+    done: { _tag: "update_project", id: "next", name: "Later" },
+    toast: "Project saved",
+    fails: [{ _tag: "update_project", id: "missing", name: "X" }, /Project is unavailable/],
+  },
+  {
+    done: { _tag: "assign_project", cwd, sessionId: "kept", projectId: "launch" },
+    toast: "Session moved to Launch",
+    fails: [
+      { _tag: "assign_project", cwd, sessionId: "missing", projectId: "launch" },
+      /Session reference is unavailable/,
+    ],
+  },
+  {
+    done: { _tag: "assign_project", cwd, sessionId: "kept", projectId: null },
+    toast: "Session removed from project",
+    fails: [
+      { _tag: "assign_project", cwd, sessionId: "kept", projectId: "missing" },
+      /Project is unavailable/,
+    ],
+  },
+  {
+    done: { _tag: "delete_project", id: "next" },
+    toast: "Project deleted",
+    fails: [{ _tag: "delete_project", id: "missing" }, /Project is unavailable/],
+  },
+  {
+    done: { _tag: "rename_session", cwd, sessionId: "kept", title: "Renamed" },
+    toast: "Session renamed",
+    fails: [
+      { _tag: "rename_session", cwd, sessionId: "missing", title: "X" },
+      /no longer registered/,
+    ],
+  },
+  {
+    done: { _tag: "archive_session", cwd, sessionId: "archived" },
+    toast: "Session archived",
+    fails: [{ _tag: "archive_session", cwd, sessionId: "missing" }, /no longer registered/],
+  },
+  {
+    done: { _tag: "delete_session", cwd, sessionId: "deleted" },
+    toast: "Session deleted",
+    fails: [{ _tag: "delete_session", cwd, sessionId: "missing" }, /no longer registered/],
+  },
+  { done: { _tag: "remove_folder", path: cwd }, toast: "Folder closed" },
+];
+
+test("every change ends with one toast naming it after it succeeds; a failed change ends with its error", async () => {
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addFolder(cwd);
+      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      for (const sessionId of ["kept", "archived", "deleted"])
+        yield* registry.addSession(cwd, sessionId);
+      const { receive } = yield* client;
+      for (const { done, toast, fails } of confirmations) {
+        if (fails) {
+          const [request, error] = fails;
+          const from = sent.length;
+          yield* yield* receive(request);
+          const [answer, ...rest] = answers(from);
+          assert.ok(answer?._tag === "error", `${request._tag} failed: ${JSON.stringify(answer)}`);
+          assert.match(answer.message, error, request._tag);
+          assert.deepEqual(rest, [], `${request._tag} failed without a toast`);
+        }
+        const from = sent.length;
+        yield* yield* receive(done);
+        assert.deepEqual(
+          answers(from),
+          [{ _tag: "toast", level: "success", message: toast }],
+          done._tag,
+        );
+      }
+      const data = yield* registry.get;
+      assert.deepEqual(
+        [data.projects.map((p) => p.id), data.folders],
+        [["launch"], []],
+        "the confirmed changes were made",
+      );
+      assert.deepEqual(
+        data.sessions.map((s) => [s.sessionId, s.title, s.projectId, s.archived === true]),
+        [
+          ["kept", "Renamed", undefined, false],
+          ["archived", undefined, undefined, true],
+        ],
+      );
+    }),
+  );
+});
