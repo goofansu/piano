@@ -260,7 +260,9 @@ await run(
       await page.ab("click", card);
       await page.see("Answer 1.");
       const header = await page.evaluate("document.querySelector('header').textContent");
-      assert.match(header, new RegExp(`Folder: apiWorktree: ${id}/Git branch: feat-${id}`));
+      // One line: folder then branch; the worktree segment is gone (it repeats the branch).
+      assert.match(header, new RegExp(`Folder: apiGit branch: feat-${id}`));
+      assert.doesNotMatch(header, /Worktree:/);
       assert.match(header, /Project: QA Project/);
       console.log(`Session header (${id}): ${header}`);
       await page.capture(`9-header-${id}`);

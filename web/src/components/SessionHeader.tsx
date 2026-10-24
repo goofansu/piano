@@ -1,5 +1,7 @@
-import { GitBranchIcon, MoreHorizontalIcon, SplitIcon, TargetIcon } from "lucide-react";
+import { cn } from "cn";
+import { MoreHorizontalIcon } from "lucide-react";
 import { useRef } from "react";
+import { BranchLabel } from "@/components/BranchLabel";
 import {
   CommandIcon,
   SessionCommandMenuItem,
@@ -20,12 +22,25 @@ import {
 import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
 import { SessionPreviewControl } from "@/components/SessionPreview";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import type { AppState } from "@/store";
+
+/** The title with its menu glued to it: the row's first item, so it shrinks last and never drops. */
+const titleGroup = "flex min-w-0 max-w-max shrink grow basis-52 items-center gap-0.5";
+
+/** A fact about where the session runs: about 6rem on a tight row, else its own width. */
+const fact = "flex min-w-0 max-w-max shrink grow basis-24 items-center text-xs text-ink-3";
 
 export function SessionHeader({
   state,
@@ -40,7 +55,6 @@ export function SessionHeader({
   const mobile = useIsMobile();
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
-  // `folder ⇄ worktree / ⑂ branch · project`; omit the redundant worktree segment for the root checkout.
   const {
     title,
     branch,
@@ -66,147 +80,149 @@ export function SessionHeader({
       <MoreHorizontalIcon />
     </Button>
   );
+  const heading = (
+    <h1 className="min-w-0 truncate text-sm font-medium text-ink">
+      {session ? title : "New session"}
+    </h1>
+  );
+  const sessionMenu = mobile ? (
+    <Sheet>
+      <SheetTrigger asChild>{menuButton}</SheetTrigger>
+      <MobileSessionSheet key={sessionId} />
+    </Sheet>
+  ) : (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>{menuButton}</DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        collisionPadding={16}
+        className="w-96 max-w-[calc(100vw-2rem)]"
+      >
+        <DropdownMenuGroup className="flex items-start">
+          <SessionDetails
+            className="px-2"
+            cwd={session?.cwd}
+            branch={branch}
+            sessionId={sessionId}
+          />
+          {menu.details.map((c) => (
+            <DropdownMenuItem
+              key={c.id}
+              className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5"
+              aria-label={c.label}
+              onSelect={() => run(c)}
+            >
+              <CommandIcon icon={c.icon} />
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          {menu.open.map((c) => (
+            <SessionCommandMenuItem key={c.id} command={c} run={run} />
+          ))}
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          {menu.manage.map((c) => (
+            <SessionCommandMenuItem key={c.id} command={c} run={run} />
+          ))}
+        </DropdownMenuGroup>
+        {projectMenu && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <ProjectMenu menu={projectMenu} run={run} />
+            </DropdownMenuGroup>
+          </>
+        )}
+        {display && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuCheckboxItem
+                checked={!!display.checked}
+                onCheckedChange={() => run(display)}
+              >
+                <CommandIcon icon={display.icon} /> {display.label}
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuGroup>
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          {menu.destructive.map((c) => (
+            <SessionCommandMenuItem key={c.id} command={c} run={run} />
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
   return (
     <>
       {/* Outside the transcript scroller: stays visible without an overlay or scroll listener.
-       * The title, with where the session runs beneath it; its controls at the end. */}
+       * One line: the project crumb and the title with its menu, then where the session runs,
+       * then its controls at the end. */}
       <PaneHeader>
-        <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
-          {cwd ? (
-            <>
-              <h1 className="col-span-2 truncate text-sm font-medium md:col-span-1">
-                {session ? title : "New session"}
-              </h1>
-              {/* Plain workspace metadata has no dedicated UI primitive. Full length while it fits;
-               * when space runs short each segment truncates to about 6rem, then drops out whole from
-               * the end: the line may wrap, but only its first row shows. The project is optional
-               * context, so it comes last and drops first; it is the way to the project's home. */}
-              <div className="col-start-1 row-start-2 flex h-[1lh] min-w-0 flex-wrap items-center gap-x-1.5 overflow-hidden text-xs text-ink-3">
-                <p className="max-w-full shrink-0 truncate">
-                  <span className="sr-only">{worktree ? "Folder: " : "Working directory: "}</span>
-                  {folder}
-                </p>
-                {worktree && (
-                  <p className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1 font-mono">
-                    <SplitIcon aria-hidden="true" className="size-3 shrink-0 rotate-90" />
-                    <span className="sr-only">Worktree: </span>
-                    <span className="truncate">{worktree}</span>
-                  </p>
-                )}
-                {branch && (
-                  <p className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1.5 font-mono">
-                    {(folder || worktree) && (
-                      <span aria-hidden="true" className="font-sans text-ink-3/60">
-                        /
-                      </span>
-                    )}
-                    <span className="flex min-w-0 items-center gap-1">
-                      <GitBranchIcon aria-hidden="true" className="size-3 shrink-0" />
-                      <span className="sr-only">Git branch: </span>
-                      <span className="truncate">{branch}</span>
-                    </span>
-                  </p>
-                )}
-                {openProject && projectMenu?.current && (
-                  <span className="flex min-w-0 max-w-max shrink grow basis-24 items-center gap-1.5">
-                    <span aria-hidden="true" className="text-ink-3/60">
-                      ·
-                    </span>
-                    <button
-                      type="button"
-                      className="flex min-w-0 items-center gap-1 rounded-sm outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={() => run(openProject)}
-                    >
-                      <TargetIcon aria-hidden="true" className="size-3 shrink-0" />
-                      <span className="sr-only">Project: </span>
-                      <span className="truncate">{projectMenu.current.name}</span>
-                    </button>
-                  </span>
-                )}
+        {cwd ? (
+          // Plain workspace metadata has no dedicated UI primitive. The row is one line tall and
+          // wraps: an item that no longer fits moves to a second row the box hides, so each fact
+          // drops out whole from the end, branch first, and only the title group shrinks.
+          <div className="flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-3 overflow-hidden max-md:h-11">
+            {openProject && projectMenu?.current ? (
+              <Breadcrumb className={titleGroup}>
+                <BreadcrumbList className="min-w-0 flex-nowrap gap-1.5 sm:gap-1.5">
+                  {/* The crumb is the way up; on phones the sheet's project page covers it. */}
+                  <BreadcrumbItem className="hidden min-w-0 max-w-32 shrink-0 md:inline-flex">
+                    <BreadcrumbLink asChild>
+                      <button
+                        type="button"
+                        className="min-w-0 truncate rounded-sm text-ink-3 outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => run(openProject)}
+                      >
+                        <span className="sr-only">Project: </span>
+                        {projectMenu.current.name}
+                      </button>
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator className="hidden text-ink-3/60 md:block">
+                    /
+                  </BreadcrumbSeparator>
+                  <BreadcrumbItem className="min-w-0 gap-0.5">
+                    {heading}
+                    {sessionMenu}
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+            ) : (
+              <div className={titleGroup}>
+                {heading}
+                {sessionMenu}
               </div>
-            </>
-          ) : (
-            <>
-              <Skeleton className="col-span-2 h-4 w-40" />
-              <Skeleton className="col-span-2 h-3 w-28" />
-            </>
-          )}
-        </div>
+            )}
+            <p className={fact}>
+              <span className="sr-only">{worktree ? "Folder: " : "Working directory: "}</span>
+              <span className="truncate">{folder}</span>
+            </p>
+            {branch && (
+              <p className={cn(fact, "gap-1")}>
+                <span className="sr-only">Git branch: </span>
+                <BranchLabel branch={branch} className="min-w-0" />
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center">
+            <Skeleton className="h-4 w-40" />
+          </div>
+        )}
         {/* The sidebar row shows the session's state; here it is only announced. */}
         <span role="status" className="sr-only">
           {status}
         </span>
-        <div className="flex shrink-0 items-center gap-0.5 self-start md:self-center">
+        <div className="flex shrink-0 items-center gap-0.5">
           <SessionPreviewControl />
           {pullRequest(menuTrigger)}
-          {mobile ? (
-            <Sheet>
-              <SheetTrigger asChild>{menuButton}</SheetTrigger>
-              <MobileSessionSheet key={sessionId} />
-            </Sheet>
-          ) : (
-            <DropdownMenu modal={false}>
-              <DropdownMenuTrigger asChild>{menuButton}</DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                collisionPadding={16}
-                className="w-96 max-w-[calc(100vw-2rem)]"
-              >
-                <DropdownMenuGroup className="flex items-start">
-                  <SessionDetails className="px-2" cwd={session?.cwd} sessionId={sessionId} />
-                  {menu.details.map((c) => (
-                    <DropdownMenuItem
-                      key={c.id}
-                      className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5"
-                      aria-label={c.label}
-                      onSelect={() => run(c)}
-                    >
-                      <CommandIcon icon={c.icon} />
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  {menu.open.map((c) => (
-                    <SessionCommandMenuItem key={c.id} command={c} run={run} />
-                  ))}
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  {menu.manage.map((c) => (
-                    <SessionCommandMenuItem key={c.id} command={c} run={run} />
-                  ))}
-                </DropdownMenuGroup>
-                {projectMenu && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuGroup>
-                      <ProjectMenu menu={projectMenu} run={run} />
-                    </DropdownMenuGroup>
-                  </>
-                )}
-                {display && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuGroup>
-                      <DropdownMenuCheckboxItem
-                        checked={!!display.checked}
-                        onCheckedChange={() => run(display)}
-                      >
-                        <CommandIcon icon={display.icon} /> {display.label}
-                      </DropdownMenuCheckboxItem>
-                    </DropdownMenuGroup>
-                  </>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  {menu.destructive.map((c) => (
-                    <SessionCommandMenuItem key={c.id} command={c} run={run} />
-                  ))}
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
         </div>
       </PaneHeader>
     </>

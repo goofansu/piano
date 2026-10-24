@@ -89,7 +89,8 @@ passes these checks:
   persistent warning appears only for a problem the user can act on.
 
 Shared structure, so every pane reads as one app: one header shape on the session, the right
-sidebar and Settings (a title, context beneath it when that adds something, controls at the end);
+sidebar and Settings (a title, context beside or beneath it when that adds something, controls at
+the end; the session header is one line, with its menu beside the title);
 one status glyph, `StatusDot`, for every state (an app preview, a webhook delivery), breathing
 (`pulse`) only while something is in progress, and each state shown once: the sidebar row owns a
 session's state, so the header repeats nothing; a refresh control turns its own icon while it

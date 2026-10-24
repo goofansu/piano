@@ -9,9 +9,9 @@ with "Stop".
 
 - `open-from-sidebar`: click the session's row in navigation "Sessions".
 - `history`: the saved user message and reply render; "Jump to message" lists them.
-- `header`: the title, with folder, branch and project beneath it; at its end the PR control and
-  "Session information and actions". The session's state is the sidebar row's;
-  the header only carries it as `role=status` text.
+- `header`: one line: the project crumb, the title with "Session information and actions" beside
+  it, then folder and branch; at its end the PR control. The session's state is the sidebar
+  row's; the header only carries it as `role=status` text.
 - `cost`: "Context usage" opens "Token and cost breakdown" with the reply's tokens and cost.
 - `follow-up`: "Message" plus Enter sends to the same Pi session.
 - `stop`: "Stop" aborts a running reply.
