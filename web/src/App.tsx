@@ -5,6 +5,7 @@ import { CommandHost } from "@/components/CommandHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
+import { PaneNotFound } from "@/components/Pane";
 import { ProjectHome } from "@/components/ProjectHome";
 import { ProjectsIndex } from "@/components/ProjectsIndex";
 import { SessionPanel } from "@/components/SessionPanel";
@@ -13,13 +14,6 @@ import { SettingsNavigation, SettingsPage } from "@/components/SettingsPage";
 import { SidebarActivityContext } from "@/components/ShowSidebarButton";
 import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { Toaster } from "@/components/ui/sonner";
 import { checkoutRefresh } from "@/lib/checkoutRefresh";
 import type { NotifyLevel } from "@/lib/client";
@@ -104,7 +98,6 @@ export default function App() {
                           state={state}
                           client={client}
                           chooseDirectory={chooseDirectory}
-                          projectId={state.view.projectId}
                           onProjectChange={(id) => openNew(undefined, id)}
                         />
                       ) : state.view.kind === "projects" ? (
@@ -117,20 +110,15 @@ export default function App() {
                           projectId={state.view.projectId}
                         />
                       ) : state.view.kind === "missing-session" ? (
-                        <Empty className="flex-1 px-4" role="alert">
-                          <EmptyHeader>
-                            <EmptyTitle>Session not found</EmptyTitle>
-                            <EmptyDescription>
-                              This session is not in the registry. Its reference may have been
-                              removed or deleted.
-                            </EmptyDescription>
-                          </EmptyHeader>
-                          <EmptyContent>
+                        <PaneNotFound
+                          title="Session not found"
+                          description="This session is not in Piano's database."
+                          action={
                             <Button variant="outline" onClick={() => openNew()}>
                               New session
                             </Button>
-                          </EmptyContent>
-                        </Empty>
+                          }
+                        />
                       ) : (
                         <SessionView state={state} send={send} />
                       )}

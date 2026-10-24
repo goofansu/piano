@@ -1,6 +1,6 @@
 import { PlusIcon } from "lucide-react";
 import { useCommands } from "@/components/CommandHost";
-import { ProjectHeader } from "@/components/ProjectHome";
+import { PaneBody, PaneHeader, PaneHeading } from "@/components/Pane";
 import { SettingsList, settingsRow } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
@@ -11,9 +11,6 @@ import { newProjectCommand } from "@/lib/projectCommands";
 import { projectsIndex, projectsIndexContext } from "@/lib/projectsIndex";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
-
-const page =
-  "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:px-6 md:py-8";
 
 /**
  * The Projects index: a listing page shaped as a Settings page is, with New project as its one
@@ -28,16 +25,18 @@ export function ProjectsIndex({ state }: { state: AppState }) {
   const now = Date.now();
   return (
     <>
-      <ProjectHeader
+      <PaneHeader
         actions={
           <Button size="sm" disabled={!create.enabled} onClick={() => run(create)}>
             <PlusIcon data-icon="inline-start" /> {create.label}
           </Button>
         }
       >
-        <h1 className="truncate text-sm font-medium">Projects</h1>
-      </ProjectHeader>
-      <div className={page}>
+        <PaneHeading>
+          <h1 className="truncate text-sm font-medium">Projects</h1>
+        </PaneHeading>
+      </PaneHeader>
+      <PaneBody>
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
           {index.kind === "loading" ? (
             <div aria-hidden className="late-enter flex flex-col gap-2">
@@ -79,7 +78,7 @@ export function ProjectsIndex({ state }: { state: AppState }) {
             </SettingsList>
           )}
         </div>
-      </div>
+      </PaneBody>
     </>
   );
 }

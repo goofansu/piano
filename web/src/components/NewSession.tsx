@@ -14,6 +14,7 @@ import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
 import { DraftEditor, useDraftEditor } from "@/components/DraftEditor";
 import { FolderPicker } from "@/components/FolderPicker";
+import { PaneShowSidebar } from "@/components/Pane";
 import {
   Command,
   CommandEmpty,
@@ -34,7 +35,6 @@ import { PianoMark } from "@/components/PianoMark";
 import { Popover, PopoverTrigger } from "@/components/PianoPopover";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { ProjectDestinationItems } from "@/components/Projects";
-import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -61,18 +61,17 @@ interface Props {
   client: WorktreeClient;
   /** Picks the directory the session will run in; the page shows the store's `view.cwd`. */
   chooseDirectory: (cwd: string) => void;
-  /** The project a session started here joins, whose name heads the page. */
-  projectId?: string;
   onProjectChange: (projectId?: string) => void;
 }
 
 /** New session: a welcome above the composer. */
-export function NewSession({ state, client, chooseDirectory, projectId, onProjectChange }: Props) {
-  const project = findProject(state, projectId);
+export function NewSession({ state, client, chooseDirectory, onProjectChange }: Props) {
+  // The project a session started here joins names the page.
+  const project = findProject(state, startPage(state.view)?.projectId);
   return (
     <>
       {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
-      <ShowSidebarButton className="absolute top-[calc(var(--gutter)-0.5rem)] left-[calc(var(--gutter)-0.5rem)]" />
+      <PaneShowSidebar />
       <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">

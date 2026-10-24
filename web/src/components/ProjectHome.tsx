@@ -2,9 +2,8 @@ import { type ComponentProps, useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
 import { NewSessionComposer } from "@/components/NewSession";
+import { PaneBody, PaneHeader, PaneHeading, PaneNotFound } from "@/components/Pane";
 import { ProjectCommandsMenu } from "@/components/Projects";
-import { ShowSidebarButton } from "@/components/ShowSidebarButton";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
   Item,
   ItemActions,
@@ -27,26 +26,6 @@ function useStableOrder(keys: readonly string[]): string[] {
   return order.current;
 }
 
-const page =
-  "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:px-6 md:py-8";
-
-/** The pane's header, shaped like the session header: the name with a line beneath it, actions at the end. The Projects index shares it. */
-export function ProjectHeader({
-  children,
-  actions,
-}: {
-  children: React.ReactNode;
-  actions?: React.ReactNode;
-}) {
-  return (
-    <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line px-4 py-2 md:px-(--gutter)">
-      <ShowSidebarButton className="-ml-2" />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">{children}</div>
-      {actions}
-    </header>
-  );
-}
-
 /**
  * The home's geometry while the registry loads, like the sidebar's skeleton: hidden from screen
  * readers and late to appear, so a quick load shows the home without it and nothing is announced.
@@ -54,18 +33,20 @@ export function ProjectHeader({
 function ProjectHomeSkeleton() {
   return (
     <>
-      <ProjectHeader>
-        <div aria-hidden className="late-enter flex flex-col gap-2">
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-3 w-20" />
-        </div>
-      </ProjectHeader>
-      <div className={page}>
+      <PaneHeader>
+        <PaneHeading>
+          <div aria-hidden className="late-enter flex flex-col gap-2">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+        </PaneHeading>
+      </PaneHeader>
+      <PaneBody>
         <div aria-hidden className="late-enter mx-auto flex w-full max-w-3xl flex-col gap-2">
           <Skeleton className="h-14 w-full rounded-lg" />
           <Skeleton className="h-14 w-full rounded-lg" />
         </div>
-      </div>
+      </PaneBody>
     </>
   );
 }
@@ -93,15 +74,10 @@ export function ProjectHome({
   if (home.kind === "loading") return <ProjectHomeSkeleton />;
   if (home.kind === "missing")
     return (
-      <>
-        <ShowSidebarButton className="absolute top-[calc(var(--gutter)-0.5rem)] left-[calc(var(--gutter)-0.5rem)]" />
-        <Empty className="flex-1 px-4" role="alert">
-          <EmptyHeader>
-            <EmptyTitle>Project not found</EmptyTitle>
-            <EmptyDescription>This project is not in Piano's database.</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </>
+      <PaneNotFound
+        title="Project not found"
+        description="This project is not in Piano's database."
+      />
     );
 
   const { project } = home;
@@ -112,7 +88,7 @@ export function ProjectHome({
   const count = sessions.length;
   return (
     <>
-      <ProjectHeader
+      <PaneHeader
         actions={
           <ProjectCommandsMenu
             project={project}
@@ -122,13 +98,15 @@ export function ProjectHome({
           />
         }
       >
-        <h1 className="truncate text-sm font-medium">{project.name}</h1>
-        {/* Plain project metadata has no dedicated UI primitive. */}
-        <p className="truncate text-xs text-ink-3">
-          {count === 1 ? "1 session" : `${count} sessions`}
-        </p>
-      </ProjectHeader>
-      <div className={page}>
+        <PaneHeading>
+          <h1 className="truncate text-sm font-medium">{project.name}</h1>
+          {/* Plain project metadata has no dedicated UI primitive. */}
+          <p className="truncate text-xs text-ink-3">
+            {count === 1 ? "1 session" : `${count} sessions`}
+          </p>
+        </PaneHeading>
+      </PaneHeader>
+      <PaneBody>
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
           {/* A session started here joins this project. */}
           <NewSessionComposer state={state} client={client} chooseDirectory={chooseDirectory} />
@@ -169,7 +147,7 @@ export function ProjectHome({
             </ItemGroup>
           )}
         </div>
-      </div>
+      </PaneBody>
     </>
   );
 }

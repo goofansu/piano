@@ -7,6 +7,7 @@ import {
   useSessionProjectMenu,
 } from "@/components/CommandHost";
 import { MobileSessionSheet, SessionDetails } from "@/components/MobileSessionSheet";
+import { PaneHeader } from "@/components/Pane";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -19,7 +20,6 @@ import {
 import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
 import { SessionPreviewControl } from "@/components/SessionPreview";
-import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -70,8 +70,7 @@ export function SessionHeader({
     <>
       {/* Outside the transcript scroller: stays visible without an overlay or scroll listener.
        * The title, with where the session runs beneath it; its controls at the end. */}
-      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line px-4 py-2 md:px-(--gutter)">
-        <ShowSidebarButton className="-ml-2" />
+      <PaneHeader>
         <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
           {cwd ? (
             <>
@@ -209,7 +208,7 @@ export function SessionHeader({
             </DropdownMenu>
           )}
         </div>
-      </header>
+      </PaneHeader>
     </>
   );
 }

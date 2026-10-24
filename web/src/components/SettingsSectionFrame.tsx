@@ -7,7 +7,7 @@ import {
   ServerIcon,
   WebhookIcon,
 } from "lucide-react";
-import { SettingsHeader } from "@/components/SettingsHeader";
+import { PaneHeader } from "@/components/Pane";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { SettingsSectionIconName } from "@/lib/routes";
 
@@ -45,9 +45,11 @@ export function SettingsSectionFrame({
 }) {
   return (
     <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
-      <SettingsHeader title={title} titleId={titleId}>
-        {actions}
-      </SettingsHeader>
+      <PaneHeader actions={actions}>
+        <h1 id={titleId} className="min-w-0 flex-1 truncate text-sm font-medium">
+          {title}
+        </h1>
+      </PaneHeader>
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
         <section
           id={sectionId}
