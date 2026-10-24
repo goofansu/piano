@@ -630,8 +630,12 @@ class Launchd implements Supervisor {
     if (state.state !== "running" || !Number.isInteger(leader) || leader <= 1) return false;
     let output: string;
     try {
+      // -b skips stat/readlink of every mount (a slow network mount stalls lsof past the run
+      // timeout); -w drops the warnings that causes. Socket listings need neither.
       output = await this.run([
         "/usr/sbin/lsof",
+        "-b",
+        "-w",
         "-nP",
         `-iTCP:${record.port}`,
         "-sTCP:LISTEN",
