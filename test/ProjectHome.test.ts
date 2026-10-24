@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, WorktreeView } from "../shared/wire.ts";
 import { globalCommands } from "../web/src/lib/globalCommands.ts";
+import { projectCommands, projectMenu } from "../web/src/lib/projectCommands.ts";
 import { projectHome, stableOrder } from "../web/src/lib/projectHome.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
@@ -124,4 +125,30 @@ test("on a project's home, Mod+K offers its menu's Project settings and Delete p
     "New session stays the same everywhere",
   );
   assert.equal(row(state, "project-settings"), undefined, "elsewhere the row is absent");
+});
+
+test("on a project's home, Mod+K offers exactly its header menu's rows, named as they are", () => {
+  const ctx = { settingsOpen: false, view: { groupBy: "date", sortBy: "recent" } } as const;
+  const shown = (c: { label: string; icon: string; enabled: boolean; intent: unknown }) => ({
+    label: c.label,
+    icon: c.icon,
+    enabled: c.enabled,
+    intent: c.intent,
+  });
+  for (const connected of [true, false]) {
+    const home: AppState = { ...state, connected, view: { kind: "project", projectId: "p1" } };
+    const elsewhere = globalCommands({ ...home, view: { kind: "session" } }, ctx).map(
+      (c) => c.label,
+    );
+    const added = globalCommands(home, ctx).filter((c) => !elsewhere.includes(c.label));
+    const project = home.projects.find((p) => p.id === "p1");
+    assert.ok(project);
+    const menu = projectMenu(projectCommands(home, project));
+    assert.deepEqual(
+      added.map(shown),
+      [...menu.manage, ...menu.destructive].map(shown),
+      connected ? "online" : "offline",
+    );
+    assert.ok(added.every((c) => c.group === "navigate"));
+  }
 });

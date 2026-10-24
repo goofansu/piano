@@ -1,5 +1,7 @@
 import {
   ArrowUpDownIcon,
+  FolderIcon,
+  FolderMinusIcon,
   HomeIcon,
   LayoutListIcon,
   type LucideIcon,
@@ -32,6 +34,8 @@ const ICONS: Record<Exclude<IconId, SettingsSectionIconName>, LucideIcon> = {
   group: LayoutListIcon,
   sort: ArrowUpDownIcon,
   delete: Trash2Icon,
+  folder: FolderIcon,
+  remove: FolderMinusIcon,
 };
 
 /**
