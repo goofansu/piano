@@ -6,6 +6,7 @@
  */
 import { Context, Data, Effect, Layer, Schema } from "effect";
 import type { PullRequest } from "../shared/wire.ts";
+import { childEnvironment } from "./ChildEnvironment.ts";
 import { observeGit } from "./GitCheckout.ts";
 import { GhCommand, run as runProcess } from "./Subprocess.ts";
 
@@ -230,7 +231,7 @@ export const GitHubPullRequestsLive = Layer.effect(
         command: ghCli,
         args,
         cwd,
-        env: { ...process.env, GH_HOST: host, GH_REPO: undefined },
+        env: { ...childEnvironment(), GH_HOST: host, GH_REPO: undefined },
         timeout: 15000,
         limit: 4 * 1024 * 1024,
       }).pipe(

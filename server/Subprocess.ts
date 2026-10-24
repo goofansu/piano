@@ -4,6 +4,7 @@
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { Context, Data, Effect } from "effect";
+import { childEnvironment } from "./ChildEnvironment.ts";
 
 export const GitCommand = Context.Reference<string>("piano/GitCommand", {
   defaultValue: () => "git",
@@ -14,7 +15,7 @@ export interface RunOptions {
   readonly command: string;
   readonly args: readonly string[];
   readonly cwd?: string;
-  /** Defaults to the server's environment. */
+  /** Defaults to `childEnvironment()`; a caller's own environment starts from it too. */
   readonly env?: NodeJS.ProcessEnv;
   /** Stdin always closes after this, so a headless prompt fails rather than waits. */
   readonly input?: Buffer | string;
@@ -103,7 +104,7 @@ export function runAsync(options: RunOptions, signal?: AbortSignal): Promise<Run
     try {
       child = spawn(command, [...args], {
         cwd: options.cwd,
-        env: options.env ?? process.env,
+        env: options.env ?? childEnvironment(),
         detached: group,
         stdio: group ? "ignore" : "pipe",
       });

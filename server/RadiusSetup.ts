@@ -12,6 +12,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
 import type { RadiusSetupRequest, RadiusSetupState, RadiusSetupStep } from "../shared/radius.ts";
+import { childEnvironment } from "./ChildEnvironment.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import {
   authOf,
@@ -50,7 +51,7 @@ async function runPackage(
       command: process.execPath,
       args: [cli, action, source, "--no-approve"],
       cwd: directory,
-      env: { ...process.env, PI_CODING_AGENT_DIR: directory },
+      env: { ...childEnvironment(), PI_CODING_AGENT_DIR: directory },
       group: true,
     },
     signal,

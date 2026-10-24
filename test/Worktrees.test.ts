@@ -449,3 +449,44 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
     ),
   );
 });
+
+test("a Piano started inside a project member's session passes no launch variable to Worktrunk", async (t) => {
+  const { root, repo } = fixture(t),
+    cli = join(root, "wt"),
+    seen = join(root, "env.json");
+  writeFileSync(
+    cli,
+    `#!${process.execPath}\nimport {writeFileSync} from 'node:fs';
+if(process.argv.includes('--version')) console.log('wt v0.80.0');
+else{writeFileSync(${JSON.stringify(seen)},JSON.stringify(process.env));
+console.log(JSON.stringify({action:'created',branch:'feature',path:${JSON.stringify(join(root, "feature"))},created_branch:true,base_branch:'main'}));}\n`,
+    { mode: 0o755 },
+  );
+  const inherited = {
+    PIANO_PROJECT_INSTRUCTIONS: "Parent project's instructions",
+    PIANO_PREVIEW_OWNER: "http://127.0.0.1:1/parent-preview",
+    PIANO_SESSION_WS_URL: "ws://127.0.0.1:1/ws",
+    PIANO_SESSION_ORIGIN: "http://127.0.0.1:1",
+    PIANO_INHERITED_MARKER: "kept",
+  };
+  const saved = Object.fromEntries(Object.keys(inherited).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, inherited);
+  try {
+    await Effect.runPromise(
+      createWorktree(repo, "feature").pipe(Effect.provideService(WorktrunkCommand, cli)),
+    );
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+  const env = JSON.parse(readFileSync(seen, "utf8"));
+  // The rest of Piano's environment still reaches Worktrunk.
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.keys(inherited).flatMap((key) => (key in env ? [[key, env[key]]] : [])),
+    ),
+    { PIANO_INHERITED_MARKER: "kept" },
+  );
+});
