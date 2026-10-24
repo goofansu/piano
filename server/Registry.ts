@@ -10,7 +10,13 @@ import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, type Scope, Semaphore } from "effect";
 import { RadiusShareLink } from "../shared/share.ts";
 import type { WebhookEvent } from "../shared/webhooks.ts";
-import { Project, SessionPullRequestLink, SessionStats, Workspace } from "../shared/wire.ts";
+import {
+  Project,
+  SESSION_TITLE_MAX,
+  SessionPullRequestLink,
+  SessionStats,
+  Workspace,
+} from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { openRegistryDatabase } from "./RegistryDatabase.ts";
@@ -633,7 +639,7 @@ export const RegistryLive = Layer.effect(
           const entry = d.sessions.find(isSession(cwd, sessionId));
           if (!entry) return d;
           // Pi owns the name; a session Pi has not named keeps its start name or first prompt.
-          const title = facts.sessionName?.trim().slice(0, 200) || entry.title;
+          const title = facts.sessionName?.trim().slice(0, SESSION_TITLE_MAX) || entry.title;
           const stats = facts.stats ?? entry.stats;
           if (title === entry.title && JSON.stringify(stats) === JSON.stringify(entry.stats))
             return d;

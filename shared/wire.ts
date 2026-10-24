@@ -500,6 +500,11 @@ export const sameWorkspace = (a: Workspace, b: Workspace) =>
 
 /** A project name's length limit, in UTF-16 code units, as the browser counts them. */
 export const PROJECT_NAME_MAX = 200;
+/**
+ * A session title's length limit, in UTF-16 code units as the browser counts them, counted as the
+ * registry saves the title: trimmed.
+ */
+export const SESSION_TITLE_MAX = 200;
 /** Project instructions' length limit, in UTF-16 code units, as the browser counts them. */
 export const PROJECT_INSTRUCTIONS_MAX = 20_000;
 export const ProjectInstructions = Schema.String.check(
@@ -845,7 +850,7 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("rename_session", {
     cwd: Schema.String,
     sessionId: Schema.String,
-    title: Schema.String,
+    title: Schema.String.check(Schema.makeFilter((t) => t.trim().length <= SESSION_TITLE_MAX)),
   }),
   /** Set a sidebar preference without starting or stopping Pi. */
   Schema.TaggedStruct("pin_session", {
