@@ -1,7 +1,8 @@
 /**
- * The commands that apply wherever the user is, described once: navigation, directory trust, the
- * sidebar and its view, and appearance. The command palette's Global commands group, the sidebar's
- * View menu and the New session page's trust toggle render these instead of each deciding.
+ * The commands that apply wherever the user is, described once: navigation, what the open page's
+ * header offers (`pageCommands`), directory trust, the sidebar and its view, and appearance. The
+ * command palette's Global commands group, the sidebar's View menu, the Projects index's header and
+ * the New session page's trust toggle render these instead of each deciding.
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand } from "../../../shared/wire.ts";
@@ -11,6 +12,7 @@ import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.t
 import {
   deleteProjectCommand,
   findProject,
+  newProjectCommand,
   type ProjectCommandOf,
   projectSettingsCommand,
 } from "./projectCommands.ts";
@@ -32,6 +34,7 @@ export type GlobalCommandId =
   | `settings-${SettingsSection}`
   | "new-session"
   | "projects"
+  | "new-project"
   | "project-settings"
   | "delete-project"
   | "trust"
@@ -71,8 +74,8 @@ export type GlobalCommandIntent =
   | { kind: "new-session" }
   /** Open the Projects index. */
   | { kind: "projects" }
-  /** A project home's Project settings or Delete project, as the project's own menu runs it. */
-  | ProjectHomeCommand["intent"]
+  /** The open page's header action (New project, Project settings, Delete project), as the page runs it. */
+  | PageCommandSource["intent"]
   /** Send this registry or Pi change. */
   | { kind: "send"; command: ClientCommand }
   | { kind: "toggle-sidebar" }
@@ -138,19 +141,19 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
   };
 }
 
-type ProjectHomeCommand = ProjectCommandOf<
-  "project-settings" | "delete-project",
-  "settings" | "delete"
->;
+/** The descriptors a page's header action comes from. */
+type PageCommandSource =
+  | ProjectCommandOf<"project-dialog", "new">
+  | ProjectCommandOf<"project-settings" | "delete-project", "settings" | "delete">;
 
 /**
- * On a project's home, its header menu's Project settings and Delete project, as the project's
- * commands describe them; the home itself starts sessions.
+ * What the open page offers in its header, as the page's own commands describe it: on the Projects
+ * index, New project; on a project's home, its menu's Project settings and Delete project (the home
+ * itself starts sessions). The palette lists exactly these, so a page that adds a header action
+ * gets its row, named as its button is, by construction.
  */
-function projectHomeRows(state: AppState): GlobalCommand[] {
-  const project = state.view.kind === "project" ? findProject(state, state.view.projectId) : null;
-  if (!project) return [];
-  const row = (id: GlobalCommandId, c: ProjectHomeCommand): GlobalCommand => ({
+export function pageCommands(state: AppState): GlobalCommand[] {
+  const row = (id: GlobalCommandId, c: PageCommandSource): GlobalCommand => ({
     id,
     label: c.label,
     icon: c.icon,
@@ -158,6 +161,10 @@ function projectHomeRows(state: AppState): GlobalCommand[] {
     enabled: c.enabled,
     intent: c.intent,
   });
+  const view = state.view;
+  if (view.kind === "projects") return [row("new-project", newProjectCommand(state))];
+  const project = view.kind === "project" ? findProject(state, view.projectId) : undefined;
+  if (!project) return [];
   return [
     row("project-settings", projectSettingsCommand(project)),
     row("delete-project", deleteProjectCommand(state, project)),
@@ -166,8 +173,8 @@ function projectHomeRows(state: AppState): GlobalCommand[] {
 
 /**
  * Global commands, in the palette's order: Home or Settings (whichever is not open), each Settings
- * section, New session, Projects, Project settings on a project's home, trust for the directory the main pane is about, Toggle sidebar, the
- * appearances, then each sidebar grouping and sort, with the current one of each checked.
+ * section, New session, Projects, the open page's header actions (`pageCommands`), trust for the
+ * directory the main pane is about, Toggle sidebar, the appearances, then each sidebar grouping and sort, with the current one of each checked.
  */
 export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
   const trust = trustCommand(state, focusedDirectory(state)?.cwd);
@@ -217,7 +224,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       enabled: true,
       intent: { kind: "projects" },
     },
-    ...projectHomeRows(state),
+    ...pageCommands(state),
     ...(trust ? [trust] : []),
     {
       id: "toggle-sidebar",

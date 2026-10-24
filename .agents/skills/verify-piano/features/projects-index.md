@@ -14,7 +14,8 @@ and session state live on the home. The page reads only what the browser already
   `No sessions yet`; the time at the row's end is absent for an empty project.
 - `sidebar-row`: the sidebar's "Projects" row under New session opens the index and reads as the
   current row (`aria-current=page`) while it is open.
-- `palette-row`: Mod+K offers "Projects" under Global commands on every screen, Settings included.
+- `palette-row`: Mod+K offers "Projects" under Global commands on every screen, Settings included;
+  on `/projects` it also offers the header's "New project", which opens the same dialog.
 - `new-project`: the header's "New project" opens the New project dialog, shaped as Project
   settings is: Name and Instructions (optional), with a live count under Instructions
   ("0 / 20,000") that turns red past the limit while Create stays off. "Create project" saves both in one write, toasts

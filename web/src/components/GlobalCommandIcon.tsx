@@ -34,9 +34,20 @@ const ICONS: Record<Exclude<IconId, SettingsSectionIconName>, LucideIcon> = {
   delete: Trash2Icon,
 };
 
-/** A global command's icon, as the palette, the View menu and the trust toggle show it; Settings sections keep their own. */
-export function GlobalCommandIcon({ icon }: { icon: IconId }) {
-  if (!(icon in ICONS)) return <SettingsSectionIcon icon={icon as SettingsSectionIconName} />;
+/**
+ * A global command's icon, as the palette, the View menu, the trust toggle and a page header's
+ * button show it; Settings sections keep their own.
+ */
+export function GlobalCommandIcon({
+  icon,
+  ...props
+}: {
+  icon: IconId;
+  /** A Button's leading or trailing icon, which sets its padding. */
+  "data-icon"?: "inline-start" | "inline-end";
+}) {
+  if (!(icon in ICONS))
+    return <SettingsSectionIcon icon={icon as SettingsSectionIconName} {...props} />;
   const Icon = ICONS[icon as keyof typeof ICONS];
-  return <Icon />;
+  return <Icon {...props} />;
 }

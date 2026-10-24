@@ -225,7 +225,10 @@ export function openProjectCommand(project: Project): ProjectCommand {
  * New project: the project dialog, which creates a project and, with `assign`, files that session in
  * it. Saving changes the registry, so it waits for a connection.
  */
-export function newProjectCommand(state: AppState, assign?: SessionRef): ProjectCommand {
+export function newProjectCommand(
+  state: AppState,
+  assign?: SessionRef,
+): ProjectCommandOf<"project-dialog", "new"> {
   return {
     id: "new-project",
     label: "New project",
