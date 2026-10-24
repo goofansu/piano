@@ -12,6 +12,7 @@ import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
 import { WebhookFetch, Webhooks, WebhooksLive, WebhookTimeoutMs } from "../server/Webhooks.ts";
+import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import { WEBHOOK_EVENTS, type WebhookPayload, type WebhookSave } from "../shared/webhooks.ts";
 import type { Snapshot } from "../shared/wire.ts";
@@ -271,14 +272,18 @@ test("a webhook token is redacted whole before the answer is cut, even across th
         "s",
         answered(`${"x".repeat(1980)} ${token} ${"y".repeat(100)}`),
       );
+      yield* hooks.emit("session.completed", cwd, "s", answered("z".repeat(LAST_ANSWER_CHARS)));
       yield* hooks.test(a.id);
       yield* hooks.test(b.id);
-      const [whole, straddling] = requests
+      const [whole, straddling, exact] = requests
         .filter((r) => r.headers.get("x-piano-hook-id") === b.id && r.body.event !== "ping")
         .map((r) => r.body);
       assert.equal(whole.answer, `${"x".repeat(100)} [redacted]`);
       assert.equal(whole.answerTruncated, false);
       assert.equal(straddling.answerTruncated, true);
+      assert.equal(straddling.answer?.length, LAST_ANSWER_CHARS);
+      assert.equal(exact.answer?.length, LAST_ANSWER_CHARS);
+      assert.equal(exact.answerTruncated, false);
       assert.ok(straddling.answer?.startsWith(`${"x".repeat(1980)} [redacted] y`));
       for (let i = 0; i + 8 <= token.length; i++)
         assert.equal(straddling.answer?.includes(token.slice(i, i + 8)), false);
