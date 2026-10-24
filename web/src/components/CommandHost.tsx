@@ -315,11 +315,9 @@ export function CommandHost({
       <ProjectDialogView
         open={!!project}
         dialog={project}
-        name={forms.text}
-        instructions={forms.instructions}
+        draft={forms.projectDraft}
+        setDraft={forms.editProject}
         allowed={answer.allowed}
-        edit={forms.edit}
-        editInstructions={forms.editInstructions}
         submit={forms.submit}
         close={close}
       />

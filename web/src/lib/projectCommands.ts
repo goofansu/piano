@@ -1,6 +1,7 @@
 /**
  * Project policy for the client, described once: which projects a picker offers, what a project's
- * row offers (each command with whether it is available now and what running it means), creating a
+ * row offers (each command with whether it is available now and what running it means), whether a
+ * project draft may be saved (`savableProjectDraft`, creating and editing alike), creating a
  * project and moving a session between projects (`sessionProjectMenu`), and whether a session can
  * start in a project. The sidebar, the session's Project menu, the phone sheet, the command palette
  * and the New session page render these and hand them to the one command host instead of each
@@ -128,27 +129,41 @@ export function deleteProjectCommand(
   };
 }
 
-/** What the settings dialog holds while it is edited. */
-export interface ProjectSettingsDraft {
+/** A project's Name and Instructions as the New project and Project settings dialogs edit them. */
+export interface ProjectDraft {
   name: string;
   instructions: string;
 }
 
+/** The draft New project opens with. */
+export const EMPTY_PROJECT_DRAFT: ProjectDraft = { name: "", instructions: "" };
+
+/**
+ * The one rule for saving a project draft, whether it creates a project or changes one: the trimmed
+ * name and instructions when the name is not blank and the instructions are within
+ * `PROJECT_INSTRUCTIONS_MAX`, otherwise nothing. Blank instructions are saveable: the project has none.
+ */
+export function savableProjectDraft(draft: ProjectDraft): ProjectDraft | undefined {
+  const name = draft.name.trim();
+  const instructions = draft.instructions.trim();
+  if (!name || instructions.length > PROJECT_INSTRUCTIONS_MAX) return undefined;
+  return { name, instructions };
+}
+
 /**
  * Saving the settings dialog: one registry change carrying each field that differs from the project
- * as saved now, trimmed. A blank name cannot be saved; blank instructions clear them. Nothing to
- * send, no connection or instructions over the limit leave Save off. The server answers the save.
+ * as saved now, trimmed. A draft `savableProjectDraft` refuses cannot be saved; blank instructions
+ * clear them. Nothing to send or no connection leave Save off. The server answers the save.
  */
 export function projectSettingsSave(
   state: AppState,
   projectId: string,
-  draft: ProjectSettingsDraft,
+  draft: ProjectDraft,
 ): { allowed: false } | { allowed: true; command: ClientCommand } {
   const project = findProject(state, projectId);
-  const name = draft.name.trim();
-  const instructions = draft.instructions.trim();
-  if (!project || !state.connected || !name || instructions.length > PROJECT_INSTRUCTIONS_MAX)
-    return { allowed: false };
+  const saved = savableProjectDraft(draft);
+  if (!project || !state.connected || !saved) return { allowed: false };
+  const { name, instructions } = saved;
   const renamed = name !== project.name;
   const instructed = instructions !== (project.instructions ?? "");
   if (!renamed && !instructed) return { allowed: false };

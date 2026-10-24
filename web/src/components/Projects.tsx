@@ -31,6 +31,7 @@ import type {
   ProjectCommand,
   ProjectCommandIcon,
   ProjectDialog,
+  ProjectDraft,
   SessionProjectMenu,
 } from "@/lib/projectCommands";
 
@@ -135,28 +136,24 @@ export function ProjectMenu({
 
 /**
  * Organization only: saving never opens, aborts or releases a Pi child. The command host owns the
- * one instance and its form (name, instructions, whether saving is allowed, submitting); this only
+ * one instance and its form (the project draft, whether saving is allowed, submitting); this only
  * renders it, in the shape of Project settings, so the project's first session already carries
  * its instructions.
  */
 export function ProjectDialogView({
   open,
   dialog,
-  name,
-  instructions,
+  draft,
+  setDraft,
   allowed,
-  edit,
-  editInstructions,
   submit,
   close,
 }: {
   open: boolean;
   dialog: ProjectDialog | undefined;
-  name: string;
-  instructions: string;
+  draft: ProjectDraft;
+  setDraft: (draft: ProjectDraft) => void;
   allowed: boolean;
-  edit: (name: string) => void;
-  editInstructions: (instructions: string) => void;
   submit: () => void;
   close: () => void;
 }) {
@@ -182,15 +179,7 @@ export function ProjectDialogView({
           <DialogHeader>
             <DialogTitle>New project</DialogTitle>
           </DialogHeader>
-          <ProjectFields
-            id={id}
-            draft={{ name, instructions }}
-            setDraft={(draft) => {
-              if (draft.name !== name) edit(draft.name);
-              if (draft.instructions !== instructions) editInstructions(draft.instructions);
-            }}
-            nameRef={nameInput}
-          />
+          <ProjectFields id={id} draft={draft} setDraft={setDraft} nameRef={nameInput} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close}>
               Cancel

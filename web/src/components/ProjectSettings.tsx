@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { type ProjectSettingsDraft, projectSettingsSave } from "@/lib/projectCommands";
+import { type ProjectDraft, projectSettingsSave } from "@/lib/projectCommands";
 import type { AppState } from "@/store";
 
 /**
@@ -61,7 +61,7 @@ function ProjectSettingsForm({
   close: () => void;
 }) {
   const id = useId();
-  const [draft, setDraft] = useState<ProjectSettingsDraft>({
+  const [draft, setDraft] = useState<ProjectDraft>({
     name: project.name,
     instructions: project.instructions ?? "",
   });
@@ -103,8 +103,8 @@ export function ProjectFields({
   nameRef,
 }: {
   id: string;
-  draft: ProjectSettingsDraft;
-  setDraft: (draft: ProjectSettingsDraft) => void;
+  draft: ProjectDraft;
+  setDraft: (draft: ProjectDraft) => void;
   nameRef?: Ref<HTMLInputElement>;
 }) {
   const over = draft.instructions.length > PROJECT_INSTRUCTIONS_MAX;
