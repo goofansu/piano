@@ -45,7 +45,7 @@ export class Webhooks extends Context.Service<
 type Job = {
   hook: StoredWebhook;
   payload: WebhookPayload;
-  result?: Deferred.Deferred<WebhookDelivery>;
+  result?: Deferred.Deferred<WebhookDelivery, WebhookError>;
 };
 
 export const WebhooksLive = Layer.effect(
@@ -145,15 +145,20 @@ export const WebhooksLive = Layer.effect(
         return;
       }
       const job = pending.splice(index, 1)[0]!;
-      const current = yield* stored;
+      // The hook as stored now, not as admitted: it may have been changed or deleted while the
+      // job waited. A test is answered either way, never left waiting or sent to a deleted hook.
+      const current = yield* stored.pipe(
+        Effect.tapError((error) => (job.result ? Deferred.fail(job.result, error) : Effect.void)),
+      );
       const hook = current.find((h) => h.id === job.hook.id);
-      if (
-        !job.result &&
-        (!hook?.active || !hook.events.includes(job.payload.event as WebhookEvent))
-      )
+      if (!hook) {
+        if (job.result) yield* Deferred.fail(job.result, refused("Webhook no longer exists."));
         return;
-      active.add(job.hook.id);
-      yield* send({ ...job, hook: hook ?? job.hook }).pipe(
+      }
+      if (!job.result && (!hook.active || !hook.events.includes(job.payload.event as WebhookEvent)))
+        return;
+      active.add(hook.id);
+      yield* send({ ...job, hook }).pipe(
         Effect.catchCause(() => Effect.logWarning("A webhook delivery could not be recorded.")),
         Effect.ensuring(
           Effect.gen(function* () {
@@ -240,7 +245,7 @@ export const WebhooksLive = Layer.effect(
       }),
       test: Effect.fn("Webhooks.test")(function* (id) {
         const hook = yield* find(id);
-        const result = yield* Deferred.make<WebhookDelivery>();
+        const result = yield* Deferred.make<WebhookDelivery, WebhookError>();
         const payload: WebhookPayload = { ...(yield* envelope("ping")), ignore: true };
         if (!(yield* admit({ hook, payload, result })))
           return yield* refused("Delivery queue is full. Try again later.");
