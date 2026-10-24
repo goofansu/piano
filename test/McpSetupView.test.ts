@@ -21,7 +21,6 @@ const view = (input: Partial<McpSetupInput> = {}) =>
     running: undefined,
     loading: false,
     loadFailed: false,
-    actionError: "",
     ...input,
   });
 const row = (setup: Partial<McpServerSetup>) =>
@@ -58,20 +57,11 @@ test("rows wait for the first read and list only servers Pi reports", () => {
   assert.equal(view().rows?.[0]?.server.name, "Linear");
 });
 
-test("a change, read or read failure disables the rows; failures need attention", () => {
+test("a change, read or read failure disables the rows", () => {
   assert.equal(view().disabled, false);
   assert.equal(view({ running: "install" }).disabled, true);
   assert.equal(view({ loading: true }).disabled, true);
-  const unreadable = view({ loadFailed: true });
-  assert.equal(unreadable.disabled, true);
-  assert.equal(
-    unreadable.attention,
-    "Could not load MCP servers. Check your connection and try again.",
-  );
-  const failed = view({ actionError: "Could not change MCP setup. Refresh before retrying." });
-  assert.equal(failed.disabled, false);
-  assert.equal(failed.attention, "Could not change MCP setup. Refresh before retrying.");
-  assert.equal(view().attention, undefined);
+  assert.equal(view({ loadFailed: true }).disabled, true);
 });
 
 test("installing goes on to sign in only when the server is ready and awaits OAuth sign-in", () => {

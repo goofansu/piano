@@ -1,5 +1,5 @@
 import type { OAuthProvider } from "@shared/wire";
-import { AlertCircleIcon, CheckCircle2Icon, HomeIcon, PlugIcon } from "lucide-react";
+import { CheckCircle2Icon, HomeIcon, PlugIcon } from "lucide-react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
@@ -9,9 +9,9 @@ import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RadiusSection } from "@/components/RadiusSection";
 import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
 import {
-  SettingsAlert,
   SettingsGroup,
   SettingsList,
+  SettingsLoadFailure,
   SettingsSectionFrame,
   SettingsSectionIcon,
   SettingsSkeleton,
@@ -136,7 +136,8 @@ function ProvidersSettings({
   const signingOut = actions.running;
   const { body, providers } = providersSettingsView({
     value: observed.value,
-    failure: !!observed.failure,
+    // The failure stays while Retry reads again, so the alert does not flicker into a skeleton.
+    failure: !!observed.error,
     signingOut,
   });
   const signOut = (provider: OAuthProvider) =>
@@ -176,12 +177,11 @@ function ProvidersSettings({
         {body.kind !== "hidden" && (
           <SettingsGroup id="settings-other-providers" title="Other providers">
             {body.kind === "error" ? (
-              <SettingsAlert title="Could not load providers" icon={<AlertCircleIcon />}>
-                <p>Check your connection and try again.</p>
-                <Button variant="outline" size="sm" onClick={() => void providerAccounts.refresh()}>
-                  Retry
-                </Button>
-              </SettingsAlert>
+              <SettingsLoadFailure
+                title="Could not load providers"
+                retrying={observed.loading}
+                retry={() => void providerAccounts.refresh()}
+              />
             ) : body.kind === "loading" ? (
               <SettingsSkeleton label="Loading providers…" className="flex flex-col gap-2">
                 {[0, 1, 2].map((row) => (

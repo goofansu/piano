@@ -11,6 +11,7 @@ export function useRadiusSetup(): RadiusSetup & RadiusSetupSnapshot {
       api: radiusSetup,
       accounts: providerAccounts,
       toast: (message, options) => toast.success(message, options),
+      failure: (message) => toast.error(message),
     }),
   );
   useEffect(() => setup.start(), [setup]);

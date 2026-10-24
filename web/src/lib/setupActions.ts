@@ -22,7 +22,10 @@ export interface SetupActionsOptions {
   refresh: () => void;
   /** Announces a finished change, given the change's id. */
   success: (message: string, id: string) => void;
-  /** Reports a failure instead of keeping it in `error`, for a section without an error alert. */
+  /**
+   * Reports a failure as the error's toast instead of keeping it in `error`. Only a form in an open
+   * dialog leaves this out, to keep the failure on its fields.
+   */
   failure?: (message: string) => void;
   /** Names one opening of the sign-in dialog. */
   newKey?: () => string;
@@ -48,7 +51,6 @@ export interface SetupActions<C, S> {
   cancel: () => void;
   openSignIn: (subject: S) => void;
   closeSignIn: () => void;
-  clearError: () => void;
 }
 
 const message = (cause: unknown, fallback: string) =>
@@ -104,9 +106,6 @@ export function createSetupActions<C = never, S = never>(
     openSignIn: (subject) => set({ signIn: { subject, key: newKey() } }),
     closeSignIn: () => {
       if (state.signIn) set({ signIn: undefined });
-    },
-    clearError: () => {
-      if (state.error) set({ error: "" });
     },
   };
 }

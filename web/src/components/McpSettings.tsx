@@ -4,8 +4,8 @@ import { toast } from "sonner";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
 import {
-  SettingsAlert,
   SettingsList,
+  SettingsLoadFailure,
   SettingsSectionFrame,
   SettingsSkeleton,
   settingsRow,
@@ -47,6 +47,7 @@ export function McpSettings() {
   const actions = useSetupActions<Confirmation, McpServer>({
     refresh: () => void setup.refresh(),
     success: (text) => toast.success(text),
+    failure: (text) => toast.error(text),
   });
   const { confirmation, signIn } = actions;
   const busy = actions.running !== undefined;
@@ -55,14 +56,13 @@ export function McpSettings() {
     running: actions.running,
     loading: setup.loading,
     loadFailed: !!setup.failure,
-    actionError: actions.error,
   });
   const act = (request: McpSetupRequest, done: string) =>
     actions.run({
       id: request.action,
       run: () => setup.mutate(async () => mcpSetup(request)),
       done,
-      fallback: "Could not change MCP setup. Refresh before retrying.",
+      fallback: "Could not change MCP setup.",
     });
   const { done: removed, ...removalCopy } = mcpRemovalCopy(confirmation?.server.name);
   return (
@@ -109,15 +109,22 @@ export function McpSettings() {
         </>
       }
     >
-      {view.attention && (
-        <SettingsAlert title="MCP setup needs attention">{view.attention}</SettingsAlert>
+      {/* The failure stays while Retry reads again, so it does not flicker into the skeleton. */}
+      {setup.error && (
+        <SettingsLoadFailure
+          title="Could not load MCP servers"
+          retrying={setup.loading}
+          retry={() => void setup.refresh()}
+        />
       )}
       {!view.rows ? (
-        <SettingsSkeleton label="Loading MCP servers…" className="flex flex-col gap-2">
-          {[0, 1].map((row) => (
-            <Skeleton key={row} className="h-14 w-full rounded-lg" />
-          ))}
-        </SettingsSkeleton>
+        setup.error ? null : (
+          <SettingsSkeleton label="Loading MCP servers…" className="flex flex-col gap-2">
+            {[0, 1].map((row) => (
+              <Skeleton key={row} className="h-14 w-full rounded-lg" />
+            ))}
+          </SettingsSkeleton>
+        )
       ) : (
         <SettingsList>
           {view.rows.map((row) => {

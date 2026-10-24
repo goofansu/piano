@@ -29,7 +29,6 @@ const view = (input: Partial<RadiusSetupInput> = {}) =>
     running: undefined,
     refreshing: false,
     loadFailed: false,
-    actionError: "",
     ...input,
   });
 
@@ -157,11 +156,10 @@ test("settled only once read, with nothing running and nothing failing", () => {
     view({ state: { ...ready, installation: { status: "running", action: "install" } } }).settled,
     false,
   );
-  assert.equal(view({ actionError: "Could not complete setup." }).settled, false);
   assert.equal(view({ loadFailed: true }).settled, false);
 });
 
-test("a failed read or change needs attention, and a failed read locks the steps", () => {
+test("a failed read needs attention and locks the steps", () => {
   const unreadable = view({ loadFailed: true });
   assert.equal(
     unreadable.attention,
@@ -169,10 +167,6 @@ test("a failed read or change needs attention, and a failed read locks the steps
   );
   assert.equal(unreadable.locked, true);
   assert.equal(unreadable.canRefresh, true);
-
-  const failedChange = view({ actionError: "Could not complete setup. Refresh before retrying." });
-  assert.equal(failedChange.attention, "Could not complete setup. Refresh before retrying.");
-  assert.equal(failedChange.locked, false);
   assert.equal(view().attention, undefined);
 });
 

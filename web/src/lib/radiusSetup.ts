@@ -41,6 +41,8 @@ export interface RadiusSetupOptions {
   accounts: Pick<ProviderAccounts, "getState" | "subscribe" | "refresh" | "signedIn" | "signOut">;
   /** Shows a success toast; `id` replaces the toast that shares it. */
   toast: (message: string, options?: { id: string }) => void;
+  /** Shows a failed change's error toast. */
+  failure: (message: string) => void;
   environment?: ObservationEnvironment;
   newKey?: () => string;
 }
@@ -62,7 +64,7 @@ export interface RadiusSetup {
   start: () => () => void;
   /** Re-reads the accounts and the setup. */
   refresh: () => Promise<unknown>;
-  /** The user's refresh: clears the last failure, spins at least one turn and confirms it landed. */
+  /** The user's refresh: spins at least one turn and confirms it landed. */
   refreshByHand: () => void;
   act: (action: RadiusSetupAction, removalKey?: string) => Promise<unknown>;
   signOut: () => Promise<unknown>;
@@ -88,6 +90,7 @@ export function createRadiusSetup({
   api,
   accounts,
   toast,
+  failure,
   environment = browserEnvironment,
   newKey,
 }: RadiusSetupOptions): RadiusSetup {
@@ -128,6 +131,7 @@ export function createRadiusSetup({
   const actions = createSetupActions<RadiusConfirmation, string>({
     refresh: () => void refresh(),
     success: (text, id) => toast(text, id === "sign-out" ? undefined : { id: SETUP_TOAST }),
+    failure,
     newKey,
   });
 
@@ -156,7 +160,6 @@ export function createRadiusSetup({
         running: changes.running,
         refreshing,
         loadFailed: !!observed.failure || !!account.failure,
-        actionError: changes.error,
       }),
     };
   };
@@ -184,7 +187,7 @@ export function createRadiusSetup({
           return next;
         }),
       done: radiusDoneMessage(action),
-      fallback: "Could not complete setup. Refresh before retrying.",
+      fallback: "Could not complete setup.",
     });
 
   return {
@@ -207,7 +210,6 @@ export function createRadiusSetup({
     },
     refresh,
     refreshByHand: () => {
-      actions.clearError();
       manual = true;
       void refresh();
     },

@@ -1,7 +1,7 @@
 /**
  * What the MCP section shows and allows: one row per catalog server Pi reports, with its ready mark
- * and the actions it offers, whether the section needs attention, and whether its controls wait.
- * A change, read or read failure in flight disables every row. Pure; the section renders it.
+ * and the actions it offers, and whether its controls wait. A change, read or read failure in
+ * flight disables every row. Pure; the section renders it, and shows a failed read itself.
  */
 import { MCP_CATALOG, type McpSetupState } from "../../../shared/mcp.ts";
 
@@ -16,8 +16,6 @@ export interface McpSetupInput {
   loading: boolean;
   /** The last read failed and no read is in flight. */
   loadFailed: boolean;
-  /** The last change's failure, or "" when it succeeded. */
-  actionError: string;
 }
 
 /** A server row's controls, in the order they appear. */
@@ -39,19 +37,9 @@ export interface McpSetupView {
   rows: readonly McpServerRow[] | undefined;
   /** Every row's controls wait: a change, read or read failure is ongoing. */
   disabled: boolean;
-  /** Why setup needs attention: the read failed or the last change did. */
-  attention: string | undefined;
 }
 
-const LOAD_FAILED = "Could not load MCP servers. Check your connection and try again.";
-
-export function mcpSetupView({
-  state,
-  running,
-  loading,
-  loadFailed,
-  actionError,
-}: McpSetupInput): McpSetupView {
+export function mcpSetupView({ state, running, loading, loadFailed }: McpSetupInput): McpSetupView {
   const rows = state
     ? MCP_CATALOG.flatMap((server): McpServerRow[] => {
         const setup = state.servers.find((s) => s.id === server.id);
@@ -75,7 +63,6 @@ export function mcpSetupView({
   return {
     rows,
     disabled: running !== undefined || loading || loadFailed,
-    attention: (loadFailed ? LOAD_FAILED : "") || actionError || undefined,
   };
 }
 

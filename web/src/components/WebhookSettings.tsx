@@ -24,8 +24,8 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
 import {
-  SettingsAlert,
   SettingsList,
+  SettingsLoadFailure,
   SettingsSectionFrame,
   SettingsSkeleton,
   settingsRow,
@@ -157,15 +157,23 @@ export function WebhookSettings() {
         </>
       }
     >
-      {observed.failure && (
-        <SettingsAlert title="Webhooks need attention">Could not load webhooks.</SettingsAlert>
+      {/* The failure stays through the poll's re-reads, so it does not flicker into the skeleton;
+       * rows already read stay below it. */}
+      {observed.error && (
+        <SettingsLoadFailure
+          title="Could not load webhooks"
+          retrying={observed.loading}
+          retry={() => void observed.refresh()}
+        />
       )}
       {!observed.value ? (
-        <SettingsSkeleton label="Loading webhooks…" className="flex flex-col gap-2">
-          {[0, 1].map((row) => (
-            <Skeleton key={row} className="h-14 w-full rounded-lg" />
-          ))}
-        </SettingsSkeleton>
+        observed.error ? null : (
+          <SettingsSkeleton label="Loading webhooks…" className="flex flex-col gap-2">
+            {[0, 1].map((row) => (
+              <Skeleton key={row} className="h-14 w-full rounded-lg" />
+            ))}
+          </SettingsSkeleton>
+        )
       ) : observed.value.length === 0 ? (
         <Empty className="border border-dashed border-line py-10">
           <EmptyHeader>
