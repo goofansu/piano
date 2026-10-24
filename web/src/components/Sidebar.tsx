@@ -36,7 +36,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { Keys } from "@/components/PianoMark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
-import { ProjectCommandIconView, ProjectMenu } from "@/components/Projects";
+import { ProjectCommandIconView, ProjectCommandsMenu, ProjectMenu } from "@/components/Projects";
 import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -534,9 +534,7 @@ function ProjectGroup({
   const { run } = useCommands();
   const commands = project ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
-  const remove = commands.find((c) => c.id === "delete");
   // The group's name only folds it; its New session in project button opens the project's home.
-  const menu = commands.filter((c) => c.id !== "new-session" && c.id !== "delete");
   return (
     <SidebarGroup
       label={project?.name ?? "No project"}
@@ -559,42 +557,13 @@ function ProjectGroup({
             </IconButton>
           )}
           {project && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className={hoverSlot}
-                  aria-label={`Project menu for ${project.name}`}
-                >
-                  <MoreHorizontalIcon />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
-                  {menu.map((c) => (
-                    <DropdownMenuItem key={c.id} disabled={!c.enabled} onSelect={() => run(c)}>
-                      <ProjectCommandIconView icon={c.icon} /> {c.label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuGroup>
-                {/* Delete sits apart, as on a session's menu: the one destructive row. */}
-                {remove && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        disabled={!remove.enabled}
-                        onSelect={() => run(remove)}
-                      >
-                        <ProjectCommandIconView icon={remove.icon} /> {remove.label}
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ProjectCommandsMenu
+              project={project}
+              commands={commands}
+              run={run}
+              size="icon-xs"
+              className={hoverSlot}
+            />
           )}
         </>
       }

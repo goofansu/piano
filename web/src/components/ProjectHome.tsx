@@ -1,19 +1,9 @@
-import { MoreHorizontalIcon } from "lucide-react";
 import { type ComponentProps, useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
 import { NewSessionComposer } from "@/components/NewSession";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/PianoDropdownMenu";
-import { ProjectCommandIconView } from "@/components/Projects";
+import { ProjectCommandsMenu } from "@/components/Projects";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
-import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
   Item,
@@ -25,7 +15,7 @@ import {
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
-import { projectCommand } from "@/lib/projectCommands";
+import { projectCommands } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
@@ -115,8 +105,6 @@ export function ProjectHome({
     );
 
   const { project } = home;
-  const settings = projectCommand(state, project, "settings");
-  const remove = projectCommand(state, project, "delete");
   const byKey = new Map(home.sessions.map((s) => [sessionKey(s), s]));
   const sessions = order.flatMap((key) => byKey.get(key) ?? []);
   const now = Date.now();
@@ -126,40 +114,12 @@ export function ProjectHome({
     <>
       <ProjectHeader
         actions={
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Project menu for ${project.name}`}
-              >
-                <MoreHorizontalIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {settings && (
-                <DropdownMenuGroup>
-                  <DropdownMenuItem disabled={!settings.enabled} onSelect={() => run(settings)}>
-                    <ProjectCommandIconView icon={settings.icon} /> {settings.label}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              )}
-              {remove && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      disabled={!remove.enabled}
-                      onSelect={() => run(remove)}
-                    >
-                      <ProjectCommandIconView icon={remove.icon} /> {remove.label}
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ProjectCommandsMenu
+            project={project}
+            commands={projectCommands(state, project)}
+            run={run}
+            size="icon-sm"
+          />
         }
       >
         <h1 className="truncate text-sm font-medium">{project.name}</h1>

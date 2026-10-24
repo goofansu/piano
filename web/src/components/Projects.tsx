@@ -4,11 +4,12 @@ import {
   FolderInputIcon,
   FolderMinusIcon,
   type LucideIcon,
+  MoreHorizontalIcon,
   PlusIcon,
   SettingsIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useId, useRef } from "react";
+import { type ComponentProps, useId, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,8 @@ import {
   DialogTitle,
 } from "@/components/PianoDialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -24,15 +27,17 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { ProjectFields } from "@/components/ProjectSettings";
 import { Button } from "@/components/ui/button";
-import type {
-  ProjectCommand,
-  ProjectCommandIcon,
-  ProjectDialog,
-  ProjectDraft,
-  SessionProjectMenu,
+import {
+  type ProjectCommand,
+  type ProjectCommandIcon,
+  type ProjectDialog,
+  type ProjectDraft,
+  projectMenu,
+  type SessionProjectMenu,
 } from "@/lib/projectCommands";
 
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
@@ -47,6 +52,79 @@ const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
 export function ProjectCommandIconView({ icon }: { icon: ProjectCommandIcon }) {
   const Icon = ICONS[icon];
   return <Icon />;
+}
+
+/** A project command as a menu row, by its label and icon. */
+function ProjectCommandMenuItem({
+  command,
+  run,
+}: {
+  command: ProjectCommand;
+  run: (command: ProjectCommand) => void;
+}) {
+  return (
+    <DropdownMenuItem
+      variant={command.destructive ? "destructive" : undefined}
+      disabled={!command.enabled}
+      onSelect={() => run(command)}
+    >
+      <ProjectCommandIconView icon={command.icon} /> {command.label}
+    </DropdownMenuItem>
+  );
+}
+
+/**
+ * A project's ⋯ menu, from `projectCommands` as `projectMenu` lays it out: its rows, then Delete
+ * apart, as on a session's menu. The sidebar's project group and the project's home differ only in
+ * the trigger's size and class. `run` is the command host's runner.
+ */
+export function ProjectCommandsMenu({
+  project,
+  commands,
+  run,
+  size,
+  className,
+}: {
+  project: Project;
+  commands: readonly ProjectCommand[];
+  run: (command: ProjectCommand) => void;
+  size: ComponentProps<typeof Button>["size"];
+  className?: string;
+}) {
+  const menu = projectMenu(commands);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size={size}
+          className={className}
+          aria-label={`Project menu for ${project.name}`}
+        >
+          <MoreHorizontalIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {menu.manage.length > 0 && (
+          <DropdownMenuGroup>
+            {menu.manage.map((c) => (
+              <ProjectCommandMenuItem key={c.id} command={c} run={run} />
+            ))}
+          </DropdownMenuGroup>
+        )}
+        {menu.destructive.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              {menu.destructive.map((c) => (
+                <ProjectCommandMenuItem key={c.id} command={c} run={run} />
+              ))}
+            </DropdownMenuGroup>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 /**
