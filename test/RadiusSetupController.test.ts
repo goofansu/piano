@@ -64,7 +64,8 @@ const succeeded: RadiusSetupState["installation"] = { status: "success", action:
 
 /**
  * Radius setup over a Pi whose setup the test sets, signed in to Radius. Reads answer with the
- * current setup at once; a change answers with `answer[action]`, or the setup unchanged.
+ * current setup at once; a change answers with `answer[action]`, or the setup unchanged, or fails
+ * with `refuse[action]`.
  */
 async function section(initial: RadiusSetupState) {
   const { env, advance } = clock();
@@ -73,6 +74,7 @@ async function section(initial: RadiusSetupState) {
     reads: 0,
     changes: [] as string[],
     answer: {} as Record<string, RadiusSetupState>,
+    refuse: {} as Record<string, string>,
   };
   const api: RadiusSetupApi = async (change) => {
     if (!change) {
@@ -80,6 +82,8 @@ async function section(initial: RadiusSetupState) {
       return pi.setup;
     }
     pi.changes.push(change.action);
+    const refusal = pi.refuse[change.action];
+    if (refusal) throw new Error(refusal);
     pi.setup = pi.answer[change.action] ?? pi.setup;
     return pi.setup;
   };
@@ -94,15 +98,17 @@ async function section(initial: RadiusSetupState) {
     listen: () => () => {},
   });
   const toasts: { message: string; id?: string }[] = [];
+  const failures: string[] = [];
   const setup = createRadiusSetup({
     api,
     accounts,
     toast: (message, options) => toasts.push({ message, id: options?.id }),
+    failure: (message) => failures.push(message),
     environment: env,
   });
   setup.start();
   await settle();
-  return { setup, pi, toasts, advance, messages: () => toasts.map((t) => t.message) };
+  return { setup, pi, toasts, failures, advance, messages: () => toasts.map((t) => t.message) };
 }
 
 test("a web-search install that finishes during a manual refresh toasts once, after the spin", async () => {
@@ -171,4 +177,17 @@ test("a removal runs only while its confirmation is open", async () => {
   setup.confirmRemoval();
   await settle();
   assert.deepEqual(pi.changes, ["remove-mcp"]);
+});
+
+test("a failed change answers with its error toast, not the section's attention", async () => {
+  const { setup, pi, failures, messages } = await section(state("missing", "missing"));
+  pi.refuse["configure-mcp"] = "Pi refused.";
+  await setup.act("configure-mcp");
+  await settle();
+  assert.deepEqual(failures, ["Pi refused."]);
+  assert.deepEqual(messages(), []);
+  const { view } = setup.getState();
+  assert.equal(view.attention, undefined);
+  // The steps are usable again: the failure does not lock them.
+  assert.equal(view.mcp.install?.enabled, true);
 });

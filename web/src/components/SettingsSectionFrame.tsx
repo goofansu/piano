@@ -1,5 +1,6 @@
 import { cn } from "cn";
 import {
+  AlertCircleIcon,
   ExternalLinkIcon,
   type LucideIcon,
   PlugIcon,
@@ -8,7 +9,9 @@ import {
   WebhookIcon,
 } from "lucide-react";
 import { PaneHeader } from "@/components/Pane";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import type { SettingsSectionIconName } from "@/lib/routes";
 
 const ICONS: Record<SettingsSectionIconName, LucideIcon> = {
@@ -142,6 +145,40 @@ export function SettingsAlert({
       {icon}
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>{children}</AlertDescription>
+    </Alert>
+  );
+}
+
+/**
+ * A section whose facts could not be read: what failed, and Retry, which turns while a read is in
+ * flight. It stands in for the section's loading placeholder; a change's failure is a toast instead.
+ */
+export function SettingsLoadFailure({
+  title,
+  retrying,
+  retry,
+}: {
+  /** "Could not load …", naming what the section lists. */
+  title: string;
+  retrying: boolean;
+  retry: () => void;
+}) {
+  return (
+    <Alert variant="destructive">
+      <AlertCircleIcon />
+      <AlertTitle>{title}</AlertTitle>
+      <AlertAction>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={retrying}
+          aria-busy={retrying}
+          onClick={retry}
+        >
+          {retrying && <Spinner data-icon="inline-start" />}
+          Retry
+        </Button>
+      </AlertAction>
     </Alert>
   );
 }

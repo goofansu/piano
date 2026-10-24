@@ -20,8 +20,6 @@ export interface RadiusSetupInput {
   refreshing: boolean;
   /** The last read failed and no read is in flight. */
   loadFailed: boolean;
-  /** The last change's failure, or "" when it succeeded. */
-  actionError: string;
 }
 
 export type WebSearchAction = "install" | "uninstall";
@@ -33,7 +31,7 @@ export interface RadiusSetupView {
   locked: boolean;
   /** Refresh waits only for a change or read already in flight. */
   canRefresh: boolean;
-  /** Why setup needs attention: the read failed or the last change did. */
+  /** Why setup needs attention: the read failed. A failed change is a toast instead. */
   attention: string | undefined;
   account: {
     signedIn: boolean;
@@ -165,7 +163,6 @@ export function radiusSetupView({
   running,
   refreshing,
   loadFailed,
-  actionError,
 }: RadiusSetupInput): RadiusSetupView {
   const radius = providers.find((provider) => provider.id === "radius");
   const signingOut = running === "sign-out";
@@ -178,7 +175,7 @@ export function radiusSetupView({
   // An installation without an action is the install Pi has always run.
   const action: WebSearchAction =
     state?.installation.action === "uninstall" ? "uninstall" : "install";
-  const attention = (loadFailed ? LOAD_FAILED : "") || actionError || undefined;
+  const attention = loadFailed ? LOAD_FAILED : undefined;
   return {
     changing,
     locked,
