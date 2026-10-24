@@ -155,7 +155,8 @@ export function addressFor(
       : sessionId
         ? {
             route: { kind: "session", sessionId },
-            title: catalogEntry(state, sessionId)?.title || "Session",
+            // "Session" only until the catalog knows the session.
+            title: catalogEntry(state, sessionId)?.label ?? "Session",
           }
         : null;
   if (!shown) return null;

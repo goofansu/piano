@@ -14,7 +14,10 @@ export type SessionActivity = "working" | "done" | "idle" | "off";
 export interface SessionEntry {
   cwd: string;
   sessionId: string;
+  /** The registry's saved title, raw: what Rename edits. */
   title: string | undefined;
+  /** What the session is called on screen (see `sessionLabel`). */
+  label: string;
   createdAt: string;
   updatedAt: string;
   /** The registered folder holding the session's directory; undefined once that folder is closed. */
@@ -45,6 +48,14 @@ export interface SessionEntry {
   hint: string | undefined;
   /** Its history is gone, so it cannot be opened. */
   disabled: boolean;
+}
+
+/**
+ * What a session is called on screen, wherever it is named: its title, else "Untitled". The
+ * fallback is display copy only; Rename starts from the raw title, never from this.
+ */
+export function sessionLabel(title: string | undefined): string {
+  return title || "Untitled";
 }
 
 const HINTS = {
@@ -123,6 +134,7 @@ function entries(state: AppState): SessionEntry[] {
       cwd: ref.cwd,
       sessionId: ref.sessionId,
       title: ref.title,
+      label: sessionLabel(ref.title),
       createdAt: ref.createdAt,
       updatedAt: ref.updatedAt,
       folderPath: folder?.path,
@@ -160,11 +172,11 @@ export function catalogEntry(state: AppState, sessionId: string): SessionEntry |
   return entries(state).find((s) => s.sessionId === sessionId);
 }
 
-/** Where a session opens: its catalog directory and title. */
+/** Where a session opens: its catalog directory, and what a link to it says. */
 export interface SessionDestination {
   sessionId: string;
   cwd: string;
-  title: string;
+  label: string;
 }
 
 /**
@@ -177,7 +189,5 @@ export function sessionDestination(
   sessionId: string,
 ): SessionDestination | "unlisted" {
   const entry = catalogEntry(state, sessionId);
-  return entry && !entry.disabled
-    ? { sessionId, cwd: entry.cwd, title: entry.title || "Untitled" }
-    : "unlisted";
+  return entry && !entry.disabled ? { sessionId, cwd: entry.cwd, label: entry.label } : "unlisted";
 }

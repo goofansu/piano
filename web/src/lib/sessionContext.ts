@@ -18,7 +18,7 @@ import { directoryTrust } from "./directoryTrust.ts";
 import { abbrevHome, DETACHED_HEAD } from "./format.ts";
 import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
 import { findProject } from "./projectCommands.ts";
-import { folderFor, sessionDirectories } from "./sessionCatalog.ts";
+import { folderFor, sessionDirectories, sessionLabel } from "./sessionCatalog.ts";
 import { startPage } from "./startPage.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
@@ -241,7 +241,7 @@ export function sessionContext(state: AppState): SessionContext {
     worktreeName: directory.worktreeName,
     branch: reference?.branch ?? undefined,
     // Pi's live name outranks the registry's saved title.
-    title: session?.state.sessionName || reference?.title || "Untitled",
+    title: sessionLabel(session?.state.sessionName || reference?.title),
     sessionId: session?.sessionId ?? undefined,
     project: findProject(state, reference?.projectId),
     workspace,
