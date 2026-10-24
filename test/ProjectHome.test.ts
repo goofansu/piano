@@ -105,7 +105,7 @@ test("rows keep their place while the page is open: new ones append, gone ones d
 });
 
 test("on a project's home, Mod+K offers its menu's Project settings and Delete project", () => {
-  const ctx = { settingsOpen: false, view: { groupBy: "date", sortBy: "recent" } } as const;
+  const ctx = { settings: null, view: { groupBy: "date", sortBy: "recent" } } as const;
   const row = (s: AppState, id: string) => globalCommands(s, ctx).find((c) => c.id === id);
   const home: AppState = { ...state, connected: true, view: { kind: "project", projectId: "p1" } };
   assert.equal(row(home, "project-settings")?.label, "Project settings");
@@ -128,7 +128,7 @@ test("on a project's home, Mod+K offers its menu's Project settings and Delete p
 });
 
 test("on a project's home, Mod+K offers exactly its header menu's rows, named as they are", () => {
-  const ctx = { settingsOpen: false, view: { groupBy: "date", sortBy: "recent" } } as const;
+  const ctx = { settings: null, view: { groupBy: "date", sortBy: "recent" } } as const;
   const shown = (c: { label: string; icon: string; enabled: boolean; intent: unknown }) => ({
     label: c.label,
     icon: c.icon,

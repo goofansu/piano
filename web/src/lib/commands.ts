@@ -66,6 +66,8 @@ export interface CommandEffects {
   /** Opens `url` in a new tab, without giving it this page. */
   openUrl: (url: string) => void;
   openPreviewDetails: () => void;
+  /** Opens the webhook editor on a new webhook. */
+  addWebhook: () => void;
 }
 
 /** Carry out `command`'s intent. A disabled command does nothing; the result says whether it ran. */
@@ -130,6 +132,9 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "preview-details":
       effects.openPreviewDetails();
+      break;
+    case "add-webhook":
+      effects.addWebhook();
       break;
     case "messages-only":
       effects.setMessagesOnly(intent.on);
