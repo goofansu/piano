@@ -9,6 +9,7 @@
  */
 import type { ClientCommand, WorktreeDiscovery, WorktreeFacts } from "@shared/wire";
 import type { Client } from "./client.ts";
+import { branchLabel } from "./format.ts";
 
 export type WorktreeRequestKind = "create" | "select";
 
@@ -225,7 +226,7 @@ export function createWorktreeOperation({
 }
 
 export const worktreeLabel = (worktree: WorktreeFacts) =>
-  worktree.branch ?? worktree.path.split("/").filter(Boolean).at(-1) ?? "Detached HEAD";
+  branchLabel(worktree.branch, worktree.detached);
 
 /** Literal matching avoids unrelated fuzzy hits and preserves discovery order. */
 export function filterWorktrees(

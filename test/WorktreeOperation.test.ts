@@ -12,6 +12,7 @@ import {
   filterWorktrees,
   RECEIPT_TIMEOUT_MS,
   type WorktreeOperationState,
+  worktreeLabel,
   worktreesView,
 } from "../web/src/lib/worktreeOperation.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
@@ -500,4 +501,16 @@ test("failures name what failed; an unconfirmed one asks to rediscover and hides
     worktreesView({ state: idle(), folder: undefined, connected: true, form }).failure,
     undefined,
   );
+});
+
+test("a detached worktree is labelled Detached HEAD and still found by its path", () => {
+  const detached: WorktreeFacts = {
+    path: "/work/repo.detached",
+    branch: null,
+    detached: true,
+    prunable: false,
+  };
+  assert.equal(worktreeLabel(detached), "Detached HEAD");
+  assert.deepEqual(filterWorktrees([detached], "detached head"), [detached]);
+  assert.deepEqual(filterWorktrees([detached], "repo.detached"), [detached]);
 });

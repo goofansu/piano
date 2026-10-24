@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { abbrevPath, formatTokenCount, toolArgsText } from "../web/src/lib/format.ts";
+import { abbrevPath, branchLabel, formatTokenCount, toolArgsText } from "../web/src/lib/format.ts";
 
 test("token counts use compact units without misleading thousand-unit boundaries", () => {
   for (const [tokens, label] of [
@@ -43,4 +43,10 @@ test("a shell command shows alone; other tool arguments one per line with real l
   assert.equal(toolArgsText("{}"), "", "an empty object shows nothing");
   assert.equal(toolArgsText('{"command":"pyth'), '{"command":"pyth', "streaming JSON shows as is");
   assert.equal(toolArgsText(undefined), "");
+});
+
+test("a worktree's branch label is its branch, else Detached HEAD, else Unknown branch", () => {
+  assert.equal(branchLabel("main", false), "main");
+  assert.equal(branchLabel(null, true), "Detached HEAD");
+  assert.equal(branchLabel(null, false), "Unknown branch");
 });
