@@ -40,6 +40,7 @@ import {
   type SessionProjectMenu,
 } from "@/lib/projectCommands";
 
+/** The one map from a project command's icon name to its icon, menus and palette alike. */
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   new: PlusIcon,
   settings: SettingsIcon,
@@ -48,10 +49,22 @@ const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   remove: FolderMinusIcon,
 };
 
+/** Whether `icon` names a project command's icon, which `ProjectCommandIconView` draws. */
+export function isProjectCommandIcon(icon: string): icon is ProjectCommandIcon {
+  return Object.hasOwn(ICONS, icon);
+}
+
 /** A project command's icon, wherever its command is offered. */
-export function ProjectCommandIconView({ icon }: { icon: ProjectCommandIcon }) {
+export function ProjectCommandIconView({
+  icon,
+  ...props
+}: {
+  icon: ProjectCommandIcon;
+  /** A Button's leading or trailing icon, which sets its padding. */
+  "data-icon"?: "inline-start" | "inline-end";
+}) {
   const Icon = ICONS[icon];
-  return <Icon />;
+  return <Icon {...props} />;
 }
 
 /** A project command as a menu row, by its label and icon. */
