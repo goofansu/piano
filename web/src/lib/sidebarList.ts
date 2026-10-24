@@ -17,6 +17,7 @@ import { folderFor, type SessionEntry, sessionCatalog } from "./sessionCatalog.t
 import { sessionReference } from "./sessionContext.ts";
 import {
   dateGroups,
+  dateLabel,
   folderGroups,
   projectGroups,
   type SidebarView,
@@ -34,8 +35,8 @@ export interface PinnedSection {
 }
 
 /**
- * One section of the grouping. Folder and project groups open and close; their keys stay the same
- * whichever grouping is chosen, so switching away and back keeps them as the user left them.
+ * One section of the grouping. Folder, project and date groups open and close; their keys stay the
+ * same whichever grouping is chosen, so switching away and back keeps them as the user left them.
  */
 export type SidebarSection =
   | { kind: "folder"; key: string; open: boolean; folder: FolderView; sessions: SessionEntry[] }
@@ -47,7 +48,8 @@ export type SidebarSection =
       project: Project | null;
       sessions: SessionEntry[];
     }
-  | { kind: "date"; key: string; label: string; sessions: SessionEntry[] }
+  /** Date groups start open; the rest start closed. */
+  | { kind: "date"; key: string; open: boolean; label: string; sessions: SessionEntry[] }
   /** No grouping: every listed session in one section. */
   | { kind: "list"; key: string; sessions: SessionEntry[] };
 
@@ -76,18 +78,27 @@ export interface SidebarClock {
 export interface SidebarPreferences {
   /** Folder and project groups left open. */
   openGroups: Preference<readonly string[]>;
+  /** Date groups left closed. */
+  closedGroups: Preference<readonly string[]>;
   /** Pinned starts open and stays as the user leaves it. */
   pinnedOpen: Preference<boolean>;
 }
+
+const keyList = (raw: string | null): readonly string[] => {
+  const stored = parseJson(raw);
+  return Array.isArray(stored) ? stored.filter((key) => typeof key === "string") : [];
+};
 
 export function sidebarPreferences(storage?: PreferenceStorage): SidebarPreferences {
   return {
     openGroups: createPreference<readonly string[]>({
       key: "piano.openProjects",
-      decode: (raw) => {
-        const stored = parseJson(raw);
-        return Array.isArray(stored) ? stored.filter((key) => typeof key === "string") : [];
-      },
+      decode: keyList,
+      storage,
+    }),
+    closedGroups: createPreference<readonly string[]>({
+      key: "piano.closedGroups",
+      decode: keyList,
       storage,
     }),
     pinnedOpen: createPreference<boolean>({
@@ -124,22 +135,33 @@ const NO_SESSIONS = "No sessions yet. Start one and it appears here.";
 
 /** Project groups share the open set with folders, keyed apart from paths; the empty id is the No project group. */
 const projectKey = (id: string) => `project:${id}`;
+const dateKey = (label: string) => `date:${label}`;
+const isDateKey = (key: string) => key.startsWith("date:");
 const localMidnight = (date: Date, days = 0) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 
-/** The section holding a session: Pinned for a pinned one, else its folder or project group. */
+/** The section holding a session: Pinned for a pinned one, else its folder, project or date group. */
 function ownerKey(
   state: AppState,
   session: { cwd: string; sessionId: string | null },
   view: SidebarView,
+  today: Date,
 ): string | undefined {
   const member = session.sessionId
     ? sessionReference(state, { cwd: session.cwd, sessionId: session.sessionId })
     : undefined;
   if (member?.pinned) return PINNED;
-  if (view.groupBy === "folder") return folderFor(state, session.cwd)?.path;
-  if (view.groupBy !== "project") return undefined;
-  return projectKey(member?.projectId ?? "");
+  switch (view.groupBy) {
+    case "folder":
+      return folderFor(state, session.cwd)?.path;
+    case "project":
+      return projectKey(member?.projectId ?? "");
+    case "date":
+      // A new session has no reference yet; it lists under Today once it does.
+      return dateKey(dateLabel(member ? member.updatedAt : today.toISOString(), today));
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -199,12 +221,10 @@ function buildList(
       const groups = dateGroups(listed, view.sortBy, today);
       if (groups.length === 0) return empty(NO_SESSIONS);
       return sections(
-        groups.map(({ label, sessions }) => ({
-          kind: "date",
-          key: `date:${label}`,
-          label,
-          sessions,
-        })),
+        groups.map(({ label, sessions }) => {
+          const key = dateKey(label);
+          return { kind: "date", key, open: isOpen(key), label, sessions };
+        }),
       );
     }
     default: {
@@ -221,6 +241,7 @@ export function createSidebarList({
   preferences,
 }: SidebarListEnvironment): SidebarListModel {
   let open: ReadonlySet<string> = new Set(preferences.openGroups.get());
+  let closed: ReadonlySet<string> = new Set(preferences.closedGroups.get());
   let today = localMidnight(clock.now());
   /** The last selection, grouping and owning section opened. */
   let revealed: string | null = null;
@@ -236,6 +257,7 @@ export function createSidebarList({
     sessionId: string | null | undefined;
     view: SidebarView;
     open: ReadonlySet<string>;
+    closed: ReadonlySet<string>;
     pinnedOpen: boolean;
     today: Date;
     list: SidebarList;
@@ -244,17 +266,29 @@ export function createSidebarList({
   const notify = () => {
     for (const listener of listeners) listener();
   };
+  /** Pinned and date groups remember being closed; folders and projects remember being open. */
+  const isOpen = (key: string, pinnedOpen: boolean) =>
+    key === PINNED ? pinnedOpen : isDateKey(key) ? !closed.has(key) : open.has(key);
   const setOpen = (keys: readonly string[], value: boolean) => {
-    const changed = keys.filter((k) => k !== PINNED && open.has(k) !== value);
     if (keys.includes(PINNED)) preferences.pinnedOpen.set(value);
+    const pinnedOpen = preferences.pinnedOpen.get();
+    const changed = keys.filter((k) => k !== PINNED && isOpen(k, pinnedOpen) !== value);
     if (changed.length === 0) return;
-    const next = new Set(open);
+    const nextOpen = new Set(open);
+    const nextClosed = new Set(closed);
     for (const key of changed) {
-      if (value) next.add(key);
-      else next.delete(key);
+      const [set, add] = isDateKey(key) ? [nextClosed, !value] : [nextOpen, value];
+      if (add) set.add(key);
+      else set.delete(key);
     }
-    open = next;
-    preferences.openGroups.set([...open]);
+    if (nextOpen.size !== open.size) {
+      open = nextOpen;
+      preferences.openGroups.set([...open]);
+    }
+    if (nextClosed.size !== closed.size) {
+      closed = nextClosed;
+      preferences.closedGroups.set([...closed]);
+    }
     notify();
   };
   const refreshDay = () => {
@@ -282,18 +316,19 @@ export function createSidebarList({
         cache.sessionId === current?.sessionId &&
         cache.view === view &&
         cache.open === open &&
+        cache.closed === closed &&
         cache.pinnedOpen === pinnedOpen &&
         cache.today === today
       )
         return cache.list;
-      const isOpen = (key: string) => (key === PINNED ? pinnedOpen : open.has(key));
-      const list = buildList(state, view, today, isOpen);
+      const list = buildList(state, view, today, (key) => isOpen(key, pinnedOpen));
       cache = {
         facts: { registryLoaded, folders, sessionReferences, projects, hosts, done },
         cwd: current?.cwd,
         sessionId: current?.sessionId,
         view,
         open,
+        closed,
         pinnedOpen,
         today,
         list,
@@ -304,7 +339,7 @@ export function createSidebarList({
       const current = state.session ?? state.selecting;
       if (current) {
         const sessionId = current.sessionId ?? null;
-        const key = ownerKey(state, { cwd: current.cwd, sessionId }, view);
+        const key = ownerKey(state, { cwd: current.cwd, sessionId }, view, today);
         if (key) {
           const target = JSON.stringify([current.cwd, sessionId, view.groupBy, key]);
           if (target !== revealed) {

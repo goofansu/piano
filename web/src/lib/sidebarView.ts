@@ -109,30 +109,38 @@ export function projectGroups<
   ];
 }
 
+/** The date groups in list order; a session falls in the first whose boundary it reaches. */
+export const DATE_LABELS = [
+  "Today",
+  "Yesterday",
+  "Previous 7 days",
+  "Previous 30 days",
+  "Older",
+  "Unknown date",
+] as const;
+export type DateLabel = (typeof DATE_LABELS)[number];
+
+/** The date group of a session last touched at `updatedAt`, as of `now`. */
+export function dateLabel(updatedAt: string | undefined, now = new Date()): DateLabel {
+  const time = updatedAt ? Date.parse(updatedAt) : Number.NaN;
+  if (Number.isNaN(time)) return "Unknown date";
+  // Local midnights, not elapsed 24-hour periods: DST days can be shorter or longer.
+  const boundaries = [0, 1, 7, 30].map((days) =>
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - days).getTime(),
+  );
+  const bucket = boundaries.findIndex((boundary) => time >= boundary);
+  return DATE_LABELS[bucket === -1 ? 4 : bucket]!;
+}
+
 /** Listed sessions by local calendar date; unknown times stay visible last. */
 export function dateGroups<S extends SessionLike>(
   sessions: readonly S[],
   sort: SortBy,
   now = new Date(),
-): Array<{ label: string; sessions: S[] }> {
-  const labels = [
-    "Today",
-    "Yesterday",
-    "Previous 7 days",
-    "Previous 30 days",
-    "Older",
-    "Unknown date",
-  ];
-  const groups = labels.map((label) => ({ label, sessions: [] as S[] }));
-  // Local midnights, not elapsed 24-hour periods: DST days can be shorter or longer.
-  const boundaries = [0, 1, 7, 30].map((days) =>
-    new Date(now.getFullYear(), now.getMonth(), now.getDate() - days).getTime(),
-  );
-  for (const session of sessions) {
-    const time = session.updatedAt ? Date.parse(session.updatedAt) : Number.NaN;
-    const bucket = Number.isNaN(time) ? 5 : boundaries.findIndex((boundary) => time >= boundary);
-    groups[bucket === -1 ? 4 : bucket]!.sessions.push(session);
-  }
+): Array<{ label: DateLabel; sessions: S[] }> {
+  const groups = DATE_LABELS.map((label) => ({ label, sessions: [] as S[] }));
+  for (const session of sessions)
+    groups[DATE_LABELS.indexOf(dateLabel(session.updatedAt, now))]!.sessions.push(session);
   return groups
     .filter((g) => g.sessions.length > 0)
     .map((g) => ({ ...g, sessions: sortSessions(g.sessions, sort) }));
