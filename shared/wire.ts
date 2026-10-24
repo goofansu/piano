@@ -498,23 +498,22 @@ export const sameWorkspace = (a: Workspace, b: Workspace) =>
 
 // ── Sidebar views ───────────────────────────────────────────────────────────
 
-/** A project name's length limit, in UTF-16 code units, as the browser counts them. */
-export const PROJECT_NAME_MAX = 200;
 /**
- * A session title's length limit, in UTF-16 code units as the browser counts them, counted as the
- * registry saves the title: trimmed.
+ * Limits on text the registry saves trimmed, in UTF-16 code units as the browser counts them,
+ * counted as saved: a value fits when its trimmed length does.
  */
+const trimmedFit = (max: number) => Schema.makeFilter((t: string) => t.trim().length <= max);
+export const PROJECT_NAME_MAX = 200;
 export const SESSION_TITLE_MAX = 200;
-const sessionTitleFit = Schema.makeFilter((t: string) => t.trim().length <= SESSION_TITLE_MAX);
-/** Project instructions' length limit, in UTF-16 code units, as the browser counts them. */
+const sessionTitleFit = trimmedFit(SESSION_TITLE_MAX);
 export const PROJECT_INSTRUCTIONS_MAX = 20_000;
 export const ProjectInstructions = Schema.String.check(
   Schema.isMinLength(1),
-  Schema.isMaxLength(PROJECT_INSTRUCTIONS_MAX),
+  trimmedFit(PROJECT_INSTRUCTIONS_MAX),
 );
 export const Project = Schema.Struct({
   id: Schema.String.check(Schema.isMinLength(1)),
-  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(PROJECT_NAME_MAX)),
+  name: Schema.String.check(Schema.isMinLength(1), trimmedFit(PROJECT_NAME_MAX)),
   /** Added to Pi's system prompt for the project's sessions whenever Piano starts their Pi. */
   instructions: Schema.optional(ProjectInstructions),
 });
