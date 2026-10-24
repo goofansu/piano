@@ -106,3 +106,7 @@ export function timeAgo(iso: string, now: number): string {
 
 /** How a checkout Git lists on no branch is named wherever a branch label would be. */
 export const DETACHED_HEAD = "Detached HEAD";
+
+/** A worktree's branch as the UI names it: the branch, else Detached HEAD, else Unknown branch. */
+export const branchLabel = (branch: string | null, detached: boolean) =>
+  branch ?? (detached ? DETACHED_HEAD : "Unknown branch");

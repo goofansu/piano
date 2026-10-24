@@ -9,7 +9,7 @@ import { isWorking } from "../../../shared/sessionProjection.ts";
 import { sameSession } from "../../../shared/wire.ts";
 import { type AppState, isSession } from "../store.ts";
 import { directoryTrust } from "./directoryTrust.ts";
-import { abbrevHome, DETACHED_HEAD } from "./format.ts";
+import { abbrevHome, branchLabel } from "./format.ts";
 import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
 import { findProject } from "./projectCommands.ts";
 import { folderFor, sessionDirectories, sessionLabel } from "./sessionCatalog.ts";
@@ -54,8 +54,7 @@ export function directoryChoices(state: AppState, cwd: string): DirectoryChoices
           kind: "checkout",
           folder: folder.name,
           ...(!checkout.root && {
-            branchLabel:
-              checkout.branch ?? (checkout.facts?.detached ? DETACHED_HEAD : "Unknown branch"),
+            branchLabel: branchLabel(checkout.branch, checkout.facts?.detached ?? false),
           }),
         }
       : { kind: "path", label: abbrevHome(cwd) };
