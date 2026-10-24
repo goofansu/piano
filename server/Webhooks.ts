@@ -7,6 +7,7 @@ import {
   type Webhook,
   type WebhookDelivery,
   type WebhookEvent,
+  type WebhookField,
   type WebhookPayload,
   WebhookSave,
 } from "../shared/webhooks.ts";
@@ -16,8 +17,13 @@ import { pullRequestIdentity } from "./GitHubPullRequests.ts";
 import { AllowedOrigins, sessionLinkOrigin } from "./OriginPolicy.ts";
 import { Registry, type StoredWebhook } from "./Registry.ts";
 
-export class WebhookError extends Data.TaggedError("WebhookError")<{ readonly detail: string }> {}
-const refused = (detail: string) => new WebhookError({ detail });
+/** A refusal written for people; `field` names the editor field it belongs to, if any. */
+export class WebhookError extends Data.TaggedError("WebhookError")<{
+  readonly detail: string;
+  readonly field?: WebhookField;
+}> {}
+const refused = (detail: string, field?: WebhookField) =>
+  new WebhookError(field ? { detail, field } : { detail });
 export const WebhookFetch = Context.Reference<typeof fetch>("piano/WebhookFetch", {
   defaultValue: () => globalThis.fetch,
 });
@@ -189,34 +195,40 @@ export const WebhooksLive = Layer.effect(
       yield* Queue.offer(wake, undefined);
       return true;
     });
+    /** A receiver URL Piano will post to: HTTPS, or HTTP on loopback, without credentials or a fragment. */
+    const receiverUrl = Effect.fn("Webhooks.receiverUrl")(function* (text: string) {
+      let url: URL;
+      try {
+        url = new URL(text);
+      } catch {
+        return yield* refused("Enter a valid HTTPS URL.", "url");
+      }
+      if (
+        url.username ||
+        url.password ||
+        url.hash ||
+        !(
+          url.protocol === "https:" ||
+          (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+        )
+      )
+        return yield* refused(
+          "Use HTTPS (HTTP is allowed only on loopback), without credentials or a fragment.",
+          "url",
+        );
+      return url;
+    });
     return Webhooks.of({
       list,
+      // Read-modify-write under one lock, removal included, so a save never acts on a row read
+      // before another change: what it omits keeps the stored value, and a removed hook stays gone.
       save: Effect.fn("Webhooks.save")(function* (raw) {
         const input = yield* Schema.decodeUnknownEffect(WebhookSave)(raw).pipe(
           Effect.mapError(() => refused("Enter a URL and select at least one event.")),
         );
-        let url: URL;
-        try {
-          url = new URL(input.url);
-        } catch {
-          return yield* refused("Enter a valid HTTPS URL.");
-        }
-        if (
-          url.username ||
-          url.password ||
-          url.hash ||
-          !(
-            url.protocol === "https:" ||
-            (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
-          )
-        )
-          return yield* refused(
-            "Use HTTPS (HTTP is allowed only on loopback), without credentials or a fragment.",
-          );
+        const url = input.url === undefined ? undefined : yield* receiverUrl(input.url);
         if (input.token && /[^\x21-\x7e]/.test(input.token))
-          return yield* refused(
-            "Bearer token must contain only visible ASCII characters, without spaces.",
-          );
+          return yield* refused("Use only visible ASCII characters, without spaces.", "token");
         return yield* Semaphore.withPermits(
           lock,
           1,
@@ -225,13 +237,17 @@ export const WebhooksLive = Layer.effect(
             const hooks = yield* stored;
             const previous = input.id ? hooks.find((h) => h.id === input.id) : undefined;
             if (input.id && !previous) return yield* refused("Webhook no longer exists.");
+            const target = url?.href ?? previous?.url;
+            const events = input.events ?? previous?.events;
+            if (!target || !events)
+              return yield* refused("Enter a URL and select at least one event.");
             if (!previous && hooks.length >= maxHooks)
               return yield* refused(`At most ${maxHooks} webhooks can be configured.`);
             const hook: StoredWebhook = {
               id: previous?.id ?? randomUUID(),
-              url: url.href,
+              url: target,
               token: input.token === undefined ? (previous?.token ?? null) : input.token || null,
-              events: [...new Set(input.events)],
+              events: [...new Set(events)],
               active: input.active,
               createdAt:
                 previous?.createdAt ?? new Date(yield* Clock.currentTimeMillis).toISOString(),
@@ -244,9 +260,14 @@ export const WebhooksLive = Layer.effect(
         );
       }),
       remove: Effect.fn("Webhooks.remove")(function* (id) {
-        yield* registry
-          .removeWebhook(id)
-          .pipe(Effect.mapError(() => refused("Could not delete webhook.")));
+        yield* Semaphore.withPermits(
+          lock,
+          1,
+        )(
+          registry
+            .removeWebhook(id)
+            .pipe(Effect.mapError(() => refused("Could not delete webhook."))),
+        );
         last.delete(id);
       }),
       test: Effect.fn("Webhooks.test")(function* (id) {

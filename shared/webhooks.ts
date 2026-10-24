@@ -7,15 +7,18 @@ export const WEBHOOK_EVENTS = [
 ] as const;
 export const WebhookEvent = Schema.Literals(WEBHOOK_EVENTS);
 export type WebhookEvent = typeof WebhookEvent.Type;
+/** A new webhook needs `url` and `events`; for an existing `id`, an omitted one keeps its stored value. */
 export const WebhookSave = Schema.Struct({
   id: Schema.optional(Schema.String),
-  url: Schema.String.check(Schema.isMaxLength(4096)),
+  url: Schema.optional(Schema.String.check(Schema.isMaxLength(4096))),
   /** Omitted preserves the token; null clears it. Never returned. */
   token: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096)))),
-  events: Schema.Array(WebhookEvent).check(Schema.isMinLength(1)),
+  events: Schema.optional(Schema.Array(WebhookEvent).check(Schema.isMinLength(1))),
   active: Schema.Boolean,
 });
 export type WebhookSave = typeof WebhookSave.Type;
+/** The editor field a refused save belongs to; a refusal without one is about the save as a whole. */
+export type WebhookField = "url" | "events" | "token";
 export const WebhookDelivery = Schema.Struct({
   deliveryId: Schema.String,
   occurredAt: Schema.String,

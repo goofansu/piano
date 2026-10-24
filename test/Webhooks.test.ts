@@ -248,6 +248,51 @@ test("subscription/active filtering is paired with positive delivery; payloads a
   );
 });
 
+test("a save that omits url and events keeps the stored ones; a removed hook stays removed", async () => {
+  await run(
+    "partial",
+    Effect.gen(function* () {
+      const hooks = yield* Webhooks;
+      const { id } = yield* hooks.save(input);
+      yield* hooks.save({
+        id,
+        url: "https://edited.example/hook",
+        events: ["session.failed", "session.needs_input"],
+        active: true,
+      });
+      // The Active switch sends only what it changes, from a list that may predate the edit.
+      yield* hooks.save({ id, active: false });
+      assert.deepEqual(
+        (yield* hooks.list).map((h) => [h.url, h.events, h.active]),
+        [["https://edited.example/hook", ["session.failed", "session.needs_input"], false]],
+      );
+      yield* hooks.remove(id);
+      const after = yield* hooks.save({ id, active: true }).pipe(Effect.flip);
+      assert.equal(after.detail, "Webhook no longer exists.");
+      assert.deepEqual(yield* hooks.list, []);
+      const created = yield* hooks.save({ active: true }).pipe(Effect.flip);
+      assert.equal(created.detail, "Enter a URL and select at least one event.");
+    }),
+  );
+});
+
+test("a refusal names the field it belongs to", async () => {
+  await run(
+    "fields",
+    Effect.gen(function* () {
+      const hooks = yield* Webhooks;
+      const token = yield* hooks.save({ ...input, token: "a b" }).pipe(Effect.flip);
+      assert.equal(token.field, "token");
+      const url = yield* hooks
+        .save({ ...input, url: "ftp://receiver.example/x" })
+        .pipe(Effect.flip);
+      assert.equal(url.field, "url");
+      const gone = yield* hooks.save({ ...input, id: "missing" }).pipe(Effect.flip);
+      assert.equal(gone.field, undefined);
+    }),
+  );
+});
+
 test("URL and token validation refuse unsafe transport without echoing secrets", async () => {
   await run(
     "validation",
