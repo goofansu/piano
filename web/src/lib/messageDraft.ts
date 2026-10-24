@@ -15,6 +15,7 @@ import {
   MAX_ATTACHMENTS,
   MAX_IMAGE_BYTES,
 } from "../../../shared/attachments.ts";
+import { sessionKey } from "../../../shared/wire.ts";
 import type { SendDisposition } from "./ws.ts";
 
 /** Identifies one draft; built only here, so a bare string cannot address one. */
@@ -24,7 +25,7 @@ export type DraftKey = string & { readonly __draft: unique symbol };
 export const NEW_SESSION_DRAFT = "new-session" as DraftKey;
 /** A session's draft. Paths are absolute, so no session key can equal the New page's. */
 export const sessionDraftKey = (s: { cwd: string; sessionId: string | null }) =>
-  `${s.cwd}\n${s.sessionId ?? ""}` as DraftKey;
+  sessionKey(s.cwd, s.sessionId ?? "") as DraftKey;
 
 /**
  * Appends text as a new paragraph. A draft with visible text gets a blank line before the

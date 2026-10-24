@@ -279,7 +279,7 @@ test("sidebar list: selection follows cwd and session id, not the snapshot or se
     const pending = selecting(state, cwd, sessionId);
     const list = model.list(pending, chosen);
     assert.notEqual(list, previous);
-    assert.deepEqual(selectedKeys(list), [`${cwd}\n${sessionId}`]);
+    assert.deepEqual(selectedKeys(list), [sessionKey({ cwd, sessionId })]);
     assert.equal(model.list(selecting(state, cwd, sessionId), chosen), list);
     const selected: AppState = {
       ...pending,

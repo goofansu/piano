@@ -13,6 +13,7 @@ import type {
 } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
+import { sameSession, sessionKey as wireSessionKey } from "../../shared/wire.ts";
 import {
   applyTrustFrame,
   beginTrustDecision,
@@ -70,8 +71,18 @@ export type Page =
   | { kind: "project"; projectId: string; cwd?: string }
   | { kind: "missing-session"; sessionId: string };
 
+/** The session's key for sets and maps; a session not yet started has an empty ID. */
 export const sessionKey = (s: { cwd: string; sessionId: string | null }) =>
-  `${s.cwd}\n${s.sessionId ?? ""}`;
+  wireSessionKey(s.cwd, s.sessionId ?? "");
+
+/** Whether the selected or opened session is the target; a session not yet started is none. */
+export const isSession = (
+  current: { cwd: string; sessionId: string | null } | null | undefined,
+  target: { cwd: string; sessionId: string },
+) =>
+  !!current &&
+  current.sessionId !== null &&
+  sameSession({ ...current, sessionId: current.sessionId }, target);
 
 export const initialState: AppState = {
   connected: false,
@@ -233,7 +244,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       const done = new Set(s.done);
       for (const prev of s.hosts) {
         if (!prev.streaming) continue;
-        const now = m.hosts.find((h) => h.cwd === prev.cwd && h.sessionId === prev.sessionId);
+        const now = m.hosts.find((h) => sameSession(h, prev));
         const k = sessionKey(prev);
         if (now && !now.streaming && k !== viewing) done.add(k);
       }

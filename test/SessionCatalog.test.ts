@@ -16,7 +16,7 @@ import {
   projectGroups,
   sortSessions,
 } from "../web/src/lib/sidebarView.ts";
-import { type AppState, initialState } from "../web/src/store.ts";
+import { type AppState, initialState, sessionKey } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const worktree = (path: string, branch: string | null, root: boolean): WorktreeView => ({
@@ -145,7 +145,7 @@ test("activity follows the live host broadcast, and the selection marks one entr
       { cwd: "/work/repo.feature", sessionId: "open-member", streaming: false },
       { cwd: "/closed/app", sessionId: "closed-member", streaming: false },
     ],
-    done: ["/closed/app\nclosed-member"],
+    done: [sessionKey({ cwd: "/closed/app", sessionId: "closed-member" })],
     selecting: { cwd: "/work/repo.feature", sessionId: "open-member" },
   } as AppState;
   const all = sessionCatalog(live);

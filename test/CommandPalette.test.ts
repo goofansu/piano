@@ -18,7 +18,7 @@ import {
 import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { sessionFiles } from "../web/src/lib/sessionFiles.ts";
-import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
+import { type AppState, initialState, type SessionView, sessionKey } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const worktree = (path: string, branch: string, root: boolean): WorktreeView => ({
@@ -494,12 +494,16 @@ test("search pages replace rows, preserve stable ties and reach the oldest match
   );
   assert.equal(
     paletteSelection(pagePalette(ranked), "sessions:next", true),
-    "sessions:/closed\nid-122",
+    `sessions:${sessionKey({ cwd: "/closed", sessionId: "id-122" })}`,
     "an edited query resets to its best match",
   );
   assert.equal(
-    paletteSelection(pagePalette(ranked, { sessions: 1 }), "sessions:/closed\nid-122", false),
-    "sessions:/closed\nid-72",
+    paletteSelection(
+      pagePalette(ranked, { sessions: 1 }),
+      `sessions:${sessionKey({ cwd: "/closed", sessionId: "id-122" })}`,
+      false,
+    ),
+    `sessions:${sessionKey({ cwd: "/closed", sessionId: "id-72" })}`,
     "a choice no longer on the page is replaced",
   );
   assert.equal(paletteSelection([], "sessions:next", false), "");
@@ -510,13 +514,15 @@ test("search pages replace rows, preserve stable ties and reach the oldest match
   );
   assert.deepEqual(
     keys,
-    Array.from({ length: 123 }, (_, i) => `/closed\nid-${122 - i}`),
+    Array.from({ length: 123 }, (_, i) =>
+      sessionKey({ cwd: "/closed", sessionId: `id-${122 - i}` }),
+    ),
   );
   assert.equal(last.pages[0].group.rows.length, 23);
   assert.equal(search({ id: 4, query: "missing", pages: {} }).pages.length, 0);
   assert.equal(
     search({ id: 5, query: "id-0", pages: {} }).pages[0].group.rows[0].key,
-    "/closed\nid-0",
+    sessionKey({ cwd: "/closed", sessionId: "id-0" }),
   );
   assert.equal(pagePalette(searchPalette(groups, "Repeated"), { sessions: 999 })[0].page, 2);
 });
@@ -533,7 +539,7 @@ test("a refreshed palette finds renamed sessions and excludes archived ones", ()
   };
   assert.deepEqual(
     searchPalette(catalog(renamed, input), "Unique renamed")[0]?.rows.map((r) => r.key),
-    ["/repo\ns0"],
+    [sessionKey({ cwd: "/repo", sessionId: "s0" })],
   );
   const archived = {
     ...renamed,
@@ -572,17 +578,17 @@ test("session availability updates the palette and keyboard selection", () => {
     assert.equal(
       paletteSelection(
         pagePalette(searchPalette(changed, query)),
-        "sessions:/work/repo.feature\ns9",
+        `sessions:${sessionKey({ cwd: "/work/repo.feature", sessionId: "s9" })}`,
         false,
       ),
-      "sessions:/repo\ns8",
+      `sessions:${sessionKey({ cwd: "/repo", sessionId: "s8" })}`,
       "selection must leave an unavailable session, for recents and search results",
     );
   }
   const restored = catalog(home, input);
   assert.equal(
     paletteSelection(pagePalette(searchPalette(restored, "")), "", true),
-    "sessions:/work/repo.feature\ns9",
+    `sessions:${sessionKey({ cwd: "/work/repo.feature", sessionId: "s9" })}`,
   );
 });
 
