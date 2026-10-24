@@ -333,7 +333,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
        * says what the directory is; Piano decides the placement (INV-01):
        * - a registered worktree starts there, and its folder is reopened if it was closed;
        * - a registered folder, under any spelling of the same directory, starts in that folder
-       *   under its registered spelling, so the sidebar lists the session there;
+       *   under its registered spelling, so the sidebar lists the session there; a closed folder
+       *   is matched the same way and reopened under its registered spelling;
        * - the root of a linked worktree is listed under its main checkout's folder, added when
        *   missing, and recorded under Git's spelling of its path, which discovery matches;
        * - any other directory becomes a folder of its own.
@@ -349,11 +350,27 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           Effect.map((real) => paths.find((path, i) => path === physical || real[i] === physical)),
         );
 
+      /** The registered folder, open or closed, of the directory whose physical path is
+       * `physical`, reopened under its registered spelling when it was closed. A closed folder
+       * keeps its root workspace (folder === path), so its spelling outlives `folders`; the
+       * registry cannot tell it from a session reference's spelling, which is adopted alike. */
+      const registeredFolder = Effect.fn("SessionHosts.registeredFolder")(function* (
+        physical: string,
+      ) {
+        const data = yield* registry.get;
+        const closed = data.workspaces
+          .filter((w) => w.folder === w.path && !data.folders.includes(w.path))
+          .map((w) => w.path);
+        const folder = yield* registeredAs([...data.folders, ...closed], physical);
+        return folder && !data.folders.includes(folder)
+          ? yield* registry.addFolder(folder)
+          : folder;
+      });
+
       /** The registered folder for a main checkout, reusing one registered under an alias of it,
        * otherwise the checkout added under Git's spelling. */
       const folderOf = Effect.fn("SessionHosts.folderOf")(function* (main: string) {
-        const data = yield* registry.get;
-        return (yield* registeredAs(data.folders, main)) ?? (yield* registry.addFolder(main));
+        return (yield* registeredFolder(main)) ?? (yield* registry.addFolder(main));
       });
 
       const place = Effect.fn("SessionHosts.place")(function* (raw: string) {
@@ -372,7 +389,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           yield* registry.addFolder(entry.folder);
           return entry.path;
         }
-        const folder = yield* registeredAs(data.folders, physical);
+        const folder = yield* registeredFolder(physical);
         if (folder) return folder;
         const owner = yield* worktreeOwner(path).pipe(
           Effect.mapError((e) => rejected(`Cannot read the checkout ${path}: ${e.detail}`)),

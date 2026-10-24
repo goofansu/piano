@@ -103,6 +103,8 @@ const run = <A, E>(
     fakePi?: string;
     /** Substitutes every preview owner's adapter, as the host supervisor would answer. */
     previewAdapter?: PreviewAdapter;
+    /** A fresh registry of this name, free of other tests' references. */
+    registry?: string;
   } = {},
 ) => {
   const layer = SessionHostsLive({ idleMs: options.idleMs ?? 0 }).pipe(
@@ -133,7 +135,10 @@ const run = <A, E>(
           },
     ),
     Effect.provideService(PiRequestTimeoutMs, options.timeoutMs ?? 30000),
-    Effect.provideService(RegistryDatabasePath, join(root, `${options.fakePi ?? "registry"}.db`)),
+    Effect.provideService(
+      RegistryDatabasePath,
+      join(root, `${options.registry ?? options.fakePi ?? "registry"}.db`),
+    ),
     Effect.provideService(
       PreviewOwnerOptions,
       options.previewAdapter
@@ -492,7 +497,7 @@ test("INV-02: a disconnected opener cannot interrupt or duplicate server-owned a
       );
       yield* hosts.release(cwd, id);
     }),
-    { holdReadiness: true },
+    { holdReadiness: true, registry: "abandoned" },
   );
 });
 
@@ -896,6 +901,7 @@ test("a member session's Pi gets its project's instructions at each launch; othe
       yield* hosts.open({ cwd, sessionId: member });
       assert.equal(launches(member).at(-1), null, "a session that left the project gets none");
     }),
+    { registry: "guided" },
   );
 });
 
@@ -1137,6 +1143,63 @@ test("INV-01: a new session in a main checkout reached by another spelling start
       assert.deepEqual((yield* registry.get).folders, [repoAlias], "the folder is not duplicated");
     }),
     { fakePi: "place-main-alias" },
+  );
+});
+
+test("INV-01: a closed folder reached by another spelling reopens under its registered spelling", async () => {
+  const git = (dir: string, ...args: string[]) => {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  const base = realpathSync(root),
+    repo = join(base, "closed-aliased-repo"),
+    repoAlias = join(base, "closed-aliased-repo-alias"),
+    linked = join(base, "closed-aliased-linked");
+  mkdirSync(repo);
+  git(repo, "init", "--quiet", "-b", "main");
+  git(
+    repo,
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "--quiet",
+    "--allow-empty",
+    "-m",
+    "baseline",
+  );
+  git(repo, "worktree", "add", "--quiet", "-b", "feature", linked);
+  symlinkSync(repo, repoAlias);
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      yield* hosts.create({ cwd: repoAlias, options: {} });
+      yield* registry.removeFolder(repoAlias);
+      const session = yield* hosts.create({ cwd: repo, options: {} });
+      assert.equal(session.spec.cwd, repoAlias, "the session starts under the registered spelling");
+      assert.deepEqual(
+        (yield* registry.get).folders,
+        [repoAlias],
+        "the folder is reopened, not duplicated",
+      );
+    }),
+    { fakePi: "closed-main-alias" },
+  );
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      // A linked worktree of the closed folder's checkout, not yet registered, joins that folder.
+      yield* hosts.create({ cwd: repoAlias, options: {} });
+      yield* registry.removeFolder(repoAlias);
+      yield* hosts.create({ cwd: linked, options: {} });
+      const data = yield* registry.get;
+      assert.deepEqual(data.folders, [repoAlias]);
+      assert.deepEqual(data.worktrees, [{ folder: repoAlias, path: linked, branch: "feature" }]);
+    }),
+    { fakePi: "closed-linked-alias" },
   );
 });
 
