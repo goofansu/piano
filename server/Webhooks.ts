@@ -12,7 +12,7 @@ import {
   type WebhookPayload,
   WebhookSave,
 } from "../shared/webhooks.ts";
-import type { Snapshot } from "../shared/wire.ts";
+import { type Snapshot, sameSession } from "../shared/wire.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { pullRequestIdentity } from "./GitHubPullRequests.ts";
 import { AllowedOrigins, sessionLinkOrigin } from "./OriginPolicy.ts";
@@ -286,7 +286,7 @@ export const WebhooksLive = Layer.effect(
           if (!hooks.length) return;
           const data = yield* registry.get;
           const workspace = data.workspaces.find((w) => w.path === cwd);
-          const entry = data.sessions.find((s) => s.cwd === cwd && s.sessionId === sessionId);
+          const entry = data.sessions.find((s) => sameSession(s, { cwd, sessionId }));
           if (!workspace || !entry) return;
           const url = origin ? `${origin}/s/${encodeURIComponent(sessionId)}` : null;
           const pr = entry.pullRequest ? pullRequestIdentity(entry.pullRequest.url) : null;

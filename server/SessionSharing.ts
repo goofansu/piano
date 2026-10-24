@@ -4,6 +4,7 @@
  * can add a version at the same URL, replacing it only after Radius reports it missing. */
 import { Context, Data, Deferred, Effect, Layer } from "effect";
 import type { SessionShare } from "../shared/share.ts";
+import { sessionKey } from "../shared/wire.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { RadiusArtifacts } from "./RadiusArtifacts.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
@@ -136,7 +137,7 @@ export const SessionSharingLive = Layer.effect(
     });
     return SessionSharing.of({
       share: Effect.fn("SessionSharing.share")(function* (session) {
-        const key = JSON.stringify([session.cwd, session.sessionId]);
+        const key = sessionKey(session.cwd, session.sessionId);
         const current = pending.get(key);
         if (current) return yield* Deferred.await(current);
         // Claim before yielding; concurrent requests for this session join the same publication.

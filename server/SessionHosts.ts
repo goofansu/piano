@@ -9,13 +9,15 @@ import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { Context, Data, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
 import { isWorking } from "../shared/sessionProjection.ts";
-import type {
-  HostInfo,
-  SessionClosure,
-  SlashCommand,
-  Snapshot,
-  StartOptions,
-  WorktreeRequest,
+import {
+  type HostInfo,
+  type SessionClosure,
+  type SlashCommand,
+  type Snapshot,
+  type StartOptions,
+  sameSession,
+  sessionKey,
+  type WorktreeRequest,
 } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { FolderWorktrees, FolderWorktreesLive } from "./FolderWorktrees.ts";
@@ -83,7 +85,6 @@ export class SessionCommandsError extends Data.TaggedError("SessionCommandsError
   readonly detail: string;
 }> {}
 
-const hostKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, sessionId]);
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 /** A creation's failure before its reference is written: nothing registered, Pi never started. */
 const notCreated = (e: PiSessionError) =>
@@ -190,7 +191,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         owned(
           Effect.gen(function* () {
             const { physical } = yield* references.checkout(cwd);
-            const key = hostKey(physical, sessionId);
+            const key = sessionKey(physical, sessionId);
             const lock = yield* lockFor(key);
             return yield* Semaphore.withPermits(lock, 1)(Effect.suspend(() => work(key)));
           }),
@@ -281,8 +282,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               const lock = yield* lockFor(key);
               // The project's instructions as of this launch; an edit reaches the next one.
               const data = yield* registry.get;
-              const projectId = data.sessions.find(
-                (s) => s.cwd === ref.cwd && s.sessionId === spec.sessionId,
+              const projectId = data.sessions.find((s) =>
+                sameSession(s, { cwd: ref.cwd, sessionId: spec.sessionId }),
               )?.projectId;
               const projectInstructions = data.projects.find(
                 (p) => p.id === projectId,

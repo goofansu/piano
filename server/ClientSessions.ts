@@ -13,7 +13,13 @@
  */
 import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
-import type { Attachment, ServerMessage, SessionAction, StartOptions } from "../shared/wire.ts";
+import {
+  type Attachment,
+  type ServerMessage,
+  type SessionAction,
+  type StartOptions,
+  sameSession,
+} from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { type PiSession, type PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
@@ -289,7 +295,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     // Detach first, so this client sees no frames from a session being stopped.
     yield* navigate(
       Effect.suspend(() =>
-        attachment?.session.spec.cwd === cwd && attachment.session.spec.sessionId === sessionId
+        attachment && sameSession(attachment.session.spec, { cwd, sessionId })
           ? detach
           : Effect.void,
       ),
