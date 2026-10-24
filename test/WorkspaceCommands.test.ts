@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
+import { Context, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
 import { DirectoryFacts } from "../server/DirectoryFacts.ts";
+import { FolderWorktreesLive } from "../server/FolderWorktrees.ts";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { Registry, RegistryDatabasePath, RegistryError } from "../server/Registry.ts";
@@ -139,7 +140,7 @@ else{const r=readFileSync(${JSON.stringify(reply)},'utf8');if(r==='fail'){consol
     registry: {
       reply: created,
       record: Effect.fail(new RegistryError({ detail: "Registry write failed." })),
-      detail: /^Registry write failed\.$/,
+      detail: /^Registry write failed\./,
     },
     defect: {
       reply: created,
@@ -153,11 +154,12 @@ else{const r=readFileSync(${JSON.stringify(reply)},'utf8');if(r==='fail'){consol
       Effect.gen(function* () {
         const registry = yield* Registry;
         yield* registry.ensureFolder(repo);
-        const commands = yield* Effect.gen(function* () {
-          return yield* WorkspaceCommands;
-        }).pipe(
-          Effect.provide(Layer.fresh(WorkspaceCommandsLive)),
-          Effect.provideService(Registry, { ...registry, addWorktree: () => record }),
+        // Built in the test's scope, which outlives the work FolderWorktrees forks into it.
+        const commands = Context.get(
+          yield* Layer.build(
+            Layer.fresh(WorkspaceCommandsLive.pipe(Layer.provide(FolderWorktreesLive))),
+          ).pipe(Effect.provideService(Registry, { ...registry, addWorktree: () => record })),
+          WorkspaceCommands,
         );
         const attempts = {
           create: commands.createWorktree(repo, "next", { hooks: false }),
@@ -176,6 +178,58 @@ else{const r=readFileSync(${JSON.stringify(reply)},'utf8');if(r==='fail'){consol
       }).pipe(Effect.provideService(WorktrunkCommand, wt)),
     );
   }
+});
+
+test("INV-02/06: a requester that leaves while Worktrunk runs still gets the worktree registered", async () => {
+  const repo = join(root, "held"),
+    wt = join(root, "held-wt"),
+    started = join(root, "held-started"),
+    release = join(root, "held-release"),
+    path = join(root, "held-next");
+  mkdirSync(repo);
+  git(repo, "init", "--quiet");
+  git(repo, "commit", "--quiet", "--allow-empty", "-m", "init");
+  // A Worktrunk that says it started creating, then waits to be released before answering.
+  writeFileSync(
+    wt,
+    `#!${process.execPath}\nimport {existsSync,writeFileSync} from 'node:fs';
+if(process.argv.includes('--version')) console.log('wt v0.80.0');
+else{writeFileSync(${JSON.stringify(started)},'');
+while(!existsSync(${JSON.stringify(release)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);
+console.log(${JSON.stringify(JSON.stringify({ action: "created", branch: "next", path, created_branch: true, base_branch: "main" }))});}\n`,
+    { mode: 0o755 },
+  );
+  const until = <A>(read: Effect.Effect<A | undefined>, what: string) =>
+    Effect.gen(function* () {
+      for (let n = 0; n < 250; n++) {
+        const value = yield* read;
+        if (value !== undefined) return value;
+        yield* Effect.sleep("20 millis");
+      }
+      return yield* Effect.die(new Error(`never observed: ${what}`));
+    });
+  await run(
+    Effect.gen(function* () {
+      const commands = yield* WorkspaceCommands,
+        registry = yield* Registry;
+      yield* registry.ensureFolder(repo);
+      const requester = yield* commands
+        .createWorktree(repo, "next", { hooks: false })
+        .pipe(Effect.forkChild);
+      yield* until(
+        Effect.sync(() => (existsSync(started) ? true : undefined)),
+        "Worktrunk running",
+      );
+      // The socket closes: its request fiber is interrupted while Worktrunk is still creating.
+      yield* Fiber.interrupt(requester);
+      writeFileSync(release, "");
+      const registered = yield* until(
+        registry.get.pipe(Effect.map((d) => d.worktrees.find((w) => w.path === path))),
+        "the worktree registered",
+      );
+      assert.deepEqual(registered, { folder: repo, path, branch: "next" });
+    }).pipe(Effect.provideService(WorktrunkCommand, wt)),
+  );
 });
 
 test("INV-01: a trust decision is saved in Pi's store and every client's model catalog is invalidated", async () => {

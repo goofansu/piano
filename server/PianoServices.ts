@@ -4,7 +4,8 @@
  * Some services must exist once per server, and the wiring here is what guarantees it:
  * `SessionHostsLive` and `SidebarViewLive` are functions, so building one a second time
  * silently makes a second instance. One SessionHosts owns every Pi child (INV-02) and also
- * provides the SessionReferences every caller shares, so all of them see one alias memory.
+ * provides the SessionReferences every caller shares, so all of them see one alias memory, and
+ * the FolderWorktrees that both it and WorkspaceCommands create worktrees through.
  * Sharing reads the Radius credential through the same ProviderLogin the routes use.
  *
  * Callers supply only what lies outside Piano: the platform (child processes, files), the

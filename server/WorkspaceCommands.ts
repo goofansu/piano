@@ -1,7 +1,8 @@
 /**
  * Workspace commands: the domain steps behind the browser's requests to discover and add
  * worktrees and to trust a folder. Registry holds references only (INV-01); Worktrees owns Git
- * and Worktrunk; Pi's trust store owns trust. Sessions belong to SessionHosts.
+ * and Worktrunk; FolderWorktrees creates and registers new worktrees; Pi's trust store owns
+ * trust. Sessions belong to SessionHosts.
  */
 import { Cause, Context, Effect, Layer } from "effect";
 import type {
@@ -12,17 +13,18 @@ import type {
 } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
+import { FolderWorktrees } from "./FolderWorktrees.ts";
 import type { ProjectTrustError } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";
 import { SidebarView } from "./SidebarView.ts";
-import { createWorktree, listWorktrees, WorktreeError } from "./Worktrees.ts";
+import { listWorktrees, WorktreeError } from "./Worktrees.ts";
 
 type ReadyWorktree = Extract<WorktreeResult, { status: "ready" }>;
 
 /**
- * The error result for a worktree mutation that failed with `error`. Only an expected
- * WorktreeError can confirm that nothing ran; any other failure may have run Worktrunk and left a
- * checkout behind, so the result is `unconfirmed`.
+ * The error result for a worktree mutation that failed with `error`. A WorktreeError says
+ * itself whether a checkout may remain (FolderWorktrees marks failures after Worktrunk ran);
+ * any other failure is unexpected, so nothing is confirmed and the result is `unconfirmed`.
  */
 export const worktreeFailure = (error: unknown): Extract<WorktreeResult, { status: "error" }> => ({
   status: "error",
@@ -49,8 +51,8 @@ export class WorkspaceCommands extends Context.Service<
      */
     readonly addWorktree: (folder: string, path: string) => Effect.Effect<WorktreeResult>;
     /**
-     * Create a new branch checkout through Worktrunk and register it. A failed result is
-     * `unconfirmed` when a checkout may exist anyway: Worktrunk ran, or something failed after it.
+     * Create a new branch checkout through FolderWorktrees, which finishes it even when the
+     * requester leaves. A failed result is `unconfirmed` when a checkout may exist anyway.
      */
     readonly createWorktree: (
       folder: string,
@@ -74,6 +76,7 @@ export const WorkspaceCommandsLive = Layer.effect(
     const registry = yield* Registry;
     const facts = yield* DirectoryFacts;
     const sidebar = yield* SidebarView;
+    const worktrees = yield* FolderWorktrees;
 
     const registered = (folder: string) =>
       registry
@@ -157,15 +160,14 @@ export const WorkspaceCommandsLive = Layer.effect(
         branch,
         options,
       ) {
-        yield* registered(folder);
-        const w = yield* createWorktree(folder, branch.trim(), { hooks: options.hooks });
-        return yield* record({
-          status: "ready",
+        const w = yield* worktrees.create(folder, branch, options);
+        return {
+          status: "ready" as const,
           folder,
           path: w.path,
           branch: w.branch,
           creation: { baseBranch: w.baseBranch, hooks: w.hooks },
-        });
+        };
       }, settled),
     });
   }),

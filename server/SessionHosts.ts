@@ -18,6 +18,7 @@ import type {
   WorktreeRequest,
 } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
+import { FolderWorktrees, FolderWorktreesLive } from "./FolderWorktrees.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, RegistryError } from "./Registry.ts";
@@ -29,7 +30,7 @@ import {
   SessionReferencesLive,
 } from "./SessionReferences.ts";
 import { type Webhooks, WebhooksLive } from "./Webhooks.ts";
-import { createWorktree, mainCheckoutOf, WorktreeError, worktreeOwner } from "./Worktrees.ts";
+import { mainCheckoutOf, WorktreeError, worktreeOwner } from "./Worktrees.ts";
 
 export interface OpenSpec {
   readonly cwd: string;
@@ -141,13 +142,15 @@ export class SessionHosts extends Context.Service<
   }
 >()("piano/SessionHosts") {}
 
-/** Also provides the SessionReferences it keys ownership by, so every caller shares its alias memory. */
+/** Also provides the SessionReferences it keys ownership by, so every caller shares its alias
+ * memory, and the FolderWorktrees it creates worktrees through. */
 export const SessionHostsLive = (options: { idleMs: number }) =>
   Layer.effect(
     SessionHosts,
     Effect.gen(function* () {
       const registry = yield* Registry;
       const references = yield* SessionReferences;
+      const worktrees = yield* FolderWorktrees;
       const layerScope = yield* Effect.scope;
       const hostServices = yield* Effect.context<
         PiSessions | Registry | SessionReferences | Webhooks
@@ -367,17 +370,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         const folder = yield* folderOf(main).pipe(
           Effect.mapError((e) => new WorktreeError({ detail: e.detail })),
         );
-        const created = yield* createWorktree(folder, worktree.branch.trim(), {
-          hooks: worktree.hooks,
-        });
-        yield* registry
-          .addWorktree({ folder, path: created.path, branch: created.branch })
-          .pipe(
-            Effect.mapError(
-              (e) =>
-                new WorktreeError({ detail: `${e.detail} ${created.path}`, unconfirmed: true }),
-            ),
-          );
+        const created = yield* worktrees.create(folder, worktree.branch, { hooks: worktree.hooks });
         return created.path;
       });
 
@@ -542,4 +535,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         lifecycleChanges: Stream.fromPubSub(lifecycle),
       });
     }),
-  ).pipe(Layer.provideMerge(SessionReferencesLive), Layer.provideMerge(WebhooksLive));
+  ).pipe(
+    Layer.provideMerge(SessionReferencesLive),
+    Layer.provideMerge(WebhooksLive),
+    Layer.provideMerge(FolderWorktreesLive),
+  );
