@@ -39,7 +39,7 @@ import { confirmation } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import { previewObservation } from "@/lib/previewObservation";
-import { findProject, sessionProjectMenu } from "@/lib/projectCommands";
+import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
 import {
   type SessionCommand,
@@ -161,7 +161,7 @@ export function SessionCommandMenuItem({
 /**
  * The one owner of command effects and their forms: whichever surface asked, running a command goes
  * through `runCommand`, which refuses a disabled one, and there is a single Rename, Archive, Delete, Close
- * folder, Share and project dialog. The forms (`useCommandForms`) own submitting; the dialogs only render.
+ * folder, Share, New project and Project settings dialog. The forms (`useCommandForms`) own submitting; the dialogs only render.
  */
 export function CommandHost({
   state,
@@ -196,10 +196,9 @@ export function CommandHost({
   const asking = form ? confirmation(state, form) : undefined;
   const sharing = form?.kind === "share-session";
   const project = form?.kind === "project" ? form.dialog : undefined;
+  const projectSettings = form?.kind === "project-settings";
   // The app whose details are open; another app, even in the same session, never reopens them.
   const [previewDetails, setPreviewDetails] = useState<string | null>(null);
-  // The project whose settings are open.
-  const [settingsFor, setSettingsFor] = useState<string | null>(null);
 
   const effects: CommandEffects = {
     send,
@@ -208,7 +207,6 @@ export function CommandHost({
     openNew,
     openProjects,
     openProject,
-    openProjectSettings: setSettingsFor,
     openPanel,
     toggleSidebar: sidebar.toggle,
     setView,
@@ -322,10 +320,12 @@ export function CommandHost({
         close={close}
       />
       <ProjectSettingsDialog
-        state={state}
-        project={findProject(state, settingsFor)}
-        send={send}
-        close={() => setSettingsFor(null)}
+        open={projectSettings}
+        draft={forms.projectDraft}
+        setDraft={forms.editProject}
+        allowed={answer.allowed}
+        submit={forms.submit}
+        close={close}
       />
     </CommandsContext.Provider>
   );

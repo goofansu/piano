@@ -69,7 +69,10 @@ test("enabled commands reach the effect their intent names", () => {
     ],
     [byId(projectCommands(online, launch), "new-session"), ["openProject", "p1"]],
     [openProjectCommand(launch), ["openProject", "p1"]],
-    [byId(projectCommands(online, launch), "settings"), ["openProjectSettings", "p1"]],
+    [
+      byId(projectCommands(online, launch), "settings"),
+      ["openForm", { kind: "project-settings", projectId: "p1" }],
+    ],
     [
       byId(
         globalCommands(
@@ -78,7 +81,7 @@ test("enabled commands reach the effect their intent names", () => {
         ),
         "project-settings",
       ),
-      ["openProjectSettings", "p1"],
+      ["openForm", { kind: "project-settings", projectId: "p1" }],
     ],
     [
       byId(projectCommands(online, launch), "delete"),
