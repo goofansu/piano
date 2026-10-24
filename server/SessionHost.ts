@@ -195,7 +195,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
             (dialog.id !== previousDialog?.id || dialog.generation !== previousDialog?.generation)
           )
             yield* webhooks.emit("session.needs_input", raw.spec.cwd, raw.spec.sessionId, observed);
-          if (event._tag === "closed" && event.closure._tag !== "released")
+          if (event._tag === "closed")
             yield* webhooks.emit("session.failed", raw.spec.cwd, raw.spec.sessionId, observed);
         }
         // Signal attachment before taking ownership's lock: the opener holds it until ready.

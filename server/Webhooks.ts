@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { Clock, Context, Data, Deferred, Effect, Layer, Queue, Schema, Semaphore } from "effect";
-import { dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
+import { closureNeedsAttention, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import {
   type Webhook,
   type WebhookDelivery,
@@ -31,7 +31,8 @@ export class Webhooks extends Context.Service<
     readonly save: (input: WebhookSave) => Effect.Effect<Webhook, WebhookError>;
     readonly remove: (id: string) => Effect.Effect<void, WebhookError>;
     readonly test: (id: string) => Effect.Effect<WebhookDelivery, WebhookError>;
-    /** Admission only. Snapshot is the live event's view, never a history read. */
+    /** Admission only. Snapshot is the live event's view, never a history read. An event the
+     * snapshot does not bear out (no dialog, a stop that is not a failure) sends nothing. */
     readonly emit: (
       event: WebhookEvent,
       cwd: string,
@@ -275,7 +276,8 @@ export const WebhooksLive = Layer.effect(
           const { dialog } = dispositionOf(snapshot, true);
           const closure = snapshot.state.closure;
           if (event === "session.needs_input" && !dialog) return;
-          if (event === "session.failed" && (!closure || closure._tag === "released")) return;
+          // Webhooks alone decide whether a stop is a failure, by the rule the browser follows.
+          if (event === "session.failed" && !closureNeedsAttention(closure)) return;
           for (const hook of hooks) {
             const payload: WebhookPayload = {
               ...(yield* envelope(event)),

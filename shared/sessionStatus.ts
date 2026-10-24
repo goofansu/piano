@@ -6,7 +6,7 @@
 import { type Disposition, LAST_ANSWER_CHARS } from "./dispatch.ts";
 import { isWorking } from "./sessionProjection.ts";
 import { turnEnding } from "./turnEnding.ts";
-import type { Dialog, Snapshot } from "./wire.ts";
+import type { Dialog, SessionClosure, Snapshot } from "./wire.ts";
 
 /**
  * What a live session is doing, from its retained state alone: waiting on a dialog, holding work
@@ -19,6 +19,14 @@ export type LiveActivity =
   | { readonly _tag: "running" }
   | { readonly _tag: "uncertain"; readonly detail: string }
   | { readonly _tag: "idle" };
+
+/** Whether a stop needs the person's attention: anything but a quiet release or a clean exit
+ * may have cut work short. The toast, the banner and the `session.failed` webhook all follow
+ * this, never the display text. */
+export const closureNeedsAttention = (
+  closure: SessionClosure | undefined,
+): closure is SessionClosure =>
+  !!closure && closure._tag !== "released" && !(closure._tag === "exited" && closure.code === 0);
 
 export function liveActivityOf({ state, dialogs }: Snapshot): LiveActivity {
   const dialog = dialogs[0];
