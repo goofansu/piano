@@ -202,9 +202,10 @@ await run(
 
     // Deferred overflow measurement still offers long prompts' complete text and works again
     // after collapsing and resizing. Code-copy controls remain present in the adjacent reply.
+    // Scoped to the transcript: the sidebar's open groups are expanded disclosure buttons too.
     await page.click("button", "Show more");
     await page.until(
-      `document.querySelector('button[aria-expanded="true"][aria-controls]')?.textContent.includes('Show less')`,
+      `document.querySelector('[data-slot="transcript"] button[aria-expanded="true"][aria-controls]')?.textContent.includes('Show less')`,
     );
     const promptSize = () =>
       page.evaluate(`(() => {
