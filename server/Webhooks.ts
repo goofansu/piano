@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { Clock, Context, Data, Deferred, Effect, Layer, Queue, Schema, Semaphore } from "effect";
+import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
 import { closureNeedsAttention, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import {
   type Webhook,
@@ -304,7 +305,8 @@ export const WebhooksLive = Layer.effect(
               );
           };
           // Redact whole values, then cut: a token straddling the cut would survive as a fragment.
-          const answer = clean(lastAnswerOf(snapshot, Infinity));
+          const full = clean(lastAnswerOf(snapshot, Infinity));
+          const answer = full?.slice(0, LAST_ANSWER_CHARS) ?? null;
           const { dialog } = dispositionOf(snapshot, true);
           const closure = snapshot.state.closure;
           if (event === "session.needs_input" && !dialog) return;
@@ -323,8 +325,8 @@ export const WebhooksLive = Layer.effect(
               pullRequest: pr ? { number: pr.number, url: pr.url, state: null } : null,
               ...(event === "session.completed"
                 ? {
-                    answer: answer?.slice(0, 2000) ?? null,
-                    answerTruncated: (answer?.length ?? 0) > 2000,
+                    answer,
+                    answerTruncated: (full?.length ?? 0) > LAST_ANSWER_CHARS,
                   }
                 : {}),
               ...(event === "session.needs_input" && dialog
@@ -346,7 +348,7 @@ export const WebhooksLive = Layer.effect(
                       detail: clean(closure.detail),
                       exitCode: closure._tag === "exited" ? closure.code : null,
                     },
-                    answer: answer?.slice(0, 2000) ?? null,
+                    answer,
                   }
                 : {}),
             };
