@@ -7,7 +7,7 @@
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand, ServerMessage } from "../../../shared/wire.ts";
-import type { AppState } from "../store.ts";
+import { type AppState, isSession } from "../store.ts";
 import { browserEnvironment, type ObservationEnvironment } from "./observation.ts";
 import { sessionReady } from "./sessionContext.ts";
 import { PREVIEW_STATUS, selectedPreview } from "./sessionPreview.ts";
@@ -101,7 +101,7 @@ export function createPreviewObservation({
       const unlisten = followed.listen((m) => {
         if (m._tag !== "action_result") return;
         const page = followed.getState().session;
-        const onScreen = page?.cwd === m.cwd && page.sessionId === m.sessionId;
+        const onScreen = isSession(page, m);
         if (m.result._tag === "preview_observed") {
           if (!onScreen) return;
           const { instanceId, logs, error } = m.result;

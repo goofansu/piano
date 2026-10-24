@@ -269,11 +269,7 @@ export function sessionCommands(
   }
   if (selected || subject) {
     const mutable = !!subject && sessionMutable(state, subject);
-    const reference =
-      subject &&
-      state.sessionReferences.find(
-        (s) => s.cwd === subject.cwd && s.sessionId === subject.sessionId,
-      );
+    const reference = subject && sessionReference(state, subject);
     commands.push(
       {
         id: "rename",

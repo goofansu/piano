@@ -5,7 +5,7 @@
  * broadcast, the only source of running state.
  */
 import type { FolderView, Project, SessionReference, WorktreeView } from "@shared/wire";
-import { type AppState, sessionKey } from "../store.ts";
+import { type AppState, isSession, sessionKey } from "../store.ts";
 import { findProject } from "./projectCommands.ts";
 
 /** Working: Pi is streaming. Done: finished while not on screen. Idle: running, waiting. Off: no process. */
@@ -147,7 +147,7 @@ function entries(state: AppState): SessionEntry[] {
       pinned: !!ref.pinned,
       listed: !ref.archived && (!!folder || !!project),
       activity: host?.streaming ? "working" : done.has(key) ? "done" : host ? "idle" : "off",
-      selected: !!current && current.cwd === ref.cwd && current.sessionId === ref.sessionId,
+      selected: isSession(current, ref),
       unavailable: ref.unavailable,
       hint: ref.unavailable && HINTS[ref.unavailable],
       disabled: ref.unavailable === "history",

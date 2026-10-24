@@ -5,8 +5,8 @@
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand, SessionPreview } from "../../../shared/wire.ts";
-import type { AppState } from "../store.ts";
-import type { SessionRef } from "./sessionContext.ts";
+import { type AppState, isSession } from "../store.ts";
+import { hostOf, type SessionRef } from "./sessionContext.ts";
 
 /** The selected session's app while its live generation owns one. */
 export function selectedPreview(state: AppState): SessionPreview | undefined {
@@ -18,11 +18,8 @@ export function selectedPreview(state: AppState): SessionPreview | undefined {
 /** Ending this session's Pi would stop an app it owns: the selected one, or a background host. */
 export function sessionHasPreview(state: AppState, target: SessionRef): boolean {
   const session = state.session;
-  if (session?.cwd === target.cwd && session.sessionId === target.sessionId)
-    return !!selectedPreview(state);
-  return state.hosts.some(
-    (host) => host.cwd === target.cwd && host.sessionId === target.sessionId && host.preview,
-  );
+  if (isSession(session, target)) return !!selectedPreview(state);
+  return !!hostOf(state, target)?.preview;
 }
 
 export type PreviewTone = "ready" | "pending" | "problem" | "idle";

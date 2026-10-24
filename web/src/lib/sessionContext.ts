@@ -3,10 +3,11 @@
  * project and readiness. Header, palette, sidebar and session view read these instead of each
  * looking the session up in the folder list themselves.
  */
-import type { FolderView, Project, SessionReference, Workspace } from "@shared/wire";
+import type { FolderView, HostInfo, Project, SessionReference, Workspace } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { isWorking } from "../../../shared/sessionProjection.ts";
-import type { AppState } from "../store.ts";
+import { sameSession } from "../../../shared/wire.ts";
+import { type AppState, isSession } from "../store.ts";
 import { directoryTrust } from "./directoryTrust.ts";
 import { abbrevHome, DETACHED_HEAD } from "./format.ts";
 import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
@@ -133,9 +134,7 @@ export function sessionReference(
   state: AppState,
   session: SessionRef,
 ): SessionReference | undefined {
-  return state.sessionReferences.find(
-    (s) => s.cwd === session.cwd && s.sessionId === session.sessionId,
-  );
+  return state.sessionReferences.find((s) => sameSession(s, session));
 }
 
 export function sessionProject(
@@ -153,7 +152,7 @@ export function sessionReady(state: AppState): boolean {
 /** The session is the one selected or being selected, whose attachment `sessionReady` describes. */
 export function isSelectedSession(state: AppState, target: SessionRef): boolean {
   const current = state.session ?? state.selecting;
-  return !!current && current.cwd === target.cwd && current.sessionId === target.sessionId;
+  return isSession(current, target);
 }
 
 /**
@@ -165,14 +164,17 @@ export function sessionMutable(state: AppState, target: SessionRef): boolean {
   return state.connected && (!isSelectedSession(state, target) || sessionReady(state));
 }
 
+/** The background host entry for a session, where its streaming and preview flags are read. */
+export function hostOf(state: AppState, target: SessionRef): HostInfo | undefined {
+  return state.hosts.find((host) => sameSession(host, target));
+}
+
 /** Activity for either the selected session or a background session in the sidebar. */
 export function sessionWorking(state: AppState, target: SessionRef): boolean {
   const session = state.session;
-  if (session?.cwd === target.cwd && session.sessionId === target.sessionId)
+  if (session && isSession(session, target))
     return isWorking(session.state) || session.state.submission?.outcome === "submitting";
-  return state.hosts.some(
-    (host) => host.cwd === target.cwd && host.sessionId === target.sessionId && host.streaming,
-  );
+  return !!hostOf(state, target)?.streaming;
 }
 
 /** Pi cannot run where the checkout or history is gone, and renaming starts Pi. */

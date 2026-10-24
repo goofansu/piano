@@ -9,13 +9,17 @@ import {
   completionTarget,
   directoryChoices,
   focusedDirectory,
+  hostOf,
+  isSelectedSession,
   sessionActivity,
   sessionCheckoutMissing,
   sessionContext,
   sessionMutable,
   sessionPane,
   sessionReady,
+  sessionWorking,
 } from "../web/src/lib/sessionContext.ts";
+import { sessionHasPreview } from "../web/src/lib/sessionPreview.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
@@ -521,4 +525,32 @@ test("the New session directory picker disables a missing root and labels a bran
     folder: "repo",
     branchLabel: "Unknown branch",
   });
+});
+
+test("a session is selected, working and previewing by cwd and ID together", () => {
+  const other = { cwd: "/repo", sessionId: "s2" };
+  const state: AppState = {
+    ...base,
+    session: session("/repo", { preview: undefined }),
+    hosts: [
+      { cwd: "/repo", sessionId: "s2", streaming: true, preview: true },
+      { cwd: "/elsewhere", sessionId: "s1", streaming: false },
+    ],
+  };
+  // The selected session reads its own state; a same-cwd session with another ID reads its host.
+  assert.equal(sessionWorking(state, { cwd: "/repo", sessionId: "s1" }), false);
+  assert.equal(sessionWorking(state, other), true);
+  assert.equal(sessionHasPreview(state, other), true);
+  assert.equal(sessionHasPreview(state, { cwd: "/repo", sessionId: "s1" }), false);
+  assert.equal(hostOf(state, other)?.streaming, true);
+  assert.equal(hostOf(state, { cwd: "/repo", sessionId: "s3" }), undefined);
+  assert.equal(isSelectedSession(state, { cwd: "/repo", sessionId: "s1" }), true);
+  assert.equal(isSelectedSession(state, other), false);
+  // The selected session's own state wins over a stale host entry for it.
+  const busyHost = { ...state, hosts: [{ cwd: "/repo", sessionId: "s1", streaming: true }] };
+  assert.equal(sessionWorking(busyHost, { cwd: "/repo", sessionId: "s1" }), false);
+  assert.equal(
+    sessionWorking({ ...busyHost, session: null }, { cwd: "/repo", sessionId: "s1" }),
+    true,
+  );
 });

@@ -4,7 +4,7 @@
  */
 
 import { defaultFilter } from "cmdk";
-import type { AppState } from "../store.ts";
+import { type AppState, sessionKey } from "../store.ts";
 import { abbrevHome } from "./format.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
 import type { ProjectCommand, SessionProjectMenu } from "./projectCommands.ts";
@@ -133,7 +133,7 @@ function sessionRow(t: SessionEntry): PaletteSessionRow {
   const project = t.project?.name ?? "";
   const { label } = t;
   return {
-    key: `${t.cwd}\n${t.sessionId}`,
+    key: sessionKey(t),
     value: `${label} ${t.folder} ${t.branch} ${project} ${t.sessionId}`,
     keywords: [t.folder, t.branch, project],
     label,
