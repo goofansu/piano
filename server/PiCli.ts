@@ -5,6 +5,7 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Context } from "effect";
+import type { LaunchEnv } from "../shared/dispatch.ts";
 
 export interface PiCliConfig {
   /** Node binary used to run the CLI entry. */
@@ -15,8 +16,8 @@ export interface PiCliConfig {
   readonly extraArgs: ReadonlyArray<string>;
   /** Absolute `--extension` paths loaded by every spawned Pi, before the session arguments. */
   readonly extensions?: ReadonlyArray<string>;
-  /** Variables added to the child's environment, such as this instance's session endpoint. */
-  readonly env?: Readonly<Record<string, string>>;
+  /** Launch variables every child gets, such as this instance's session endpoint. */
+  readonly env?: Readonly<LaunchEnv>;
 }
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));

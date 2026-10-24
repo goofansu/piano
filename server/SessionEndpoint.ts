@@ -10,7 +10,7 @@
  * The address names the listener, not a proxy: the child runs beside the server, so it reaches
  * the loopback port directly even when the only allowed origin is a public proxy origin.
  */
-import { SESSION_ORIGIN, SESSION_WS_URL } from "../shared/dispatch.ts";
+import { type LaunchEnv, SESSION_ORIGIN, SESSION_WS_URL } from "../shared/dispatch.ts";
 import { sessionLinkOrigin } from "./OriginPolicy.ts";
 
 export interface SessionEndpoint {
@@ -49,7 +49,7 @@ export function sessionEndpoint(
  * the `Origin` header for the upgrade and the base for a `/s/<id>` link into Piano's UI; there is no
  * separate base-URL variable, because a second spelling of the same origin could drift from it.
  */
-export const sessionEnvironment = (endpoint: SessionEndpoint): Record<string, string> => ({
+export const sessionEnvironment = (endpoint: SessionEndpoint): LaunchEnv => ({
   [SESSION_WS_URL]: endpoint.wsUrl,
   [SESSION_ORIGIN]: endpoint.origin,
 });
