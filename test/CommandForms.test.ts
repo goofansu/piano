@@ -268,12 +268,24 @@ const settled = () => new Promise((resolve) => setImmediate(resolve));
 test("a form submitted after the connection drops stays open and sends nothing", () => {
   const share: CommandForm = { kind: "share-session", target: other };
   const newProject: CommandForm = { kind: "project", dialog: {} };
-  for (const form of [rename(), del(), archive(), closeFolder, share, newProject, deleteProject]) {
+  const settings: CommandForm = { kind: "project-settings", projectId: "p1" };
+  for (const form of [
+    rename(),
+    del(),
+    archive(),
+    closeFolder,
+    share,
+    newProject,
+    deleteProject,
+    settings,
+  ]) {
     const { subject, sent, published, setState } = forms();
+    setState({ ...withWorkspace, projects: [launch] });
     subject.open(form);
     subject.edit("Renamed");
     subject.editProject({ name: "Renamed", instructions: "" });
-    setState({ ...withWorkspace, connected: false });
+    assert.equal(subject.answer().allowed, true, form.kind);
+    setState({ ...withWorkspace, projects: [launch], connected: false });
     assert.equal(subject.submit(), false, form.kind);
     assert.equal(subject.getState().form, form, form.kind);
     assert.deepEqual(sent, [], form.kind);
@@ -349,6 +361,71 @@ test("creating a project opens it; creating one for a session does not", () => {
     assert.equal(sent.length, 1);
     assert.deepEqual(opened, []);
   }
+});
+
+test("Project settings starts from the project as saved and sends only what changed", () => {
+  const saved: Project = { id: "p1", name: "Launch", instructions: "Reply in French." };
+  const { subject, sent, setState } = forms();
+  setState({ ...withWorkspace, projects: [saved] });
+  const settings: CommandForm = { kind: "project-settings", projectId: "p1" };
+  subject.open(settings);
+  assert.deepEqual(subject.getState().projectDraft, {
+    name: "Launch",
+    instructions: "Reply in French.",
+  });
+  // Nothing changed yet, so there is nothing to save.
+  assert.equal(subject.submit(), false);
+  assert.equal(subject.getState().form, settings);
+
+  subject.editProject({ name: " Ship ", instructions: "Reply in French." });
+  assert.equal(subject.submit(), true);
+  assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", name: "Ship" }]);
+  assert.equal(subject.getState().form, null);
+
+  // Reopening starts from what is saved, not from the last draft.
+  subject.open(settings);
+  assert.deepEqual(subject.getState().projectDraft, {
+    name: "Launch",
+    instructions: "Reply in French.",
+  });
+  subject.editProject({ name: "Launch", instructions: "" });
+  assert.equal(subject.submit(), true);
+  assert.deepEqual(sent[1], { _tag: "update_project", id: "p1", instructions: null });
+});
+
+test("Project settings for a project deleted while open stays open and sends nothing", () => {
+  const { subject, sent, setState } = forms();
+  setState({ ...withWorkspace, projects: [launch] });
+  const settings: CommandForm = { kind: "project-settings", projectId: "p1" };
+  subject.open(settings);
+  subject.editProject({ name: "Renamed", instructions: "" });
+  assert.equal(subject.answer().allowed, true);
+  setState({ ...withWorkspace, projects: [] });
+  assert.equal(subject.submit(), false);
+  assert.equal(subject.getState().form, settings);
+  assert.deepEqual(sent, []);
+});
+
+test("opening Project settings replaces the open form, and another form replaces it", () => {
+  const { subject, sent, setState } = forms();
+  setState({ ...withWorkspace, projects: [launch] });
+  subject.open(deleteProject);
+  subject.open({ kind: "project-settings", projectId: "p1" });
+  assert.equal(subject.getState().form?.kind, "project-settings");
+  assert.equal(subject.getState().projectDraft.name, "Launch");
+  // Submitting answers the settings form, not the replaced confirmation.
+  subject.editProject({ name: "Renamed", instructions: "" });
+  subject.submit();
+  assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", name: "Renamed" }]);
+
+  subject.open({ kind: "project-settings", projectId: "p1" });
+  subject.editProject({ name: "Draft", instructions: "" });
+  subject.open(rename());
+  assert.equal(subject.getState().form?.kind, "rename-session");
+  assert.equal(subject.getState().text, "Other");
+  // A New project opened next does not inherit the settings draft.
+  subject.open({ kind: "project", dialog: {} });
+  assert.deepEqual(subject.getState().projectDraft, { name: "", instructions: "" });
 });
 
 test("Share clicked twice publishes once and stays open on the link", async () => {

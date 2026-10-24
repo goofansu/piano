@@ -44,6 +44,7 @@ export type CommandForm =
   | { kind: "archive-session"; target: SessionTarget }
   | { kind: "close-folder"; folder: { path: string; name: string } }
   | { kind: "project"; dialog: ProjectDialog }
+  | { kind: "project-settings"; projectId: string }
   | { kind: "delete-project"; project: Project };
 
 /** What running a command can do; the host binds each to navigation, the client, and its own forms. */
@@ -54,7 +55,6 @@ export interface CommandEffects {
   openNew: (cwd?: string, projectId?: string) => void;
   openProjects: () => void;
   openProject: (projectId: string) => void;
-  openProjectSettings: (projectId: string) => void;
   openPanel: (panel: Panel) => void;
   toggleSidebar: () => void;
   setAppearance: (appearance: Appearance) => void;
@@ -110,7 +110,7 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       effects.openForm({ kind: "delete-project", project: intent.project });
       break;
     case "project-settings":
-      effects.openProjectSettings(intent.projectId);
+      effects.openForm({ kind: "project-settings", projectId: intent.projectId });
       break;
     case "copy":
       effects.copy(intent.value, intent.label);

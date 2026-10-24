@@ -1,9 +1,9 @@
 /**
  * The forms `runCommand` opens (see `CommandForm`) and their one lifecycle: `open` a form, edit its
  * input (a session title, or a project draft), `submit` or `cancel` it. Submitting re-checks the
- * form's rule, since the connection or the session's attachment may have changed while the form was
- * open, and a form closes only after its answer was sent; a refused answer leaves it open having
- * sent nothing. Sharing is a phase of its form (confirm, publishing, shared or failed) and publishes
+ * form's rule, since the connection, the session's attachment or the project may have changed while
+ * the form was open, and a form closes only after its answer was sent; a refused answer leaves it
+ * open having sent nothing. Project settings starts from the project as saved when it opens. Sharing is a phase of its form (confirm, publishing, shared or failed) and publishes
  * at most once per opening. A new project not created for a session opens once it is saved.
  * `CommandHost` and the dialogs render this state and nothing else. Nothing here depends on React.
  */
@@ -12,7 +12,13 @@ import type { SessionShare } from "../../../shared/share.ts";
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
-import { EMPTY_PROJECT_DRAFT, type ProjectDraft, savableProjectDraft } from "./projectCommands.ts";
+import {
+  EMPTY_PROJECT_DRAFT,
+  findProject,
+  type ProjectDraft,
+  projectSettingsSave,
+  savableProjectDraft,
+} from "./projectCommands.ts";
 import { sessionLabel } from "./sessionCatalog.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
 import { sessionMutable, sessionWorking, workspaceFor } from "./sessionContext.ts";
@@ -39,8 +45,8 @@ export interface AnswerContext {
 }
 
 /**
- * Answer `form` with its input: the session title for rename, the project draft for a new project;
- * confirmations take none. A project form answered with a title is refused.
+ * Answer `form` with its input: the session title for rename, the project draft for a new project
+ * or a project's settings; confirmations take none. A project form answered with a title is refused.
  */
 export function answerForm(
   state: AppState,
@@ -110,6 +116,11 @@ export function answerForm(
         ...(!assign ? { openProject: id } : {}),
       };
     }
+    // A project deleted while its settings are open refuses the save, as a vanished session refuses rename.
+    case "project-settings": {
+      if (typeof input === "string") return { allowed: false };
+      return projectSettingsSave(state, form.projectId, input);
+    }
   }
 }
 
@@ -125,7 +136,7 @@ export interface Confirmation {
 
 /**
  * The question a confirmation form asks, as of `state`; undefined for a form with its own dialog
- * (rename, share, project). Deleting a working session warns that it interrupts the work.
+ * (rename, share, project, project settings). Deleting a working session warns that it interrupts the work.
  */
 export function confirmation(state: AppState, form: CommandForm): Confirmation | undefined {
   switch (form.kind) {
@@ -187,6 +198,7 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
     case "rename-session":
     case "share-session":
     case "project":
+    case "project-settings":
       return undefined;
   }
 }
@@ -202,7 +214,7 @@ export interface CommandFormsState {
   form: CommandForm | null;
   /** The rename form's text input: the session title; empty for every other form. */
   text: string;
-  /** The project form's Name and Instructions; empty for every other form. */
+  /** The New project or Project settings form's Name and Instructions; empty for every other form. */
   projectDraft: ProjectDraft;
   /** The share form's phase; `confirm` for every other form. */
   share: SharePhase;
@@ -226,11 +238,14 @@ export interface CommandForms {
   subscribe: (listener: () => void) => () => void;
   /** The open form's answer as of now; `{ allowed: false }` when none is open. */
   answer: () => FormAnswer;
-  /** Open `form`, replacing any open one. Rename starts from the session's title. */
+  /**
+   * Open `form`, replacing any open one. Rename starts from the session's title, Project settings
+   * from the project's saved name and instructions.
+   */
   open: (form: CommandForm) => void;
   /** The rename form's title. */
   edit: (text: string) => void;
-  /** The project form's draft. */
+  /** The New project or Project settings form's draft. */
   editProject: (draft: ProjectDraft) => void;
   /**
    * Send the open form's answer if it is allowed now, then close; a share form publishes instead and
@@ -240,6 +255,10 @@ export interface CommandForms {
   /** Close the open form; ignored while a share is publishing. */
   cancel: () => void;
 }
+
+/** The forms whose input is a project draft rather than a title. */
+const editsProject = (form: CommandForm) =>
+  form.kind === "project" || form.kind === "project-settings";
 
 export const SHARE_UNCONFIRMED =
   "Sharing could not be confirmed. Check Radius artifacts before sharing again.";
@@ -266,12 +285,18 @@ export function createCommandForms({
     state = next;
     for (const listener of listeners) listener();
   };
+  const savedDraft = (projectId: string): ProjectDraft => {
+    const project = findProject(getState(), projectId);
+    return project
+      ? { name: project.name, instructions: project.instructions ?? "" }
+      : EMPTY_PROJECT_DRAFT;
+  };
   const answer = (): FormAnswer =>
     state.form
       ? answerForm(
           getState(),
           state.form,
-          state.form.kind === "project" ? state.projectDraft : state.text,
+          editsProject(state.form) ? state.projectDraft : state.text,
           { radiusSignedIn: radiusSignedIn(), newId },
         )
       : { allowed: false };
@@ -303,14 +328,15 @@ export function createCommandForms({
       set({
         form,
         text: form.kind === "rename-session" ? (form.target.title ?? "") : "",
-        projectDraft: EMPTY_PROJECT_DRAFT,
+        projectDraft:
+          form.kind === "project-settings" ? savedDraft(form.projectId) : EMPTY_PROJECT_DRAFT,
         share: { phase: "confirm" },
       }),
     edit: (text) => {
       if (state.form?.kind === "rename-session") set({ ...state, text });
     },
     editProject: (projectDraft) => {
-      if (state.form?.kind === "project") set({ ...state, projectDraft });
+      if (state.form && editsProject(state.form)) set({ ...state, projectDraft });
     },
     submit: () => {
       const { form } = state;

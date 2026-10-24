@@ -1,6 +1,6 @@
-import { type ClientCommand, PROJECT_INSTRUCTIONS_MAX, type Project } from "@shared/wire";
+import { PROJECT_INSTRUCTIONS_MAX } from "@shared/wire";
 import { cn } from "cn";
-import { type Ref, useId, useState } from "react";
+import { type Ref, useId } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,83 +12,54 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { type ProjectDraft, projectSettingsSave } from "@/lib/projectCommands";
-import type { AppState } from "@/store";
+import type { ProjectDraft } from "@/lib/projectCommands";
 
 /**
- * A project's settings: its name and instructions, saved together. The command host owns the one
- * instance (which project is open); the server answers the save with a toast.
+ * A project's settings: its name and instructions, saved together. A view over the command host's
+ * Project settings form, which seeds the draft from the saved project and owns submitting; the
+ * server answers the save with a toast.
  */
 export function ProjectSettingsDialog({
-  state,
-  project,
-  send,
+  open,
+  draft,
+  setDraft,
+  allowed,
+  submit,
   close,
 }: {
-  state: AppState;
-  /** The project being edited; undefined while the dialog is closed. */
-  project: Project | undefined;
-  send: (command: ClientCommand) => void;
-  close: () => void;
-}) {
-  return (
-    <Dialog open={!!project} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
-        {/* A draft belongs to one opening: reopening, or another project, starts from what is saved. */}
-        {project && (
-          <ProjectSettingsForm
-            key={project.id}
-            state={state}
-            project={project}
-            send={send}
-            close={close}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ProjectSettingsForm({
-  state,
-  project,
-  send,
-  close,
-}: {
-  state: AppState;
-  project: Project;
-  send: (command: ClientCommand) => void;
+  open: boolean;
+  draft: ProjectDraft;
+  setDraft: (draft: ProjectDraft) => void;
+  allowed: boolean;
+  submit: () => void;
   close: () => void;
 }) {
   const id = useId();
-  const [draft, setDraft] = useState<ProjectDraft>({
-    name: project.name,
-    instructions: project.instructions ?? "",
-  });
-  const save = projectSettingsSave(state, project.id, draft);
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!save.allowed) return;
-        send(save.command);
-        close();
-      }}
-    >
-      <DialogHeader>
-        <DialogTitle>Project settings</DialogTitle>
-      </DialogHeader>
-      <ProjectFields id={id} draft={draft} setDraft={setDraft} />
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={close}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!save.allowed}>
-          Save
-        </Button>
-      </DialogFooter>
-    </form>
+    <Dialog open={open} onOpenChange={(open) => !open && close()}>
+      <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Project settings</DialogTitle>
+          </DialogHeader>
+          <ProjectFields id={id} draft={draft} setDraft={setDraft} />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={close}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!allowed}>
+              Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
