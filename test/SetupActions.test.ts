@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { toast } from "sonner";
 import { createSetupActions } from "../web/src/lib/setupActions.ts";
+
+/** The error toasts sonner has shown since `from`, read from its own history (no Toaster needed). */
+const errorToasts = (from: number) =>
+  toast
+    .getHistory()
+    .slice(from)
+    .flatMap((t) => ("type" in t && t.type === "error" ? [t.title] : []));
 
 /** A change the test settles by hand. */
 function deferred<T>() {
@@ -12,7 +20,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function section(options: { failure?: boolean } = {}) {
+function section(options: { failure?: "keep" | "report" } = {}) {
   const log = { refreshes: 0, announced: [] as string[], failures: [] as string[] };
   let keys = 0;
   const actions = createSetupActions<{ name: string }, string>({
@@ -22,11 +30,12 @@ function section(options: { failure?: boolean } = {}) {
     success: (message) => {
       log.announced.push(message);
     },
-    failure: options.failure
-      ? (message) => {
-          log.failures.push(message);
-        }
-      : undefined,
+    failure:
+      options.failure === "report"
+        ? (message) => {
+            log.failures.push(message);
+          }
+        : options.failure,
     newKey: () => `key-${++keys}`,
   });
   return { actions, log };
@@ -85,8 +94,31 @@ test("a confirmation stays open while its change runs and closes once it settles
   assert.equal(actions.getState().confirmation, undefined);
 });
 
-test("a failed change keeps its message, falls back when it has none, still refreshes, and clears when another starts", async () => {
+test("by default a failed change answers with the error's toast, falling back when it has none", async () => {
   const { actions, log } = section();
+  const from = toast.getHistory().length;
+  await actions.run({
+    id: "save",
+    run: async () => {
+      throw new Error("Pi refused.");
+    },
+    fallback: "Could not save.",
+  });
+  await actions.run({
+    id: "save",
+    run: async () => {
+      throw "offline";
+    },
+    fallback: "Could not save.",
+  });
+  assert.deepEqual(errorToasts(from), ["Pi refused.", "Could not save."]);
+  assert.equal(actions.getState().error, "");
+  assert.equal(log.refreshes, 2);
+});
+
+test("a form that keeps failures holds the message instead of toasting, falls back when it has none, still refreshes, and clears when another starts", async () => {
+  const { actions, log } = section({ failure: "keep" });
+  const from = toast.getHistory().length;
   actions.confirm({ name: "Linear" });
   assert.equal(
     await actions.run({
@@ -111,6 +143,7 @@ test("a failed change keeps its message, falls back when it has none, still refr
     fallback: "Could not sign out.",
   });
   assert.equal(actions.getState().error, "Could not sign out.");
+  assert.deepEqual(errorToasts(from), [], "a kept failure shows no toast");
   const next = deferred<void>();
   const running = actions.run({ id: "install", run: () => next.promise, fallback: "x" });
   assert.equal(actions.getState().error, "", "starting another change clears the old failure");
@@ -118,8 +151,8 @@ test("a failed change keeps its message, falls back when it has none, still refr
   await running;
 });
 
-test("a section without an error alert reports failures instead of keeping them", async () => {
-  const { actions, log } = section({ failure: true });
+test("a section given its own reporter reports failures there instead of keeping them", async () => {
+  const { actions, log } = section({ failure: "report" });
   await actions.run({
     id: "sign-out",
     run: async () => {

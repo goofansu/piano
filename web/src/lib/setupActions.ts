@@ -1,10 +1,12 @@
 /**
  * What a Settings section does when the user changes setup: one change at a time, a confirmation
- * before a destructive one, a sign-in dialog, and a re-read of the section's facts once a change
- * settles either way. A confirmation exists only while its dialog is on screen; the dialog keeps
- * its own face while it animates closed. Each sign-in gets a fresh key, so reopening the dialog
- * starts it afresh. Nothing here depends on React.
+ * before a destructive one, a sign-in dialog, a failure answered with its error's toast, and a
+ * re-read of the section's facts once a change settles either way. A confirmation exists only
+ * while its dialog is on screen; the dialog keeps its own face while it animates closed. Each
+ * sign-in gets a fresh key, so reopening the dialog starts it afresh. Nothing here renders: the
+ * toast is sonner's, which works without a Toaster on screen.
  */
+import { toast } from "sonner";
 
 export interface SetupActionsState<C, S> {
   /** The id of the change in flight; every setup control waits for it. */
@@ -23,10 +25,11 @@ export interface SetupActionsOptions {
   /** Announces a finished change, given the change's id. */
   success: (message: string, id: string) => void;
   /**
-   * Reports a failure as the error's toast instead of keeping it in `error`. Only a form in an open
-   * dialog leaves this out, to keep the failure on its fields.
+   * Where a failed change's message goes: the error's toast unless this says otherwise, so a
+   * section never fails silently. A function reports it instead; `"keep"` keeps it in `error`, for
+   * a form in an open dialog that shows the failure on its fields.
    */
-  failure?: (message: string) => void;
+  failure?: ((message: string) => void) | "keep";
   /** Names one opening of the sign-in dialog. */
   newKey?: () => string;
 }
@@ -60,6 +63,10 @@ export function createSetupActions<C = never, S = never>(
   options: SetupActionsOptions,
 ): SetupActions<C, S> {
   const newKey = options.newKey ?? (() => crypto.randomUUID());
+  const report =
+    options.failure === "keep"
+      ? (error: string) => set({ error })
+      : (options.failure ?? ((text: string) => void toast.error(text)));
   let state: SetupActionsState<C, S> = {
     running: undefined,
     error: "",
@@ -89,8 +96,7 @@ export function createSetupActions<C = never, S = never>(
         return result;
       } catch (cause) {
         const text = message(cause, change.fallback);
-        if (options.failure) options.failure(text);
-        else set({ error: text });
+        report(text);
         return undefined;
       } finally {
         // The re-read starts first, so no moment shows the change settled on facts it may have changed.

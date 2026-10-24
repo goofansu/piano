@@ -114,7 +114,6 @@ export function WebhookSettings() {
   const actions = useSetupActions<Webhook>({
     refresh: () => void observed.refresh(),
     success: (text) => toast.success(text),
-    failure: (text) => toast.error(text),
   });
   const removing = actions.confirmation;
   const busy = actions.running !== undefined;
@@ -315,7 +314,11 @@ function WebhookEditor({
   const [active, setActive] = useState(hook?.active ?? true);
   const [eventsError, setEventsError] = useState(false);
   // A failed save stays in the open dialog, on its fields; a saved one closes it with a toast.
-  const actions = useSetupActions({ refresh, success: (text) => toast.success(text) });
+  const actions = useSetupActions({
+    refresh,
+    success: (text) => toast.success(text),
+    failure: "keep",
+  });
   const busy = actions.running !== undefined;
   // The server names the field a refusal belongs to; one without a field shows below the form.
   const [errorField, setErrorField] = useState<WebhookField | undefined>();
