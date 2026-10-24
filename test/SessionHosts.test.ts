@@ -1006,6 +1006,68 @@ test("INV-01: a prompt or steer records activity on every path to a running sess
   );
 });
 
+test("INV-01/02: input refused because its Pi is closing records no activity", async () => {
+  // Holds the close in its first step, preview cleanup: the session's lock is held, but the host
+  // is not closing yet, so input that arrives now is refused only once the close completes.
+  let entered!: () => void, finish!: () => void;
+  const cleaning = new Promise<void>((resolve) => (entered = resolve));
+  const cleaned = new Promise<void>((resolve) => (finish = resolve));
+  class HeldCleanup extends PreviewAdapter {
+    override async request(): Promise<never> {
+      throw new Error("no supervisor in this test");
+    }
+    override async retire() {
+      entered();
+      await cleaned;
+      return true;
+    }
+  }
+  const id = "refused-activity";
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      const session = yield* registered(id);
+      const endpoint = records(id).find((r) => r.event === "spawn")?.previewOwner;
+      assert.ok(endpoint);
+      yield* Effect.promise(() =>
+        assert.rejects(ownerRequest(endpoint, { action: "start", command: ["/bin/false"] })),
+      );
+      const bumps: string[] = [];
+      yield* registry.onChange((before, after) =>
+        Effect.sync(() => {
+          for (const s of after.sessions)
+            if (
+              s.sessionId === id &&
+              before.sessions.some(
+                (b) => b.sessionId === s.sessionId && b.updatedAt !== s.updatedAt,
+              )
+            )
+              bumps.push(s.sessionId);
+        }),
+      );
+      // Activity times have millisecond resolution; keep each step on its own tick.
+      yield* Effect.sleep("2 millis");
+      yield* prompt(session, "accepted");
+      assert.equal(bumps.length, 1, "accepted input records activity");
+      const closing = yield* hosts.release(cwd, id).pipe(Effect.forkChild);
+      yield* Effect.promise(() => cleaning);
+      yield* Effect.sleep("2 millis");
+      const refused = yield* session
+        .act({ _tag: "prompt", text: "while closing" })
+        .pipe(Effect.flip, Effect.forkChild);
+      // Real time for input that does not wait for the close to record its activity, as it did.
+      yield* Effect.sleep("100 millis");
+      yield* Effect.sync(finish);
+      yield* Fiber.join(closing);
+      assert.match((yield* Fiber.join(refused)).detail, /closing or has stopped/);
+      assert.equal(bumps.length, 1, "refused input records no activity");
+      assert.equal(records(id).filter((r) => r.text === "while closing").length, 0);
+    }).pipe(Effect.ensuring(Effect.sync(finish))),
+    { previewAdapter: new HeldCleanup(), registry: id },
+  );
+});
+
 test("INV-02: a session's slash commands come from its running child; a stopped one is refused, not started", async () => {
   await run(
     Effect.gen(function* () {

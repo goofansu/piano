@@ -14,9 +14,11 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
+import { PreviewAdapter } from "../scripts/PreviewAdapter.ts";
+import { ownerRequest } from "../scripts/PreviewClient.ts";
 import { makeClientSessions } from "../server/ClientSessions.ts";
 import { PiCli } from "../server/PiCli.ts";
-import { type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
+import { type PiSession, PiSessionsLive, PreviewOwnerOptions } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
 import { WorktrunkCommand } from "../server/Worktrees.ts";
@@ -613,6 +615,98 @@ test("INV-02/05: acts that start a still-selected session attach it once and bot
     }).pipe(Effect.ensuring(held.release)),
     undefined,
     held.pi,
+  );
+});
+
+test("INV-02/05: input with start options that arrives while the attached Pi closes reaches a relaunched Pi", async () => {
+  const dir = mkdtempSync(join(root, "closing-relaunch-"));
+  const audit = join(dir, "audit.jsonl");
+  writeFileSync(audit, "");
+  const records = () =>
+    readFileSync(audit, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map(
+        (line) =>
+          JSON.parse(line) as { event: string; pid: number; text?: string; previewOwner?: string },
+      );
+  const spawns = () => records().filter((r) => r.event === "spawn");
+  // Holds the close in its first step, preview cleanup, while the session's lock is held, the
+  // host is not yet closing and this client is still attached to it.
+  let entered!: () => void, finish!: () => void;
+  const cleaning = new Promise<void>((resolve) => (entered = resolve));
+  const cleaned = new Promise<void>((resolve) => (finish = resolve));
+  class HeldCleanup extends PreviewAdapter {
+    override async request(): Promise<never> {
+      throw new Error("no supervisor in this test");
+    }
+    override async retire() {
+      entered();
+      await cleaned;
+      return true;
+    }
+  }
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const id = (yield* started()).spec.sessionId;
+      const [first] = spawns();
+      // A preview start makes this owner ask its adapter before release.
+      yield* Effect.promise(() =>
+        assert.rejects(
+          ownerRequest(first.previewOwner!, { action: "start", command: ["/bin/false"] }),
+        ),
+      );
+      const { sessions, sent, next } = yield* client;
+      yield* yield* sessions.select({ cwd, sessionId: id, selectionId: "S" });
+      const shown = yield* next((m) => m._tag === "selected");
+      assert.ok(shown._tag === "selected" && shown.hosted, "the live session is attached");
+      // Another tab, or the idle sweep, stops Pi.
+      const closing = yield* hosts.release(cwd, id).pipe(Effect.forkChild);
+      yield* Effect.promise(() => cleaning);
+      const acting = yield* sessions
+        .act("S", { _tag: "prompt", text: "after close" }, {})
+        .pipe(Effect.result, Effect.forkChild);
+      yield* Effect.sync(finish);
+      yield* Fiber.join(closing);
+      const result = yield* Fiber.join(acting);
+      assert.equal(
+        result._tag,
+        "Success",
+        result._tag === "Failure" ? `refused: ${result.failure.detail}` : "accepted",
+      );
+      const seen = yield* next(
+        (m) =>
+          m._tag === "session" &&
+          m.event._tag === "notice" &&
+          m.event.message === "barrier after close",
+      );
+      assert.ok(seen._tag === "session" && seen.selectionId === "S", "this client observes it");
+      const relaunched = spawns()
+        .map((r) => r.pid)
+        .filter((pid) => pid !== first.pid);
+      assert.equal(relaunched.length, 1, "one new Pi");
+      assert.deepEqual(
+        records()
+          .filter((r) => r.event === "command" && r.text === "after close")
+          .map((r) => r.pid),
+        relaunched,
+        "the prompt reached the new Pi, not the closing one",
+      );
+      assert.equal(
+        sent.filter((m) => m._tag === "selected" && m.selectionId === "S" && m.hosted).length,
+        2,
+        "the new Pi is attached in place of the closed one",
+      );
+    }).pipe(
+      Effect.ensuring(Effect.sync(finish)),
+      Effect.provideService(PreviewOwnerOptions, {
+        adapter: new HeldCleanup(),
+        root: join(dir, "previews"),
+      }),
+    ),
+    undefined,
+    { cli: new URL("./fake-host-pi.mjs", import.meta.url).pathname, extraArgs: ["--audit", audit] },
   );
 });
 

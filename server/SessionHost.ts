@@ -44,6 +44,7 @@ export interface CloseHow {
 }
 
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
+const stopped = () => rejected("Pi is closing or has stopped. Refresh before sending new input.");
 
 /** Pi owns the session name and statistics; the registry only mirrors them for the sidebar. */
 export const mirrorSession = (
@@ -114,11 +115,17 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
     if (closing)
       return yield* rejected("Pi is closing. Wait for shutdown before reopening history.");
     // Outside the ownership lock, like the work itself: the reference and its project already
-    // exist, so activity is recorded before Pi sees the input.
-    if (sessionActionPolicy[action._tag].activity)
+    // exist, so activity is recorded before Pi sees the input. First wait out a close that holds
+    // the lock (idle release, a requested stop, Pi's exit), so input it refuses records none.
+    if (sessionActionPolicy[action._tag].activity) {
+      yield* Semaphore.withPermits(
+        lock,
+        1,
+      )(Effect.suspend(() => (closing ? Effect.fail(stopped()) : Effect.void)));
       yield* registry
         .touchSession(raw.spec.cwd, raw.spec.sessionId, "text" in action ? action.text : undefined)
         .pipe(Effect.mapError((e) => rejected(e.detail)));
+    }
     // Admit an action atomically against retirement, but don't hold the lock while awaiting a
     // command whose dialog another action must answer.
     const fiber = yield* Semaphore.withPermits(
@@ -126,8 +133,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
       1,
     )(
       Effect.gen(function* () {
-        if (closing)
-          return yield* rejected("Pi is closing or has stopped. Refresh before sending new input.");
+        if (closing) return yield* stopped();
         if (sessionActionPolicy[action._tag].needsCheckout)
           yield* references.requireCheckout(raw.spec.cwd);
         actions++;
