@@ -29,6 +29,7 @@ import {
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive, SessionNotCreated } from "../server/SessionHosts.ts";
 import { WorktrunkCommand } from "../server/Worktrees.ts";
+import { closureNeedsAttention } from "../shared/sessionStatus.ts";
 import type { SessionEvent } from "../shared/wire.ts";
 
 const root = mkdtempSync(join(tmpdir(), "piano-hosts-"));
@@ -436,6 +437,40 @@ test("INV-02/06: Stop remains available for active work after its checkout is re
           .map((r) => r.command),
         ["clear_queue", "abort"],
       );
+    }),
+  );
+});
+
+test("archiving or deleting working Pi announces a quiet stop to every viewer; releasing it does not", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      // Another viewer of the session, still attached when Pi stops.
+      const closureSeenBy = (id: string, stop: Effect.Effect<void, unknown>) =>
+        Effect.gen(function* () {
+          const session = yield* registered(id);
+          yield* prompt(session, "/hold");
+          assert.equal((yield* session.state).isQuiescent, false, "Pi is working when it stops");
+          const viewer = yield* observe(session, (e) => e._tag === "closed");
+          yield* stop;
+          const frames = yield* Fiber.join(viewer);
+          const closed = frames.find((e) => e._tag === "closed");
+          assert.ok(closed?._tag === "closed", `${id}: the viewer sees Pi stop`);
+          return closed.closure;
+        });
+      for (const [id, stop] of [
+        ["requested-archive", (id: string) => hosts.archive(cwd, id)],
+        ["requested-delete", (id: string) => hosts.delete(cwd, id)],
+      ] as const) {
+        const closure = yield* closureSeenBy(id, stop(id));
+        assert.equal(closureNeedsAttention(closure), false, `${id}: ${JSON.stringify(closure)}`);
+      }
+      // Without the person asking, as at shutdown, a stop that interrupts work still needs them.
+      const released = yield* closureSeenBy(
+        "unrequested-release",
+        hosts.release(cwd, "unrequested-release"),
+      );
+      assert.equal(closureNeedsAttention(released), true, JSON.stringify(released));
     }),
   );
 });

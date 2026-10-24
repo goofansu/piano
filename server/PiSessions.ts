@@ -88,9 +88,14 @@ export interface PiSessionSpec {
 
 export interface PiSession {
   readonly spec: PiSessionSpec;
-  /** Fence preview admission before scope release. Idle returns false for active/unknown apps;
-   * explicit release cleans up or fails honestly, leaving ownership available for retry. */
-  readonly prepareRelease: (idle?: boolean) => Effect.Effect<boolean, PiSessionError>;
+  /** Fence preview admission before scope release. `idle` (the idle sweep) returns false for
+   * active/unknown apps; any other release cleans up or fails honestly, leaving ownership
+   * available for retry. `requested`: the person asked for this stop (archive or delete), so the
+   * release that follows is announced as a quiet `released` even if it interrupts work; an
+   * unrequested release during work (shutdown, replacement) stays `released_during_work`. */
+  readonly prepareRelease: (
+    reason?: "idle" | "requested",
+  ) => Effect.Effect<boolean, PiSessionError>;
   /** Atomic snapshot/cursor first, then contiguous live frames until closed.
    * A subscriber exceeding 256 queued frames / 8 MiB fails DeliveryOverflow;
    * attach again for a current snapshot, never replay commands or old deltas. */
@@ -540,14 +545,16 @@ const openSession = (spec: PiSessionSpec) =>
         });
       });
     // Release is "during work" when Pi still held work it could continue or that awaited an
-    // answer. Readback workers and prompt fibers are already interrupted by now, so judge from
-    // retained state and transport uncertainty, never from those fibers.
+    // answer, unless the person asked for this stop. Readback workers and prompt fibers are
+    // already interrupted by now, so judge from retained state and transport uncertainty, never
+    // from those fibers.
+    let releaseRequested = false;
     yield* Effect.addFinalizer(() =>
       announceClosed(
         Effect.map(
           publication.snapshot,
           (snapshot): SessionClosure =>
-            settled(snapshot) && !child.hasPendingWork()
+            releaseRequested || (settled(snapshot) && !child.hasPendingWork())
               ? { _tag: "released", detail: "Pi was released" }
               : { _tag: "released_during_work", detail: "Pi was released during work" },
         ),
@@ -778,15 +785,20 @@ const openSession = (spec: PiSessionSpec) =>
     const actionCapacity = makeInboundCapacity(inboundLimits.requests);
     const session: PiSession = {
       spec,
-      prepareRelease: Effect.fn("PiSessions.prepareRelease")(function* (idle?: boolean) {
-        return yield* Effect.tryPromise({
-          try: () => preview?.prepareRelease(idle) ?? Promise.resolve(true),
+      prepareRelease: Effect.fn("PiSessions.prepareRelease")(function* (
+        reason?: "idle" | "requested",
+      ) {
+        const prepared = yield* Effect.tryPromise({
+          try: () => preview?.prepareRelease(reason === "idle") ?? Promise.resolve(true),
           catch: (error) =>
             new PiSessionError({
               reason: "rejected",
               detail: `Preview cleanup failed: ${String(error)}`,
             }),
         });
+        // Only once cleanup succeeded: a failed requested release leaves the session as it was.
+        if (reason === "requested") releaseRequested = true;
+        return prepared;
       }),
       events,
       act: (action) =>

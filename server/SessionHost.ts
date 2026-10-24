@@ -93,7 +93,6 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   let lastActivity = yield* Clock.currentTimeMillis;
   let actions = 0;
   let closing = false;
-  let requested = false;
 
   const mirrorStats = Effect.gen(function* () {
     const state = yield* raw.state;
@@ -158,25 +157,23 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
     idle: Effect.fn("SessionHost.idle")(function* (idleMs: number) {
       if (closing || (yield* Clock.currentTimeMillis) - lastActivity < idleMs) return false;
       if (yield* busy) return false;
-      return yield* raw.prepareRelease(true);
+      return yield* raw.prepareRelease("idle");
     }),
     close: Effect.fn("SessionHost.close")(function* ({
       closure,
       shutdown = false,
-      requested: asked = false,
+      requested = false,
     }: CloseHow = {}) {
       // Do not claim archive/delete succeeded, or drop this owner, if cleanup is uncertain.
       // The broker fences launches immediately; repeated close retries the retained identity.
       yield* raw
-        .prepareRelease()
+        .prepareRelease(requested ? "requested" : undefined)
         .pipe(
           Effect.catchTag("PiSessionError", (error) =>
             shutdown ? Effect.logWarning(error.detail) : Effect.fail(error),
           ),
         );
       closing = true;
-      // Before the scope closes, so the observer reads it when the stop is announced.
-      requested = asked;
       yield* Scope.close(scope, Exit.void);
       // PiSessions announces how its child stopped, including whether a release interrupted work.
       const closed = closure ??
@@ -208,12 +205,8 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
             (dialog.id !== previousDialog?.id || dialog.generation !== previousDialog?.generation)
           )
             yield* webhooks.emit("session.needs_input", raw.spec.cwd, raw.spec.sessionId, observed);
-          // A stop the person asked for interrupts work on purpose; Pi exiting on its own first
-          // announces its own closure, and is still a failure.
-          if (
-            event._tag === "closed" &&
-            !(requested && event.closure._tag === "released_during_work")
-          )
+          // Webhooks decide from the closure, by the rule the browser follows.
+          if (event._tag === "closed")
             yield* webhooks.emit("session.failed", raw.spec.cwd, raw.spec.sessionId, observed);
         }
         // Signal attachment before taking ownership's lock: the opener holds it until ready.
