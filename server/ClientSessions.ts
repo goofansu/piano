@@ -217,10 +217,12 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     return session;
   });
 
-  // The attached session for this selection, or the selected one started with `start`. Only
-  // the decision holds navigation; starting runs outside it (see `openThenAttach`). Two quick
-  // acts may both start the session: SessionHosts shares its one host, and the act that did
-  // not launch Pi applies its choices as actions.
+  // With `start`, the selected session as SessionHosts starts it: its live host, or a new Pi when
+  // none is running or the attached one is closing (SessionHosts decides under the session's
+  // lock, after any close completes; the attachment here may be stale). Without `start`, only the
+  // attached session. Only the decision holds navigation; starting runs outside it (see
+  // `openThenAttach`). Two quick acts may both start the session: SessionHosts shares its one
+  // host, and the act that did not launch Pi applies its choices as actions.
   const target = Effect.fn("ClientSessions.target")(function* (
     selectionId: string,
     start: StartOptions | undefined,
@@ -233,7 +235,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
             `${refused.stale} selected.selectionId=${JSON.stringify(selected?.selectionId ?? null)}; act.selectionId=${JSON.stringify(selectionId)}. Reuse the selectionId from the current select or create_session; do not mint a new id for act.`,
           );
         const attached = attachment;
-        if (attached?.selectionId === selectionId)
+        if (!start && attached?.selectionId === selectionId)
           return { _tag: "attached" as const, session: attached.session };
         const { cwd, sessionId } = selected;
         // Creating belongs to `create`, which registers the folder and project first.
