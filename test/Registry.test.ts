@@ -853,7 +853,7 @@ test("a new session's title is limited where it is stored, from a start name or 
   );
   const titles = Object.fromEntries((await f.get()).sessions.map((s) => [s.sessionId, s.title]));
   assert.equal(titles.named, "n".repeat(SESSION_TITLE_MAX));
-  assert.equal(titles.prompted, "p".repeat(SESSION_TITLE_MAX));
+  assert.equal(titles.prompted, "p".repeat(80));
 });
 
 test("a start name over the title limit is refused like a rename", () => {

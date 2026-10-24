@@ -39,6 +39,9 @@ export class RegistryLookupError extends Data.TaggedError("RegistryLookupError")
   }
 }
 
+/** A title derived from a session's first prompt stays shorter than one a person typed. */
+const PROMPT_TITLE_MAX = 80;
+
 const WorktreeEntry = Schema.Struct({
   folder: Schema.String,
   path: Schema.String,
@@ -410,9 +413,9 @@ export const RegistryLive = Layer.effect(
       );
     }, Effect.uninterruptible);
     const now = () => new Date().toISOString();
-    /** The one place a session's title is decided: trimmed, at most SESSION_TITLE_MAX, empty is none. */
-    const titleOf = (text: string | undefined) =>
-      text?.trim().slice(0, SESSION_TITLE_MAX).trim() || undefined;
+    /** The one place a session's title is decided: trimmed, cut at `max`, empty is none. */
+    const titleOf = (text: string | undefined, max = SESSION_TITLE_MAX) =>
+      text?.trim().slice(0, max).trim() || undefined;
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) =>
       sameSession(t, { cwd, sessionId });
     const currentIn = (d: RegistryData, expected: SessionEntry, link?: SessionLinkKey) => {
@@ -634,7 +637,7 @@ export const RegistryLive = Layer.effect(
               ? {
                   ...t,
                   updatedAt: now(),
-                  title: t.title ?? titleOf(text),
+                  title: t.title ?? titleOf(text, PROMPT_TITLE_MAX),
                 }
               : t,
           ),
