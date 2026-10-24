@@ -1063,7 +1063,7 @@ test("INV-01/06: a new session in a linked worktree is listed under its main che
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
       // A folder registered under an alias of the main checkout is reused, not duplicated.
-      yield* registry.ensureFolder(repoAlias);
+      yield* registry.addFolder(repoAlias);
       yield* hosts.create({ cwd: linked, options: {} });
       const data = yield* registry.get;
       assert.deepEqual(data.folders, [repoAlias]);
@@ -1072,6 +1072,71 @@ test("INV-01/06: a new session in a linked worktree is listed under its main che
       ]);
     }),
     { fakePi: "place-alias" },
+  );
+});
+
+test("INV-01: a closed folder's registered worktree reopens its folder, under its own spelling or another", async () => {
+  const git = (dir: string, ...args: string[]) => {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  // Git's spelling, as `place` registers a worktree it discovers.
+  const base = realpathSync(root),
+    repo = join(base, "closed-repo"),
+    linked = join(base, "closed-linked"),
+    linkedAlias = join(base, "closed-linked-alias");
+  mkdirSync(repo);
+  git(repo, "init", "--quiet", "-b", "main");
+  git(
+    repo,
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "--quiet",
+    "--allow-empty",
+    "-m",
+    "baseline",
+  );
+  git(repo, "worktree", "add", "--quiet", "-b", "feature", linked);
+  symlinkSync(linked, linkedAlias);
+  for (const [name, spelling] of [
+    ["closed-own", linked],
+    ["closed-alias", linkedAlias],
+  ] as const)
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts,
+          registry = yield* Registry;
+        yield* hosts.create({ cwd: linked, options: {} });
+        yield* registry.removeFolder(repo);
+        const session = yield* hosts.create({ cwd: spelling, options: {} });
+        assert.equal(session.spec.cwd, linked, `${spelling} starts in the registered worktree`);
+        const data = yield* registry.get;
+        assert.deepEqual(data.folders, [repo], `${spelling} reopens the worktree's folder`);
+        assert.deepEqual(data.worktrees, [{ folder: repo, path: linked, branch: "feature" }]);
+      }),
+      { fakePi: name },
+    );
+});
+
+test("INV-01: a new session in a main checkout reached by another spelling starts in its registered folder", async () => {
+  const repo = join(root, "aliased-repo"),
+    repoAlias = join(root, "aliased-repo-alias");
+  mkdirSync(repo);
+  assert.equal(spawnSync("git", ["init", "--quiet", repo]).status, 0);
+  symlinkSync(repo, repoAlias);
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      yield* hosts.create({ cwd: repoAlias, options: {} });
+      const session = yield* hosts.create({ cwd: repo, options: {} });
+      assert.equal(session.spec.cwd, repoAlias, "the session's cwd is the registered spelling");
+      assert.deepEqual((yield* registry.get).folders, [repoAlias], "the folder is not duplicated");
+    }),
+    { fakePi: "place-main-alias" },
   );
 });
 

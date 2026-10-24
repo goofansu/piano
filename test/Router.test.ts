@@ -242,7 +242,7 @@ test("the old ignored-files answer keeps its paths verbatim and still projects a
   const id = await server.run(
     Effect.gen(function* () {
       const registry = yield* Registry;
-      yield* registry.ensureFolder(gone);
+      yield* registry.addFolder(gone);
       return (yield* registry.get).workspaces.find((w) => w.path === gone)!.id;
     }),
   );

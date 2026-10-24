@@ -514,7 +514,7 @@ test("INV-06: rejected worktree operations settle the picker immediately without
         "mutations are never replayed",
       );
       for (const work of held) yield* work;
-      yield* (yield* Registry).ensureFolder(cwd);
+      yield* (yield* Registry).addFolder(cwd);
       operation.refresh();
       yield* exchange;
       assert.equal(operation.getState().refreshing, false, "accepted discovery is correlated too");
@@ -837,7 +837,7 @@ test("INV-01: a browser's checkout poll re-observes without resending the sideba
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.ensureFolder(cwd);
+      yield* registry.addFolder(cwd);
       yield* view.fresh;
       const queue = yield* Queue.unbounded<ServerMessage>();
       const { receive } = yield* makeClientDispatch({

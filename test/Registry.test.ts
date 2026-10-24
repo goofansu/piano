@@ -157,14 +157,14 @@ test("INV-01/07: a folder keeps its workspace identity when closed and reopened"
     folder = join(f.root, "folder");
   mkdirSync(folder);
   const workspaceId = (data: RegistryData) => data.workspaces.find((w) => w.path === folder)?.id;
-  await f.run(Effect.flatMap(Registry, (r) => r.ensureFolder(folder)));
+  await f.run(Effect.flatMap(Registry, (r) => r.addFolder(folder)));
   const id = workspaceId(await f.get());
   assert.ok(id);
   await f.run(
     Effect.gen(function* () {
       const r = yield* Registry;
       yield* r.removeFolder(folder);
-      yield* r.ensureFolder(folder);
+      yield* r.addFolder(folder);
     }),
   );
   assert.equal(workspaceId(await f.get()), id);
@@ -177,7 +177,7 @@ test("INV-01/07: every path a write adds has a workspace when the database reope
     sessionCwd = join(f.root, "elsewhere");
   mkdirSync(folder);
   const writes: Array<[string, Effect.Effect<unknown, unknown, Registry>]> = [
-    [folder, Effect.flatMap(Registry, (r) => r.ensureFolder(folder))],
+    [folder, Effect.flatMap(Registry, (r) => r.addFolder(folder))],
     [
       worktree,
       Effect.flatMap(Registry, (r) => r.addWorktree({ folder, path: worktree, branch: "feature" })),
@@ -207,7 +207,7 @@ test("INV-01: a worktree's observed branch replaces its last-known one in one wr
   await f.run(
     Effect.gen(function* () {
       const r = yield* Registry;
-      yield* r.ensureFolder(folder);
+      yield* r.addFolder(folder);
       yield* r.addWorktree({ folder, path: one, branch: "feat-a" });
       yield* r.addWorktree({ folder, path: two, branch: "feat-x" });
       yield* r.onChange(() =>
