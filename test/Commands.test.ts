@@ -65,7 +65,7 @@ test("enabled commands reach the effect their intent names", () => {
         }),
         "new-session",
       ),
-      ["openNew", undefined, undefined],
+      ["openNew", undefined],
     ],
     [byId(projectCommands(online, launch), "new-session"), ["openProject", "p1"]],
     [openProjectCommand(launch), ["openProject", "p1"]],
@@ -92,7 +92,7 @@ test("enabled commands reach the effect their intent names", () => {
       assignProjectCommand(online, other, null),
       ["send", { _tag: "assign_project", cwd: "/repo", sessionId: "s2", projectId: null }],
     ],
-    [folderCommands(online, folder).create, ["openNew", "/repo", undefined]],
+    [folderCommands(online, folder).create, ["openNew", "/repo"]],
     [folderCommands(online, folder).close, ["openForm", { kind: "close-folder", folder }]],
     [
       byId(sessionCommands(online, other), "rename"),
@@ -159,5 +159,5 @@ test("the selected session's New session here opens its directory", () => {
   };
   const selected: AppState = { ...online, view: { kind: "session" }, session };
   const here = sessionCommands(selected).find((c) => c.id === "new-session-here")!;
-  assert.deepEqual(effectsOf(here), { ran: true, calls: [["openNew", "/repo/wt", undefined]] });
+  assert.deepEqual(effectsOf(here), { ran: true, calls: [["openNew", "/repo/wt"]] });
 });
