@@ -11,18 +11,19 @@ folders and their worktrees. Users touch the browser UI; orchestrators also use 
 this skill starts, never on the user's own Piano (local `7070`; on exe.dev `piano.service` on
 `127.0.0.1:8001` behind `piano-web` on `127.0.0.1:8000`), whose database is real.
 
-All paths below are relative to the repository root. The scripts live in
-`.agents/skills/verify-piano/scripts/`; `S=.agents/skills/verify-piano/scripts` below. On exe.dev
-they put `~/node/bin` and `~/.local/bin` (Node 24, `wt`) on `PATH` themselves. The feature map in
+All paths below are relative to the repository root, and every script is written out in full: a
+worktree-isolated session refuses a command whose name comes from a variable. The scripts run on
+Linux and macOS alike: `lib.sh` reads processes and ports from whatever the host has (`/proc`,
+`ss` and `setsid`, or `ps` and `lsof`), so no step below changes with the platform. On exe.dev they
+put `~/node/bin` and `~/.local/bin` (Node 24, `wt`) on `PATH` themselves. The feature map in
 [`features/README.md`](features/README.md) says what to drive; this file says how.
 
 ## Launch
 
 ```bash
-S=.agents/skills/verify-piano/scripts
-$S/launch.sh                      # seeded: folder repo, 2 projects, 2 saved sessions
-$S/launch.sh --empty              # empty database: nothing registered
-$S/launch.sh --fake-pi dialogs    # test/fake-pi.mjs: "ask ..." opens a dialog, "crash ..." exits
+.agents/skills/verify-piano/scripts/launch.sh                      # seeded: folder repo, 2 projects, 2 saved sessions
+.agents/skills/verify-piano/scripts/launch.sh --empty              # empty database: nothing registered
+.agents/skills/verify-piano/scripts/launch.sh --fake-pi dialogs    # test/fake-pi.mjs: "ask ..." opens a dialog, "crash ..." exits
 ```
 
 It needs `node_modules` (runs `npm ci` when missing) and nothing else. It creates
@@ -74,7 +75,7 @@ successful Pi `write` of `src/answer.ts` (hand-written, since fake Pi makes no t
 exe.dev private access: it has no login of its own, and the origin check is its only write guard.
 Target it read-only:
 
-- From outside the VM: `$S/doctor.sh --deployed-auth pi-piano` expects `307` to
+- From outside the VM: `.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth pi-piano` expects `307` to
   `https://pi-piano.exe.xyz/__exe.dev/login`. A headless `agent-browser` has no exe.dev login, so it
   cannot open that UI; UI observation there needs the owner's signed-in browser.
 - On the VM, from any checkout there (the script sources its `lib.sh`, so it cannot be piped over
@@ -89,12 +90,12 @@ Target it read-only:
 Run it first, and again whenever anything looks off. It changes nothing.
 
 ```bash
-$S/doctor.sh "$RUN"            # exit 0 = worth driving
-$S/doctor.sh --deployed         # on the VM, read-only
+.agents/skills/verify-piano/scripts/doctor.sh "$RUN"            # exit 0 = worth driving
+.agents/skills/verify-piano/scripts/doctor.sh --deployed         # on the VM, read-only
 ```
 
-For a scratch run it checks: both recorded PIDs alive with their recorded kernel start time and
-working directory; each port owned by that PID (`ss -ltnp`); no real-Piano port in use; the
+For a scratch run it checks: both recorded PIDs alive with their recorded start time and
+working directory; each port owned by that PID; no real-Piano port in use; the
 checkout still at `EXPECTED_SHA` (dirty paths noted, since they run too); the server log naming this
 run's database; `GET /api/folders` listing only the throwaway repo (or nothing for `--empty`);
 POST `/api/ls` refused without Origin (403) and allowed with `ORIGIN` (200), which is Piano's only
@@ -122,17 +123,21 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    They do not need `launch.sh`. `npm run test:browser` runs all three into `.scratch/browser/`.
 
 2. **Then `agent-browser` on the launched instance** for anything the harness does not cover,
-   through `$S/ab.sh`, which runs `npx -y "agent-browser@${AB_VERSION}" --session "$AB_SESSION"`
+   through `ab.sh`, which runs `npx -y "agent-browser@${AB_VERSION}" --session "$AB_SESSION"`
    (npx cache only; never `npm i -g`, never a system package). `AB_VERSION` is pinned once, in
    `scripts/lib.sh`, and `cleanup.sh` closes the session with the same version:
 
    ```bash
-   $S/ab.sh "$RUN" set viewport 1280 800
-   $S/ab.sh "$RUN" open "$WEB_URL/projects/verify"
-   $S/ab.sh "$RUN" wait --text "Plan the verification"
-   $S/ab.sh "$RUN" find role button click --name "New session" --exact
-   $S/ab.sh "$RUN" snapshot -i            # refs like @e9 for the current page only
+   .agents/skills/verify-piano/scripts/ab.sh "$RUN" set viewport 1280 800
+   .agents/skills/verify-piano/scripts/ab.sh "$RUN" open "$WEB_URL/projects/verify"
+   .agents/skills/verify-piano/scripts/ab.sh "$RUN" wait --text "Plan the verification"
+   .agents/skills/verify-piano/scripts/ab.sh "$RUN" find role button click --name "New session" --exact
+   .agents/skills/verify-piano/scripts/ab.sh "$RUN" snapshot -i            # refs like @e9 for the current page only
    ```
+
+   A drive of more than a few steps goes in a script file (`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`
+   at its top, the steps below) run with `bash <file>`: one command for the session, and the
+   steps kept beside the evidence.
 
    Stable handles, in order of preference: role plus accessible name (`find role <role> click
    --name <name> --exact`), `aria-label` selectors (`[aria-label="First message"]`,
@@ -140,7 +145,7 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    `[data-slot="gutter"]` transcript glyphs), `[cmdk-input]` (Mod+K palette), and routes (`/new`,
    `/s/<sessionId>`, `/projects/<id>`, `/projects/<id>/new`). Snapshot refs (`@e9`) change on every
    render; never reuse them across pages. Read the session header with
-   `$S/ab.sh "$RUN" eval "document.querySelector('main header').innerText"`.
+   `ab.sh "$RUN" eval "document.querySelector('main header').innerText"`.
 
 3. **The dispatch CLI** (`scripts/dispatch-session.ts`) after `. "$RUN/run.env"`; see
    [`features/session-dispatch.md`](features/session-dispatch.md).
@@ -157,7 +162,7 @@ the parent), outside the run dir, so Cleanup keeps it. System temp cleanup may r
 set `VERIFY_EVIDENCE` to a persistent directory when longer retention is needed.
 
 ```bash
-$S/capture.sh "$RUN" <feature-id> <step>
+.agents/skills/verify-piano/scripts/capture.sh "$RUN" <feature-id> <step>
 # -> $EVIDENCE/<feature-id>/<step>.png, <step>.aria.txt, <step>.state.json
 ```
 
@@ -180,7 +185,7 @@ Proof standards:
 ## Cleanup
 
 ```bash
-$S/cleanup.sh "$RUN"
+.agents/skills/verify-piano/scripts/cleanup.sh "$RUN"
 ```
 
 It closes this run's browser session, sends TERM (KILL after 10 s) only to the PIDs in
@@ -194,7 +199,7 @@ harness journeys clean up their own instance and browser.
 
 - agent-browser is pinned (`AB_VERSION` in `scripts/lib.sh`) so a new release never changes a
   journey under you. To bump it: `npm view agent-browser version`, set that exact version in
-  `lib.sh`, check it with `VERIFY_AB_VERSION=<new> $S/ab.sh "$RUN" --version` and one proof run
+  `lib.sh`, check it with `VERIFY_AB_VERSION=<new> ab.sh "$RUN" --version` and one proof run
   (launch, doctor, a drive, cleanup), then commit `lib.sh` alone. The repo harness
   (`test/browser/harness.mjs`) has its own `npx agent-browser` call outside this skill.
 
@@ -217,8 +222,9 @@ harness journeys clean up their own instance and browser.
 - Times in the UI follow the browser's time zone (UTC on the VM), not the user's.
 - On exe.dev, `piano.service` may carry an environment drop-in such as `PIANO_API_SOCKET` that this
   SHA does not read; launch unsets it so a scratch backend never shares a live socket path.
-- The skill was proved on the exe.dev VM `pi-piano` (Linux, Node 24, Worktrunk 0.80). It relies on
-  `/proc` and `ss`, so macOS needs other PID and port checks.
+- Proved on the exe.dev VM `pi-piano` (Linux, Node 24, Worktrunk 0.80) and on macOS (Node 24).
+  A stock Mac has no `timeout`, so `ab.sh` and the browser close in `cleanup.sh` run unbounded
+  there; `VERIFY_AB_TIMEOUT` applies only where coreutils is installed.
 
 ## Keeping it current
 

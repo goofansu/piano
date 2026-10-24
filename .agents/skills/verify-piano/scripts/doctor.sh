@@ -16,7 +16,7 @@ bad() {
 }
 note() { echo "note $*"; }
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
-owner() { ss -Hltnp "sport = :$1" | grep -o 'pid=[0-9]*' | head -n 1 | cut -d= -f2; }
+owner() { listeners "$1" | head -n 1; }
 moved() { git -C "$1" reflog -1 --date=unix --format=%gd 2> /dev/null | tr -dc 0-9; }
 
 isolated() {
@@ -26,8 +26,8 @@ isolated() {
       bad "$role pid $pid is not running (or the PID was reused)"
       continue
     fi
-    ok "$role pid $pid alive since boot tick $start"
-    [ "$(readlink "/proc/$pid/cwd")" = "$cwd" ] && ok "$role runs from $cwd" || bad "$role cwd is $(readlink "/proc/$pid/cwd"), expected $cwd"
+    ok "$role pid $pid alive since $start"
+    [ "$(process_cwd "$pid")" = "$cwd" ] && ok "$role runs from $cwd" || bad "$role cwd is $(process_cwd "$pid"), expected $cwd"
   done < "$RUN/pids"
   server_pid=$(awk '$1=="server"{print $2}' "$RUN/pids")
   web_pid=$(awk '$1=="web"{print $2}' "$RUN/pids")
@@ -64,7 +64,7 @@ deployed() {
   main=$(systemctl show -p MainPID --value piano.service)
   [ "$(owner 8001)" = "$main" ] && ok "127.0.0.1:8001 is owned by piano.service (pid $main)" || bad "8001 owner '$(owner 8001)' is not piano.service pid $main"
   proxy=$(systemctl show -p MainPID --value piano-web.service)
-  holders=$(ss -Hltnp "sport = :8000" | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u | tr '\n' ' ')
+  holders=$(listeners 8000 | tr '\n' ' ')
   case " $holders" in
     *" 1 "* | *" $proxy "*) ok "127.0.0.1:8000 is held by piano-web (systemd socket / proxy pid $proxy)" ;;
     *) bad "8000 is held by pid(s) $holders, not piano-web" ;;

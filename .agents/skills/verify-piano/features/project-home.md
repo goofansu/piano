@@ -39,13 +39,13 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 
 ## Driving it with agent-browser
 
-Preconditions: a seeded launch (`$S/launch.sh`), `. "$RUN/run.env"`, doctor passed;
-`ab() { $S/ab.sh "$RUN" "$@"; }`.
+Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`), `. "$RUN/run.env"`, doctor passed;
+`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`.
 
 - `open-from-header`
   - Action: open the member session and click its project button.
     `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
-    $S/capture.sh "$RUN" project-home 01-session;
+    .agents/skills/verify-piano/scripts/capture.sh "$RUN" project-home 01-session;
     ab find role button click --name "Project: Verify Project" --exact; ab wait --url "**/projects/verify"`
   - Result: `ab get url` ends in `/projects/verify`, `ab get title` is `Verify Project - Piano`, and
     `ab eval "document.querySelector('main').innerText"` starts with `Verify Project` and

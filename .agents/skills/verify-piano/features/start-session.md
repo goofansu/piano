@@ -25,7 +25,7 @@ the session without sending the message again; a message that cannot be sent kee
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { $S/ab.sh "$RUN" "$@"; }`. Run the harness journey first; it covers model, effort,
+`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Run the harness journey first; it covers model, effort,
 project and reload on its own scratch instance.
 
 - Harness

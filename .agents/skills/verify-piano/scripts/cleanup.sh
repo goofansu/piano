@@ -9,7 +9,7 @@ set -uo pipefail
 load_run "${1:-}"
 case "$RUN" in "$SCRATCH_ROOT"/?*) ;; *) die "refusing to clean $RUN: not under $SCRATCH_ROOT" ;; esac
 
-timeout 30 npx -y "agent-browser@${AB_VERSION}" --session "$AB_SESSION" close > /dev/null 2>&1 && echo "closed browser session $AB_SESSION"
+with_timeout 30 npx -y "agent-browser@${AB_VERSION}" --session "$AB_SESSION" close > /dev/null 2>&1 && echo "closed browser session $AB_SESSION"
 
 while read -r role pid start _; do
   if [ "$(starttime "$pid")" != "$start" ]; then
@@ -30,7 +30,7 @@ while read -r role pid start _; do
 done < "$RUN/pids"
 
 for p in "$PORT" "$WEB_PORT"; do
-  [ -z "$(ss -Hltn "sport = :$p")" ] && echo "port $p free" || echo "WARNING port $p still listening"
+  [ -z "$(listeners "$p")" ] && echo "port $p free" || echo "WARNING port $p still listening"
 done
 
 mkdir -p "$EVIDENCE/_run"

@@ -6,9 +6,9 @@ matching feature file. How to launch, check, drive, capture and clean up is in
 
 ## Baseline preconditions
 
-- An instance from `$S/launch.sh` (seeded unless a file says `--empty` or `--fake-pi dialogs`),
+- An instance from `.agents/skills/verify-piano/scripts/launch.sh` (seeded unless a file says `--empty` or `--fake-pi dialogs`),
   with `. "$RUN/run.env"` loaded in the driving shell.
-- `$S/doctor.sh "$RUN"` exits 0.
+- `.agents/skills/verify-piano/scripts/doctor.sh "$RUN"` exits 0.
 - Seed: folder `repo` (`$REPO`); projects `verify` "Verify Project" and `empty` "Empty Project";
   sessions `verify-plan` "Plan the verification" (project
   `verify`, PR link `#222`, last active 1 hour ago) and `verify-loose` "Loose session" (no project,
@@ -21,7 +21,7 @@ matching feature file. How to launch, check, drive, capture and clean up is in
 
 - Start every recipe from the baseline unless its preconditions say otherwise; relaunch rather
   than undo a mutation by hand.
-- Prefer role plus accessible name (`$S/ab.sh "$RUN" find role button click --name "..." --exact`),
+- Prefer role plus accessible name (`.agents/skills/verify-piano/scripts/ab.sh "$RUN" find role button click --name "..." --exact`),
   then `aria-label` and `data-slot` selectors, then routes. Never coordinates or tab order.
 - Treat quoted names and commands as literal.
 - Wait for the state you assert (`wait --text`, `wait --fn`), not a fixed sleep.
@@ -30,7 +30,7 @@ matching feature file. How to launch, check, drive, capture and clean up is in
 
 ## Proof and skip reporting
 
-- Capture the action and the resulting state: `$S/capture.sh "$RUN" <feature-id> <step>` before
+- Capture the action and the resulting state: `.agents/skills/verify-piano/scripts/capture.sh "$RUN" <feature-id> <step>` before
   and after, plus the text that proves the step.
 - UI proof is a screenshot, an accessibility snapshot and `state.json` (all from `capture.sh`).
 - CLI proof is the command, stdout, stderr and exit code, saved under `$EVIDENCE/<feature-id>/`.
