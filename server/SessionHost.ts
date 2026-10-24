@@ -122,6 +122,10 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
         lock,
         1,
       )(Effect.suspend(() => (closing ? Effect.fail(stopped()) : Effect.void)));
+      // Refuse before recording, so input for a missing checkout leaves no activity; admission
+      // below checks again, atomically.
+      if (sessionActionPolicy[action._tag].needsCheckout)
+        yield* references.requireCheckout(raw.spec.cwd);
       yield* registry
         .touchSession(raw.spec.cwd, raw.spec.sessionId, "text" in action ? action.text : undefined)
         .pipe(Effect.mapError((e) => rejected(e.detail)));
