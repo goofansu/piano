@@ -39,6 +39,9 @@ export class RegistryLookupError extends Data.TaggedError("RegistryLookupError")
   }
 }
 
+/** A title derived from a session's first prompt stays shorter than one a person typed. */
+const PROMPT_TITLE_MAX = 80;
+
 const WorktreeEntry = Schema.Struct({
   folder: Schema.String,
   path: Schema.String,
@@ -410,6 +413,9 @@ export const RegistryLive = Layer.effect(
       );
     }, Effect.uninterruptible);
     const now = () => new Date().toISOString();
+    /** The one place a session's title is decided: trimmed, cut at `max`, empty is none. */
+    const titleOf = (text: string | undefined, max = SESSION_TITLE_MAX) =>
+      text?.trim().slice(0, max).trim() || undefined;
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) =>
       sameSession(t, { cwd, sessionId });
     const currentIn = (d: RegistryData, expected: SessionEntry, link?: SessionLinkKey) => {
@@ -614,7 +620,7 @@ export const RegistryLive = Layer.effect(
               {
                 cwd,
                 sessionId,
-                title: title?.trim() || undefined,
+                title: titleOf(title),
                 projectId,
                 createdAt: t,
                 updatedAt: t,
@@ -631,7 +637,7 @@ export const RegistryLive = Layer.effect(
               ? {
                   ...t,
                   updatedAt: now(),
-                  title: t.title ?? (text ? text.trim().slice(0, 80) : undefined),
+                  title: t.title ?? titleOf(text, PROMPT_TITLE_MAX),
                 }
               : t,
           ),
@@ -641,7 +647,7 @@ export const RegistryLive = Layer.effect(
           const entry = d.sessions.find(isSession(cwd, sessionId));
           if (!entry) return d;
           // Pi owns the name; a session Pi has not named keeps its start name or first prompt.
-          const title = facts.sessionName?.trim().slice(0, SESSION_TITLE_MAX) || entry.title;
+          const title = titleOf(facts.sessionName) || entry.title;
           const stats = facts.stats ?? entry.stats;
           if (title === entry.title && JSON.stringify(stats) === JSON.stringify(entry.stats))
             return d;

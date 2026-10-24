@@ -13,6 +13,7 @@ import {
   RegistryLive,
 } from "../server/Registry.ts";
 import { openRegistryDatabase } from "../server/RegistryDatabase.ts";
+import { decodeClientMessage, SESSION_TITLE_MAX } from "../shared/wire.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
 function fixture(t: TestContext) {
@@ -837,4 +838,32 @@ test("database location honors data home and DB override", () => {
     location({ XDG_DATA_HOME: "/tmp/piano-data", PIANO_DB_PATH: "/tmp/explicit/piano.db" }),
     "/tmp/explicit/piano.db",
   );
+});
+
+test("a new session's title is limited where it is stored, from a start name or a first prompt", async (t) => {
+  const f = fixture(t),
+    cwd = join(f.root, "folder");
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.addSession(cwd, "named", ` ${"n".repeat(SESSION_TITLE_MAX + 50)} `);
+      yield* r.addSession(cwd, "prompted");
+      yield* r.touchSession(cwd, "prompted", ` ${"p".repeat(SESSION_TITLE_MAX + 50)}`);
+    }),
+  );
+  const titles = Object.fromEntries((await f.get()).sessions.map((s) => [s.sessionId, s.title]));
+  assert.equal(titles.named, "n".repeat(SESSION_TITLE_MAX));
+  assert.equal(titles.prompted, "p".repeat(80));
+});
+
+test("a start name over the title limit is refused like a rename", () => {
+  const act = (name: string) =>
+    JSON.stringify({
+      _tag: "act",
+      selectionId: "s",
+      action: { _tag: "abort" },
+      start: { name },
+    });
+  assert.doesNotThrow(() => decodeClientMessage(act("t".repeat(SESSION_TITLE_MAX))));
+  assert.throws(() => decodeClientMessage(act("t".repeat(10_000))));
 });
