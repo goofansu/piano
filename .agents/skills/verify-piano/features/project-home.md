@@ -20,7 +20,8 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   ends with "Project menu for <name>": "Project settings", then a red "Delete project".
 - `empty`: a project with no sessions shows its header ("0 sessions") and the composer on "Choose a folder".
 - `settings`: "Project settings" (the header menu, the sidebar's project menu, Mod+K on the home) opens a
-  dialog in place: Name and Instructions fields, Save off until a field changes; saving closes it
+  dialog in place: Name and Instructions fields with a live count under Instructions ("14 / 20,000",
+  red past the limit with Save off), Save off until a field changes; saving closes it
   and toasts "Project saved". Scope selectors to `[role=dialog]`: the page's composer is a
   `textarea` too. What reaches Pi needs the real Pi: fake Pi ignores the extension, so check the
   model's request with a scripted loopback model, as `test/fixtures/RealPiDispatch.ts` does.

@@ -22,6 +22,14 @@ test("settings URLs preserve each section and accept the Providers alias", () =>
   assert.deepEqual(parseRoute({ pathname: "/settings/unknown" }), { kind: "new" });
 });
 
+test("the Projects index has an address of its own beside each project's home", () => {
+  assert.equal(routePath({ kind: "projects" }), "/projects");
+  assert.deepEqual(parseRoute({ pathname: "/projects" }), { kind: "projects" });
+  assert.deepEqual(parseRoute({ pathname: "/projects/" }), { kind: "projects" });
+  assert.deepEqual(parseRoute({ pathname: "/projects/p1" }), { kind: "project", projectId: "p1" });
+  assert.deepEqual(parseRoute({ pathname: "/projects/p1/new" }), { kind: "new", projectId: "p1" });
+});
+
 test("Radius addresses the Providers page, and is offered once in navigation", () => {
   assert.deepEqual(
     SETTINGS_PAGES.map((page) => page.id),

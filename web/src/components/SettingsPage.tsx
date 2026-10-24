@@ -2,8 +2,7 @@ import type { OAuthProvider } from "@shared/wire";
 import { AlertCircleIcon, CheckCircle2Icon, HomeIcon, PlugIcon } from "lucide-react";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
-import { IconButton } from "@/components/IconButton";
+import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
@@ -49,12 +48,10 @@ import { useSetupActions } from "@/lib/useSetupActions";
 export type { SettingsSection } from "@/lib/routes";
 
 export function SettingsNavigation({
-  compact,
   section,
   onSelect,
   onHome,
 }: {
-  compact: boolean;
   section: SettingsSection;
   onSelect: (section: SettingsSection) => void;
   onHome: () => void;
@@ -62,7 +59,7 @@ export function SettingsNavigation({
   // Radius addresses the Providers page, so its row stays the current one while Radius shows.
   const current = settingsPage(section);
   const menu = (
-    <nav aria-label="Settings sections" className={compact ? "w-full px-2" : undefined}>
+    <nav aria-label="Settings sections">
       <SidebarMenu>
         {SETTINGS_PAGES.map((item) => (
           <SidebarMenuItem key={item.id}>
@@ -71,41 +68,31 @@ export function SettingsNavigation({
               aria-current={current === item.id ? "page" : undefined}
               aria-label={item.label}
               tooltip={item.label}
-              className={compact ? "size-8 justify-center p-2" : "h-9 pointer-coarse:h-11"}
+              className="h-9 pointer-coarse:h-11"
               onClick={() => onSelect(item.id)}
             >
               <SettingsSectionIcon icon={item.icon} />
-              {!compact && <span>{item.label}</span>}
+              <span>{item.label}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         ))}
       </SidebarMenu>
     </nav>
   );
-  return compact ? (
-    <LayoutRail
-      footer={
-        <IconButton label="Home" side="right" onClick={onHome}>
-          <HomeIcon />
-        </IconButton>
-      }
-    >
-      {menu}
-    </LayoutRail>
-  ) : (
+  return (
     <div className="flex h-full flex-col">
       <LayoutHeader title="Settings" />
       <SidebarContent>
-        <SidebarGroup className="px-3">
+        <SidebarGroup className="px-(--gutter)">
           <SidebarGroupContent>{menu}</SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <div className="shrink-0 p-3">
-        <Button variant="ghost" className="w-full justify-start" onClick={onHome}>
+      <LayoutFooter>
+        <Button variant="ghost" className="flex-1 justify-start" onClick={onHome}>
           <HomeIcon data-icon="inline-start" />
           Home
         </Button>
-      </div>
+      </LayoutFooter>
     </div>
   );
 }

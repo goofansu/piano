@@ -52,6 +52,7 @@ export interface CommandEffects {
   closeSettings: () => void;
   openSettings: (section?: SettingsSection) => void;
   openNew: (cwd?: string, projectId?: string) => void;
+  openProjects: () => void;
   openProject: (projectId: string) => void;
   openProjectSettings: (projectId: string) => void;
   openPanel: (panel: Panel) => void;
@@ -86,6 +87,9 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
         "cwd" in intent ? intent.cwd : undefined,
         "projectId" in intent ? intent.projectId : undefined,
       );
+      break;
+    case "projects":
+      effects.openProjects();
       break;
     case "open-project":
       effects.openProject(intent.projectId);

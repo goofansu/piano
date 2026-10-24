@@ -23,7 +23,7 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 
 | Concern | Owner outside `ui/` |
 | --- | --- |
-| Borderless/rail button variants | `PianoButton` |
+| Borderless button variants | `PianoButton` |
 | Underlined file-view toggles | `PianoViewToggle`, `PianoViewToggleItem` |
 | Status badge and warning alert variants | `StatusBadge`, `PianoAlert` |
 | Status dot (session, preview, delivery state) | `StatusDot` |

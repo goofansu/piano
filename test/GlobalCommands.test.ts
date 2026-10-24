@@ -86,6 +86,15 @@ test("the palette offers Settings, or Home while Settings is open", () => {
   assert.ok(!labels(onNewPage, { ...ctx, settingsOpen: true }).includes("Settings"));
 });
 
+test("the palette offers Projects wherever the user is, named as the sidebar row is", () => {
+  const projects = globalCommands(onNewPage, ctx).find((c) => c.id === "projects");
+  assert.equal(projects?.label, "Projects");
+  assert.equal(projects?.group, "navigate");
+  assert.deepEqual(projects?.intent, { kind: "projects" });
+  assert.ok(labels({ ...onNewPage, view: { kind: "session" } }).includes("Projects"));
+  assert.ok(labels(onNewPage, { ...ctx, settingsOpen: true }).includes("Projects"));
+});
+
 test("exactly the current grouping and sort are checked", () => {
   const checked = (group: string, c: GlobalCommandContext) =>
     globalCommands(onNewPage, c)

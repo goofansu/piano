@@ -79,6 +79,14 @@
 :root {
   --radius: 0.625rem;
 
+  /* The main pane is an inset sheet: this gap around it, its line, and the side gutter its
+   * headers and content keep on desktop. The sidebar reads all three, so its hide control sits
+   * exactly where a pane header's show control appears once the sidebar is collapsed, and its
+   * rows share the panes' gutter. */
+  --pane-inset: 0.5rem;
+  --pane-line: 1px;
+  --gutter: 1.5rem;
+
   /* Compact UI must be as readable as the composer on phones. */
   --type-label: 1rem;
   --type-caption: 0.875rem;

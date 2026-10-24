@@ -40,8 +40,8 @@ function useStableOrder(keys: readonly string[]): string[] {
 const page =
   "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:px-6 md:py-8";
 
-/** The pane's header, shaped like the session header: the name with a line beneath it, actions at the end. */
-function ProjectHeader({
+/** The pane's header, shaped like the session header: the name with a line beneath it, actions at the end. The Projects index shares it. */
+export function ProjectHeader({
   children,
   actions,
 }: {
@@ -49,7 +49,7 @@ function ProjectHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-line px-4 py-3 md:px-6">
+    <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line px-4 py-2 md:px-(--gutter)">
       <ShowSidebarButton className="-ml-2" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">{children}</div>
       {actions}
@@ -104,7 +104,7 @@ export function ProjectHome({
   if (home.kind === "missing")
     return (
       <>
-        <ShowSidebarButton className="absolute top-2 left-2" />
+        <ShowSidebarButton className="absolute top-[calc(var(--gutter)-0.5rem)] left-[calc(var(--gutter)-0.5rem)]" />
         <Empty className="flex-1 px-4" role="alert">
           <EmptyHeader>
             <EmptyTitle>Project not found</EmptyTitle>

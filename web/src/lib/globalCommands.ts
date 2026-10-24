@@ -31,6 +31,7 @@ export type GlobalCommandId =
   | "settings"
   | `settings-${SettingsSection}`
   | "new-session"
+  | "projects"
   | "project-settings"
   | "delete-project"
   | "trust"
@@ -53,6 +54,7 @@ export type GlobalCommandIcon =
   | "settings"
   | SettingsSectionIconName
   | "new"
+  | "projects"
   | "trusted"
   | "untrusted"
   | "sidebar"
@@ -67,6 +69,8 @@ export type GlobalCommandIntent =
   | { kind: "settings"; section?: SettingsSection }
   /** Open the New session page, for `projectId` when given. */
   | { kind: "new-session"; projectId?: string }
+  /** Open the Projects index. */
+  | { kind: "projects" }
   /** A project home's Project settings or Delete project, as the project's own menu runs it. */
   | ProjectHomeCommand["intent"]
   /** Send this registry or Pi change. */
@@ -162,7 +166,7 @@ function projectHomeRows(state: AppState): GlobalCommand[] {
 
 /**
  * Global commands, in the palette's order: Home or Settings (whichever is not open), each Settings
- * section, New session, Project settings on a project's home, trust for the directory the main pane is about, Toggle sidebar, the
+ * section, New session, Projects, Project settings on a project's home, trust for the directory the main pane is about, Toggle sidebar, the
  * appearances, then each sidebar grouping and sort, with the current one of each checked.
  */
 export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
@@ -204,6 +208,14 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       group: "navigate",
       enabled: true,
       intent: { kind: "new-session" },
+    },
+    {
+      id: "projects",
+      label: "Projects",
+      icon: "projects",
+      group: "navigate",
+      enabled: true,
+      intent: { kind: "projects" },
     },
     ...projectHomeRows(state),
     ...(trust ? [trust] : []),

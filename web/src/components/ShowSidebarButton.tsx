@@ -1,12 +1,19 @@
 import { cn } from "cn";
 import { PanelLeftOpenIcon } from "lucide-react";
-import { useCallback } from "react";
+import { createContext, useCallback, useContext } from "react";
+import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
-import { useSidebarLayout } from "@/lib/useSidebarLayout";
+import { useSidebarLayout, useSidebarLayoutState } from "@/lib/useSidebarLayout";
+
+/** Whether any session's Pi is working: the one signal the hidden sidebar's rows would have shown. */
+export const SidebarActivityContext = createContext(false);
 
 /**
- * A page's way to the sidebar below the breakpoint, where the sidebar is a sheet. It offers itself
- * as where focus returns when the sheet closes and nothing better is left to focus.
+ * A page's way to the sidebar while it is out of sight: below the breakpoint, where the sidebar is
+ * a sheet, and on desktop once it is collapsed. It sits where the sidebar's hide control was, so
+ * the toggle stands still across the collapse. While any session works it carries the busy dot, since the rows that
+ * would say so are hidden. It offers itself as where focus returns when the sheet closes and
+ * nothing better is left to focus.
  */
 export function ShowSidebarButton({
   className,
@@ -18,6 +25,8 @@ export function ShowSidebarButton({
   children?: React.ReactNode;
 }) {
   const layout = useSidebarLayout();
+  const { collapsed } = useSidebarLayoutState();
+  const working = useContext(SidebarActivityContext);
   const register = useCallback(
     (button: HTMLButtonElement | null) =>
       button ? layout.registerFocusFallback(button) : undefined,
@@ -28,11 +37,12 @@ export function ShowSidebarButton({
       ref={register}
       variant="ghost"
       size="icon-sm"
-      className={cn("md:hidden", className)}
+      className={cn("relative", !collapsed && "md:hidden", className)}
       aria-label={label}
       onClick={layout.show}
     >
       {children}
+      {working && <StatusDot tone="busy" pulse className="absolute top-1.5 right-1.5" />}
     </Button>
   );
 }

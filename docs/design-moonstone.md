@@ -198,7 +198,7 @@ favicon and the home-screen icons. `web/src/components/PianoMark.tsx` draws it i
   wide and 2 apart, a 3-unit fallboard, white keys 8, black key 5, a 13×12 glyph in a 14×12 box.
   (Halving it to 2-wide keys read too thin beside 14px text.) Boxes
   are rounded up to even sides so a centred glyph never lands on half pixels; the tile sizes the
-  glyph to a whole multiple of 16px (`round(57.15%, 16px)`): 1× in the 24px rail and 28px header
+  glyph to a whole multiple of 16px (`round(57.15%, 16px)`): 1× in the 24px footer and 28px
   tiles, 2× in the 48px empty-state tile. `shape-rendering: crispEdges` keeps edges sharp.
 - **Colour.** In the app the mark is one colour from tokens: `currentColor` for the glyph (rows
   pass `text-brand`), `text-brand-ink` on `bg-brand` for the tile.
@@ -224,7 +224,8 @@ still. (See Motion.)
 - In the sidebar row, the keys replace the yellow dot while that session streams.
 - In the transcript, the keys are the glyph of the pending reply, with a caret beside them before
   the first token arrives, and stay the glyph while the reply streams.
-- In the collapsed rail, where no rows are visible, the mark is pressed when any session is working.
+- With the sidebar collapsed, where no rows are visible, the pane header's show-sidebar control
+  carries a breathing busy dot while any session is working.
 - The browser tab icon switches to a pressed-keys variant while the session on screen works.
 
 This is the only ornament; everything else is structure.
@@ -299,8 +300,13 @@ offers New session, per project, and the sidebar toggle without shortcuts of the
 - **Sidebar.** Skeleton rows in the real row geometry while projects load; a staggered first
   reveal; one `selection-bar` that slides between rows; the keys replace the yellow dot while a
   session streams; row heights grow to 44px on touch screens; keyboard hints on the hide, search
-  and New session controls. The collapsed rail carries the mark and plays it when any session
-  is working.
+  and New session controls. The header is the one header shape and no heavier: hide at its left on
+  the rows' edge and where each pane's show control appears once the sidebar is collapsed (the
+  sidebar reads the panes' `--gutter`, `--pane-inset` and `--pane-line` tokens), then search, View options
+  and New session as the filled primary action at its end; no mark and no wordmark, so the one
+  accent in the strip is the primary action. The mark sits in the footer beside Settings. Collapsed,
+  the column is gone rather than a rail: the pane takes the width, and its header's show control
+  brings the sidebar back.
 - **Transcript.** A skeleton in the transcript's layout is on screen within a frame of a switch
   and cross-fades with the real transcript, which is keyed by session so scroll pinning starts
   fresh. The pending reply row shows the keys and a caret before the first token; the streaming
@@ -385,7 +391,7 @@ Observed against the scratch fixture on backend 7181 and Vite 7182 with agent-br
 - `shots/` numbered screenshots: baseline, session light/dark, working state with the keys and
   Stop, palette light/dark/filtered, session switch with the selection bar, loading skeletons
   with the reconnecting pill (backend paused), New page with directory and model pickers in both
-  appearances, the rail, phone session/sheet/New/palette, session menu, rename and delete dialogs,
+  appearances, the collapsed sidebar, phone session/sheet/New/palette, session menu, rename and delete dialogs,
   creating a session from New.
 - `evidence/ui-polish/` the browser polish run (screenshots, `commands.json`,
   `observations.json`) and `evidence/final-tests.txt` for typecheck and module tests.

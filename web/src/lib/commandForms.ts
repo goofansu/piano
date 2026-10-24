@@ -9,7 +9,7 @@
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { SessionShare } from "../../../shared/share.ts";
-import type { ClientCommand } from "../../../shared/wire.ts";
+import { type ClientCommand, PROJECT_INSTRUCTIONS_MAX } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
@@ -34,6 +34,8 @@ export interface AnswerContext {
   radiusSignedIn?: boolean;
   /** Names a new project; called only for an allowed new-project answer. */
   newId?: () => string;
+  /** The project form's second field; blank means the project starts without instructions. */
+  instructions?: string;
 }
 
 /** Answer `form` with its text input (the session title or project name; unused by confirmations). */
@@ -41,7 +43,11 @@ export function answerForm(
   state: AppState,
   form: CommandForm,
   text = "",
-  { radiusSignedIn = false, newId = () => crypto.randomUUID() }: AnswerContext = {},
+  {
+    radiusSignedIn = false,
+    newId = () => crypto.randomUUID(),
+    instructions: instructionsText = "",
+  }: AnswerContext = {},
 ): FormAnswer {
   switch (form.kind) {
     case "rename-session": {
@@ -90,14 +96,16 @@ export function answerForm(
     case "project": {
       const { assign } = form.dialog;
       const name = text.trim();
-      if (!state.connected || !name) return { allowed: false };
+      const instructions = instructionsText.trim();
+      if (!state.connected || !name || instructions.length > PROJECT_INSTRUCTIONS_MAX)
+        return { allowed: false };
       const id = newId();
       return {
         allowed: true,
-        // One message, so the project and its new session arrive in one registry write.
+        // One message, so the project, its instructions and its new session arrive in one registry write.
         command: {
           _tag: "save_project",
-          project: { id, name },
+          project: { id, name, ...(instructions ? { instructions } : {}) },
           assign: assign && { cwd: assign.cwd, sessionId: assign.sessionId },
         },
         ...(!assign ? { openProject: id } : {}),
@@ -195,6 +203,8 @@ export interface CommandFormsState {
   form: CommandForm | null;
   /** The form's text input: the session title or project name. */
   text: string;
+  /** The project form's instructions; empty for every other form. */
+  instructions: string;
   /** The share form's phase; `confirm` for every other form. */
   share: SharePhase;
 }
@@ -220,6 +230,8 @@ export interface CommandForms {
   /** Open `form`, replacing any open one. Rename starts from the session's title. */
   open: (form: CommandForm) => void;
   edit: (text: string) => void;
+  /** The project form's instructions. */
+  editInstructions: (text: string) => void;
   /**
    * Send the open form's answer if it is allowed now, then close; a share form publishes instead and
    * stays open on its result. Returns whether anything was sent or published.
@@ -232,7 +244,12 @@ export interface CommandForms {
 export const SHARE_UNCONFIRMED =
   "Sharing could not be confirmed. Check Radius artifacts before sharing again.";
 
-const CLOSED: CommandFormsState = { form: null, text: "", share: { phase: "confirm" } };
+const CLOSED: CommandFormsState = {
+  form: null,
+  text: "",
+  instructions: "",
+  share: { phase: "confirm" },
+};
 
 export function createCommandForms({
   getState,
@@ -254,6 +271,7 @@ export function createCommandForms({
       ? answerForm(getState(), state.form, state.text, {
           radiusSignedIn: radiusSignedIn(),
           newId,
+          instructions: state.instructions,
         })
       : { allowed: false };
 
@@ -284,10 +302,14 @@ export function createCommandForms({
       set({
         form,
         text: form.kind === "rename-session" ? (form.target.title ?? "") : "",
+        instructions: "",
         share: { phase: "confirm" },
       }),
     edit: (text) => {
       if (state.form) set({ ...state, text });
+    },
+    editInstructions: (instructions) => {
+      if (state.form?.kind === "project") set({ ...state, instructions });
     },
     submit: () => {
       const { form } = state;

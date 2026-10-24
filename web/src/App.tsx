@@ -6,10 +6,12 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
 import { NewSession } from "@/components/NewSession";
 import { ProjectHome } from "@/components/ProjectHome";
+import { ProjectsIndex } from "@/components/ProjectsIndex";
 import { SessionPanel } from "@/components/SessionPanel";
 import { SessionView } from "@/components/SessionView";
 import { SettingsNavigation, SettingsPage } from "@/components/SettingsPage";
-import { Sidebar, SidebarRail } from "@/components/Sidebar";
+import { SidebarActivityContext } from "@/components/ShowSidebarButton";
+import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -76,89 +78,90 @@ export default function App() {
 
   return (
     <SidebarLayoutContext.Provider value={layout}>
-      <NavigationContext.Provider value={navigation}>
-        <SessionFilesContext value={sessionFiles}>
-          <CommandHost state={state} send={send}>
-            <AppLayout
-              navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
-              navigation={(compact) =>
-                settings ? (
-                  <SettingsNavigation
-                    compact={compact}
-                    section={settings}
-                    onSelect={openSettings}
-                    onHome={closeSettings}
-                  />
-                ) : compact ? (
-                  <SidebarRail working={anyWorking} />
-                ) : (
-                  <Sidebar state={state} />
-                )
-              }
-              content={
-                <>
-                  {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
-                  <LayoutView key={state.view.kind} active={!settings}>
-                    {state.view.kind === "new" ? (
-                      <NewSession
-                        state={state}
-                        client={client}
-                        chooseDirectory={chooseDirectory}
-                        projectId={state.view.projectId}
-                        onProjectChange={(id) => openNew(undefined, id)}
-                      />
-                    ) : state.view.kind === "project" ? (
-                      <ProjectHome
-                        state={state}
-                        client={client}
-                        chooseDirectory={chooseDirectory}
-                        projectId={state.view.projectId}
-                      />
-                    ) : state.view.kind === "missing-session" ? (
-                      <Empty className="flex-1 px-4" role="alert">
-                        <EmptyHeader>
-                          <EmptyTitle>Session not found</EmptyTitle>
-                          <EmptyDescription>
-                            This session is not in the registry. Its reference may have been removed
-                            or deleted.
-                          </EmptyDescription>
-                        </EmptyHeader>
-                        <EmptyContent>
-                          <Button variant="outline" onClick={() => openNew()}>
-                            New session
-                          </Button>
-                        </EmptyContent>
-                      </Empty>
-                    ) : (
-                      <SessionView state={state} send={send} />
-                    )}
-                  </LayoutView>
-                  {settings && (
-                    <LayoutView>
-                      <SettingsPage section={settings} request={settingsRequest} />
+      <SidebarActivityContext.Provider value={anyWorking}>
+        <NavigationContext.Provider value={navigation}>
+          <SessionFilesContext value={sessionFiles}>
+            <CommandHost state={state} send={send}>
+              <AppLayout
+                navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
+                navigation={
+                  settings ? (
+                    <SettingsNavigation
+                      section={settings}
+                      onSelect={openSettings}
+                      onHome={closeSettings}
+                    />
+                  ) : (
+                    <Sidebar state={state} />
+                  )
+                }
+                content={
+                  <>
+                    {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
+                    <LayoutView key={state.view.kind} active={!settings}>
+                      {state.view.kind === "new" ? (
+                        <NewSession
+                          state={state}
+                          client={client}
+                          chooseDirectory={chooseDirectory}
+                          projectId={state.view.projectId}
+                          onProjectChange={(id) => openNew(undefined, id)}
+                        />
+                      ) : state.view.kind === "projects" ? (
+                        <ProjectsIndex state={state} />
+                      ) : state.view.kind === "project" ? (
+                        <ProjectHome
+                          state={state}
+                          client={client}
+                          chooseDirectory={chooseDirectory}
+                          projectId={state.view.projectId}
+                        />
+                      ) : state.view.kind === "missing-session" ? (
+                        <Empty className="flex-1 px-4" role="alert">
+                          <EmptyHeader>
+                            <EmptyTitle>Session not found</EmptyTitle>
+                            <EmptyDescription>
+                              This session is not in the registry. Its reference may have been
+                              removed or deleted.
+                            </EmptyDescription>
+                          </EmptyHeader>
+                          <EmptyContent>
+                            <Button variant="outline" onClick={() => openNew()}>
+                              New session
+                            </Button>
+                          </EmptyContent>
+                        </Empty>
+                      ) : (
+                        <SessionView state={state} send={send} />
+                      )}
                     </LayoutView>
-                  )}
-                </>
-              }
-              aside={<SessionPanel state={state} />}
-            >
-              {/* Top-right, just below the pane's header row, so a toast never covers a title or its controls.
+                    {settings && (
+                      <LayoutView>
+                        <SettingsPage section={settings} request={settingsRequest} />
+                      </LayoutView>
+                    )}
+                  </>
+                }
+                aside={<SessionPanel state={state} />}
+              >
+                {/* Top-right, just below the pane's header row, so a toast never covers a title or its controls.
           Above dialogs and sheets (z-50) but below menus, popovers and tooltips (z-[60]), so an open menu is never covered. */}
-              <Toaster
-                position="top-right"
-                className="toaster group !absolute !z-[55]"
-                offset={{ top: 88, right: 24 }}
-                mobileOffset={{ top: 68, left: 16, right: 16 }}
-                visibleToasts={4}
-                duration={4000}
-                closeButton
-              />
-              <CommandPalette state={state} />
-              <DialogHost pending={pendingDialogs(state)} send={send} />
-            </AppLayout>
-          </CommandHost>
-        </SessionFilesContext>
-      </NavigationContext.Provider>
+                <Toaster
+                  position="top-right"
+                  className="toaster group !absolute !z-[55]"
+                  offset={{ top: 88, right: 24 }}
+                  mobileOffset={{ top: 68, left: 16, right: 16 }}
+                  visibleToasts={4}
+                  duration={4000}
+                  closeButton
+                />
+                <CommandPalette state={state} />
+                <DialogHost pending={pendingDialogs(state)} send={send} />
+              </AppLayout>
+            </CommandHost>
+          </SessionFilesContext>
+        </NavigationContext.Provider>
+      </SidebarActivityContext.Provider>
     </SidebarLayoutContext.Provider>
   );
 }

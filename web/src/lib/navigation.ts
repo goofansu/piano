@@ -57,6 +57,8 @@ export interface Navigation {
   select: (cwd: string, sessionId: string | null) => void;
   /** The New page, optionally in a directory or for a project. */
   openNew: (cwd?: string, projectId?: string) => void;
+  /** The Projects index. */
+  openProjects: () => void;
   /** A project's home. */
   openProject: (projectId: string) => void;
   openSettings: (section?: SettingsSection) => void;
@@ -70,6 +72,7 @@ export interface Navigation {
 /** The client's first view for a route, so a session URL never renders the New page while the registry loads. */
 export function initialView(route: Route): AppState["view"] {
   if (route.kind === "session") return { kind: "session" };
+  if (route.kind === "projects") return { kind: "projects" };
   if (route.kind === "project") return { kind: "project", projectId: route.projectId };
   return { kind: "new", projectId: route.kind === "new" ? route.projectId : undefined };
 }
@@ -78,6 +81,7 @@ export type RouteDecision =
   | { kind: "wait" }
   | { kind: "settings"; section: SettingsSection }
   | { kind: "new"; projectId?: string }
+  | { kind: "projects" }
   | { kind: "project"; projectId: string }
   /** Back or forward onto the New page already on screen keeps whatever directory it had. */
   | { kind: "keep" }
@@ -91,6 +95,8 @@ export function decideRoute(route: Route, state: AppState): RouteDecision {
     return state.view.kind === "new" && state.view.projectId === route.projectId
       ? { kind: "keep" }
       : { kind: "new", projectId: route.projectId };
+  if (route.kind === "projects")
+    return state.view.kind === "projects" ? { kind: "keep" } : { kind: "projects" };
   if (route.kind === "project")
     return state.view.kind === "project" && state.view.projectId === route.projectId
       ? { kind: "keep" }
@@ -119,13 +125,15 @@ export function addressFor(
   const route: Route | null =
     state.view.kind === "new"
       ? { kind: "new", projectId: state.view.projectId }
-      : state.view.kind === "project"
-        ? { kind: "project", projectId: state.view.projectId }
-        : state.view.kind === "missing-session"
-          ? { kind: "session", sessionId: state.view.sessionId }
-          : current?.sessionId
-            ? { kind: "session", sessionId: current.sessionId }
-            : null;
+      : state.view.kind === "projects"
+        ? { kind: "projects" }
+        : state.view.kind === "project"
+          ? { kind: "project", projectId: state.view.projectId }
+          : state.view.kind === "missing-session"
+            ? { kind: "session", sessionId: state.view.sessionId }
+            : current?.sessionId
+              ? { kind: "session", sessionId: current.sessionId }
+              : null;
   if (!route) return null;
   const path = routePath(settings ? { kind: "settings", section: settings } : route);
   // The bare root is an alias for /new and a query string carries nothing: replace those, push real moves.
@@ -137,11 +145,13 @@ export function addressFor(
     ? "Settings"
     : state.view.kind === "missing-session"
       ? "Session not found"
-      : route.kind === "project"
-        ? findProject(state, route.projectId)?.name || "Project"
-        : route.kind === "new"
-          ? findProject(state, route.projectId)?.name || "New session"
-          : catalogEntry(state, route.sessionId)?.title || "Session";
+      : route.kind === "projects"
+        ? "Projects"
+        : route.kind === "project"
+          ? findProject(state, route.projectId)?.name || "Project"
+          : route.kind === "new"
+            ? findProject(state, route.projectId)?.name || "New session"
+            : catalogEntry(state, route.sessionId)?.title || "Session";
   return { path, mode, title: `${title} - Piano` };
 }
 
@@ -202,6 +212,7 @@ export function createNavigation({
       set({ settings: decision.section, settingsRequest: state.settingsRequest + 1 });
     else if (decision.kind === "new")
       client.dispatch({ type: "new", projectId: decision.projectId });
+    else if (decision.kind === "projects") client.dispatch({ type: "projects" });
     else if (decision.kind === "project")
       client.dispatch({ type: "project", projectId: decision.projectId });
     else if (decision.kind === "select") select(decision.cwd, decision.sessionId);
@@ -288,6 +299,12 @@ export function createNavigation({
       batch(() => {
         set({ settings: null });
         client.dispatch({ type: "new", cwd, projectId });
+        moved();
+      }),
+    openProjects: () =>
+      batch(() => {
+        set({ settings: null });
+        client.dispatch({ type: "projects" });
         moved();
       }),
     openProject: (projectId) =>

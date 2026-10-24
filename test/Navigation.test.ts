@@ -189,6 +189,26 @@ test("a project's address opens its home; its New page has an address of its own
   assert.deepEqual(fresh.client.getState().view, { kind: "new", projectId: "p1" });
 });
 
+test("the Projects index has its own address and title, and a row's move to a home is one entry", () => {
+  const p = page("/projects");
+  assert.deepEqual(p.client.getState().view, { kind: "projects" });
+  p.registry();
+  assert.deepEqual(p.entries, ["/projects"]);
+  assert.equal(p.title(), "Projects - Piano");
+
+  p.navigation.openProject("p1");
+  assert.deepEqual(p.entries, ["/projects", "/projects/p1"]);
+  assert.equal(p.title(), "Launch - Piano");
+  p.back();
+  assert.deepEqual(p.client.getState().view, { kind: "projects" });
+  assert.equal(p.title(), "Projects - Piano");
+
+  p.navigation.openSettings("mcp");
+  p.navigation.openProjects();
+  assert.equal(p.navigation.getState().settings, null, "opening the index leaves Settings");
+  assert.deepEqual(p.entries, ["/projects", "/settings/mcp", "/projects"]);
+});
+
 test("back and forward apply the address bar's route; back onto the same New page keeps its directory", () => {
   const p = page("/new");
   p.registry();

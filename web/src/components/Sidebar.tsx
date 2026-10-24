@@ -6,10 +6,11 @@ import {
   SearchIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
+  TargetIcon,
   XIcon,
 } from "lucide-react";
 import { Fragment, memo } from "react";
-import { LayoutHeader, LayoutRail } from "@/components/AppLayout";
+import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
 import {
   SessionCommandMenuItem,
   useCommands,
@@ -69,7 +70,7 @@ const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 export function Sidebar({ state }: Props) {
-  const { select, openNew, openSettings, setPalette } = useNavigation();
+  const { select, openNew, openProjects, openSettings, setPalette } = useNavigation();
   const { view } = useSidebarView();
   const {
     list: { pinned, body },
@@ -144,18 +145,29 @@ export function Sidebar({ state }: Props) {
           <SearchIcon />
         </IconButton>
         <ViewMenu />
+        {/* The sidebar's one primary action, filled, at the header's end. */}
+        <IconButton label="New session" variant="default" onClick={() => openNew()}>
+          <PlusIcon />
+        </IconButton>
       </LayoutHeader>
-      <div className="px-3 pb-3">
+      {/* The way to the Projects index leads the list; it is the current row while the index is open, as a selected session row is. */}
+      <div className="px-(--gutter) py-2">
         <Button
-          variant="rail-action"
-          className="h-10 w-full justify-start rounded-xl pointer-coarse:h-11"
-          onClick={() => openNew()}
+          variant="ghost"
+          className={cn(
+            row,
+            "w-full justify-start text-ink-2",
+            state.view.kind === "projects" &&
+              "bg-(--selected) font-medium text-ink hover:bg-(--selected)",
+          )}
+          aria-current={state.view.kind === "projects" ? "page" : undefined}
+          onClick={() => openProjects()}
         >
-          <PlusIcon data-icon="inline-start" /> New session
+          <TargetIcon data-icon="inline-start" /> Projects
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <nav className="relative px-3 pb-4" aria-label="Sessions">
+        <nav className="relative px-(--gutter) pb-4" aria-label="Sessions">
           {pinned && (
             <Collapsible
               open={pinned.open}
@@ -185,12 +197,12 @@ export function Sidebar({ state }: Props) {
           {list()}
         </nav>
       </ScrollArea>
-      <div className="shrink-0 p-3">
-        <Button variant="ghost" className="w-full justify-start" onClick={() => openSettings()}>
+      <LayoutFooter>
+        <Button variant="ghost" className="flex-1 justify-start" onClick={() => openSettings()}>
           <SettingsIcon data-icon="inline-start" />
           Settings
         </Button>
-      </div>
+      </LayoutFooter>
     </div>
   );
 }
@@ -313,21 +325,6 @@ function SidebarSkeleton() {
         </div>
       ))}
     </div>
-  );
-}
-
-/** The collapsed sidebar: a vertical rail with the expand control and activity mark. */
-export function SidebarRail({ working }: { working: boolean }) {
-  const { openSettings } = useNavigation();
-  return (
-    <LayoutRail
-      working={working}
-      footer={
-        <IconButton label="Settings" side="right" onClick={() => openSettings()}>
-          <SettingsIcon />
-        </IconButton>
-      }
-    />
   );
 }
 

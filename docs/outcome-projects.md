@@ -115,7 +115,9 @@ activity. The cards draw only from what the browser already holds (PIN-83). Abov
 has the New page's composer: a session started there joins the project, and runs by default in the
 folder of the member session active most recently (at the folder's own checkout), else wherever
 the person picks. `/projects/<id>/new` is its New page, where a session started joins it too. Closed-directory and archived-session references remain reachable
-from the group and from session search.
+from the group and from session search. `/projects` is the Projects index above the homes: one row per project with its folders, session
+count and last activity, newest first, reached from the sidebar's Projects row and Mod+K; see
+[the project-centered UX](project-centered-ux.md).
 
 ## Step 2 — Shared context and instructions, later
 
@@ -124,8 +126,9 @@ without replacing the selected checkout's normal Pi configuration or treating an
 entire history as shared context. This is a separate slice after grouping proves useful.
 
 **Shipped first: plain project instructions.** A project has optional instructions, one text of
-up to 20,000 characters kept in Piano's database (registry version 10) and edited, with the name,
-in the Project settings dialog (its home's header, the project menu or Mod+K on the home). Each
+up to 20,000 characters kept in Piano's database (registry version 10), given with the name in the
+New project dialog or edited later in the Project settings dialog (its home's header, the project
+menu or Mod+K on the home); both dialogs show the same two fields. Each
 time Piano starts Pi for a
 member session, new or reopened, it passes the project's current instructions in the child's
 environment, and Piano's own extension adds them on every run as a `project_instructions` system

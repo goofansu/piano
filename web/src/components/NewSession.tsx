@@ -71,7 +71,7 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
   return (
     <>
       {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
-      <ShowSidebarButton className="absolute top-2 left-2" />
+      <ShowSidebarButton className="absolute top-[calc(var(--gutter)-0.5rem)] left-[calc(var(--gutter)-0.5rem)]" />
       <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">

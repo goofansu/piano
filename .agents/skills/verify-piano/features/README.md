@@ -55,6 +55,8 @@ Keep implementation details out; name user paths, handles, required state, comma
   choices, the first message and reply, reload without resending, a kept draft when not sent.
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
   home; read history and cost; follow up; stop a running reply.
+- [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
+  per project with folders, count and last activity; New project in the header; empty and phone.
 - [Project home](./project-home.md): `/projects/<id>` from the sidebar, palette and session
   header; member cards, order, PR number, live append, empty, deleted and missing projects, the
   no-request cost rule, 390px layout.

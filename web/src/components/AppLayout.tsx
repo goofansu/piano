@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { PanelLeftCloseIcon, PanelLeftOpenIcon, XIcon } from "lucide-react";
+import { PanelLeftCloseIcon, XIcon } from "lucide-react";
 import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import { IconButton } from "@/components/IconButton";
 import { PianoMark } from "@/components/PianoMark";
@@ -20,7 +20,7 @@ export function AppLayout({
   aside,
   children,
 }: {
-  navigation: (compact: boolean) => ReactNode;
+  navigation: ReactNode;
   navigationTitle: string;
   content: ReactNode;
   /** The right sidebar, when one is open: a second sheet beside the conversation. */
@@ -61,19 +61,19 @@ export function AppLayout({
         data-state={collapsed ? "collapsed" : "expanded"}
         data-dragging={resizing}
         className="relative hidden shrink-0 md:flex md:flex-col"
-        style={{ width: collapsed ? SIDEBAR_WIDTH.rail : width }}
+        style={{ width: collapsed ? 0 : width }}
       >
+        {/* Collapsed, the column has no width and no rail: each pane's header carries the control
+            that brings it back. Visibility (not display:none) preserves scroll. */}
         <div className="relative h-full overflow-hidden">
-          {/* Visibility (not display:none) preserves scroll. */}
           <div
             inert={collapsed}
             aria-hidden={collapsed}
             className={cn("h-full", collapsed && "invisible")}
             style={{ width }}
           >
-            {navigation(false)}
+            {navigation}
           </div>
-          {collapsed && <div className="absolute inset-0">{navigation(true)}</div>}
         </div>
         {!collapsed && (
           // No standard shadcn resize handle supports drag-to-collapse with remembered pixel width.
@@ -113,7 +113,7 @@ export function AppLayout({
         contentRef={swipe.revealRef}
         title={navigationTitle}
       >
-        {navigation(false)}
+        {navigation}
       </PianoSidebarReveal>
       {/* A viewport landmark, not a shadcn content Card with header/footer padding. */}
       <main
@@ -123,7 +123,9 @@ export function AppLayout({
         data-sidebar-dragging={swipe.dragging}
         style={swipe.style}
         className={cn(
-          "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-2 md:mr-2 md:rounded-2xl md:border md:border-line md:shadow-1",
+          "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-(--pane-inset) md:mr-(--pane-inset) md:rounded-2xl md:border-(length:--pane-line) md:border-line md:shadow-1",
+          // With the sidebar collapsed the pane keeps the gap the column gave it.
+          collapsed && "md:ml-(--pane-inset)",
           // With the right sidebar open the two are one sheet, split by a hairline (RightSidebar).
           // The conversation keeps a readable column; the sidebar gives way when space runs short.
           "md:[&:has(~[data-slot=layout-panel])]:mr-0 md:[&:has(~[data-slot=layout-panel])]:min-w-[28rem] md:[&:has(~[data-slot=layout-panel])]:rounded-r-none md:[&:has(~[data-slot=layout-panel])]:border-r-0",
@@ -151,48 +153,36 @@ export function LayoutView({ active = true, children }: { active?: boolean; chil
   );
 }
 
+/**
+ * The sidebar's header, in the one header shape and no heavier: the hide control first, where
+ * each pane's show control appears once the sidebar is collapsed, so the toggle never moves; a
+ * title only when the sidebar is not the session list; then the pane's controls, its one primary
+ * action last. The mark lives in the footer.
+ */
 export function LayoutHeader({ title, children }: { title?: string; children?: ReactNode }) {
   const { hide } = useSidebarLayout();
   return (
-    <SidebarHeader className="h-16 shrink-0 flex-row items-center gap-2.5 px-4">
-      {title ? (
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-      ) : (
-        <>
-          <PianoMark />
-          <span className="text-lg font-semibold tracking-tight">Piano</span>
-        </>
-      )}
-      <span className="flex-1" />
-      {children}
+    // The sidebar shares the panes' gutter and, on desktop, the pane's inset and line, so the hide
+    // control sits on the rows' left edge and, once collapsed, each pane's show control appears at
+    // exactly the same point; its hairline is level with the pane header's, one band across the screen.
+    <SidebarHeader className="h-16 shrink-0 flex-row items-center gap-2.5 border-b border-line px-(--gutter) md:mt-[calc(var(--pane-inset)+var(--pane-line))] md:pl-[calc(var(--gutter)+var(--pane-line))]">
       <IconButton label="Hide sidebar" onClick={hide}>
         <XIcon className="md:hidden" />
         <PanelLeftCloseIcon className="hidden md:block" />
       </IconButton>
+      {title && <h2 className="text-sm font-medium">{title}</h2>}
+      <span className="flex-1" />
+      {children}
     </SidebarHeader>
   );
 }
 
-export function LayoutRail({
-  working = false,
-  children,
-  footer,
-}: {
-  working?: boolean;
-  children?: ReactNode;
-  footer?: ReactNode;
-}) {
-  const { show } = useSidebarLayout();
+/** The sidebar's footer: its one plain action and the mark, which marks the app once, at rest. */
+export function LayoutFooter({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-full flex-col items-center gap-1 pt-2">
-      <IconButton label="Show sidebar" side="right" onClick={show}>
-        <PanelLeftOpenIcon />
-      </IconButton>
+    <div className="flex shrink-0 items-center gap-2 px-(--gutter) py-3">
       {children}
-      <div className="mt-auto flex flex-col items-center gap-3 pb-3">
-        {footer}
-        <PianoMark playing={working} className="size-6 rounded-md shadow-none" />
-      </div>
+      <PianoMark className="mr-1 size-6 rounded-md shadow-none" />
     </div>
   );
 }

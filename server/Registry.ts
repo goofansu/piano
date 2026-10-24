@@ -262,11 +262,12 @@ export class Registry extends Context.Service<
     readonly requireProject: (id: string) => Effect.Effect<Project, RegistryLookupError>;
     /**
      * Create a project (or rename one, as `updateProject` does without refusing an unknown ID).
-     * With `assign`, that session joins it in the same write: one change announcement, and an
+     * Given instructions are saved trimmed; absent ones leave the project's as they are. With
+     * `assign`, that session joins it in the same write: one change announcement, and an
      * unregistered session rejects the whole save.
      */
     readonly saveProject: (
-      project: Pick<Project, "id" | "name">,
+      project: Pick<Project, "id" | "name" | "instructions">,
       assign?: { readonly cwd: string; readonly sessionId: string },
     ) => Effect.Effect<void, RegistryError>;
     /**
@@ -494,9 +495,15 @@ export const RegistryLive = Layer.effect(
             throw new RegistryError({
               detail: "Session reference is unavailable. Refresh and try again.",
             });
-          // Renaming keeps the project's instructions; only `updateProject` changes them.
+          // A save without instructions (a rename) keeps the project's; `updateProject` clears them.
           const existing = d.projects.find((p) => p.id === parsed.id);
-          const next = { ...existing, id: parsed.id, name: parsed.name.trim() };
+          const instructions = parsed.instructions?.trim();
+          const next = {
+            ...existing,
+            id: parsed.id,
+            name: parsed.name.trim(),
+            ...(instructions ? { instructions } : {}),
+          };
           const projects = d.projects.some((p) => p.id === next.id)
             ? d.projects.map((p) => (p.id === next.id ? next : p))
             : [...d.projects, next];

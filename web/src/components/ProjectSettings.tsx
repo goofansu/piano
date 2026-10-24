@@ -1,5 +1,6 @@
 import { type ClientCommand, PROJECT_INSTRUCTIONS_MAX, type Project } from "@shared/wire";
-import { useId, useState } from "react";
+import { cn } from "cn";
+import { type Ref, useId, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/PianoDialog";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { type ProjectSettingsDraft, projectSettingsSave } from "@/lib/projectCommands";
@@ -78,28 +79,7 @@ function ProjectSettingsForm({
       <DialogHeader>
         <DialogTitle>Project settings</DialogTitle>
       </DialogHeader>
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
-          <Input
-            id={`${id}-name`}
-            value={draft.name}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            maxLength={200}
-            required
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor={`${id}-instructions`}>Instructions</FieldLabel>
-          <Textarea
-            id={`${id}-instructions`}
-            value={draft.instructions}
-            onChange={(e) => setDraft({ ...draft, instructions: e.target.value })}
-            maxLength={PROJECT_INSTRUCTIONS_MAX}
-            className="max-h-[50dvh] min-h-48 font-mono"
-          />
-        </Field>
-      </FieldGroup>
+      <ProjectFields id={id} draft={draft} setDraft={setDraft} />
       <DialogFooter>
         <Button type="button" variant="outline" onClick={close}>
           Cancel
@@ -111,3 +91,57 @@ function ProjectSettingsForm({
     </form>
   );
 }
+
+/**
+ * A project's two fields, Name and Instructions, as the New project and Project settings dialogs
+ * both show them: one shape for creating and editing a project.
+ */
+export function ProjectFields({
+  id,
+  draft,
+  setDraft,
+  nameRef,
+}: {
+  id: string;
+  draft: ProjectSettingsDraft;
+  setDraft: (draft: ProjectSettingsDraft) => void;
+  nameRef?: Ref<HTMLInputElement>;
+}) {
+  const over = draft.instructions.length > PROJECT_INSTRUCTIONS_MAX;
+  return (
+    <FieldGroup>
+      <Field>
+        <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
+        <Input
+          id={`${id}-name`}
+          ref={nameRef}
+          value={draft.name}
+          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          maxLength={200}
+          required
+        />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor={`${id}-instructions`}>Instructions</FieldLabel>
+        <Textarea
+          id={`${id}-instructions`}
+          aria-describedby={`${id}-instructions-count`}
+          aria-invalid={over || undefined}
+          value={draft.instructions}
+          onChange={(e) => setDraft({ ...draft, instructions: e.target.value })}
+          className="max-h-[50dvh] min-h-48 font-mono"
+        />
+        {/* The count, not a maxLength: a paste over the limit stays visible and the count says so, and Save stays off. */}
+        <FieldDescription
+          id={`${id}-instructions-count`}
+          className={cn("text-right text-xs tabular-nums", over ? "text-err" : "text-ink-3")}
+        >
+          {count.format(draft.instructions.length)} / {count.format(PROJECT_INSTRUCTIONS_MAX)}
+        </FieldDescription>
+      </Field>
+    </FieldGroup>
+  );
+}
+
+/** Characters as the browser counts them (UTF-16 code units), grouped for reading: "20,000". */
+const count = new Intl.NumberFormat();

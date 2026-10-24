@@ -1,6 +1,7 @@
 /**
  * Routes, kept in the address bar so refresh, back and forward work:
  *   /new             the New page (which directory it starts in is not part of the address)
+ *   /projects        the Projects index: every project, newest activity first
  *   /projects/<id>   one project's home: its branches and other member sessions
  *   /projects/<id>/new the New page for one project: a session started there joins it
  *   /s/<sessionId>   one session; its directory is looked up in the folder list
@@ -40,6 +41,7 @@ export const settingsPage = (section: SettingsSection): SettingsPage =>
 
 export type Route =
   | { kind: "new"; projectId?: string }
+  | { kind: "projects" }
   | { kind: "project"; projectId: string }
   | { kind: "session"; sessionId: string }
   | { kind: "settings"; section: SettingsSection };
@@ -53,6 +55,7 @@ export function parseRoute(loc: { pathname: string }): Route {
   const settings = loc.pathname.match(/^\/settings(?:\/([^/]+))?\/?$/);
   const section = settings && settingsSection(settings[1]);
   if (section) return { kind: "settings", section };
+  if (/^\/projects\/?$/.test(loc.pathname)) return { kind: "projects" };
   const project = loc.pathname.match(/^\/projects\/([^/]+)(\/new)?\/?$/);
   if (project)
     return project[2]
@@ -66,6 +69,7 @@ export function parseRoute(loc: { pathname: string }): Route {
 export function routePath(r: Route): string {
   if (r.kind === "settings") return `/settings/${r.section}`;
   if (r.kind === "session") return `/s/${encodeURIComponent(r.sessionId)}`;
+  if (r.kind === "projects") return "/projects";
   if (r.kind === "project") return `/projects/${encodeURIComponent(r.projectId)}`;
   return r.projectId ? `/projects/${encodeURIComponent(r.projectId)}/new` : "/new";
 }

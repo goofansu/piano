@@ -42,6 +42,7 @@ export interface AppState {
   view:
     | { kind: "session" }
     | { kind: "new"; cwd?: string; projectId?: string }
+    | { kind: "projects" }
     | { kind: "project"; projectId: string; cwd?: string }
     | { kind: "missing-session"; sessionId: string };
   folders: FolderView[];
@@ -105,6 +106,7 @@ export type Action =
   /** Opens the New page; without a directory it keeps the one already chosen there. */
   | { type: "new"; cwd?: string; projectId?: string }
   /** Opens a project's home. */
+  | { type: "projects" }
   | { type: "project"; projectId: string }
   /** Picks the New page's directory; ignored on any other view. */
   | { type: "new_directory"; cwd: string }
@@ -161,6 +163,17 @@ function reduceAction(s: AppState, a: Action): AppState {
           cwd: a.cwd ?? (s.view.kind === "new" ? s.view.cwd : undefined),
           projectId: a.projectId,
         },
+        selecting: null,
+        session: null,
+        pendingCreate: null,
+      };
+    case "projects":
+      return {
+        ...s,
+        selectionId: null,
+        resync: false,
+        selectionFailure: null,
+        view: { kind: "projects" },
         selecting: null,
         session: null,
         pendingCreate: null,

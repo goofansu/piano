@@ -11,6 +11,7 @@ import {
   ShieldCheckIcon,
   ShieldOffIcon,
   SunIcon,
+  TargetIcon,
   Trash2Icon,
 } from "lucide-react";
 import { SettingsSectionIcon } from "@/components/SettingsSectionFrame";
@@ -21,6 +22,7 @@ const ICONS: Record<Exclude<IconId, SettingsSectionIconName>, LucideIcon> = {
   home: HomeIcon,
   settings: SettingsIcon,
   new: PlusIcon,
+  projects: TargetIcon,
   trusted: ShieldCheckIcon,
   untrusted: ShieldOffIcon,
   sidebar: PanelLeftIcon,

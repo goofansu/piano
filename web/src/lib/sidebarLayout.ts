@@ -8,7 +8,7 @@
  */
 import { readStorage, writeStorage } from "./storage.ts";
 
-export const SIDEBAR_WIDTH = { min: 208, max: 480, default: 288, rail: 48, collapseBelow: 160 };
+export const SIDEBAR_WIDTH = { min: 208, max: 480, default: 288, collapseBelow: 160 };
 /** Where the sheet gives way to the column; matches Tailwind's `md`. */
 export const DESKTOP_QUERY = "(min-width: 768px)";
 
@@ -16,7 +16,7 @@ const COLLAPSED_KEY = "piano.sidebar";
 const WIDTH_KEY = "piano.sidebarWidth";
 
 export interface SidebarLayoutState {
-  /** The desktop column shows only its rail. */
+  /** The desktop column is hidden; each pane's header shows the control that brings it back. */
   collapsed: boolean;
   /** The expanded column's width: the remembered one, or the drag's while resizing. */
   width: number;

@@ -756,9 +756,16 @@ export const ClientMessage = Schema.Union([
     refresh: Schema.optional(Schema.Boolean),
     requestId: Schema.optional(Schema.String),
   }),
-  /** Create a project; with `assign`, that session joins it in the same registry write. */
+  /**
+   * Create a project, with its instructions when given; with `assign`, that session joins it in
+   * the same registry write.
+   */
   Schema.TaggedStruct("save_project", {
-    project: Schema.Struct({ id: Project.fields.id, name: Project.fields.name }),
+    project: Schema.Struct({
+      id: Project.fields.id,
+      name: Project.fields.name,
+      instructions: Schema.optional(ProjectInstructions),
+    }),
     assign: Schema.optional(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String })),
   }),
   /** Delete a project; its sessions stay and move to No project. */

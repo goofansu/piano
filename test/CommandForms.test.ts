@@ -168,6 +168,30 @@ test("project answers: a new project opens, create-and-assign stays put", () => 
   assert.deepEqual(answerForm(online, { kind: "project", dialog: {} }, "  ", { newId }), {
     allowed: false,
   });
+  // Instructions travel in the same save, trimmed; blank ones are left out; over the limit refuses.
+  assert.deepEqual(
+    answerForm(online, { kind: "project", dialog: {} }, "Ship", {
+      newId,
+      instructions: "\n Reply in French. \n",
+    }).command,
+    {
+      _tag: "save_project",
+      project: { id: "new-id", name: "Ship", instructions: "Reply in French." },
+      assign: undefined,
+    },
+  );
+  assert.deepEqual(
+    answerForm(online, { kind: "project", dialog: {} }, "Ship", { newId, instructions: "  " })
+      .command,
+    { _tag: "save_project", project: { id: "new-id", name: "Ship" }, assign: undefined },
+  );
+  assert.equal(
+    answerForm(online, { kind: "project", dialog: {} }, "Ship", {
+      newId,
+      instructions: "x".repeat(20_001),
+    }).allowed,
+    false,
+  );
   assert.deepEqual(answerForm(offline, { kind: "project", dialog: {} }, "Ship", { newId }), {
     allowed: false,
   });
@@ -319,12 +343,21 @@ test("creating a project opens it; creating one for a session does not", () => {
   const created = forms();
   created.subject.open({ kind: "project", dialog: {} });
   created.subject.edit(" Ship ");
+  created.subject.editInstructions("Reply in French.");
   assert.equal(created.subject.submit(), true);
   assert.deepEqual(created.sent, [
-    { _tag: "save_project", project: { id: "new-id", name: "Ship" }, assign: undefined },
+    {
+      _tag: "save_project",
+      project: { id: "new-id", name: "Ship", instructions: "Reply in French." },
+      assign: undefined,
+    },
   ]);
   assert.deepEqual(created.opened, ["new-id"]);
   assert.equal(created.subject.getState().form, null);
+  // The next opening starts clean; instructions belong to the project form alone.
+  created.subject.open({ kind: "rename-session", target: other });
+  created.subject.editInstructions("ignored");
+  assert.equal(created.subject.getState().instructions, "");
 
   for (const dialog of [{ assign: other }]) {
     const { subject, opened, sent } = forms();

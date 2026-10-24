@@ -172,7 +172,7 @@ export function CommandHost({
   send: (command: ClientCommand) => void;
   children: React.ReactNode;
 }) {
-  const { openNew, openProject, openPanel, openSettings, closeSettings, settings } =
+  const { openNew, openProjects, openProject, openPanel, openSettings, closeSettings, settings } =
     useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [changesWrap, setChangesWrap] = useChangesWrap();
@@ -206,6 +206,7 @@ export function CommandHost({
     closeSettings,
     openSettings,
     openNew,
+    openProjects,
     openProject,
     openProjectSettings: setSettingsFor,
     openPanel,
@@ -315,8 +316,10 @@ export function CommandHost({
         open={!!project}
         dialog={project}
         name={forms.text}
+        instructions={forms.instructions}
         allowed={answer.allowed}
         edit={forms.edit}
+        editInstructions={forms.editInstructions}
         submit={forms.submit}
         close={close}
       />

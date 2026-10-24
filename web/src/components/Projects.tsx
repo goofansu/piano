@@ -8,7 +8,7 @@ import {
   SettingsIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useRef } from "react";
+import { useId, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -25,9 +25,8 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/PianoDropdownMenu";
+import { ProjectFields } from "@/components/ProjectSettings";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import type {
   ProjectCommand,
   ProjectCommandIcon,
@@ -136,32 +135,37 @@ export function ProjectMenu({
 
 /**
  * Organization only: saving never opens, aborts or releases a Pi child. The command host owns the
- * one instance and its form (name, whether saving is allowed, submitting); this only renders it.
+ * one instance and its form (name, instructions, whether saving is allowed, submitting); this only
+ * renders it, in the shape of Project settings, so the project's first session already carries
+ * its instructions.
  */
 export function ProjectDialogView({
   open,
   dialog,
   name,
+  instructions,
   allowed,
   edit,
+  editInstructions,
   submit,
   close,
 }: {
   open: boolean;
   dialog: ProjectDialog | undefined;
   name: string;
+  instructions: string;
   allowed: boolean;
   edit: (name: string) => void;
+  editInstructions: (instructions: string) => void;
   submit: () => void;
   close: () => void;
 }) {
+  const id = useId();
   const nameInput = useRef<HTMLInputElement>(null);
   return (
     <Dialog open={open} onOpenChange={(open) => !open && close()}>
-      {/* One field, shaped as Rename session is: the title names it, Cancel closes it. */}
       <DialogContent
-        className="sm:max-w-md"
-        showCloseButton={false}
+        className="sm:max-w-xl"
         aria-describedby={undefined}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
@@ -178,20 +182,15 @@ export function ProjectDialogView({
           <DialogHeader>
             <DialogTitle>New project</DialogTitle>
           </DialogHeader>
-          <FieldGroup>
-            <Field>
-              <Input
-                id="project-name"
-                ref={nameInput}
-                aria-label="Project name"
-                value={name}
-                onChange={(e) => edit(e.target.value)}
-                onFocus={(event) => event.target.select()}
-                maxLength={200}
-                required
-              />
-            </Field>
-          </FieldGroup>
+          <ProjectFields
+            id={id}
+            draft={{ name, instructions }}
+            setDraft={(draft) => {
+              if (draft.name !== name) edit(draft.name);
+              if (draft.instructions !== instructions) editInstructions(draft.instructions);
+            }}
+            nameRef={nameInput}
+          />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close}>
               Cancel

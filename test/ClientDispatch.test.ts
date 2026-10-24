@@ -757,11 +757,13 @@ test("INV-01: save_project with a session saves both, and an unknown session is 
       assert.deepEqual((yield* registry.get).projects, []);
       yield* yield* receive({
         _tag: "save_project",
-        project: { id: "launch", name: "Launch" },
+        project: { id: "launch", name: "Launch", instructions: "Reply tersely." },
         assign: { cwd, sessionId: "one" },
       });
       const data = yield* registry.get;
-      assert.deepEqual(data.projects, [{ id: "launch", name: "Launch" }]);
+      assert.deepEqual(data.projects, [
+        { id: "launch", name: "Launch", instructions: "Reply tersely." },
+      ]);
       assert.equal(data.sessions.find((s) => s.sessionId === "one")?.projectId, "launch");
     }),
   );

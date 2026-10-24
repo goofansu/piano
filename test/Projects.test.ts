@@ -43,6 +43,30 @@ test("a project's instructions are saved trimmed, kept by a rename, cleared when
   assert.match(failure.message, /Project is unavailable/);
 });
 
+test("a project created with instructions keeps them, trimmed, and a plain save keeps them too", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "piano-projects-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = join(root, "registry.db");
+  seedRegistry(path, {});
+  const run = <A, E>(effect: Effect.Effect<A, E, Registry>) =>
+    Effect.runPromise(
+      effect.pipe(Effect.provide(RegistryLive), Effect.provideService(RegistryDatabasePath, path)),
+    );
+  const projects = () => run(Effect.flatMap(Registry, (r) => r.get)).then((d) => d.projects);
+  await run(
+    Effect.flatMap(Registry, (r) =>
+      r.saveProject({ id: "ship", name: " Ship ", instructions: "  Reply in French.\n" }),
+    ),
+  );
+  assert.deepEqual(await projects(), [
+    { id: "ship", name: "Ship", instructions: "Reply in French." },
+  ]);
+  await run(Effect.flatMap(Registry, (r) => r.saveProject({ id: "ship", name: "Ship v2" })));
+  assert.deepEqual(await projects(), [
+    { id: "ship", name: "Ship v2", instructions: "Reply in French." },
+  ]);
+});
+
 test("INV-01/07: deleting a project keeps its sessions, in no project, across a restart", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "piano-projects-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
