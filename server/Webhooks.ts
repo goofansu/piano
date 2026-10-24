@@ -42,6 +42,10 @@ export class Webhooks extends Context.Service<
   }
 >()("piano/Webhooks") {}
 
+/** Configured hooks, and pending jobs each may queue behind its in-flight request. */
+const maxHooks = 32;
+const perHook = 32;
+
 type Job = {
   hook: StoredWebhook;
   payload: WebhookPayload;
@@ -136,11 +140,13 @@ export const WebhooksLive = Layer.effect(
       if (job.result) yield* Deferred.succeed(job.result, result);
       if ((yield* stored).some((h) => h.id === hook.id)) last.set(hook.id, result);
     });
-    // One owner schedules at most one request per hook. Slow hooks retain only their own slot;
-    // up to 32 others can be pending. Wakeups coalesce, never retaining event data in the queue.
+    // One owner schedules at most one request per hook. Each hook queues up to `perHook` jobs
+    // behind its own request, so a slow receiver fills only its own queue and never another's;
+    // with at most `maxHooks` hooks, pending work stays bounded. Wakeups coalesce, never
+    // retaining event data in the queue.
     yield* Effect.gen(function* () {
       const index = pending.findIndex((job) => !active.has(job.hook.id));
-      if (index < 0 || active.size >= 32) {
+      if (index < 0) {
         yield* Queue.take(wake);
         return;
       }
@@ -175,7 +181,7 @@ export const WebhooksLive = Layer.effect(
     );
 
     const admit = Effect.fn("Webhooks.admit")(function* (job: Job) {
-      if (pending.length >= 32) {
+      if (pending.filter((queued) => queued.hook.id === job.hook.id).length >= perHook) {
         yield* Effect.logWarning("Webhook pending capacity reached; delivery dropped.");
         return false;
       }
@@ -219,8 +225,8 @@ export const WebhooksLive = Layer.effect(
             const hooks = yield* stored;
             const previous = input.id ? hooks.find((h) => h.id === input.id) : undefined;
             if (input.id && !previous) return yield* refused("Webhook no longer exists.");
-            if (!previous && hooks.length >= 32)
-              return yield* refused("At most 32 webhooks can be configured.");
+            if (!previous && hooks.length >= maxHooks)
+              return yield* refused(`At most ${maxHooks} webhooks can be configured.`);
             const hook: StoredWebhook = {
               id: previous?.id ?? randomUUID(),
               url: url.href,

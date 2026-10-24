@@ -11,7 +11,7 @@ import { PiCli } from "../server/PiCli.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
-import { WebhookFetch, Webhooks, WebhooksLive } from "../server/Webhooks.ts";
+import { WebhookFetch, Webhooks, WebhooksLive, WebhookTimeoutMs } from "../server/Webhooks.ts";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import { WEBHOOK_EVENTS, type WebhookPayload, type WebhookSave } from "../shared/webhooks.ts";
 import type { Snapshot } from "../shared/wire.ts";
@@ -43,6 +43,7 @@ const run = <A, E>(
   name: string,
   work: Effect.Effect<A, E, Webhooks | Registry | Scope.Scope>,
   fetch: typeof globalThis.fetch = globalThis.fetch,
+  timeoutMs = 10_000,
 ) =>
   Effect.runPromise(
     work.pipe(
@@ -50,6 +51,7 @@ const run = <A, E>(
       Effect.provide(WebhooksLive.pipe(Layer.provideMerge(RegistryLive))),
       Effect.provideService(RegistryDatabasePath, join(root, `${name}.db`)),
       Effect.provideService(WebhookFetch, fetch),
+      Effect.provideService(WebhookTimeoutMs, timeoutMs),
       Effect.provideService(AllowedOrigins, new Set(["https://piano.example"])),
     ),
   );
@@ -333,6 +335,58 @@ test("admission stays bounded under a stalled receiver; overflow and transport e
   );
 });
 
+test("one webhook's backlog never drops another webhook's deliveries or Test", async () => {
+  const requests: Received[] = [];
+  const logs: unknown[] = [];
+  // Receiver A never answers; B answers at once.
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    const response = await receive(requests)(url, init);
+    if (String(url).startsWith("https://stuck.example"))
+      return new Promise<Response>((_, reject) =>
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
+      );
+    return response;
+  };
+  await run(
+    "per-hook",
+    Effect.gen(function* () {
+      yield* registered;
+      const hooks = yield* Webhooks;
+      const stuck = yield* hooks.save({ ...input, url: "https://stuck.example/events" });
+      const healthy = yield* hooks.save({ ...input, events: ["session.failed"] });
+      for (let i = 0; i < 100; i++) yield* hooks.emit("session.completed", cwd, "s", snapshot);
+      yield* wait(() => requests.length === 1);
+      assert.ok(logs.length > 0, "the stuck webhook's own overflow is dropped and logged");
+      yield* hooks.emit("session.failed", cwd, "s", {
+        ...snapshot,
+        state: { ...snapshot.state, closure: { _tag: "exited", code: 3, detail: "boom" } },
+      });
+      const ping = yield* hooks.test(healthy.id).pipe(Effect.result);
+      assert.equal(ping._tag, "Success", JSON.stringify(ping));
+      assert.deepEqual(
+        requests
+          .filter((r) => r.headers.get("x-piano-hook-id") === healthy.id)
+          .map((r) => r.body.event),
+        ["session.failed", "ping"],
+      );
+      assert.equal(
+        requests.filter((r) => r.headers.get("x-piano-hook-id") === stuck.id).length,
+        1,
+        "the stuck webhook still has one request in flight",
+      );
+    }).pipe(
+      Effect.provide(
+        Logger.layer([
+          Logger.make(({ message }) => {
+            logs.push(message);
+          }),
+        ]),
+      ),
+    ),
+    fetch,
+  );
+});
+
 test("a test queued behind a slow delivery answers, and sends nothing, once its webhook is deleted", async () => {
   const requests: Received[] = [];
   let release!: () => void;
@@ -369,9 +423,7 @@ test("a test queued behind a slow delivery answers, and sends nothing, once its 
   );
 });
 
-test("real HTTP: redirects/non-2xx fail, a dead receiver times out at 10s without blocking other hooks", {
-  timeout: 20000,
-}, async () => {
+test("real HTTP: redirects/non-2xx fail, a dead receiver times out without blocking other hooks", async () => {
   const paths: string[] = [];
   const server = createServer((req, res) => {
     paths.push(req.url!);
@@ -398,7 +450,8 @@ test("real HTTP: redirects/non-2xx fail, a dead receiver times out at 10s withou
         const started = Date.now();
         const dead = yield* hooks.test(slow.id).pipe(Effect.forkChild);
         yield* wait(() => paths.includes("/dead"));
-        assert.equal((yield* hooks.test(fast.id).pipe(Effect.timeout(2000))).httpStatus, 204);
+        // Answered well before the dead receiver's request times out.
+        assert.equal((yield* hooks.test(fast.id).pipe(Effect.timeout(1500))).httpStatus, 204);
         for (const path of ["redirect", "fail"]) {
           const hook = yield* hooks.save({ ...input, url: `${url}/${path}` });
           const result = yield* hooks.test(hook.id);
@@ -408,9 +461,11 @@ test("real HTTP: redirects/non-2xx fail, a dead receiver times out at 10s withou
         const timedOut = yield* Fiber.join(dead);
         assert.equal(timedOut.status, "failed");
         assert.equal(timedOut.httpStatus, null);
-        assert.ok(Date.now() - started >= 9900);
+        assert.ok(Date.now() - started >= 2900);
         assert.deepEqual(paths.sort(), ["/dead", "/fail", "/ok", "/redirect"]);
       }),
+      globalThis.fetch,
+      3000,
     );
   } finally {
     server.closeAllConnections();
