@@ -67,8 +67,8 @@ export type GlobalCommandIntent =
   | { kind: "home" }
   /** Open Settings, at `section` when given. */
   | { kind: "settings"; section?: SettingsSection }
-  /** Open the New session page, for `projectId` when given. */
-  | { kind: "new-session"; projectId?: string }
+  /** Open the New session page. */
+  | { kind: "new-session" }
   /** Open the Projects index. */
   | { kind: "projects" }
   /** A project home's Project settings or Delete project, as the project's own menu runs it. */

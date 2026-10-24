@@ -45,6 +45,7 @@ import { NEW_SESSION_DRAFT } from "@/lib/messageDraft";
 import { findProject, newProjectCommand, projectDestinations } from "@/lib/projectCommands";
 import { folderFor } from "@/lib/sessionCatalog";
 import { completionTarget, directoryChoices } from "@/lib/sessionContext";
+import { startPage } from "@/lib/startPage";
 import { composerAction, composerInput, picker } from "@/lib/styles";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
@@ -60,7 +61,7 @@ interface Props {
   client: WorktreeClient;
   /** Picks the directory the session will run in; the page shows the store's `view.cwd`. */
   chooseDirectory: (cwd: string) => void;
-  /** The project a session started here joins. */
+  /** The project a session started here joins, whose name heads the page. */
   projectId?: string;
   onProjectChange: (projectId?: string) => void;
 }
@@ -87,7 +88,6 @@ export function NewSession({ state, client, chooseDirectory, projectId, onProjec
             state={state}
             client={client}
             chooseDirectory={chooseDirectory}
-            projectId={projectId}
             onProjectChange={onProjectChange}
             className="shrink-0"
             inputClassName="new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5"
@@ -108,7 +108,6 @@ export function NewSessionComposer({
   state,
   client,
   chooseDirectory,
-  projectId,
   onProjectChange,
   className,
   inputClassName,
@@ -116,7 +115,6 @@ export function NewSessionComposer({
   state: AppState;
   client: WorktreeClient;
   chooseDirectory: (cwd: string) => void;
-  projectId?: string;
   onProjectChange?: (projectId?: string) => void;
   className?: string;
   inputClassName?: string;
@@ -125,8 +123,9 @@ export function NewSessionComposer({
   const { run } = useCommands();
   // The client starts a fresh New page in the last directory used, else the first folder; a
   // project's New page starts without one, and its home in its most recent member's folder.
-  const cwd =
-    state.view.kind === "new" || state.view.kind === "project" ? (state.view.cwd ?? "") : "";
+  const page = startPage(state.view);
+  const cwd = page?.cwd ?? "";
+  const projectId = page?.projectId;
   const editor = useDraftEditor(NEW_SESSION_DRAFT);
   const [pickerOpen, setPickerOpen] = useState(false);
 

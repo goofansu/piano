@@ -83,10 +83,7 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       effects.openSettings(intent.section);
       break;
     case "new-session":
-      effects.openNew(
-        "cwd" in intent ? intent.cwd : undefined,
-        "projectId" in intent ? intent.projectId : undefined,
-      );
+      effects.openNew("cwd" in intent ? intent.cwd : undefined);
       break;
     case "projects":
       effects.openProjects();

@@ -20,6 +20,7 @@ import {
   type PendingTrust,
 } from "./lib/directoryTrust.ts";
 import * as FirstMessage from "./lib/firstMessage.ts";
+import { startPage } from "./lib/startPage.ts";
 
 export type { PendingCreate } from "./lib/firstMessage.ts";
 
@@ -107,7 +108,7 @@ export type Action =
     }
   /** Opens a page, leaving the session; see `opened` for what a page already on screen keeps. */
   | { type: "open"; page: Page }
-  /** Picks the New page's directory; ignored on any other view. */
+  /** Picks the directory of a page that starts sessions (see `startPage`); ignored on any other view. */
   | { type: "new_directory"; cwd: string };
 
 export function reduce(s: AppState, a: Action): AppState {
@@ -160,10 +161,10 @@ function reduceAction(s: AppState, a: Action): AppState {
         session: null,
         pendingCreate: null,
       };
-    case "new_directory":
-      return (s.view.kind === "new" || s.view.kind === "project") && s.view.cwd !== a.cwd
-        ? { ...s, view: { ...s.view, cwd: a.cwd } }
-        : s;
+    case "new_directory": {
+      const page = startPage(s.view);
+      return page && page.cwd !== a.cwd ? { ...s, view: { ...page, cwd: a.cwd } } : s;
+    }
     case "server":
       return applyServer(s, a.message);
   }

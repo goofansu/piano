@@ -131,12 +131,7 @@ export function ProjectHome({
       <div className={page}>
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
           {/* A session started here joins this project. */}
-          <NewSessionComposer
-            state={state}
-            client={client}
-            chooseDirectory={chooseDirectory}
-            projectId={project.id}
-          />
+          <NewSessionComposer state={state} client={client} chooseDirectory={chooseDirectory} />
           {sessions.length > 0 && (
             <ItemGroup aria-label="Sessions" className="gap-2">
               {sessions.map((s) => (
