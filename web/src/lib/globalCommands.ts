@@ -10,11 +10,14 @@ import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.ts";
 import {
-  deleteProjectCommand,
   findProject,
   newProjectCommand,
-  type ProjectCommandOf,
-  projectSettingsCommand,
+  type ProjectCommand,
+  type ProjectCommandIcon,
+  type ProjectCommandIntent,
+  type ProjectMenuCommandId,
+  projectCommands,
+  projectMenu,
 } from "./projectCommands.ts";
 import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
 import { focusedDirectory } from "./sessionContext.ts";
@@ -64,7 +67,7 @@ export type GlobalCommandIcon =
   | Appearance
   | "group"
   | "sort"
-  | "delete";
+  | ProjectCommandIcon;
 
 export type GlobalCommandIntent =
   | { kind: "home" }
@@ -74,8 +77,8 @@ export type GlobalCommandIntent =
   | { kind: "new-session" }
   /** Open the Projects index. */
   | { kind: "projects" }
-  /** The open page's header action (New project, Project settings, Delete project), as the page runs it. */
-  | PageCommandSource["intent"]
+  /** The open page's header action (New project, a project's menu row), as the page runs it. */
+  | ProjectCommandIntent
   /** Send this registry or Pi change. */
   | { kind: "send"; command: ClientCommand }
   | { kind: "toggle-sidebar" }
@@ -141,19 +144,20 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
   };
 }
 
-/** The descriptors a page's header action comes from. */
-type PageCommandSource =
-  | ProjectCommandOf<"project-dialog", "new">
-  | ProjectCommandOf<"project-settings" | "delete-project", "settings" | "delete">;
+/** Each row a project's menu lists, by its palette ID; a row the menu adds fails here until named. */
+const PROJECT_MENU_IDS = {
+  settings: "project-settings",
+  delete: "delete-project",
+} as const satisfies Record<ProjectMenuCommandId, GlobalCommandId>;
 
 /**
  * What the open page offers in its header, as the page's own commands describe it: on the Projects
- * index, New project; on a project's home, its menu's Project settings and Delete project (the home
- * itself starts sessions). The palette lists exactly these, so a page that adds a header action
- * gets its row, named as its button is, by construction.
+ * index, New project; on a project's home, its menu (`projectMenu`), manage rows then destructive
+ * (the home itself starts sessions). The palette lists exactly these, so a page or menu that adds a
+ * header action gets its row, named as its button is, by construction.
  */
 export function pageCommands(state: AppState): GlobalCommand[] {
-  const row = (id: GlobalCommandId, c: PageCommandSource): GlobalCommand => ({
+  const row = (id: GlobalCommandId, c: ProjectCommand): GlobalCommand => ({
     id,
     label: c.label,
     icon: c.icon,
@@ -165,10 +169,8 @@ export function pageCommands(state: AppState): GlobalCommand[] {
   if (view.kind === "projects") return [row("new-project", newProjectCommand(state))];
   const project = view.kind === "project" ? findProject(state, view.projectId) : undefined;
   if (!project) return [];
-  return [
-    row("project-settings", projectSettingsCommand(project)),
-    row("delete-project", deleteProjectCommand(state, project)),
-  ];
+  const menu = projectMenu(projectCommands(state, project));
+  return [...menu.manage, ...menu.destructive].map((c) => row(PROJECT_MENU_IDS[c.id], c));
 }
 
 /**

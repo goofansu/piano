@@ -110,8 +110,8 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
  * it as its own button and the home is where sessions start.
  */
 export interface ProjectMenuSections {
-  manage: ProjectCommand[];
-  destructive: ProjectCommand[];
+  manage: ProjectMenuCommand[];
+  destructive: ProjectMenuCommand[];
 }
 
 const MENU_SECTIONS = {
@@ -119,8 +119,14 @@ const MENU_SECTIONS = {
   destructive: ["delete"],
 } as const satisfies Record<keyof ProjectMenuSections, readonly ProjectCommandId[]>;
 
-const pick = (commands: readonly ProjectCommand[], ids: readonly ProjectCommandId[]) =>
-  commands.filter((c) => ids.includes(c.id));
+/** The commands a project's menu lists, across its sections. */
+export type ProjectMenuCommandId = (typeof MENU_SECTIONS)[keyof typeof MENU_SECTIONS][number];
+export type ProjectMenuCommand = ProjectCommand & { id: ProjectMenuCommandId };
+
+const pick = (commands: readonly ProjectCommand[], ids: readonly ProjectMenuCommandId[]) =>
+  commands.filter((c): c is ProjectMenuCommand =>
+    (ids as readonly ProjectCommandId[]).includes(c.id),
+  );
 
 /** A project's menu, from `projectCommands`' descriptors. */
 export function projectMenu(commands: readonly ProjectCommand[]): ProjectMenuSections {
