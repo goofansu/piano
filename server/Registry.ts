@@ -15,6 +15,8 @@ import {
   SESSION_TITLE_MAX,
   SessionPullRequestLink,
   SessionStats,
+  sameSession,
+  sessionKey,
   Workspace,
 } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
@@ -202,7 +204,7 @@ function decode(value: unknown): RegistryData {
   if (ids.size !== initial.projects.length || initial.projects.some((p) => !p.name.trim()))
     throw new Error("Duplicate project identities or blank project name.");
   if (
-    new Set(initial.sessions.map((s) => JSON.stringify([s.cwd, s.sessionId]))).size !==
+    new Set(initial.sessions.map((s) => sessionKey(s.cwd, s.sessionId))).size !==
     initial.sessions.length
   )
     throw new Error("Duplicate session references.");
@@ -409,7 +411,7 @@ export const RegistryLive = Layer.effect(
     }, Effect.uninterruptible);
     const now = () => new Date().toISOString();
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) =>
-      t.cwd === cwd && t.sessionId === sessionId;
+      sameSession(t, { cwd, sessionId });
     const currentIn = (d: RegistryData, expected: SessionEntry, link?: SessionLinkKey) => {
       const entry = d.sessions.find(isSession(expected.cwd, expected.sessionId));
       return entry && sameReference(entry, expected, link) ? entry : undefined;

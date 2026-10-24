@@ -17,14 +17,16 @@
  * resource invalidation), and finding the same facts again is not news for any browser.
  */
 import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
-import type {
-  FolderView,
-  HostInfo,
-  ProjectTrust,
-  ServerMessage,
-  SessionReference,
-  WorktreeDiscovery,
-  WorktreeView,
+import {
+  type FolderView,
+  type HostInfo,
+  type ProjectTrust,
+  type ServerMessage,
+  type SessionReference,
+  sameSession,
+  sessionKey,
+  type WorktreeDiscovery,
+  type WorktreeView,
 } from "../shared/wire.ts";
 import { type CoalescedReader, makeCoalescedReader } from "./CoalescedReader.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
@@ -65,7 +67,6 @@ const shapeOf = (data: RegistryData) =>
 /** The sessions an availability read judges. One decision, used both to read and to compare,
  * so what the reader reads and what starts it cannot drift apart. */
 const projectMembersOf = (data: RegistryData) => data.sessions.filter((s) => s.projectId);
-const memberKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, sessionId]);
 const membersOf = (data: RegistryData) =>
   JSON.stringify(projectMembersOf(data).map((s) => [s.cwd, s.sessionId]));
 /** The registry facts the view shows. Statistics and the Radius share are not among them; a
@@ -141,7 +142,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         seen: Observation,
       ) {
         const hosted = (cwd: string, sessionId: string) =>
-          running.some((h) => h.cwd === cwd && h.sessionId === sessionId);
+          running.some((h) => sameSession(h, { cwd, sessionId }));
         // A folder added after the run is left out until the next run, which its change already queued.
         const observed = data.folders.flatMap((path) => {
           const d = seen.discoveries.get(path);
@@ -225,7 +226,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
             unavailable:
               !s.projectId || hosted(s.cwd, s.sessionId)
                 ? undefined
-                : unavailable.get(memberKey(s.cwd, s.sessionId)),
+                : unavailable.get(sessionKey(s.cwd, s.sessionId)),
           }),
         );
         return {
@@ -329,7 +330,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
                   return false;
                 }
                 unavailable = new Map(
-                  members.map((s) => [memberKey(s.cwd, s.sessionId), judged(s.cwd, s.sessionId)]),
+                  members.map((s) => [sessionKey(s.cwd, s.sessionId), judged(s.cwd, s.sessionId)]),
                 );
                 // A newly registered folder may still be waiting on Git. Publish history
                 // against the folders already observed, just as a Git install does; shape

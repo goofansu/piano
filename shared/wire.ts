@@ -554,6 +554,13 @@ export const SessionReference = Schema.Struct({
 });
 export type SessionReference = typeof SessionReference.Type;
 
+/** A session's identity is its exact `cwd` string and `sessionId`; every key and comparison uses these. */
+export const sessionKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, sessionId]);
+export const sameSession = (
+  a: { readonly cwd: string; readonly sessionId: string },
+  b: { readonly cwd: string; readonly sessionId: string },
+) => a.cwd === b.cwd && a.sessionId === b.sessionId;
+
 /** What picking a worktree needs, from Git; not exact revisions or verification evidence. */
 export const WorktreeFacts = Schema.Struct({
   path: Schema.String,
