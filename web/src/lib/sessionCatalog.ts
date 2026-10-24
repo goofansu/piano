@@ -181,13 +181,15 @@ export interface SessionDestination {
 
 /**
  * Whether a session can be opened, and where: the one rule every link to a session follows. A
- * session opens when the catalog knows it and its history is there, at the catalog's directory;
- * otherwise it is "unlisted" and nothing offers to open it.
+ * session opens when the catalog offers it (it is not archived, as `sessionCatalog` decides for
+ * the sidebar and palette) and its history is there, at the catalog's directory; otherwise it is
+ * "unlisted" and nothing offers to open it. A `/s/<id>` address resolves through `catalogEntry`
+ * instead, so it still names an archived session.
  */
 export function sessionDestination(
   state: AppState,
   sessionId: string,
 ): SessionDestination | "unlisted" {
-  const entry = catalogEntry(state, sessionId);
+  const entry = sessionCatalog(state).find((s) => s.sessionId === sessionId);
   return entry && !entry.disabled ? { sessionId, cwd: entry.cwd, label: entry.label } : "unlisted";
 }
