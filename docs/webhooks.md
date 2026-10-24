@@ -101,8 +101,11 @@ restart; the last-delivery result lives only in memory and resets on restart. To
 from general database projections and all HTTP responses. Settings endpoints are:
 
 - `GET /api/settings/webhooks` → `[{id, url, hasToken, events, active, lastDelivery}]`
-- `PUT /api/settings/webhooks` with `{id?, url, token?, events, active}` → saved public row;
-  omitted token preserves it, null clears it
+- `PUT /api/settings/webhooks` with `{id?, url?, token?, events?, active}` → saved public row. A
+  new webhook needs `url` and `events`; for an existing `id`, an omitted `url`, `events` or token
+  keeps the stored value (the Active switch sends only `{id, active}`), and null clears the token.
+  A refusal answers `{error, field?}`, where `field` (`url`, `events` or `token`) names the editor
+  field it belongs to
 - `POST /api/settings/webhooks/remove` with `{id}`
 - `POST /api/settings/webhooks/test` with `{id}` → delivery result
 

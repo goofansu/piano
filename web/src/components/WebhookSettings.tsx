@@ -3,6 +3,7 @@ import {
   type Webhook,
   type WebhookDelivery,
   type WebhookEvent,
+  type WebhookField,
 } from "@shared/webhooks";
 import { MoreHorizontalIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -61,7 +62,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/co
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { listWebhooks, removeWebhook, saveWebhook, testWebhook } from "@/lib/api";
+import { ApiError, listWebhooks, removeWebhook, saveWebhook, testWebhook } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { pageCommands } from "@/lib/globalCommands";
 import { useObservation } from "@/lib/useObservation";
@@ -202,8 +203,8 @@ export function WebhookSettings() {
               setActive={(active) =>
                 void actions.run({
                   id: `active:${hook.id}`,
-                  run: () =>
-                    saveWebhook({ id: hook.id, url: hook.url, events: hook.events, active }),
+                  // Only what the switch changes: the row may predate an edit made elsewhere.
+                  run: () => saveWebhook({ id: hook.id, active }),
                   done: active ? "Webhook turned on" : "Webhook turned off",
                   fallback: "Could not save webhook.",
                 })
@@ -316,7 +317,12 @@ function WebhookEditor({
   // A failed save stays in the open dialog, on its fields; a saved one closes it with a toast.
   const actions = useSetupActions({ refresh, success: (text) => toast.success(text) });
   const busy = actions.running !== undefined;
-  const error = actions.error;
+  // The server names the field a refusal belongs to; one without a field shows below the form.
+  const [errorField, setErrorField] = useState<WebhookField | undefined>();
+  const errorAt = (field: WebhookField | undefined) =>
+    actions.error && errorField === field ? actions.error : undefined;
+  const urlError = errorAt("url");
+  const tokenError = errorAt("token");
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!events.length) {
@@ -332,6 +338,12 @@ function WebhookEditor({
           token: clearToken ? null : token || undefined,
           events,
           active,
+        }).catch((cause: unknown) => {
+          const field = cause instanceof ApiError ? cause.field : undefined;
+          setErrorField(
+            field === "url" || field === "events" || field === "token" ? field : undefined,
+          );
+          throw cause;
         }),
       done: hook ? "Webhook saved" : "Webhook added",
       fallback: "Could not save webhook.",
@@ -351,19 +363,20 @@ function WebhookEditor({
         </DialogHeader>
         <form className="flex flex-col gap-6" onSubmit={(e) => void submit(e)}>
           <FieldGroup>
-            <Field data-invalid={!!error}>
+            <Field data-invalid={!!urlError}>
               <FieldLabel htmlFor="webhook-url">URL</FieldLabel>
               <Input
                 id="webhook-url"
                 type="url"
                 required
                 value={url}
-                aria-invalid={!!error}
+                aria-invalid={!!urlError}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://example.com/piano"
               />
+              {urlError && <FieldError role="alert">{urlError}</FieldError>}
             </Field>
-            <Field>
+            <Field data-invalid={!!tokenError}>
               <FieldLabel htmlFor="webhook-token">
                 Bearer token <span className="font-normal text-ink-3">Optional</span>
               </FieldLabel>
@@ -375,6 +388,7 @@ function WebhookEditor({
                   type="password"
                   autoComplete="new-password"
                   value={token}
+                  aria-invalid={!!tokenError}
                   placeholder={hook?.hasToken && !clearToken ? "••••••••••••••••" : undefined}
                   aria-description={
                     hook?.hasToken && !clearToken ? "A token is saved; blank keeps it." : undefined
@@ -392,6 +406,7 @@ function WebhookEditor({
                   </InputGroupAddon>
                 )}
               </InputGroup>
+              {tokenError && <FieldError role="alert">{tokenError}</FieldError>}
             </Field>
             <FieldSet>
               <FieldLegend>Events</FieldLegend>
@@ -423,12 +438,13 @@ function WebhookEditor({
               {eventsError && !events.length && (
                 <FieldError role="alert">Select at least one event.</FieldError>
               )}
+              {errorAt("events") && <FieldError role="alert">{errorAt("events")}</FieldError>}
             </FieldSet>
             <Field orientation="horizontal" className="items-center gap-2.5">
               <Switch id="webhook-active" checked={active} onCheckedChange={setActive} />
               <FieldLabel htmlFor="webhook-active">Active</FieldLabel>
             </Field>
-            {error && <FieldError role="alert">{error}</FieldError>}
+            {errorAt(undefined) && <FieldError role="alert">{errorAt(undefined)}</FieldError>}
           </FieldGroup>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busy} onClick={close}>

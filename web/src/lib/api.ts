@@ -36,14 +36,17 @@ export const testWebhook = (id: string) => call(Endpoints.testWebhook, { body: {
 
 /**
  * Every failed request: the server's own `error` message when it sent one, otherwise the
- * endpoint's fallback. `status` is 0 when no response arrived. Aborts are rethrown unchanged.
+ * endpoint's fallback, and the form `field` the server said it belongs to. `status` is 0 when no
+ * response arrived. Aborts are rethrown unchanged.
  */
 export class ApiError extends Error {
   readonly status: number;
-  constructor(message: string, status: number) {
+  readonly field: string | undefined;
+  constructor(message: string, status: number, field?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.field = field;
   }
 }
 
@@ -97,7 +100,11 @@ async function call<Q extends IdParam, B extends Json | undefined, R extends Jso
       json.error
         ? json.error
         : failure(response.status);
-    throw new ApiError(message, response.status);
+    const field =
+      json && typeof json === "object" && "field" in json && typeof json.field === "string"
+        ? json.field
+        : undefined;
+    throw new ApiError(message, response.status, field);
   }
   const decoded = Schema.decodeUnknownExit(endpoint.response)(json);
   if (decoded._tag === "Failure") throw new ApiError(failure(response.status), response.status);

@@ -31,19 +31,23 @@ import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { downloadWorkspaceFile, readWorkspaceFile } from "./WorkspaceFiles.ts";
 import { handleSocket } from "./WsClient.ts";
 
-/** A failed request as the browser sees it: a status and the `error` message it shows. */
+/** A failed request as the browser sees it: a status, the `error` message it shows and, for a
+ * form's refusal, the `field` the message belongs to. */
 class ApiFailure extends Data.TaggedError("ApiFailure")<{
   readonly status: number;
   readonly error: string;
+  readonly field?: string;
 }> {}
 
 const fail = (status: number, error: string) => Effect.fail(new ApiFailure({ status, error }));
 
-/** A service's refusal: a tagged error whose `detail` is written for people. Its endpoint
- * declares the status (`refused`). SignInAttempts keeps token responses out of sign-in details (INV-11). */
+/** A service's refusal: a tagged error whose `detail` is written for people, and optionally the
+ * form `field` it belongs to. Its endpoint declares the status (`refused`). SignInAttempts keeps
+ * token responses out of sign-in details (INV-11). */
 interface Refusal {
   readonly _tag: string;
   readonly detail: string;
+  readonly field?: string;
 }
 
 const isRefusal = (error: unknown): error is Refusal =>
@@ -59,7 +63,13 @@ const failure = (endpoint: Endpoint, cause: Cause.Cause<unknown>) => {
   const error = Option.getOrUndefined(Cause.findErrorOption(cause));
   if (error instanceof ApiFailure) return Effect.succeed(error);
   if (endpoint.refused && isRefusal(error))
-    return Effect.succeed(new ApiFailure({ status: endpoint.refused, error: error.detail }));
+    return Effect.succeed(
+      new ApiFailure({
+        status: endpoint.refused,
+        error: error.detail,
+        ...(typeof error.field === "string" ? { field: error.field } : {}),
+      }),
+    );
   const { fallback } = endpoint;
   return Effect.logError(`${endpoint.method} ${endpoint.path} failed unexpectedly`, cause).pipe(
     Effect.as(
@@ -164,8 +174,8 @@ const route =
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.failCause(cause)
-            : Effect.map(failure(endpoint, cause), ({ status, error }) =>
-                respond({ error }, status),
+            : Effect.map(failure(endpoint, cause), ({ status, error, field }) =>
+                respond(field ? { error, field } : { error }, status),
               ),
         ),
       ),
