@@ -228,10 +228,7 @@ export const WebhooksLive = Layer.effect(
         );
         const url = input.url === undefined ? undefined : yield* receiverUrl(input.url);
         if (input.token && /[^\x21-\x7e]/.test(input.token))
-          return yield* refused(
-            "Bearer token must contain only visible ASCII characters, without spaces.",
-            "token",
-          );
+          return yield* refused("Use only visible ASCII characters, without spaces.", "token");
         return yield* Semaphore.withPermits(
           lock,
           1,
