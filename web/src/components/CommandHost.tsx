@@ -56,6 +56,7 @@ import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
+import { webhookEditor } from "@/lib/useWebhookEditor";
 import type { AppState } from "@/store";
 
 async function copySessionValue(value: string, label: string) {
@@ -220,6 +221,7 @@ export function CommandHost({
       setPreviewDetails(selectedPreview(state)?.instanceId ?? null);
       previewObservation.refresh();
     },
+    addWebhook: () => webhookEditor.open("new"),
   };
   const run = (command: Command) => {
     runCommand(command, effects);
@@ -234,7 +236,7 @@ export function CommandHost({
         state,
         radiusSignedIn,
         // The one global command context; "system" is next-themes' default before it reads storage.
-        global: { settingsOpen: !!settings, view, theme: theme ?? "system" },
+        global: { settings, view, theme: theme ?? "system" },
       }}
     >
       {children}

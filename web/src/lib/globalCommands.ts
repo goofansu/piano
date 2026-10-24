@@ -1,8 +1,9 @@
 /**
  * The commands that apply wherever the user is, described once: navigation, what the open page's
  * header offers (`pageCommands`), directory trust, the sidebar and its view, and appearance. The
- * command palette's Global commands group, the sidebar's View menu, the Projects index's header and
- * the New session page's trust toggle render these instead of each deciding.
+ * command palette's Global commands group, the sidebar's View menu, the Projects index's and
+ * Webhooks page's headers and the New session page's trust toggle render these instead of each
+ * deciding.
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand } from "../../../shared/wire.ts";
@@ -19,7 +20,12 @@ import {
   projectCommands,
   projectMenu,
 } from "./projectCommands.ts";
-import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
+import {
+  SETTINGS_SECTIONS,
+  type SettingsSection,
+  type SettingsSectionIconName,
+  settingsPage,
+} from "./routes.ts";
 import { focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
 
@@ -38,6 +44,7 @@ export type GlobalCommandId =
   | "new-session"
   | "projects"
   | "new-project"
+  | "add-webhook"
   | "project-settings"
   | "delete-project"
   | "trust"
@@ -79,6 +86,8 @@ export type GlobalCommandIntent =
   | { kind: "projects" }
   /** The open page's header action (New project, a project's menu row), as the page runs it. */
   | ProjectCommandIntent
+  /** Open the webhook editor on a new webhook, as the Webhooks page's header does. */
+  | { kind: "add-webhook" }
   /** Send this registry or Pi change. */
   | { kind: "send"; command: ClientCommand }
   | { kind: "toggle-sidebar" }
@@ -106,8 +115,11 @@ export interface GlobalCommand {
 }
 
 export interface GlobalCommandContext {
-  /** A Settings page is open, so the palette offers the way back instead of Settings. */
-  settingsOpen: boolean;
+  /**
+   * The open Settings section, or `null` when none is: the palette then offers the way back instead
+   * of Settings, and that page's header actions instead of the page beneath it.
+   */
+  settings: SettingsSection | null;
   view: SidebarView;
   /** The chosen appearance, for a surface that marks it; without it no appearance is checked. */
   theme?: string;
@@ -151,12 +163,29 @@ const PROJECT_MENU_IDS = {
 } as const satisfies Record<ProjectMenuCommandId, GlobalCommandId>;
 
 /**
- * What the open page offers in its header, as the page's own commands describe it: on the Projects
- * index, New project; on a project's home, its menu (`projectMenu`), manage rows then destructive
- * (the home itself starts sessions). The palette lists exactly these, so a page or menu that adds a
- * header action gets its row, named as its button is, by construction.
+ * What the open page offers in its header, as the page's own commands describe it: on Settings ›
+ * Webhooks, Add webhook; on the Projects index, New project; on a project's home, its menu
+ * (`projectMenu`), manage rows then destructive (the home itself starts sessions). An open Settings
+ * page covers the page beneath it, so only its own actions count. The palette lists exactly these,
+ * so a page or menu that adds a header action gets its row, named as its button is, by construction.
  */
-export function pageCommands(state: AppState): GlobalCommand[] {
+export function pageCommands(
+  state: AppState,
+  settings: SettingsSection | null = null,
+): GlobalCommand[] {
+  if (settings)
+    return settingsPage(settings) === "webhooks"
+      ? [
+          {
+            id: "add-webhook",
+            label: "Add webhook",
+            icon: "new",
+            group: "navigate",
+            enabled: true,
+            intent: { kind: "add-webhook" },
+          },
+        ]
+      : [];
   const row = (id: GlobalCommandId, c: ProjectCommand): GlobalCommand => ({
     id,
     label: c.label,
@@ -182,7 +211,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
   const trust = trustCommand(state, focusedDirectory(state)?.cwd);
   const theme = ctx.theme;
   return [
-    ctx.settingsOpen
+    ctx.settings
       ? {
           id: "home",
           label: "Home",
@@ -226,7 +255,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       enabled: true,
       intent: { kind: "projects" },
     },
-    ...pageCommands(state),
+    ...pageCommands(state, ctx.settings),
     ...(trust ? [trust] : []),
     {
       id: "toggle-sidebar",

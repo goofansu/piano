@@ -66,7 +66,7 @@ const selected: SessionView = {
 };
 const inSession: AppState = { ...home, view: { kind: "session" }, session: selected };
 const ctx: GlobalCommandContext = {
-  settingsOpen: false,
+  settings: null,
   view: { groupBy: "date", sortBy: "recent" },
   theme: "dark",
 };
@@ -222,7 +222,7 @@ test("search uses direct command synonyms, not related topics or opposite displa
     trusts: { "/repo": { required: true, trusted: true } },
   };
   const commands = [
-    ...globalCommands(state, { ...ctx, settingsOpen: true }),
+    ...globalCommands(state, { ...ctx, settings: "providers" }),
     ...sessionCommands(state, undefined, { radiusSignedIn: true }),
   ];
   const matches = (query: string) =>

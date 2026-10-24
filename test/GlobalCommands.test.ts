@@ -27,7 +27,7 @@ const onNewPage: AppState = {
   trusts: { "/repo": protectedDir, "/plain": { required: false, trusted: false } },
 };
 const ctx: GlobalCommandContext = {
-  settingsOpen: false,
+  settings: null,
   view: { groupBy: "date", sortBy: "recent" },
 };
 const labels = (state: AppState, c = ctx) =>
@@ -83,8 +83,8 @@ test("running trust flips the directory's trusted state", () => {
 test("the palette offers Settings, or Home while Settings is open", () => {
   assert.equal(labels(onNewPage)[0], "Settings");
   assert.ok(!labels(onNewPage).includes("Home"));
-  assert.equal(labels(onNewPage, { ...ctx, settingsOpen: true })[0], "Home");
-  assert.ok(!labels(onNewPage, { ...ctx, settingsOpen: true }).includes("Settings"));
+  assert.equal(labels(onNewPage, { ...ctx, settings: "providers" })[0], "Home");
+  assert.ok(!labels(onNewPage, { ...ctx, settings: "providers" }).includes("Settings"));
 });
 
 test("the palette offers Projects wherever the user is, named as the sidebar row is", () => {
@@ -93,7 +93,7 @@ test("the palette offers Projects wherever the user is, named as the sidebar row
   assert.equal(projects?.group, "navigate");
   assert.deepEqual(projects?.intent, { kind: "projects" });
   assert.ok(labels({ ...onNewPage, view: { kind: "session" } }).includes("Projects"));
-  assert.ok(labels(onNewPage, { ...ctx, settingsOpen: true }).includes("Projects"));
+  assert.ok(labels(onNewPage, { ...ctx, settings: "providers" }).includes("Projects"));
 });
 
 test("exactly the current grouping and sort are checked", () => {
@@ -187,5 +187,32 @@ test("on the Projects index the palette offers New project, which opens the New 
     newProject({ ...onNewPage, view: { kind: "session" } }),
     undefined,
     "a session offers its own Add to project: New project",
+  );
+});
+
+test("on Settings › Webhooks the palette offers Add webhook, which opens the webhook editor", () => {
+  const addWebhook = (settings: GlobalCommandContext["settings"], state = onNewPage) =>
+    globalCommands(state, { ...ctx, settings }).find((c) => c.label === "Add webhook");
+  const add = addWebhook("webhooks");
+  assert.ok(add);
+  const calls: unknown[][] = [];
+  const effects = new Proxy({} as CommandEffects, {
+    get:
+      (_, name) =>
+      (...args: unknown[]) => {
+        calls.push([name, ...args]);
+      },
+  });
+  assert.equal(runCommand(add, effects), true);
+  assert.deepEqual(calls, [["addWebhook"]]);
+  assert.equal(addWebhook(null), undefined, "a page outside Settings offers none");
+  assert.equal(addWebhook("mcp"), undefined, "another Settings page offers none");
+  const onProjects: AppState = { ...initialState, connected: true, view: { kind: "projects" } };
+  assert.equal(
+    globalCommands(onProjects, { ...ctx, settings: "webhooks" }).some(
+      (c) => c.label === "New project",
+    ),
+    false,
+    "Settings covers the page beneath it, so its header actions are not offered",
   );
 });

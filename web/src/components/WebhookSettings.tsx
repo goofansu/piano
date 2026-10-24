@@ -4,9 +4,11 @@ import {
   type WebhookDelivery,
   type WebhookEvent,
 } from "@shared/webhooks";
-import { MoreHorizontalIcon, PlusIcon, WebhookIcon } from "lucide-react";
+import { MoreHorizontalIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useCommands } from "@/components/CommandHost";
+import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import {
   Dialog,
   DialogContent,
@@ -61,8 +63,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { listWebhooks, removeWebhook, saveWebhook, testWebhook } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
+import { pageCommands } from "@/lib/globalCommands";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
+import { useWebhookEditor, webhookEditor } from "@/lib/useWebhookEditor";
 
 const host = (url: string) => {
   try {
@@ -102,7 +106,9 @@ const testToast = (result: WebhookDelivery) => {
 
 export function WebhookSettings() {
   const observed = useObservation("webhooks", (signal) => listWebhooks({ signal }));
-  const [editing, setEditing] = useState<Webhook | "new" | null>(null);
+  // Add webhook comes from `pageCommands`, which the palette lists too; both open this editor.
+  const { state, run, global } = useCommands();
+  const editing = useWebhookEditor();
   // Row changes answer with a toast, failures included; only a failed load stays on the page.
   const actions = useSetupActions<Webhook>({
     refresh: () => void observed.refresh(),
@@ -120,18 +126,17 @@ export function WebhookSettings() {
   return (
     <SettingsSectionFrame
       title="Webhooks"
-      actions={
-        <Button size="sm" onClick={() => setEditing("new")}>
-          <PlusIcon data-icon="inline-start" />
-          Add webhook
+      actions={pageCommands(state, global.settings).map((c) => (
+        <Button key={c.id} size="sm" disabled={!c.enabled} onClick={() => run(c)}>
+          <GlobalCommandIcon icon={c.icon} data-icon="inline-start" /> {c.label}
         </Button>
-      }
+      ))}
       dialogs={
         <>
           {editing && (
             <WebhookEditor
               hook={editing === "new" ? undefined : editing}
-              close={() => setEditing(null)}
+              close={webhookEditor.close}
               refresh={() => void observed.refresh()}
             />
           )}
@@ -203,7 +208,7 @@ export function WebhookSettings() {
                   fallback: "Could not save webhook.",
                 })
               }
-              edit={() => setEditing(hook)}
+              edit={() => webhookEditor.open(hook)}
               test={() =>
                 void actions.run({
                   id: `test:${hook.id}`,
