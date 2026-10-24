@@ -26,7 +26,7 @@ import {
   type SettingsSectionIconName,
   settingsPage,
 } from "./routes.ts";
-import { focusedDirectory } from "./sessionContext.ts";
+import { checkoutMissingAt, focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
 
 export type Appearance = "light" | "dark" | "system";
@@ -140,7 +140,7 @@ export function radioChoice(
  */
 export function trustCommand(state: AppState, cwd: string | undefined): GlobalCommand | undefined {
   if (!cwd) return undefined;
-  if (state.session?.cwd === cwd && state.session.state.checkoutMissing) return undefined;
+  if (checkoutMissingAt(state, cwd)) return undefined;
   const pending = !!pendingTrust(state, cwd);
   const trust = displayedTrust(state, cwd);
   if (!trust?.required) return undefined;

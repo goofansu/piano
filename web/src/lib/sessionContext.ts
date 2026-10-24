@@ -80,6 +80,18 @@ export function workspaceFor(state: AppState, cwd: string | undefined): Workspac
   return cwd === undefined ? undefined : state.workspaces.find((w) => w.path === cwd);
 }
 
+/**
+ * Pi cannot be asked about `cwd`: the selected session there reports its checkout gone, or the
+ * registry marks a session reference in that directory's checkout unavailable. The one rule behind
+ * Trust, New session here, Rename and the focused directory.
+ */
+export function checkoutMissingAt(state: AppState, cwd: string): boolean {
+  return (
+    (state.session?.cwd === cwd && !!state.session.state.checkoutMissing) ||
+    state.sessionReferences.some((r) => r.cwd === cwd && r.unavailable === "checkout")
+  );
+}
+
 export interface FocusedDirectory {
   cwd: string;
   /** The selected session's checkout is gone, so Pi cannot be asked about it. */
@@ -92,7 +104,7 @@ export function focusedDirectory(state: AppState): FocusedDirectory | undefined 
   if (page) return page.cwd ? { cwd: page.cwd, checkoutMissing: false } : undefined;
   const session = state.view.kind === "session" ? state.session : null;
   return session
-    ? { cwd: session.cwd, checkoutMissing: !!session.state.checkoutMissing }
+    ? { cwd: session.cwd, checkoutMissing: checkoutMissingAt(state, session.cwd) }
     : undefined;
 }
 
@@ -179,8 +191,8 @@ export function sessionWorking(state: AppState, target: SessionRef): boolean {
 /** Pi cannot run where the checkout or history is gone, and renaming starts Pi. */
 export function sessionCheckoutMissing(state: AppState, target: SessionRef): boolean {
   return (
-    (state.session?.cwd === target.cwd && !!state.session.state.checkoutMissing) ||
-    !!sessionReference(state, target)?.unavailable
+    checkoutMissingAt(state, target.cwd) ||
+    sessionReference(state, target)?.unavailable === "history"
   );
 }
 
@@ -220,7 +232,7 @@ export function sessionContext(state: AppState): SessionContext {
   const directory = sessionDirectories(state)(cwd);
   const { folder, checkout } = directory;
   const workspace = workspaceFor(state, session?.cwd);
-  const checkoutMissing = !!session?.state.checkoutMissing;
+  const checkoutMissing = !!session && checkoutMissingAt(state, session.cwd);
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;
   return {
     cwd,
