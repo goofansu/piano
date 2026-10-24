@@ -127,10 +127,6 @@ export function compileRedaction(): DisplayRedaction {
   return { text, value, wire };
 }
 
-export function redactDisplay(text: string, streaming = false): string {
-  return compileRedaction().text(text, streaming);
-}
-
 /** One rule for all outbound wire values, including notices, errors and snapshots: display text
  * is redacted, directory and file identities are not. */
 export function projectDisplay<T>(value: T): T {
