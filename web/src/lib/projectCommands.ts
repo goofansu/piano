@@ -1,7 +1,7 @@
 /**
  * Project policy for the client, described once: which projects a picker offers, what a project's
  * row offers (each command with whether it is available now and what running it means), whether a
- * project draft may be saved (`savableProjectDraft`, creating and editing alike), creating a
+ * project's menu sets apart (`projectMenu`), whether a project draft may be saved (`savableProjectDraft`, creating and editing alike), creating a
  * project and moving a session between projects (`sessionProjectMenu`), and whether a session can
  * start in a project. The sidebar, the session's Project menu, the phone sheet, the command palette
  * and the New session page render these and hand them to the one command host instead of each
@@ -70,6 +70,8 @@ export interface ProjectCommand {
   ariaLabel?: string;
   icon: ProjectCommandIcon;
   enabled: boolean;
+  /** Shown in the destructive style: Delete project. */
+  destructive?: true;
   intent: ProjectCommandIntent;
 }
 
@@ -102,6 +104,32 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
   ];
 }
 
+/**
+ * A project's menu, which the sidebar's project group and the project's home lay out alike: its
+ * rows, then the destructive row set apart. New session in project is not a row: the group offers
+ * it as its own button and the home is where sessions start.
+ */
+export interface ProjectMenuSections {
+  manage: ProjectCommand[];
+  destructive: ProjectCommand[];
+}
+
+const MENU_SECTIONS = {
+  manage: ["settings"],
+  destructive: ["delete"],
+} as const satisfies Record<keyof ProjectMenuSections, readonly ProjectCommandId[]>;
+
+const pick = (commands: readonly ProjectCommand[], ids: readonly ProjectCommandId[]) =>
+  commands.filter((c) => ids.includes(c.id));
+
+/** A project's menu, from `projectCommands`' descriptors. */
+export function projectMenu(commands: readonly ProjectCommand[]): ProjectMenuSections {
+  return {
+    manage: pick(commands, MENU_SECTIONS.manage),
+    destructive: pick(commands, MENU_SECTIONS.destructive),
+  };
+}
+
 /** Project settings: the dialog for `project`'s name and instructions. */
 export function projectSettingsCommand(
   project: Project,
@@ -125,6 +153,7 @@ export function deleteProjectCommand(
     label: "Delete project",
     icon: "delete",
     enabled: state.connected,
+    destructive: true,
     intent: { kind: "delete-project", project },
   };
 }
@@ -176,15 +205,6 @@ export function projectSettingsSave(
       ...(instructed && { instructions: instructions || null }),
     },
   };
-}
-
-/** One command of `project`'s. */
-export function projectCommand(
-  state: AppState,
-  project: Project,
-  id: ProjectCommandId,
-): ProjectCommand | undefined {
-  return projectCommands(state, project).find((c) => c.id === id);
 }
 
 /**
