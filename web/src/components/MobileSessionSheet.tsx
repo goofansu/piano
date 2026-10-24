@@ -23,13 +23,16 @@ type Page = "actions" | "projects";
 /** A full-width, 44px row; the sheet's own type size, not the 14px of a desktop menu. */
 const row = "h-11 w-full justify-start gap-3 px-3 text-base font-normal";
 
-/** The session's working directory and ID, selectable, for the header menu and the phone sheet. */
+/** The session's working directory, branch and ID, selectable, for the header menu and the phone sheet. */
 export function SessionDetails({
   cwd,
+  branch,
   sessionId,
   className,
 }: {
   cwd?: string;
+  /** Absent for a non-Git directory; the row then is not shown. */
+  branch?: string;
   sessionId?: string;
   className?: string;
 }) {
@@ -45,6 +48,12 @@ export function SessionDetails({
         <dt className="sr-only">Working directory</dt>
         <dd className="break-all">{cwd}</dd>
       </div>
+      {branch && (
+        <div className="min-w-0">
+          <dt className="sr-only">Git branch</dt>
+          <dd className="break-all">{branch}</dd>
+        </div>
+      )}
       <div className="min-w-0">
         <dt className="sr-only">Session ID</dt>
         <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
@@ -106,7 +115,7 @@ function ProjectCommandRow({
 export function MobileSessionSheet() {
   const { state } = useCommands();
   const { commands, run } = useSessionCommands();
-  const { sessionId } = sessionContext(state);
+  const { sessionId, branch } = sessionContext(state);
   const projects = useSessionProjectMenu();
   const session = state.session;
   const [page, setPage] = useState<Page>("actions");
@@ -137,7 +146,7 @@ export function MobileSessionSheet() {
           <>
             <SheetTitle className="sr-only">Session</SheetTitle>
             <div className="flex items-start gap-1 pl-3">
-              <SessionDetails cwd={session?.cwd} sessionId={sessionId} />
+              <SessionDetails cwd={session?.cwd} branch={branch} sessionId={sessionId} />
               {menu.details.map((c) => (
                 <SheetClose asChild key={c.id}>
                   <Button

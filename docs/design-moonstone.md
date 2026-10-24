@@ -145,15 +145,18 @@ pointer and 44px on touch screens.
 A session row is its title alone. Where it runs and which project it belongs to live in the session
 header and the sidebar's groupings, not on every row.
 
-The session header is the title with where the session runs beneath it, in Zed's form
-`folder ⇄ worktree / ⑂ branch · project` (worktree in mono, without Worktrunk's `folder.` prefix; no
-worktree segment for the folder itself), and at its end its controls: preview, pull request, menu. The session's state is the
-sidebar row's (the keys while it works, a dot otherwise); the header only announces it to screen
-readers, since a state is shown once. The context line runs at full length
-while it fits. When space runs out, the worktree, branch and project truncate down to about 6rem
-each, then drop out whole from the right, project first: the line may wrap, but only its first row
-shows. The folder always stays. The full path is in the session menu; the segments carry no
-tooltips, since they show their own text.
+The session header is one line, as Amp's is: the project crumb and the title with its menu
+glued to it (`Project / Title ⋯`, a shadcn Breadcrumb), then where the session runs as `folder
+⑂ branch` in the Directory picker's shape (no worktree segment: Worktrunk names a worktree after
+its branch, and the full path is in the menu's details), and at its end its controls: preview,
+pull request. The session's state is the sidebar row's (the keys while it works, a dot
+otherwise); the header only announces it to screen readers, since a state is shown once. The
+facts run at full length while they fit. When space runs out, folder and branch truncate down
+to about 6rem each, then drop out whole from the right, branch first: the row may wrap, but
+only its first line shows. The title group never drops and shrinks last. The crumb is hidden on
+phones, where the sheet's project page covers it. The branch is in the menu's details beside
+the path; the segments carry no tooltips, since they show their own text. The design is in
+[session views](session-views.md).
 
 The right sidebar (Changes, an open file) shares the conversation's sheet, split off by a hairline,
 rather than floating as a second card; its header has the same shape, a title with a line beneath
