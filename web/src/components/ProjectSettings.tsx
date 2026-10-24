@@ -1,4 +1,3 @@
-import { PROJECT_INSTRUCTIONS_MAX } from "@shared/wire";
 import { cn } from "cn";
 import { type Ref, useId } from "react";
 import {
@@ -12,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { ProjectDraft } from "@/lib/projectCommands";
+import { checkProjectDraft, type ProjectDraft } from "@/lib/projectCommands";
 
 /**
  * A project's settings: its name and instructions, saved together. A view over the command host's
@@ -65,7 +64,8 @@ export function ProjectSettingsDialog({
 
 /**
  * A project's two fields, Name and Instructions, as the New project and Project settings dialogs
- * both show them: one shape for creating and editing a project.
+ * both show them: one shape for creating and editing a project. Each field's count and invalid state
+ * are `checkProjectDraft`'s, the rule that also decides whether the dialog may save.
  */
 export function ProjectFields({
   id,
@@ -78,7 +78,7 @@ export function ProjectFields({
   setDraft: (draft: ProjectDraft) => void;
   nameRef?: Ref<HTMLInputElement>;
 }) {
-  const over = draft.instructions.length > PROJECT_INSTRUCTIONS_MAX;
+  const check = checkProjectDraft(draft);
   return (
     <FieldGroup>
       <Field>
@@ -87,8 +87,9 @@ export function ProjectFields({
           id={`${id}-name`}
           ref={nameRef}
           value={draft.name}
+          aria-invalid={check.name.over || undefined}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          maxLength={200}
+          maxLength={check.name.max}
           required
         />
       </Field>
@@ -97,17 +98,20 @@ export function ProjectFields({
         <Textarea
           id={`${id}-instructions`}
           aria-describedby={`${id}-instructions-count`}
-          aria-invalid={over || undefined}
+          aria-invalid={check.instructions.over || undefined}
           value={draft.instructions}
           onChange={(e) => setDraft({ ...draft, instructions: e.target.value })}
           className="max-h-[50dvh] min-h-48 font-mono"
         />
-        {/* The count, not a maxLength: a paste over the limit stays visible and the count says so, and Save stays off. */}
+        {/* The count, not a maxLength: a paste over the limit stays visible and the count says so, and Save stays off. It counts what saving saves: the trimmed text. */}
         <FieldDescription
           id={`${id}-instructions-count`}
-          className={cn("text-right text-xs tabular-nums", over ? "text-err" : "text-ink-3")}
+          className={cn(
+            "text-right text-xs tabular-nums",
+            check.instructions.over ? "text-err" : "text-ink-3",
+          )}
         >
-          {count.format(draft.instructions.length)} / {count.format(PROJECT_INSTRUCTIONS_MAX)}
+          {count.format(check.instructions.length)} / {count.format(check.instructions.max)}
         </FieldDescription>
       </Field>
     </FieldGroup>

@@ -498,6 +498,8 @@ export const sameWorkspace = (a: Workspace, b: Workspace) =>
 
 // ── Sidebar views ───────────────────────────────────────────────────────────
 
+/** A project name's length limit, in UTF-16 code units, as the browser counts them. */
+export const PROJECT_NAME_MAX = 200;
 /** Project instructions' length limit, in UTF-16 code units, as the browser counts them. */
 export const PROJECT_INSTRUCTIONS_MAX = 20_000;
 export const ProjectInstructions = Schema.String.check(
@@ -506,7 +508,7 @@ export const ProjectInstructions = Schema.String.check(
 );
 export const Project = Schema.Struct({
   id: Schema.String.check(Schema.isMinLength(1)),
-  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(PROJECT_NAME_MAX)),
   /** Added to Pi's system prompt for the project's sessions whenever Piano starts their Pi. */
   instructions: Schema.optional(ProjectInstructions),
 });
