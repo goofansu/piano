@@ -7,10 +7,12 @@
  * nothing here depends on render timing.
  */
 import type { ClientCommand, ServerMessage } from "@shared/wire";
+// Relative, not @shared: module tests load this file directly in Node.
+import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
 import { projectStartDirectory } from "./projectHome.ts";
-import { closureNeedsAttention, focusedDirectory, sessionReady } from "./sessionContext.ts";
+import { focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
 import { readStorage, writeStorage } from "./storage.ts";
 import type { Connection, ConnectionHandlers, DisconnectReason, SendDisposition } from "./ws.ts";

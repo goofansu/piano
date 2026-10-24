@@ -5,9 +5,10 @@
  * lives here so it can be checked without a browser.
  */
 // Relative, not @shared: module tests load this file directly in Node.
+import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import type { ClientCommand, ExtensionState } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import { closureNeedsAttention, sessionContext } from "./sessionContext.ts";
+import { sessionContext } from "./sessionContext.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
 /** Where a notice sits: above the transcript, below it, or in place of the composer. */

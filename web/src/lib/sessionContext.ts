@@ -3,13 +3,7 @@
  * project and readiness. Header, palette, sidebar and session view read these instead of each
  * looking the session up in the folder list themselves.
  */
-import type {
-  FolderView,
-  Project,
-  SessionClosure,
-  SessionReference,
-  Workspace,
-} from "@shared/wire";
+import type { FolderView, Project, SessionReference, Workspace } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { isWorking } from "../../../shared/sessionProjection.ts";
 import type { AppState } from "../store.ts";
@@ -330,10 +324,3 @@ export function sessionPane(state: AppState): SessionPane {
     composerDisabled: !sessionReady(state) || !t || input?.outcome === "starting",
   };
 }
-
-/** Whether a stop needs the person's attention: anything but a quiet release or a clean exit
- * may have cut work short. Toast and banner both follow this, never the display text. */
-export const closureNeedsAttention = (
-  closure: SessionClosure | undefined,
-): closure is SessionClosure =>
-  !!closure && closure._tag !== "released" && !(closure._tag === "exited" && closure.code === 0);

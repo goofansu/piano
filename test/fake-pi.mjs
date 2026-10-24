@@ -659,6 +659,7 @@ function handle(cmd) {
         });
         return; // stays streaming until answered (see extension_ui_response below is fire-and-forget; finish on answer)
       }
+      if (cmd.message.startsWith("exit cleanly")) process.exit(0);
       if (cmd.message.startsWith("crash")) {
         process.stderr.write("boom\n");
         process.exit(3);

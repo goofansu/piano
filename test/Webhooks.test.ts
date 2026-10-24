@@ -163,6 +163,15 @@ test("subscription/active filtering is paired with positive delivery; payloads a
           },
         },
       });
+      // Stops the browser does not flag are not failures: a quiet release and a clean exit.
+      for (const closure of [
+        { _tag: "released", detail: "Released" },
+        { _tag: "exited", code: 0, detail: "Pi exited with code 0" },
+      ] as const)
+        yield* hooks.emit("session.failed", cwd, "s", {
+          ...snapshot,
+          state: { ...snapshot.state, closure },
+        });
       // Tests share the same per-hook lane: their ping is a barrier for prior deliveries.
       yield* hooks.test(completed.id);
       yield* hooks.test(all.id);
