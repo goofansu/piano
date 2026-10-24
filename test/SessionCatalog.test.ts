@@ -171,7 +171,7 @@ test("lookup by ID resolves archived and closed-folder sessions for routing and 
   );
 });
 
-test("a session opens at the catalog's directory only while its history is there", () => {
+test("a session opens at the catalog's directory only while it is not archived and its history is there", () => {
   assert.deepEqual(sessionDestination(state, "open-member"), {
     sessionId: "open-member",
     cwd: "/work/repo.feature",
@@ -183,6 +183,11 @@ test("a session opens at the catalog's directory only while its history is there
     "a missing folder still leaves the history readable",
   );
   assert.equal(sessionDestination(state, "lost"), "unlisted", "lost history cannot be opened");
+  assert.equal(
+    sessionDestination(state, "archived"),
+    "unlisted",
+    "the server refuses to open an archived session",
+  );
   assert.equal(sessionDestination(state, "missing"), "unlisted");
 });
 

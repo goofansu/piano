@@ -58,9 +58,9 @@ import { NavigationContext } from "@/lib/useNavigation";
 import { useNewTranscriptViewport, useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
 /**
- * Where a session the transcript names opens, from the session catalog (`sessionDestination`),
- * so a dispatch row offers exactly the sessions the sidebar and palette open. Without a provider,
- * as in module tests, no session is offered.
+ * Where a session the transcript names opens, from the session catalog (`sessionDestination`):
+ * a dispatch row offers a session the sidebar and palette list (not archived) whose history is
+ * there. Without a provider, as in module tests, no session is offered.
  */
 export const SessionDestinationContext = createContext<
   (sessionId: string) => SessionDestination | "unlisted"
