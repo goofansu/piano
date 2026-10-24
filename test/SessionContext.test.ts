@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import { directoryTrust } from "../web/src/lib/directoryTrust.ts";
 import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
+import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
 import { catalogEntry } from "../web/src/lib/sessionCatalog.ts";
 import {
   completionTarget,
@@ -13,6 +14,7 @@ import {
   sessionContext,
   sessionMutable,
   sessionPane,
+  sessionReady,
 } from "../web/src/lib/sessionContext.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
@@ -68,13 +70,11 @@ const base: AppState = {
   ],
 };
 
-test("a worktree session reads its folder, worktree, branch, project and workspace from one place", () => {
+test("a worktree session reads its folder, worktree, branch and workspace from one place", () => {
   const ctx = sessionContext({ ...base, session: session("/work/repo.feature") });
-  assert.equal(ctx.ready, true);
   assert.equal(ctx.folderName, "repo");
   assert.equal(ctx.worktreeName, "feature");
   assert.equal(ctx.branch, "feature");
-  assert.equal(ctx.project?.name, "Launch");
   assert.equal(ctx.workspace?.id, "ws:/work/repo.feature");
   assert.equal(ctx.canOpenChanges, true);
   assert.equal(ctx.title, "Registry title", "an unnamed Pi session shows its registry title");
@@ -160,7 +160,8 @@ test("the header and the session's catalog row agree on where it runs", () => {
     ],
   ];
   for (const [name, state, cwd] of cases) {
-    const ctx = sessionContext({ ...state, session: session(cwd) });
+    const selected = { ...state, session: session(cwd) };
+    const ctx = sessionContext(selected);
     const row = catalogEntry(state, "s1");
     assert.ok(row, name);
     assert.deepEqual(
@@ -168,7 +169,7 @@ test("the header and the session's catalog row agree on where it runs", () => {
         folder: ctx.folderName,
         inWorktree: ctx.worktreeName !== undefined,
         branch: ctx.branch ?? "",
-        project: ctx.project,
+        project: sessionProjectMenu(selected, { cwd, sessionId: "s1" }).current,
         title: ctx.title,
       },
       {
@@ -185,14 +186,14 @@ test("the header and the session's catalog row agree on where it runs", () => {
 
 test("readiness needs a connected, settled attachment", () => {
   const current = { ...base, session: session("/repo") };
-  assert.equal(sessionContext(current).ready, true);
+  assert.equal(sessionReady(current), true);
   for (const state of [
     { ...current, connected: false },
     { ...current, resync: true },
     { ...current, selecting: { cwd: "/repo", sessionId: "s2" } },
     { ...current, selectionId: null },
   ]) {
-    assert.equal(sessionContext(state).ready, false);
+    assert.equal(sessionReady(state), false);
     assert.equal(sessionActivity(state, false).status, "Reconnecting");
   }
 });
