@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SessionState } from "../shared/wire.ts";
+import { type CommandEffects, runCommand } from "../web/src/lib/commands.ts";
 import {
   type GlobalCommandContext,
   globalCommands,
@@ -157,5 +158,34 @@ test("the palette keeps a Radius row, which opens Providers", () => {
     labels(onNewPage).filter((label) => label === "Radius").length,
     1,
     "Radius is offered once",
+  );
+});
+
+test("on the Projects index the palette offers New project, which opens the New project dialog", () => {
+  const onProjects: AppState = { ...initialState, connected: true, view: { kind: "projects" } };
+  const newProject = (state: AppState) =>
+    globalCommands(state, ctx).find((c) => c.label === "New project");
+  const create = newProject(onProjects);
+  assert.ok(create);
+  const calls: unknown[][] = [];
+  const effects = new Proxy({} as CommandEffects, {
+    get:
+      (_, name) =>
+      (...args: unknown[]) => {
+        calls.push([name, ...args]);
+      },
+  });
+  assert.equal(runCommand(create, effects), true);
+  assert.deepEqual(calls, [["openForm", { kind: "project", dialog: {} }]]);
+  assert.equal(
+    newProject({ ...onProjects, connected: false })?.enabled,
+    false,
+    "creating a project changes the registry",
+  );
+  assert.equal(newProject(onNewPage), undefined, "the New session page offers none");
+  assert.equal(
+    newProject({ ...onNewPage, view: { kind: "session" } }),
+    undefined,
+    "a session offers its own Add to project: New project",
   );
 });

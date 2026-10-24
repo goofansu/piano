@@ -95,8 +95,9 @@ The project's name in the context line already opens the home. Together with the
 
 ### Command palette
 
-Global commands gains "Projects", named as the sidebar row is. "New project" and "Open project: X"
-exist already. No new global shortcut.
+Global commands gains "Projects", named as the sidebar row is, and on the index the header's
+"New project" (Global commands lists the open page's header actions). "Open project: X" exists
+already. No new global shortcut.
 
 ### Routes
 

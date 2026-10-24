@@ -1,5 +1,5 @@
-import { PlusIcon } from "lucide-react";
 import { useCommands } from "@/components/CommandHost";
+import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { PaneBody, PaneHeader, PaneHeading } from "@/components/Pane";
 import { SettingsList, settingsRow } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
@@ -7,30 +7,30 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
-import { newProjectCommand } from "@/lib/projectCommands";
+import { pageCommands } from "@/lib/globalCommands";
 import { projectsIndex, projectsIndexContext } from "@/lib/projectsIndex";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
 /**
- * The Projects index: a listing page shaped as a Settings page is, with New project as its one
- * primary action. Each row is the way to one project's home; it carries no menu and no state, as
+ * The Projects index: a listing page shaped as a Settings page is, with its one primary action,
+ * New project, from `pageCommands`, which the palette lists too. Each row is the way to one project's home; it carries no menu and no state, as
  * the index is for scanning. Everything comes from what the browser already holds.
  */
 export function ProjectsIndex({ state }: { state: AppState }) {
   const { openProject } = useNavigation();
   const { run } = useCommands();
   const index = projectsIndex(state);
-  const create = newProjectCommand(state);
+  const actions = pageCommands(state);
   const now = Date.now();
   return (
     <>
       <PaneHeader
-        actions={
-          <Button size="sm" disabled={!create.enabled} onClick={() => run(create)}>
-            <PlusIcon data-icon="inline-start" /> {create.label}
+        actions={actions.map((c) => (
+          <Button key={c.id} size="sm" disabled={!c.enabled} onClick={() => run(c)}>
+            <GlobalCommandIcon icon={c.icon} data-icon="inline-start" /> {c.label}
           </Button>
-        }
+        ))}
       >
         <PaneHeading>
           <h1 className="truncate text-sm font-medium">Projects</h1>

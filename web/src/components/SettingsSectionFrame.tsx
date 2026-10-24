@@ -19,9 +19,16 @@ const ICONS: Record<SettingsSectionIconName, LucideIcon> = {
 };
 
 /** A Settings section's icon, as navigation and the command palette show it. */
-export function SettingsSectionIcon({ icon }: { icon: SettingsSectionIconName }) {
+export function SettingsSectionIcon({
+  icon,
+  ...props
+}: {
+  icon: SettingsSectionIconName;
+  /** A Button's leading or trailing icon, which sets its padding. */
+  "data-icon"?: "inline-start" | "inline-end";
+}) {
   const Icon = ICONS[icon];
-  return <Icon />;
+  return <Icon {...props} />;
 }
 
 /**
