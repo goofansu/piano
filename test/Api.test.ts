@@ -7,7 +7,9 @@ import type { WorkspaceWrittenFiles } from "../shared/wire.ts";
 import {
   ApiError,
   listDirectory,
+  listWebhooks,
   makeDirectory,
+  saveWebhook,
   workspaceChangedFile,
   workspaceChanges,
   workspaceFile,
@@ -273,4 +275,15 @@ test("INV-07: a batched read stops at an abort and refuses a reply naming anothe
     workspaceWrittenFiles(workspace(), paths),
     (error: unknown) => error instanceof ApiError && error.status === 502,
   );
+});
+
+test("webhooks: a receiver URL with a token reads back as stored, and saving other fields keeps it", async () => {
+  const url = "https://localhost/h?token=abc123";
+  const saved = await saveWebhook({ url, events: ["session.completed"], active: true });
+  assert.equal(saved.url, url);
+  assert.equal((await listWebhooks()).find((h) => h.id === saved.id)?.url, url);
+  await saveWebhook({ id: saved.id, active: false });
+  const after = (await listWebhooks()).find((h) => h.id === saved.id);
+  assert.equal(after?.url, url);
+  assert.equal(after?.active, false);
 });
