@@ -75,12 +75,6 @@ export interface ProjectCommand {
   intent: ProjectCommandIntent;
 }
 
-/** A project command of one intent kind and icon, for a surface that offers only that command. */
-export type ProjectCommandOf<
-  K extends ProjectCommandIntent["kind"],
-  I extends ProjectCommandIcon = ProjectCommandIcon,
-> = ProjectCommand & { icon: I; intent: Extract<ProjectCommandIntent, { kind: K }> };
-
 /**
  * What a project row offers, in order: New session in the project, Project settings (its name and
  * instructions), then Delete. Enablement, one rule per command:
@@ -99,8 +93,21 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
       // The project's home starts a session in the project, beside the ones it already has.
       intent: { kind: "open-project", projectId: project.id },
     },
-    projectSettingsCommand(project),
-    deleteProjectCommand(state, project),
+    {
+      id: "settings",
+      label: "Project settings",
+      icon: "settings",
+      enabled: true,
+      intent: { kind: "project-settings", projectId: project.id },
+    },
+    {
+      id: "delete",
+      label: "Delete project",
+      icon: "delete",
+      enabled: state.connected,
+      destructive: true,
+      intent: { kind: "delete-project", project },
+    },
   ];
 }
 
@@ -133,34 +140,6 @@ export function projectMenu(commands: readonly ProjectCommand[]): ProjectMenuSec
   return {
     manage: pick(commands, MENU_SECTIONS.manage),
     destructive: pick(commands, MENU_SECTIONS.destructive),
-  };
-}
-
-/** Project settings: the dialog for `project`'s name and instructions. */
-export function projectSettingsCommand(
-  project: Project,
-): ProjectCommandOf<"project-settings", "settings"> {
-  return {
-    id: "settings",
-    label: "Project settings",
-    icon: "settings",
-    enabled: true,
-    intent: { kind: "project-settings", projectId: project.id },
-  };
-}
-
-/** Delete project: asks first, then changes the registry, so it waits for a connection. */
-export function deleteProjectCommand(
-  state: AppState,
-  project: Project,
-): ProjectCommandOf<"delete-project", "delete"> {
-  return {
-    id: "delete",
-    label: "Delete project",
-    icon: "delete",
-    enabled: state.connected,
-    destructive: true,
-    intent: { kind: "delete-project", project },
   };
 }
 
@@ -231,10 +210,7 @@ export function openProjectCommand(project: Project): ProjectCommand {
  * New project: the project dialog, which creates a project and, with `assign`, files that session in
  * it. Saving changes the registry, so it waits for a connection.
  */
-export function newProjectCommand(
-  state: AppState,
-  assign?: SessionRef,
-): ProjectCommandOf<"project-dialog", "new"> {
+export function newProjectCommand(state: AppState, assign?: SessionRef): ProjectCommand {
   return {
     id: "new-project",
     label: "New project",
