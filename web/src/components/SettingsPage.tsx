@@ -130,7 +130,6 @@ function ProvidersSettings({
   const actions = useSetupActions<OAuthProvider, string>({
     refresh: () => void providerAccounts.refresh(),
     success: (text) => toast.success(text),
-    failure: (text) => toast.error(text),
   });
   const { confirmation: signOutTarget, signIn } = actions;
   const signingOut = actions.running;

@@ -9,7 +9,14 @@ export function useSetupActions<C = never, S = never>(options: SetupActionsOptio
     createSetupActions<C, S>({
       refresh: () => latest.current.refresh(),
       success: (text, id) => latest.current.success(text, id),
-      failure: options.failure && ((text) => latest.current.failure?.(text)),
+      // Where failures go is fixed when the section mounts; a reporter is read when it is called.
+      failure:
+        typeof options.failure === "function"
+          ? (text) => {
+              const { failure } = latest.current;
+              if (typeof failure === "function") failure(text);
+            }
+          : options.failure,
       newKey: options.newKey,
     }),
   );

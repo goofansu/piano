@@ -47,7 +47,6 @@ export function McpSettings() {
   const actions = useSetupActions<Confirmation, McpServer>({
     refresh: () => void setup.refresh(),
     success: (text) => toast.success(text),
-    failure: (text) => toast.error(text),
   });
   const { confirmation, signIn } = actions;
   const busy = actions.running !== undefined;

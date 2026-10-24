@@ -41,8 +41,8 @@ export interface RadiusSetupOptions {
   accounts: Pick<ProviderAccounts, "getState" | "subscribe" | "refresh" | "signedIn" | "signOut">;
   /** Shows a success toast; `id` replaces the toast that shares it. */
   toast: (message: string, options?: { id: string }) => void;
-  /** Shows a failed change's error toast. */
-  failure: (message: string) => void;
+  /** Reports a failed change; the error's toast when left out. */
+  failure?: (message: string) => void;
   environment?: ObservationEnvironment;
   newKey?: () => string;
 }
