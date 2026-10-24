@@ -9,10 +9,10 @@ import {
   MessageSquareIcon,
   PinIcon,
   PinOffIcon,
-  PlusIcon,
   ScrollTextIcon,
   ShareIcon,
   SquareIcon,
+  SquarePenIcon,
   TextCursorInputIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -82,7 +82,7 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   share: ShareIcon,
   archive: ArchiveIcon,
   delete: Trash2Icon,
-  new: PlusIcon,
+  new: SquarePenIcon,
 };
 
 export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {

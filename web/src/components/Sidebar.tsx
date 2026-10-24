@@ -2,10 +2,10 @@ import type { FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
 import {
   MoreHorizontalIcon,
-  PlusIcon,
   SearchIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
+  SquarePenIcon,
   TargetIcon,
   XIcon,
 } from "lucide-react";
@@ -151,7 +151,7 @@ export function Sidebar({ state }: Props) {
         <ViewMenu />
         {/* The sidebar's one primary action, filled, at the header's end. */}
         <IconButton label="New session" variant="default" onClick={() => openNew()}>
-          <PlusIcon />
+          <SquarePenIcon />
         </IconButton>
       </LayoutHeader>
       {/* The way to the Projects index leads the list; it is the current row while the index is open, as a selected session row is. */}
@@ -599,7 +599,7 @@ function FolderGroup({
             tooltip={create.label}
             onClick={() => run(create)}
           >
-            <PlusIcon />
+            <SquarePenIcon />
           </IconButton>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

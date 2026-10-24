@@ -7,6 +7,7 @@ import {
   MoreHorizontalIcon,
   PlusIcon,
   SettingsIcon,
+  SquarePenIcon,
   Trash2Icon,
 } from "lucide-react";
 import { type ComponentProps, useId, useRef } from "react";
@@ -42,7 +43,8 @@ import {
 
 /** The one map from a project command's icon name to its icon, menus and palette alike. */
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
-  new: PlusIcon,
+  new: SquarePenIcon,
+  "new-project": PlusIcon,
   settings: SettingsIcon,
   delete: Trash2Icon,
   folder: FolderIcon,

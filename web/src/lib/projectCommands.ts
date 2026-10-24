@@ -54,7 +54,14 @@ export type ProjectCommandId =
   | "new-project"
   | "assign";
 
-export type ProjectCommandIcon = "new" | "settings" | "delete" | "folder" | "remove";
+/** `new` starts a session (the pen, as the sidebar's New session); `new-project` adds a project (the plus). */
+export type ProjectCommandIcon =
+  | "new"
+  | "new-project"
+  | "settings"
+  | "delete"
+  | "folder"
+  | "remove";
 
 export type ProjectCommandIntent =
   /** Open the project's home; it sends nothing. */
@@ -250,7 +257,7 @@ export function newProjectCommand(
   return {
     id: "new-project",
     label: "New project",
-    icon: "new",
+    icon: "new-project",
     enabled: state.connected,
     intent: {
       kind: "project-dialog",
