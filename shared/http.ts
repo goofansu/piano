@@ -299,6 +299,8 @@ export const Endpoints = {
     response: Schema.Array(Webhook),
     noStore: true,
     refused: 400,
+    // The receiver URL is the user's own and is edited and saved back: redacting it would overwrite it.
+    redact: false,
     fallback: "Could not load webhooks.",
   }),
   saveWebhook: endpoint({
@@ -309,6 +311,8 @@ export const Endpoints = {
     response: Webhook,
     noStore: true,
     refused: 400,
+    // The receiver URL is the user's own and is edited and saved back: redacting it would overwrite it.
+    redact: false,
     fallback: "Could not save webhook.",
   }),
   removeWebhook: endpoint({
@@ -329,6 +333,8 @@ export const Endpoints = {
     response: WebhookDelivery,
     noStore: true,
     refused: 400,
+    // The receiver URL is the user's own and is edited and saved back: redacting it would overwrite it.
+    redact: false,
     fallback: "Could not test webhook.",
   }),
 
