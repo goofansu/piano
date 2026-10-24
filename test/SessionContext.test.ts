@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import { directoryTrust } from "../web/src/lib/directoryTrust.ts";
+import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
 import { catalogEntry } from "../web/src/lib/sessionCatalog.ts";
+import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import {
+  checkoutMissingAt,
   completionTarget,
   directoryChoices,
   focusedDirectory,
@@ -553,4 +556,50 @@ test("a session is selected, working and previewing by cwd and ID together", () 
     sessionWorking({ ...busyHost, session: null }, { cwd: "/repo", sessionId: "s1" }),
     true,
   );
+});
+
+test("a missing checkout is decided once: Trust, New session here, Rename and the focus agree", () => {
+  const trusts = {
+    "/work/repo.feature": { required: true, trusted: false },
+    "/closed": { required: true, trusted: false },
+  };
+  const gone = {
+    ...base,
+    trusts,
+    sessionReferences: [
+      ...base.sessionReferences,
+      sessionReference("/closed", "s1", { unavailable: "checkout" }),
+      sessionReference("/closed", "s2"),
+    ],
+  };
+  const cases = [
+    {
+      name: "the selected session reports its checkout missing",
+      state: { ...gone, session: session("/work/repo.feature", { checkoutMissing: true }) },
+      cwd: "/work/repo.feature",
+      missing: true,
+    },
+    {
+      name: "the registry marks the directory's checkout unavailable",
+      state: { ...gone, session: session("/closed", {}, { sessionId: "s2" }) },
+      cwd: "/closed",
+      missing: true,
+    },
+    {
+      name: "the checkout is present",
+      state: { ...gone, session: session("/work/repo.feature") },
+      cwd: "/work/repo.feature",
+      missing: false,
+    },
+  ];
+  for (const c of cases) {
+    const target = { cwd: c.cwd, sessionId: c.state.session?.sessionId ?? "s1" };
+    const commands = sessionCommands(c.state, target);
+    const enabled = (id: string) => commands.find((x) => x.id === id)?.enabled;
+    assert.equal(checkoutMissingAt(c.state, c.cwd), c.missing, c.name);
+    assert.equal(trustCommand(c.state, c.cwd) === undefined, c.missing, `${c.name}: Trust`);
+    assert.equal(enabled("new-session-here"), !c.missing, `${c.name}: New session here`);
+    assert.equal(enabled("rename"), !c.missing, `${c.name}: Rename`);
+    assert.equal(focusedDirectory(c.state)?.checkoutMissing, c.missing, `${c.name}: focus`);
+  }
 });

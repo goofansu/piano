@@ -6,6 +6,7 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import {
+  checkoutMissingAt,
   isSelectedSession,
   sessionCheckoutMissing,
   sessionContext,
@@ -337,7 +338,7 @@ export function sessionCommands(
       id: "new-session-here",
       label: "New session here",
       icon: "new",
-      enabled: !session.state.checkoutMissing,
+      enabled: !checkoutMissingAt(state, session.cwd),
       keywords: ["directory"],
       detail: session.cwd,
       intent: { kind: "new-session", cwd: session.cwd },
