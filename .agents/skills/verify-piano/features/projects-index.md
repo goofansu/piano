@@ -18,7 +18,7 @@ and session state live on the home. The page reads only what the browser already
 - `new-project`: the header's "New project" opens the New project dialog, shaped as Project
   settings is: Name and Instructions (optional), with a live count under Instructions
   ("0 / 20,000") that turns red past the limit while Create stays off. "Create project" saves both in one write, toasts
-  "Project saved" and lands on the new project's New page, as the sidebar's New project does, so
+  "Project created" and lands on the new project's New page, as the sidebar's New project does, so
   the project's first session already carries its instructions.
 - `address`: the tab title is `Projects - Piano`; back from a home returns to the index.
 - `empty`: with no projects the list is one line, "No projects yet", and New project stays in the

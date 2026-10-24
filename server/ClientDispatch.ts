@@ -223,10 +223,16 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         message: unansweredText(reason),
       }),
     },
-    // Registry writes reach every client's sidebar on their own.
+    // Answered as Delete project is: a toast once the registry holds the new project. Every
+    // client's sidebar hears the write on its own.
     save_project: {
       admission: "ordinary",
-      run: ({ project, assign }) => registry.saveProject(project, assign),
+      run: ({ project, assign }) =>
+        registry
+          .saveProject(project, assign)
+          .pipe(
+            Effect.andThen(send({ _tag: "toast", message: "Project created", level: "success" })),
+          ),
       unanswered: plainError,
     },
     delete_project: {

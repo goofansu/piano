@@ -43,7 +43,7 @@ test("a project's instructions are saved trimmed, kept by a rename, cleared when
   assert.match(failure.message, /Project is unavailable/);
 });
 
-test("a project created with instructions keeps them, trimmed, and a plain save keeps them too", async (t) => {
+test("a project created with instructions keeps them, trimmed; saving its ID again is refused", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "piano-projects-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const path = join(root, "registry.db");
@@ -61,9 +61,14 @@ test("a project created with instructions keeps them, trimmed, and a plain save 
   assert.deepEqual(await projects(), [
     { id: "ship", name: "Ship", instructions: "Reply in French." },
   ]);
-  await run(Effect.flatMap(Registry, (r) => r.saveProject({ id: "ship", name: "Ship v2" })));
+  const failure = await run(
+    Effect.flatMap(Registry, (r) =>
+      r.saveProject({ id: "ship", name: "Ship v2" }).pipe(Effect.flip),
+    ),
+  );
+  assert.match(failure.message, /Project already exists/);
   assert.deepEqual(await projects(), [
-    { id: "ship", name: "Ship v2", instructions: "Reply in French." },
+    { id: "ship", name: "Ship", instructions: "Reply in French." },
   ]);
 });
 

@@ -266,26 +266,38 @@ test("a shell fans out into fresh worktrees and reads each child's status, acros
       headers: { Origin: base },
     } as unknown as string[]);
     await once(socket, "open");
-    for (const child of [echo, asks])
-      socket.send(
-        JSON.stringify({
-          _tag: "save_project",
-          project: { id: "fan-out", name: "Fan-out" },
-          assign: { cwd: child.cwd, sessionId: child.handle!.sessionId },
-        }),
-      );
     const deadline = Date.now() + 10_000;
     let lines: SessionStatus[] = [];
-    while (lines.length < 2) {
-      assert.ok(Date.now() < deadline, "project membership never arrived");
-      const listedProject = await dispatch("list", "--project", "fan-out");
-      assert.equal(listedProject.code, 0, listedProject.stderr);
-      lines = listedProject.stdout
-        .trim()
-        .split("\n")
-        .filter(Boolean)
-        .map((l) => JSON.parse(l));
-    }
+    const listUntil = async (count: number) => {
+      while (lines.length < count) {
+        assert.ok(Date.now() < deadline, "project membership never arrived");
+        const listedProject = await dispatch("list", "--project", "fan-out");
+        assert.equal(listedProject.code, 0, listedProject.stderr);
+        lines = listedProject.stdout
+          .trim()
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => JSON.parse(l));
+      }
+    };
+    // save_project only creates, so the second session joins the project once it exists.
+    socket.send(
+      JSON.stringify({
+        _tag: "save_project",
+        project: { id: "fan-out", name: "Fan-out" },
+        assign: { cwd: echo.cwd, sessionId: echo.handle.sessionId },
+      }),
+    );
+    await listUntil(1);
+    socket.send(
+      JSON.stringify({
+        _tag: "assign_project",
+        cwd: asks.cwd,
+        sessionId: asks.handle!.sessionId,
+        projectId: "fan-out",
+      }),
+    );
+    await listUntil(2);
     socket.close();
     assert.deepEqual(
       new Map(lines.map((s) => [s.sessionId, [s.disposition, s.projectId]])),

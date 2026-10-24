@@ -715,7 +715,7 @@ test("PIN-50: metadata writes share unchanged collections and rows; value-equal 
       try {
         const revision = () => db.prepare("SELECT revision FROM registry_meta").get()!.revision;
         const priorRevision = revision();
-        yield* r.saveProject({ id: "project", name: "Project" });
+        yield* r.updateProject("project", { name: "Project" });
         yield* r.assignProject(cwd, "one", null);
         yield* r.removeFolder("/missing");
         yield* r.removeSession(cwd, "missing");
