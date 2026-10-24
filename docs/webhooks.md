@@ -89,11 +89,12 @@ Delivery is best-effort, with no automatic retry, log of past deliveries or rede
 Only 2xx counts as delivered. Redirects are refused and each request has a 10-second timeout.
 A failure can be ambiguous: the receiver may have acted before Piano lost the response.
 
-One background owner admits at most 32 pending deliveries and schedules separate per-hook lanes;
-a slow receiver does not stall the session observer or another receiver. At most 32 hooks can be
-configured, with one in-flight request per hook. Overflow is dropped and logged without URLs,
-tokens or payloads. Pending live events are rechecked for active/subscribed status before sending.
-Disabling or deleting a hook does not recall an already-sent request. Shutdown drops pending work.
+One background owner schedules separate per-hook lanes: at most 32 hooks can be configured, each
+with one in-flight request and at most 32 pending deliveries behind it. A slow receiver fills only
+its own lane; it does not stall the session observer or delay, drop or refuse another receiver's
+deliveries or Test. Overflow is dropped and logged without URLs, tokens or payloads. Pending live
+events are rechecked for active/subscribed status before sending. Disabling or deleting a hook
+does not recall an already-sent request. Shutdown drops pending work.
 
 SQLite schema 8 adds `webhooks (id, url, token, events, active, created_at)`. Preferences survive a
 restart; the last-delivery result lives only in memory and resets on restart. Tokens are excluded
