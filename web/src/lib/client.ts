@@ -11,6 +11,7 @@ import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
 import { projectStartDirectory } from "./projectHome.ts";
 import { closureNeedsAttention, focusedDirectory, sessionReady } from "./sessionContext.ts";
+import { startPage } from "./startPage.ts";
 import { readStorage, writeStorage } from "./storage.ts";
 import type { Connection, ConnectionHandlers, DisconnectReason, SendDisposition } from "./ws.ts";
 
@@ -101,12 +102,14 @@ export function createClient({
    * folder; a project's home starts in its most recent member's folder once the registry says which.
    */
   const withNewPageDirectory = (s: AppState) => {
-    if (s.view.kind === "project" && !s.view.cwd) {
-      const cwd = projectStartDirectory(s, s.view.projectId);
-      return cwd ? reduce(s, { type: "new_directory", cwd }) : s;
-    }
-    if (s.view.kind !== "new" || s.view.cwd || s.view.projectId) return s;
-    const cwd = lastDirectory.read() || s.folders[0]?.path;
+    const page = startPage(s.view);
+    if (!page || page.cwd) return s;
+    const cwd =
+      page.kind === "project"
+        ? projectStartDirectory(s, page.projectId)
+        : page.projectId
+          ? undefined
+          : lastDirectory.read() || s.folders[0]?.path;
     return cwd ? reduce(s, { type: "new_directory", cwd }) : s;
   };
 

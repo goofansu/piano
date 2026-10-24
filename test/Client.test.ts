@@ -710,6 +710,19 @@ test("a project's home starts in its most recent member's folder, at the folder'
     { kind: "project", projectId: "p1", cwd: "/repo.sort" },
     "a directory picked on the home stays picked",
   );
+  home.client.dispatch({ type: "open", page: { kind: "project", projectId: "p1" } });
+  assert.deepEqual(
+    home.client.getState().view,
+    { kind: "project", projectId: "p1", cwd: "/repo.sort" },
+    "opening the home already on screen keeps the picked directory",
+  );
+  home.client.dispatch({ type: "open", page: { kind: "projects" } });
+  home.client.dispatch({ type: "open", page: { kind: "project", projectId: "p1" } });
+  assert.deepEqual(
+    home.client.getState().view,
+    { kind: "project", projectId: "p1", cwd: "/repo" },
+    "arriving from another page starts afresh in the newest member's folder",
+  );
 
   const elsewhere = focusHarness({
     remembered: "/last",

@@ -19,6 +19,7 @@ import { abbrevHome, DETACHED_HEAD } from "./format.ts";
 import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
 import { findProject } from "./projectCommands.ts";
 import { folderFor, sessionDirectories } from "./sessionCatalog.ts";
+import { startPage } from "./startPage.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
 export type SessionRef = { cwd: string; sessionId: string };
@@ -94,8 +95,8 @@ export interface FocusedDirectory {
 
 /** The directory the main pane is about: the New page's or project home's, else the selected session's. */
 export function focusedDirectory(state: AppState): FocusedDirectory | undefined {
-  if (state.view.kind === "new" || state.view.kind === "project")
-    return state.view.cwd ? { cwd: state.view.cwd, checkoutMissing: false } : undefined;
+  const page = startPage(state.view);
+  if (page) return page.cwd ? { cwd: page.cwd, checkoutMissing: false } : undefined;
   const session = state.view.kind === "session" ? state.session : null;
   return session
     ? { cwd: session.cwd, checkoutMissing: !!session.state.checkoutMissing }
