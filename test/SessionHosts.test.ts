@@ -856,7 +856,9 @@ test("INV-01/02: a project deleted after preflight refuses registration before P
       const error = yield* hosts
         .create({ cwd, projectId: "launch", options: {} })
         .pipe(Effect.flip);
+      assert.ok(error instanceof SessionNotCreated, "nothing was registered, so nothing started");
       assert.equal(error.detail, unavailableProject);
+      assert.equal(error.checkoutUnconfirmed, false);
       const data = yield* registry.get;
       assert.deepEqual(data.folders, [cwd], "the race happened after the folder was registered");
       assert.deepEqual(data.sessions, [], "no rejected reference is inserted");

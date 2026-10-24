@@ -85,6 +85,11 @@ export class SessionCommandsError extends Data.TaggedError("SessionCommandsError
 
 const hostKey = (cwd: string, sessionId: string) => JSON.stringify([cwd, sessionId]);
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
+/** A creation's failure before its reference is written: nothing registered, Pi never started. */
+const notCreated = (e: PiSessionError) =>
+  new SessionNotCreated({ detail: e.detail, checkoutUnconfirmed: false });
+/** An open's failures stay its own: its reference was written before this call. */
+const reopenFailed = (e: PiSessionError) => e;
 
 export class SessionHosts extends Context.Service<
   SessionHosts,
@@ -253,8 +258,15 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           }),
         );
 
-      const start = (spec: OpenSpec, creation?: Creation): Effect.Effect<Opened, PiSessionError> =>
-        resolved(
+      /** `refuse` answers every failure before the reference is known to exist, resolution
+       * included: for a creation, nothing was registered and Pi never started. */
+      const start = <E>(
+        spec: OpenSpec,
+        refuse: (e: PiSessionError) => E,
+        creation?: Creation,
+      ): Effect.Effect<Opened, PiSessionError | E> => {
+        let registered = false;
+        return resolved(
           spec.cwd,
           spec.sessionId,
           ({ key, ref, host: existing }) =>
@@ -266,6 +278,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                 yield* registry
                   .addSession(ref.cwd, spec.sessionId, spec.name, creation.projectId)
                   .pipe(Effect.mapError((e) => rejected(e.detail)));
+              registered = true;
               const lock = yield* lockFor(key);
               // The project's instructions as of this launch; an edit reaches the next one.
               const data = yield* registry.get;
@@ -310,8 +323,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               return { session: host.session, launched: true };
             }),
           creation !== undefined,
-        );
-      const open = (spec: OpenSpec) => start(spec).pipe(Effect.map(({ session }) => session));
+        ).pipe(Effect.mapError((e) => (registered ? e : refuse(e))));
+      };
+      const open = (spec: OpenSpec) =>
+        start(spec, reopenFailed).pipe(Effect.map(({ session }) => session));
 
       /**
        * Where a new session's directory belongs. Git says what the directory is; Piano decides
@@ -400,6 +415,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           // membership survive a disconnected requester, as acquisition is server-owned.
           const { session } = yield* start(
             { cwd, sessionId: randomUUID(), model, thinkingLevel, name, dispatchedFrom },
+            notCreated,
             { projectId: spec.projectId },
           );
           return session;
@@ -513,7 +529,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       );
       return SessionHosts.of({
         open,
-        start: (spec) => start(spec),
+        start: (spec) => start(spec, reopenFailed),
         commands,
         create,
         rename,
