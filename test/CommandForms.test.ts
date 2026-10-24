@@ -148,13 +148,13 @@ test("archive and close folder name their subject; an untitled session reads Unt
   assert.equal(confirmation(online, { kind: "project", dialog: {} }), undefined);
 });
 
-test("project answers: a new project opens, create-and-assign stays put", () => {
+test("project answers: a new project opens its home, create-and-assign stays put", () => {
   const newProject = (draft: { name: string; instructions?: string }, s = online, dialog = {}) =>
     answerForm(s, { kind: "project", dialog }, { instructions: "", ...draft }, { newId });
   assert.deepEqual(newProject({ name: " Ship " }), {
     allowed: true,
     command: { _tag: "save_project", project: { id: "new-id", name: "Ship" }, assign: undefined },
-    openProject: "new-id",
+    open: { kind: "project", projectId: "new-id" },
   });
   assert.deepEqual(newProject({ name: "Ship" }, online, { assign: other }), {
     allowed: true,
@@ -247,8 +247,12 @@ function forms(
       published.push([workspaceId, sessionId]);
       return share(workspaceId, sessionId);
     },
-    openProject: (id) => opened.push(id),
-    openNew: () => leaving++,
+    // Each page as its address names it: a project's home, or the New page for a project.
+    openProject: (id) => opened.push(`/projects/${id}`),
+    openNew: (projectId?: string) => {
+      if (projectId) opened.push(`/projects/${projectId}/new`);
+      else leaving++;
+    },
     newId,
   });
   return {
@@ -335,7 +339,7 @@ test("an untitled selected session renames from the same empty title in the head
   assert.equal(subject.answer().allowed, true);
 });
 
-test("creating a project opens it; creating one for a session does not", () => {
+test("creating a project opens its home; from the New page's picker, the New page for it; for a session, nothing", () => {
   const created = forms();
   created.subject.open({ kind: "project", dialog: {} });
   created.subject.editProject({ name: " Ship ", instructions: "Reply in French." });
@@ -347,11 +351,19 @@ test("creating a project opens it; creating one for a session does not", () => {
       assign: undefined,
     },
   ]);
-  assert.deepEqual(created.opened, ["new-id"]);
+  assert.deepEqual(created.opened, ["/projects/new-id"]);
   assert.equal(created.subject.getState().form, null);
   // The next opening starts clean.
   created.subject.open({ kind: "project", dialog: {} });
   assert.equal(created.subject.answer().allowed, false);
+
+  // The New page's project picker keeps its page, with the project it created picked.
+  const picked = forms();
+  picked.subject.open({ kind: "project", dialog: { newPage: true } });
+  picked.subject.editProject({ name: "Ship", instructions: "" });
+  assert.equal(picked.subject.submit(), true);
+  assert.deepEqual(picked.opened, ["/projects/new-id/new"]);
+  assert.equal(picked.left(), 0);
 
   for (const dialog of [{ assign: other }]) {
     const { subject, opened, sent } = forms();

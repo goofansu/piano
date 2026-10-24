@@ -38,8 +38,12 @@ export function projectDestinations(
 
 type SessionRef = { cwd: string; sessionId: string };
 
-/** The New project dialog. With `assign`, the created project also takes that session. */
-export type ProjectDialog = { assign?: SessionRef };
+/**
+ * The New project dialog. With `assign`, the created project also takes that session. With
+ * `newPage`, the New page's project picker opened it, and the created project becomes that page's
+ * project; otherwise the created project's home opens.
+ */
+export type ProjectDialog = { assign?: SessionRef; newPage?: true };
 
 export type ProjectCommandId =
   | "new-session"
@@ -208,9 +212,13 @@ export function openProjectCommand(project: Project): ProjectCommand {
 
 /**
  * New project: the project dialog, which creates a project and, with `assign`, files that session in
- * it. Saving changes the registry, so it waits for a connection.
+ * it; with `newPage`, offered by the New page's project picker. Saving changes the registry, so it
+ * waits for a connection.
  */
-export function newProjectCommand(state: AppState, assign?: SessionRef): ProjectCommand {
+export function newProjectCommand(
+  state: AppState,
+  { assign, newPage }: ProjectDialog = {},
+): ProjectCommand {
   return {
     id: "new-project",
     label: "New project",
@@ -218,7 +226,11 @@ export function newProjectCommand(state: AppState, assign?: SessionRef): Project
     enabled: state.connected,
     intent: {
       kind: "project-dialog",
-      dialog: assign ? { assign: { cwd: assign.cwd, sessionId: assign.sessionId } } : {},
+      dialog: assign
+        ? { assign: { cwd: assign.cwd, sessionId: assign.sessionId } }
+        : newPage
+          ? { newPage }
+          : {},
     },
   };
 }
@@ -279,7 +291,7 @@ export function sessionProjectMenu(state: AppState, session: SessionRef): Sessio
     current,
     open: current ? openProjectCommand(current) : undefined,
     entry: { label: current ? "Move to project" : "Add to project", enabled: state.connected },
-    create: newProjectCommand(state, ref),
+    create: newProjectCommand(state, { assign: ref }),
     destinations: projectDestinations(state, current, { keepCurrent: false }).map((project) => ({
       project,
       command: assignProjectCommand(state, ref, project.id),

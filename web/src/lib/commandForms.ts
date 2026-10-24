@@ -4,7 +4,8 @@
  * form's rule, since the connection, the session's attachment or the project may have changed while
  * the form was open, and a form closes only after its answer was sent; a refused answer leaves it
  * open having sent nothing. Project settings starts from the project as saved when it opens. Sharing is a phase of its form (confirm, publishing, shared or failed) and publishes
- * at most once per opening. A new project not created for a session opens once it is saved.
+ * at most once per opening. A new project not created for a session opens once it is saved: its
+ * home, or the New page for it when the New page's project picker created it.
  * `CommandHost` and the dialogs render this state and nothing else. Nothing here depends on React.
  */
 // Relative, not @shared: module tests load this file directly in Node.
@@ -29,13 +30,18 @@ export interface FormAnswer {
   allowed: boolean;
   /** What submitting sends; present exactly when an allowed registry form. */
   command?: ClientCommand;
-  /** A new project, not created for a session, opens once it is saved. */
-  openProject?: string;
-  /** A deleted project's home or New page, when on screen, gives way to the plain New page. */
-  leaveProject?: string;
+  /**
+   * The page submitting opens. A new project not created for a session opens its home, or the New
+   * page for it when the New page's project picker created it; a deleted project's home or New page,
+   * when on screen, gives way to the plain New page.
+   */
+  open?: FormPage;
   /** What submitting a share form publishes; present exactly when an allowed share form. */
   share?: { workspaceId: string; sessionId: string };
 }
+
+/** A page a submitted form opens: a project's home, or the New page, for a project or none. */
+export type FormPage = { kind: "project"; projectId: string } | { kind: "new"; projectId?: string };
 
 export interface AnswerContext {
   /** Share publishes only while signed in to Radius. */
@@ -96,11 +102,11 @@ export function answerForm(
         allowed: true,
         command: { _tag: "delete_project", id: form.project.id },
         ...("projectId" in state.view && state.view.projectId === form.project.id
-          ? { leaveProject: form.project.id }
+          ? { open: { kind: "new" } }
           : {}),
       };
     case "project": {
-      const { assign } = form.dialog;
+      const { assign, newPage } = form.dialog;
       const saved = typeof input === "string" ? undefined : savableProjectDraft(input);
       if (!state.connected || !saved) return { allowed: false };
       const { name, instructions } = saved;
@@ -113,7 +119,9 @@ export function answerForm(
           project: { id, name, ...(instructions ? { instructions } : {}) },
           assign: assign && { cwd: assign.cwd, sessionId: assign.sessionId },
         },
-        ...(!assign ? { openProject: id } : {}),
+        ...(!assign
+          ? { open: newPage ? { kind: "new", projectId: id } : { kind: "project", projectId: id } }
+          : {}),
       };
     }
     // A project deleted while its settings are open refuses the save, as a vanished session refuses rename.
@@ -227,9 +235,10 @@ export interface CommandFormsOptions {
   send: (command: ClientCommand) => void;
   /** Publish a session to Radius; resolves once the publication is confirmed. */
   share: (workspaceId: string, sessionId: string) => Promise<SessionShare>;
+  /** A project's home. */
   openProject: (id: string) => void;
-  /** The plain New page, with no project. */
-  openNew: () => void;
+  /** The New page, for `projectId` or, without it, for no project. */
+  openNew: (projectId?: string) => void;
   newId?: () => string;
 }
 
@@ -352,8 +361,8 @@ export function createCommandForms({
       if (!answered.command) return false;
       send(answered.command);
       set(CLOSED);
-      if (answered.openProject) openProject(answered.openProject);
-      if (answered.leaveProject) openNew();
+      if (answered.open?.kind === "project") openProject(answered.open.projectId);
+      if (answered.open?.kind === "new") openNew(answered.open.projectId);
       return true;
     },
     cancel: () => {

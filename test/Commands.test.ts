@@ -88,7 +88,7 @@ test("enabled commands reach the effect their intent names", () => {
       ["openForm", { kind: "delete-project", project: launch }],
     ],
     [
-      newProjectCommand(online, other),
+      newProjectCommand(online, { assign: other }),
       ["openForm", { kind: "project", dialog: { assign: { cwd: "/repo", sessionId: "s2" } } }],
     ],
     [

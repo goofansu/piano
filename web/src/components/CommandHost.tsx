@@ -185,8 +185,9 @@ export function CommandHost({
     state,
     radiusSignedIn,
     send,
-    openProject: (id) => openNew(undefined, id),
-    openNew: () => openNew(),
+    openProject,
+    // The New page keeps the directory chosen there when it opens for a project.
+    openNew: (projectId) => openNew(undefined, projectId),
   });
   const { form } = forms;
   const renameInputRef = useRef<HTMLInputElement>(null);

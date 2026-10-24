@@ -6,14 +6,14 @@ import { type CommandForms, type CommandFormsState, createCommandForms } from ".
 
 /**
  * The command host's forms, answered against the latest render's state. `state`, `radiusSignedIn`,
- * `send` and `openProject` may change between renders.
+ * `send`, `openProject` and `openNew` may change between renders.
  */
 export function useCommandForms(deps: {
   state: AppState;
   radiusSignedIn: boolean;
   send: (command: ClientCommand) => void;
   openProject: (id: string) => void;
-  openNew: () => void;
+  openNew: (projectId?: string) => void;
 }): CommandForms & CommandFormsState {
   const latest = useRef(deps);
   latest.current = deps;
@@ -24,7 +24,7 @@ export function useCommandForms(deps: {
       send: (command) => latest.current.send(command),
       share: shareSession,
       openProject: (id) => latest.current.openProject(id),
-      openNew: () => latest.current.openNew(),
+      openNew: (projectId) => latest.current.openNew(projectId),
     }),
   );
   const state = useSyncExternalStore(forms.subscribe, forms.getState);
