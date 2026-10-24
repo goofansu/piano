@@ -12,7 +12,7 @@
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { SessionShare } from "../../../shared/share.ts";
-import type { ClientCommand, ServerMessage } from "../../../shared/wire.ts";
+import { type ClientCommand, SESSION_TITLE_MAX, type ServerMessage } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
 import {
@@ -67,7 +67,12 @@ export function answerForm(
     case "rename-session": {
       const { target } = form;
       const title = text.trim();
-      if (!canRenameSession(state, target) || !title || title === (target.title ?? ""))
+      if (
+        !canRenameSession(state, target) ||
+        !title ||
+        title.length > SESSION_TITLE_MAX ||
+        title === (target.title ?? "")
+      )
         return { allowed: false };
       const { cwd, sessionId } = target;
       return { allowed: true, command: { _tag: "rename_session", cwd, sessionId, title } };

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SessionShare } from "../shared/share.ts";
-import type { ClientCommand, Project, SessionState } from "../shared/wire.ts";
+import {
+  type ClientCommand,
+  decodeClientMessage,
+  type Project,
+  SESSION_TITLE_MAX,
+  type SessionState,
+} from "../shared/wire.ts";
 import {
   answerForm,
   confirmation,
@@ -79,6 +85,26 @@ test("the selected session's forms wait for its resync; other sessions do not", 
   assert.equal(answerForm(resyncing, rename(other), "Renamed").allowed, true);
   assert.equal(answerForm(resyncing, del(other)).allowed, true);
   assert.equal(answerForm(online, rename(selected), "Renamed").allowed, true);
+});
+
+test("a session title saves up to its limit, counted trimmed, in the form and on the wire alike", () => {
+  const atLimit = ` ${"t".repeat(SESSION_TITLE_MAX)} `;
+  const over = "t".repeat(SESSION_TITLE_MAX + 1);
+  assert.deepEqual(answerForm(online, rename(), atLimit), {
+    allowed: true,
+    command: {
+      _tag: "rename_session",
+      cwd: "/repo",
+      sessionId: "s2",
+      title: "t".repeat(SESSION_TITLE_MAX),
+    },
+  });
+  assert.deepEqual(answerForm(online, rename(), over), { allowed: false });
+  const wire = (title: string) =>
+    JSON.stringify({ _tag: "rename_session", cwd: "/repo", sessionId: "s2", title });
+  // The server would trim it to fit, so it is accepted.
+  assert.equal(decodeClientMessage(wire(atLimit))._tag, "rename_session");
+  assert.throws(() => decodeClientMessage(wire(over)));
 });
 
 test("rename's form follows the descriptor's rule when the checkout is gone", () => {

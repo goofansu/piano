@@ -1,4 +1,4 @@
-import type { ClientCommand, ServerMessage } from "@shared/wire";
+import { type ClientCommand, SESSION_TITLE_MAX, type ServerMessage } from "@shared/wire";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -281,7 +281,7 @@ export function CommandHost({
                   value={renaming ? forms.text : ""}
                   onChange={(event) => forms.edit(event.target.value)}
                   onFocus={(event) => event.target.select()}
-                  maxLength={200}
+                  maxLength={SESSION_TITLE_MAX}
                 />
               </Field>
             </FieldGroup>
