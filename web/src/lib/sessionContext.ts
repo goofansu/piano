@@ -9,7 +9,6 @@ import type {
   SessionClosure,
   SessionReference,
   Workspace,
-  WorktreeView,
 } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { isWorking } from "../../../shared/sessionProjection.ts";
@@ -191,12 +190,9 @@ export function sessionCheckoutMissing(state: AppState, target: SessionRef): boo
 }
 
 export interface SessionContext {
-  /** Session actions may be sent (see `sessionReady`). */
-  ready: boolean;
   /** The selected session's directory, or the one a first message is starting in. */
   cwd: string | undefined;
   folder: FolderView | undefined;
-  checkout: WorktreeView | undefined;
   /** Folder name, else the directory's last segment; Zed's `folder ⇄ worktree / ⑂ branch`. */
   folderName: string;
   /** Linked worktree's directory name; omitted for the folder's own checkout. */
@@ -205,7 +201,6 @@ export interface SessionContext {
   branch: string | undefined;
   title: string;
   sessionId: string | undefined;
-  project: Project | undefined;
   /** Registry identity of the selected session's directory: addresses its pull request. */
   workspace: Workspace | undefined;
   /** The workspace Changes previews: none for a non-Git folder. */
@@ -233,17 +228,14 @@ export function sessionContext(state: AppState): SessionContext {
   const checkoutMissing = !!session?.state.checkoutMissing;
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;
   return {
-    ready: sessionReady(state),
     cwd,
     folder,
-    checkout,
     folderName: directory.folderName,
     worktreeName: directory.worktreeName,
     branch: reference?.branch ?? undefined,
     // Pi's live name outranks the registry's saved title.
     title: sessionLabel(session?.state.sessionName || reference?.title),
     sessionId: session?.sessionId ?? undefined,
-    project: findProject(state, reference?.projectId),
     workspace,
     changesWorkspace,
     canOpenChanges: !!changesWorkspace && !checkoutMissing,
