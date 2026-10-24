@@ -75,7 +75,7 @@ export default function App() {
       <SidebarActivityContext.Provider value={anyWorking}>
         <NavigationContext.Provider value={navigation}>
           <SessionFilesContext value={sessionFiles}>
-            <CommandHost state={state} send={send}>
+            <CommandHost state={state} send={send} listen={client.listen}>
               <AppLayout
                 navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
                 navigation={

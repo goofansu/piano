@@ -1,4 +1,4 @@
-import type { ClientCommand } from "@shared/wire";
+import type { ClientCommand, ServerMessage } from "@shared/wire";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -167,10 +167,13 @@ export function SessionCommandMenuItem({
 export function CommandHost({
   state,
   send,
+  listen,
   children,
 }: {
   state: AppState;
   send: (command: ClientCommand) => void;
+  /** Hears each server frame, as `Client.listen` does. */
+  listen: (listener: (message: ServerMessage) => void) => () => void;
   children: React.ReactNode;
 }) {
   const { openNew, openProjects, openProject, openPanel, openSettings, closeSettings, settings } =
@@ -188,6 +191,7 @@ export function CommandHost({
     openProject,
     // The New page keeps the directory chosen there when it opens for a project.
     openNew: (projectId) => openNew(undefined, projectId),
+    listen,
   });
   const { form } = forms;
   const renameInputRef = useRef<HTMLInputElement>(null);

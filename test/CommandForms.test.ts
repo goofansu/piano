@@ -203,7 +203,7 @@ test("deleting a project asks first, saying its sessions move to No project", ()
   );
 });
 
-test("deleting the project on screen leaves for the New page; deleting another stays put", () => {
+test("deleting the project on screen leaves for the New page once it is gone; deleting another stays put", () => {
   for (const [view, leaves] of [
     [{ kind: "project", projectId: "p1" }, true],
     [{ kind: "new", projectId: "p1" }, true],
@@ -211,11 +211,36 @@ test("deleting the project on screen leaves for the New page; deleting another s
     [{ kind: "session" }, false],
   ] as const) {
     const { subject, sent, left, setState } = forms();
-    setState({ ...withWorkspace, view });
+    setState({ ...withWorkspace, view, projects: [launch] });
     subject.open(deleteProject);
     assert.equal(subject.submit(), true);
     assert.deepEqual(sent, [{ _tag: "delete_project", id: "p1" }]);
+    // The project's page stays until the server's registry no longer has it.
+    subject.settle();
+    assert.equal(left(), 0, JSON.stringify(view));
+    setState({ ...withWorkspace, view, projects: [] });
+    subject.settle();
+    subject.settle();
     assert.equal(left(), leaves ? 1 : 0, JSON.stringify(view));
+  }
+});
+
+test("a delete the server refuses, or one cut off by a lost connection, stays on the project's page", () => {
+  const view = { kind: "project", projectId: "p1" } as const;
+  for (const fail of ["error", "disconnect"] as const) {
+    const { subject, left, setState } = forms();
+    setState({ ...withWorkspace, view, projects: [launch] });
+    subject.open(deleteProject);
+    assert.equal(subject.submit(), true);
+    if (fail === "error") subject.hear({ _tag: "error", message: "Project not deleted" });
+    else {
+      setState({ ...withWorkspace, view, projects: [launch], connected: false });
+      subject.settle();
+    }
+    // A later registry without the project (deleted elsewhere) is not this submit's answer.
+    setState({ ...withWorkspace, view, projects: [] });
+    subject.settle();
+    assert.equal(left(), 0, fail);
   }
 });
 
@@ -351,8 +376,15 @@ test("creating a project opens its home; from the New page's picker, the New pag
       assign: undefined,
     },
   ]);
-  assert.deepEqual(created.opened, ["/projects/new-id"]);
   assert.equal(created.subject.getState().form, null);
+  // Its home opens once the server's registry has it, and only once.
+  created.subject.settle();
+  assert.deepEqual(created.opened, []);
+  const ship: Project = { id: "new-id", name: "Ship", instructions: "Reply in French." };
+  created.setState({ ...withWorkspace, projects: [ship] });
+  created.subject.settle();
+  created.subject.settle();
+  assert.deepEqual(created.opened, ["/projects/new-id"]);
   // The next opening starts clean.
   created.subject.open({ kind: "project", dialog: {} });
   assert.equal(created.subject.answer().allowed, false);
@@ -362,6 +394,8 @@ test("creating a project opens its home; from the New page's picker, the New pag
   picked.subject.open({ kind: "project", dialog: { newPage: true } });
   picked.subject.editProject({ name: "Ship", instructions: "" });
   assert.equal(picked.subject.submit(), true);
+  picked.setState({ ...withWorkspace, projects: [{ id: "new-id", name: "Ship" }] });
+  picked.subject.settle();
   assert.deepEqual(picked.opened, ["/projects/new-id/new"]);
   assert.equal(picked.left(), 0);
 
@@ -371,8 +405,22 @@ test("creating a project opens its home; from the New page's picker, the New pag
     subject.editProject({ name: "Ship", instructions: "" });
     assert.equal(subject.submit(), true);
     assert.equal(sent.length, 1);
+    subject.settle();
     assert.deepEqual(opened, []);
   }
+});
+
+test("a new project the server fails to save opens nothing", () => {
+  const { subject, opened, setState } = forms();
+  subject.open({ kind: "project", dialog: {} });
+  subject.editProject({ name: "Ship", instructions: "" });
+  assert.equal(subject.submit(), true);
+  // A failed session start is that selection's answer, not the save's.
+  subject.hear({ _tag: "error", message: "Session not started", selectionId: "sel" });
+  subject.hear({ _tag: "error", message: "Project not saved" });
+  setState({ ...withWorkspace, projects: [{ id: "new-id", name: "Ship" }] });
+  subject.settle();
+  assert.deepEqual(opened, []);
 });
 
 test("Project settings starts from the project as saved and sends only what changed", () => {

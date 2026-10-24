@@ -5,12 +5,14 @@
  * the form was open, and a form closes only after its answer was sent; a refused answer leaves it
  * open having sent nothing. Project settings starts from the project as saved when it opens. Sharing is a phase of its form (confirm, publishing, shared or failed) and publishes
  * at most once per opening. A new project not created for a session opens once it is saved: its
- * home, or the New page for it when the New page's project picker created it.
+ * home, or the New page for it when the New page's project picker created it. That page, and the New
+ * page a deleted project's page gives way to, waits for the page's state to show the change (`settle`);
+ * a server error or a dropped connection first leaves the user where they are.
  * `CommandHost` and the dialogs render this state and nothing else. Nothing here depends on React.
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { SessionShare } from "../../../shared/share.ts";
-import type { ClientCommand } from "../../../shared/wire.ts";
+import type { ClientCommand, ServerMessage } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
 import {
@@ -31,9 +33,9 @@ export interface FormAnswer {
   /** What submitting sends; present exactly when an allowed registry form. */
   command?: ClientCommand;
   /**
-   * The page submitting opens. A new project not created for a session opens its home, or the New
-   * page for it when the New page's project picker created it; a deleted project's home or New page,
-   * when on screen, gives way to the plain New page.
+   * The page submitting opens once the server confirms the change. A new project not created for a
+   * session opens its home, or the New page for it when the New page's project picker created it; a
+   * deleted project's home or New page, when on screen, gives way to the plain New page.
    */
   open?: FormPage;
   /** What submitting a share form publishes; present exactly when an allowed share form. */
@@ -263,6 +265,13 @@ export interface CommandForms {
   submit: () => boolean;
   /** Close the open form; ignored while a share is publishing. */
   cancel: () => void;
+  /**
+   * Open the page the last submit waits on once the page's state shows its change: the new project
+   * saved, or the deleted one gone. A dropped connection drops it. Call after each change of state.
+   */
+  settle: () => void;
+  /** Hear a server frame: an error, which the server does not tie to a registry change, drops the waiting page. */
+  hear: (message: ServerMessage) => void;
 }
 
 /** The forms whose input is a project draft rather than a title. */
@@ -271,6 +280,14 @@ const editsProject = (form: CommandForm) =>
 
 export const SHARE_UNCONFIRMED =
   "Sharing could not be confirmed. Check Radius artifacts before sharing again.";
+
+/** Whether `state` shows the change `command` makes, so the page it opens can show it. */
+const confirmedIn = (state: AppState, command: ClientCommand) =>
+  command._tag === "save_project"
+    ? !!findProject(state, command.project.id)
+    : command._tag === "delete_project"
+      ? !findProject(state, command.id)
+      : true;
 
 const CLOSED: CommandFormsState = {
   form: null,
@@ -289,6 +306,8 @@ export function createCommandForms({
   newId,
 }: CommandFormsOptions): CommandForms {
   let state = CLOSED;
+  /** The page a submitted form opens once the server confirms its command. */
+  let waiting: { page: FormPage; command: ClientCommand } | null = null;
   const listeners = new Set<() => void>();
   const set = (next: CommandFormsState) => {
     state = next;
@@ -360,13 +379,28 @@ export function createCommandForms({
       }
       if (!answered.command) return false;
       send(answered.command);
+      waiting = answered.open ? { page: answered.open, command: answered.command } : null;
       set(CLOSED);
-      if (answered.open?.kind === "project") openProject(answered.open.projectId);
-      if (answered.open?.kind === "new") openNew(answered.open.projectId);
       return true;
     },
     cancel: () => {
       if (state.form && state.share.phase !== "publishing") set(CLOSED);
+    },
+    settle: () => {
+      if (!waiting) return;
+      const app = getState();
+      if (!app.connected) {
+        waiting = null;
+        return;
+      }
+      if (!confirmedIn(app, waiting.command)) return;
+      const { page } = waiting;
+      waiting = null;
+      if (page.kind === "project") openProject(page.projectId);
+      else openNew(page.projectId);
+    },
+    hear: (message) => {
+      if (message._tag === "error" && !message.selectionId) waiting = null;
     },
   };
 }
