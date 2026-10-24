@@ -261,10 +261,10 @@ export class Registry extends Context.Service<
     /** A known project. */
     readonly requireProject: (id: string) => Effect.Effect<Project, RegistryLookupError>;
     /**
-     * Create a project (or rename one, as `updateProject` does without refusing an unknown ID).
-     * Given instructions are saved trimmed; absent ones leave the project's as they are. With
-     * `assign`, that session joins it in the same write: one change announcement, and an
-     * unregistered session rejects the whole save.
+     * Create a project, its name and any instructions trimmed. An existing ID is refused and
+     * left as it is: `updateProject` is the one way to change a project. With `assign`, that
+     * session joins it in the same write: one change announcement, and an unregistered session
+     * rejects the whole save.
      */
     readonly saveProject: (
       project: Pick<Project, "id" | "name" | "instructions">,
@@ -495,18 +495,15 @@ export const RegistryLive = Layer.effect(
             throw new RegistryError({
               detail: "Session reference is unavailable. Refresh and try again.",
             });
-          // A save without instructions (a rename) keeps the project's; `updateProject` clears them.
-          const existing = d.projects.find((p) => p.id === parsed.id);
+          if (d.projects.some((p) => p.id === parsed.id))
+            throw new RegistryError({ detail: "Project already exists. Refresh and try again." });
           const instructions = parsed.instructions?.trim();
           const next = {
-            ...existing,
             id: parsed.id,
             name: parsed.name.trim(),
             ...(instructions ? { instructions } : {}),
           };
-          const projects = d.projects.some((p) => p.id === next.id)
-            ? d.projects.map((p) => (p.id === next.id ? next : p))
-            : [...d.projects, next];
+          const projects = [...d.projects, next];
           const sessions = assign
             ? d.sessions.map((s) =>
                 isSession(assign.cwd, assign.sessionId)(s) ? { ...s, projectId: next.id } : s,
