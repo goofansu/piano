@@ -14,11 +14,11 @@ import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
 import {
+  checkProjectDraft,
   EMPTY_PROJECT_DRAFT,
   findProject,
   type ProjectDraft,
   projectSettingsSave,
-  savableProjectDraft,
 } from "./projectCommands.ts";
 import { sessionLabel } from "./sessionCatalog.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
@@ -107,7 +107,7 @@ export function answerForm(
       };
     case "project": {
       const { assign, newPage } = form.dialog;
-      const saved = typeof input === "string" ? undefined : savableProjectDraft(input);
+      const saved = typeof input === "string" ? undefined : checkProjectDraft(input).saved;
       if (!state.connected || !saved) return { allowed: false };
       const { name, instructions } = saved;
       const id = newId();

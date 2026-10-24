@@ -1,7 +1,7 @@
 /**
  * Project policy for the client, described once: which projects a picker offers, what a project's
  * row offers (each command with whether it is available now and what running it means), whether a
- * project's menu sets apart (`projectMenu`), whether a project draft may be saved (`savableProjectDraft`, creating and editing alike), creating a
+ * project's menu sets apart (`projectMenu`), whether a project draft may be saved and which fields are over their limits (`checkProjectDraft`, creating and editing alike), creating a
  * project and moving a session between projects (`sessionProjectMenu`), and whether a session can
  * start in a project. The sidebar, the session's Project menu, the phone sheet, the command palette
  * and the New session page render these and hand them to the one command host instead of each
@@ -11,6 +11,7 @@
 import {
   type ClientCommand,
   PROJECT_INSTRUCTIONS_MAX,
+  PROJECT_NAME_MAX,
   type Project,
 } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
@@ -156,21 +157,48 @@ export interface ProjectDraft {
 /** The draft New project opens with. */
 export const EMPTY_PROJECT_DRAFT: ProjectDraft = { name: "", instructions: "" };
 
+/** A draft field's length against its limit, counted as the server saves it: trimmed. */
+export interface ProjectFieldCheck {
+  /** The field's length once trimmed, in UTF-16 code units as the browser counts them. */
+  length: number;
+  max: number;
+  over: boolean;
+}
+
+/** What `checkProjectDraft` decides about a draft: each field against its limit, and what saving it saves. */
+export interface ProjectDraftCheck {
+  name: ProjectFieldCheck;
+  instructions: ProjectFieldCheck;
+  /** The trimmed draft, when it may be saved; otherwise undefined. */
+  saved: ProjectDraft | undefined;
+}
+
+const fieldCheck = (saved: string, max: number): ProjectFieldCheck => ({
+  length: saved.length,
+  max,
+  over: saved.length > max,
+});
+
 /**
- * The one rule for saving a project draft, whether it creates a project or changes one: the trimmed
- * name and instructions when the name is not blank and the instructions are within
- * `PROJECT_INSTRUCTIONS_MAX`, otherwise nothing. Blank instructions are saveable: the project has none.
+ * The one rule for saving a project draft, whether it creates a project or changes one, and what the
+ * dialogs show of it: each field's trimmed length against its limit (`PROJECT_NAME_MAX`,
+ * `PROJECT_INSTRUCTIONS_MAX`), and the trimmed draft as saved when the name is not blank and no field
+ * is over its limit. Blank instructions are saveable: the project has none.
  */
-export function savableProjectDraft(draft: ProjectDraft): ProjectDraft | undefined {
+export function checkProjectDraft(draft: ProjectDraft): ProjectDraftCheck {
   const name = draft.name.trim();
   const instructions = draft.instructions.trim();
-  if (!name || instructions.length > PROJECT_INSTRUCTIONS_MAX) return undefined;
-  return { name, instructions };
+  const checks = {
+    name: fieldCheck(name, PROJECT_NAME_MAX),
+    instructions: fieldCheck(instructions, PROJECT_INSTRUCTIONS_MAX),
+  };
+  const savable = name && !checks.name.over && !checks.instructions.over;
+  return { ...checks, saved: savable ? { name, instructions } : undefined };
 }
 
 /**
  * Saving the settings dialog: one registry change carrying each field that differs from the project
- * as saved now, trimmed. A draft `savableProjectDraft` refuses cannot be saved; blank instructions
+ * as saved now, trimmed. A draft `checkProjectDraft` refuses (no `saved`) cannot be saved; blank instructions
  * clear them. Nothing to send or no connection leave Save off. The server answers the save.
  */
 export function projectSettingsSave(
@@ -179,7 +207,7 @@ export function projectSettingsSave(
   draft: ProjectDraft,
 ): { allowed: false } | { allowed: true; command: ClientCommand } {
   const project = findProject(state, projectId);
-  const saved = savableProjectDraft(draft);
+  const { saved } = checkProjectDraft(draft);
   if (!project || !state.connected || !saved) return { allowed: false };
   const { name, instructions } = saved;
   const renamed = name !== project.name;

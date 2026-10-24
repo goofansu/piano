@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PROJECT_INSTRUCTIONS_MAX, type Project } from "../shared/wire.ts";
+import { PROJECT_INSTRUCTIONS_MAX, PROJECT_NAME_MAX, type Project } from "../shared/wire.ts";
 import {
+  checkProjectDraft,
   openProjectCommand,
   type ProjectDraft,
   projectCommands,
@@ -109,6 +110,46 @@ test("saving project settings sends one change with each changed field, trimmed;
     ["deleted meanwhile", { name: "Relaunch", instructions: "Other" }, { ...guided, projects: [] }],
   ];
   for (const [why, draft, s] of refused) assert.deepEqual(save(draft, s), { allowed: false }, why);
+});
+
+test("a draft's over-limit fields and whether it saves agree, counting what is saved: trimmed", () => {
+  const cases: [string, ProjectDraft, { name: boolean; instructions: boolean }][] = [
+    [
+      "instructions at the limit plus a trailing newline",
+      { name: "Launch", instructions: `${"x".repeat(PROJECT_INSTRUCTIONS_MAX)}\n` },
+      { name: false, instructions: false },
+    ],
+    [
+      "instructions one over the limit",
+      { name: "Launch", instructions: "x".repeat(PROJECT_INSTRUCTIONS_MAX + 1) },
+      { name: false, instructions: true },
+    ],
+    [
+      "a name at the limit inside spaces",
+      { name: ` ${"n".repeat(PROJECT_NAME_MAX)} `, instructions: "" },
+      { name: false, instructions: false },
+    ],
+    [
+      "a name one over the limit",
+      { name: "n".repeat(PROJECT_NAME_MAX + 1), instructions: "" },
+      { name: true, instructions: false },
+    ],
+  ];
+  for (const [why, draft, over] of cases) {
+    const check = checkProjectDraft(draft);
+    assert.deepEqual(
+      { name: check.name.over, instructions: check.instructions.over },
+      over,
+      `${why}: over`,
+    );
+    assert.equal(check.saved !== undefined, !over.name && !over.instructions, `${why}: saves`);
+  }
+  // The count is the saved length.
+  assert.equal(
+    checkProjectDraft({ name: "Launch", instructions: `${"x".repeat(PROJECT_INSTRUCTIONS_MAX)}\n` })
+      .instructions.length,
+    PROJECT_INSTRUCTIONS_MAX,
+  );
 });
 
 test("a session's project menu: Move for a member, Add otherwise, one connection rule for every row", () => {
