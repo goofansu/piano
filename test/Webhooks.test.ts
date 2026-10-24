@@ -248,6 +248,45 @@ test("subscription/active filtering is paired with positive delivery; payloads a
   );
 });
 
+test("a webhook token is redacted whole before the answer is cut, even across the cut", async () => {
+  const requests: Received[] = [];
+  const token = "tok0abcdefghijklmnopqrstuvwxyz0123456789";
+  assert.equal(token.length, 40);
+  const answered = (text: string): Snapshot => ({
+    ...snapshot,
+    messages: [{ ...snapshot.messages[0], text }],
+  });
+  await run(
+    "redact-before-cut",
+    Effect.gen(function* () {
+      yield* registered;
+      const hooks = yield* Webhooks;
+      const a = yield* hooks.save({ ...input, token });
+      const b = yield* hooks.save(input);
+      yield* hooks.emit("session.completed", cwd, "s", answered(`${"x".repeat(100)} ${token}`));
+      // The token spans characters 1,982-2,021; the tail keeps the redacted answer over 2,000.
+      yield* hooks.emit(
+        "session.completed",
+        cwd,
+        "s",
+        answered(`${"x".repeat(1980)} ${token} ${"y".repeat(100)}`),
+      );
+      yield* hooks.test(a.id);
+      yield* hooks.test(b.id);
+      const [whole, straddling] = requests
+        .filter((r) => r.headers.get("x-piano-hook-id") === b.id && r.body.event !== "ping")
+        .map((r) => r.body);
+      assert.equal(whole.answer, `${"x".repeat(100)} [redacted]`);
+      assert.equal(whole.answerTruncated, false);
+      assert.equal(straddling.answerTruncated, true);
+      assert.ok(straddling.answer?.startsWith(`${"x".repeat(1980)} [redacted] y`));
+      for (let i = 0; i + 8 <= token.length; i++)
+        assert.equal(straddling.answer?.includes(token.slice(i, i + 8)), false);
+    }),
+    receive(requests),
+  );
+});
+
 test("a save that omits url and events keeps the stored ones; a removed hook stays removed", async () => {
   await run(
     "partial",

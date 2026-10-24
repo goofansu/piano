@@ -303,8 +303,8 @@ export const WebhooksLive = Layer.effect(
                 "$1[path]",
               );
           };
-          const rawAnswer = lastAnswerOf(snapshot, 2001);
-          const answer = clean(rawAnswer);
+          // Redact whole values, then cut: a token straddling the cut would survive as a fragment.
+          const answer = clean(lastAnswerOf(snapshot, Infinity));
           const { dialog } = dispositionOf(snapshot, true);
           const closure = snapshot.state.closure;
           if (event === "session.needs_input" && !dialog) return;
@@ -324,8 +324,7 @@ export const WebhooksLive = Layer.effect(
               ...(event === "session.completed"
                 ? {
                     answer: answer?.slice(0, 2000) ?? null,
-                    answerTruncated:
-                      (rawAnswer?.length ?? 0) > 2000 || (answer?.length ?? 0) > 2000,
+                    answerTruncated: (answer?.length ?? 0) > 2000,
                   }
                 : {}),
               ...(event === "session.needs_input" && dialog
