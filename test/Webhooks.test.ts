@@ -333,6 +333,42 @@ test("admission stays bounded under a stalled receiver; overflow and transport e
   );
 });
 
+test("a test queued behind a slow delivery answers, and sends nothing, once its webhook is deleted", async () => {
+  const requests: Received[] = [];
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    const response = await receive(requests)(url, init);
+    await held;
+    return response;
+  };
+  await run(
+    "test-deleted",
+    Effect.gen(function* () {
+      yield* registered;
+      const hooks = yield* Webhooks;
+      const hook = yield* hooks.save({ ...input, token: "private-canary" });
+      yield* hooks.emit("session.completed", cwd, "s", snapshot);
+      yield* wait(() => requests.length === 1);
+      const test = yield* hooks.test(hook.id).pipe(Effect.result, Effect.forkChild);
+      // Let the test pass admission, which still finds the webhook, and wait in its lane.
+      yield* Effect.sleep(50);
+      yield* hooks.remove(hook.id);
+      release();
+      const answer = yield* Fiber.join(test);
+      assert.equal(answer._tag, "Failure");
+      assert.match(JSON.stringify(answer), /Webhook no longer exists\./);
+      assert.deepEqual(
+        requests.map((r) => r.body.event),
+        ["session.completed"],
+      );
+    }),
+    fetch,
+  );
+});
+
 test("real HTTP: redirects/non-2xx fail, a dead receiver times out at 10s without blocking other hooks", {
   timeout: 20000,
 }, async () => {
