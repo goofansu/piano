@@ -1,8 +1,8 @@
 /**
  * One browser client's sessions: which session it has selected, the live attachment that
- * forwards that session's frames, and the session requests it makes — create, act, rename and
- * retire. Each request runs its SessionHosts step and delivers its results (`action_result`,
- * toasts) to this client through its output.
+ * forwards that session's frames, and the session requests that touch them — create, act and
+ * retire. Each request runs its SessionHosts step and delivers its results (`selected`,
+ * `action_result`) to this client through its output.
  *
  * Selections are claimed in receive order, so a slow lookup for an older selection never shows
  * or acts on a newer one. Attaching delivers the snapshot, then contiguous frames (INV-05), and
@@ -16,7 +16,6 @@ import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Attachment, ServerMessage, SessionAction, StartOptions } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { type PiSession, type PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
-import type { RegistryError } from "./Registry.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
 
 /** A new session and the first message to send it, if any. */
@@ -77,12 +76,6 @@ interface ClientSessions {
     action: SessionAction,
     start?: StartOptions,
   ) => Effect.Effect<void, ActRefused | PiSessionError>;
-  /** Pi owns the name, so a stopped session is started for it; returns the mirrored title. */
-  readonly rename: (
-    cwd: string,
-    sessionId: string,
-    title: string,
-  ) => Effect.Effect<string, PiSessionError | RegistryError>;
   /** Detaches a session, stops Pi and archives or deletes it, then clears the selection if it showed that session. */
   readonly retire: (
     cwd: string,
@@ -313,8 +306,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         snapshot: emptySnapshot(""),
       });
     }
-    if (mode === "delete")
-      yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
   });
 
   // Caller has claimed the new-session selection. Creating runs outside navigation (see
@@ -341,7 +332,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         Effect.as(create(selectionId, request)),
       ),
     act,
-    rename: hosts.rename,
     retire,
   } satisfies ClientSessions as ClientSessions;
 });

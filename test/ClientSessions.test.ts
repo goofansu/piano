@@ -646,21 +646,12 @@ test("INV-02: retiring the selected session detaches before Pi stops, clears the
         [],
         "detached before Pi stopped",
       );
-      assert.deepEqual(
-        sent.filter((m) => m._tag === "toast"),
-        [],
-        "archiving is shown by the sidebar, not a toast",
-      );
       yield* sessions.retire(cwd, b.spec.sessionId, "delete");
       assert.deepEqual(yield* hosts.list, []);
       assert.deepEqual(
         (yield* (yield* Registry).get).sessions.map((s) => [s.sessionId, s.archived]),
         [[a.spec.sessionId, true]],
         "archive keeps the reference; delete forgets it",
-      );
-      assert.deepEqual(
-        sent.filter((m) => m._tag === "toast").map((m) => m._tag === "toast" && m.message),
-        ["Session deleted"],
       );
       // A stale link cannot show a retired conversation, even when archive kept its history.
       const shown = sent.filter((m) => m._tag === "selected").length;
