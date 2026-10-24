@@ -406,7 +406,7 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
       const buildFolders = Effect.map(sidebar.fresh, (view) => view.folders);
       const references = Effect.map(sidebar.fresh, (view) => view.sessionReferences ?? []);
       const registry = yield* Registry;
-      yield* registry.ensureFolder(repo);
+      yield* registry.addFolder(repo);
       yield* registry.addWorktree({
         folder: repo,
         path: created.path,

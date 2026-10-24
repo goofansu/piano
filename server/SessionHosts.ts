@@ -329,37 +329,60 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         start(spec, reopenFailed).pipe(Effect.map(({ session }) => session));
 
       /**
-       * Where a new session's directory belongs. Git says what the directory is; Piano decides
-       * the placement (INV-01): the root of a linked worktree is listed under its main checkout's
-       * folder, added when missing, and any other directory becomes a folder of its own. The
-       * worktree is recorded under Git's spelling of its path, which discovery matches, and a
-       * folder already registered under an alias of the main checkout is reused. A checkout Git
-       * cannot read refuses creation instead of registering it blindly (INV-06).
+       * Where a new session's directory belongs: one rule for every spelling of a checkout. Git
+       * says what the directory is; Piano decides the placement (INV-01):
+       * - a registered worktree starts there, and its folder is reopened if it was closed;
+       * - a registered folder, under any spelling of the same directory, starts in that folder
+       *   under its registered spelling, so the sidebar lists the session there;
+       * - the root of a linked worktree is listed under its main checkout's folder, added when
+       *   missing, and recorded under Git's spelling of its path, which discovery matches;
+       * - any other directory becomes a folder of its own.
+       * A missing directory gets Piano's own answer before Git is asked anything, and a checkout
+       * Git cannot read refuses creation instead of registering it blindly (INV-06).
        */
-      /** The registered folder for a main checkout: one registered under an alias of it is
-       * reused, otherwise the checkout is added under Git's spelling. */
+      const physicalPath = (path: string) =>
+        Effect.promise(() => realpath(path).catch(() => undefined));
+
+      /** The registered spelling among `paths` of the directory whose physical path is `physical`. */
+      const registeredAs = (paths: ReadonlyArray<string>, physical: string) =>
+        Effect.forEach(paths, physicalPath).pipe(
+          Effect.map((real) => paths.find((path, i) => path === physical || real[i] === physical)),
+        );
+
+      /** The registered folder for a main checkout, reusing one registered under an alias of it,
+       * otherwise the checkout added under Git's spelling. */
       const folderOf = Effect.fn("SessionHosts.folderOf")(function* (main: string) {
         const data = yield* registry.get;
-        const physical = yield* Effect.forEach(data.folders, (folder) =>
-          Effect.promise(() => realpath(folder).catch(() => undefined)),
-        );
-        return data.folders[physical.indexOf(main)] ?? (yield* registry.ensureFolder(main));
+        return (yield* registeredAs(data.folders, main)) ?? (yield* registry.addFolder(main));
       });
 
       const place = Effect.fn("SessionHosts.place")(function* (raw: string) {
         const path = directoryPath(raw);
-        const data = yield* registry.get;
-        if (data.folders.includes(path) || data.worktrees.some((w) => w.path === path)) return path;
-        // Piano's own answer for a missing directory, before Git is asked anything about it.
         yield* Directories.require(path).pipe(
           Effect.mapError((e) => new RegistryError({ detail: e.detail })),
         );
+        const physical = (yield* physicalPath(path)) ?? path;
+        const data = yield* registry.get;
+        const worktree = yield* registeredAs(
+          data.worktrees.map((w) => w.path),
+          physical,
+        );
+        const entry = data.worktrees.find((w) => w.path === worktree);
+        if (entry) {
+          yield* registry.addFolder(entry.folder);
+          return entry.path;
+        }
+        const folder = yield* registeredAs(data.folders, physical);
+        if (folder) return folder;
         const owner = yield* worktreeOwner(path).pipe(
           Effect.mapError((e) => rejected(`Cannot read the checkout ${path}: ${e.detail}`)),
         );
-        if (!owner) return yield* registry.ensureFolder(path);
-        const folder = yield* folderOf(owner.main);
-        yield* registry.addWorktree({ folder, path: owner.root, branch: owner.branch ?? "" });
+        if (!owner) return yield* registry.addFolder(path);
+        yield* registry.addWorktree({
+          folder: yield* folderOf(owner.main),
+          path: owner.root,
+          branch: owner.branch ?? "",
+        });
         return owner.root;
       });
 

@@ -98,7 +98,7 @@ test("INV-06: changes during discovery coalesce into one more run; a late subscr
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.ensureFolder(first);
+      yield* registry.addFolder(first);
       yield* view.fresh;
       const before = git.calls;
       // Hold a run in Git; every change below lands while it runs.
@@ -138,7 +138,7 @@ test("INV-06: a registry-only change publishes before Git answers; a later chang
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.ensureFolder(first);
+      yield* registry.addFolder(first);
       yield* registry.addSession(first, "s1", "Before");
       yield* view.fresh;
       const runs = git.calls;
@@ -150,7 +150,7 @@ test("INV-06: a registry-only change publishes before Git answers; a later chang
       git.release();
 
       // A new folder needs discovery; the change starts a run and the view follows it.
-      yield* registry.ensureFolder(second);
+      yield* registry.addFolder(second);
       const grown = yield* nextView(view, (m) => m.folders.length === 2);
       assert.deepEqual(grown.folders.map((f) => f.path).sort(), [first, second]);
       assert.ok(git.calls > runs, "the change after a finished run rediscovered");
@@ -165,7 +165,7 @@ test("INV-01/06/07: a prompt, rename or pin starts no reader; membership and fol
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.ensureFolder(first);
+      yield* registry.addFolder(first);
       yield* registry.addSession(first, "s1", "Before");
       yield* view.fresh;
       const quiet = git.calls;
@@ -223,7 +223,7 @@ test("INV-01/06/07: a prompt, rename or pin starts no reader; membership and fol
       // A folder is Git's input, not availability's: registering one discovers it and reads no history.
       const scanned = scans,
         headers = reads;
-      yield* registry.ensureFolder(second);
+      yield* registry.addFolder(second);
       const grown = yield* nextView(view, (m) => m.folders.length === 2);
       assert.deepEqual(grown.folders.map((f) => f.path).sort(), [first, second]);
       yield* Effect.yieldNow;
@@ -245,7 +245,7 @@ test("INV-01: a registry write made outside any browser request reaches the side
       const registry = yield* Registry,
         view = yield* SidebarView,
         hosts = yield* SessionHosts;
-      yield* registry.ensureFolder(first);
+      yield* registry.addFolder(first);
       yield* view.fresh;
       yield* registry.addSession(first, "pi-named");
       const session = yield* hosts.open({ cwd: first, sessionId: "pi-named" });
@@ -321,7 +321,7 @@ test("INV-01/INV-07: a session reference keeps its registry creation time and wo
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.ensureFolder(first);
+      yield* registry.addFolder(first);
       yield* registry.addSession(first, "kept", "Kept");
       const entry = (yield* registry.get).sessions[0]!;
       const workspaceId = (yield* registry.get).workspaces.find((w) => w.path === first)!.id;
@@ -382,7 +382,7 @@ test("INV-01/07: a removed worktree's sessions keep the last branch Git reported
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.ensureFolder(first);
+      yield* registry.addFolder(first);
       for (const [path, branch] of [
         [live, "registered-live"],
         [detached, "registered-detached"],
@@ -449,7 +449,7 @@ test("INV-06: while Git discovery fails, a worktree's sessions show no branch ra
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.ensureFolder(first);
+      yield* registry.addFolder(first);
       yield* registry.addWorktree({
         folder: first,
         path: linked,
@@ -472,7 +472,7 @@ test("INV-01: a repeated observation that found nothing new publishes no view; a
       const registry = yield* Registry,
         view = yield* SidebarView,
         facts = yield* DirectoryFacts;
-      yield* registry.ensureFolder(first);
+      yield* registry.addFolder(first);
       yield* registry.addSession(first, "s1", "One");
       yield* view.fresh;
 
@@ -521,7 +521,7 @@ test("INV-01: a trust decision reaches the sidebar without a registry write", as
       const registry = yield* Registry,
         view = yield* SidebarView,
         facts = yield* DirectoryFacts;
-      yield* registry.ensureFolder(skilled);
+      yield* registry.addFolder(skilled);
       const trustIn = (m: SidebarMessage) => m.folders[0]?.worktrees[0]?.trust;
       assert.deepEqual(trustIn(yield* view.fresh), { required: true, trusted: false });
       const runs = git.calls;
@@ -575,7 +575,7 @@ test("INV-01/02/06: retirement rechecks saved history without waiting for Git or
       const runs = git.calls;
       // Shape drift must not hold back history either: this folder waits for the queued Git
       // run, while availability may still publish against the already observed folder set.
-      yield* registry.ensureFolder(second);
+      yield* registry.addFolder(second);
       try {
         const written = yield* session.events.pipe(
           Stream.filter((e) => e._tag === "message_end" && e.message.text === `Final ${id}`),
@@ -689,7 +689,7 @@ test("INV-01/05: fresh awaits availability; a lifetime during its read invalidat
       const registry = yield* Registry,
         hosts = yield* SessionHosts,
         view = yield* SidebarView;
-      yield* registry.ensureFolder(cwd);
+      yield* registry.addFolder(cwd);
       yield* registry.saveProject({ id: "racing", name: "Racing" });
       yield* registry.addSession(cwd, "rapid", undefined, "racing");
       const before = yield* view.fresh;
@@ -714,7 +714,7 @@ test("INV-01/05: fresh awaits availability; a lifetime during its read invalidat
       );
       yield* held.entered;
       try {
-        yield* registry.ensureFolder(second);
+        yield* registry.addFolder(second);
         yield* Fiber.join(gitUpdated);
         yield* Effect.yieldNow;
         assert.equal(freshDone, false, "Git completed, but fresh still owes an availability read");
@@ -830,8 +830,8 @@ test("INV-01: the sidebar marks a project member unavailable when its history or
     Effect.gen(function* () {
       const registry = yield* Registry,
         view = yield* SidebarView;
-      yield* registry.ensureFolder(kept);
-      yield* registry.ensureFolder(gone);
+      yield* registry.addFolder(kept);
+      yield* registry.addFolder(gone);
       yield* registry.saveProject({ id: "outcome", name: "Outcome" });
       seedHistory(kept, "written");
       seedHistory(gone, "removed");

@@ -286,8 +286,8 @@ export class Registry extends Context.Service<
       sessionId: string,
       projectId: string | null,
     ) => Effect.Effect<void, RegistryError>;
-    /** Make sure a directory is usable as a session cwd: a folder root or a registered worktree. Adds it as a folder otherwise. */
-    readonly ensureFolder: (path: string) => Effect.Effect<string, RegistryError>;
+    /** Open an existing directory as a folder under this exact spelling, returned; an open folder stays as it is. Which directory a session belongs to is SessionHosts' decision. */
+    readonly addFolder: (path: string) => Effect.Effect<string, RegistryError>;
     readonly removeFolder: (path: string) => Effect.Effect<void, RegistryError>;
     /** Register a worktree. An already registered path keeps its entry. */
     readonly addWorktree: (entry: WorktreeEntry) => Effect.Effect<void, RegistryError>;
@@ -556,11 +556,9 @@ export const RegistryLive = Layer.effect(
             ),
           };
         }),
-      ensureFolder: (raw) =>
+      addFolder: (raw) =>
         Effect.gen(function* () {
           const path = directoryPath(raw);
-          const d = yield* Ref.get(state);
-          if (d.folders.includes(path) || d.worktrees.some((w) => w.path === path)) return path;
           yield* requireDirectory(path);
           yield* update((x) =>
             x.folders.includes(path) ? x : { ...x, folders: [...x.folders, path] },

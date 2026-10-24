@@ -70,7 +70,7 @@ export async function startRouter<Fakes = never>(
   const workspaceId = await Effect.runPromise(
     Effect.gen(function* () {
       const registry = yield* Registry;
-      yield* registry.ensureFolder(repo);
+      yield* registry.addFolder(repo);
       return (yield* registry.get).workspaces.find((w) => w.path === repo)!.id;
     }).pipe(Effect.provide(RegistryLive.pipe(Layer.provide(Config)))),
   );
