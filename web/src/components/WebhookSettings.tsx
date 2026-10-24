@@ -1,5 +1,6 @@
 import {
   WEBHOOK_EVENTS,
+  WEBHOOK_FIELDS,
   type Webhook,
   type WebhookDelivery,
   type WebhookEvent,
@@ -343,9 +344,7 @@ function WebhookEditor({
           active,
         }).catch((cause: unknown) => {
           const field = cause instanceof ApiError ? cause.field : undefined;
-          setErrorField(
-            field === "url" || field === "events" || field === "token" ? field : undefined,
-          );
+          setErrorField(WEBHOOK_FIELDS.find((known) => known === field));
           throw cause;
         }),
       done: hook ? "Webhook saved" : "Webhook added",
@@ -441,7 +440,6 @@ function WebhookEditor({
               {eventsError && !events.length && (
                 <FieldError role="alert">Select at least one event.</FieldError>
               )}
-              {errorAt("events") && <FieldError role="alert">{errorAt("events")}</FieldError>}
             </FieldSet>
             <Field orientation="horizontal" className="items-center gap-2.5">
               <Switch id="webhook-active" checked={active} onCheckedChange={setActive} />

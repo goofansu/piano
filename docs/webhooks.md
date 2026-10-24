@@ -104,8 +104,8 @@ from general database projections and all HTTP responses. Settings endpoints are
 - `PUT /api/settings/webhooks` with `{id?, url?, token?, events?, active}` → saved public row. A
   new webhook needs `url` and `events`; for an existing `id`, an omitted `url`, `events` or token
   keeps the stored value (the Active switch sends only `{id, active}`), and null clears the token.
-  A refusal answers `{error, field?}`, where `field` (`url`, `events` or `token`) names the editor
-  field it belongs to
+  A refusal answers `{error, field?}`, where `field` (`url` or `token`) names the editor field it
+  belongs to; a refusal without one, such as a save with no events, is about the save as a whole
 - `POST /api/settings/webhooks/remove` with `{id}`
 - `POST /api/settings/webhooks/test` with `{id}` → delivery result
 
