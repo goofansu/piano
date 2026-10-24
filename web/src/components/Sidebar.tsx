@@ -105,9 +105,10 @@ export function Sidebar({ state }: Props) {
         );
       case "date":
         return (
-          <PlainGroup
+          <SidebarGroup
             key={s.key}
             label={s.label}
+            aria-label={s.label}
             sessions={s.sessions}
             open={s.open}
             onOpenChange={onOpenChange}
@@ -172,8 +173,9 @@ export function Sidebar({ state }: Props) {
       <ScrollArea className="min-h-0 flex-1">
         <nav className="relative px-(--gutter) pb-4" aria-label="Sessions">
           {pinned && (
-            <PlainGroup
+            <SidebarGroup
               label="Pinned"
+              aria-label="Pinned"
               sessions={pinned.sessions}
               open={pinned.open}
               onOpenChange={(open) => toggle(pinned.key, open)}
@@ -455,31 +457,66 @@ function SessionList({
   return <SessionRows className="flex flex-col gap-1" sessions={sessions} select={select} />;
 }
 
-/** Pinned and each date group: the same disclosure row as a folder or project, with nothing to act on. */
-function PlainGroup({
+/**
+ * The sidebar's one disclosure group: a row whose name folds it, with the group's actions in the
+ * hover slot after it, and its session rows beneath. Pinned, each date group, each folder and each
+ * project are this group; an empty one (only a folder or project can be) says so in one row.
+ */
+function SidebarGroup({
   label,
+  muted = false,
+  title,
+  "aria-label": ariaLabel,
+  className,
+  actions,
+  notice,
   sessions,
   open,
   onOpenChange,
   select,
-  className,
 }: Omit<GroupProps, "state"> & {
   label: string;
-  sessions: readonly SessionEntry[];
+  /** A group that stands for the absence of one (No project) reads quieter. */
+  muted?: boolean;
+  /** The trigger's tooltip, for a name that shortens something longer (a folder's path). */
+  title?: string;
+  "aria-label"?: string;
   className?: string;
+  actions?: React.ReactNode;
+  /** A line between the row and its sessions, shown folded or not. */
+  notice?: React.ReactNode;
+  sessions: readonly SessionEntry[];
 }) {
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange} aria-label={label} className={className}>
+    <Collapsible
+      open={open}
+      onOpenChange={onOpenChange}
+      aria-label={ariaLabel}
+      className={className}
+    >
       <div className={groupRow}>
         <CollapsibleTrigger asChild>
-          <button type="button" className={groupTrigger}>
+          <button type="button" className={groupTrigger} title={title}>
             <Chevron open={open} />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">{label}</span>
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-sm font-medium",
+                muted ? "text-ink-3" : "text-ink-2",
+              )}
+            >
+              {label}
+            </span>
           </button>
         </CollapsibleTrigger>
+        {actions}
       </div>
+      {notice}
       <CollapsibleContent className="disclosure-content">
-        <SessionRows className="flex flex-col gap-1 py-1" sessions={sessions} select={select} />
+        {sessions.length === 0 ? (
+          <ListEmpty>No sessions yet</ListEmpty>
+        ) : (
+          <SessionRows className="flex flex-col gap-1 py-1" sessions={sessions} select={select} />
+        )}
       </CollapsibleContent>
     </Collapsible>
   );
@@ -495,86 +532,73 @@ function ProjectGroup({
   select,
 }: GroupProps & { project: Project | null; sessions: readonly SessionEntry[] }) {
   const { run } = useCommands();
-  const members = sessions;
   const commands = project ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
   const remove = commands.find((c) => c.id === "delete");
   // The group's name only folds it; its New session in project button opens the project's home.
   const menu = commands.filter((c) => c.id !== "new-session" && c.id !== "delete");
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange}>
-      <div className={groupRow}>
-        <CollapsibleTrigger asChild>
-          <button type="button" className={groupTrigger}>
-            <Chevron open={open} />
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate text-sm font-medium",
-                project ? "text-ink-2" : "text-ink-3",
-              )}
+    <SidebarGroup
+      label={project?.name ?? "No project"}
+      muted={!project}
+      sessions={sessions}
+      open={open}
+      onOpenChange={onOpenChange}
+      select={select}
+      actions={
+        <>
+          {create?.enabled && (
+            <IconButton
+              size="icon-xs"
+              className={hoverSlot}
+              label={create.ariaLabel ?? create.label}
+              tooltip={create.label}
+              onClick={() => run(create)}
             >
-              {project?.name ?? "No project"}
-            </span>
-          </button>
-        </CollapsibleTrigger>
-        {create?.enabled && (
-          <IconButton
-            size="icon-xs"
-            className={hoverSlot}
-            label={create.ariaLabel ?? create.label}
-            tooltip={create.label}
-            onClick={() => run(create)}
-          >
-            <ProjectCommandIconView icon={create.icon} />
-          </IconButton>
-        )}
-        {project && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className={hoverSlot}
-                aria-label={`Project menu for ${project.name}`}
-              >
-                <MoreHorizontalIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuGroup>
-                {menu.map((c) => (
-                  <DropdownMenuItem key={c.id} disabled={!c.enabled} onSelect={() => run(c)}>
-                    <ProjectCommandIconView icon={c.icon} /> {c.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-              {/* Delete sits apart, as on a session's menu: the one destructive row. */}
-              {remove && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      disabled={!remove.enabled}
-                      onSelect={() => run(remove)}
-                    >
-                      <ProjectCommandIconView icon={remove.icon} /> {remove.label}
+              <ProjectCommandIconView icon={create.icon} />
+            </IconButton>
+          )}
+          {project && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className={hoverSlot}
+                  aria-label={`Project menu for ${project.name}`}
+                >
+                  <MoreHorizontalIcon />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  {menu.map((c) => (
+                    <DropdownMenuItem key={c.id} disabled={!c.enabled} onSelect={() => run(c)}>
+                      <ProjectCommandIconView icon={c.icon} /> {c.label}
                     </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-      <CollapsibleContent className="disclosure-content">
-        {members.length === 0 ? (
-          <ListEmpty>No sessions yet</ListEmpty>
-        ) : (
-          <SessionRows className="flex flex-col gap-1 py-1" sessions={members} select={select} />
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+                  ))}
+                </DropdownMenuGroup>
+                {/* Delete sits apart, as on a session's menu: the one destructive row. */}
+                {remove && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        disabled={!remove.enabled}
+                        onSelect={() => run(remove)}
+                      >
+                        <ProjectCommandIconView icon={remove.icon} /> {remove.label}
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </>
+      }
+    />
   );
 }
 
@@ -590,57 +614,52 @@ function FolderGroup({
   const { create, close } = folderCommands(state, folder);
 
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange}>
-      <div className={groupRow}>
-        <CollapsibleTrigger asChild>
-          <button type="button" className={groupTrigger} title={folder.path}>
-            <Chevron open={open} />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-2">
-              {folder.name}
-            </span>
-          </button>
-        </CollapsibleTrigger>
-        <IconButton
-          size="icon-xs"
-          className={hoverSlot}
-          label={create.ariaLabel ?? create.label}
-          tooltip={create.label}
-          onClick={() => run(create)}
-        >
-          <PlusIcon />
-        </IconButton>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className={hoverSlot}
-              aria-label={`Folder menu for ${folder.name}`}
-            >
-              <MoreHorizontalIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuGroup>
-              <DropdownMenuItem disabled={!close.enabled} onSelect={() => run(close)}>
-                <XIcon /> {close.label}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      {folder.discovery.status === "error" && (
-        <Badge variant="destructive" className="ml-7" title={folder.discovery.detail}>
-          Git status unavailable
-        </Badge>
-      )}
-      <CollapsibleContent className="disclosure-content">
-        {sessions.length === 0 ? (
-          <ListEmpty>No sessions yet</ListEmpty>
-        ) : (
-          <SessionRows className="flex flex-col gap-1 py-1" sessions={sessions} select={select} />
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+    <SidebarGroup
+      label={folder.name}
+      title={folder.path}
+      sessions={sessions}
+      open={open}
+      onOpenChange={onOpenChange}
+      select={select}
+      actions={
+        <>
+          <IconButton
+            size="icon-xs"
+            className={hoverSlot}
+            label={create.ariaLabel ?? create.label}
+            tooltip={create.label}
+            onClick={() => run(create)}
+          >
+            <PlusIcon />
+          </IconButton>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className={hoverSlot}
+                aria-label={`Folder menu for ${folder.name}`}
+              >
+                <MoreHorizontalIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuGroup>
+                <DropdownMenuItem disabled={!close.enabled} onSelect={() => run(close)}>
+                  <XIcon /> {close.label}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      }
+      notice={
+        folder.discovery.status === "error" && (
+          <Badge variant="destructive" className="ml-7" title={folder.discovery.detail}>
+            Git status unavailable
+          </Badge>
+        )
+      }
+    />
   );
 }
