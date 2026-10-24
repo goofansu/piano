@@ -239,7 +239,7 @@ function ProjectSelect({
 }) {
   const { run } = useCommands();
   const [open, setOpen] = useState(false);
-  const create = newProjectCommand(state);
+  const create = newProjectCommand(state, { newPage: true });
   const onCreate = () => {
     setOpen(false);
     run(create);
