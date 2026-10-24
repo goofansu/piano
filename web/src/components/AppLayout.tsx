@@ -155,11 +155,11 @@ export function LayoutView({ active = true, children }: { active?: boolean; chil
 
 /**
  * The sidebar's header, in the one header shape and no heavier: the hide control first, where
- * each pane's show control appears once the sidebar is collapsed, so the toggle never moves; a
- * title only when the sidebar is not the session list; then the pane's controls, its one primary
- * action last. The mark lives in the footer.
+ * each pane's show control appears once the sidebar is collapsed, so the toggle never moves; then
+ * the pane's controls, its one primary action last. No title: the rows beneath say what the list
+ * is, for sessions and for Settings alike. The mark lives in the footer.
  */
-export function LayoutHeader({ title, children }: { title?: string; children?: ReactNode }) {
+export function LayoutHeader({ children }: { children?: ReactNode }) {
   const { hide } = useSidebarLayout();
   return (
     // The sidebar shares the panes' gutter and, on desktop, the pane's inset and line, so the hide
@@ -170,7 +170,6 @@ export function LayoutHeader({ title, children }: { title?: string; children?: R
         <XIcon className="md:hidden" />
         <PanelLeftCloseIcon className="hidden md:block" />
       </IconButton>
-      {title && <h2 className="text-sm font-medium">{title}</h2>}
       <span className="flex-1" />
       {children}
     </SidebarHeader>

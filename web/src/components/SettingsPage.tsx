@@ -81,7 +81,7 @@ export function SettingsNavigation({
   );
   return (
     <div className="flex h-full flex-col">
-      <LayoutHeader title="Settings" />
+      <LayoutHeader />
       <SidebarContent>
         <SidebarGroup className="px-(--gutter)">
           <SidebarGroupContent>{menu}</SidebarGroupContent>
