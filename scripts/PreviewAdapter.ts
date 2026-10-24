@@ -177,8 +177,8 @@ async function close(server: Server) {
 
 /** An exclusive SQLite transaction is a kernel file lock on Linux and macOS alike: released on
  * exit or SIGKILL, with no stale file or PID-reuse race. All helpers share one state root. */
-async function lock(root: string) {
-  const deadline = performance.now() + 65000;
+async function lock(root: string, wait = 65000) {
+  const deadline = performance.now() + wait;
   const database = new DatabaseSync(join(root, "lock.sqlite"));
   for (;;) {
     try {
@@ -865,10 +865,13 @@ export class PreviewAdapter {
   /** Serializes owner retirement with every launch/replace, using retained canonical identity.
    * On idle, errors mean active/unknown, never proof of absence. Explicit cleanup throws. */
   async retire(owner: PreviewOwnerIdentity, stateRoot: string, idle = false): Promise<boolean> {
-    await mkdir(stateRoot, { recursive: true, mode: 0o700 });
-    const root = await realpath(stateRoot);
-    const mutex = await lock(root);
+    let mutex: DatabaseSync | undefined;
     try {
+      await mkdir(stateRoot, { recursive: true, mode: 0o700 });
+      const root = await realpath(stateRoot);
+      // Idle asks while holding its session's ownership: a busy lock is not idle, and the next
+      // sweep asks again. Explicit cleanup waits its turn.
+      mutex = await lock(root, idle ? 0 : undefined);
       const serviceId = `piano-preview-${hash(owner.workspace).slice(0, 24)}`;
       const path = join(root, `${serviceId}.json`);
       let record: Intent;
@@ -892,7 +895,7 @@ export class PreviewAdapter {
       if (idle) return false;
       throw error;
     } finally {
-      unlock(mutex);
+      if (mutex) unlock(mutex);
     }
   }
 

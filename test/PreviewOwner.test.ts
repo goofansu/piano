@@ -4,6 +4,7 @@ import { once } from "node:events";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { type TestContext, test } from "node:test";
 import type { PreviewRequest } from "../scripts/PreviewAdapter.ts";
 import { ownerRequest } from "../scripts/PreviewClient.ts";
@@ -145,6 +146,30 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       true,
       "confirmed failed/exited app needs no explicit stop to retire",
     );
+  });
+
+  test(`[${platform}] idle answers not-idle without waiting on a busy lock or an unusable state root`, {
+    timeout: 10000,
+  }, async (t) => {
+    const f = await fixture(t);
+    await f.call(); // a failed app: idle may retire it once the lock and state are readable
+    // Another helper holds the account-wide lock; idle must not wait out its 65-second bound.
+    const holder = new DatabaseSync(join(f.state, "lock.sqlite"));
+    holder.exec("BEGIN EXCLUSIVE");
+    try {
+      assert.equal(await f.owner.prepareRelease(true), false, "a busy lock is not idle");
+    } finally {
+      holder.exec("ROLLBACK");
+      holder.close();
+    }
+    assert.equal(await f.owner.prepareRelease(true), true, "a free lock lets idle retire");
+    // The state root became a file: idle answers not-idle, explicit cleanup reports the failure.
+    const next = await f.open("unusable-state");
+    await f.call(next);
+    await rm(f.state, { recursive: true });
+    await writeFile(f.state, "not a directory");
+    assert.equal(await next.prepareRelease(true), false, "unknown state is not idle");
+    await assert.rejects(next.prepareRelease(), /EEXIST|ENOTDIR/);
   });
 
   test(`[${platform}] cleanup retains identity after checkout deletion, is retryable and fences launches`, async (t) => {

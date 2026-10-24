@@ -17,9 +17,15 @@ import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { PreviewAdapter, type PreviewOwnerIdentity } from "../scripts/PreviewAdapter.ts";
 import { ownerRequest } from "../scripts/PreviewClient.ts";
 import { PiCli } from "../server/PiCli.ts";
-import { PiRequestTimeoutMs, type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
+import {
+  PiRequestTimeoutMs,
+  type PiSession,
+  PiSessionsLive,
+  PreviewOwnerOptions,
+} from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive, SessionNotCreated } from "../server/SessionHosts.ts";
 import { WorktrunkCommand } from "../server/Worktrees.ts";
@@ -95,6 +101,8 @@ const run = <A, E>(
     timeoutMs?: number;
     /** The general fake Pi, which keeps names and messages, with a fresh registry of this name. */
     fakePi?: string;
+    /** Substitutes every preview owner's adapter, as the host supervisor would answer. */
+    previewAdapter?: PreviewAdapter;
   } = {},
 ) => {
   const layer = SessionHostsLive({ idleMs: options.idleMs ?? 0 }).pipe(
@@ -126,6 +134,12 @@ const run = <A, E>(
     ),
     Effect.provideService(PiRequestTimeoutMs, options.timeoutMs ?? 30000),
     Effect.provideService(RegistryDatabasePath, join(root, `${options.fakePi ?? "registry"}.db`)),
+    Effect.provideService(
+      PreviewOwnerOptions,
+      options.previewAdapter
+        ? { adapter: options.previewAdapter, root: join(root, "previews") }
+        : {},
+    ),
   );
   return Effect.runPromise(options.clock ? work.pipe(Effect.provide(TestClock.layer())) : work);
 };
@@ -658,6 +672,45 @@ test("INV-02/03/04: idle deadline respects queue, retry, compaction, dialogs and
       assert.equal(yield* hosts.get(cwd, "actually-idle"), undefined);
     }),
     { idleMs: 1000, clock: true, timeoutMs: 1000 },
+  );
+});
+
+test("INV-02: one host's failing idle check does not keep the next idle host from release", {
+  timeout: 15000,
+}, async () => {
+  /** A supervisor that cannot answer whether this generation's app is gone. */
+  class UnknownPreview extends PreviewAdapter {
+    override async request(): Promise<never> {
+      throw new Error("no supervisor in this test");
+    }
+    override async retire(_: PreviewOwnerIdentity, __: string, idle = false) {
+      if (idle) throw new Error("preview state unreadable");
+      return true;
+    }
+  }
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      // Opened first, so the sweep checks it before the other host.
+      const failing = yield* registered("idle-check-fails");
+      const endpoint = records("idle-check-fails").find((r) => r.event === "spawn")?.previewOwner;
+      assert.ok(endpoint);
+      // An admitted start makes this owner ask its adapter before idle release.
+      yield* Effect.promise(() =>
+        assert.rejects(ownerRequest(endpoint, { action: "start", command: ["/bin/false"] })),
+      );
+      const other = yield* registered("idle-after-failure");
+      for (const s of [failing, other]) {
+        yield* prompt(s, "/settle");
+        yield* quiescent(s);
+      }
+      yield* TestClock.adjust(2000);
+      yield* waitAudit("idle-after-failure", (rs) => rs.some((r) => r.event === "exit"));
+      assert.equal(yield* hosts.get(cwd, "idle-after-failure"), undefined);
+      assert.equal(yield* hosts.get(cwd, "idle-check-fails"), failing, "unknown is not idle");
+      assert.equal(records("idle-check-fails").filter((r) => r.event === "exit").length, 0);
+    }),
+    { idleMs: 100, clock: true, timeoutMs: 1000, previewAdapter: new UnknownPreview() },
   );
 });
 
