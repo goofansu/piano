@@ -452,16 +452,34 @@ test("live fake-Pi completion/dialog/exit drive the worker once; opening history
         ["session.completed"],
       );
       assert.equal(live.filter((r) => r.headers.get("x-piano-hook-id") === inactive.id).length, 0);
-      yield* (yield* Registry).addSession(cwd, "released");
-      const working = yield* hosts.open({ cwd, sessionId: "released" });
-      yield* working.act({ _tag: "prompt", text: "ask before release" });
+      // Archive and delete stop Pi mid-work because the person asked: not a failure. The same
+      // stop without that request (release, as at shutdown) still is, and arrives after them.
+      const stopMidWork = (id: string, stop: Effect.Effect<void, unknown>) =>
+        Effect.gen(function* () {
+          yield* (yield* Registry).addSession(cwd, id);
+          const working = yield* hosts.open({ cwd, sessionId: id });
+          yield* working.act({ _tag: "prompt", text: "ask before release" });
+          yield* wait(() =>
+            requests.some(
+              (r) => r.body.session?.id === id && r.body.event === "session.needs_input",
+            ),
+          );
+          yield* stop;
+        });
+      yield* stopMidWork("archived", hosts.archive(cwd, "archived"));
+      yield* stopMidWork("deleted", hosts.delete(cwd, "deleted"));
+      yield* stopMidWork("released", hosts.release(cwd, "released"));
       yield* wait(() =>
         requests.some(
-          (r) => r.body.session?.id === "released" && r.body.event === "session.needs_input",
+          (r) =>
+            r.body.session?.id === "released" && r.body.failure?.reason === "released_during_work",
         ),
       );
-      yield* hosts.release(cwd, "released");
-      yield* wait(() => requests.some((r) => r.body.failure?.reason === "released_during_work"));
+      yield* hooks.test(all.id);
+      assert.deepEqual(
+        requests.filter((r) => r.body.event === "session.failed").map((r) => r.body.session?.id),
+        ["s", "released"],
+      );
     }).pipe(
       Effect.timeout("10 seconds"),
       Effect.scoped,

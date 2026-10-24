@@ -31,10 +31,16 @@ export interface SessionHost {
    * Stop the child and mirror its final facts; returns how it closed. The caller holds the
    * ownership lock through actual process exit, not just close intent.
    */
-  readonly close: (
-    closure?: SessionClosure,
-    shutdown?: boolean,
-  ) => Effect.Effect<SessionClosure, PiSessionError>;
+  readonly close: (how?: CloseHow) => Effect.Effect<SessionClosure, PiSessionError>;
+}
+
+export interface CloseHow {
+  /** How the child already stopped, when its exit is why the host closes. */
+  readonly closure?: SessionClosure;
+  /** Piano is stopping: a failed release is logged, not refused. */
+  readonly shutdown?: boolean;
+  /** The person asked for this stop (archive or delete): interrupting work is not a failure. */
+  readonly requested?: boolean;
 }
 
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
@@ -87,6 +93,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   let lastActivity = yield* Clock.currentTimeMillis;
   let actions = 0;
   let closing = false;
+  let requested = false;
 
   const mirrorStats = Effect.gen(function* () {
     const state = yield* raw.state;
@@ -153,7 +160,11 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
       if (yield* busy) return false;
       return yield* raw.prepareRelease(true);
     }),
-    close: Effect.fn("SessionHost.close")(function* (closure?: SessionClosure, shutdown = false) {
+    close: Effect.fn("SessionHost.close")(function* ({
+      closure,
+      shutdown = false,
+      requested: asked = false,
+    }: CloseHow = {}) {
       // Do not claim archive/delete succeeded, or drop this owner, if cleanup is uncertain.
       // The broker fences launches immediately; repeated close retries the retained identity.
       yield* raw
@@ -164,6 +175,8 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
           ),
         );
       closing = true;
+      // Before the scope closes, so the observer reads it when the stop is announced.
+      requested = asked;
       yield* Scope.close(scope, Exit.void);
       // PiSessions announces how its child stopped, including whether a release interrupted work.
       const closed = closure ??
@@ -195,7 +208,12 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
             (dialog.id !== previousDialog?.id || dialog.generation !== previousDialog?.generation)
           )
             yield* webhooks.emit("session.needs_input", raw.spec.cwd, raw.spec.sessionId, observed);
-          if (event._tag === "closed")
+          // A stop the person asked for interrupts work on purpose; Pi exiting on its own first
+          // announces its own closure, and is still a failure.
+          if (
+            event._tag === "closed" &&
+            !(requested && event.closure._tag === "released_during_work")
+          )
             yield* webhooks.emit("session.failed", raw.spec.cwd, raw.spec.sessionId, observed);
         }
         // Signal attachment before taking ownership's lock: the opener holds it until ready.
