@@ -17,8 +17,9 @@ export const WebhookSave = Schema.Struct({
   active: Schema.Boolean,
 });
 export type WebhookSave = typeof WebhookSave.Type;
-/** The editor field a refused save belongs to; a refusal without one is about the save as a whole. */
-export type WebhookField = "url" | "events" | "token";
+/** The editor fields a refused save can belong to; a refusal without one is about the save as a whole. */
+export const WEBHOOK_FIELDS = ["url", "token"] as const;
+export type WebhookField = (typeof WEBHOOK_FIELDS)[number];
 export const WebhookDelivery = Schema.Struct({
   deliveryId: Schema.String,
   occurredAt: Schema.String,
