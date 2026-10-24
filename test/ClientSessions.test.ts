@@ -4,6 +4,7 @@ import fs, {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -33,6 +34,10 @@ let databases = 0;
 const run = <A, E>(
   effect: Effect.Effect<A, E, SessionHosts | Registry | Scope.Scope>,
   path = join(root, `registry-${++databases}.db`),
+  pi: { readonly cli: string; readonly extraArgs: ReadonlyArray<string> } = {
+    cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
+    extraArgs: [],
+  },
 ) => {
   const layer = SessionHostsLive({ idleMs: 0 }).pipe(
     Layer.provide(PiSessionsLive),
@@ -43,11 +48,7 @@ const run = <A, E>(
     effect.pipe(
       Effect.scoped,
       Effect.provide(layer),
-      Effect.provideService(PiCli, {
-        node: process.execPath,
-        cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
-        extraArgs: [],
-      }),
+      Effect.provideService(PiCli, { node: process.execPath, ...pi }),
       Effect.provideService(RegistryDatabasePath, path),
       Effect.timeout("10 seconds"),
     ),
@@ -493,6 +494,125 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
       Effect.ensuring(Effect.sync(() => writeFileSync(release, ""))),
       Effect.provideService(WorktrunkCommand, wt),
     ),
+  );
+});
+
+/**
+ * Pi from the lifecycle fixture, holding `held`'s readiness until `release`, so a start of that
+ * session is observably in flight.
+ */
+const holdingStart = (held: string) => {
+  const dir = mkdtempSync(join(root, "holding-start-"));
+  const audit = join(dir, "audit.jsonl");
+  writeFileSync(audit, "");
+  const records = () =>
+    readFileSync(audit, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map(
+        (line) =>
+          JSON.parse(line) as { event: string; sessionId: string; pid: number; command?: string },
+      )
+      .filter((r) => r.sessionId === held);
+  const pid = () => records().find((r) => r.event === "spawn")?.pid;
+  /** The commands `held`'s Pi received, in order. */
+  const commands = () => records().flatMap((r) => (r.event === "command" ? [r.command] : []));
+  const launched = Effect.gen(function* () {
+    for (let n = 0; !pid(); n++) {
+      if (n > 250) return yield* Effect.die(new Error(`${held} never launched`));
+      yield* Effect.sleep("20 millis");
+    }
+  });
+  const release = Effect.sync(() => {
+    const p = pid();
+    if (p) process.kill(p, "SIGCONT");
+  });
+  const pi = {
+    cli: new URL("./fake-host-pi.mjs", import.meta.url).pathname,
+    extraArgs: ["--audit", audit, "--hold-session", held],
+  };
+  return { launched, release, pi, commands };
+};
+
+test("INV-05: selecting another session while an act is still starting the selected one shows it at once", async () => {
+  const held = holdingStart("A");
+  await run(
+    Effect.gen(function* () {
+      yield* (yield* Registry).addSession(cwd, "A");
+      const b = yield* started();
+      const { sessions, sent, next } = yield* client;
+      yield* yield* sessions.select({ cwd, sessionId: "A", selectionId: "a" });
+      yield* next((m) => m._tag === "selected");
+      const acting = yield* sessions.act("a", restoreQueue, {}).pipe(Effect.forkChild);
+      yield* held.launched;
+      const selecting = yield* (yield* sessions.select({
+        cwd,
+        sessionId: b.spec.sessionId,
+        selectionId: "b",
+      })).pipe(Effect.forkChild);
+      const selected = yield* next((m) => m._tag === "selected").pipe(
+        Effect.timeoutOption("2 seconds"),
+      );
+      assert.ok(
+        selected._tag === "Some" && selected.value._tag === "selected",
+        "B was shown while A's start was still held",
+      );
+      assert.deepEqual(
+        [selected.value.selectionId, selected.value.sessionId, selected.value.hosted],
+        ["b", b.spec.sessionId, true],
+      );
+      yield* held.release;
+      yield* Fiber.join(selecting);
+      yield* Fiber.join(acting);
+      // The act was accepted while A was selected, so it completes and its result reaches its
+      // requester; A is started but not shown over the newer selection.
+      assert.deepEqual(resultFor(sent), ["A"]);
+      assert.deepEqual(
+        sent.filter((m) => "selectionId" in m && m.selectionId === "a").map((m) => m._tag),
+        ["selected"],
+        "nothing from A reaches this client after its first, read-only view",
+      );
+      yield* sessions.act("b", restoreQueue);
+      assert.deepEqual(resultFor(sent), ["A", b.spec.sessionId]);
+    }).pipe(Effect.ensuring(held.release)),
+    undefined,
+    held.pi,
+  );
+});
+
+test("INV-02/05: acts that start a still-selected session attach it once and both get their results", async () => {
+  const held = holdingStart("A");
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      yield* (yield* Registry).addSession(cwd, "A");
+      const { sessions, sent, next } = yield* client;
+      yield* yield* sessions.select({ cwd, sessionId: "A", selectionId: "a" });
+      yield* next((m) => m._tag === "selected");
+      const first = yield* sessions.act("a", restoreQueue, {}).pipe(Effect.forkChild);
+      yield* held.launched;
+      const second = yield* sessions
+        .act("a", restoreQueue, { thinkingLevel: "high" })
+        .pipe(Effect.forkChild);
+      yield* held.release;
+      yield* Fiber.join(first);
+      yield* Fiber.join(second);
+      assert.deepEqual(resultFor(sent), ["A", "A"]);
+      assert.deepEqual(
+        sent
+          .filter((m) => m._tag === "selected" && m.selectionId === "a")
+          .map((m) => m._tag === "selected" && m.hosted),
+        [false, true],
+        "the started session is shown once, live",
+      );
+      assert.equal((yield* hosts.list).filter((h) => h.sessionId === "A").length, 1);
+      assert.ok(
+        held.commands().includes("set_thinking_level"),
+        "the act that did not launch Pi still applies its draft choices",
+      );
+    }).pipe(Effect.ensuring(held.release)),
+    undefined,
+    held.pi,
   );
 });
 

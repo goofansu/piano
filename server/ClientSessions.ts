@@ -69,6 +69,8 @@ interface ClientSessions {
    * Sends `action` to the selected session, starting it with `start` when it is not running,
    * and delivers any `action_result`. Never creates a session. Reuse the current select or
    * create selectionId; a new request id is refused as stale, even for the same hosted session.
+   * Starting does not hold this client's navigation: if another selection is made meanwhile, the
+   * action is still sent and its result delivered, but the started session is not shown.
    */
   readonly act: (
     selectionId: string,
@@ -162,17 +164,29 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     yield* Deferred.await(ready);
   });
 
-  // Caller holds navigation and has just opened `session`.
+  // Caller holds navigation and has just opened `session`. Two acts that both started the
+  // selected session attach it once.
   const attachOpened = Effect.fn("ClientSessions.attachOpened")(function* (
     selectionId: string,
     session: PiSession,
   ) {
     const selection = { cwd: session.spec.cwd, sessionId: session.spec.sessionId, selectionId };
-    if (current(selection)) {
-      selected = selection;
-      yield* attachTo(session, selection);
-    }
+    if (!current(selection)) return;
+    selected = selection;
+    if (attachment?.selectionId === selectionId && attachment.session === session) return;
+    yield* attachTo(session, selection);
   });
+
+  // The one place a request brings up Pi for a selection. Opening (Pi readiness can take 30 s, a
+  // new worktree a minute) runs outside navigation, so this client can show other sessions
+  // meanwhile; navigation is taken only to attach the result. If the selection changed in the
+  // meantime, the newer view stays: the opened session is not shown, but the request still
+  // completes (create sends its first prompt, act its action and `action_result`), because it
+  // was accepted while its selection was current.
+  const openThenAttach = <A extends { readonly session: PiSession }, E>(
+    selectionId: string,
+    opening: Effect.Effect<A, E>,
+  ) => opening.pipe(Effect.tap(({ session }) => navigate(attachOpened(selectionId, session))));
 
   const show = Effect.fn("ClientSessions.show")(function* (selection: Selection) {
     const { cwd, sessionId, selectionId } = selection;
@@ -210,33 +224,46 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     return session;
   });
 
-  // The attached session for this selection, or the selected one started with `start`.
-  const target = (selectionId: string, start: StartOptions | undefined) =>
-    navigate(
+  // The attached session for this selection, or the selected one started with `start`. Only
+  // the decision holds navigation; starting runs outside it (see `openThenAttach`). Two quick
+  // acts may both start the session: SessionHosts shares its one host, and the act that did
+  // not launch Pi applies its choices as actions.
+  const target = Effect.fn("ClientSessions.target")(function* (
+    selectionId: string,
+    start: StartOptions | undefined,
+  ) {
+    const decided = yield* navigate(
       Effect.gen(function* () {
         if (!selected || selected.selectionId !== selectionId)
           return yield* refuse(
             "stale",
             `${refused.stale} selected.selectionId=${JSON.stringify(selected?.selectionId ?? null)}; act.selectionId=${JSON.stringify(selectionId)}. Reuse the selectionId from the current select or create_session; do not mint a new id for act.`,
           );
-        if (attachment?.selectionId === selectionId)
-          return yield* applyChoices(attachment.session, start);
+        const attached = attachment;
+        if (attached?.selectionId === selectionId)
+          return { _tag: "attached" as const, session: attached.session };
         const { cwd, sessionId } = selected;
         // Creating belongs to `create`, which registers the folder and project first.
         if (sessionId === null) return yield* refuse("no_session");
         if (!start) return yield* refuse("not_running");
-        // A start reaches browsers as a `hosts` update.
-        const { session, launched } = yield* hosts.start({
-          cwd,
-          sessionId,
-          model: start.model,
-          thinkingLevel: start.thinkingLevel,
-          name: start.name,
-        });
-        yield* attachOpened(selectionId, session);
-        return launched ? session : yield* applyChoices(session, start);
+        return { _tag: "start" as const, cwd, sessionId, start };
       }),
     );
+    if (decided._tag === "attached") return yield* applyChoices(decided.session, start);
+    const { cwd, sessionId, start: options } = decided;
+    // A start reaches browsers as a `hosts` update.
+    const { session, launched } = yield* openThenAttach(
+      selectionId,
+      hosts.start({
+        cwd,
+        sessionId,
+        model: options.model,
+        thinkingLevel: options.thinkingLevel,
+        name: options.name,
+      }),
+    );
+    return launched ? session : yield* applyChoices(session, options);
+  });
 
   const act = Effect.fn("ClientSessions.act")(function* (
     selectionId: string,
@@ -290,15 +317,17 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
   });
 
-  // Caller has claimed the new-session selection. Creating (a worktree can take a minute) runs
-  // outside navigation, so this client can show other sessions meanwhile. A client acts only
-  // after its `selected`, which attaching sends, so no act waits on a pending creation.
+  // Caller has claimed the new-session selection. Creating runs outside navigation (see
+  // `openThenAttach`). A client acts only after its `selected`, which attaching sends, so no act
+  // waits on a pending creation.
   const create = Effect.fn("ClientSessions.create")(function* (
     selectionId: string,
     { text, attachments, ...spec }: CreateSessionRequest,
   ) {
-    const session = yield* hosts.create(spec);
-    yield* navigate(attachOpened(selectionId, session));
+    const { session } = yield* openThenAttach(
+      selectionId,
+      hosts.create(spec).pipe(Effect.map((session) => ({ session }))),
+    );
     const trimmed = text?.trim() ?? "";
     if (!trimmed && !attachments?.length) return;
     // Sent only once this client has attached, so it observes the prompt.
