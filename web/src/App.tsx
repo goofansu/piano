@@ -104,7 +104,6 @@ export default function App() {
                           state={state}
                           client={client}
                           chooseDirectory={chooseDirectory}
-                          projectId={state.view.projectId}
                           onProjectChange={(id) => openNew(undefined, id)}
                         />
                       ) : state.view.kind === "projects" ? (
