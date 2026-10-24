@@ -177,3 +177,17 @@ export const SESSION_ORIGIN = "PIANO_SESSION_ORIGIN";
 export const PROJECT_INSTRUCTIONS_ENV = "PIANO_PROJECT_INSTRUCTIONS";
 /** The system prompt section the extension puts them in. */
 export const PROJECT_INSTRUCTIONS_SECTION = "project_instructions";
+/** The session's preview owner endpoint, set for each launch where previews are supported. */
+export const PREVIEW_OWNER_ENV = "PIANO_PREVIEW_OWNER";
+/**
+ * Every variable Piano sets for a launch of Pi. A spawned Pi starts with all of them cleared and
+ * gets only what its own launch sets, so a Piano started inside another session never passes on
+ * that parent's values. `.agents/skills/verify-piano/scripts/launch.sh` repeats this list.
+ */
+export const LAUNCH_ENV = [
+  SESSION_WS_URL,
+  SESSION_ORIGIN,
+  PREVIEW_OWNER_ENV,
+  PROJECT_INSTRUCTIONS_ENV,
+] as const;
+export type LaunchEnv = Partial<Record<(typeof LAUNCH_ENV)[number], string>>;

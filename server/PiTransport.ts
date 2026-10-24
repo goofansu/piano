@@ -3,7 +3,7 @@
  * It never publishes browser state or decides dialog/action semantics. */
 import { Cause, Clock, Context, Data, Deferred, Effect, Queue, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
-import { SESSION_ORIGIN, SESSION_WS_URL } from "../shared/dispatch.ts";
+import { LAUNCH_ENV, type LaunchEnv } from "../shared/dispatch.ts";
 import type { SessionClosure } from "../shared/wire.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
@@ -75,7 +75,7 @@ const debug = (...a: unknown[]) => {
 const spawn = Effect.fn("PiTransport.spawn")(function* (
   args: ReadonlyArray<string>,
   cwd: string,
-  lifetime?: { env: Record<string, string>; onExit: () => void },
+  lifetime?: { env: LaunchEnv; onExit: () => void },
 ) {
   const cli = yield* PiCli;
   const timeoutMs = yield* PiRequestTimeoutMs;
@@ -120,14 +120,13 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       // Development only: `npm run dev` (node --watch) sets WATCH_REPORT_DEPENDENCIES=1, and Pi's
       // image-resize worker then mistakes Node's dependency-watch message for its result and
       // reports a bogus size-limit omission. `npm start` and the hosted service never set it (INV-12).
-      // `cli.env` carries this instance's session endpoint to Piano's extension (SessionEndpoint).
+      // Every launch variable starts cleared: a Piano started inside another session must not pass
+      // on that parent's endpoint, preview owner or project instructions. `cli.env` carries this
+      // instance's session endpoint (SessionEndpoint), `lifetime.env` this session's own values.
       env: {
         WATCH_REPORT_DEPENDENCIES: undefined,
-        // A Piano started inside another session must not inherit that parent's instance.
-        [SESSION_WS_URL]: undefined,
-        [SESSION_ORIGIN]: undefined,
+        ...Object.fromEntries(LAUNCH_ENV.map((name) => [name, undefined])),
         ...cli.env,
-        PIANO_PREVIEW_OWNER: undefined,
         ...lifetime?.env,
       },
       stdin: "pipe",

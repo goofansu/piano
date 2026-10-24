@@ -844,6 +844,32 @@ test("a member session's Pi gets its project's instructions at each launch; othe
   );
 });
 
+test("a Piano started inside a project member's session passes its parent's instructions to no Pi", async () => {
+  // Pi gives the session it runs the instructions variable, so a Piano started from it inherits it.
+  process.env.PIANO_PROJECT_INSTRUCTIONS = "Inherited from the parent session.";
+  try {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts,
+          registry = yield* Registry;
+        const launches = (id: string) =>
+          records(id)
+            .filter((r) => r.event === "spawn")
+            .map((r) => r.instructions ?? null);
+        yield* registry.saveProject({ id: "inheriting", name: "Inheriting" });
+        yield* registry.updateProject("inheriting", { instructions: "Answer in Dutch." });
+        const loose = (yield* hosts.create({ cwd, options: {} })).spec.sessionId;
+        const member = (yield* hosts.create({ cwd, projectId: "inheriting", options: {} })).spec
+          .sessionId;
+        assert.deepEqual(launches(loose), [null]);
+        assert.deepEqual(launches(member), ["Answer in Dutch."]);
+      }),
+    );
+  } finally {
+    delete process.env.PIANO_PROJECT_INSTRUCTIONS;
+  }
+});
+
 test("INV-01: a prompt or steer records activity on every path to a running session; other input does not", async () => {
   await run(
     Effect.gen(function* () {
