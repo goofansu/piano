@@ -35,16 +35,8 @@ export interface AppState {
   connected: boolean;
   selectionId: string | null;
   resync: boolean;
-  /**
-   * What the main pane shows. The `cwd` of the New page and of a project's home is the directory a
-   * session started there runs in; it has no other owner.
-   */
-  view:
-    | { kind: "session" }
-    | { kind: "new"; cwd?: string; projectId?: string }
-    | { kind: "projects" }
-    | { kind: "project"; projectId: string; cwd?: string }
-    | { kind: "missing-session"; sessionId: string };
+  /** What the main pane shows: a session, or a page. */
+  view: { kind: "session" } | Page;
   folders: FolderView[];
   projects: Project[];
   sessionReferences: SessionReference[];
@@ -66,6 +58,16 @@ export interface AppState {
   /** Sessions whose turn finished while another one was on screen; cleared when opened. */
   done: string[];
 }
+
+/**
+ * A main-pane view other than a session; opening one leaves the session. The `cwd` of the New page
+ * and of a project's home is the directory a session started there runs in; it has no other owner.
+ */
+export type Page =
+  | { kind: "new"; cwd?: string; projectId?: string }
+  | { kind: "projects" }
+  | { kind: "project"; projectId: string; cwd?: string }
+  | { kind: "missing-session"; sessionId: string };
 
 export const sessionKey = (s: { cwd: string; sessionId: string | null }) =>
   `${s.cwd}\n${s.sessionId ?? ""}`;
@@ -103,14 +105,10 @@ export type Action =
       sessionId: string | null;
       firstMessage?: Pick<FirstMessage.PendingCreate, "text" | "attachments">;
     }
-  /** Opens the New page; without a directory it keeps the one already chosen there. */
-  | { type: "new"; cwd?: string; projectId?: string }
-  /** Opens a project's home. */
-  | { type: "projects" }
-  | { type: "project"; projectId: string }
+  /** Opens a page, leaving the session; see `opened` for what a page already on screen keeps. */
+  | { type: "open"; page: Page }
   /** Picks the New page's directory; ignored on any other view. */
-  | { type: "new_directory"; cwd: string }
-  | { type: "missing-session"; sessionId: string };
+  | { type: "new_directory"; cwd: string };
 
 export function reduce(s: AppState, a: Action): AppState {
   const next = reduceAction(s, a);
@@ -151,44 +149,13 @@ function reduceAction(s: AppState, a: Action): AppState {
       // A selection that lands on a closed connection is lost at once, as if the socket closed after it.
       return s.connected ? next : reduceAction(next, { type: "connected", connected: false });
     }
-    case "new":
-      // Picking a project, or New session again, on the New page keeps the directory chosen there.
+    case "open":
       return {
         ...s,
         selectionId: null,
         resync: false,
         selectionFailure: null,
-        view: {
-          kind: "new",
-          cwd: a.cwd ?? (s.view.kind === "new" ? s.view.cwd : undefined),
-          projectId: a.projectId,
-        },
-        selecting: null,
-        session: null,
-        pendingCreate: null,
-      };
-    case "projects":
-      return {
-        ...s,
-        selectionId: null,
-        resync: false,
-        selectionFailure: null,
-        view: { kind: "projects" },
-        selecting: null,
-        session: null,
-        pendingCreate: null,
-      };
-    case "project":
-      return {
-        ...s,
-        selectionId: null,
-        resync: false,
-        selectionFailure: null,
-        // Opening the home already on screen keeps the directory chosen there.
-        view:
-          s.view.kind === "project" && s.view.projectId === a.projectId
-            ? s.view
-            : { kind: "project", projectId: a.projectId },
+        view: opened(s.view, a.page),
         selecting: null,
         session: null,
         pendingCreate: null,
@@ -197,20 +164,25 @@ function reduceAction(s: AppState, a: Action): AppState {
       return (s.view.kind === "new" || s.view.kind === "project") && s.view.cwd !== a.cwd
         ? { ...s, view: { ...s.view, cwd: a.cwd } }
         : s;
-    case "missing-session":
-      return {
-        ...s,
-        selectionId: null,
-        resync: false,
-        view: { kind: "missing-session", sessionId: a.sessionId },
-        selectionFailure: null,
-        selecting: null,
-        session: null,
-        pendingCreate: null,
-      };
     case "server":
       return applyServer(s, a.message);
   }
+}
+
+/**
+ * The view opening `page` shows. Picking a project, or New session again, on the New page keeps the
+ * directory chosen there, as does opening the project home already on screen.
+ */
+function opened(view: AppState["view"], page: Page): Page {
+  if (page.kind === "new")
+    return {
+      kind: "new",
+      cwd: page.cwd ?? (view.kind === "new" ? view.cwd : undefined),
+      projectId: page.projectId,
+    };
+  if (page.kind === "project" && view.kind === "project" && view.projectId === page.projectId)
+    return view;
+  return page;
 }
 
 /** Shared by projection and notifications: rejected frames cannot toast either. */

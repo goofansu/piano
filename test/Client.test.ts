@@ -600,13 +600,13 @@ test("INV-05: picking a New-page directory asks for its models and trust exactly
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
   assert.deepEqual(h.asked(), ["models /a", "trust /a"]);
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
-  h.client.dispatch({ type: "new", projectId: "p1" });
+  h.client.dispatch({ type: "open", page: { kind: "new", projectId: "p1" } });
   assert.deepEqual(
     h.client.getState().view,
     { kind: "new", cwd: "/a", projectId: "p1" },
     "picking a project keeps the directory",
   );
-  h.client.dispatch({ type: "new", projectId: "p2" });
+  h.client.dispatch({ type: "open", page: { kind: "new", projectId: "p2" } });
   assert.deepEqual(h.asked(), [], "another project in the same directory asks nothing again");
   h.client.dispatch({ type: "new_directory", cwd: "/b" });
   assert.deepEqual(h.asked(), ["models /b", "trust /b"]);
