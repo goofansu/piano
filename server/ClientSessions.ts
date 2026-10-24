@@ -290,14 +290,15 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       yield* send({ _tag: "toast", message: "Session deleted", level: "success" });
   });
 
-  // Caller has claimed the new-session selection.
+  // Caller has claimed the new-session selection. Creating (a worktree can take a minute) runs
+  // outside navigation, so this client can show other sessions meanwhile. A client acts only
+  // after its `selected`, which attaching sends, so no act waits on a pending creation.
   const create = Effect.fn("ClientSessions.create")(function* (
     selectionId: string,
     { text, attachments, ...spec }: CreateSessionRequest,
   ) {
-    const session = yield* navigate(
-      hosts.create(spec).pipe(Effect.tap((session) => attachOpened(selectionId, session))),
-    );
+    const session = yield* hosts.create(spec);
+    yield* navigate(attachOpened(selectionId, session));
     const trimmed = text?.trim() ?? "";
     if (!trimmed && !attachments?.length) return;
     // Sent only once this client has attached, so it observes the prompt.
