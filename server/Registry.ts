@@ -410,6 +410,9 @@ export const RegistryLive = Layer.effect(
       );
     }, Effect.uninterruptible);
     const now = () => new Date().toISOString();
+    /** The one place a session's title is decided: trimmed, at most SESSION_TITLE_MAX, empty is none. */
+    const titleOf = (text: string | undefined) =>
+      text?.trim().slice(0, SESSION_TITLE_MAX).trim() || undefined;
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) =>
       sameSession(t, { cwd, sessionId });
     const currentIn = (d: RegistryData, expected: SessionEntry, link?: SessionLinkKey) => {
@@ -614,7 +617,7 @@ export const RegistryLive = Layer.effect(
               {
                 cwd,
                 sessionId,
-                title: title?.trim() || undefined,
+                title: titleOf(title),
                 projectId,
                 createdAt: t,
                 updatedAt: t,
@@ -631,7 +634,7 @@ export const RegistryLive = Layer.effect(
               ? {
                   ...t,
                   updatedAt: now(),
-                  title: t.title ?? (text ? text.trim().slice(0, 80) : undefined),
+                  title: t.title ?? titleOf(text),
                 }
               : t,
           ),
@@ -641,7 +644,7 @@ export const RegistryLive = Layer.effect(
           const entry = d.sessions.find(isSession(cwd, sessionId));
           if (!entry) return d;
           // Pi owns the name; a session Pi has not named keeps its start name or first prompt.
-          const title = facts.sessionName?.trim().slice(0, SESSION_TITLE_MAX) || entry.title;
+          const title = titleOf(facts.sessionName) || entry.title;
           const stats = facts.stats ?? entry.stats;
           if (title === entry.title && JSON.stringify(stats) === JSON.stringify(entry.stats))
             return d;

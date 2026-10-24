@@ -505,6 +505,7 @@ export const PROJECT_NAME_MAX = 200;
  * registry saves the title: trimmed.
  */
 export const SESSION_TITLE_MAX = 200;
+const sessionTitleFit = Schema.makeFilter((t: string) => t.trim().length <= SESSION_TITLE_MAX);
 /** Project instructions' length limit, in UTF-16 code units, as the browser counts them. */
 export const PROJECT_INSTRUCTIONS_MAX = 20_000;
 export const ProjectInstructions = Schema.String.check(
@@ -710,7 +711,7 @@ export type HostInfo = typeof HostInfo.Type;
 export const StartOptions = Schema.Struct({
   model: Schema.optional(Schema.String),
   thinkingLevel: Schema.optional(ThinkingLevel),
-  name: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String.check(sessionTitleFit)),
   /** The session whose dispatch tool created this one; recorded in the new session's own history. */
   dispatchedFrom: Schema.optional(Schema.String),
 });
@@ -857,7 +858,7 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("rename_session", {
     cwd: Schema.String,
     sessionId: Schema.String,
-    title: Schema.String.check(Schema.makeFilter((t) => t.trim().length <= SESSION_TITLE_MAX)),
+    title: Schema.String.check(sessionTitleFit),
   }),
   /** Set a sidebar preference without starting or stopping Pi. */
   Schema.TaggedStruct("pin_session", {
