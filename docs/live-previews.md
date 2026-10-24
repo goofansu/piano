@@ -148,10 +148,12 @@ observation at 120s. A disconnected client leaves work owned by its Pi generatio
 `PiSessions` creates the private generation socket and injects only its endpoint into its Pi child;
 probes cannot inherit a parent's endpoint. `PreviewOwner` runs inside Piano, not a daemon. Requests
 serialize against release; pending/start/stop/unknown observations guard idle retirement. Idle
-reservation closes admission atomically when absence is confirmed. Explicit release closes
-admission and live runner connections immediately, then cleans the retained exact intent under the
-adapter lock. Failed cleanup retains the host/identity for retry and refuses archive/delete.
-Piano shutdown still closes Pi's scope on cleanup failure and logs the failure.
+retirement never waits on the account-wide lock: a busy lock or unusable state root answers not
+idle, and the next sweep asks again. Idle reservation closes admission atomically when absence is
+confirmed. Explicit release closes admission and live runner connections immediately, then cleans
+the retained exact intent under the adapter lock. Failed cleanup retains the host/identity for
+retry and refuses archive/delete. Piano shutdown still closes Pi's scope on cleanup failure and
+logs the failure.
 
 The supervisor runs `preview-runner.ts` as its main process. Before spawning the app it must obtain
 and keep a connection to that generation's socket. No reconnect, PID polling, renewable lease or

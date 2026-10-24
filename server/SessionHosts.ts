@@ -496,6 +496,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         yield* Effect.gen(function* () {
           for (const [key, host] of hosts) {
             const lock = yield* lockFor(key);
+            // One host's failed check or release stays with it; the rest of the sweep still runs.
             yield* Semaphore.withPermits(
               lock,
               1,
@@ -504,14 +505,9 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                 if (hosts.get(key) === host && (yield* host.idle(options.idleMs)))
                   yield* close(key, host);
               }),
-            );
+            ).pipe(Effect.catchTag("PiSessionError", (error) => Effect.logWarning(error.detail)));
           }
-        }).pipe(
-          Effect.catchTag("PiSessionError", (error) => Effect.logWarning(error.detail)),
-          Effect.delay(Math.min(15_000, options.idleMs)),
-          Effect.forever,
-          Effect.forkScoped,
-        );
+        }).pipe(Effect.delay(Math.min(15_000, options.idleMs)), Effect.forever, Effect.forkScoped);
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
