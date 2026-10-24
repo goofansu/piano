@@ -13,6 +13,7 @@ import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
 import { EMPTY_PROJECT_DRAFT, type ProjectDraft, savableProjectDraft } from "./projectCommands.ts";
+import { sessionLabel } from "./sessionCatalog.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
 import { sessionMutable, sessionWorking, workspaceFor } from "./sessionContext.ts";
 import { sessionHasPreview } from "./sessionPreview.ts";
@@ -129,7 +130,7 @@ export interface Confirmation {
 export function confirmation(state: AppState, form: CommandForm): Confirmation | undefined {
   switch (form.kind) {
     case "archive-session": {
-      const title = form.target.title || "Untitled";
+      const title = sessionLabel(form.target.title);
       const preview = sessionHasPreview(state, form.target);
       const stop =
         preview && !sessionWorking(state, form.target)
@@ -153,7 +154,7 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
       // The name sits in the body, where a long one wraps; the title stays one short line.
       return {
         title: "Delete session?",
-        description: `${stop}"${form.target.title || "Untitled"}" and its transcript are removed from Pi's session store. This cannot be undone.`,
+        description: `${stop}"${sessionLabel(form.target.title)}" and its transcript are removed from Pi's session store. This cannot be undone.`,
         confirmLabel: working || preview ? "Stop and delete" : "Delete",
         destructive: true,
       };

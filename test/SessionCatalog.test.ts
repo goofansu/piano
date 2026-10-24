@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { FolderView, WorktreeView } from "../shared/wire.ts";
+import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
+import { addressFor } from "../web/src/lib/navigation.ts";
 import {
   catalogEntry,
   folderFor,
@@ -8,6 +9,7 @@ import {
   sessionCatalog,
   sessionDestination,
 } from "../web/src/lib/sessionCatalog.ts";
+import { sessionContext } from "../web/src/lib/sessionContext.ts";
 import {
   dateGroups,
   folderGroups,
@@ -173,15 +175,40 @@ test("a session opens at the catalog's directory only while its history is there
   assert.deepEqual(sessionDestination(state, "open-member"), {
     sessionId: "open-member",
     cwd: "/work/repo.feature",
-    title: "Open member",
+    label: "Open member",
   });
   assert.deepEqual(
     sessionDestination(state, "closed-member"),
-    { sessionId: "closed-member", cwd: "/closed/app", title: "Closed member" },
+    { sessionId: "closed-member", cwd: "/closed/app", label: "Closed member" },
     "a missing folder still leaves the history readable",
   );
   assert.equal(sessionDestination(state, "lost"), "unlisted", "lost history cannot be opened");
   assert.equal(sessionDestination(state, "missing"), "unlisted");
+});
+
+test("an untitled session is called Untitled in the sidebar, its header and the browser tab", () => {
+  const untitled: AppState = {
+    ...state,
+    view: { kind: "session" },
+    sessionReferences: [sessionReference("/repo", "blank")],
+    session: {
+      cwd: "/repo",
+      sessionId: "blank",
+      hosted: true,
+      cursor: null,
+      state: { sessionId: "blank" } as SessionState,
+      messages: [],
+      dialogs: [],
+    },
+  };
+  assert.deepEqual(
+    {
+      catalog: catalogEntry(untitled, "blank")?.label,
+      header: sessionContext(untitled).title,
+      tab: addressFor(untitled, null, "/s/blank")?.title,
+    },
+    { catalog: "Untitled", header: "Untitled", tab: "Untitled - Piano" },
+  );
 });
 
 test("the palette lists newest first by creation time, a closed folder's session included", () => {

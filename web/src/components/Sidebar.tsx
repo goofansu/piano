@@ -364,7 +364,7 @@ const SessionRow = memo(
               !t.title && "text-ink-3",
             )}
           >
-            {t.title || "Untitled"}
+            {t.label}
           </span>
           {activity === "working" ? (
             <span className="sr-only">working</span>
@@ -379,7 +379,7 @@ const SessionRow = memo(
               variant="ghost"
               size="icon-xs"
               className={cn(hoverSlot, "max-md:hidden")}
-              aria-label={`Session menu for ${t.title || t.sessionId}`}
+              aria-label={`Session menu for ${t.label}`}
             >
               <MoreHorizontalIcon />
             </Button>

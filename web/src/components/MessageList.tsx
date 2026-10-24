@@ -678,7 +678,7 @@ function DispatchedFrom({ parent }: { parent: NonNullable<Props["dispatchedFrom"
   );
 }
 
-function ParentLink({ sessionId, cwd, title }: SessionDestination) {
+function ParentLink({ sessionId, cwd, label }: SessionDestination) {
   const link = useSessionLink(cwd, sessionId);
   // An inline link inside a sentence: no shadcn component reads as running text.
   return (
@@ -686,7 +686,7 @@ function ParentLink({ sessionId, cwd, title }: SessionDestination) {
       {...link}
       className="font-medium text-ink-2 underline-offset-4 outline-none hover:text-ink hover:underline focus-visible:underline"
     >
-      {title}
+      {label}
     </a>
   );
 }

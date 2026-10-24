@@ -48,7 +48,7 @@ export interface PaletteSessionRow {
   /** Search text: the title, folder, branch, project and session ID. */
   value: string;
   keywords: string[];
-  /** The title, or "Untitled". */
+  /** What the session is called on screen, as the catalog labels it. */
   label: string;
   untitled: boolean;
   /** Availability comes from the session catalog, just as it does for the sidebar. */
@@ -131,7 +131,7 @@ export interface PaletteInput {
 
 function sessionRow(t: SessionEntry): PaletteSessionRow {
   const project = t.project?.name ?? "";
-  const label = t.title || "Untitled";
+  const { label } = t;
   return {
     key: `${t.cwd}\n${t.sessionId}`,
     value: `${label} ${t.folder} ${t.branch} ${project} ${t.sessionId}`,

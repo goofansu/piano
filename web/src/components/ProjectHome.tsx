@@ -129,7 +129,7 @@ export function ProjectHome({
                   >
                     <ItemContent className="min-w-0">
                       <ItemTitle className="w-full min-w-0">
-                        <span className="min-w-0 flex-1 truncate">{s.title || "Untitled"}</span>
+                        <span className="min-w-0 flex-1 truncate">{s.label}</span>
                       </ItemTitle>
                       <ItemDescription className="flex min-w-0 items-center gap-1.5 text-xs">
                         {/* The folder keeps its name (up to half the line); a long branch truncates first. */}
