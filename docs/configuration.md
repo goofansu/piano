@@ -72,8 +72,12 @@ A request needs an `Origin` header that exactly matches an allowed origin when i
 
 Piano checks the origin before routing, body decoding or a WebSocket upgrade. A foreign, missing,
 empty or `null` origin gets HTTP 403. Scripts get no exception, so a script that changes state must
-send an allowed `Origin` too. Piano never trusts `Host`, `Forwarded`, `X-Forwarded-*` or identity
-headers.
+send an allowed `Origin` too. Piano never trusts `Forwarded`, `X-Forwarded-*` or identity headers.
+
+Every request, a read included, also needs a `Host` header that names Piano: the host of an allowed
+origin, or a loopback name (`127.0.0.1`, `localhost`, `[::1]`) on any port. A page reached through
+DNS rebinding sends its own hostname as `Host` and gets HTTP 403, though a read carries no `Origin`
+to refuse. Piano compares `Host` only with the configured origins, never the other way round.
 
 The origin check blocks cross-site browser requests. It is not authentication, because a client
 outside a browser can set any `Origin`. It does not replace private access, and it does not prove

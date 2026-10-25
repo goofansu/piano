@@ -176,7 +176,8 @@ binds to loopback for the private proxy connection. Local development defaults a
 configuration are separate from this unit.
 
 Origins are not inferred from Host or forwarded headers: neither Piano nor the TCP forwarder uses proxy identity headers
-as authorization. exe.dev remains responsible for private HTTP/WebSocket access (PIN-5); browser
+as authorization. Piano refuses a request whose `Host` is neither an allowed origin's host nor a
+loopback name, so the proxy must pass the public hostname or a loopback one. exe.dev remains responsible for private HTTP/WebSocket access (PIN-5); browser
 origin checks are a separate control (PIN-12, INV-11).
 
 When deliberately deploying this change, install the configured `piano.service` unit (or configure

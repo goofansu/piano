@@ -86,7 +86,10 @@ export async function startRouter<Fakes = never>(
     handle: (input, init) => {
       const headers = new Headers(init?.headers);
       if (!headers.has("origin")) headers.set("origin", "http://piano.test");
-      return web.handler(new Request(new URL(input, "http://piano.test"), { ...init, headers }));
+      const url = new URL(input, "http://piano.test");
+      // A server receives the Host its client dialled; a web Request carries none of its own.
+      if (!headers.has("host")) headers.set("host", url.host);
+      return web.handler(new Request(url, { ...init, headers }));
     },
     run: (effect) => runtime.runPromise(effect),
     dispose: async () => {
