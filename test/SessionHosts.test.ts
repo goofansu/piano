@@ -484,6 +484,28 @@ test("archiving or deleting working Pi announces a quiet stop to every viewer; r
   );
 });
 
+test("a subscriber hears a session stop that happens before it reads the stream", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      yield* quiescent(yield* registered("subscribed-stop"));
+      const running = yield* hosts.subscribe;
+      // As when a browser connects: Pi stops after the subscription, before anything reads it.
+      yield* hosts.archive(cwd, "subscribed-stop");
+      const lists = yield* running.pipe(
+        Stream.takeUntil((list) => !list.some((h) => h.sessionId === "subscribed-stop")),
+        Stream.runCollect,
+        Effect.timeout("5 seconds"),
+      );
+      assert.equal(
+        lists.at(-1)?.some((h) => h.sessionId === "subscribed-stop"),
+        false,
+        "the last list has no stopped session",
+      );
+    }),
+  );
+});
+
 test("INV-02: concurrent public opens through real/symlink paths have one child lifetime", async () => {
   await run(
     Effect.gen(function* () {

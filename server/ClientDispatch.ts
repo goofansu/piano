@@ -435,20 +435,22 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   // ── initial state and global updates ──
   // Worktree discovery can take seconds in a large repository. Show the last observation at
   // once and let a fresh one follow, so it never holds up the page or this client's requests.
+  // Each subscription is taken before anything is sent, so no change between the first message
+  // and a later one is missed.
   const updates = yield* sidebar.subscribe;
-  yield* send({ _tag: "hosts", hosts: yield* hosts.list });
-  yield* updates.pipe(Stream.runForEach(send), Effect.ignore, Effect.forkScoped);
+  const running = yield* hosts.subscribe;
   yield* facts.changes.pipe(
     Stream.runForEach(() => send({ _tag: "catalogs_invalidated" })),
     Effect.ignore,
-    Effect.forkScoped,
+    Effect.forkScoped({ startImmediately: true }),
   );
-  yield* sidebar.refresh;
-  yield* hosts.changes.pipe(
+  yield* running.pipe(
     Stream.runForEach((list) => send({ _tag: "hosts", hosts: list })),
     Effect.ignore,
     Effect.forkScoped,
   );
+  yield* updates.pipe(Stream.runForEach(send), Effect.ignore, Effect.forkScoped);
+  yield* sidebar.refresh;
 
   return { receive, report } satisfies ClientDispatch as ClientDispatch;
 });
