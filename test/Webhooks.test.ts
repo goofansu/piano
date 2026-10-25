@@ -292,6 +292,30 @@ test("a webhook token is redacted whole before the answer is cut, even across th
   );
 });
 
+test("an answer cut at an emoji leaves the emoji out whole, and is flagged truncated", async () => {
+  const requests: Received[] = [];
+  const answered = (text: string): Snapshot => ({
+    ...snapshot,
+    messages: [{ ...snapshot.messages[0], text }],
+  });
+  await run(
+    "surrogate-cut",
+    Effect.gen(function* () {
+      yield* registered;
+      const hooks = yield* Webhooks;
+      yield* hooks.save(input);
+      // The emoji's two UTF-16 units sit at 1,999-2,000, across the limit.
+      const head = "x".repeat(LAST_ANSWER_CHARS - 1);
+      yield* hooks.emit("session.completed", cwd, "s", answered(`${head}\u{1F600} tail`));
+      yield* wait(() => requests.length === 1);
+      const [body] = requests.map((r) => r.body);
+      assert.ok(body.answer === head, `answer ends ${JSON.stringify(body.answer?.slice(-3))}`);
+      assert.equal(body.answerTruncated, true);
+    }),
+    receive(requests),
+  );
+});
+
 test("a save that omits url and events keeps the stored ones; a removed hook stays removed", async () => {
   await run(
     "partial",

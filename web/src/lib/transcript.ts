@@ -1,4 +1,5 @@
 import type { RenderMsg, ToolExecution } from "@shared/wire";
+import { cutText } from "../../../shared/cutText.ts";
 import {
   type Disposition,
   type SessionCreation,
@@ -130,7 +131,7 @@ export function messageLabel(text: string, max = 80): string {
     .trim()
     .replace(/^[#>*\-`\s]+/, "")
     .trim();
-  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+  return line.length > max ? `${cutText(line, max - 1)}…` : line;
 }
 
 const VERBS: Record<string, [running: string, done: string]> = {
@@ -394,7 +395,7 @@ function summarize(args: string): string {
     if (typeof v === "string") {
       const lines = v.trim().split("\n");
       const first = abbrevHome(lines[0]!.trim());
-      const head = first.length > 160 ? `${first.slice(0, 159)}…` : first;
+      const head = first.length > 160 ? `${cutText(first, 159)}…` : first;
       const more = lines.length - 1;
       return more > 0 ? `${head} (+${more} ${more === 1 ? "line" : "lines"})` : head;
     }

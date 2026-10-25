@@ -5,6 +5,7 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { Context, Data, Effect, Schema } from "effect";
+import { cutText } from "../shared/cutText.ts";
 import {
   WORKTREE_CREATION_MS,
   type WorktreeDiscovery,
@@ -81,7 +82,7 @@ export const checkoutHint = Effect.fn("Worktrees.checkoutHint")(function* (
     root = observed.toplevel;
   }
   const subject = yield* gitText(path, ["log", "-1", "--format=%s"], { timeout: 2000 }).pipe(
-    Effect.map((out) => out.trim().slice(0, 120)),
+    Effect.map((out) => cutText(out.trim(), 120)),
     Effect.orElseSucceed(() => ""),
   );
   return { root, subject: subject || undefined };

@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { Clock, Context, Data, Deferred, Effect, Layer, Queue, Schema, Semaphore } from "effect";
+import { cutText } from "../shared/cutText.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
 import { isLoopbackHostname } from "../shared/loopback.ts";
 import { closureNeedsAttention, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
@@ -307,7 +308,7 @@ export const WebhooksLive = Layer.effect(
           };
           // Redact whole values, then cut: a token straddling the cut would survive as a fragment.
           const full = clean(lastAnswerOf(snapshot, Infinity));
-          const answer = full?.slice(0, LAST_ANSWER_CHARS) ?? null;
+          const answer = full == null ? null : cutText(full, LAST_ANSWER_CHARS);
           const { dialog } = dispositionOf(snapshot, true);
           const closure = snapshot.state.closure;
           if (event === "session.needs_input" && !dialog) return;
