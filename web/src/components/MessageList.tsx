@@ -654,7 +654,7 @@ function useSessionLink(cwd: string, sessionId: string) {
 function OpenSession({ cwd, sessionId }: SessionDestination) {
   const link = useSessionLink(cwd, sessionId);
   return (
-    <IconButton asChild label="Open session" size="icon-xs" className="-my-1 shrink-0 text-ink-3">
+    <IconButton asChild label="Open session" size="inline" className="-my-1 shrink-0 text-ink-3">
       <a {...link}>
         {/* Go there, beside the chevron's expand here: its size, and no box, unlike leaving Piano. */}
         <ArrowUpRightIcon className="size-3.5" />

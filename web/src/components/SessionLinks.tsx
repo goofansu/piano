@@ -63,6 +63,7 @@ export function SessionLinks({ messages, working = false }: Props) {
           </a>
           {/* A bubble with quote marks: the message this link was cited in. */}
           <IconButton
+            size="list"
             label="Jump to message"
             side="left"
             className="shrink-0 text-ink-3"

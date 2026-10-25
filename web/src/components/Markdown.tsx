@@ -29,7 +29,7 @@ function CopyCode({ text }: { text: string }) {
   return (
     <IconButton
       label={copied ? "Code copied" : "Copy code"}
-      size="icon-xs"
+      size="inline"
       className="absolute top-4 right-2"
       onClick={async () => {
         try {

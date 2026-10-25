@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
+import { PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
   DialogContent,
@@ -271,14 +272,14 @@ function WebhookRow({
         />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
+            <PianoButton
               variant="ghost"
-              size="icon-sm"
+              size="list"
               aria-label={`Webhook actions ${name}`}
               disabled={disabled}
             >
               <MoreHorizontalIcon />
-            </Button>
+            </PianoButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuGroup>

@@ -1,7 +1,9 @@
+import { cn } from "cn";
 import { useCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { PaneBody, PaneHeader, PaneHeading } from "@/components/Pane";
 import { ProjectCommandsMenu } from "@/components/Projects";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { SettingsList, settingsRow } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
@@ -14,14 +16,11 @@ import { projectsIndex, projectsIndexContext } from "@/lib/projectsIndex";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
-/** The menu sits above the row's stretched button and appears on hover, as the sidebar's does. */
-const rowMenu =
-  "relative z-10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
-
 /**
  * The Projects index: a listing page shaped as a Settings page is, with its one primary action,
  * New project, from `pageCommands`, which the palette lists too. Each row is the way to one project's
- * home and carries the sidebar's project menu, shown on hover as there; it carries no state, as the
+ * home and carries the sidebar's project menu, revealed as there (`RowActions`), its time stepping
+ * aside for it; it carries no state, as the
  * index is for scanning. Everything comes from what the browser already holds.
  */
 export function ProjectsIndex({ state }: { state: AppState }) {
@@ -61,8 +60,13 @@ export function ProjectsIndex({ state }: { state: AppState }) {
               {index.rows.map((row) => (
                 <Item
                   key={row.project.id}
+                  data-row
                   role="listitem"
-                  className={`${settingsRow} group relative hover:bg-fill-hover`}
+                  className={cn(
+                    settingsRow,
+                    rowActionsWidth.list[1],
+                    "relative hover:bg-fill-hover",
+                  )}
                 >
                   <ItemContent className="min-w-0 gap-0.5">
                     <ItemTitle className="w-full min-w-0">
@@ -81,15 +85,18 @@ export function ProjectsIndex({ state }: { state: AppState }) {
                   </ItemContent>
                   <ItemActions className="text-xs text-ink-3">
                     {row.updatedAt && (
-                      <time dateTime={row.updatedAt}>{timeAgo(row.updatedAt, now)}</time>
+                      <time data-motion="aside" dateTime={row.updatedAt}>
+                        {timeAgo(row.updatedAt, now)}
+                      </time>
                     )}
-                    <ProjectCommandsMenu
-                      project={row.project}
-                      commands={projectCommands(state, row.project)}
-                      run={run}
-                      size="icon-xs"
-                      className={rowMenu}
-                    />
+                    <RowActions className="top-1/2 right-4 -translate-y-1/2">
+                      <ProjectCommandsMenu
+                        project={row.project}
+                        commands={projectCommands(state, row.project)}
+                        run={run}
+                        size="list"
+                      />
+                    </RowActions>
                   </ItemActions>
                 </Item>
               ))}
