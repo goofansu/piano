@@ -18,6 +18,7 @@ import { PianoViewToggle, PianoViewToggleItem } from "@/components/PianoViewTogg
 import { SurfaceFrame } from "@/components/SurfaceArea";
 import { workspaceFile, workspaceFileDownload } from "@/lib/api";
 import { renderMarkdown } from "@/lib/markdown";
+import type { SurfaceTab } from "@/lib/navigation";
 
 const relativeTo = (document: string, path: string) =>
   path.startsWith("/") ? path : `${document.slice(0, document.lastIndexOf("/") + 1)}${path}`;
@@ -73,7 +74,7 @@ export function WorkspaceFile({
   open,
 }: {
   workspaceId: string | undefined;
-  file: { path: string };
+  file: Extract<SurfaceTab, { kind: "file" }>;
   close: () => void;
   open: (path: string) => void;
 }) {
@@ -190,10 +191,8 @@ export function WorkspaceFile({
   const path = result?.path ?? file.path;
   return (
     <SurfaceFrame
-      label="File viewer"
+      tab={file}
       close={close}
-      closeLabel={`Close ${path.slice(path.lastIndexOf("/") + 1)}`}
-      closeWhenSingle
       status={
         <span className="min-w-0 truncate font-mono" title={path}>
           {path}

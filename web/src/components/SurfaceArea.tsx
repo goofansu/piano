@@ -1,16 +1,16 @@
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import {
-  createContext,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
-  useContext,
   useState,
 } from "react";
 import { IconButton } from "@/components/IconButton";
+import type { SurfaceTab } from "@/lib/navigation";
 import { clampPanelWidth, PANEL_WIDTH, readPanelWidth, writePanelWidth } from "@/lib/panelLayout";
 import { trackPointerDrag } from "@/lib/pointerDrag";
+import { useNavigation } from "@/lib/useNavigation";
 
 /** The viewers own native button and media keys, not the composer's type-to-focus hook. */
 const ownKeys = (event: ReactKeyboardEvent<HTMLElement>) => {
@@ -18,36 +18,33 @@ const ownKeys = (event: ReactKeyboardEvent<HTMLElement>) => {
     event.stopPropagation();
 };
 
-/**
- * Whether the session shows one area at a time. There a tab names the view, so a view drops the
- * heading and Close it has beside the Agent area.
- */
-export const SurfaceSingleContext = createContext(false);
-export const useSurfaceSingle = () => useContext(SurfaceSingleContext);
+const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+
+/** A tab's name, the name of its Close, and its view's region. */
+export function surfaceTabNames(tab: SurfaceTab) {
+  return tab === "changes"
+    ? { name: "Changes", close: "Hide changes", region: "Changes" }
+    : { name: fileName(tab.path), close: `Close ${fileName(tab.path)}`, region: "File viewer" };
+}
 
 /**
  * One view in the Surface area: a session's Changes or an open file. The area (`SessionPanel`)
  * draws the tabs, each with its name and Close, in a row of their own; a view owns the toolbar
  * beneath them, what it shows on the left and its actions on the right, so naming and closing
  * never mix with acting, and its scrolling body. One area at a time the session's tabs name the
- * view, so a file's Close joins the end of its toolbar.
+ * view, so a file's Close joins the end of its toolbar; Agent is the way back from Changes.
  */
 export function SurfaceFrame({
-  label,
+  tab,
   close,
-  closeLabel,
-  closeWhenSingle = false,
   status,
   actions,
   below,
   children,
 }: {
-  /** The region's accessible name ("Changes", "File viewer"). */
-  label: string;
+  /** The view's tab, which names the region and its Close. */
+  tab: SurfaceTab;
   close: () => void;
-  closeLabel: string;
-  /** One area at a time, Close joins the toolbar: for a file; Agent is the way back from Changes. */
-  closeWhenSingle?: boolean;
   /** What the view shows, before its actions: a change's size, a file's path. */
   status?: ReactNode;
   /** The view's controls. */
@@ -56,10 +53,11 @@ export function SurfaceFrame({
   below?: ReactNode;
   children: ReactNode;
 }) {
-  const single = useSurfaceSingle();
+  const { single } = useNavigation();
+  const names = surfaceTabNames(tab);
   return (
     <section
-      aria-label={label}
+      aria-label={names.region}
       className="flex min-h-0 min-w-0 flex-1 flex-col"
       onKeyDown={(event) => {
         if (event.key === "Escape" && !single && !event.defaultPrevented) {
@@ -73,8 +71,8 @@ export function SurfaceFrame({
         <div className="flex min-w-0 items-center truncate">{status}</div>
         <div className="flex shrink-0 items-center">
           {actions}
-          {single && closeWhenSingle && (
-            <IconButton size="header" label={closeLabel} onClick={close}>
+          {single && tab !== "changes" && (
+            <IconButton size="header" label={names.close} onClick={close}>
               <XIcon />
             </IconButton>
           )}

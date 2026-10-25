@@ -9,25 +9,16 @@ import {
   PianoStripTabTrigger,
   Tabs,
 } from "@/components/PianoTabs";
-import { SurfaceColumn, SurfaceSingleContext } from "@/components/SurfaceArea";
+import { SurfaceColumn, surfaceTabNames } from "@/components/SurfaceArea";
 import { FileTabIcon, WorkspaceFile } from "@/components/WorkspaceFile";
-import { type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
+import { activeTab, type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
 
 /** The id of a Surface tab's trigger, which its view is labelled by. */
-export const surfaceTabId = (key: string) => `surface-tab-${encodeURIComponent(key)}`;
+const surfaceTabId = (key: string) => `surface-tab-${encodeURIComponent(key)}`;
 const viewId = (key: string) => `surface-view-${encodeURIComponent(key)}`;
-const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-
-/** A tab's name and the name of its Close. */
-export function surfaceTabNames(tab: SurfaceTab) {
-  return tab === "changes"
-    ? { name: "Changes", close: "Hide changes" }
-    : { name: fileName(tab.path), close: `Close ${fileName(tab.path)}` };
-}
-
 /** A tab's icon, alike beside the Agent area and among the session's tabs. */
 export function SurfaceTabIcon({ tab }: { tab: SurfaceTab }) {
   return tab === "changes" ? (
@@ -48,13 +39,11 @@ export function SurfaceTabIcon({ tab }: { tab: SurfaceTab }) {
  */
 export function SessionPanel({
   state,
-  single,
   onAsk,
   id,
   labelledBy,
 }: {
   state: AppState;
-  single: boolean;
   id: string;
   /** The tab naming the area, one area at a time. */
   labelledBy: string | undefined;
@@ -62,7 +51,7 @@ export function SessionPanel({
   onAsk: ((text: string) => void) | undefined;
 }) {
   const navigation = useNavigation();
-  const { settings, surface, surfaceRequest, openFile, selectTab, closeTab } = navigation;
+  const { settings, surface, surfaceRequest, single, openFile, selectTab, closeTab } = navigation;
   const t = state.session;
   const key = t ? sessionKey(t) : null;
   const tabs = surface?.tabs ?? [];
@@ -133,80 +122,78 @@ export function SessionPanel({
     </SurfaceView>
   );
   return (
-    <SurfaceSingleContext value={single}>
-      <SurfaceColumn
-        id={id}
-        labelledBy={labelledBy}
-        label={active === "changes" ? "Changes" : "File viewer"}
-        single={single}
-        shown={shown}
-      >
-        {!single && (
-          // Only the tabs: the shown view's controls are its own toolbar beneath.
-          <PianoStripBar>
-            <Tabs
-              value={active ?? ""}
-              onValueChange={selectTab}
-              className="min-w-0 flex-1 gap-0 self-stretch"
-            >
-              <PianoStripTabsList aria-label="Surface views">
-                {tabs.map((tab) => {
-                  const k = tabKey(tab);
-                  const names = surfaceTabNames(tab);
-                  return (
-                    <PianoStripTab key={k} selected={k === active}>
-                      <PianoStripTabTrigger
-                        value={k}
-                        id={surfaceTabId(k)}
-                        aria-controls={viewId(k)}
-                        title={tab === "changes" ? undefined : tab.path}
-                        icon={<SurfaceTabIcon tab={tab} />}
-                      >
-                        {names.name}
-                      </PianoStripTabTrigger>
-                      <IconButton size="row" label={names.close} onClick={() => closeTab(k)}>
-                        <XIcon />
-                      </IconButton>
-                    </PianoStripTab>
-                  );
-                })}
-              </PianoStripTabsList>
-            </Tabs>
-          </PianoStripBar>
-        )}
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          {keepChanges &&
-            view(
-              "changes",
-              <ChangesPanel
-                key={key}
-                workspace={changesWorkspace}
-                // An open tab follows the rule the Changes command does: a reload can bring one
-                // back, and a checkout can go while it is open.
-                unavailable={
-                  canOpenChanges ? undefined : (changesUnavailable ?? "Changes unavailable")
-                }
-                session={t}
-                active={shown && active === "changes" && !settings}
-                close={() => closeTab("changes")}
-                onAsk={onAsk}
-              />,
-            )}
-          {files.map((file) =>
-            view(
-              tabKey(file),
-              <WorkspaceFile
-                key={`${workspace?.id}:${key}:${file.path}`}
-                workspaceId={workspace?.id}
-                file={file}
-                open={(path) => openFile(path, "surface")}
-                close={() => closeTab(tabKey(file))}
-              />,
-            ),
+    <SurfaceColumn
+      id={id}
+      labelledBy={labelledBy}
+      label={surfaceTabNames(activeTab(surface) ?? "changes").region}
+      single={single}
+      shown={shown}
+    >
+      {!single && (
+        // Only the tabs: the shown view's controls are its own toolbar beneath.
+        <PianoStripBar>
+          <Tabs
+            value={active ?? ""}
+            onValueChange={selectTab}
+            className="min-w-0 flex-1 gap-0 self-stretch"
+          >
+            <PianoStripTabsList aria-label="Surface views">
+              {tabs.map((tab) => {
+                const k = tabKey(tab);
+                const names = surfaceTabNames(tab);
+                return (
+                  <PianoStripTab key={k} selected={k === active}>
+                    <PianoStripTabTrigger
+                      value={k}
+                      id={surfaceTabId(k)}
+                      aria-controls={viewId(k)}
+                      title={tab === "changes" ? undefined : tab.path}
+                      icon={<SurfaceTabIcon tab={tab} />}
+                    >
+                      {names.name}
+                    </PianoStripTabTrigger>
+                    <IconButton size="row" label={names.close} onClick={() => closeTab(k)}>
+                      <XIcon />
+                    </IconButton>
+                  </PianoStripTab>
+                );
+              })}
+            </PianoStripTabsList>
+          </Tabs>
+        </PianoStripBar>
+      )}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {keepChanges &&
+          view(
+            "changes",
+            <ChangesPanel
+              key={key}
+              workspace={changesWorkspace}
+              // An open tab follows the rule the Changes command does: a reload can bring one
+              // back, and a checkout can go while it is open.
+              unavailable={
+                canOpenChanges ? undefined : (changesUnavailable ?? "Changes unavailable")
+              }
+              session={t}
+              active={shown && active === "changes" && !settings}
+              close={() => closeTab("changes")}
+              onAsk={onAsk}
+            />,
           )}
-        </div>
-      </SurfaceColumn>
-    </SurfaceSingleContext>
+        {files.map((file) =>
+          view(
+            tabKey(file),
+            <WorkspaceFile
+              key={`${workspace?.id}:${key}:${file.path}`}
+              workspaceId={workspace?.id}
+              file={file}
+              open={(path) => openFile(path, "surface")}
+              close={() => closeTab(tabKey(file))}
+            />,
+          ),
+        )}
+      </div>
+    </SurfaceColumn>
   );
 }
 
