@@ -18,9 +18,8 @@ import {
 } from "@/components/PianoTabs";
 import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
-import { SessionPanel, SurfaceTabIcon } from "@/components/SessionPanel";
+import { SessionPanel, SurfaceTabTrigger } from "@/components/SessionPanel";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
-import { surfaceTabNames } from "@/components/SurfaceArea";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -295,15 +294,14 @@ function AreaTabs({
   const tabs = surface?.tabs ?? [];
   const value = surface && shownAreas(navigation).surface ? surface.active : "agent";
   // The Surface area's strip tabs, so the session's tabs look alike at every width.
-  const trigger = (key: string, icon: React.ReactNode, label: string, controls: string) => (
-    <PianoStripTab key={key} selected={key === value}>
-      <PianoStripTabTrigger value={key} id={tabId(key)} aria-controls={controls} icon={icon}>
-        {label}
-      </PianoStripTabTrigger>
-    </PianoStripTab>
-  );
-  const view = (tab: SurfaceTab) =>
-    trigger(tabKey(tab), <SurfaceTabIcon tab={tab} />, surfaceTabNames(tab).name, AREA_ID.surface);
+  const view = (tab: SurfaceTab) => {
+    const key = tabKey(tab);
+    return (
+      <PianoStripTab key={key} selected={key === value}>
+        <SurfaceTabTrigger tab={tab} id={tabId(key)} controls={AREA_ID.surface} />
+      </PianoStripTab>
+    );
+  };
   return (
     <PianoStripBar variant="pills">
       <Tabs
@@ -318,7 +316,16 @@ function AreaTabs({
         className="min-w-0 flex-1 gap-0 self-stretch"
       >
         <PianoStripTabsList aria-label="Session views">
-          {trigger("agent", <MessagesSquareIcon className="size-3.5" />, "Agent", AREA_ID.agent)}
+          <PianoStripTab selected={value === "agent"}>
+            <PianoStripTabTrigger
+              value="agent"
+              id={tabId("agent")}
+              aria-controls={AREA_ID.agent}
+              icon={<MessagesSquareIcon className="size-3.5" />}
+            >
+              Agent
+            </PianoStripTabTrigger>
+          </PianoStripTab>
           {tabs.map(view)}
           {/* Not open yet, Changes waits at the end, where opening it adds its tab. */}
           {openChanges && !tabs.includes("changes") && view("changes")}
