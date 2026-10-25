@@ -75,9 +75,20 @@ export interface AddressBar {
   onPop: (listener: () => void) => () => void;
 }
 
+/**
+ * Where the selected session's Surface area outlives a reload of this browser tab, behind a seam
+ * so the policy runs in Node. Any call may throw.
+ */
+export interface SurfaceMemory {
+  read: () => string | null;
+  write: (value: string | null) => void;
+}
+
 export interface NavigationOptions {
   client: Pick<Client, "getState" | "subscribe" | "select" | "dispatch">;
   address: AddressBar;
+  /** Without one, a reload starts every session on its Agent area. */
+  memory?: SurfaceMemory;
   /** Called on every move the user or history makes, e.g. to close the mobile sidebar. */
   moved?: () => void;
 }
@@ -220,9 +231,51 @@ export function addressFor(
 
 const panelOwner = (s: AppState) => (s.session ? sessionKey(s.session) : null);
 
+/** What a reload brings back: one session's tabs and the area it was on. */
+interface KeptSurface {
+  owner: string;
+  surface: Surface | null;
+  area: SessionArea;
+}
+
+const isArea = (value: unknown): value is SessionArea => value === "agent" || value === "surface";
+
+const isTab = (value: unknown): value is SurfaceTab =>
+  value === "changes" ||
+  (typeof value === "object" &&
+    value !== null &&
+    (value as { kind?: unknown }).kind === "file" &&
+    typeof (value as { path?: unknown }).path === "string" &&
+    isArea((value as { from?: unknown }).from));
+
+/** The surface `owner` kept, or null when it kept none or what is stored does not decode. */
+function decodeKept(
+  raw: string | null,
+  owner: string,
+): { surface: Surface; area: SessionArea } | null {
+  if (raw === null) return null;
+  let value: Partial<KeptSurface> | null;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const surface = value?.owner === owner ? value.surface : null;
+  if (
+    !surface ||
+    !isArea(value?.area) ||
+    !Array.isArray(surface.tabs) ||
+    !surface.tabs.every(isTab) ||
+    !surface.tabs.some((tab) => tabKey(tab) === surface.active)
+  )
+    return null;
+  return { surface: { tabs: surface.tabs, active: surface.active }, area: value.area };
+}
+
 export function createNavigation({
   client,
   address,
+  memory,
   moved = () => {},
 }: NavigationOptions): Navigation {
   // A route read from the address bar (on start, or on back/forward) that has not been applied yet.
@@ -244,6 +297,38 @@ export function createNavigation({
   // A user or history move always re-checks the address; otherwise only the screen's inputs changing does.
   let moving = false;
   let synced: unknown[] = [];
+  let kept: { owner: string | null; surface: Surface | null; area: SessionArea } | undefined;
+
+  /** The surface this browser tab kept for `key` before a reload. */
+  const recall = (key: string) => {
+    try {
+      return decodeKept(memory?.read() ?? null, key);
+    } catch {
+      return null;
+    }
+  };
+
+  /** Keeps the shown session's surface, and forgets it once no session is on screen. */
+  const remember = () => {
+    if (!memory) return;
+    // While a session URL loads there is no owner yet, and what it kept must survive.
+    if (!owner && client.getState().view.kind === "session") return;
+    if (kept?.owner === owner && kept.surface === state.surface && kept.area === state.area) return;
+    kept = { owner, surface: state.surface, area: state.area };
+    try {
+      memory.write(
+        owner
+          ? JSON.stringify({
+              owner,
+              surface: state.surface,
+              area: state.area,
+            } satisfies KeptSurface)
+          : null,
+      );
+    } catch {
+      /* storage unavailable: a reload starts on the Agent area */
+    }
+  };
   const listeners = new Set<() => void>();
 
   const set = (patch: Partial<NavigationState>) => {
@@ -288,9 +373,17 @@ export function createNavigation({
       const next = panelOwner(client.getState());
       if (next !== owner) {
         owner = next;
-        // Inspection belongs to one session: another one starts with only its Agent area.
-        set({ surface: null, area: "agent", views: false, pullRequest: false });
+        // Inspection belongs to one session: another one starts with only its Agent area. The
+        // session this browser tab showed last comes back as it was left, as after a reload.
+        const back = next ? recall(next) : null;
+        set({
+          surface: back?.surface ?? null,
+          area: back?.area ?? "agent",
+          views: false,
+          pullRequest: false,
+        });
       }
+      remember();
     } finally {
       depth--;
     }
@@ -438,6 +531,15 @@ export function createNavigation({
     setPalette: (open) => batch(() => set({ palette: open })),
   };
 }
+
+/** This browser tab's sessionStorage: a reload keeps the surface, a new tab starts without it. */
+export const browserSurfaceMemory: SurfaceMemory = {
+  read: () => sessionStorage.getItem("piano.surface"),
+  write: (value) =>
+    value === null
+      ? sessionStorage.removeItem("piano.surface")
+      : sessionStorage.setItem("piano.surface", value),
+};
 
 /** The real address bar. Globals are read only when called, so this module loads in Node. */
 export const browserAddressBar: AddressBar = {

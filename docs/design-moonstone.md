@@ -164,7 +164,9 @@ has no title. Its views are browser-style tabs on a darker strip, each a small i
 Close, outlined while pointed at; the shown view's toolbar is a row of its own beneath them, what
 it shows on the left and its small-text actions on the right, so naming and closing never mix
 with acting. A new view's tab joins the end, Changes included; opening one already open shows it
-in place. Tabs that no longer fit scroll sideways. Views at the header's end opens Changes, or
+in place. Tabs that no longer fit scroll sideways. Reloading the page brings back the session's
+tabs, the one shown and its area; another session, or a new browser tab, starts with only the
+Agent area. Pressing a tab never draws the keyboard ring. Views at the header's end opens Changes, or
 shows it where it is already open. The Surface area's remembered width is a
 preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
 shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the

@@ -57,6 +57,16 @@ function ScrollingTabsList({ className, onWheel, ...props }: ComponentProps<type
   );
 }
 
+/**
+ * Upstream focuses a pressed tab from script, which draws the keyboard ring whenever nothing had
+ * focus before (as after a reload). Focusing it first without the ring leaves upstream's focus
+ * nothing to do; keyboard focus still rings.
+ */
+function focusPressedTab(event: React.MouseEvent<HTMLButtonElement>) {
+  if (event.button === 0 && !event.ctrlKey && !event.currentTarget.disabled)
+    event.currentTarget.focus({ focusVisible: false });
+}
+
 /** Quiet navigation tabs: the line variant, its tabs sized by their text, not stretched. */
 export function PianoTabsList({ className, ...props }: ComponentProps<typeof TabsList>) {
   return <ScrollingTabsList {...props} className={cn("gap-1", className)} />;
@@ -66,10 +76,18 @@ export function PianoTabsList({ className, ...props }: ComponentProps<typeof Tab
  * A tab as `PianoViewToggleItem` draws a choice: muted until selected, then ink with an underline
  * on the row's edge. Focus draws a ring, never the boxed border that would hide the underline.
  */
-export function PianoTabsTrigger({ className, ...props }: ComponentProps<typeof TabsTrigger>) {
+export function PianoTabsTrigger({
+  className,
+  onMouseDown,
+  ...props
+}: ComponentProps<typeof TabsTrigger>) {
   return (
     <TabsTrigger
       {...props}
+      onMouseDown={(event) => {
+        onMouseDown?.(event);
+        focusPressedTab(event);
+      }}
       className={cn(
         // Sized by pointer, not width: a touch screen keeps a 44px target at any width.
         "h-8 max-w-48 flex-none gap-1.5 rounded-none border-0 px-2 text-xs text-ink-3 hover:text-ink data-active:text-ink pointer-coarse:h-11",
@@ -127,10 +145,18 @@ export function PianoStripTab({
 }
 
 /** The strip tab's trigger: its icon and name, with no underline or fill of its own. */
-export function PianoStripTabTrigger({ className, ...props }: ComponentProps<typeof TabsTrigger>) {
+export function PianoStripTabTrigger({
+  className,
+  onMouseDown,
+  ...props
+}: ComponentProps<typeof TabsTrigger>) {
   return (
     <TabsTrigger
       {...props}
+      onMouseDown={(event) => {
+        onMouseDown?.(event);
+        focusPressedTab(event);
+      }}
       className={cn(
         "h-full min-w-0 flex-1 justify-start gap-1.5 rounded-md border-0 pl-2.5 pr-0.5 text-xs text-inherit after:hidden hover:text-inherit data-active:text-inherit dark:text-inherit dark:hover:text-inherit dark:data-active:text-inherit focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
         className,
