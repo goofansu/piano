@@ -164,8 +164,6 @@ export interface Navigation {
   closeTab: (key: string) => void;
   /** Shows the Agent area in a single-view layout, keeping the surface for the next visit. */
   showAgent: () => void;
-  /** Shows the surface already open in a single-view layout, as it was left. */
-  showSurface: () => void;
   /** The session reports its layout as its available width changes. */
   setSingle: (single: boolean) => void;
   setViews: (open: boolean) => void;
@@ -565,7 +563,6 @@ export function createNavigation({
         set({ surface: { tabs, active }, area: back ? "agent" : state.area });
       }),
     showAgent: () => batch(() => set({ area: "agent" })),
-    showSurface: () => batch(() => set({ area: state.surface ? "surface" : "agent" })),
     setSingle: (single) => batch(() => set({ single, views: single ? false : state.views })),
     setViews: (open) => batch(() => set({ views: open })),
     openPullRequest: () =>

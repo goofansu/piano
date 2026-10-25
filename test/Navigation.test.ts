@@ -537,8 +537,8 @@ test("one area at a time, closing a file opened from the Agent area returns ther
     "opened from Changes, back to Changes",
   );
   p.navigation.showAgent();
-  p.navigation.showSurface();
-  assert.equal(shownTabs(p.navigation).area, "surface");
+  p.navigation.selectTab("changes");
+  assert.equal(shownTabs(p.navigation).area, "surface", "the Changes tab shows it again");
 });
 
 test("a file remembers the area it was opened from when the layout narrows", () => {
@@ -631,7 +631,6 @@ test("side by side both areas show while there are tabs; one area at a time, the
   assert.deepEqual(shown(), { agent: true, surface: true }, "wide again: both");
   p.navigation.closeTab("changes");
   p.navigation.setSingle(true);
-  p.navigation.showSurface();
   assert.deepEqual(shown(), { agent: true, surface: false }, "nothing open stays on Agent");
 });
 
