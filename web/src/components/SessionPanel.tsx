@@ -19,12 +19,34 @@ import { type AppState, sessionKey } from "@/store";
 /** The id of a Surface tab's trigger, which its view is labelled by. */
 const surfaceTabId = (key: string) => `surface-tab-${encodeURIComponent(key)}`;
 const viewId = (key: string) => `surface-view-${encodeURIComponent(key)}`;
-/** A tab's icon, alike beside the Agent area and among the session's tabs. */
-export function SurfaceTabIcon({ tab }: { tab: SurfaceTab }) {
-  return tab === "changes" ? (
-    <FileDiffIcon className="size-3.5" />
-  ) : (
-    <FileTabIcon path={tab.path} className="size-3.5" />
+/** A Surface tab's trigger, alike beside the Agent area and among the session's tabs: its icon,
+ * its name, and a file's path on hover. */
+export function SurfaceTabTrigger({
+  tab,
+  id,
+  controls,
+}: {
+  tab: SurfaceTab;
+  id: string;
+  /** The id of the region the tab shows. */
+  controls: string;
+}) {
+  return (
+    <PianoStripTabTrigger
+      value={tabKey(tab)}
+      id={id}
+      aria-controls={controls}
+      title={tab === "changes" ? undefined : tab.path}
+      icon={
+        tab === "changes" ? (
+          <FileDiffIcon className="size-3.5" />
+        ) : (
+          <FileTabIcon path={tab.path} className="size-3.5" />
+        )
+      }
+    >
+      {surfaceTabNames(tab).name}
+    </PianoStripTabTrigger>
   );
 }
 
@@ -141,20 +163,15 @@ export function SessionPanel({
             <PianoStripTabsList aria-label="Surface views">
               {tabs.map((tab) => {
                 const k = tabKey(tab);
-                const names = surfaceTabNames(tab);
                 return (
                   <PianoStripTab key={k} selected={k === active}>
-                    <PianoStripTabTrigger
-                      value={k}
-                      id={surfaceTabId(k)}
-                      aria-controls={viewId(k)}
-                      title={tab === "changes" ? undefined : tab.path}
-                      icon={<SurfaceTabIcon tab={tab} />}
-                    >
-                      {names.name}
-                    </PianoStripTabTrigger>
+                    <SurfaceTabTrigger tab={tab} id={surfaceTabId(k)} controls={viewId(k)} />
                     {closable(tab, single) && (
-                      <IconButton size="row" label={names.close} onClick={() => closeTab(k)}>
+                      <IconButton
+                        size="row"
+                        label={surfaceTabNames(tab).close}
+                        onClick={() => closeTab(k)}
+                      >
                         <XIcon />
                       </IconButton>
                     )}
