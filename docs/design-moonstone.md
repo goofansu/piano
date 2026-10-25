@@ -160,7 +160,9 @@ the path; the segments carry no tooltips, since they show their own text. The de
 
 The Surface area (Changes, an open file) sits beside the Agent area under the one session header,
 on the same sheet, split off by a hairline rather than floating as a second card; the Agent area
-has no title, and only the Surface area's view has a heading row. Views at the header's end opens
+has no title. The Surface area's view has a tab row, its name and Close as a browser-style tab on
+a darker strip, apart from a toolbar row beneath it: what the view shows on the left, its actions
+on the right, so naming and closing never mix with acting. Views at the header's end opens
 Changes, or focuses it where it already shows. The Surface area's remembered width is a
 preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
 shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the

@@ -27,38 +27,50 @@ export const useSurfaceSingle = () => useContext(SurfaceSingleContext);
 
 /**
  * One view in the Surface area: a session's Changes or an open file. The area (`SurfaceColumn`)
- * owns sizing and the splitter; a view owns its header, toolbar and scrolling body. Beside the
- * Agent area, Escape closes the view once its own popovers have taken theirs.
+ * owns sizing and the splitter; a view owns two rows and its scrolling body. Beside the Agent area
+ * the first row is the view's tab, its name and Close, and the second its toolbar: what it shows
+ * on the left, its actions on the right, so naming and closing never mix with acting. One area
+ * at a time the session's tabs name the view, so only the toolbar shows. Beside the Agent area,
+ * Escape closes the view once its own popovers have taken theirs.
  */
 export function SurfaceFrame({
   label,
+  icon,
   title,
-  header,
-  description,
-  actions,
-  toolbar,
-  footer,
   close,
   closeLabel,
+  closeWhenSingle = false,
+  status,
+  actions,
+  below,
   children,
 }: {
   /** The region's accessible name ("Changes", "File viewer"). */
   label: string;
-  closeLabel?: string;
-  title?: ReactNode;
-  /** A viewer-specific heading; the frame still owns scrolling. */
-  header?: ReactNode;
-  /** Secondary words under the title. */
-  description?: ReactNode;
-  /** Controls at the header's end, before Close. */
-  actions?: ReactNode;
-  /** View controls in a row below the title at every width. */
-  toolbar?: ReactNode;
-  footer?: ReactNode;
+  icon: ReactNode;
+  /** The tab's name: the view's, or a file's name. */
+  title: ReactNode;
   close: () => void;
+  closeLabel: string;
+  /**
+   * One area at a time, Close joins the toolbar: for a file, whose tab has no Close of its own.
+   * Changes has none there, since Agent is the way back.
+   */
+  closeWhenSingle?: boolean;
+  /** What the view shows, at the toolbar's start: a change's size, a file's path. */
+  status?: ReactNode;
+  /** The view's controls, at the toolbar's end. */
+  actions?: ReactNode;
+  /** Rows under the toolbar, such as a stale observation's note. */
+  below?: ReactNode;
   children: ReactNode;
 }) {
   const single = useSurfaceSingle();
+  const closeButton = (
+    <IconButton size={single ? "header" : "row"} label={closeLabel} onClick={close}>
+      <XIcon />
+    </IconButton>
+  );
   return (
     <section
       aria-label={label}
@@ -70,59 +82,38 @@ export function SurfaceFrame({
         } else ownKeys(event);
       }}
     >
-      {header ?? (
-        <PanelHeader label={label} closeLabel={closeLabel} close={close} actions={actions}>
-          <h2
-            tabIndex={-1}
-            data-surface-focus
-            className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink outline-none"
-          >
-            {title}
-          </h2>
-          {description && (
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-ink-3">
-              {description}
-            </div>
-          )}
-        </PanelHeader>
-      )}
-      {toolbar && (
-        <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4">
-          {toolbar}
+      {!single && (
+        // A browser-style tab on the area's strip; one view, so not a tab list. No shadcn
+        // component is a closable tab.
+        <div className="flex h-11 shrink-0 items-end border-b border-line bg-surface-0 px-2">
+          <div className="relative -mb-px flex h-9 min-w-0 max-w-full items-center gap-1.5 rounded-t-lg border border-b-0 border-line bg-conversation pr-1 pl-3">
+            <span className="flex shrink-0 text-ink-3 [&_svg]:size-4" aria-hidden>
+              {icon}
+            </span>
+            <h2
+              tabIndex={-1}
+              data-surface-focus
+              className="min-w-0 truncate text-sm font-medium text-ink outline-none"
+            >
+              {title}
+            </h2>
+            {closeButton}
+          </div>
         </div>
       )}
+      {/* Plain status and view controls have no dedicated shadcn layout. */}
+      <div className="flex min-h-10 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
+        <div className="flex min-w-0 items-center truncate">{status}</div>
+        <div className="flex shrink-0 items-center">
+          {actions}
+          {single && closeWhenSingle && closeButton}
+        </div>
+      </div>
+      {below}
       <div data-slot="panel-body" className="relative min-h-0 flex-1 overflow-auto">
         {children}
       </div>
-      {footer && <footer className="shrink-0 border-t border-line px-4 py-3">{footer}</footer>}
     </section>
-  );
-}
-
-/** A view's header, shaped like the session header: a title with a line beneath it, then controls, then Close. */
-export function PanelHeader({
-  label,
-  closeLabel = `Close ${label.toLowerCase()}`,
-  actions,
-  close,
-  children,
-}: {
-  label: string;
-  closeLabel?: string;
-  actions?: ReactNode;
-  close: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <header className="flex shrink-0 items-center gap-2 border-b border-line py-3 pr-3 pl-4">
-      <div className="flex min-w-0 flex-1 flex-col gap-1 py-0.5">{children}</div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        {actions}
-        <IconButton size="header" label={closeLabel} onClick={close}>
-          <XIcon />
-        </IconButton>
-      </div>
-    </header>
   );
 }
 

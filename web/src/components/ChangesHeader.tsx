@@ -8,7 +8,6 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/PianoPopover";
-import { PanelHeader, useSurfaceSingle } from "@/components/SurfaceArea";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { type ChangesSheetView, FILE_PATCH_LIMIT } from "@/lib/changesView";
@@ -16,28 +15,41 @@ import { abbrevHome } from "@/lib/format";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 
 /**
- * The Changes header: the title and its controls, then a toolbar with the size of the change and
- * the view controls. The session header already names the branch; what is compared and when lives
- * in Details. One area at a time, the tab names the view and Agent is the way back, so the
- * controls join the toolbar and there is no title or Hide.
+ * Changes' toolbar actions: the view controls, then Refresh and Details. The size of the change sits
+ * at the toolbar's start and the tab names the view (`SurfaceFrame`); the session header already
+ * names the branch, and what is compared and when lives in Details.
  */
-export function ChangesHeader({
+export function ChangesActions({
   sheet,
   canRefresh,
   refresh,
   toggleEvery,
-  close,
 }: {
   sheet: ChangesSheetView;
   canRefresh: boolean;
   refresh: () => void;
   toggleEvery: () => void;
-  close: () => void;
 }) {
   const [wrap, setWrap] = useChangesWrap();
-  const single = useSurfaceSingle();
-  const actions = (
+  return (
     <>
+      <Button
+        variant="ghost"
+        size="xs"
+        disabled={sheet.body.kind !== "files"}
+        onClick={toggleEvery}
+        className="text-ink-2 pointer-coarse:min-h-11"
+      >
+        {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
+      </Button>
+      <Toggle
+        size="sm"
+        pressed={wrap}
+        onPressedChange={setWrap}
+        className="h-6 min-w-0 px-2 text-xs text-ink-2 pointer-coarse:min-h-11"
+      >
+        Wrap
+      </Toggle>
       <IconButton
         size="header"
         label={sheet.refreshing ? "Refreshing changes…" : "Refresh changes"}
@@ -51,47 +63,16 @@ export function ChangesHeader({
       <ChangesDetails sheet={sheet} />
     </>
   );
+}
+
+/** The note under the toolbar while the last observation is stale. */
+export function ChangesStaleNote({ sheet }: { sheet: ChangesSheetView }) {
   return (
-    <div className="shrink-0">
-      {!single && (
-        <PanelHeader label="Changes" closeLabel="Hide changes" close={close} actions={actions}>
-          <h2 tabIndex={-1} data-surface-focus className="text-sm font-medium outline-none">
-            Changes
-          </h2>
-        </PanelHeader>
-      )}
-      {/* Plain comparison status and view controls have no dedicated shadcn layout. */}
-      <div className="flex min-h-10 min-w-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
-        <span role="status" className="min-w-0 truncate">
-          {sheet.status}
-        </span>
-        <div className="flex shrink-0 items-center">
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={sheet.body.kind !== "files"}
-            onClick={toggleEvery}
-            className="text-ink-2 pointer-coarse:min-h-11"
-          >
-            {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
-          </Button>
-          <Toggle
-            size="sm"
-            pressed={wrap}
-            onPressedChange={setWrap}
-            className="h-6 min-w-0 px-2 text-xs text-ink-2 pointer-coarse:min-h-11"
-          >
-            Wrap
-          </Toggle>
-          {single && actions}
-        </div>
-      </div>
-      {sheet.staleNote && (
-        <p role="status" className="border-b border-line px-4 py-2 text-xs text-ink-2">
-          {sheet.staleNote.text}
-        </p>
-      )}
-    </div>
+    sheet.staleNote && (
+      <p role="status" className="border-b border-line px-4 py-2 text-xs text-ink-2">
+        {sheet.staleNote.text}
+      </p>
+    )
   );
 }
 

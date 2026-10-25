@@ -167,33 +167,38 @@ export function WorkspaceFile({
   return (
     <SurfaceFrame
       label="File viewer"
-      closeLabel="Close file"
+      icon={<Icon />}
+      title={<span title={path}>{path.slice(path.lastIndexOf("/") + 1)}</span>}
       close={close}
-      title={
-        <>
-          <Icon className="size-4 shrink-0 text-ink-3" aria-hidden />
-          <span className="min-w-0 truncate font-mono text-xs font-normal" title={path}>
-            {path}
-          </span>
-        </>
+      closeLabel="Close file"
+      closeWhenSingle
+      status={
+        <span className="min-w-0 truncate font-mono" title={path}>
+          {path}
+        </span>
       }
       actions={
-        <IconButton size="header" label="Download file" disabled={!result || saving} onClick={save}>
-          <DownloadIcon />
-        </IconButton>
-      }
-      toolbar={
-        result?.kind === "markdown" && (
-          <PianoViewToggle
-            type="single"
-            value={mode}
-            onValueChange={(value) => value && setMode(value)}
-            aria-label="Markdown view"
+        <>
+          {result?.kind === "markdown" && (
+            <PianoViewToggle
+              type="single"
+              value={mode}
+              onValueChange={(value) => value && setMode(value)}
+              aria-label="Markdown view"
+            >
+              <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
+              <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
+            </PianoViewToggle>
+          )}
+          <IconButton
+            size="header"
+            label="Download file"
+            disabled={!result || saving}
+            onClick={save}
           >
-            <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
-            <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
-          </PianoViewToggle>
-        )
+            <DownloadIcon />
+          </IconButton>
+        </>
       }
     >
       {status && <Notice>{status}</Notice>}

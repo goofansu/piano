@@ -2,7 +2,7 @@ import type { ChangeFile, Workspace, WorkspaceChanges } from "@shared/wire";
 import { cn } from "cn";
 import { FileDiffIcon, MessageSquarePlusIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { ChangesHeader } from "@/components/ChangesHeader";
+import { ChangesActions, ChangesStaleNote } from "@/components/ChangesHeader";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
 import { SurfaceFrame } from "@/components/SurfaceArea";
@@ -90,16 +90,24 @@ export function ChangesPanel({
   return (
     <SurfaceFrame
       label="Changes"
+      icon={<FileDiffIcon />}
+      title="Changes"
       close={close}
-      header={
-        <ChangesHeader
+      closeLabel="Hide changes"
+      status={
+        <span role="status" className="truncate">
+          {sheet.status}
+        </span>
+      }
+      actions={
+        <ChangesActions
           sheet={sheet}
           canRefresh={!!workspace}
           refresh={refresh}
           toggleEvery={() => setDisclosure(toggleEvery(disclosure, sheet))}
-          close={close}
         />
       }
+      below={<ChangesStaleNote sheet={sheet} />}
     >
       <div className="flex flex-col">
         <SheetBodyView
