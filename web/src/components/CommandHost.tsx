@@ -185,6 +185,7 @@ export function CommandHost({
   children: React.ReactNode;
 }) {
   const {
+    openPage,
     openNew,
     openProjects,
     openProject,
@@ -209,10 +210,7 @@ export function CommandHost({
     state,
     radiusSignedIn,
     send,
-    openProject,
-    // The New page keeps the directory chosen there when it opens for a project.
-    openNew: (projectId) => openNew(undefined, projectId),
-    openProjects,
+    openPage,
     listen,
   });
   const { form } = forms;

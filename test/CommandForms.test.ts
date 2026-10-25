@@ -330,9 +330,14 @@ function forms(
       return share(workspaceId, sessionId);
     },
     // Each page as its address names it: a project's home, the New page for a project, the index.
-    openProject: (id) => opened.push(`/projects/${id}`),
-    openNew: (projectId) => opened.push(`/projects/${projectId}/new`),
-    openProjects: () => opened.push("/projects"),
+    openPage: (page) =>
+      opened.push(
+        page.kind === "project"
+          ? `/projects/${page.projectId}`
+          : page.kind === "new"
+            ? `/projects/${page.projectId}/new`
+            : "/projects",
+      ),
     newId,
   });
   return {
