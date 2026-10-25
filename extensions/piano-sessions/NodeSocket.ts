@@ -1,5 +1,6 @@
 /** Node 24's WebSocket accepts Undici's options, including an explicit Origin header. */
 import { SESSION_ORIGIN, SESSION_WS_URL } from "../../shared/dispatch.ts";
+import { isLoopbackHostname } from "../../shared/loopback.ts";
 import type { SocketEnvironment } from "../../web/src/lib/ws.ts";
 
 export interface DispatchConfiguration {
@@ -19,7 +20,7 @@ export function dispatchConfiguration(
     const origin = new URL(configured);
     if (
       !["ws:", "wss:"].includes(url.protocol) ||
-      !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) ||
+      !isLoopbackHostname(url.hostname) ||
       url.username ||
       url.password ||
       url.pathname !== "/ws" ||

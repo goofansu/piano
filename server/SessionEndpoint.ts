@@ -11,6 +11,7 @@
  * the loopback port directly even when the only allowed origin is a public proxy origin.
  */
 import { type LaunchEnv, SESSION_ORIGIN, SESSION_WS_URL } from "../shared/dispatch.ts";
+import { isLoopbackHostname } from "../shared/loopback.ts";
 import { sessionLinkOrigin } from "./OriginPolicy.ts";
 
 export interface SessionEndpoint {
@@ -36,7 +37,7 @@ export function sessionEndpoint(
   origins: ReadonlySet<string>,
 ): SessionEndpoint | undefined {
   const host = connectableHost(listener.host);
-  if (!["127.0.0.1", "localhost", "[::1]"].includes(host)) return undefined;
+  if (!isLoopbackHostname(host)) return undefined;
   const authority = `${host}:${listener.port}`;
   // Any allowed origin passes the upgrade check, so the one links use serves as the header too.
   const origin = sessionLinkOrigin(origins, authority);
