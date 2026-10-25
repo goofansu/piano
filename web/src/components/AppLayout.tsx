@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { PanelLeftCloseIcon, XIcon } from "lucide-react";
+import { PanelLeftCloseIcon } from "lucide-react";
 import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import { IconButton } from "@/components/IconButton";
 import { PianoMark } from "@/components/PianoMark";
@@ -167,8 +167,7 @@ export function LayoutHeader({ children }: { children?: ReactNode }) {
     // exactly the same point; its hairline is level with the pane header's, one band across the screen.
     <SidebarHeader className="h-16 shrink-0 flex-row items-center gap-2.5 border-b border-line px-(--gutter) md:mt-[calc(var(--pane-inset)+var(--pane-line))] md:pl-[calc(var(--gutter)+var(--pane-line))]">
       <IconButton label="Hide sidebar" onClick={hide}>
-        <XIcon className="md:hidden" />
-        <PanelLeftCloseIcon className="hidden md:block" />
+        <PanelLeftCloseIcon />
       </IconButton>
       <span className="flex-1" />
       {children}
