@@ -6,9 +6,13 @@
  * the transcript as Pi content becomes wire messages, live or saved, PiSessions projects the rest
  * of what a session publishes or a saved peek returns (state, notices, dialogs), and socket egress projects
  * messages that never passed through a session.
+ *
+ * Two kinds of wire text leave verbatim: identities (paths and correlation keys, below), and text
+ * the person wrote in Piano and saves back from what they are shown (a project's name and
+ * instructions, see `AUTHORED_PROJECT_FIELDS`). Redacting either would overwrite what it names.
  */
 import { stripVTControlCharacters } from "node:util";
-import type { ServerMessage, SessionEvent, Snapshot } from "../shared/wire.ts";
+import type { Project, ServerMessage, SessionEvent, Snapshot } from "../shared/wire.ts";
 
 const marker = "[REDACTED]";
 const prefixes = ["sk-", "ghp_", "github_pat_", "xoxb-", "xoxp-"];
@@ -32,7 +36,8 @@ export interface DisplayRedaction {
  * sends them back (`select`, `/api/ls`, the registry's folders and sessions), so they leave
  * verbatim: a redacted path names nothing. Within the wire vocabulary these keys never hold
  * display text; raw Pi content uses `value`, while PiRecords' typed wire output uses `wire`. A path is not a secret
- * store: one spelled like a token is shown as spelled.
+ * store: one spelled like a token is shown as spelled. Authored text is not an identity: it is
+ * exempted by its place in a message (`projectServerMessage`), never by a key name alone.
  */
 const IDENTITY_FIELDS: ReadonlySet<string> = new Set([
   "inputFingerprint", // Opaque, process-keyed input equality evidence, never display content
@@ -162,11 +167,31 @@ export function projectSessionEvent(event: SessionEvent): SessionEvent {
 }
 
 /**
+ * A project's fields the person wrote in Piano: Project settings shows them and saves them back,
+ * so a redacted copy would be written over the stored text (as webhook receiver URLs are sent
+ * unredacted, shared/http.ts). They are the person's own words, not Pi output, so they leave as
+ * stored; the project's other fields get the full pass.
+ */
+const AUTHORED_PROJECT_FIELDS = ["name", "instructions"] as const;
+
+const projectProject = (project: Project): Project => {
+  const shown: Record<string, unknown> = { ...projectDisplay(project) };
+  for (const key of AUTHORED_PROJECT_FIELDS) if (key in project) shown[key] = project[key];
+  return shown as Project;
+};
+
+/**
  * The socket egress pass. A `session` event is a PiSession frame, which the session projected
  * as it published it; only the envelope is projected here. Every other message, including a
- * `selected` snapshot's state and dialogs, gets the full pass.
+ * `selected` snapshot's state and dialogs, gets the full pass. The `registry` message is the only
+ * one carrying projects; their authored fields leave as stored.
  */
 export function projectServerMessage(message: ServerMessage): ServerMessage {
+  if (message._tag === "registry") {
+    const { projects, ...rest } = message;
+    const shown = projectDisplay(rest);
+    return projects === undefined ? shown : { ...shown, projects: projects.map(projectProject) };
+  }
   if (message._tag === "session") {
     const { event, ...envelope } = message;
     return { ...projectDisplay(envelope), event };
