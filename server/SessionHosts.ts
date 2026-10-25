@@ -143,7 +143,9 @@ export class SessionHosts extends Context.Service<
     readonly archive: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly delete: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly list: Effect.Effect<ReadonlyArray<HostInfo>>;
-    readonly changes: Stream.Stream<ReadonlyArray<HostInfo>>;
+    /** The running sessions, then every later change to them. Subscribes now, so nothing published
+     * after this returns is missed. */
+    readonly subscribe: Effect.Effect<Stream.Stream<ReadonlyArray<HostInfo>>, never, Scope.Scope>;
     /** Acquisition or completed retirement may have changed Pi history. Coalesced invalidations,
      * not a lifecycle log: re-read current facts. Ordinary session state changes do not emit. */
     readonly lifecycleChanges: Stream.Stream<void>;
@@ -595,7 +597,11 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         archive: (cwd, id) => retire(cwd, id, false),
         delete: (cwd, id) => retire(cwd, id, true),
         list,
-        changes: Stream.fromPubSub(changed),
+        // Subscribed before the list is read: a change in between arrives after it, not never.
+        subscribe: Effect.gen(function* () {
+          const subscription = yield* PubSub.subscribe(changed);
+          return Stream.concat(Stream.make(yield* list), Stream.fromSubscription(subscription));
+        }),
         lifecycleChanges: Stream.fromPubSub(lifecycle),
       });
     }),
