@@ -250,12 +250,8 @@ export interface CommandFormsOptions {
   send: (command: ClientCommand) => void;
   /** Publish a session to Radius; resolves once the publication is confirmed. */
   share: (workspaceId: string, sessionId: string) => Promise<SessionShare>;
-  /** A project's home. */
-  openProject: (id: string) => void;
-  /** The New page for `projectId`. */
-  openNew: (projectId: string) => void;
-  /** The Projects index. */
-  openProjects: () => void;
+  /** Opens the page a submitted form waits on, once the server confirms its change. */
+  openPage: (page: FormPage) => void;
   newId?: () => string;
 }
 
@@ -316,9 +312,7 @@ export function createCommandForms({
   radiusSignedIn,
   send,
   share,
-  openProject,
-  openNew,
-  openProjects,
+  openPage,
   newId,
 }: CommandFormsOptions): CommandForms {
   let state = CLOSED;
@@ -412,9 +406,7 @@ export function createCommandForms({
       if (!confirmedIn(app, waiting.command)) return;
       const { page } = waiting;
       waiting = null;
-      if (page.kind === "project") openProject(page.projectId);
-      else if (page.kind === "new") openNew(page.projectId);
-      else openProjects();
+      openPage(page);
     },
     hear: (message) => {
       if (message._tag === "error" && !message.selectionId) waiting = null;

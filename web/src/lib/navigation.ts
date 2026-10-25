@@ -130,6 +130,8 @@ export interface Navigation {
   /** Applies the address bar's route and follows client and history changes; returns the stop function. */
   start: () => () => void;
   select: (cwd: string, sessionId: string | null) => void;
+  /** A page in the main pane; it leaves Settings. The moves below each open one page. */
+  openPage: (page: Page) => void;
   /** The New page, optionally in a directory or for a project. */
   openNew: (cwd?: string, projectId?: string) => void;
   /** The Projects index. */
@@ -506,6 +508,7 @@ export function createNavigation({
       };
     },
     select,
+    openPage: open,
     openNew: (cwd, projectId) => open({ kind: "new", cwd, projectId }),
     openProjects: () => open({ kind: "projects" }),
     openProject: (projectId) => open({ kind: "project", projectId }),
