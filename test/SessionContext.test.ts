@@ -132,6 +132,7 @@ test("a removed checkout keeps its workspace identity but cannot open Changes; a
   assert.equal(missing.checkoutMissing, true);
   assert.equal(missing.workspace?.id, "ws:/work/repo.feature");
   assert.equal(missing.canOpenChanges, false);
+  assert.equal(missing.changesUnavailable, "Checkout removed");
   const plain: FolderView = {
     ...folder,
     worktrees: [worktree("/repo", null, { status: "non-git" })],
@@ -147,6 +148,7 @@ test("a removed checkout keeps its workspace identity but cannot open Changes; a
   assert.equal(nonGit.workspace?.id, "ws:/repo");
   assert.equal(nonGit.changesWorkspace, undefined);
   assert.equal(nonGit.canOpenChanges, false);
+  assert.equal(nonGit.changesUnavailable, "Not a Git repository");
   assert.equal(nonGit.branch, undefined);
   assert.equal(nonGit.title, "Plain", "the context read this session's reference");
 });
