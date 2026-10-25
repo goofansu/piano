@@ -220,7 +220,8 @@ export function SessionHeader({
         <span role="status" className="sr-only">
           {status}
         </span>
-        <div className="flex shrink-0 items-center gap-0.5">
+        {/* Ghost controls: the group pulls out so the last one's content ends on the gutter. */}
+        <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           <SessionPreviewControl />
           {pullRequest(menuTrigger)}
         </div>

@@ -34,10 +34,15 @@ export type IconPlace = keyof typeof places;
 
 /**
  * A leading button's glyph sits `--glyph-pad` from its start edge, as a sidebar row's does, at any
- * width, so it stays on the gutter when a touch target grows. The 1px is the button's border.
+ * width, so it stays on the gutter when a touch target grows; a trailing button's content ends the
+ * same distance from its end edge. The 1px is the button's border. A ghost button at a header's end
+ * pulls out by `--glyph-pad` (`-mr-(--glyph-pad)` on it or its group) so its content, not its hover
+ * fill, meets the gutter; a filled or outlined one keeps its visible edge on the gutter.
  */
 const leadingPad =
   "justify-start pl-[calc(var(--glyph-pad)-1px)] has-data-[icon=inline-start]:pl-[calc(var(--glyph-pad)-1px)]";
+const trailingPad =
+  "justify-end pr-[calc(var(--glyph-pad)-1px)] has-data-[icon=inline-end]:pr-[calc(var(--glyph-pad)-1px)]";
 
 type Props = Omit<ComponentProps<typeof Button>, "variant" | "size"> & {
   variant?: ComponentProps<typeof Button>["variant"] | keyof typeof variants;
@@ -45,14 +50,21 @@ type Props = Omit<ComponentProps<typeof Button>, "variant" | "size"> & {
   size?: ComponentProps<typeof Button>["size"] | IconPlace;
   /** Starts a row or header, its glyph on the gutter line (see `--glyph-pad`). */
   leading?: boolean;
+  /** Ends a header, its content on the gutter line once pulled out (see `trailingPad`). */
+  trailing?: boolean;
 };
 
 const isPlace = (size: Props["size"]): size is IconPlace =>
   typeof size === "string" && Object.hasOwn(places, size);
 
 /** App variants opt out of the base variant so its hover/dark styles cannot leak through. */
-export function PianoButton({ variant, size, leading, className, ...props }: Props) {
-  const placed = cn(isPlace(size) && places[size].className, leading && leadingPad, className);
+export function PianoButton({ variant, size, leading, trailing, className, ...props }: Props) {
+  const placed = cn(
+    isPlace(size) && places[size].className,
+    leading && leadingPad,
+    trailing && trailingPad,
+    className,
+  );
   const sized = { size: isPlace(size) ? places[size].size : size, className: placed };
   if (variant === "outline-solid" || variant === "outline-transparent") {
     return (

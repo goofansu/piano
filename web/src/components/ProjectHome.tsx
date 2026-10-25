@@ -94,6 +94,7 @@ export function ProjectHome({
             commands={projectCommands(state, project)}
             run={run}
             size="header"
+            trailing
           />
         }
       >

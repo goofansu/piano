@@ -83,10 +83,11 @@ function SessionPullRequestTrigger({
     <Tooltip>
       <PopoverTrigger asChild>
         <TooltipTrigger asChild>
-          <Button
+          <PianoButton
             ref={ref}
             variant="ghost"
             size={mobile ? "xs" : "sm"}
+            trailing
             aria-label={face.ariaLabel}
             aria-description={face.ariaDescription}
             aria-busy={loading || undefined}
@@ -99,7 +100,7 @@ function SessionPullRequestTrigger({
               aria-hidden
             />{" "}
             {face.label}
-          </Button>
+          </PianoButton>
         </TooltipTrigger>
       </PopoverTrigger>
       <TooltipContent className="max-w-80">
