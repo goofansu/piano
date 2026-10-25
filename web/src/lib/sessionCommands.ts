@@ -5,7 +5,7 @@
  */
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import type { NavigationState } from "./navigation.ts";
+import { closable, type NavigationState } from "./navigation.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
@@ -274,7 +274,7 @@ export function sessionCommands(
         id: "hide-changes",
         label: "Hide changes",
         icon: "hide",
-        enabled: !single && !!surface?.tabs.includes("changes"),
+        enabled: closable("changes", single) && !!surface?.tabs.includes("changes"),
         keywords: ["close"],
         intent: { kind: "hide-changes" },
       },

@@ -4,6 +4,7 @@ import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import {
   type AddressBar,
+  closable,
   createNavigation,
   initialView,
   type SurfaceMemory,
@@ -584,6 +585,33 @@ test("one area at a time, a file opened again returns to the area of its latest 
     { tabs: ["file:docs/a.md"], active: "file:docs/a.md", area: "agent" },
     "its latest link was in the transcript, so back to Agent",
   );
+});
+
+test("side by side every tab closes; one area at a time Changes stays and a file closes", () => {
+  const file = { kind: "file", path: "docs/a.md", from: "agent" } as const;
+  assert.equal(closable("changes", false), true);
+  assert.equal(closable(file, false), true);
+  assert.equal(closable("changes", true), false);
+  assert.equal(closable(file, true), true);
+
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/a.md");
+  p.navigation.setSingle(true);
+  p.navigation.closeTab("changes");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes", "file:docs/a.md"], active: "file:docs/a.md", area: "surface" },
+    "one area at a time, Changes stays open",
+  );
+  p.navigation.closeTab("file:docs/a.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["changes"], "a file still closes");
+  p.navigation.setSingle(false);
+  p.navigation.closeTab("changes");
+  assert.deepEqual(shownTabs(p.navigation).tabs, [], "side by side, Changes closes");
 });
 
 test("side by side both areas show while there are tabs; one area at a time, the one moved to", () => {
