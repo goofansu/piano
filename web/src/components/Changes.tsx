@@ -279,10 +279,11 @@ function FileSection({
             className="h-auto min-h-9 min-w-0 justify-start gap-2 whitespace-normal px-2 py-2 text-left font-normal aria-expanded:bg-transparent pointer-coarse:min-h-11"
             aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
           >
-            <span className="self-start">
+            {/* One filename line tall, so the chevron centres on the first line however the name wraps. */}
+            <span className="flex h-[1lh] items-center self-start text-xs">
               <DisclosureChevron open={open} />
             </span>
-            <ItemContent className="min-w-0 gap-0">
+            <ItemContent className="min-w-0 gap-0 self-start">
               <ItemTitle className="block w-full min-w-0 line-clamp-none font-mono text-xs [overflow-wrap:anywhere]">
                 {filename}
               </ItemTitle>
@@ -296,7 +297,8 @@ function FileSection({
           </Button>
         </CollapsibleTrigger>
         {canAsk && (
-          <ItemActions>
+          // The name's button has a 1px border before its padding; Ask drops by the same.
+          <ItemActions className="mt-px">
             <IconButton
               size="list"
               label={`Ask about ${file.path}`}
