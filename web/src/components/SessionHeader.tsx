@@ -54,7 +54,6 @@ export function SessionHeader({
   pullRequest: (menuTrigger: React.RefObject<HTMLButtonElement | null>) => React.ReactNode;
 }) {
   const mobile = useIsMobile();
-  const { single } = useNavigation();
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
   const {
@@ -67,6 +66,8 @@ export function SessionHeader({
   } = sessionContext(state);
   const { commands, run } = useSessionCommands();
   const menu = sessionHeaderMenu(commands);
+  // Views shows where its command is offered, so the palette's Views always has a menu to open.
+  const views = commands.find((c) => c.id === "views")?.enabled;
   const projectMenu = useSessionProjectMenu();
   const openProject = projectMenu?.open;
   const { display } = menu;
@@ -226,7 +227,7 @@ export function SessionHeader({
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           <SessionPreviewControl />
           {pullRequest(menuTrigger)}
-          {session && !single && <ViewsMenu />}
+          {views && <ViewsMenu />}
         </div>
       </PaneHeader>
     </>
