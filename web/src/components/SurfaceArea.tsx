@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { IconButton } from "@/components/IconButton";
-import type { SurfaceTab } from "@/lib/navigation";
+import { closable, type SurfaceTab } from "@/lib/navigation";
 import { clampPanelWidth, PANEL_WIDTH, readPanelWidth, writePanelWidth } from "@/lib/panelLayout";
 import { trackPointerDrag } from "@/lib/pointerDrag";
 import { useNavigation } from "@/lib/useNavigation";
@@ -55,12 +55,13 @@ export function SurfaceFrame({
 }) {
   const { single } = useNavigation();
   const names = surfaceTabNames(tab);
+  const closes = closable(tab, single);
   return (
     <section
       aria-label={names.region}
       className="flex min-h-0 min-w-0 flex-1 flex-col"
       onKeyDown={(event) => {
-        if (event.key === "Escape" && !single && !event.defaultPrevented) {
+        if (event.key === "Escape" && closes && !single && !event.defaultPrevented) {
           event.preventDefault();
           close();
         } else ownKeys(event);
@@ -71,7 +72,7 @@ export function SurfaceFrame({
         <div className="flex min-w-0 items-center truncate">{status}</div>
         <div className="flex shrink-0 items-center">
           {actions}
-          {single && tab !== "changes" && (
+          {closes && single && (
             <IconButton size="header" label={names.close} onClick={close}>
               <XIcon />
             </IconButton>

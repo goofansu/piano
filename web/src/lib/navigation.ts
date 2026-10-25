@@ -68,6 +68,13 @@ export function shownAreas(state: Pick<NavigationState, "surface" | "area" | "si
   return { agent: !state.single || !surface, surface };
 }
 
+/**
+ * Whether a Surface tab closes: side by side every tab does (its strip X, Escape, Hide changes);
+ * one area at a time only a file does, from its toolbar, and Changes stays, Agent being the way
+ * back from it.
+ */
+export const closable = (tab: SurfaceTab, single: boolean): boolean => !single || tab !== "changes";
+
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */
   settings: SettingsSection | null;
@@ -151,8 +158,8 @@ export interface Navigation {
   /** Shows an open tab by its key. */
   selectTab: (key: string) => void;
   /**
-   * Closes a tab; its neighbour shows. Closing the last hides the area, and one area at a time a
-   * file opened from the Agent area returns there.
+   * Closes a tab that is `closable`; its neighbour shows. Closing the last hides the area, and one
+   * area at a time a file opened from the Agent area returns there.
    */
   closeTab: (key: string) => void;
   /** Shows the Agent area in a single-view layout, keeping the surface for the next visit. */
@@ -544,7 +551,7 @@ export function createNavigation({
       batch(() => {
         const surface = state.surface;
         const at = surface?.tabs.findIndex((tab) => tabKey(tab) === key) ?? -1;
-        if (!surface || at < 0) return;
+        if (!surface || at < 0 || !closable(surface.tabs[at], state.single)) return;
         const closing = surface.tabs[at];
         const tabs = surface.tabs.toSpliced(at, 1);
         if (!tabs.length) return set({ surface: null, area: "agent" });

@@ -11,7 +11,7 @@ import {
 } from "@/components/PianoTabs";
 import { SurfaceColumn, surfaceTabNames } from "@/components/SurfaceArea";
 import { FileTabIcon, WorkspaceFile } from "@/components/WorkspaceFile";
-import { activeTab, type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
+import { activeTab, closable, type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
@@ -153,9 +153,11 @@ export function SessionPanel({
                     >
                       {names.name}
                     </PianoStripTabTrigger>
-                    <IconButton size="row" label={names.close} onClick={() => closeTab(k)}>
-                      <XIcon />
-                    </IconButton>
+                    {closable(tab, single) && (
+                      <IconButton size="row" label={names.close} onClick={() => closeTab(k)}>
+                        <XIcon />
+                      </IconButton>
+                    )}
                   </PianoStripTab>
                 );
               })}
