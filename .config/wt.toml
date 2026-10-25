@@ -1,2 +1,4 @@
+# Copies only the gitignored paths `.worktreeinclude` lists (`node_modules/`); without that file
+# it copies nothing, as Claude Code desktop does, rather than every gitignored path.
 [[post-start]]
-copy = "wt step copy-ignored"
+copy = "wt step copy-ignored --require-include"
