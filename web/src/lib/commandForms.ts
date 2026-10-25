@@ -15,6 +15,7 @@ import type { SessionShare } from "../../../shared/share.ts";
 import { type ClientCommand, SESSION_TITLE_MAX, type ServerMessage } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
+import { addressFor } from "./navigation.ts";
 import {
   checkProjectDraft,
   EMPTY_PROJECT_DRAFT,
@@ -278,7 +279,8 @@ export interface CommandForms {
   cancel: () => void;
   /**
    * Open the page the last submit waits on once the page's state shows its change: the new project
-   * saved, or the deleted one gone. A dropped connection drops it. Call after each change of state.
+   * saved, or the deleted one gone. A dropped connection, or a move to another screen, drops it.
+   * Call after each change of state.
    */
   settle: () => void;
   /** Hear a server frame: an error, which the server does not tie to a registry change, drops the waiting page. */
@@ -316,8 +318,10 @@ export function createCommandForms({
   newId,
 }: CommandFormsOptions): CommandForms {
   let state = CLOSED;
-  /** The page a submitted form opens once the server confirms its command. */
-  let waiting: { page: FormPage; command: ClientCommand } | null = null;
+  /** The page a submitted form opens once the server confirms its command, and the screen it was
+   * submitted from: a user who moves on in the meantime keeps the screen they chose. */
+  let waiting: { page: FormPage; command: ClientCommand; from: string | undefined } | null = null;
+  const screen = () => addressFor(getState(), null, "")?.path;
   const listeners = new Set<() => void>();
   const set = (next: CommandFormsState) => {
     state = next;
@@ -389,7 +393,9 @@ export function createCommandForms({
       }
       if (!answered.command) return false;
       send(answered.command);
-      waiting = answered.open ? { page: answered.open, command: answered.command } : null;
+      waiting = answered.open
+        ? { page: answered.open, command: answered.command, from: screen() }
+        : null;
       set(CLOSED);
       return true;
     },
@@ -399,7 +405,7 @@ export function createCommandForms({
     settle: () => {
       if (!waiting) return;
       const app = getState();
-      if (!app.connected) {
+      if (!app.connected || screen() !== waiting.from) {
         waiting = null;
         return;
       }
