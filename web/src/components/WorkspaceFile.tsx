@@ -66,7 +66,8 @@ export function FileTabIcon({ path, className }: { path: string; className?: str
 }
 
 /** A file a local link opened, read-only, in the Surface area.
- * The owner keys it by session, workspace and path, so new destinations never flash old content. */
+ * The owner keys it by session, workspace, path and whether the checkout is there, so new
+ * destinations never flash old content and a checkout going or coming back rereads it. */
 export function WorkspaceFile({
   workspaceId,
   file,

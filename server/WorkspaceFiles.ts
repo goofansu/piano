@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { open, realpath } from "node:fs/promises";
+import { access, open, realpath } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Data, Effect } from "effect";
 import { fileTypeFromBuffer } from "file-type";
@@ -168,6 +168,10 @@ interface Acquired {
  */
 async function acquire(workspace: Workspace, path: string, signal: AbortSignal): Promise<Acquired> {
   if (!path.trim() || path.includes("\0")) refuse("Choose a file inside this workspace.");
+  // The checkout's own absence is the cause, named as the session's other views name it.
+  await access(workspace.path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") refuse("Checkout removed");
+  });
   const name = await place(workspace, path);
   if (name === undefined) return refuse("Choose a file inside this workspace.");
   const root = await realpath(workspace.path);
