@@ -19,6 +19,7 @@ import { SurfaceFrame } from "@/components/SurfaceArea";
 import { workspaceFile, workspaceFileDownload } from "@/lib/api";
 import { renderMarkdown } from "@/lib/markdown";
 import type { SurfaceTab } from "@/lib/navigation";
+import { useNavigation } from "@/lib/useNavigation";
 
 const relativeTo = (document: string, path: string) =>
   path.startsWith("/") ? path : `${document.slice(0, document.lastIndexOf("/") + 1)}${path}`;
@@ -71,14 +72,11 @@ export function FileTabIcon({ path, className }: { path: string; className?: str
 export function WorkspaceFile({
   workspaceId,
   file,
-  close,
-  open,
 }: {
   workspaceId: string | undefined;
   file: Extract<SurfaceTab, { kind: "file" }>;
-  close: () => void;
-  open: (path: string) => void;
 }) {
+  const { openFile } = useNavigation();
   const [result, setResult] = useState<Preview>();
   const [mode, setMode] = useState("preview");
   const [status, setStatus] = useState("Opening…");
@@ -193,7 +191,6 @@ export function WorkspaceFile({
   return (
     <SurfaceFrame
       tab={file}
-      close={close}
       status={
         <span className="min-w-0 truncate font-mono" title={path}>
           {path}
@@ -235,7 +232,10 @@ export function WorkspaceFile({
               <NativeFile key={binary.url} kind={result.kind} url={binary.url} name={path} />
             ) : null
           ) : result.kind === "markdown" && mode === "preview" ? (
-            <LocalFileContext value={(path) => open(relativeTo(result.path, path))}>
+            <LocalFileContext
+              // A link in a file opens beside it, in the Surface area.
+              value={(path) => openFile(relativeTo(result.path, path), "surface")}
+            >
               <Markdown
                 text={result.content}
                 className="prose-chat p-4 text-sm md:p-5"
