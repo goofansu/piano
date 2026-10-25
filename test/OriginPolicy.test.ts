@@ -149,6 +149,25 @@ test("INV-11: real HTTP and WebSocket boundaries reject untrusted origins before
       assert.equal(await handshake(origin), 101);
     }
     assert.equal((await fetch(`${base}/api/folders`)).status, 200, "safe reads need no Origin");
+    // DNS rebinding: the page's own hostname arrives as Host, with no Origin to refuse.
+    const readWithHost = (host: string, extra: Record<string, string> = {}) =>
+      new Promise<number>((resolve, reject) => {
+        const req = request(`${base}/api/folders`, { headers: { host, ...extra } }, (res) => {
+          res.resume();
+          resolve(res.statusCode!);
+        });
+        req.on("error", reject);
+        req.end();
+      });
+    for (const host of ["rebound.example", `rebound.example:${port}`, `piano.example.evil.example`])
+      assert.equal(await readWithHost(host), 403, `GET with Host ${host}`);
+    assert.equal(
+      await readWithHost("rebound.example", { "x-forwarded-host": "piano.example" }),
+      403,
+      "a forwarded host never stands in for Host",
+    );
+    for (const host of ["piano.example", "PIANO.example", `localhost:${port}`, `[::1]:${port}`])
+      assert.equal(await readWithHost(host), 200, `GET with Host ${host}`);
     for (const compressed of [false, true]) {
       const connect = () =>
         new NodeWS.WebSocket(`${base.replace("http", "ws")}/ws`, {

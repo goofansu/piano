@@ -16,7 +16,7 @@ import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { legacyIgnoredFiles, projectLegacyIgnoredFiles } from "./LegacyIgnoredFiles.ts";
 import { McpSetup } from "./McpSetup.ts";
-import { AllowedOrigins } from "./OriginPolicy.ts";
+import { AllowedOrigins, hostAllowed } from "./OriginPolicy.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { RadiusSetup } from "./RadiusSetup.ts";
@@ -188,6 +188,10 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* router.addGlobalMiddleware((handler) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
+        // A rebound DNS name reaches Piano with its own Host: refuse it for reads as well.
+        if (!hostAllowed(allowedOrigins, request.headers.host)) {
+          return HttpServerResponse.text("Request host is not allowed.", { status: 403 });
+        }
         const path = new URL(request.url, "http://localhost").pathname;
         if (
           path === "/ws" ||

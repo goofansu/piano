@@ -1,4 +1,5 @@
 import { Context } from "effect";
+import { isLoopbackHostname } from "../shared/loopback.ts";
 
 /** INV-11: explicit deployment configuration, never derived from request/proxy headers. */
 export const AllowedOrigins = Context.Reference<ReadonlySet<string>>("piano/AllowedOrigins", {
@@ -30,6 +31,27 @@ export function configuredOrigins(port: number, configured?: string): ReadonlySe
       }
       return url.origin;
     }),
+  );
+}
+
+/**
+ * Whether a request's `Host` header names this server. A browser that DNS rebinding sent to Piano
+ * still carries the attacker's hostname, so only the hosts of the allowed origins and the loopback
+ * names pass (the loopback interface is how the proxy and Pi's session extension connect). The
+ * allowed origins decide, never a forwarded header (INV-11).
+ */
+export function hostAllowed(origins: ReadonlySet<string>, host: string | undefined): boolean {
+  if (!host) return false;
+  let url: URL;
+  try {
+    url = new URL(`http://${host}`);
+  } catch {
+    return false;
+  }
+  if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) return false;
+  return (
+    isLoopbackHostname(url.hostname) ||
+    [...origins].some((o) => new URL(o).host === host.toLowerCase())
   );
 }
 
