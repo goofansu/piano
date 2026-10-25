@@ -439,10 +439,10 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   // and a later one is missed.
   const updates = yield* sidebar.subscribe;
   const running = yield* hosts.subscribe;
-  yield* facts.changes.pipe(
+  yield* (yield* facts.changes).pipe(
     Stream.runForEach(() => send({ _tag: "catalogs_invalidated" })),
     Effect.ignore,
-    Effect.forkScoped({ startImmediately: true }),
+    Effect.forkScoped,
   );
   yield* running.pipe(
     Stream.runForEach((list) => send({ _tag: "hosts", hosts: list })),
