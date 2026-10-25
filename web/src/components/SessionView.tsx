@@ -191,7 +191,7 @@ function StatusLine({ notice }: { notice: SessionNotice }) {
       aria-label={notice.id === "dialog-resolution" ? "Last dialog" : "Last input"}
       role="status"
       className={cn(
-        "px-4 pt-2 text-sm md:px-6",
+        "px-(--gutter) pt-2 text-sm",
         notice.tone === "warning" ? "text-warning" : "text-ink-2",
       )}
     >
@@ -221,7 +221,7 @@ function ExtensionBlock({
   return (
     <section
       aria-label="Extension state"
-      className="mx-auto w-full max-w-3xl max-h-40 overflow-auto px-4 pt-2 text-xs text-ink-2 md:px-6"
+      className="mx-auto w-full max-w-3xl max-h-40 overflow-auto px-(--gutter) pt-2 text-xs text-ink-2"
     >
       {extension.title && <p>Extension title: {extension.title}</p>}
       {extension.statuses.map((status) => (
@@ -266,7 +266,7 @@ function ExtensionBlock({
  */
 function TranscriptSkeleton() {
   return (
-    <div aria-hidden className="absolute inset-0 overflow-hidden bg-conversation px-4 md:px-6">
+    <div aria-hidden className="absolute inset-0 overflow-hidden bg-conversation px-(--gutter)">
       {/* The lines wait like the sidebar's, so a quick load shows the transcript without them. */}
       <div className="late-enter mx-auto flex w-full max-w-3xl flex-col gap-6 py-6 md:py-8">
         <div className="rounded-2xl border border-line bg-fill px-4 py-3.5">
