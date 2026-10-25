@@ -229,32 +229,34 @@ test("deleting a project asks first, saying its sessions move to No project", ()
   );
 });
 
-test("deleting the project on screen leaves for the New page once it is gone; deleting another stays put", () => {
+test("deleting the project on screen leaves for the Projects index once it is gone; deleting another stays put", () => {
   for (const [view, leaves] of [
     [{ kind: "project", projectId: "p1" }, true],
     [{ kind: "new", projectId: "p1" }, true],
     [{ kind: "project", projectId: "p2" }, false],
     [{ kind: "session" }, false],
+    // The Projects index offers each project's menu; deleting one there keeps the index.
+    [{ kind: "projects" }, false],
   ] as const) {
-    const { subject, sent, left, setState } = forms();
+    const { subject, sent, opened, setState } = forms();
     setState({ ...withWorkspace, view, projects: [launch] });
     subject.open(deleteProject);
     assert.equal(subject.submit(), true);
     assert.deepEqual(sent, [{ _tag: "delete_project", id: "p1" }]);
     // The project's page stays until the server's registry no longer has it.
     subject.settle();
-    assert.equal(left(), 0, JSON.stringify(view));
+    assert.deepEqual(opened, [], JSON.stringify(view));
     setState({ ...withWorkspace, view, projects: [] });
     subject.settle();
     subject.settle();
-    assert.equal(left(), leaves ? 1 : 0, JSON.stringify(view));
+    assert.deepEqual(opened, leaves ? ["/projects"] : [], JSON.stringify(view));
   }
 });
 
 test("a delete the server refuses, or one cut off by a lost connection, stays on the project's page", () => {
   const view = { kind: "project", projectId: "p1" } as const;
   for (const fail of ["error", "disconnect"] as const) {
-    const { subject, left, setState } = forms();
+    const { subject, opened, setState } = forms();
     setState({ ...withWorkspace, view, projects: [launch] });
     subject.open(deleteProject);
     assert.equal(subject.submit(), true);
@@ -266,7 +268,7 @@ test("a delete the server refuses, or one cut off by a lost connection, stays on
     // A later registry without the project (deleted elsewhere) is not this submit's answer.
     setState({ ...withWorkspace, view, projects: [] });
     subject.settle();
-    assert.equal(left(), 0, fail);
+    assert.deepEqual(opened, [], fail);
   }
 });
 
@@ -289,7 +291,6 @@ function forms(
   const sent: ClientCommand[] = [];
   const opened: string[] = [];
   const published: [string, string][] = [];
-  let leaving = 0;
   const subject = createCommandForms({
     getState: () => state,
     radiusSignedIn: () => true,
@@ -298,19 +299,16 @@ function forms(
       published.push([workspaceId, sessionId]);
       return share(workspaceId, sessionId);
     },
-    // Each page as its address names it: a project's home, or the New page for a project.
+    // Each page as its address names it: a project's home, the New page for a project, the index.
     openProject: (id) => opened.push(`/projects/${id}`),
-    openNew: (projectId?: string) => {
-      if (projectId) opened.push(`/projects/${projectId}/new`);
-      else leaving++;
-    },
+    openNew: (projectId) => opened.push(`/projects/${projectId}/new`),
+    openProjects: () => opened.push("/projects"),
     newId,
   });
   return {
     subject,
     sent,
     opened,
-    left: () => leaving,
     published,
     setState: (next: AppState) => {
       state = next;
@@ -423,7 +421,6 @@ test("creating a project opens its home; from the New page's picker, the New pag
   picked.setState({ ...withWorkspace, projects: [{ id: "new-id", name: "Ship" }] });
   picked.subject.settle();
   assert.deepEqual(picked.opened, ["/projects/new-id/new"]);
-  assert.equal(picked.left(), 0);
 
   for (const dialog of [{ assign: other }]) {
     const { subject, opened, sent } = forms();
