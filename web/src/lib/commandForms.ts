@@ -55,6 +55,9 @@ export interface AnswerContext {
   radiusSignedIn?: boolean;
   /** Names a new project; called only for an allowed new-project answer. */
   newId?: () => string;
+  /** Project settings: the project as the dialog opened on it, which a save changes only where
+   * the draft differs; the project as saved now when absent. */
+  opened?: ProjectDraft;
 }
 
 /**
@@ -65,7 +68,7 @@ export function answerForm(
   state: AppState,
   form: CommandForm,
   input: string | ProjectDraft = "",
-  { radiusSignedIn = false, newId = () => crypto.randomUUID() }: AnswerContext = {},
+  { radiusSignedIn = false, newId = () => crypto.randomUUID(), opened }: AnswerContext = {},
 ): FormAnswer {
   const text = typeof input === "string" ? input : "";
   switch (form.kind) {
@@ -139,7 +142,7 @@ export function answerForm(
     // A project deleted while its settings are open refuses the save, as a vanished session refuses rename.
     case "project-settings": {
       if (typeof input === "string") return { allowed: false };
-      return projectSettingsSave(state, form.projectId, input);
+      return projectSettingsSave(state, form.projectId, input, opened);
     }
   }
 }
@@ -318,6 +321,8 @@ export function createCommandForms({
   newId,
 }: CommandFormsOptions): CommandForms {
   let state = CLOSED;
+  /** The project Project settings opened on, so another tab's change to it is kept on save. */
+  let opened: ProjectDraft | undefined;
   /** The page a submitted form opens once the server confirms its command, and the screen it was
    * submitted from: a user who moves on in the meantime keeps the screen they chose. */
   let waiting: { page: FormPage; command: ClientCommand; from: string | undefined } | null = null;
@@ -339,7 +344,7 @@ export function createCommandForms({
           getState(),
           state.form,
           editsProject(state.form) ? state.projectDraft : state.text,
-          { radiusSignedIn: radiusSignedIn(), newId },
+          { radiusSignedIn: radiusSignedIn(), newId, opened },
         )
       : { allowed: false };
 
@@ -366,14 +371,15 @@ export function createCommandForms({
       return () => listeners.delete(listener);
     },
     answer,
-    open: (form) =>
+    open: (form) => {
+      opened = form.kind === "project-settings" ? savedDraft(form.projectId) : undefined;
       set({
         form,
         text: form.kind === "rename-session" ? (form.target.title ?? "") : "",
-        projectDraft:
-          form.kind === "project-settings" ? savedDraft(form.projectId) : EMPTY_PROJECT_DRAFT,
+        projectDraft: opened ?? EMPTY_PROJECT_DRAFT,
         share: { phase: "confirm" },
-      }),
+      });
+    },
     edit: (text) => {
       if (state.form?.kind === "rename-session") set({ ...state, text });
     },

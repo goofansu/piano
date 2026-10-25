@@ -539,6 +539,18 @@ test("Project settings starts from the project as saved and sends only what chan
   assert.deepEqual(sent[1], { _tag: "update_project", id: "p1", instructions: null });
 });
 
+test("Project settings keeps a change another tab saved while it was open", () => {
+  const { subject, sent, setState } = forms();
+  setState({ ...withWorkspace, projects: [{ id: "p1", name: "Alpha" }] });
+  subject.open({ kind: "project-settings", projectId: "p1" });
+  // Another tab renames the project; this dialog still shows Alpha.
+  setState({ ...withWorkspace, projects: [{ id: "p1", name: "Beta" }] });
+  assert.equal(subject.submit(), false, "an untouched dialog has nothing to save");
+  subject.editProject({ name: "Alpha", instructions: "New" });
+  assert.equal(subject.submit(), true);
+  assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", instructions: "New" }]);
+});
+
 test("Project settings for a project deleted while open stays open and sends nothing", () => {
   const { subject, sent, setState } = forms();
   setState({ ...withWorkspace, projects: [launch] });
