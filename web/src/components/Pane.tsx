@@ -4,6 +4,7 @@
  * the address names nothing. Each carries the Show sidebar control, so no page can be left without
  * a way back to the sidebar once it is collapsed or below the breakpoint.
  */
+import { cn } from "cn";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import {
   Empty,
@@ -12,6 +13,10 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+
+/** The one header row, shared by every pane and the sidebar (`LayoutHeader`). */
+export const paneHeaderRow =
+  "flex h-16 shrink-0 items-center gap-3 border-b border-line px-(--gutter) py-2";
 
 /**
  * The pane's header: Show sidebar, the title block, then the controls at the end. Every pane's
@@ -27,8 +32,8 @@ export function PaneHeader({
 }) {
   return (
     // No shadcn component is a page header; this row is Piano's own.
-    <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line px-4 py-2 md:px-(--gutter)">
-      <ShowSidebarButton className="-ml-2" />
+    <header className={paneHeaderRow}>
+      <ShowSidebarButton className="-ml-(--glyph-pad)" />
       {children}
       {actions}
     </header>
@@ -43,7 +48,7 @@ export function PaneHeading({ children }: { children: React.ReactNode }) {
 /** The page beneath a header: a scrolling column that clears the home indicator. */
 export function PaneBody({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:px-6 md:py-8">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-(--gutter) py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:py-8">
       {children}
     </div>
   );
@@ -52,7 +57,15 @@ export function PaneBody({ children }: { children: React.ReactNode }) {
 /** Show sidebar for a page without a header, where the header's control would be. */
 export function PaneShowSidebar() {
   return (
-    <ShowSidebarButton className="absolute top-[calc(var(--gutter)-0.5rem)] left-[calc(var(--gutter)-0.5rem)]" />
+    // The same header geometry, without a visible rule or a row that blocks page content.
+    <div
+      className={cn(
+        paneHeaderRow,
+        "pointer-events-none absolute inset-x-0 top-0 border-transparent",
+      )}
+    >
+      <ShowSidebarButton className="pointer-events-auto -ml-(--glyph-pad)" />
+    </div>
   );
 }
 

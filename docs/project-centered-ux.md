@@ -87,7 +87,8 @@ Keeps its two jobs, start work here and read the project's work, and takes Linea
 One row "Projects", with the project icon the New page's Project picker uses, first under the
 header, where the list begins. The header itself takes the one header shape and stays light: the
 hide control at its left, on the rows' left edge and at the point where each pane's show control
-appears once the sidebar is collapsed, since the sidebar reads the panes' gutter, inset and line tokens; then search, View options and New session as the
+appears once the sidebar is collapsed, since on desktop the sidebar keeps the pane's frame and
+its header is the pane header's row; then search, View options and New session as the
 filled primary action at the end, the strip's one accent, which frees the row the full-width New
 session button took; a hairline under it is level with the pane header's, so the two headers read
 as one band. The mark sits in the footer beside Settings. Collapsed, there is no rail: the

@@ -10,6 +10,7 @@ import {
 import { useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { useCommands, useSessionCommands } from "@/components/CommandHost";
+import { PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
   DialogContent,
@@ -111,9 +112,10 @@ export function SessionPreviewControl() {
       <Tooltip>
         <DropdownMenuTrigger asChild>
           <TooltipTrigger asChild>
-            <Button
+            <PianoButton
               variant="ghost"
               size={mobile ? "icon-sm" : "sm"}
+              trailing
               className={mobile ? "size-11" : "max-w-48"}
               aria-label={`Preview: ${face.status}. Status and actions`}
             >
@@ -125,7 +127,7 @@ export function SessionPreviewControl() {
                 aria-hidden
               />
               {!mobile && <span className="truncate font-mono">{label}</span>}
-            </Button>
+            </PianoButton>
           </TooltipTrigger>
         </DropdownMenuTrigger>
         <TooltipContent>Preview: {face.status}</TooltipContent>

@@ -304,8 +304,9 @@ offers New session, per project, and the sidebar toggle without shortcuts of the
   reveal; one `selection-bar` that slides between rows; the keys replace the yellow dot while a
   session streams; row heights grow to 44px on touch screens; keyboard hints on the hide, search
   and New session controls. The header is the one header shape and no heavier: hide at its left on
-  the rows' edge and where each pane's show control appears once the sidebar is collapsed (the
-  sidebar reads the panes' `--gutter`, `--pane-inset` and `--pane-line` tokens), then search, View options
+  the rows' edge and where each pane's show control appears once the sidebar is collapsed (on desktop
+  the sidebar column keeps the pane's frame, `--pane-frame`, and its header is the pane header's
+  row, `paneHeaderRow`, so every leading glyph sits `--gutter` in), then search, View options
   and New session as the filled primary action at its end; no mark and no wordmark, so the one
   accent in the strip is the primary action. The mark sits in the footer beside Settings. Collapsed,
   the column is gone rather than a rail: the pane takes the width, and its header's show control

@@ -152,7 +152,7 @@ export function MessageList({
         ref={ref}
         onScroll={viewport.scrolled}
         data-slot="transcript"
-        className="h-full overflow-y-auto px-4 md:px-6"
+        className="h-full overflow-y-auto px-(--gutter)"
       >
         <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
           {placeholder && (

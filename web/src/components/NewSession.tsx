@@ -72,7 +72,7 @@ export function NewSession({ state, client, chooseDirectory, onProjectChange }: 
     <>
       {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
       <PaneShowSidebar />
-      <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
+      <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-(--gutter) pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:py-16">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
           <div className="new-session-welcome flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex" />

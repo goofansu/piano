@@ -1,4 +1,5 @@
 import type { Project } from "@shared/wire";
+import { cn } from "cn";
 import {
   FolderIcon,
   FolderInputIcon,
@@ -99,17 +100,26 @@ export function ProjectCommandsMenu({
   commands,
   run,
   size,
+  trailing,
 }: {
   project: Project;
   commands: readonly ProjectCommand[];
   run: (command: ProjectCommand) => void;
   size: IconPlace;
+  /** At a header's end: its glyph ends on the gutter (see `PianoButton`). */
+  trailing?: boolean;
 }) {
   const menu = projectMenu(commands);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <PianoButton variant="ghost" size={size} aria-label={`Project menu for ${project.name}`}>
+        <PianoButton
+          variant="ghost"
+          size={size}
+          trailing={trailing}
+          className={cn(trailing && "-mr-(--glyph-pad)")}
+          aria-label={`Project menu for ${project.name}`}
+        >
           <MoreHorizontalIcon />
         </PianoButton>
       </DropdownMenuTrigger>
