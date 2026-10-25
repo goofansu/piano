@@ -2,6 +2,7 @@ import { cn } from "cn";
 import { PanelLeftCloseIcon } from "lucide-react";
 import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import { IconButton } from "@/components/IconButton";
+import { paneHeaderRow } from "@/components/Pane";
 import { PianoMark } from "@/components/PianoMark";
 import { PianoSidebarReveal } from "@/components/PianoSidebarReveal";
 import { SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
@@ -64,12 +65,13 @@ export function AppLayout({
         style={{ width: collapsed ? 0 : width }}
       >
         {/* Collapsed, the column has no width and no rail: each pane's header carries the control
-            that brings it back. Visibility (not display:none) preserves scroll. */}
+            that brings it back. Visibility (not display:none) preserves scroll. The column keeps
+            the pane's frame on its outer sides, so its rows and header share the pane's geometry. */}
         <div className="relative h-full overflow-hidden">
           <div
             inert={collapsed}
             aria-hidden={collapsed}
-            className={cn("h-full", collapsed && "invisible")}
+            className={cn("h-full py-(--pane-frame) pl-(--pane-frame)", collapsed && "invisible")}
             style={{ width }}
           >
             {navigation}
@@ -162,12 +164,13 @@ export function LayoutView({ active = true, children }: { active?: boolean; chil
 export function LayoutHeader({ children }: { children?: ReactNode }) {
   const { hide } = useSidebarLayout();
   return (
-    // Match the pane header's mobile gutter and button overhang. Desktop also accounts for the
-    // collapsed pane's outer inset and border, keeping Show and Hide at the same viewport position.
-    <SidebarHeader className="h-16 shrink-0 flex-row items-center gap-2.5 border-b border-line px-(--gutter) md:mt-[calc(var(--pane-inset)+var(--pane-line))] md:pl-[calc(var(--gutter)+var(--pane-line))]">
+    // The pane header's row in the same frame, so Hide sits where a pane's Show appears and the
+    // two hairlines are one line across the screen.
+    <SidebarHeader className={cn(paneHeaderRow, "flex-row border-line")}>
       <IconButton
         size="header"
-        className="-ml-2 justify-start pl-2 md:ml-0"
+        leading
+        className="-ml-(--glyph-pad)"
         label="Hide sidebar"
         onClick={hide}
       >
@@ -182,7 +185,7 @@ export function LayoutHeader({ children }: { children?: ReactNode }) {
 /** The sidebar's footer: its one plain action and the mark, which marks the app once, at rest. */
 export function LayoutFooter({ children }: { children: ReactNode }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 px-(--sidebar-row-gutter) py-3">
+    <div className="flex shrink-0 items-center gap-2 px-(--row-inset) py-3">
       {children}
       <PianoMark className="mr-1 size-6 rounded-md shadow-none" />
     </div>

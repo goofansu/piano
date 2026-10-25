@@ -32,20 +32,28 @@ const places = {
 
 export type IconPlace = keyof typeof places;
 
+/**
+ * A leading button's glyph sits `--glyph-pad` from its start edge, as a sidebar row's does, at any
+ * width, so it stays on the gutter when a touch target grows. The 1px is the button's border.
+ */
+const leadingPad =
+  "justify-start pl-[calc(var(--glyph-pad)-1px)] has-data-[icon=inline-start]:pl-[calc(var(--glyph-pad)-1px)]";
+
 type Props = Omit<ComponentProps<typeof Button>, "variant" | "size"> & {
   variant?: ComponentProps<typeof Button>["variant"] | keyof typeof variants;
   /** A shadcn size, or for an icon-only button the place it sits in. */
   size?: ComponentProps<typeof Button>["size"] | IconPlace;
+  /** Starts a row or header, its glyph on the gutter line (see `--glyph-pad`). */
+  leading?: boolean;
 };
 
 const isPlace = (size: Props["size"]): size is IconPlace =>
   typeof size === "string" && Object.hasOwn(places, size);
 
 /** App variants opt out of the base variant so its hover/dark styles cannot leak through. */
-export function PianoButton({ variant, size, className, ...props }: Props) {
-  const sized = isPlace(size)
-    ? { size: places[size].size, className: cn(places[size].className, className) }
-    : { size, className };
+export function PianoButton({ variant, size, leading, className, ...props }: Props) {
+  const placed = cn(isPlace(size) && places[size].className, leading && leadingPad, className);
+  const sized = { size: isPlace(size) ? places[size].size : size, className: placed };
   if (variant === "outline-solid" || variant === "outline-transparent") {
     return (
       <Button

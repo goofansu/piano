@@ -79,12 +79,16 @@
 :root {
   --radius: 0.625rem;
 
-  /* Shared pane gutter. Sidebar rows include 8px of inner padding, so on phones their
-   * outer inset compensates for it: leading icons, not hover backgrounds, meet the gutter. */
+  /* On desktop each column, the sidebar included, sits in the same frame: this gap from the
+   * screen's edge and the pane's line. Inside it every leading glyph is `--gutter` from the frame's
+   * edge, so the sidebar's Hide and a pane's Show share a point. A row or leading button starts
+   * `--glyph-pad` before its glyph. Below md nothing is framed. */
   --pane-inset: 0.5rem;
   --pane-line: 1px;
+  --pane-frame: calc(var(--pane-inset) + var(--pane-line));
   --gutter: 1rem;
-  --sidebar-row-gutter: calc(var(--gutter) - 0.5rem);
+  --glyph-pad: 0.5rem;
+  --row-inset: calc(var(--gutter) - var(--glyph-pad));
 
   /* Compact UI must be as readable as the composer on phones. */
   --type-label: 1rem;
@@ -175,8 +179,6 @@
 @media (min-width: 48rem) {
   :root {
     --gutter: 1.5rem;
-    /* Include the inset pane's border so its toggle and the sidebar rows share an edge. */
-    --sidebar-row-gutter: calc(var(--gutter) + var(--pane-line));
   }
 }
 

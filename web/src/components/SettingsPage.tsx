@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
 import { McpSettings } from "@/components/McpSettings";
+import { PianoButton } from "@/components/PianoButton";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RadiusSection } from "@/components/RadiusSection";
@@ -83,15 +84,15 @@ export function SettingsNavigation({
     <div className="flex h-full flex-col">
       <LayoutHeader />
       <SidebarContent>
-        <SidebarGroup className="px-(--sidebar-row-gutter)">
+        <SidebarGroup className="px-(--row-inset)">
           <SidebarGroupContent>{menu}</SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       <LayoutFooter>
-        <Button variant="ghost" className="flex-1 justify-start" onClick={onHome}>
+        <PianoButton variant="ghost" leading className="flex-1" onClick={onHome}>
           <HomeIcon data-icon="inline-start" />
           Home
-        </Button>
+        </PianoButton>
       </LayoutFooter>
     </div>
   );

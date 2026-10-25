@@ -14,7 +14,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 
-const paneHeaderRow = "flex h-16 shrink-0 items-center gap-3 border-b px-(--gutter) py-2";
+/** The one header row, shared by every pane and the sidebar (`LayoutHeader`). */
+export const paneHeaderRow = "flex h-16 shrink-0 items-center gap-3 border-b px-(--gutter) py-2";
 
 /**
  * The pane's header: Show sidebar, the title block, then the controls at the end. Every pane's
@@ -31,7 +32,7 @@ export function PaneHeader({
   return (
     // No shadcn component is a page header; this row is Piano's own.
     <header className={cn(paneHeaderRow, "border-line")}>
-      <ShowSidebarButton className="-ml-2" />
+      <ShowSidebarButton className="-ml-(--glyph-pad)" />
       {children}
       {actions}
     </header>
@@ -62,7 +63,7 @@ export function PaneShowSidebar() {
         "pointer-events-none absolute inset-x-0 top-0 border-transparent",
       )}
     >
-      <ShowSidebarButton className="pointer-events-auto -ml-2" />
+      <ShowSidebarButton className="pointer-events-auto -ml-(--glyph-pad)" />
     </div>
   );
 }
