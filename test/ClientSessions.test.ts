@@ -428,6 +428,47 @@ test("a saved session's view follows its checkout going and coming back", async 
   );
 });
 
+test("a live session's view follows its checkout going and coming back", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const path = join(root, "recheck-live");
+      const away = join(root, "recheck-live-away");
+      mkdirSync(path);
+      const sessionId = crypto.randomUUID();
+      yield* (yield* Registry).addSession(path, sessionId);
+      yield* hosts.open({ cwd: path, sessionId });
+      const { sessions, sent, next } = yield* client;
+      yield* yield* sessions.select({ cwd: path, sessionId, selectionId: "A" });
+      const attached = yield* next((m) => m._tag === "selected");
+      assert.ok(attached._tag === "selected" && attached.hosted, "the running session is live");
+      // Each recheck completes its show before returning, so the last view is already sent.
+      const lastView = () => {
+        const m = sent.findLast((m) => m._tag === "selected" && m.sessionId === sessionId);
+        return m?._tag === "selected"
+          ? { hosted: m.hosted, checkoutMissing: !!m.snapshot.state.checkoutMissing }
+          : undefined;
+      };
+
+      renameSync(path, away);
+      yield* sessions.recheck;
+      assert.deepEqual(
+        lastView(),
+        { hosted: false, checkoutMissing: true },
+        "a removed checkout stops the live view and shows it missing",
+      );
+
+      renameSync(away, path);
+      yield* sessions.recheck;
+      assert.deepEqual(
+        lastView(),
+        { hosted: false, checkoutMissing: false },
+        "a restored checkout shows the session again",
+      );
+    }),
+  );
+});
+
 test("a new-session selection shows what it creates only while it is still selected", async () => {
   await run(
     Effect.gen(function* () {

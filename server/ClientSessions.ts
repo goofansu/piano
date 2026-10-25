@@ -83,8 +83,9 @@ interface ClientSessions {
     start?: StartOptions,
   ) => Effect.Effect<void, ActRefused | PiSessionError>;
   /**
-   * Shows the selected saved session again when its checkout has since gone or come back: no Pi
-   * watches a saved session's checkout, so its view would otherwise keep the answer it was read with.
+   * Shows the selected session again when its checkout has since gone or come back: no Pi watches
+   * a saved session's checkout, and a live one's Pi keeps running without it, so its view would
+   * otherwise keep the answer it was shown with.
    */
   readonly recheck: Effect.Effect<void>;
   /** Detaches a session, stops Pi and archives or deletes it, then clears the selection if it showed that session. */
@@ -102,8 +103,8 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   const hosts = yield* SessionHosts;
   const { send } = output;
   let selected: Selection | null = null;
-  /** The saved session last shown, with the checkout answer its view carries. */
-  let saved: { selectionId: string; cwd: string; checkoutMissing: boolean } | null = null;
+  /** The session last shown, live or saved, with the checkout answer its view carries. */
+  let shown: { selectionId: string; cwd: string; checkoutMissing: boolean } | null = null;
   let attachment: { session: PiSession; scope: Scope.Closeable; selectionId: string } | null = null;
   // Serializes attach, detach and the stale checks that decide between them.
   const navigation = yield* Semaphore.make(1);
@@ -127,7 +128,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     selection: Selection,
   ) {
     if (!current(selection)) return;
-    saved = null;
+    shown = { selectionId: selection.selectionId, cwd: session.spec.cwd, checkoutMissing: false };
     yield* detach;
     const scope = yield* Scope.make();
     const mine = { session, scope, selectionId: selection.selectionId };
@@ -205,7 +206,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         if (!current(selection)) return;
         if (view._tag === "live") return yield* attachTo(view.session, selection);
         yield* detach;
-        saved = sessionId
+        shown = sessionId
           ? { selectionId, cwd: view.cwd, checkoutMissing: !!view.snapshot.state.checkoutMissing }
           : null;
         yield* send({
@@ -298,14 +299,15 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       });
   });
 
-  // One stat per call; the history is read again only when the answer changed. Show forgets the
-  // view first, so a session that can no longer be read is not retried on every refresh.
+  // One stat per call; the session is read again only when the answer changed, and reading stops
+  // a live host whose checkout is gone. Show forgets the view first, so a session that can no
+  // longer be read is not retried on every refresh.
   const recheck = Effect.gen(function* () {
-    const shown = saved;
-    if (!shown || !selected || selected.selectionId !== shown.selectionId) return;
+    const view = shown;
+    if (!view || !selected || selected.selectionId !== view.selectionId) return;
     const selection = selected;
-    if ((yield* hosts.checkoutMissing(shown.cwd)) === shown.checkoutMissing) return;
-    saved = null;
+    if ((yield* hosts.checkoutMissing(view.cwd)) === view.checkoutMissing) return;
+    shown = null;
     yield* show(selection);
   }).pipe(
     Effect.catchTag("PiSessionError", (e) =>
