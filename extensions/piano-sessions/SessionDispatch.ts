@@ -492,6 +492,7 @@ const closureReading = (closure: SessionClosure, completed: boolean): Reading =>
     case "released":
       return { status: "settled", terminal: true, detail };
     case "released_during_work":
+    case "stopped":
       return { status: "cancelled", terminal: true, detail };
     case "exited":
       if (closure.code !== 0) return { status: "failed", terminal: true, detail };

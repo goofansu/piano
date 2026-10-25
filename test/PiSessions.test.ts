@@ -1296,9 +1296,13 @@ test("probe reports models and default", async () => {
 });
 
 test("INV-02: releasing a session tells subscribers it closed, and whether that interrupted work", async () => {
-  for (const [sessionId, prompt, expected] of [
-    ["s4", undefined, "released"],
-    ["s4-working", "ask first", "released_during_work"],
+  // A stop the person asked for (archive, delete) is told apart from one they did not, and a
+  // settled session's stays a plain release either way.
+  for (const [sessionId, prompt, requested, expected] of [
+    ["s4", undefined, false, "released"],
+    ["s4-working", "ask first", false, "released_during_work"],
+    ["s4-asked", undefined, true, "released"],
+    ["s4-asked-working", "ask first", true, "stopped"],
   ] as const) {
     const events = await run(
       Effect.gen(function* () {
@@ -1317,6 +1321,7 @@ test("INV-02: releasing a session tells subscribers it closed, and whether that 
           yield* t.act({ _tag: "prompt", text: prompt });
           yield* Fiber.join(waiting);
         } else yield* Effect.sleep("50 millis");
+        if (requested) yield* t.prepareRelease("requested");
         yield* Scope.close(scope, Exit.succeed(undefined));
         return yield* Fiber.join(collector).pipe(Effect.timeoutOption("5 seconds"));
       }),
@@ -1324,6 +1329,6 @@ test("INV-02: releasing a session tells subscribers it closed, and whether that 
     assert.equal(events._tag, "Some", "subscriber saw the stream end");
     const last = events.value[events.value.length - 1] as Extract<SessionEvent, { _tag: "closed" }>;
     assert.equal(last._tag, "closed");
-    assert.equal(last.closure._tag, expected);
+    assert.equal(last.closure._tag, expected, sessionId);
   }
 });

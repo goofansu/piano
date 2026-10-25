@@ -20,13 +20,16 @@ export type LiveActivity =
   | { readonly _tag: "uncertain"; readonly detail: string }
   | { readonly _tag: "idle" };
 
-/** Whether a stop needs the person's attention: anything but a quiet release or a clean exit
- * may have cut work short. The toast, the banner and the `session.failed` webhook all follow
- * this, never the display text. */
+/** Whether a stop needs the person's attention: anything but a quiet release, a stop they asked
+ * for or a clean exit may have cut work short. The toast, the banner and the `session.failed`
+ * webhook all follow this, never the display text. */
 export const closureNeedsAttention = (
   closure: SessionClosure | undefined,
 ): closure is SessionClosure =>
-  !!closure && closure._tag !== "released" && !(closure._tag === "exited" && closure.code === 0);
+  !!closure &&
+  closure._tag !== "released" &&
+  closure._tag !== "stopped" &&
+  !(closure._tag === "exited" && closure.code === 0);
 
 export function liveActivityOf({ state, dialogs }: Snapshot): LiveActivity {
   const dialog = dialogs[0];

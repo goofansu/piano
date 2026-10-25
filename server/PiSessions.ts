@@ -90,9 +90,10 @@ export interface PiSession {
   readonly spec: PiSessionSpec;
   /** Fence preview admission before scope release. `idle` (the idle sweep) returns false for
    * active/unknown apps; any other release cleans up or fails honestly, leaving ownership
-   * available for retry. `requested`: the person asked for this stop (archive or delete), so the
-   * release that follows is announced as a quiet `released` even if it interrupts work; an
-   * unrequested release during work (shutdown, replacement) stays `released_during_work`. */
+   * available for retry. `requested`: the person asked for this stop (archive or delete), so a
+   * release that interrupts work is announced as a quiet `stopped`; an unrequested one
+   * (shutdown, replacement) stays `released_during_work`. Either way a settled session's is
+   * `released`. */
   readonly prepareRelease: (
     reason?: "idle" | "requested",
   ) => Effect.Effect<boolean, PiSessionError>;
@@ -545,7 +546,7 @@ const openSession = (spec: PiSessionSpec) =>
         });
       });
     // Release is "during work" when Pi still held work it could continue or that awaited an
-    // answer, unless the person asked for this stop. Readback workers and prompt fibers are
+    // answer; a stop the person asked for says so. Readback workers and prompt fibers are
     // already interrupted by now, so judge from retained state and transport uncertainty, never
     // from those fibers.
     let releaseRequested = false;
@@ -554,9 +555,11 @@ const openSession = (spec: PiSessionSpec) =>
         Effect.map(
           publication.snapshot,
           (snapshot): SessionClosure =>
-            releaseRequested || (settled(snapshot) && !child.hasPendingWork())
+            settled(snapshot) && !child.hasPendingWork()
               ? { _tag: "released", detail: "Pi was released" }
-              : { _tag: "released_during_work", detail: "Pi was released during work" },
+              : releaseRequested
+                ? { _tag: "stopped", detail: "Pi was stopped during work" }
+                : { _tag: "released_during_work", detail: "Pi was released during work" },
         ),
       ),
     );
