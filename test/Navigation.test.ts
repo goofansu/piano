@@ -476,6 +476,36 @@ test("files open as tabs once each; closing a tab shows its neighbour, the last 
   assert.deepEqual(shownTabs(p.navigation), { tabs: [], active: null, area: "agent" });
 });
 
+test("a file opens as one tab however its path is spelled", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("README.md");
+  p.navigation.openFile("/scratch/README.md");
+  p.navigation.openFile("./README.md");
+  p.navigation.openFile("docs/../README.md");
+  p.navigation.openFile("docs//guide.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:docs/guide.md"]);
+  p.navigation.openFile("/elsewhere/../scratch/docs/guide.md");
+  p.navigation.openFile("/scratchpad/notes.md");
+  p.navigation.openFile("../outside.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    {
+      tabs: [
+        "file:README.md",
+        "file:docs/guide.md",
+        "file:/scratchpad/notes.md",
+        "file:../outside.md",
+      ],
+      active: "file:../outside.md",
+      area: "surface",
+    },
+    "a path outside the session's directory keeps its own spelling",
+  );
+});
+
 test("one area at a time, closing a file opened from the Agent area returns there", () => {
   const p = page("/new");
   p.registry();
