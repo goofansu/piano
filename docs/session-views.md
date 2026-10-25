@@ -34,7 +34,7 @@ that are also a state (preview, pull request) and Views.
 
 ### Session header (slice 1, built)
 
-One row in the 64px band, so Settings, the project home and the sidebar header stay level.
+One row in the 48px band, so Settings, the project home and the sidebar header stay level.
 
 - **Title group:** the project crumb ("Project: X", a button to the home, hidden on phones where
   the sheet's project page covers it), `/`, then the title as the `h1` with the session menu
