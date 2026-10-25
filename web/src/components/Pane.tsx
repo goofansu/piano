@@ -16,7 +16,7 @@ import {
 
 /** The one header row, shared by every pane and the sidebar (`LayoutHeader`). */
 export const paneHeaderRow =
-  "flex h-16 shrink-0 items-center gap-3 border-b border-line px-(--gutter) py-2";
+  "flex h-12 shrink-0 items-center gap-3 border-b border-line px-(--gutter) py-0";
 
 /**
  * The pane's header: Show sidebar, the title block, then the controls at the end. Every pane's
