@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
-import { type AddressBar, createNavigation, initialView } from "../web/src/lib/navigation.ts";
+import {
+  type AddressBar,
+  createNavigation,
+  initialView,
+  tabKey,
+} from "../web/src/lib/navigation.ts";
 import { parseRoute } from "../web/src/lib/routes.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
@@ -250,6 +255,14 @@ test("back and forward apply the address bar's route; back onto the same New pag
   assert.ok(p.moves() > 0);
 });
 
+/** The Surface area as the user sees it: its tabs in order and the one shown, or null while hidden. */
+function shownTabs(navigation: ReturnType<typeof createNavigation>) {
+  const { surface, area } = navigation.getState();
+  return surface
+    ? { tabs: surface.tabs.map(tabKey), active: surface.active, area }
+    : { tabs: [], active: null, area };
+}
+
 test("a session's surfaces close when another session is selected, and opening one leaves Settings", () => {
   const p = page("/new");
   p.registry();
@@ -258,27 +271,31 @@ test("a session's surfaces close when another session is selected, and opening o
   p.navigation.openSettings();
   p.navigation.openChanges();
   assert.equal(p.navigation.getState().settings, null);
-  assert.equal(p.navigation.getState().surface, "changes");
-  assert.equal(p.navigation.getState().area, "surface");
-  assert.equal(p.path(), "/s/a");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["changes"],
+    active: "changes",
+    area: "surface",
+  });
   p.navigation.openFile("docs/guide.md");
   assert.equal(p.path(), "/s/a", "a file preview never puts its path in the address bar");
 
   p.navigation.openPullRequest();
   assert.equal(p.navigation.getState().pullRequest, true);
   assert.equal(
-    (p.navigation.getState().surface as { path: string }).path,
-    "docs/guide.md",
+    shownTabs(p.navigation).active,
+    "file:docs/guide.md",
     "the PR opens over the nonmodal Surface area without replacing it",
   );
   p.navigation.closePullRequest();
-  assert.equal((p.navigation.getState().surface as { path: string }).path, "docs/guide.md");
 
   p.navigation.openPullRequest();
   p.navigation.select("/scratch", "b");
   p.selected("b");
-  assert.equal(p.navigation.getState().surface, null);
-  assert.equal(p.navigation.getState().area, "agent", "another session starts on its Agent area");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: [], active: null, area: "agent" },
+    "another session starts on its Agent area with no tabs",
+  );
   assert.equal(p.navigation.getState().pullRequest, false);
   p.navigation.openChanges();
   p.navigation.openPullRequest();
@@ -287,7 +304,7 @@ test("a session's surfaces close when another session is selected, and opening o
   assert.equal(p.navigation.getState().pullRequest, false);
 });
 
-test("choosing Changes again focuses it in place: no toggle, no history entry", () => {
+test("choosing Changes again shows its one tab in place: no toggle, no duplicate, no history entry", () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
@@ -296,59 +313,121 @@ test("choosing Changes again focuses it in place: no toggle, no history entry", 
   p.navigation.openChanges();
   const first = p.navigation.getState().surfaceRequest;
   p.navigation.openChanges();
-  const state = p.navigation.getState();
-  assert.equal(state.surface, "changes", "a repeat never hides Changes");
-  assert.equal(state.area, "surface");
-  assert.ok(state.surfaceRequest > first, "a repeat is still a request, so the view takes focus");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["changes"],
+    active: "changes",
+    area: "surface",
+  });
+  assert.ok(
+    p.navigation.getState().surfaceRequest > first,
+    "a repeat is still a request, so the tab takes focus",
+  );
   assert.equal(p.entries.length, entries, "showing a surface is local view state, not a route");
 
   p.navigation.openFile("README.md");
   p.navigation.openChanges();
-  assert.equal(p.navigation.getState().surface, "changes", "Changes replaces an open file");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes", "file:README.md"], active: "changes", area: "surface" },
+    "Changes shows beside the open file's tab, not in place of it",
+  );
 
   p.navigation.setViews(true);
-  p.navigation.hideSurface();
   p.navigation.openChanges();
   assert.equal(p.navigation.getState().views, false, "choosing a view dismisses Views");
-  p.navigation.hideSurface();
-  assert.equal(p.navigation.getState().surface, null);
-  assert.equal(p.navigation.getState().area, "agent");
 });
 
-test("closing a file returns to where it was opened from", () => {
+test("each new view is added at the end, Changes included; reopening one keeps its place", () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
   p.selected("a");
-  const at = () => {
-    const { surface, area } = p.navigation.getState();
-    return { surface: typeof surface === "object" && surface ? surface.path : surface, area };
-  };
-
   p.navigation.openFile("docs/a.md");
-  assert.deepEqual(at(), { surface: "docs/a.md", area: "surface" });
-  p.navigation.closeFile();
-  assert.deepEqual(at(), { surface: null, area: "agent" }, "opened from Agent, back to Agent");
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/b.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:docs/a.md", "changes", "file:docs/b.md"]);
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/a.md");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["file:docs/a.md", "changes", "file:docs/b.md"],
+    active: "file:docs/a.md",
+    area: "surface",
+  });
+  p.navigation.closeTab("changes");
+  p.navigation.openChanges();
+  assert.deepEqual(
+    shownTabs(p.navigation).tabs,
+    ["file:docs/a.md", "file:docs/b.md", "changes"],
+    "a closed view opened again is new, so it joins the end",
+  );
+});
 
+test("files open as tabs once each; closing a tab shows its neighbour, the last hides the area", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
   p.navigation.openChanges();
   p.navigation.openFile("docs/a.md");
   p.navigation.openFile("docs/b.md");
-  assert.deepEqual(at(), { surface: "docs/b.md", area: "surface" }, "a link replaces the file");
-  p.navigation.closeFile();
-  assert.deepEqual(at(), { surface: "changes", area: "surface" }, "back to Changes, not a.md");
-
-  // One area at a time, a link in the transcript leaves Changes waiting behind the Agent tab.
-  p.navigation.setSingle(true);
-  p.navigation.showAgent();
-  assert.deepEqual(at(), { surface: "changes", area: "agent" }, "Agent keeps Changes for later");
   p.navigation.openFile("docs/a.md");
-  p.navigation.closeFile();
-  assert.deepEqual(at(), { surface: "changes", area: "agent" });
-  p.navigation.showSurface();
-  assert.deepEqual(at(), { surface: "changes", area: "surface" });
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    {
+      tabs: ["changes", "file:docs/a.md", "file:docs/b.md"],
+      active: "file:docs/a.md",
+      area: "surface",
+    },
+    "an open file is shown again, never opened twice",
+  );
+  p.navigation.selectTab("file:docs/b.md");
+  p.navigation.closeTab("file:docs/b.md");
+  assert.deepEqual(shownTabs(p.navigation).active, "file:docs/a.md");
+  p.navigation.closeTab("changes");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["file:docs/a.md"], active: "file:docs/a.md", area: "surface" },
+    "closing a tab that is not shown leaves the shown one",
+  );
+  p.navigation.closeTab("file:docs/a.md");
+  assert.deepEqual(shownTabs(p.navigation), { tabs: [], active: null, area: "agent" });
 });
 
-test("the layout and Settings leave the session's surface as it was", () => {
+test("one area at a time, closing a file opened from the Agent area returns there", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.setSingle(true);
+  p.navigation.openChanges();
+  p.navigation.showAgent();
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes"], active: "changes", area: "agent" },
+    "Agent keeps Changes for later",
+  );
+  p.navigation.openFile("docs/a.md");
+  p.navigation.closeTab("file:docs/a.md");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["changes"],
+    active: "changes",
+    area: "agent",
+  });
+
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/b.md");
+  p.navigation.closeTab("file:docs/b.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes"], active: "changes", area: "surface" },
+    "opened from Changes, back to Changes",
+  );
+  p.navigation.showAgent();
+  p.navigation.showSurface();
+  assert.equal(shownTabs(p.navigation).area, "surface");
+});
+
+test("the layout and Settings leave the session's tabs as they were", () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
@@ -359,9 +438,9 @@ test("the layout and Settings leave the session's surface as it was", () => {
   p.navigation.openSettings();
   p.navigation.closeSettings();
   p.navigation.setSingle(false);
-  assert.equal(
-    p.navigation.getState().surface,
-    "changes",
+  assert.deepEqual(
+    shownTabs(p.navigation).tabs,
+    ["changes"],
     "Changes chosen one at a time shows beside Agent",
   );
   p.navigation.setViews(true);

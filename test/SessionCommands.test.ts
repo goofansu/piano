@@ -408,9 +408,11 @@ test("archiving a session that owns an app asks first, from the header or its si
 });
 
 test("view commands follow the session's areas: Views and Hide changes side by side, Agent one at a time", () => {
-  const ofAreas = (areas: { surface: "changes" | null; single: boolean }) =>
+  const ofAreas = ({ surface, single }: { surface: "changes" | null; single: boolean }) =>
     Object.fromEntries(
-      sessionCommands(base, undefined, { areas })
+      sessionCommands(base, undefined, {
+        areas: { single, surface: surface && { tabs: [surface], active: surface } },
+      })
         .filter((c) => ["views", "changes", "hide-changes", "agent"].includes(c.id))
         .map((c) => [c.id, c.enabled]),
     );

@@ -17,8 +17,8 @@ opening a file viewer.
 - `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to Views;
   reopening shows the same scroll and expanded files.
 - `files-list`: the composer's "Files" button (`<n> file(s)`) lists files written in the session.
-- `file-viewer`: a Files row opens the file viewer (heading = path, "Close file", which returns
-  to Changes or the Agent area, wherever it was opened from).
+- `file-viewer`: a Files row opens the file in a tab of its own at the strip's end (tab = file
+  name, toolbar = path, "Close <file name>"); opening it again shows the same tab.
 
 ## How to get to it (user POV)
 
@@ -58,7 +58,8 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Action: `ab find role button click --name "Files" --exact`
   - Result: `ab eval "document.querySelector('[role=dialog]')?.innerText"` is `Files` /
     `answer.ts` / `src`. Then `ab find role button click --name "answer.ts src" --exact` opens
-    heading `src/answer.ts` with the file's current contents and "Close file". Capture
+    a tab `answer.ts` with toolbar `src/answer.ts`, the file's current contents and "Close
+    answer.ts". Capture
     `03-file-viewer`.
 
 ## Gotchas

@@ -55,7 +55,7 @@ export interface CommandEffects {
   openProjects: () => void;
   openProject: (projectId: string) => void;
   openChanges: () => void;
-  hideSurface: () => void;
+  hideChanges: () => void;
   showAgent: () => void;
   openViews: () => void;
   openPullRequest: () => void;
@@ -128,7 +128,7 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       effects.openChanges();
       break;
     case "hide-changes":
-      effects.hideSurface();
+      effects.hideChanges();
       break;
     case "agent":
       effects.showAgent();

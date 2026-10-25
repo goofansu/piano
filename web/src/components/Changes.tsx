@@ -90,8 +90,6 @@ export function ChangesPanel({
   return (
     <SurfaceFrame
       label="Changes"
-      icon={<FileDiffIcon />}
-      title="Changes"
       close={close}
       closeLabel="Hide changes"
       status={

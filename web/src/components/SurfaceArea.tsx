@@ -26,17 +26,14 @@ export const SurfaceSingleContext = createContext(false);
 export const useSurfaceSingle = () => useContext(SurfaceSingleContext);
 
 /**
- * One view in the Surface area: a session's Changes or an open file. The area (`SurfaceColumn`)
- * owns sizing and the splitter; a view owns two rows and its scrolling body. Beside the Agent area
- * the first row is the view's tab, its name and Close, and the second its toolbar: what it shows
- * on the left, its actions on the right, so naming and closing never mix with acting. One area
- * at a time the session's tabs name the view, so only the toolbar shows. Beside the Agent area,
- * Escape closes the view once its own popovers have taken theirs.
+ * One view in the Surface area: a session's Changes or an open file. The area (`SessionPanel`)
+ * draws the tabs, each with its name and Close, in a row of their own; a view owns the toolbar
+ * beneath them, what it shows on the left and its actions on the right, so naming and closing
+ * never mix with acting, and its scrolling body. One area at a time the session's tabs name the
+ * view, so a file's Close joins the end of its toolbar.
  */
 export function SurfaceFrame({
   label,
-  icon,
-  title,
   close,
   closeLabel,
   closeWhenSingle = false,
@@ -47,30 +44,19 @@ export function SurfaceFrame({
 }: {
   /** The region's accessible name ("Changes", "File viewer"). */
   label: string;
-  icon: ReactNode;
-  /** The tab's name: the view's, or a file's name. */
-  title: ReactNode;
   close: () => void;
   closeLabel: string;
-  /**
-   * One area at a time, Close joins the toolbar: for a file, whose tab has no Close of its own.
-   * Changes has none there, since Agent is the way back.
-   */
+  /** One area at a time, Close joins the toolbar: for a file; Agent is the way back from Changes. */
   closeWhenSingle?: boolean;
-  /** What the view shows, at the toolbar's start: a change's size, a file's path. */
+  /** What the view shows, before its actions: a change's size, a file's path. */
   status?: ReactNode;
-  /** The view's controls, at the toolbar's end. */
+  /** The view's controls. */
   actions?: ReactNode;
-  /** Rows under the toolbar, such as a stale observation's note. */
+  /** Rows above the body, such as a stale observation's note. */
   below?: ReactNode;
   children: ReactNode;
 }) {
   const single = useSurfaceSingle();
-  const closeButton = (
-    <IconButton size={single ? "header" : "row"} label={closeLabel} onClick={close}>
-      <XIcon />
-    </IconButton>
-  );
   return (
     <section
       aria-label={label}
@@ -82,31 +68,16 @@ export function SurfaceFrame({
         } else ownKeys(event);
       }}
     >
-      {!single && (
-        // A browser-style tab on the area's strip; one view, so not a tab list. No shadcn
-        // component is a closable tab.
-        <div className="flex h-11 shrink-0 items-end border-b border-line bg-surface-0 px-2">
-          <div className="relative -mb-px flex h-9 min-w-0 max-w-full items-center gap-1.5 rounded-t-lg border border-b-0 border-line bg-conversation pr-1 pl-3">
-            <span className="flex shrink-0 text-ink-3 [&_svg]:size-4" aria-hidden>
-              {icon}
-            </span>
-            <h2
-              tabIndex={-1}
-              data-surface-focus
-              className="min-w-0 truncate text-sm font-medium text-ink outline-none"
-            >
-              {title}
-            </h2>
-            {closeButton}
-          </div>
-        </div>
-      )}
       {/* Plain status and view controls have no dedicated shadcn layout. */}
       <div className="flex min-h-10 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
         <div className="flex min-w-0 items-center truncate">{status}</div>
         <div className="flex shrink-0 items-center">
           {actions}
-          {single && closeWhenSingle && closeButton}
+          {single && closeWhenSingle && (
+            <IconButton size="header" label={closeLabel} onClick={close}>
+              <XIcon />
+            </IconButton>
+          )}
         </div>
       </div>
       {below}

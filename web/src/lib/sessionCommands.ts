@@ -188,7 +188,7 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
  * - views: the session is laid out side by side, where the header shows the Views menu.
- * - hide changes: Changes is shown beside the Agent area.
+ * - hide changes: Changes has a tab beside the Agent area; hiding closes it.
  * - agent: the session is laid out one area at a time, where the Agent tab shows.
  * - pull request, copy session ID: the selected session has a Pi session ID.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
@@ -275,7 +275,7 @@ export function sessionCommands(
         id: "hide-changes",
         label: "Hide changes",
         icon: "hide",
-        enabled: !single && surface === "changes",
+        enabled: !single && !!surface?.tabs.includes("changes"),
         keywords: ["close"],
         intent: { kind: "hide-changes" },
       },

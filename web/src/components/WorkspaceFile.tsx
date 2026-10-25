@@ -39,6 +39,31 @@ const KIND_ICON: Record<Preview["kind"], typeof FileIcon> = {
   pdf: FileIcon,
 };
 
+const EXTENSION_KIND: Record<string, Preview["kind"]> = {
+  md: "markdown",
+  markdown: "markdown",
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  webp: "image",
+  svg: "image",
+  pdf: "pdf",
+  mp3: "audio",
+  wav: "audio",
+  ogg: "audio",
+  mp4: "video",
+  webm: "video",
+  mov: "video",
+};
+
+/** A file tab's icon, by the kind its extension suggests before the file is read. */
+export function FileTabIcon({ path, className }: { path: string; className?: string }) {
+  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  const Icon = KIND_ICON[EXTENSION_KIND[extension] ?? "text"] ?? FileIcon;
+  return <Icon className={className} aria-hidden />;
+}
+
 /** A file a local link opened, read-only, in the Surface area.
  * The owner keys it by session, workspace and path, so new destinations never flash old content. */
 export function WorkspaceFile({
@@ -163,14 +188,11 @@ export function WorkspaceFile({
     }
   };
   const path = result?.path ?? file.path;
-  const Icon = result ? KIND_ICON[result.kind] : FileIcon;
   return (
     <SurfaceFrame
       label="File viewer"
-      icon={<Icon />}
-      title={<span title={path}>{path.slice(path.lastIndexOf("/") + 1)}</span>}
       close={close}
-      closeLabel="Close file"
+      closeLabel={`Close ${path.slice(path.lastIndexOf("/") + 1)}`}
       closeWhenSingle
       status={
         <span className="min-w-0 truncate font-mono" title={path}>

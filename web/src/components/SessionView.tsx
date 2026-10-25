@@ -1,6 +1,7 @@
 import { isWorking } from "@shared/sessionProjection";
 import type { ExtensionState } from "@shared/wire";
 import { cn } from "cn";
+import { FileDiffIcon, MessagesSquareIcon } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
@@ -10,14 +11,15 @@ import { MessageList, SessionDestinationContext } from "@/components/MessageList
 import { PianoTabsList, PianoTabsTrigger, Tabs } from "@/components/PianoTabs";
 import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
-import { SessionPanel } from "@/components/SessionPanel";
+import { SessionPanel, surfaceTabNames } from "@/components/SessionPanel";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { FileTabIcon } from "@/components/WorkspaceFile";
 import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
-import type { Surface } from "@/lib/navigation";
+import { type Surface, tabKey } from "@/lib/navigation";
 import { AGENT_MIN_WIDTH, PANEL_WIDTH, singleArea } from "@/lib/panelLayout";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
@@ -41,7 +43,7 @@ interface Props {
 
 /** The session's areas share one tab list one at a time; these name its parts for each other. */
 const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" } as const;
-const tabId = (value: string) => `session-area-tab-${value}`;
+const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
 export function SessionView({ state, send }: Props) {
   // The selected session's PR popover; hidden while Settings covers the view. Its Changes and
@@ -141,7 +143,7 @@ export function SessionView({ state, send }: Props) {
         <AreaTabs
           surface={surface}
           agentShown={!agentHidden}
-          changes={!!changesWorkspace || surface === "changes"}
+          changes={!!changesWorkspace || !!surface?.tabs.includes("changes")}
         />
       )}
       <div
@@ -263,9 +265,7 @@ export function SessionView({ state, send }: Props) {
           single={single}
           onAsk={onAsk}
           id={AREA_ID.surface}
-          labelledBy={
-            single ? tabId(typeof surface === "object" && surface ? "file" : "changes") : undefined
-          }
+          labelledBy={single && surface ? tabId(surface.active) : undefined}
         />
       </div>
     </TranscriptViewportContext>
@@ -273,9 +273,10 @@ export function SessionView({ state, send }: Props) {
 }
 
 /**
- * One area at a time, the tabs between them: Agent, Changes for a Git workspace, and the open
- * file while there is one. Choosing Agent never focuses the composer, so a phone keeps its
- * keyboard down; choosing Changes shows it as it was left.
+ * One area at a time, the tabs between them: Agent, then the open views in the order they were
+ * opened, then Changes for a Git workspace while it is not open yet. Choosing Agent never focuses
+ * the composer, so a phone keeps its keyboard down; choosing a view shows it as it was left. A
+ * file closes from its own toolbar.
  */
 function AreaTabs({
   surface,
@@ -286,26 +287,37 @@ function AreaTabs({
   agentShown: boolean;
   changes: boolean;
 }) {
-  const { showAgent, openChanges, showSurface } = useNavigation();
-  const file = typeof surface === "object" && surface ? surface : null;
-  const value = agentShown ? "agent" : file ? "file" : "changes";
-  const trigger = (id: string, label: string, controls: string) => (
-    <PianoTabsTrigger value={id} id={tabId(id)} aria-controls={controls}>
-      {label}
+  const { showAgent, openChanges, selectTab } = useNavigation();
+  const tabs = surface?.tabs ?? [];
+  const value = agentShown || !surface ? "agent" : surface.active;
+  const trigger = (key: string, icon: React.ReactNode, label: string, controls: string) => (
+    <PianoTabsTrigger key={key} value={key} id={tabId(key)} aria-controls={controls}>
+      {icon}
+      <span className="min-w-0 truncate">{label}</span>
     </PianoTabsTrigger>
   );
   return (
     <Tabs
       value={value}
       onValueChange={(next) =>
-        next === "agent" ? showAgent() : next === "changes" ? openChanges() : showSurface()
+        next === "agent" ? showAgent() : next === "changes" ? openChanges() : selectTab(next)
       }
       className="shrink-0 gap-0 border-b border-line px-(--gutter)"
     >
       <PianoTabsList aria-label="Session views" className="-ml-2">
-        {trigger("agent", "Agent", AREA_ID.agent)}
-        {changes && trigger("changes", "Changes", AREA_ID.surface)}
-        {file && trigger("file", file.path.slice(file.path.lastIndexOf("/") + 1), AREA_ID.surface)}
+        {trigger("agent", <MessagesSquareIcon aria-hidden />, "Agent", AREA_ID.agent)}
+        {tabs.map((tab) =>
+          trigger(
+            tabKey(tab),
+            tab === "changes" ? <FileDiffIcon aria-hidden /> : <FileTabIcon path={tab.path} />,
+            surfaceTabNames(tab).name,
+            AREA_ID.surface,
+          ),
+        )}
+        {/* Not open yet, Changes waits at the end, where opening it adds its tab. */}
+        {changes &&
+          !tabs.includes("changes") &&
+          trigger("changes", <FileDiffIcon aria-hidden />, "Changes", AREA_ID.surface)}
       </PianoTabsList>
     </Tabs>
   );
