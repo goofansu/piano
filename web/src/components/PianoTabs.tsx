@@ -83,7 +83,8 @@ export function PianoStripBar({
       data-variant={variant}
       className={cn(
         "group/strip flex shrink-0 items-end border-b border-line bg-surface-0 px-2",
-        variant === "pills" ? "h-11 pointer-coarse:h-14" : "h-10 pointer-coarse:h-12",
+        // Pills keep the strip's side padding above and below them too.
+        variant === "pills" ? "h-11 pointer-coarse:h-15" : "h-10 pointer-coarse:h-12",
       )}
     >
       {children}
@@ -125,8 +126,9 @@ export function PianoStripTab({
         // Keyboard focus rings the whole tab, Close included, inside its edge so the strip
         // never clips it. Sized by pointer, not width: a touch screen keeps a 44px target.
         "relative flex h-8 pointer-coarse:h-11 max-w-48 min-w-0 shrink-0 items-center gap-0.5 rounded-t-lg border border-b-0 pr-1 has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-inset",
-        // Single-area navigation stays separate from the content rather than joining its edge.
-        "group-data-[variant=pills]/strip:mb-0 group-data-[variant=pills]/strip:rounded-full group-data-[variant=pills]/strip:border-b",
+        // Single-area navigation stays a whole rectangle apart from the content rather than
+        // joining its edge.
+        "group-data-[variant=pills]/strip:h-7 group-data-[variant=pills]/strip:rounded-sm group-data-[variant=pills]/strip:border-b pointer-coarse:group-data-[variant=pills]/strip:h-11",
         selected
           ? "z-10 border-line bg-conversation text-ink"
           : // Pointing at a tab outlines it, the shape it takes when chosen.
