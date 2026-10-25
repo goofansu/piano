@@ -9,3 +9,6 @@ web/public/pdfjs/
 
 # Claude Code worktrees carry their own biome.json
 .claude/worktrees/
+
+# TypeScript incremental build state.
+*.tsbuildinfo

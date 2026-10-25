@@ -849,11 +849,15 @@ test("a new session's title is limited where it is stored, from a start name or 
       yield* r.addSession(cwd, "named", ` ${"n".repeat(SESSION_TITLE_MAX + 50)} `);
       yield* r.addSession(cwd, "prompted");
       yield* r.touchSession(cwd, "prompted", ` ${"p".repeat(SESSION_TITLE_MAX + 50)}`);
+      // An emoji straddling the cut is dropped whole, never left as half a surrogate pair.
+      yield* r.addSession(cwd, "emoji");
+      yield* r.touchSession(cwd, "emoji", `${"e".repeat(79)}\u{1F600} more`);
     }),
   );
   const titles = Object.fromEntries((await f.get()).sessions.map((s) => [s.sessionId, s.title]));
   assert.equal(titles.named, "n".repeat(SESSION_TITLE_MAX));
   assert.equal(titles.prompted, "p".repeat(80));
+  assert.equal(titles.emoji, "e".repeat(79));
 });
 
 test("a start name over the title limit is refused like a rename", () => {

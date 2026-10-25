@@ -49,10 +49,16 @@ export function hostAllowed(origins: ReadonlySet<string>, host: string | undefin
     return false;
   }
   if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) return false;
-  return (
-    isLoopbackHostname(url.hostname) ||
-    [...origins].some((o) => new URL(o).host === host.toLowerCase())
-  );
+  if (isLoopbackHostname(url.hostname)) return true;
+  // Compare parsed, so case, IDN spelling and an explicit default port (`:80`, `:443`) still match.
+  return [...origins].some((value) => {
+    const origin = new URL(value);
+    return (
+      origin.hostname === url.hostname &&
+      (origin.port === url.port ||
+        (origin.port === "" && origin.protocol === "https:" && url.port === "443"))
+    );
+  });
 }
 
 /**

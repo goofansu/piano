@@ -393,17 +393,20 @@ for (const removed of ["checkout", "alias"])
         const session = yield* hosts.open({ cwd: path, sessionId: id });
         yield* prompt(session, "/settle");
         yield* quiescent(session);
-        const recorded = (yield* registry.get).sessions.find((s) => s.sessionId === id);
+        // Activity is the updated time and a first-prompt title; retiring the host may still
+        // mirror Pi's statistics, so those are not compared.
+        const activity = Effect.map(registry.get, ({ sessions }) => {
+          const entry = sessions.find((s) => s.sessionId === id);
+          return { updatedAt: entry?.updatedAt, title: entry?.title };
+        });
+        const recorded = yield* activity;
         yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
         rmSync(removed === "checkout" ? path : link, { recursive: true });
         assert.match(
           (yield* session.act({ _tag: "prompt", text: "must not send" }).pipe(Effect.flip)).detail,
           /checkout no longer exists/,
         );
-        assert.deepEqual(
-          (yield* registry.get).sessions.find((s) => s.sessionId === id),
-          recorded,
-        );
+        assert.deepEqual(yield* activity, recorded);
         assert.equal(yield* hosts.get(path, id), undefined);
         const view = yield* saved(hosts, path, id);
         assert.equal(view.cwd, link);

@@ -166,7 +166,13 @@ test("INV-11: real HTTP and WebSocket boundaries reject untrusted origins before
       403,
       "a forwarded host never stands in for Host",
     );
-    for (const host of ["piano.example", "PIANO.example", `localhost:${port}`, `[::1]:${port}`])
+    for (const host of [
+      "piano.example",
+      "PIANO.example",
+      "piano.example:443",
+      `localhost:${port}`,
+      `[::1]:${port}`,
+    ])
       assert.equal(await readWithHost(host), 200, `GET with Host ${host}`);
     for (const compressed of [false, true]) {
       const connect = () =>

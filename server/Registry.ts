@@ -414,8 +414,13 @@ export const RegistryLive = Layer.effect(
     }, Effect.uninterruptible);
     const now = () => new Date().toISOString();
     /** The one place a session's title is decided: trimmed, cut at `max`, empty is none. */
-    const titleOf = (text: string | undefined, max = SESSION_TITLE_MAX) =>
-      text?.trim().slice(0, max).trim() || undefined;
+    const titleOf = (text: string | undefined, max = SESSION_TITLE_MAX) => {
+      const trimmed = text?.trim();
+      if (!trimmed) return undefined;
+      // Never cut a surrogate pair in half: the lone half shows as a replacement character.
+      const high = trimmed.length > max && (trimmed.charCodeAt(max - 1) & 0xfc00) === 0xd800;
+      return trimmed.slice(0, high ? max - 1 : max).trim() || undefined;
+    };
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) =>
       sameSession(t, { cwd, sessionId });
     const currentIn = (d: RegistryData, expected: SessionEntry, link?: SessionLinkKey) => {
