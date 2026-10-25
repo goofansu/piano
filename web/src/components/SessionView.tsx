@@ -5,6 +5,7 @@ import { FileDiffIcon, MessagesSquareIcon } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
+import { useSessionCommands } from "@/components/CommandHost";
 import { Composer } from "@/components/Composer";
 import { LocalFileContext } from "@/components/Markdown";
 import { MessageList, SessionDestinationContext } from "@/components/MessageList";
@@ -94,7 +95,11 @@ export function SessionView({ state, send }: Props) {
     [t?.tools],
   );
   const input = state.pendingCreate;
-  const { workspace, draftKey, changesWorkspace } = sessionContext(state);
+  const { workspace, draftKey } = sessionContext(state);
+  // Changes opens through its session command, whose rule Views and the palette follow too.
+  const { commands, run } = useSessionCommands();
+  const changes = commands.find((c) => c.id === "changes");
+  const openChanges = changes?.enabled ? () => run(changes) : undefined;
   // Ask adds to the draft and never sends; one area at a time, it returns to the draft.
   const onAsk = draftKey
     ? (text: string) => {
@@ -145,12 +150,8 @@ export function SessionView({ state, send }: Props) {
           )
         }
       />
-      {single && (changesWorkspace || surface) && (
-        <AreaTabs
-          surface={surface}
-          agentShown={!agentHidden}
-          changes={!!changesWorkspace || !!surface?.tabs.includes("changes")}
-        />
+      {single && (openChanges || surface) && (
+        <AreaTabs surface={surface} agentShown={!agentHidden} openChanges={openChanges} />
       )}
       <div
         ref={areas}
@@ -280,20 +281,21 @@ export function SessionView({ state, send }: Props) {
 
 /**
  * One area at a time, the tabs between them: Agent, then the open views in the order they were
- * opened, then Changes for a Git workspace while it is not open yet. Choosing Agent never focuses
+ * opened, then Changes while it is not open yet and can open. Choosing Agent never focuses
  * the composer, so a phone keeps its keyboard down; choosing a view shows it as it was left. A
  * file closes from its own toolbar.
  */
 function AreaTabs({
   surface,
   agentShown,
-  changes,
+  openChanges,
 }: {
   surface: Surface | null;
   agentShown: boolean;
-  changes: boolean;
+  /** Runs the Changes command; omitted while it is disabled, which leaves Changes out. */
+  openChanges: (() => void) | undefined;
 }) {
-  const { showAgent, openChanges, selectTab } = useNavigation();
+  const { showAgent, selectTab } = useNavigation();
   const tabs = surface?.tabs ?? [];
   const value = agentShown || !surface ? "agent" : surface.active;
   // The Surface area's strip tabs, so the session's tabs look alike at every width.
@@ -312,7 +314,11 @@ function AreaTabs({
       <Tabs
         value={value}
         onValueChange={(next) =>
-          next === "agent" ? showAgent() : next === "changes" ? openChanges() : selectTab(next)
+          next === "agent"
+            ? showAgent()
+            : next === "changes" && !tabs.includes("changes")
+              ? openChanges?.()
+              : selectTab(next)
         }
         className="min-w-0 flex-1 gap-0 self-stretch"
       >
@@ -331,7 +337,7 @@ function AreaTabs({
             ),
           )}
           {/* Not open yet, Changes waits at the end, where opening it adds its tab. */}
-          {changes &&
+          {openChanges &&
             !tabs.includes("changes") &&
             trigger("changes", <FileDiffIcon className="size-3.5" />, "Changes", AREA_ID.surface)}
         </PianoStripTabsList>
