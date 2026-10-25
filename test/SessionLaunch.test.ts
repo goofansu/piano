@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { configuredOrigins, sessionLinkOrigin } from "../server/OriginPolicy.ts";
 import { defaultPiCli, sessionExtension } from "../server/PiCli.ts";
 import { sessionEndpoint, sessionEnvironment } from "../server/SessionEndpoint.ts";
 
@@ -80,6 +81,25 @@ test("the session endpoint addresses the listener and borrows an already-allowed
       PIANO_SESSION_ORIGIN: "https://piano.example",
     },
   );
+});
+
+// Webhooks and the session endpoint both link by this rule; without the listener, a webhook named
+// 127.0.0.1 for a Piano listening only on [::1] (docs/configuration.md#session-link-origin).
+test("a session link opens from the listener's own origin unless an HTTPS one is configured", () => {
+  const loopback = configuredOrigins(7070);
+  for (const [host, origin] of [
+    ["127.0.0.1", "http://127.0.0.1:7070"],
+    ["0.0.0.0", "http://127.0.0.1:7070"],
+    ["localhost", "http://localhost:7070"],
+    ["::1", "http://[::1]:7070"],
+    ["::", "http://[::1]:7070"],
+  ] as const)
+    assert.equal(sessionLinkOrigin(loopback, { host, port: 7070 }), origin, host);
+  // A listener no origin names falls back to the first; an HTTPS origin wins over all.
+  const listener = { host: "192.0.2.1", port: 7070 };
+  assert.equal(sessionLinkOrigin(loopback, listener), "http://127.0.0.1:7070");
+  const proxied = configuredOrigins(7070, "http://[::1]:7070,https://piano.example");
+  assert.equal(sessionLinkOrigin(proxied, { host: "::1", port: 7070 }), "https://piano.example");
 });
 
 test("a running Piano launches Pi with its extension and a usable endpoint", {

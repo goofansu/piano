@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, Logger, type Scope, Stream } from "effect";
-import { AllowedOrigins } from "../server/OriginPolicy.ts";
+import { SessionLinkOrigin } from "../server/OriginPolicy.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
@@ -53,7 +53,7 @@ const run = <A, E>(
       Effect.provideService(RegistryDatabasePath, join(root, `${name}.db`)),
       Effect.provideService(WebhookFetch, fetch),
       Effect.provideService(WebhookTimeoutMs, timeoutMs),
-      Effect.provideService(AllowedOrigins, new Set(["https://piano.example"])),
+      Effect.provideService(SessionLinkOrigin, "https://piano.example"),
     ),
   );
 /** Webhooks fed by real session hosts on fake Pi, delivering into `requests`, until the scope
@@ -78,7 +78,7 @@ const live =
         cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
         extraArgs: [],
       }),
-      Effect.provideService(AllowedOrigins, new Set(["https://piano.example"])),
+      Effect.provideService(SessionLinkOrigin, "https://piano.example"),
     );
 const wait = (condition: () => boolean) =>
   Effect.gen(function* () {
