@@ -192,7 +192,7 @@ export function Sidebar({ state }: Props) {
         </nav>
       </ScrollArea>
       <LayoutFooter>
-        <Button variant="ghost" className="flex-1 justify-start" onClick={() => openSettings()}>
+        <Button variant="ghost" leading className="flex-1" onClick={() => openSettings()}>
           <SettingsIcon data-icon="inline-start" />
           Settings
         </Button>

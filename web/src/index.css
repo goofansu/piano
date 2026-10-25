@@ -176,12 +176,6 @@
   --chart-5: var(--ink-2);
 }
 
-@media (min-width: 48rem) {
-  :root {
-    --gutter: 1.5rem;
-  }
-}
-
 .dark {
   /* Lefos in dark mode: midnight canvas, evening-blue layers and warm parchment ink. Elevation adds
    * lightness so menus and dialogs separate without bright outlines. */
@@ -226,6 +220,7 @@
 /* Match the shell's md breakpoint; preserve desktop information density. */
 @media (min-width: 48rem) {
   :root {
+    --gutter: 1.5rem;
     --type-label: 0.875rem;
     --type-caption: 0.75rem;
   }

@@ -166,7 +166,7 @@ export function LayoutHeader({ children }: { children?: ReactNode }) {
   return (
     // The pane header's row in the same frame, so Hide sits where a pane's Show appears and the
     // two hairlines are one line across the screen.
-    <SidebarHeader className={cn(paneHeaderRow, "flex-row border-line")}>
+    <SidebarHeader className={cn(paneHeaderRow, "flex-row")}>
       <IconButton
         size="header"
         leading
