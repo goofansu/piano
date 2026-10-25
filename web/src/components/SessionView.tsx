@@ -100,7 +100,7 @@ export function SessionView({ state, send }: Props) {
   const { commands, run } = useSessionCommands();
   const changes = commands.find((c) => c.id === "changes");
   const openChanges = changes?.enabled ? () => run(changes) : undefined;
-  // The area tabs show where the Agent command is offered.
+  // The area tabs show where the Agent command is offered; only then is each area their panel.
   const areaTabs = !!commands.find((c) => c.id === "agent")?.enabled;
   // Ask adds to the draft and never sends; one area at a time, it returns to the draft.
   const onAsk = draftKey
@@ -167,8 +167,8 @@ export function SessionView({ state, send }: Props) {
           ref={agent}
           id={AREA_ID.agent}
           data-slot="agent-area"
-          // One area at a time it is the panel the Agent tab names; side by side, a plain region.
-          {...(single && { role: "tabpanel", "aria-labelledby": tabId("agent") })}
+          // While the area tabs show it is the panel the Agent tab names; otherwise a plain region.
+          {...(areaTabs && { role: "tabpanel", "aria-labelledby": tabId("agent") })}
           inert={agentHidden}
           aria-hidden={agentHidden || undefined}
           className={cn(
@@ -271,7 +271,7 @@ export function SessionView({ state, send }: Props) {
           state={state}
           onAsk={onAsk}
           id={AREA_ID.surface}
-          labelledBy={single && surface ? tabId(surface.active) : undefined}
+          labelledBy={areaTabs && surface ? tabId(surface.active) : undefined}
         />
       </div>
     </TranscriptViewportContext>
