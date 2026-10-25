@@ -114,7 +114,8 @@ export function SessionPanel({
   });
 
   if (!t) return null;
-  const { workspace, changesWorkspace, canOpenChanges, changesUnavailable } = sessionContext(state);
+  const { workspace, changesWorkspace, canOpenChanges, changesUnavailable, checkoutMissing } =
+    sessionContext(state);
   const files = tabs.filter((tab): tab is Exclude<SurfaceTab, "changes"> => tab !== "changes");
   const view = (k: string, children: React.ReactNode) => (
     <SurfaceView key={k} tab={k} shown={active === k} single={single}>
@@ -184,7 +185,8 @@ export function SessionPanel({
           view(
             tabKey(file),
             <WorkspaceFile
-              key={`${workspace?.id}:${key}:${file.path}`}
+              // A checkout going or coming back rereads the file, as Changes does.
+              key={`${workspace?.id}:${key}:${file.path}:${checkoutMissing}`}
               workspaceId={workspace?.id}
               file={file}
               open={(path) => openFile(path, "surface")}

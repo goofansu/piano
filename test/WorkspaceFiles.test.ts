@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Effect } from "effect";
-import { place, readWorkspaceFile } from "../server/WorkspaceFiles.ts";
+import { downloadWorkspaceFile, place, readWorkspaceFile } from "../server/WorkspaceFiles.ts";
 
 test("workspace file reads are bounded and never fall back to a neighboring workspace", async () => {
   const root = await mkdtemp(join(tmpdir(), "piano-files-"));
@@ -232,5 +232,30 @@ test("UTF-8 text whose first bytes match a short binary signature stays text", a
     assert.deepEqual(audio.bytes, mp3);
   } finally {
     await rm(a, { recursive: true, force: true });
+  }
+});
+
+test("a removed checkout refuses its files by that cause, and they read again once it returns", async () => {
+  const root = await mkdtemp(join(tmpdir(), "piano-checkout-"));
+  try {
+    const a = join(root, "a");
+    await mkdir(a);
+    await writeFile(join(a, "readme.txt"), "workspace A\n");
+    const workspace = { id: "a", folder: a, path: a };
+    const refusal = <A>(effect: Effect.Effect<A, { detail: string }>) =>
+      Effect.runPromise(
+        effect.pipe(
+          Effect.flip,
+          Effect.map((error) => error.detail),
+        ),
+      );
+    await rename(a, join(root, "moved"));
+    assert.equal(await refusal(readWorkspaceFile(workspace, "readme.txt")), "Checkout removed");
+    assert.equal(await refusal(downloadWorkspaceFile(workspace, "readme.txt")), "Checkout removed");
+    await rename(join(root, "moved"), a);
+    const preview = await Effect.runPromise(readWorkspaceFile(workspace, "readme.txt"));
+    assert.equal((preview as { content: string }).content, "workspace A\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
