@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { Clock, Context, Data, Deferred, Effect, Layer, Queue, Schema, Semaphore } from "effect";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
+import { isLoopbackHostname } from "../shared/loopback.ts";
 import { closureNeedsAttention, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import {
   type Webhook,
@@ -210,7 +211,7 @@ export const WebhooksLive = Layer.effect(
         url.hash ||
         !(
           url.protocol === "https:" ||
-          (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+          (url.protocol === "http:" && isLoopbackHostname(url.hostname))
         )
       )
         return yield* refused(
