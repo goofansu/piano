@@ -125,7 +125,7 @@ export function PianoStripTab({
       className={cn(
         // Keyboard focus rings the whole tab, Close included, inside its edge so the strip
         // never clips it. Sized by pointer, not width: a touch screen keeps a 44px target.
-        "relative flex h-8 pointer-coarse:h-11 max-w-48 min-w-0 shrink-0 items-center gap-0.5 rounded-t-lg border border-b-0 pr-1 has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-inset",
+        "relative -mb-px flex h-8 pointer-coarse:h-11 max-w-48 min-w-0 shrink-0 items-center gap-0.5 rounded-t-lg border border-b-0 pr-1 has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-inset",
         // Single-area navigation stays a whole rectangle apart from the content rather than
         // joining its edge.
         "group-data-[variant=pills]/strip:h-7 group-data-[variant=pills]/strip:rounded-sm group-data-[variant=pills]/strip:border-b pointer-coarse:group-data-[variant=pills]/strip:h-11",
@@ -142,14 +142,16 @@ export function PianoStripTab({
 }
 
 /**
- * The strip tab's trigger: its icon and name, with no underline or fill of its own. A tab without
- * Close (Agent) keeps the same room after its name as before it.
+ * The strip tab's trigger: its icon and name (the children), with no underline or fill of its own.
+ * A tab without Close (Agent) keeps the same room after its name as before it.
  */
 export function PianoStripTabTrigger({
+  icon,
   className,
   onMouseDown,
+  children,
   ...props
-}: ComponentProps<typeof TabsTrigger>) {
+}: ComponentProps<typeof TabsTrigger> & { icon: React.ReactNode }) {
   return (
     <TabsTrigger
       {...props}
@@ -161,6 +163,11 @@ export function PianoStripTabTrigger({
         "h-full min-w-0 flex-1 justify-start gap-1.5 rounded-md border-0 pl-2.5 pr-0.5 last:pr-1.5 text-xs text-inherit after:hidden hover:text-inherit data-active:text-inherit dark:text-inherit dark:hover:text-inherit dark:data-active:text-inherit focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
         className,
       )}
-    />
+    >
+      <span className="flex shrink-0 text-ink-3" aria-hidden>
+        {icon}
+      </span>
+      <span className="min-w-0 truncate font-medium">{children}</span>
+    </TabsTrigger>
   );
 }

@@ -1,7 +1,7 @@
 import { isWorking } from "@shared/sessionProjection";
 import type { ExtensionState } from "@shared/wire";
 import { cn } from "cn";
-import { FileDiffIcon, MessagesSquareIcon } from "lucide-react";
+import { MessagesSquareIcon } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
@@ -18,15 +18,14 @@ import {
 } from "@/components/PianoTabs";
 import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
-import { SessionPanel, surfaceTabNames } from "@/components/SessionPanel";
+import { SessionPanel, SurfaceTabIcon, surfaceTabNames } from "@/components/SessionPanel";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { FileTabIcon } from "@/components/WorkspaceFile";
 import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
-import { shownAreas, tabKey } from "@/lib/navigation";
+import { type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
 import { AGENT_MIN_WIDTH, PANEL_WIDTH, singleArea } from "@/lib/panelLayout";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
@@ -295,15 +294,14 @@ function AreaTabs({
   const value = surface && shownAreas(navigation).surface ? surface.active : "agent";
   // The Surface area's strip tabs, so the session's tabs look alike at every width.
   const trigger = (key: string, icon: React.ReactNode, label: string, controls: string) => (
-    <PianoStripTab key={key} selected={key === value} className="-mb-px">
-      <PianoStripTabTrigger value={key} id={tabId(key)} aria-controls={controls}>
-        <span className="flex shrink-0 text-ink-3" aria-hidden>
-          {icon}
-        </span>
-        <span className="min-w-0 truncate font-medium">{label}</span>
+    <PianoStripTab key={key} selected={key === value}>
+      <PianoStripTabTrigger value={key} id={tabId(key)} aria-controls={controls} icon={icon}>
+        {label}
       </PianoStripTabTrigger>
     </PianoStripTab>
   );
+  const view = (tab: SurfaceTab) =>
+    trigger(tabKey(tab), <SurfaceTabIcon tab={tab} />, surfaceTabNames(tab).name, AREA_ID.surface);
   return (
     <PianoStripBar variant="pills">
       <Tabs
@@ -319,22 +317,9 @@ function AreaTabs({
       >
         <PianoStripTabsList aria-label="Session views">
           {trigger("agent", <MessagesSquareIcon className="size-3.5" />, "Agent", AREA_ID.agent)}
-          {tabs.map((tab) =>
-            trigger(
-              tabKey(tab),
-              tab === "changes" ? (
-                <FileDiffIcon className="size-3.5" />
-              ) : (
-                <FileTabIcon path={tab.path} className="size-3.5" />
-              ),
-              surfaceTabNames(tab).name,
-              AREA_ID.surface,
-            ),
-          )}
+          {tabs.map(view)}
           {/* Not open yet, Changes waits at the end, where opening it adds its tab. */}
-          {openChanges &&
-            !tabs.includes("changes") &&
-            trigger("changes", <FileDiffIcon className="size-3.5" />, "Changes", AREA_ID.surface)}
+          {openChanges && !tabs.includes("changes") && view("changes")}
         </PianoStripTabsList>
       </Tabs>
     </PianoStripBar>

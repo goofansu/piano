@@ -28,6 +28,15 @@ export function surfaceTabNames(tab: SurfaceTab) {
     : { name: fileName(tab.path), close: `Close ${fileName(tab.path)}` };
 }
 
+/** A tab's icon, alike beside the Agent area and among the session's tabs. */
+export function SurfaceTabIcon({ tab }: { tab: SurfaceTab }) {
+  return tab === "changes" ? (
+    <FileDiffIcon className="size-3.5" />
+  ) : (
+    <FileTabIcon path={tab.path} className="size-3.5" />
+  );
+}
+
 /**
  * The selected session's Surface area: its tabs, Changes and the files links opened. Beside the
  * Agent area a strip holds the tabs, each with its Close, above the shown view's own toolbar; one
@@ -145,21 +154,15 @@ export function SessionPanel({
                   const k = tabKey(tab);
                   const names = surfaceTabNames(tab);
                   return (
-                    <PianoStripTab key={k} selected={k === active} className="-mb-px">
+                    <PianoStripTab key={k} selected={k === active}>
                       <PianoStripTabTrigger
                         value={k}
                         id={surfaceTabId(k)}
                         aria-controls={viewId(k)}
                         title={tab === "changes" ? undefined : tab.path}
+                        icon={<SurfaceTabIcon tab={tab} />}
                       >
-                        <span className="flex shrink-0 text-ink-3" aria-hidden>
-                          {tab === "changes" ? (
-                            <FileDiffIcon className="size-3.5" />
-                          ) : (
-                            <FileTabIcon path={tab.path} className="size-3.5" />
-                          )}
-                        </span>
-                        <span className="min-w-0 truncate font-medium">{names.name}</span>
+                        {names.name}
                       </PianoStripTabTrigger>
                       <IconButton size="row" label={names.close} onClick={() => closeTab(k)}>
                         <XIcon />
