@@ -199,7 +199,7 @@ export function SessionPanel({
                 key={`${workspace?.id}:${key}:${file.path}`}
                 workspaceId={workspace?.id}
                 file={file}
-                open={openFile}
+                open={(path) => openFile(path, "surface")}
                 close={() => closeTab(tabKey(file))}
               />,
             ),
