@@ -302,6 +302,34 @@ test("a delete the server refuses, or one cut off by a lost connection, stays on
   }
 });
 
+test("a submitted form opens no page once the user has moved to another screen", () => {
+  const home = { kind: "project", projectId: "p1" } as const;
+  const deleted = forms();
+  deleted.setState({ ...withWorkspace, view: home, projects: [launch] });
+  deleted.subject.open(deleteProject);
+  assert.equal(deleted.subject.submit(), true);
+  // The user opens the index while the server is still deleting the project.
+  deleted.setState({ ...withWorkspace, view: { kind: "projects" }, projects: [launch] });
+  deleted.subject.settle();
+  deleted.setState({ ...withWorkspace, view: { kind: "projects" }, projects: [] });
+  deleted.subject.settle();
+  deleted.setState({ ...withWorkspace, view: home, projects: [] });
+  deleted.subject.settle();
+  assert.deepEqual(deleted.opened, [], "returning later is not the submit's answer either");
+
+  const created = forms();
+  created.subject.open({ kind: "project", dialog: {} });
+  created.subject.editProject({ name: "Ship", instructions: "" });
+  assert.equal(created.subject.submit(), true);
+  created.setState({
+    ...withWorkspace,
+    view: { kind: "project", projectId: "p1" },
+    projects: [launch, { id: "new-id", name: "Ship" }],
+  });
+  created.subject.settle();
+  assert.deepEqual(created.opened, [], "the new project's home does not replace the page opened");
+});
+
 test("Share needs Radius and a registered workspace", () => {
   const share: CommandForm = { kind: "share-session", target: other };
   assert.equal(answerForm(withWorkspace, share, "", { radiusSignedIn: false }).allowed, false);
