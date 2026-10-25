@@ -100,6 +100,8 @@ export function SessionView({ state, send }: Props) {
   const { commands, run } = useSessionCommands();
   const changes = commands.find((c) => c.id === "changes");
   const openChanges = changes?.enabled ? () => run(changes) : undefined;
+  // The area tabs show where the Agent command is offered.
+  const areaTabs = !!commands.find((c) => c.id === "agent")?.enabled;
   // Ask adds to the draft and never sends; one area at a time, it returns to the draft.
   const onAsk = draftKey
     ? (text: string) => {
@@ -150,7 +152,7 @@ export function SessionView({ state, send }: Props) {
           )
         }
       />
-      {single && (openChanges || surface) && <AreaTabs openChanges={openChanges} />}
+      {areaTabs && <AreaTabs openChanges={openChanges} />}
       <div
         ref={areas}
         className="relative flex min-h-0 min-w-0 flex-1"
