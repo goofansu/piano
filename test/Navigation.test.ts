@@ -7,6 +7,7 @@ import {
   createNavigation,
   initialView,
   type SurfaceMemory,
+  shownAreas,
   tabKey,
 } from "../web/src/lib/navigation.ts";
 import { parseRoute } from "../web/src/lib/routes.ts";
@@ -507,6 +508,27 @@ test("one area at a time, closing a file opened from the Agent area returns ther
   p.navigation.showAgent();
   p.navigation.showSurface();
   assert.equal(shownTabs(p.navigation).area, "surface");
+});
+
+test("side by side both areas show while there are tabs; one area at a time, the one moved to", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  const shown = () => shownAreas(p.navigation.getState());
+  assert.deepEqual(shown(), { agent: true, surface: false }, "no tabs: only the Agent area");
+  p.navigation.openChanges();
+  assert.deepEqual(shown(), { agent: true, surface: true }, "side by side");
+  p.navigation.setSingle(true);
+  assert.deepEqual(shown(), { agent: false, surface: true }, "narrow: Changes, just opened");
+  p.navigation.showAgent();
+  assert.deepEqual(shown(), { agent: true, surface: false }, "narrow: back on Agent");
+  p.navigation.setSingle(false);
+  assert.deepEqual(shown(), { agent: true, surface: true }, "wide again: both");
+  p.navigation.closeTab("changes");
+  p.navigation.setSingle(true);
+  p.navigation.showSurface();
+  assert.deepEqual(shown(), { agent: true, surface: false }, "nothing open stays on Agent");
 });
 
 test("the layout and Settings leave the session's tabs as they were", () => {

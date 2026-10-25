@@ -37,6 +37,18 @@ export const activeTab = (surface: Surface | null): SurfaceTab | undefined =>
 /** The session's two areas: the conversation and its composer, and the Surface area. */
 export type SessionArea = "agent" | "surface";
 
+/**
+ * Which of the session's areas show: side by side, the Agent area always and the Surface area
+ * while it has tabs; one area at a time, the one the user moved to last.
+ */
+export function shownAreas(state: Pick<NavigationState, "surface" | "area" | "single">): {
+  agent: boolean;
+  surface: boolean;
+} {
+  const surface = !!state.surface && (!state.single || state.area === "surface");
+  return { agent: !state.single || !surface, surface };
+}
+
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */
   settings: SettingsSection | null;
@@ -490,9 +502,9 @@ export function createNavigation({
     },
     openFile: (path) => {
       const tabs = state.surface?.tabs ?? [];
-      const key = `file:${path}`;
-      const at = tabs.findIndex((tab) => tabKey(tab) === key);
       const from = state.surface && state.area === "surface" ? "surface" : "agent";
+      const key = tabKey({ kind: "file", path, from });
+      const at = tabs.findIndex((tab) => tabKey(tab) === key);
       // A fresh tab object for an open file: the viewer reads it again, as clicking a link did.
       const tab: SurfaceTab = {
         kind: "file",

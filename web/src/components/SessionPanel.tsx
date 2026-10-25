@@ -11,7 +11,7 @@ import {
 } from "@/components/PianoTabs";
 import { SurfaceColumn, SurfaceSingleContext } from "@/components/SurfaceArea";
 import { FileTabIcon, WorkspaceFile } from "@/components/WorkspaceFile";
-import { type SurfaceTab, tabKey } from "@/lib/navigation";
+import { type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
@@ -52,8 +52,8 @@ export function SessionPanel({
   /** Adds review text to the draft; omitted while the draft takes no additions. */
   onAsk: ((text: string) => void) | undefined;
 }) {
-  const { settings, surface, area, surfaceRequest, openFile, selectTab, closeTab } =
-    useNavigation();
+  const navigation = useNavigation();
+  const { settings, surface, surfaceRequest, openFile, selectTab, closeTab } = navigation;
   const t = state.session;
   const key = t ? sessionKey(t) : null;
   const tabs = surface?.tabs ?? [];
@@ -63,7 +63,7 @@ export function SessionPanel({
   const [changesFor, setChangesFor] = useState<string | null>(null);
   if (changesOpen && key && changesFor !== key) setChangesFor(key);
   const keepChanges = !!key && (changesFor === key || changesOpen);
-  const shown = !!surface && (!single || area === "surface");
+  const shown = shownAreas(navigation).surface;
 
   /**
    * Focus on the shown view itself, where reading and scrolling start; its tab is one Shift+Tab
