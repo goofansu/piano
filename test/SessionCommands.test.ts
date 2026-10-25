@@ -408,9 +408,12 @@ test("archiving a session that owns an app asks first, from the header or its si
 });
 
 test("view commands follow the session's areas: Views and Hide changes side by side, Agent one at a time", () => {
-  const ofAreas = ({ surface, single }: { surface: "changes" | null; single: boolean }) =>
+  const ofAreas = (
+    { surface, single }: { surface: "changes" | null; single: boolean },
+    state = base,
+  ) =>
     Object.fromEntries(
-      sessionCommands(base, undefined, {
+      sessionCommands(state, undefined, {
         areas: { single, surface: surface && { tabs: [surface], active: surface } },
       })
         .filter((c) => ["views", "changes", "hide-changes", "agent"].includes(c.id))
@@ -434,4 +437,13 @@ test("view commands follow the session's areas: Views and Hide changes side by s
     "hide-changes": false,
     agent: true,
   });
+  // No Changes to open and no tab open: no tab beside Agent, so Agent is not offered.
+  const removed = { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) };
+  assert.deepEqual(ofAreas({ surface: null, single: true }, removed), {
+    views: false,
+    changes: false,
+    "hide-changes": false,
+    agent: false,
+  });
+  assert.equal(ofAreas({ surface: "changes", single: true }, removed).agent, true, "a tab is open");
 });

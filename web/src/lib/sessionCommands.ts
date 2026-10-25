@@ -188,7 +188,8 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
  * - views: the session is laid out side by side, where the header shows the Views menu.
  * - hide changes: Changes has a tab beside the Agent area; hiding closes it.
- * - agent: the session is laid out one area at a time, where the Agent tab shows.
+ * - agent: the session is laid out one area at a time and the Agent tab shows, beside a Surface
+ *   tab or Changes that can open.
  * - pull request, copy session ID: the selected session has a Pi session ID.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
  *   an app; open needs its link, stop needs the attachment (`sessionReady`).
@@ -282,7 +283,7 @@ export function sessionCommands(
         id: "agent",
         label: "Agent",
         icon: "agent",
-        enabled: single,
+        enabled: single && (!!surface || ctx.canOpenChanges),
         keywords: ["conversation"],
         intent: { kind: "agent" },
       },
