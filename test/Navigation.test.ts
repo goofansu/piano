@@ -563,6 +563,29 @@ test("a file remembers the area it was opened from when the layout narrows", () 
   );
 });
 
+test("one area at a time, a file opened again returns to the area of its latest link", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.setSingle(true);
+  p.navigation.openFile("docs/a.md", "agent");
+  p.navigation.openFile("docs/b.md", "surface");
+  p.navigation.showAgent();
+  p.navigation.openFile("docs/b.md", "agent");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["file:docs/a.md", "file:docs/b.md"], active: "file:docs/b.md", area: "surface" },
+    "the open file's one tab shows again",
+  );
+  p.navigation.closeTab("file:docs/b.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["file:docs/a.md"], active: "file:docs/a.md", area: "agent" },
+    "its latest link was in the transcript, so back to Agent",
+  );
+});
+
 test("side by side both areas show while there are tabs; one area at a time, the one moved to", () => {
   const p = page("/new");
   p.registry();

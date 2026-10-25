@@ -14,7 +14,7 @@ import { catalogEntry } from "./sessionCatalog.ts";
 
 /**
  * One tab in the selected session's Surface area: its Changes, or a file a link opened. A file
- * remembers the area it was opened from, so closing it one area at a time returns there.
+ * remembers the area its latest link was in, so closing it one area at a time returns there.
  */
 export type SurfaceTab = "changes" | { kind: "file"; path: string; from: SessionArea };
 
@@ -144,8 +144,8 @@ export interface Navigation {
   openChanges: () => void;
   /**
    * Shows a file's tab, opening it at the end if needed; an open file, however spelled, is read
-   * again. `from` is the area the link was in; without one (the palette), the area shown one at a
-   * time, or Agent side by side.
+   * again. `from` is the area the link was in, which closing the file returns to, even when it was
+   * already open; without one (the palette), the area shown one at a time, or Agent side by side.
    */
   openFile: (path: string, from?: SessionArea) => void;
   /** Shows an open tab by its key. */
@@ -529,14 +529,11 @@ export function createNavigation({
     openFile: (spelled, from = shownAreas(state).agent ? "agent" : "surface") => {
       const path = filePath(spelled, client.getState().session?.cwd);
       const tabs = state.surface?.tabs ?? [];
-      const key = tabKey({ kind: "file", path, from });
-      const at = tabs.findIndex((tab) => tabKey(tab) === key);
-      // A fresh tab object for an open file: the viewer reads it again, as clicking a link did.
-      const tab: SurfaceTab = {
-        kind: "file",
-        path,
-        from: at < 0 ? from : (tabs[at] as { from: SessionArea }).from,
-      };
+      // A fresh tab object for an open file: the viewer reads it again, as clicking a link did,
+      // and closing it returns to the area of this, the latest, link.
+      const tab: SurfaceTab = { kind: "file", path, from };
+      const key = tabKey(tab);
+      const at = tabs.findIndex((t) => tabKey(t) === key);
       show({ tabs: at < 0 ? [...tabs, tab] : tabs.with(at, tab), active: key });
     },
     selectTab: (key) => {
