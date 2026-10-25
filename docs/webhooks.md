@@ -1,7 +1,8 @@
 # Webhooks
 
 Open **Settings → Webhooks** (or **Webhooks** in the Mod+K command palette), then **Add webhook**.
-Enter an HTTPS receiver URL, optionally a Bearer token, and select at least one event. HTTP is
+Enter an HTTPS receiver URL, optionally a Bearer token of at least 8 visible ASCII characters
+(shorter ones would redact ordinary words from payloads), and select at least one event. HTTP is
 allowed only for loopback hosts (`localhost`, `127.0.0.1`, `[::1]`). URLs cannot contain credentials
 or fragments. Only configure receivers you trust with conversation text.
 

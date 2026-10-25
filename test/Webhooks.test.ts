@@ -375,6 +375,10 @@ test("a refusal names the field it belongs to", async () => {
       const hooks = yield* Webhooks;
       const token = yield* hooks.save({ ...input, token: "a b" }).pipe(Effect.flip);
       assert.equal(token.field, "token");
+      // A short token would redact ordinary words out of every webhook's payload.
+      const short = yield* hooks.save({ ...input, token: "test" }).pipe(Effect.flip);
+      assert.deepEqual([short.field, short.detail], ["token", "Use at least 8 characters."]);
+      assert.equal((yield* hooks.save({ ...input, token: "12345678" })).hasToken, true);
       const url = yield* hooks
         .save({ ...input, url: "ftp://receiver.example/x" })
         .pipe(Effect.flip);
