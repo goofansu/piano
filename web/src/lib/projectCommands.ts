@@ -205,20 +205,24 @@ export function checkProjectDraft(draft: ProjectDraft): ProjectDraftCheck {
 
 /**
  * Saving the settings dialog: one registry change carrying each field that differs from the project
- * as saved now, trimmed. A draft `checkProjectDraft` refuses (no `saved`) cannot be saved; blank instructions
- * clear them. Nothing to send or no connection leave Save off. The server answers the save.
+ * as the dialog opened on it (`opened`; as saved now without it), trimmed, so a field changed
+ * elsewhere meanwhile keeps that change. A draft `checkProjectDraft` refuses (no `saved`) cannot be
+ * saved; blank instructions clear them. Nothing to send, a deleted project or no connection leave
+ * Save off. The server answers the save.
  */
 export function projectSettingsSave(
   state: AppState,
   projectId: string,
   draft: ProjectDraft,
+  opened?: ProjectDraft,
 ): { allowed: false } | { allowed: true; command: ClientCommand } {
   const project = findProject(state, projectId);
   const { saved } = checkProjectDraft(draft);
   if (!project || !state.connected || !saved) return { allowed: false };
+  const base = opened ?? { name: project.name, instructions: project.instructions ?? "" };
   const { name, instructions } = saved;
-  const renamed = name !== project.name;
-  const instructed = instructions !== (project.instructions ?? "");
+  const renamed = name !== base.name;
+  const instructed = instructions !== base.instructions;
   if (!renamed && !instructed) return { allowed: false };
   return {
     allowed: true,
