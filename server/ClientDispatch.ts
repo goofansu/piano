@@ -191,7 +191,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     },
     registry: {
       admission: "ordinary",
-      run: () => sidebar.refresh,
+      run: () => sidebar.refresh.pipe(Effect.andThen(sessions.recheck)),
       unanswered: plainError,
       confirmed: null,
     },

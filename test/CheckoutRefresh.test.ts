@@ -157,7 +157,7 @@ test("checkout-changing tool results and streaming changes coalesce into one ref
   assert.equal(page.take(), 0);
 });
 
-test("nothing refreshes while disconnected, without a session, or with the checkout missing", () => {
+test("nothing refreshes while disconnected or without a session", () => {
   const clock = environment();
   const page = client({ connected: false });
   const stop = createCheckoutRefresh({ environment: clock.env }).follow(page.source);
@@ -170,16 +170,8 @@ test("nothing refreshes while disconnected, without a session, or with the check
   clock.advance(20_000);
   assert.equal(page.take(), 0, "no session on screen");
 
-  page.set({
-    view: { kind: "session" },
-    session: session({ state: { isStreaming: false, checkoutMissing: true } }),
-  });
-  clock.advance(20_000);
-  clock.focus();
-  assert.equal(page.take(), 0, "checkout missing");
-
-  page.set({ session: session() });
-  assert.equal(page.take(), 1, "a present checkout refreshes at once");
+  page.set({ view: { kind: "session" }, session: session() });
+  assert.equal(page.take(), 1, "a session on screen refreshes at once");
   clock.advance(5000);
   assert.equal(page.take(), 2, "debounce and first poll");
 

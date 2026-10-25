@@ -6,6 +6,7 @@ import fs, {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -381,6 +382,48 @@ test("INV-02: a pick reaches a session another client started after this one sho
       assert.ok(reply._tag === "session" && reply.event._tag === "message_end");
       assert.equal(reply.event.message.model, "fake/beta");
       assert.equal((yield* (yield* hosts.get(cwd, id))!.state).thinkingLevel, "high");
+    }),
+  );
+});
+
+test("a saved session's view follows its checkout going and coming back", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const path = join(root, "recheck");
+      const away = join(root, "recheck-away");
+      mkdirSync(path);
+      const sessionId = crypto.randomUUID();
+      yield* (yield* Registry).addSession(path, sessionId);
+      yield* hosts.open({ cwd: path, sessionId });
+      yield* hosts.release(path, sessionId);
+      renameSync(path, away);
+      const { sessions, sent, next } = yield* client;
+      const shown = (selected: ServerMessage) =>
+        selected._tag === "selected" && selected.sessionId === sessionId && !selected.hosted
+          ? selected.snapshot.state.checkoutMissing
+          : undefined;
+      const view = () =>
+        Effect.map(
+          next((m) => shown(m) !== undefined),
+          shown,
+        );
+      yield* yield* sessions.select({ cwd: path, sessionId, selectionId: "A" });
+      assert.equal(yield* view(), true);
+
+      yield* sessions.recheck;
+      const before = sent.length;
+      yield* sessions.recheck;
+      assert.equal(sent.length, before, "an unchanged checkout sends nothing");
+
+      renameSync(away, path);
+      yield* sessions.recheck;
+      assert.equal(yield* view(), false, "a restored checkout shows the session again");
+
+      renameSync(path, away);
+      yield* sessions.recheck;
+      assert.equal(yield* view(), true, "a removed checkout shows it missing");
+      renameSync(away, path);
     }),
   );
 });
