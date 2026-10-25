@@ -18,8 +18,9 @@ import {
 } from "@/components/PianoTabs";
 import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
-import { SessionPanel, SurfaceTabIcon, surfaceTabNames } from "@/components/SessionPanel";
+import { SessionPanel, SurfaceTabIcon } from "@/components/SessionPanel";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
+import { surfaceTabNames } from "@/components/SurfaceArea";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -266,7 +267,6 @@ export function SessionView({ state, send }: Props) {
         </div>
         <SessionPanel
           state={state}
-          single={single}
           onAsk={onAsk}
           id={AREA_ID.surface}
           labelledBy={single && surface ? tabId(surface.active) : undefined}

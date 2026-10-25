@@ -92,9 +92,8 @@ export function ChangesPanel({
 
   return (
     <SurfaceFrame
-      label="Changes"
+      tab="changes"
       close={close}
-      closeLabel="Hide changes"
       status={
         <span role="status" className="truncate">
           {unavailable ? "" : sheet.status}
