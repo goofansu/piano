@@ -65,9 +65,13 @@ const namesPath = (item: Record<string, unknown>) =>
   typeof item.path === "string" &&
   item.name === (item.path.split("/").filter(Boolean).pop() ?? item.path);
 
+/** The shortest value redacted as a known secret: a shorter one would also cut ordinary words
+ * out of the text. Webhook tokens follow it too. */
+export const KNOWN_SECRET_MIN = 8;
+
 export function compileRedaction(): DisplayRedaction {
   const secrets = Object.entries(process.env)
-    .filter(([key, value]) => isSecretName(key) && value && value.length >= 8)
+    .filter(([key, value]) => isSecretName(key) && value && value.length >= KNOWN_SECRET_MIN)
     .map(([, value]) => value!)
     .sort((a, b) => b.length - a.length);
   const known = new Set(secrets);

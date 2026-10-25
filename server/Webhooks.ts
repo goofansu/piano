@@ -15,7 +15,7 @@ import {
   WebhookSave,
 } from "../shared/webhooks.ts";
 import { type Snapshot, sameSession } from "../shared/wire.ts";
-import { projectDisplay } from "./DisplayProjection.ts";
+import { KNOWN_SECRET_MIN, projectDisplay } from "./DisplayProjection.ts";
 import { pullRequestIdentity } from "./GitHubPullRequests.ts";
 import { AllowedOrigins, sessionLinkOrigin } from "./OriginPolicy.ts";
 import { Registry, type StoredWebhook } from "./Registry.ts";
@@ -232,6 +232,8 @@ export const WebhooksLive = Layer.effect(
         const url = input.url === undefined ? undefined : yield* receiverUrl(input.url);
         if (input.token && /[^\x21-\x7e]/.test(input.token))
           return yield* refused("Use only visible ASCII characters, without spaces.", "token");
+        if (input.token && input.token.length < KNOWN_SECRET_MIN)
+          return yield* refused(`Use at least ${KNOWN_SECRET_MIN} characters.`, "token");
         return yield* Semaphore.withPermits(
           lock,
           1,
@@ -297,7 +299,10 @@ export const WebhooksLive = Layer.effect(
           const clean = (value: string | undefined | null): string | null => {
             if (value == null) return null;
             let text = projectDisplay(value);
-            for (const h of configured) if (h.token) text = text.replaceAll(h.token, "[redacted]");
+            // A token saved before the minimum existed is too short to tell from ordinary words.
+            for (const h of configured)
+              if (h.token && h.token.length >= KNOWN_SECRET_MIN)
+                text = text.replaceAll(h.token, "[redacted]");
             return text
               .replaceAll(cwd, "[folder]")
               .replaceAll(workspace.folder, "[folder]")
