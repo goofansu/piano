@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { MoreHorizontalIcon } from "lucide-react";
+import { ChevronDownIcon, MoreHorizontalIcon } from "lucide-react";
 import { useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import {
@@ -34,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
+import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
 /** The title with its menu glued to it: the row's first item, so it shrinks last and never drops. */
@@ -53,6 +54,7 @@ export function SessionHeader({
   pullRequest: (menuTrigger: React.RefObject<HTMLButtonElement | null>) => React.ReactNode;
 }) {
   const mobile = useIsMobile();
+  const { single } = useNavigation();
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
   const {
@@ -224,8 +226,60 @@ export function SessionHeader({
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           <SessionPreviewControl />
           {pullRequest(menuTrigger)}
+          {session && !single && <ViewsMenu />}
         </div>
       </PaneHeader>
     </>
+  );
+}
+
+/**
+ * Views, at the header's end beside the Agent area: the views the Surface area can show, today
+ * only Changes. Choosing one shows it, or focuses it where it already shows; it never hides it.
+ * The palette's Views opens this same menu.
+ */
+function ViewsMenu() {
+  const { views, setViews } = useNavigation();
+  const { commands, run } = useSessionCommands();
+  const changes = commands.find((c) => c.id === "changes");
+  // A chosen view takes focus itself; the trigger takes it back only when the menu is dismissed.
+  const chose = useRef(false);
+  return (
+    <DropdownMenu modal={false} open={views} onOpenChange={setViews}>
+      <DropdownMenuTrigger asChild>
+        <PianoButton
+          data-views-trigger
+          variant="ghost"
+          size="sm"
+          trailing
+          className="pointer-coarse:h-11"
+        >
+          Views
+          <ChevronDownIcon data-icon="inline-end" aria-hidden />
+        </PianoButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(event) => {
+          if (chose.current) event.preventDefault();
+          chose.current = false;
+        }}
+      >
+        {changes && (
+          <DropdownMenuItem
+            disabled={!changes.enabled}
+            onSelect={() => {
+              chose.current = true;
+              run(changes);
+            }}
+          >
+            <CommandIcon icon={changes.icon} /> {changes.label}
+            {changes.detail && (
+              <span className="ml-auto pl-4 text-xs text-muted-foreground">{changes.detail}</span>
+            )}
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

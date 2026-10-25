@@ -27,7 +27,9 @@ export function useTypeToFocus(
         overlayOpen() ||
         !ref.current ||
         ref.current.disabled ||
-        !ref.current.getClientRects().length
+        !ref.current.getClientRects().length ||
+        // Hidden in place behind another area (one area at a time), it is not taking input.
+        ref.current.closest("[inert]")
       )
         return;
       e.preventDefault();
@@ -42,7 +44,8 @@ export function useTypeToFocus(
         overlayOpen() ||
         !ref.current ||
         ref.current.disabled ||
-        !ref.current.getClientRects().length
+        !ref.current.getClientRects().length ||
+        ref.current.closest("[inert]")
       )
         return;
       e.preventDefault();

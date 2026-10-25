@@ -1,19 +1,24 @@
 import { isWorking } from "@shared/sessionProjection";
 import type { ExtensionState } from "@shared/wire";
 import { cn } from "cn";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
 import { Composer } from "@/components/Composer";
 import { LocalFileContext } from "@/components/Markdown";
 import { MessageList, SessionDestinationContext } from "@/components/MessageList";
+import { PianoTabsList, PianoTabsTrigger, Tabs } from "@/components/PianoTabs";
 import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
+import { SessionPanel } from "@/components/SessionPanel";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
+import type { Surface } from "@/lib/navigation";
+import { AGENT_MIN_WIDTH, PANEL_WIDTH, singleArea } from "@/lib/panelLayout";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
   completionTarget,
@@ -34,12 +39,45 @@ interface Props {
   send: Client["send"];
 }
 
+/** The session's areas share one tab list one at a time; these name its parts for each other. */
+const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" } as const;
+const tabId = (value: string) => `session-area-tab-${value}`;
+
 export function SessionView({ state, send }: Props) {
   // The selected session's PR popover; hidden while Settings covers the view. Its Changes and
-  // open file live in the right sidebar (SessionPanel).
-  const { settings, pullRequest: pullRequestOpened, openPanel, closePullRequest } = useNavigation();
+  // open file live in the Surface area (SessionPanel).
+  const {
+    settings,
+    pullRequest: pullRequestOpened,
+    openPullRequest,
+    closePullRequest,
+    openFile,
+    single,
+    setSingle,
+    area,
+    surface,
+    showAgent,
+  } = useNavigation();
   const pullRequestOpen = !settings && pullRequestOpened;
-  const onPullRequestOpenChange = (open: boolean) => (open ? openPanel("pr") : closePullRequest());
+  const onPullRequestOpenChange = (open: boolean) =>
+    open ? openPullRequest() : closePullRequest();
+  // The width left after navigation and insets decides the layout, not the viewport alone. A
+  // hidden session (under Settings) measures nothing and keeps its layout.
+  const areas = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = areas.current;
+    if (!element) return;
+    const measure = () => {
+      const next = singleArea(element.getBoundingClientRect().width);
+      if (next !== undefined) setSingle(next);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [setSingle]);
+  const agentHidden = single && area === "surface" && !!surface;
+  const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
   // The transcript looks executions up by tool call ID.
@@ -48,7 +86,16 @@ export function SessionView({ state, send }: Props) {
     [t?.tools],
   );
   const input = state.pendingCreate;
-  const { workspace, draftKey } = sessionContext(state);
+  const { workspace, draftKey, changesWorkspace } = sessionContext(state);
+  // Ask adds to the draft and never sends; one area at a time, it returns to the draft.
+  const onAsk = draftKey
+    ? (text: string) => {
+        drafts.paragraph(draftKey, text);
+        toast.success("Added to your message");
+        if (single) showAgent();
+        requestAnimationFrame(() => agent.current?.querySelector("textarea")?.focus());
+      }
+    : undefined;
   // The registry's workspace for the directory, like Changes: it outlives a closed folder. Its
   // reference says whether the session is linked, so an unlinked one asks GitHub nothing.
   const pullRequest = useSessionPullRequest(
@@ -90,97 +137,177 @@ export function SessionView({ state, send }: Props) {
           )
         }
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {notices
-          .filter((n) => n.placement === "banner")
-          .map((n) => (
-            <Banner
-              key={n.id}
-              variant={n.tone === "destructive" ? "destructive" : "warning"}
-              title={n.title}
-              action={
-                n.action && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => n.action && send(n.action.command)}
-                  >
-                    {n.action.label}
-                  </Button>
-                )
-              }
-            >
-              {n.details.length
-                ? n.details.map((detail) => (
-                    <p key={detail} className="whitespace-pre-wrap break-words">
-                      {detail}
-                    </p>
-                  ))
-                : undefined}
-            </Banner>
-          ))}
-        <AddToChat draftKey={draftKey} className="relative flex min-h-0 flex-1 flex-col">
-          {pane.list && (
-            <LocalFileContext value={(path) => openPanel({ kind: "file", path })}>
-              <SessionDestinationContext value={destination}>
-                <MessageList
-                  showTools={!messagesOnly}
-                  messages={t?.messages ?? []}
-                  pending={t?.pending ?? null}
-                  submittedInput={input}
-                  tools={tools}
-                  activity={replyActivity}
-                  working={!!t && isWorking(t.state)}
-                  placeholder={pane.placeholder}
-                  dispatchedFrom={dispatchedFrom}
-                />
-              </SessionDestinationContext>
-            </LocalFileContext>
+      {single && (changesWorkspace || surface) && (
+        <AreaTabs
+          surface={surface}
+          agentShown={!agentHidden}
+          changes={!!changesWorkspace || surface === "changes"}
+        />
+      )}
+      <div
+        ref={areas}
+        className="relative flex min-h-0 min-w-0 flex-1"
+        style={
+          {
+            "--agent-min": `${AGENT_MIN_WIDTH}px`,
+            "--surface-min": `${PANEL_WIDTH.min}px`,
+          } as React.CSSProperties
+        }
+      >
+        <div
+          ref={agent}
+          id={AREA_ID.agent}
+          data-slot="agent-area"
+          // One area at a time it is the panel the Agent tab names; side by side, a plain region.
+          {...(single && { role: "tabpanel", "aria-labelledby": tabId("agent") })}
+          inert={agentHidden}
+          aria-hidden={agentHidden || undefined}
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 flex-col",
+            !single && "min-w-(--agent-min)",
+            // Hidden in place, not display:none, so the transcript keeps its reading position.
+            agentHidden && "invisible absolute inset-0",
           )}
-          {pane.skeleton && <TranscriptSkeleton />}
-          {!state.connected && (
-            <div
-              role="status"
-              className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center"
-            >
-              <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
-                <Spinner className="size-3.5" /> Reconnecting…
-              </span>
-            </div>
-          )}
-        </AddToChat>
-        {notices
-          .filter((n) => n.placement === "status")
-          .map((n) =>
-            n.extension ? (
-              <ExtensionBlock
+        >
+          {notices
+            .filter((n) => n.placement === "banner")
+            .map((n) => (
+              <Banner
                 key={n.id}
-                extension={n.extension}
-                used={usedEditorRequest}
-                onAppend={
-                  draftKey
-                    ? (request) => {
-                        drafts.paragraph(draftKey, request.text);
-                        setUsedEditorRequest(request.id);
-                      }
-                    : undefined
+                variant={n.tone === "destructive" ? "destructive" : "warning"}
+                title={n.title}
+                action={
+                  n.action && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => n.action && send(n.action.command)}
+                    >
+                      {n.action.label}
+                    </Button>
+                  )
                 }
-              />
-            ) : (
-              <StatusLine key={n.id} notice={n} />
-            ),
-          )}
-        <Composer
-          session={t}
-          draftKey={draftKey}
-          completion={completionTarget(state)}
-          disabled={!draftKey || input?.outcome === "starting"}
-          actionsDisabled={pane.composerDisabled}
-          readOnly={readOnly}
-          send={send}
+              >
+                {n.details.length
+                  ? n.details.map((detail) => (
+                      <p key={detail} className="whitespace-pre-wrap break-words">
+                        {detail}
+                      </p>
+                    ))
+                  : undefined}
+              </Banner>
+            ))}
+          <AddToChat draftKey={draftKey} className="relative flex min-h-0 flex-1 flex-col">
+            {pane.list && (
+              <LocalFileContext value={openFile}>
+                <SessionDestinationContext value={destination}>
+                  <MessageList
+                    showTools={!messagesOnly}
+                    messages={t?.messages ?? []}
+                    pending={t?.pending ?? null}
+                    submittedInput={input}
+                    tools={tools}
+                    activity={replyActivity}
+                    working={!!t && isWorking(t.state)}
+                    placeholder={pane.placeholder}
+                    dispatchedFrom={dispatchedFrom}
+                  />
+                </SessionDestinationContext>
+              </LocalFileContext>
+            )}
+            {pane.skeleton && <TranscriptSkeleton />}
+            {!state.connected && (
+              <div
+                role="status"
+                className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center"
+              >
+                <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
+                  <Spinner className="size-3.5" /> Reconnecting…
+                </span>
+              </div>
+            )}
+          </AddToChat>
+          {notices
+            .filter((n) => n.placement === "status")
+            .map((n) =>
+              n.extension ? (
+                <ExtensionBlock
+                  key={n.id}
+                  extension={n.extension}
+                  used={usedEditorRequest}
+                  onAppend={
+                    draftKey
+                      ? (request) => {
+                          drafts.paragraph(draftKey, request.text);
+                          setUsedEditorRequest(request.id);
+                        }
+                      : undefined
+                  }
+                />
+              ) : (
+                <StatusLine key={n.id} notice={n} />
+              ),
+            )}
+          <Composer
+            session={t}
+            draftKey={draftKey}
+            completion={completionTarget(state)}
+            disabled={!draftKey || input?.outcome === "starting"}
+            actionsDisabled={pane.composerDisabled}
+            readOnly={readOnly}
+            send={send}
+          />
+        </div>
+        <SessionPanel
+          state={state}
+          single={single}
+          onAsk={onAsk}
+          id={AREA_ID.surface}
+          labelledBy={
+            single ? tabId(typeof surface === "object" && surface ? "file" : "changes") : undefined
+          }
         />
       </div>
     </TranscriptViewportContext>
+  );
+}
+
+/**
+ * One area at a time, the tabs between them: Agent, Changes for a Git workspace, and the open
+ * file while there is one. Choosing Agent never focuses the composer, so a phone keeps its
+ * keyboard down; choosing Changes shows it as it was left.
+ */
+function AreaTabs({
+  surface,
+  agentShown,
+  changes,
+}: {
+  surface: Surface | null;
+  agentShown: boolean;
+  changes: boolean;
+}) {
+  const { showAgent, openChanges, showSurface } = useNavigation();
+  const file = typeof surface === "object" && surface ? surface : null;
+  const value = agentShown ? "agent" : file ? "file" : "changes";
+  const trigger = (id: string, label: string, controls: string) => (
+    <PianoTabsTrigger value={id} id={tabId(id)} aria-controls={controls}>
+      {label}
+    </PianoTabsTrigger>
+  );
+  return (
+    <Tabs
+      value={value}
+      onValueChange={(next) =>
+        next === "agent" ? showAgent() : next === "changes" ? openChanges() : showSurface()
+      }
+      className="shrink-0 gap-0 border-b border-line px-(--gutter)"
+    >
+      <PianoTabsList aria-label="Session views" className="-ml-2">
+        {trigger("agent", "Agent", AREA_ID.agent)}
+        {changes && trigger("changes", "Changes", AREA_ID.surface)}
+        {file && trigger("file", file.path.slice(file.path.lastIndexOf("/") + 1), AREA_ID.surface)}
+      </PianoTabsList>
+    </Tabs>
   );
 }
 

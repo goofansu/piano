@@ -1,7 +1,7 @@
 /**
  * What is on screen and how it maps to the address bar. The client owns the main pane's view (a
- * session or a page); navigation owns what sits over it (Settings, the selected session's right
- * sidebar and PR, the palette), reconciles the address bar's route with the registry once it
+ * session or a page); navigation owns what sits over it (Settings, the selected session's areas
+ * and PR, the palette), reconciles the address bar's route with the registry once it
  * loads, and keeps the URL and title following the screen. A page's address and title are decided
  * once, in `pageAddress`. Sessions are addressed by ID, never by directory. Nothing here depends on
  * render timing.
@@ -12,13 +12,17 @@ import { findProject } from "./projectCommands.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
 import { catalogEntry } from "./sessionCatalog.ts";
 
-/** What the selected session's right sidebar shows: its Changes, or a file a link opened. */
-export type SidebarPanel = "changes" | { kind: "file"; path: string };
 /**
- * Something that belongs to the selected session and closes when that session changes: a right
- * sidebar view, or the PR. The sidebar is nonmodal, so the PR opens over it without replacing it.
+ * What the selected session's Surface area shows beside (or, in a single-view layout, instead of)
+ * its Agent area: its Changes, or one file a link opened. A file remembers where it was opened
+ * from, so closing it returns there.
  */
-export type Panel = SidebarPanel | "pr";
+export type Surface =
+  | "changes"
+  | { kind: "file"; path: string; back: { surface: "changes" | null; area: SessionArea } };
+
+/** The session's two areas: the conversation and its composer, and the Surface area. */
+export type SessionArea = "agent" | "surface";
 
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */
@@ -28,7 +32,22 @@ export interface NavigationState {
    * that reveals part of a page reads it so asking again reveals it again (INV-07).
    */
   settingsRequest: number;
-  sidebar: SidebarPanel | null;
+  /** What the Surface area shows; `null` while it is hidden. */
+  surface: Surface | null;
+  /**
+   * The area the user moved to last: the one a single-view layout shows. Only showing a surface
+   * moves it there; files changing or the agent finishing never do.
+   */
+  area: SessionArea;
+  /**
+   * Counts the requests to show a surface, including repeats of the one already shown, so asking
+   * again focuses it without reopening or refreshing it.
+   */
+  surfaceRequest: number;
+  /** Whether the session is laid out one area at a time, as its available width decides. */
+  single: boolean;
+  /** The session header's Views menu, which the palette can open too. */
+  views: boolean;
   pullRequest: boolean;
   palette: boolean;
 }
@@ -64,8 +83,22 @@ export interface Navigation {
   openProject: (projectId: string) => void;
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
-  openPanel: (panel: Panel) => void;
-  closeSidebar: () => void;
+  /** Shows Changes in the Surface area, or focuses it where it is already shown; never a toggle. */
+  openChanges: () => void;
+  /** Shows a file in the Surface area in place of any file already there. */
+  openFile: (path: string) => void;
+  /** Closes the shown file, returning to wherever it was opened from. */
+  closeFile: () => void;
+  /** Hides the Surface area; the Agent area takes its room. */
+  hideSurface: () => void;
+  /** Shows the Agent area in a single-view layout, keeping the surface for the next visit. */
+  showAgent: () => void;
+  /** Shows the surface already open in a single-view layout, as it was left. */
+  showSurface: () => void;
+  /** The session reports its layout as its available width changes. */
+  setSingle: (single: boolean) => void;
+  setViews: (open: boolean) => void;
+  openPullRequest: () => void;
   closePullRequest: () => void;
   setPalette: (open: boolean) => void;
 }
@@ -181,7 +214,11 @@ export function createNavigation({
   let state: NavigationState = {
     settings: wanted.kind === "settings" ? wanted.section : null,
     settingsRequest: 0,
-    sidebar: null,
+    surface: null,
+    area: "agent",
+    surfaceRequest: 0,
+    single: false,
+    views: false,
     pullRequest: false,
     palette: false,
   };
@@ -235,7 +272,8 @@ export function createNavigation({
       const next = panelOwner(client.getState());
       if (next !== owner) {
         owner = next;
-        set({ sidebar: null, pullRequest: false });
+        // Inspection belongs to one session: another one starts with only its Agent area.
+        set({ surface: null, area: "agent", views: false, pullRequest: false });
       }
     } finally {
       depth--;
@@ -275,6 +313,19 @@ export function createNavigation({
     batch(() => {
       set({ settings: null });
       client.dispatch({ type: "open", page });
+      moved();
+    });
+
+  /** Shows `surface` in the Surface area as a request of its own; it leaves Settings. */
+  const show = (surface: Surface) =>
+    batch(() => {
+      set({
+        settings: null,
+        surface,
+        area: "surface",
+        surfaceRequest: state.surfaceRequest + 1,
+        views: false,
+      });
       moved();
     });
 
@@ -321,16 +372,32 @@ export function createNavigation({
         moved();
       }),
     closeSettings,
-    openPanel: (panel) =>
+    openChanges: () => show("changes"),
+    openFile: (path) => {
+      const { surface, area } = state;
+      // A link inside a file replaces it and keeps where the first file was opened from.
+      const back =
+        typeof surface === "object" && surface
+          ? surface.back
+          : { surface: surface === "changes" ? ("changes" as const) : null, area };
+      show({ kind: "file", path, back });
+    },
+    closeFile: () =>
       batch(() => {
-        set(
-          panel === "pr"
-            ? { settings: null, pullRequest: true }
-            : { settings: null, sidebar: panel },
-        );
+        const { surface } = state;
+        if (typeof surface === "object" && surface)
+          set({ surface: surface.back.surface, area: surface.back.area });
+      }),
+    hideSurface: () => batch(() => set({ surface: null, area: "agent" })),
+    showAgent: () => batch(() => set({ area: "agent" })),
+    showSurface: () => batch(() => set({ area: state.surface ? "surface" : "agent" })),
+    setSingle: (single) => batch(() => set({ single, views: single ? false : state.views })),
+    setViews: (open) => batch(() => set({ views: open })),
+    openPullRequest: () =>
+      batch(() => {
+        set({ settings: null, pullRequest: true });
         moved();
       }),
-    closeSidebar: () => batch(() => set({ sidebar: null })),
     closePullRequest: () => batch(() => set({ pullRequest: false })),
     setPalette: (open) => batch(() => set({ palette: open })),
   };

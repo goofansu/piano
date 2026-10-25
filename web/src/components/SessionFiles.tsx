@@ -19,7 +19,7 @@ interface Props {
  * Absent while the session wrote nothing.
  */
 export function SessionFiles({ files, cwd }: Props) {
-  const { openPanel } = useNavigation();
+  const { openFile } = useNavigation();
   if (files.length === 0) return null;
   return (
     <UsageListPopover
@@ -35,7 +35,7 @@ export function SessionFiles({ files, cwd }: Props) {
           <li key={file.path} className="flex items-center">
             <button
               type="button"
-              onClick={() => openPanel({ kind: "file", path: file.path })}
+              onClick={() => openFile(file.path)}
               className={cn(listRow, "min-w-0 flex-1 px-4 py-1.5")}
             >
               {/* Two lines in mono, as the transcript names paths: files in one session mostly

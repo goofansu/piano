@@ -1,6 +1,9 @@
 # Session views: a chat area beside a tools area
 
-Status: 2026-10-24, after a walk through Amp's thread screen and the
+Status: superseded for the Surface area by PIN-102 (Option A, adaptive workbench): one session
+header over an untitled Agent area and a Surface area that shows Changes or a transient file,
+opened from Views; Agent and Changes tabs where the areas take turns. See
+[design-moonstone](design-moonstone.md) and [the glossary](glossary.md). Written 2026-10-24, after a walk through Amp's thread screen and the
 [one-line session header research](research/2026-10-24-one-line-session-header.md). Slice 1,
 the one-line header with its menu on the title, is built on `session-header-polish`; the views
 below remain a proposal. Terms follow [the glossary](glossary.md); workspace identity and

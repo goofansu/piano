@@ -7,7 +7,6 @@
 import type { ClientCommand, Project } from "../../../shared/wire.ts";
 import type { FolderCommand } from "./folderCommands.ts";
 import type { Appearance, GlobalCommand } from "./globalCommands.ts";
-import type { Panel } from "./navigation.ts";
 import type { ProjectCommand, ProjectDialog } from "./projectCommands.ts";
 import type { SettingsSection } from "./routes.ts";
 import type { SessionCommand, SessionTarget } from "./sessionCommands.ts";
@@ -55,7 +54,11 @@ export interface CommandEffects {
   openNew: (cwd?: string, projectId?: string) => void;
   openProjects: () => void;
   openProject: (projectId: string) => void;
-  openPanel: (panel: Panel) => void;
+  openChanges: () => void;
+  hideSurface: () => void;
+  showAgent: () => void;
+  openViews: () => void;
+  openPullRequest: () => void;
   toggleSidebar: () => void;
   setAppearance: (appearance: Appearance) => void;
   setView: (change: Partial<SidebarView>) => void;
@@ -118,14 +121,23 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       effects.copy(intent.value, intent.label);
       break;
     case "changes":
-      effects.openPanel("changes");
+      effects.openChanges();
       break;
     case "wrap-changes":
       effects.setChangesWrap(intent.on);
-      effects.openPanel("changes");
+      effects.openChanges();
+      break;
+    case "hide-changes":
+      effects.hideSurface();
+      break;
+    case "agent":
+      effects.showAgent();
+      break;
+    case "views":
+      effects.openViews();
       break;
     case "pull-request":
-      effects.openPanel("pr");
+      effects.openPullRequest();
       break;
     case "open-url":
       effects.openUrl(intent.url);

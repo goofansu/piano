@@ -15,6 +15,8 @@ SQLite, UI and documentation. Some describe the target model in
 | Session | The Pi session, with Pi-owned history and identity. Use "session" for the entity and its lifecycle, never "thread". |
 | Page | A main-pane view other than a session: the New page, the Projects index, a project's home, or Session not found. Opening one leaves the selected session; each has its own address. |
 | Conversation | The user messages and final assistant replies within a session, rather than its tool activity or intermediate assistant output. Use for navigation through that exchange, such as "Top of conversation" and "End of conversation"; not a separate session identity. |
+| Agent area | The selected session's interaction region: transcript, tool activity and composer. It is the session's default content and has no title of its own; "Agent" names it only as a tab where the areas take turns on a narrow screen. |
+| Surface area | The selected session's inspection region beside the Agent area, showing one view of the session's workspace: Changes, or a file a link opened. Name the view ("Changes"), never "Surface", in the UI. |
 | Task | An intended outcome that may span sessions; session completion does not establish task acceptance. |
 | Acceptance criterion | An observable requirement with an identity and captured version, against which evidence can be evaluated. |
 | Revision | A captured identity for relevant repository content, including uncommitted inputs; HEAD alone is insufficient. |

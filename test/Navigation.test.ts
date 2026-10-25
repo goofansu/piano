@@ -250,45 +250,123 @@ test("back and forward apply the address bar's route; back onto the same New pag
   assert.ok(p.moves() > 0);
 });
 
-test("a session's panels close when another session is selected, and opening one leaves Settings", () => {
+test("a session's surfaces close when another session is selected, and opening one leaves Settings", () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
   p.selected("a");
   p.navigation.openSettings();
-  p.navigation.openPanel("changes");
-  assert.deepEqual(p.navigation.getState(), {
-    settings: null,
-    settingsRequest: 1,
-    sidebar: "changes",
-    pullRequest: false,
-    palette: false,
-  });
+  p.navigation.openChanges();
+  assert.equal(p.navigation.getState().settings, null);
+  assert.equal(p.navigation.getState().surface, "changes");
+  assert.equal(p.navigation.getState().area, "surface");
   assert.equal(p.path(), "/s/a");
-  p.navigation.openPanel({ kind: "file", path: "docs/guide.md" });
-  assert.deepEqual(p.navigation.getState().sidebar, { kind: "file", path: "docs/guide.md" });
+  p.navigation.openFile("docs/guide.md");
   assert.equal(p.path(), "/s/a", "a file preview never puts its path in the address bar");
 
-  p.navigation.openPanel("pr");
+  p.navigation.openPullRequest();
   assert.equal(p.navigation.getState().pullRequest, true);
-  assert.deepEqual(
-    p.navigation.getState().sidebar,
-    { kind: "file", path: "docs/guide.md" },
-    "the PR opens over the nonmodal sidebar without replacing it",
+  assert.equal(
+    (p.navigation.getState().surface as { path: string }).path,
+    "docs/guide.md",
+    "the PR opens over the nonmodal Surface area without replacing it",
   );
   p.navigation.closePullRequest();
-  assert.deepEqual(p.navigation.getState().sidebar, { kind: "file", path: "docs/guide.md" });
+  assert.equal((p.navigation.getState().surface as { path: string }).path, "docs/guide.md");
 
-  p.navigation.openPanel("pr");
+  p.navigation.openPullRequest();
   p.navigation.select("/scratch", "b");
   p.selected("b");
-  assert.equal(p.navigation.getState().sidebar, null);
+  assert.equal(p.navigation.getState().surface, null);
+  assert.equal(p.navigation.getState().area, "agent", "another session starts on its Agent area");
   assert.equal(p.navigation.getState().pullRequest, false);
-  p.navigation.openPanel("changes");
-  p.navigation.openPanel("pr");
+  p.navigation.openChanges();
+  p.navigation.openPullRequest();
   p.navigation.openNew();
-  assert.equal(p.navigation.getState().sidebar, null, "the New page has no session panel");
+  assert.equal(p.navigation.getState().surface, null, "the New page has no Surface area");
   assert.equal(p.navigation.getState().pullRequest, false);
+});
+
+test("choosing Changes again focuses it in place: no toggle, no history entry", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  const entries = p.entries.length;
+  p.navigation.openChanges();
+  const first = p.navigation.getState().surfaceRequest;
+  p.navigation.openChanges();
+  const state = p.navigation.getState();
+  assert.equal(state.surface, "changes", "a repeat never hides Changes");
+  assert.equal(state.area, "surface");
+  assert.ok(state.surfaceRequest > first, "a repeat is still a request, so the view takes focus");
+  assert.equal(p.entries.length, entries, "showing a surface is local view state, not a route");
+
+  p.navigation.openFile("README.md");
+  p.navigation.openChanges();
+  assert.equal(p.navigation.getState().surface, "changes", "Changes replaces an open file");
+
+  p.navigation.setViews(true);
+  p.navigation.hideSurface();
+  p.navigation.openChanges();
+  assert.equal(p.navigation.getState().views, false, "choosing a view dismisses Views");
+  p.navigation.hideSurface();
+  assert.equal(p.navigation.getState().surface, null);
+  assert.equal(p.navigation.getState().area, "agent");
+});
+
+test("closing a file returns to where it was opened from", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  const at = () => {
+    const { surface, area } = p.navigation.getState();
+    return { surface: typeof surface === "object" && surface ? surface.path : surface, area };
+  };
+
+  p.navigation.openFile("docs/a.md");
+  assert.deepEqual(at(), { surface: "docs/a.md", area: "surface" });
+  p.navigation.closeFile();
+  assert.deepEqual(at(), { surface: null, area: "agent" }, "opened from Agent, back to Agent");
+
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/a.md");
+  p.navigation.openFile("docs/b.md");
+  assert.deepEqual(at(), { surface: "docs/b.md", area: "surface" }, "a link replaces the file");
+  p.navigation.closeFile();
+  assert.deepEqual(at(), { surface: "changes", area: "surface" }, "back to Changes, not a.md");
+
+  // One area at a time, a link in the transcript leaves Changes waiting behind the Agent tab.
+  p.navigation.setSingle(true);
+  p.navigation.showAgent();
+  assert.deepEqual(at(), { surface: "changes", area: "agent" }, "Agent keeps Changes for later");
+  p.navigation.openFile("docs/a.md");
+  p.navigation.closeFile();
+  assert.deepEqual(at(), { surface: "changes", area: "agent" });
+  p.navigation.showSurface();
+  assert.deepEqual(at(), { surface: "changes", area: "surface" });
+});
+
+test("the layout and Settings leave the session's surface as it was", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.setSingle(true);
+  p.navigation.showAgent();
+  p.navigation.openSettings();
+  p.navigation.closeSettings();
+  p.navigation.setSingle(false);
+  assert.equal(
+    p.navigation.getState().surface,
+    "changes",
+    "Changes chosen one at a time shows beside Agent",
+  );
+  p.navigation.setViews(true);
+  p.navigation.setSingle(true);
+  assert.equal(p.navigation.getState().views, false, "one area at a time there is no Views menu");
 });
 
 test("each request to open Settings is counted, so a repeat reveals its section again", () => {

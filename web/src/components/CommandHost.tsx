@@ -7,6 +7,9 @@ import {
   GitPullRequestIcon,
   type LucideIcon,
   MessageSquareIcon,
+  MessagesSquareIcon,
+  PanelRightCloseIcon,
+  PanelRightIcon,
   PinIcon,
   PinOffIcon,
   ScrollTextIcon,
@@ -38,6 +41,7 @@ import { Input } from "@/components/ui/input";
 import { confirmation } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
+import type { NavigationState } from "@/lib/navigation";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
@@ -70,7 +74,10 @@ async function copySessionValue(value: string, label: string) {
 
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   copy: CopyIcon,
+  views: PanelRightIcon,
   changes: FileDiffIcon,
+  hide: PanelRightCloseIcon,
+  agent: MessagesSquareIcon,
   "pull-request": GitPullRequestIcon,
   preview: AppWindowIcon,
   details: ScrollTextIcon,
@@ -94,6 +101,7 @@ export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {
 interface CommandsValue {
   run: (command: Command) => void;
   messagesOnly: boolean;
+  areas: Pick<NavigationState, "surface" | "single">;
   changesWrap: boolean;
   state: AppState;
   radiusSignedIn: boolean;
@@ -110,9 +118,9 @@ export function useCommands() {
 
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
-  const { state, run, messagesOnly, changesWrap, radiusSignedIn } = useCommands();
+  const { state, run, messagesOnly, changesWrap, radiusSignedIn, areas } = useCommands();
   return {
-    commands: sessionCommands(state, target, { messagesOnly, changesWrap, radiusSignedIn }),
+    commands: sessionCommands(state, target, { messagesOnly, changesWrap, radiusSignedIn, areas }),
     run,
     messagesOnly,
   };
@@ -176,8 +184,21 @@ export function CommandHost({
   listen: (listener: (message: ServerMessage) => void) => () => void;
   children: React.ReactNode;
 }) {
-  const { openNew, openProjects, openProject, openPanel, openSettings, closeSettings, settings } =
-    useNavigation();
+  const {
+    openNew,
+    openProjects,
+    openProject,
+    openChanges,
+    hideSurface,
+    showAgent,
+    setViews,
+    openPullRequest,
+    openSettings,
+    closeSettings,
+    settings,
+    surface,
+    single,
+  } = useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [changesWrap, setChangesWrap] = useChangesWrap();
   const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
@@ -214,7 +235,11 @@ export function CommandHost({
     openNew,
     openProjects,
     openProject,
-    openPanel,
+    openChanges,
+    hideSurface,
+    showAgent,
+    openViews: () => setViews(true),
+    openPullRequest,
     toggleSidebar: sidebar.toggle,
     setView,
     setMessagesOnly,
@@ -238,6 +263,7 @@ export function CommandHost({
       value={{
         run,
         messagesOnly,
+        areas: { surface, single },
         changesWrap,
         state,
         radiusSignedIn,

@@ -1,6 +1,5 @@
 import { CHANGES_INITIAL_PATCH_BYTES } from "@shared/wire";
 import { InfoIcon, RefreshCwIcon } from "lucide-react";
-import { BranchLabel } from "@/components/BranchLabel";
 import { IconButton } from "@/components/IconButton";
 import {
   Popover,
@@ -9,7 +8,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/PianoPopover";
-import { PanelHeader } from "@/components/RightSidebar";
+import { PanelHeader, useSurfaceSingle } from "@/components/SurfaceArea";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { type ChangesSheetView, FILE_PATCH_LIMIT } from "@/lib/changesView";
@@ -17,8 +16,10 @@ import { abbrevHome } from "@/lib/format";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 
 /**
- * The Changes header: the title with the branch beneath it, then a toolbar with the size of the
- * change and the view controls. What is compared and when lives in Details.
+ * The Changes header: the title and its controls, then a toolbar with the size of the change and
+ * the view controls. The session header already names the branch; what is compared and when lives
+ * in Details. One area at a time, the tab names the view and Agent is the way back, so the
+ * controls join the toolbar and there is no title or Hide.
  */
 export function ChangesHeader({
   sheet,
@@ -34,38 +35,33 @@ export function ChangesHeader({
   close: () => void;
 }) {
   const [wrap, setWrap] = useChangesWrap();
+  const single = useSurfaceSingle();
+  const actions = (
+    <>
+      <IconButton
+        size="header"
+        label={sheet.refreshing ? "Refreshing changes…" : "Refresh changes"}
+        aria-busy={sheet.refreshing}
+        disabled={!canRefresh}
+        onClick={refresh}
+      >
+        {/* The icon turns while Git is read, the one in-progress sign every refresh shares. */}
+        <RefreshCwIcon className={sheet.refreshing ? "animate-spin" : undefined} />
+      </IconButton>
+      <ChangesDetails sheet={sheet} />
+    </>
+  );
   return (
     <div className="shrink-0">
-      <PanelHeader
-        label="Changes"
-        close={close}
-        actions={
-          <>
-            <IconButton
-              size="header"
-              label={sheet.refreshing ? "Refreshing changes…" : "Refresh changes"}
-              aria-busy={sheet.refreshing}
-              disabled={!canRefresh}
-              onClick={refresh}
-            >
-              {/* The icon turns while Git is read, the one in-progress sign every refresh shares. */}
-              <RefreshCwIcon className={sheet.refreshing ? "animate-spin" : undefined} />
-            </IconButton>
-            <ChangesDetails sheet={sheet} />
-          </>
-        }
-      >
-        <h2 className="text-sm font-medium">Changes</h2>
-        <div className="flex min-w-0 items-center text-xs text-ink-3">
-          {sheet.branch ? (
-            <BranchLabel branch={sheet.branch} className="min-w-0" />
-          ) : (
-            <span className="truncate">Working tree vs HEAD</span>
-          )}
-        </div>
-      </PanelHeader>
+      {!single && (
+        <PanelHeader label="Changes" closeLabel="Hide changes" close={close} actions={actions}>
+          <h2 tabIndex={-1} data-surface-focus className="text-sm font-medium outline-none">
+            Changes
+          </h2>
+        </PanelHeader>
+      )}
       {/* Plain comparison status and view controls have no dedicated shadcn layout. */}
-      <div className="flex h-10 min-w-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
+      <div className="flex min-h-10 min-w-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
         <span role="status" className="min-w-0 truncate">
           {sheet.status}
         </span>
@@ -87,6 +83,7 @@ export function ChangesHeader({
           >
             Wrap
           </Toggle>
+          {single && actions}
         </div>
       </div>
       {sheet.staleNote && (

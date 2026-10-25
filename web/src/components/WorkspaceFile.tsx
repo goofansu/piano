@@ -15,7 +15,7 @@ import { IconButton } from "@/components/IconButton";
 import { LocalFileContext, Markdown } from "@/components/Markdown";
 import { NativeFile } from "@/components/NativeFile";
 import { PianoViewToggle, PianoViewToggleItem } from "@/components/PianoViewToggle";
-import { RightSidebar } from "@/components/RightSidebar";
+import { SurfaceFrame } from "@/components/SurfaceArea";
 import { workspaceFile, workspaceFileDownload } from "@/lib/api";
 import { renderMarkdown } from "@/lib/markdown";
 
@@ -39,7 +39,7 @@ const KIND_ICON: Record<Preview["kind"], typeof FileIcon> = {
   pdf: FileIcon,
 };
 
-/** A file a local link opened, read-only, in the right sidebar.
+/** A file a local link opened, read-only, in the Surface area.
  * The owner keys it by session, workspace and path, so new destinations never flash old content. */
 export function WorkspaceFile({
   workspaceId,
@@ -165,8 +165,9 @@ export function WorkspaceFile({
   const path = result?.path ?? file.path;
   const Icon = result ? KIND_ICON[result.kind] : FileIcon;
   return (
-    <RightSidebar
+    <SurfaceFrame
       label="File viewer"
+      closeLabel="Close file"
       close={close}
       title={
         <>
@@ -220,6 +221,6 @@ export function WorkspaceFile({
           )}
         </section>
       )}
-    </RightSidebar>
+    </SurfaceFrame>
   );
 }

@@ -97,7 +97,7 @@ function PaletteContents({
   selected,
   setSelected,
 }: Props & { selected: string; setSelected: (value: string) => void }) {
-  const { palette: open, setPalette: onOpenChange, select, openPanel } = useNavigation();
+  const { palette: open, setPalette: onOpenChange, select, openFile } = useNavigation();
   const [catalog] = useState(createPaletteCatalog);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(false);
@@ -174,7 +174,7 @@ function PaletteContents({
           pages={results.result}
           run={run}
           select={select}
-          openPanel={openPanel}
+          openFile={openFile}
           runCommand={executeCommand}
           page={changePage}
         />
@@ -253,14 +253,14 @@ const PaletteResults = memo(function PaletteResults({
   pages,
   run,
   select,
-  openPanel,
+  openFile,
   runCommand,
   page,
 }: {
   pages: PalettePage[];
   run: (action: () => void) => void;
   select: ReturnType<typeof useNavigation>["select"];
-  openPanel: ReturnType<typeof useNavigation>["openPanel"];
+  openFile: ReturnType<typeof useNavigation>["openFile"];
   runCommand: ReturnType<typeof useGlobalCommands>["run"];
   page: (group: PalettePage["group"]["id"], page: number) => void;
 }) {
@@ -327,7 +327,7 @@ const PaletteResults = memo(function PaletteResults({
                       <CommandItem
                         key={r.key}
                         value={`${group.id}:${r.key}`}
-                        onSelect={() => run(() => openPanel({ kind: "file", path: r.file.path }))}
+                        onSelect={() => run(() => openFile(r.file.path))}
                         className="gap-3 font-mono text-xs"
                       >
                         <span className="min-w-0 shrink-0 truncate">{r.name}</span>

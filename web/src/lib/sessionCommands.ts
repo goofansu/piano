@@ -5,9 +5,11 @@
  */
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
+import type { NavigationState } from "./navigation.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
+  type SessionContext,
   sessionCheckoutMissing,
   sessionContext,
   sessionMutable,
@@ -25,7 +27,10 @@ export type SessionCommandId =
   | "copy-branch"
   | "copy-session-id"
   | "copy-all"
+  | "views"
   | "changes"
+  | "hide-changes"
+  | "agent"
   | "wrap-changes"
   | "pull-request"
   | "open-preview"
@@ -41,7 +46,10 @@ export type SessionCommandId =
 
 export type SessionCommandIcon =
   | "copy"
+  | "views"
   | "changes"
+  | "hide"
+  | "agent"
   | "pull-request"
   | "preview"
   | "details"
@@ -59,6 +67,11 @@ export type SessionCommandIntent =
   | { kind: "send"; command: ClientCommand }
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
+  /** Open the session header's Views menu. */
+  | { kind: "views" }
+  | { kind: "hide-changes" }
+  /** Show the Agent area in a single-view layout. */
+  | { kind: "agent" }
   | { kind: "wrap-changes"; on: boolean }
   | { kind: "pull-request" }
   /** Open the app in a new tab. */
@@ -111,8 +124,9 @@ export interface SessionHeaderMenu {
 const ROW_SECTIONS = [["rename", "pin"], ["share"], ["archive", "delete"]] as const;
 const HEADER_SECTIONS = {
   details: ["copy-all"],
-  // The header's preview control carries open and stop; the menu lists neither twice.
-  open: ["changes", "pull-request"],
+  // The header's preview control carries open and stop, and Views (or, one area at a time, the
+  // area tabs) Changes; the menu lists none of them twice.
+  open: ["pull-request"],
   manage: ["rename", "pin", "share"],
   destructive: ["archive", "delete"],
 } as const satisfies Record<string, readonly SessionCommandId[]>;
@@ -172,7 +186,10 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - pin: connected with an active registry reference; independent of Pi attachment or activity.
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
- * - changes: a Git workspace whose checkout is present (`canOpenChanges`).
+ * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
+ * - views: the session is laid out side by side, where the header shows the Views menu.
+ * - hide changes: Changes is shown beside the Agent area.
+ * - agent: the session is laid out one area at a time, where the Agent tab shows.
  * - pull request, copy session ID: the selected session has a Pi session ID.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
  *   an app; open needs its link, stop needs the attachment (`sessionReady`).
@@ -182,7 +199,13 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
 export function sessionCommands(
   state: AppState,
   target?: SessionTarget,
-  options: { messagesOnly?: boolean; changesWrap?: boolean; radiusSignedIn?: boolean } = {},
+  options: {
+    messagesOnly?: boolean;
+    changesWrap?: boolean;
+    radiusSignedIn?: boolean;
+    /** The session's areas as navigation has them; by default side by side with only Agent. */
+    areas?: Pick<NavigationState, "surface" | "single">;
+  } = {},
 ): SessionCommand[] {
   const session = state.session;
   const ctx = sessionContext(state);
@@ -193,6 +216,7 @@ export function sessionCommands(
   const commands: SessionCommand[] = [];
   if (selected && session) {
     const messagesOnly = options.messagesOnly ?? false;
+    const { surface = null, single = false } = options.areas ?? {};
     const all = [
       `Working directory: ${session.cwd}`,
       ...(ctx.sessionId ? [`Session ID: ${ctx.sessionId}`] : []),
@@ -232,12 +256,36 @@ export function sessionCommands(
         intent: { kind: "copy", value: all, label: "Session details" },
       },
       {
+        id: "views",
+        label: "Views",
+        icon: "views",
+        enabled: !single,
+        intent: { kind: "views" },
+      },
+      {
         id: "changes",
         label: "Changes",
         icon: "changes",
         enabled: ctx.canOpenChanges,
         keywords: ["diff"],
+        detail: changesUnavailable(ctx),
         intent: { kind: "changes" },
+      },
+      {
+        id: "hide-changes",
+        label: "Hide changes",
+        icon: "hide",
+        enabled: !single && surface === "changes",
+        keywords: ["close"],
+        intent: { kind: "hide-changes" },
+      },
+      {
+        id: "agent",
+        label: "Agent",
+        icon: "agent",
+        enabled: single,
+        keywords: ["conversation"],
+        intent: { kind: "agent" },
       },
       {
         id: "wrap-changes",
@@ -345,6 +393,18 @@ export function sessionCommands(
     });
   }
   return commands;
+}
+
+/** Why Changes cannot open, when the session's facts say: a removed checkout, or no Git. */
+function changesUnavailable(
+  ctx: Pick<
+    SessionContext,
+    "canOpenChanges" | "checkoutMissing" | "workspace" | "changesWorkspace"
+  >,
+): string | undefined {
+  if (ctx.canOpenChanges) return undefined;
+  if (ctx.checkoutMissing) return "Checkout removed";
+  return ctx.workspace && !ctx.changesWorkspace ? "Not a Git repository" : undefined;
 }
 
 /** The selected session's app commands; none unless its live Pi owns one. */
