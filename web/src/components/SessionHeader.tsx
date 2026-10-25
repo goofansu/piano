@@ -167,7 +167,8 @@ export function SessionHeader({
           // Plain workspace metadata has no dedicated UI primitive. The row is one line tall and
           // wraps: an item that no longer fits moves to a second row the box hides, so each fact
           // drops out whole from the end, branch first, and only the title group shrinks.
-          <div className="flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-3 overflow-hidden max-md:h-11">
+          // Match header buttons by pointer capability: a landscape phone is wide but still touch.
+          <div className="flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-3 overflow-hidden pointer-coarse:h-11">
             {openProject && projectMenu?.current ? (
               <Breadcrumb className={titleGroup}>
                 <BreadcrumbList className="min-w-0 flex-nowrap gap-1.5 sm:gap-1.5">
