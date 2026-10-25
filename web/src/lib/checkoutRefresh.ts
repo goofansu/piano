@@ -1,9 +1,10 @@
 /**
  * Keeps Git's branch projection current even with Changes closed (INV-01/06): while a session is
- * on screen with its checkout present and the socket connected, ask the server for the registry
- * now, every 5 seconds and on focus or a visibility change while the page is visible, and 250 ms
- * after the session's checkout may have moved (see `refreshKey`). The server coalesces discovery;
- * never infer a branch from tool arguments or the registry. Nothing here depends on React.
+ * on screen and the socket connected, ask the server for the registry now, every 5 seconds and on
+ * focus or a visibility change while the page is visible, and 250 ms after the session's checkout
+ * may have moved (see `refreshKey`). The same refresh notices a saved session's checkout go or
+ * come back. The server coalesces discovery; never infer a branch from tool arguments or the
+ * registry. Nothing here depends on React.
  */
 import type { ClientCommand, RenderMsg } from "@shared/wire";
 import { refreshKey } from "./changesView.ts";
@@ -30,7 +31,7 @@ export interface CheckoutRefreshState {
   session: {
     cwd: string;
     messages: readonly Pick<RenderMsg, "id" | "role" | "toolName">[];
-    state: { isStreaming: boolean; checkoutMissing?: boolean };
+    state: { isStreaming: boolean };
   } | null;
 }
 
@@ -88,8 +89,7 @@ export function createCheckoutRefresh({
       const update = () => {
         const state = source.getState();
         const session = state.view.kind === "session" ? state.session : null;
-        const next =
-          state.connected && session && !session.state.checkoutMissing ? session.cwd : undefined;
+        const next = state.connected && session ? session.cwd : undefined;
         if (next !== cwd) {
           stopPolling();
           cwd = next;

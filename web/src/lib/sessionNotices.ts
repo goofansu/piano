@@ -154,7 +154,7 @@ export function sessionNotices(state: AppState, _messagesOnly: boolean): Session
   if (checkoutMissing) {
     notices.push(
       notice("checkout-missing", "composer", "neutral", "Checkout removed · Read-only session", [
-        "History is still available. You can archive or delete this session, or restore the checkout at its original path and reload to continue.",
+        "History is still available. You can archive or delete this session, or restore the checkout at its original path to continue.",
       ]),
     );
   }

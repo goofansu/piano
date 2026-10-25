@@ -132,6 +132,8 @@ export class SessionHosts extends Context.Service<
       cwd: string,
       sessionId: string,
     ) => Effect.Effect<SessionReadback, PiSessionError>;
+    /** Whether the checkout at `cwd` is gone now: one filesystem check, no lock and no Pi. */
+    readonly checkoutMissing: (cwd: string) => Effect.Effect<boolean, PiSessionError>;
     /** Capture Pi's saved branch under the ownership lock, without starting a child. */
     readonly exportBranch: (
       cwd: string,
@@ -581,6 +583,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         release,
         get,
         read,
+        checkoutMissing: (cwd) => Effect.map(references.checkout(cwd), ({ missing }) => missing),
         exportBranch: (cwd, id) =>
           resolved(cwd, id, ({ ref, host }) =>
             Effect.gen(function* () {
