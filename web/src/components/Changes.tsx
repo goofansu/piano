@@ -66,7 +66,6 @@ export function ChangesPanel({
   unavailable,
   session,
   active,
-  close,
   onAsk,
 }: {
   workspace: Workspace | undefined;
@@ -75,7 +74,6 @@ export function ChangesPanel({
   session: SessionView | null;
   /** Shown on screen: Git is read only then, and a hidden panel keeps its last observation. */
   active: boolean;
-  close: () => void;
   /** Receives review text for the composer draft; the caller decides how to confirm. Omitted
    * while the draft takes no additions, which hides Ask. */
   onAsk: ((text: string) => void) | undefined;
@@ -93,7 +91,6 @@ export function ChangesPanel({
   return (
     <SurfaceFrame
       tab="changes"
-      close={close}
       status={
         <span role="status" className="truncate">
           {unavailable ? "" : sheet.status}

@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { IconButton } from "@/components/IconButton";
-import { closable, type SurfaceTab } from "@/lib/navigation";
+import { closable, type SurfaceTab, tabKey } from "@/lib/navigation";
 import { clampPanelWidth, PANEL_WIDTH, readPanelWidth, writePanelWidth } from "@/lib/panelLayout";
 import { trackPointerDrag } from "@/lib/pointerDrag";
 import { useNavigation } from "@/lib/useNavigation";
@@ -36,15 +36,13 @@ export function surfaceTabNames(tab: SurfaceTab) {
  */
 export function SurfaceFrame({
   tab,
-  close,
   status,
   actions,
   below,
   children,
 }: {
-  /** The view's tab, which names the region and its Close. */
+  /** The view's tab, which names the region and its Close, and which Close closes. */
   tab: SurfaceTab;
-  close: () => void;
   /** What the view shows, before its actions: a change's size, a file's path. */
   status?: ReactNode;
   /** The view's controls. */
@@ -53,9 +51,10 @@ export function SurfaceFrame({
   below?: ReactNode;
   children: ReactNode;
 }) {
-  const { single } = useNavigation();
+  const { single, closeTab } = useNavigation();
   const names = surfaceTabNames(tab);
   const closes = closable(tab, single);
+  const close = () => closeTab(tabKey(tab));
   return (
     <section
       aria-label={names.region}

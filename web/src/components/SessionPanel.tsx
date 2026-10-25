@@ -73,7 +73,7 @@ export function SessionPanel({
   onAsk: ((text: string) => void) | undefined;
 }) {
   const navigation = useNavigation();
-  const { settings, surface, surfaceRequest, single, openFile, selectTab, closeTab } = navigation;
+  const { settings, surface, surfaceRequest, single, selectTab, closeTab } = navigation;
   const t = state.session;
   const key = t ? sessionKey(t) : null;
   const tabs = surface?.tabs ?? [];
@@ -196,7 +196,6 @@ export function SessionPanel({
               }
               session={t}
               active={shown && active === "changes" && !settings}
-              close={() => closeTab("changes")}
               onAsk={onAsk}
             />,
           )}
@@ -208,8 +207,6 @@ export function SessionPanel({
               key={`${workspace?.id}:${key}:${file.path}:${checkoutMissing}`}
               workspaceId={workspace?.id}
               file={file}
-              open={(path) => openFile(path, "surface")}
-              close={() => closeTab(tabKey(file))}
             />,
           ),
         )}
