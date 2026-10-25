@@ -199,10 +199,10 @@ test("subscription/active filtering is paired with positive delivery; payloads a
           ...snapshot,
           state: { ...snapshot.state, closure },
         });
-      // Tests share the same per-hook lane: their ping is a barrier for prior deliveries.
-      yield* hooks.test(completed.id);
-      yield* hooks.test(all.id);
-      yield* hooks.test(inactive.id);
+      // Emit admits synchronously, so once the subscribed deliveries arrive nothing else is queued;
+      // the inactive hook still answers its Test, so its receiver can be heard.
+      yield* wait(() => requests.length === 4);
+      assert.equal((yield* hooks.test(inactive.id)).status, "delivered");
       const live = requests.filter((r) => r.body.event !== "ping");
       assert.equal(live.filter((r) => r.headers.get("x-piano-hook-id") === completed.id).length, 1);
       assert.equal(live.filter((r) => r.headers.get("x-piano-hook-id") === all.id).length, 3);
@@ -264,7 +264,7 @@ test("subscription/active filtering is paired with positive delivery; payloads a
         ...snapshot,
         messages: [{ ...snapshot.messages[0], text: "short" }],
       });
-      yield* hooks.test(completed.id);
+      yield* wait(() => requests.some((r) => r.body.answer === "short"));
       const short = requests.find((r) => r.body.answer === "short")!.body;
       assert.equal(short.answerTruncated, false);
       assert.equal(short.pullRequest, null);
@@ -286,7 +286,7 @@ test("a webhook token is redacted whole before the answer is cut, even across th
     Effect.gen(function* () {
       yield* registered;
       const hooks = yield* Webhooks;
-      const a = yield* hooks.save({ ...input, token });
+      yield* hooks.save({ ...input, token });
       const b = yield* hooks.save(input);
       yield* hooks.emit("session.completed", cwd, "s", answered(`${"x".repeat(100)} ${token}`));
       // The token spans characters 1,982-2,021; the tail keeps the redacted answer over 2,000.
@@ -297,11 +297,9 @@ test("a webhook token is redacted whole before the answer is cut, even across th
         answered(`${"x".repeat(1980)} ${token} ${"y".repeat(100)}`),
       );
       yield* hooks.emit("session.completed", cwd, "s", answered("z".repeat(LAST_ANSWER_CHARS)));
-      yield* hooks.test(a.id);
-      yield* hooks.test(b.id);
-      const [whole, straddling, exact] = requests
-        .filter((r) => r.headers.get("x-piano-hook-id") === b.id && r.body.event !== "ping")
-        .map((r) => r.body);
+      const fromB = () => requests.filter((r) => r.headers.get("x-piano-hook-id") === b.id);
+      yield* wait(() => fromB().length === 3);
+      const [whole, straddling, exact] = fromB().map((r) => r.body);
       assert.equal(whole.answer, `${"x".repeat(100)} [redacted]`);
       assert.equal(whole.answerTruncated, false);
       assert.equal(straddling.answerTruncated, true);
@@ -420,7 +418,7 @@ test("URL and token validation refuse unsafe transport without echoing secrets",
   );
 });
 
-test("admission stays bounded under a stalled receiver; overflow and transport errors never log secrets", async () => {
+test("admission stays bounded under a stalled receiver, a Test goes ahead of it; logs never hold secrets", async () => {
   const requests: Received[] = [];
   const logs: unknown[] = [];
   let release!: () => void;
@@ -451,15 +449,13 @@ test("admission stays bounded under a stalled receiver; overflow and transport e
         1,
         "admission did not wait for delivery or start unbounded fetches",
       );
-      assert.equal(
-        (yield* hooks.test(hook.id).pipe(Effect.result))._tag,
-        "Failure",
-        "test reports overflow too",
-      );
+      // A Test checks this very receiver: it goes ahead of the full backlog, not behind or refused.
+      const again = yield* hooks.test(hook.id).pipe(Effect.forkChild);
       release();
       assert.equal((yield* Fiber.join(test)).status, "failed");
-      yield* wait(() => requests.length === 33);
-      yield* hooks.test(hook.id);
+      assert.equal((yield* Fiber.join(again)).status, "delivered");
+      assert.equal(requests[1]?.body.event, "ping", "the Test is the next request");
+      yield* wait(() => requests.length === 34);
       assert.equal(requests.filter((r) => r.body.event === "session.completed").length, 32);
       assert.ok(logs.length > 0, "overflow is logged");
       assert.doesNotMatch(JSON.stringify(logs), /private-canary|receiver\.example|payload/);
@@ -504,11 +500,14 @@ test("one webhook's backlog never drops another webhook's deliveries or Test", a
       });
       const ping = yield* hooks.test(healthy.id).pipe(Effect.result);
       assert.equal(ping._tag, "Success", JSON.stringify(ping));
+      const toHealthy = () =>
+        requests.filter((r) => r.headers.get("x-piano-hook-id") === healthy.id);
+      yield* wait(() => toHealthy().length === 2);
       assert.deepEqual(
-        requests
-          .filter((r) => r.headers.get("x-piano-hook-id") === healthy.id)
-          .map((r) => r.body.event),
-        ["session.failed", "ping"],
+        toHealthy()
+          .map((r) => r.body.event)
+          .sort(),
+        ["ping", "session.failed"],
       );
       assert.equal(
         requests.filter((r) => r.headers.get("x-piano-hook-id") === stuck.id).length,
