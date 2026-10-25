@@ -308,7 +308,7 @@ function AreaTabs({
     </PianoStripTab>
   );
   return (
-    <PianoStripBar>
+    <PianoStripBar variant="pills">
       <Tabs
         value={value}
         onValueChange={(next) =>
