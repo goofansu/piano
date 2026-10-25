@@ -4,8 +4,10 @@ import type { SessionShare } from "../shared/share.ts";
 import {
   type ClientCommand,
   decodeClientMessage,
+  type FolderView,
   type Project,
   SESSION_TITLE_MAX,
+  type SessionReference,
   type SessionState,
 } from "../shared/wire.ts";
 import {
@@ -41,6 +43,21 @@ const online: AppState = {
 const offline: AppState = { ...online, connected: false };
 const resyncing: AppState = { ...online, resync: true };
 const launch: Project = { id: "p1", name: "Launch" };
+const repoFolder: FolderView = {
+  path: "/repo",
+  name: "repo",
+  worktrees: [
+    {
+      workspace: { id: "ws:/repo", folder: "/repo", path: "/repo" },
+      trust: { required: false, trusted: false },
+      branch: "main",
+      path: "/repo",
+      root: true,
+      status: "current",
+    },
+  ],
+  discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
+};
 const newId = () => "new-id";
 const withWorkspace: AppState = {
   ...online,
@@ -206,25 +223,38 @@ test("project answers: a new project opens its home, create-and-assign stays put
   assert.deepEqual(newProject({ name: "Ship" }, offline), { allowed: false });
 });
 
-test("deleting a project asks first, saying its sessions move to No project", () => {
-  const members = (...archived: boolean[]): AppState => ({
+test("deleting a project asks first, counting the sessions that move to No project", () => {
+  // Members in the open folder /repo; `extra` sets archived, pinned or another directory.
+  const members = (...extras: Array<Partial<SessionReference>>): AppState => ({
     ...online,
-    sessionReferences: archived.map((a, i) =>
-      sessionReference("/repo", `m${i}`, { projectId: "p1", archived: a }),
+    folders: [repoFolder],
+    projects: [launch],
+    sessionReferences: extras.map((extra, i) =>
+      sessionReference("/repo", `m${i}`, { projectId: "p1", ...extra }),
     ),
   });
-  assert.deepEqual(confirmation(members(false, false, true), deleteProject), {
+  assert.deepEqual(confirmation(members({}, {}, { archived: true }), deleteProject), {
     title: "Delete project?",
     description: '"Launch" is deleted; its 2 sessions move to No project. This cannot be undone.',
     confirmLabel: "Delete",
     destructive: true,
   });
   assert.equal(
-    confirmation(members(false), deleteProject)!.description,
+    confirmation(members({}), deleteProject)!.description,
     '"Launch" is deleted; its session moves to No project. This cannot be undone.',
   );
   assert.equal(
     confirmation(members(), deleteProject)!.description,
+    '"Launch" is deleted. This cannot be undone.',
+  );
+  // A member whose folder is closed leaves the sidebar, and a pinned one stays in Pinned:
+  // neither moves to No project.
+  assert.equal(
+    confirmation(members({}, { cwd: "/closed" }, { pinned: true }), deleteProject)!.description,
+    '"Launch" is deleted; its session moves to No project. This cannot be undone.',
+  );
+  assert.equal(
+    confirmation(members({ cwd: "/closed" }, { pinned: true }), deleteProject)!.description,
     '"Launch" is deleted. This cannot be undone.',
   );
 });

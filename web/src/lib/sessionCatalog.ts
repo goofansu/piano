@@ -160,6 +160,11 @@ export function sessionCatalog(state: AppState): SessionEntry[] {
   return entries(state).filter((s) => !s.archived);
 }
 
+/** Whether the sidebar's groups hold a session: listed and not pinned, since Pinned holds those. */
+export function inSidebarGroups(s: Pick<SessionEntry, "listed" | "pinned">): boolean {
+  return s.listed && !s.pinned;
+}
+
 /** The palette's order: every session that is not archived, newest created first, wherever its folder is. */
 export function recentSessions(state: AppState): SessionEntry[] {
   return sessionCatalog(state).sort(
