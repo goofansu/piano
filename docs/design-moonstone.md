@@ -170,7 +170,8 @@ Agent area. Pressing a tab never draws the keyboard ring. Views at the header's 
 shows it where it is already open. The Surface area's remembered width is a
 preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
 shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the
-viewport) the areas take turns under Agent and Changes tabs, each at full width.
+viewport) the areas take turns under Agent and Changes tabs, each at full width, drawn as the same
+strip tabs without Close (a file closes from its toolbar).
 
 ## Linear
 
