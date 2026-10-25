@@ -79,13 +79,12 @@
 :root {
   --radius: 0.625rem;
 
-  /* The main pane is an inset sheet: this gap around it, its line, and the side gutter its
-   * headers and content keep on desktop. The sidebar reads all three, so its hide control sits
-   * exactly where a pane header's show control appears once the sidebar is collapsed, and its
-   * rows share the panes' gutter. */
+  /* Shared pane gutter. Sidebar rows include 8px of inner padding, so on phones their
+   * outer inset compensates for it: leading icons, not hover backgrounds, meet the gutter. */
   --pane-inset: 0.5rem;
   --pane-line: 1px;
-  --gutter: 1.5rem;
+  --gutter: 1rem;
+  --sidebar-row-gutter: calc(var(--gutter) - 0.5rem);
 
   /* Compact UI must be as readable as the composer on phones. */
   --type-label: 1rem;
@@ -171,6 +170,14 @@
   --chart-3: var(--busy);
   --chart-4: var(--err);
   --chart-5: var(--ink-2);
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --gutter: 1.5rem;
+    /* Include the inset pane's border so its toggle and the sidebar rows share an edge. */
+    --sidebar-row-gutter: calc(var(--gutter) + var(--pane-line));
+  }
 }
 
 .dark {

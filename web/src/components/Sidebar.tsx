@@ -70,7 +70,7 @@ const groupRow = cn(
   "group relative flex items-center gap-1 rounded-lg pr-1 hover:bg-fill-hover",
 );
 const groupTrigger =
-  "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
+  "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 export function Sidebar({ state }: Props) {
   const { select, openNew, openProjects, openSettings, setPalette } = useNavigation();
@@ -159,7 +159,7 @@ export function Sidebar({ state }: Props) {
         </IconButton>
       </LayoutHeader>
       {/* The way to the Projects index leads the list; it is the current row while the index is open, as a selected session row is. */}
-      <div className="px-(--gutter) py-2">
+      <div className="px-(--sidebar-row-gutter) py-2">
         <Button
           variant="ghost"
           className={cn(
@@ -175,7 +175,7 @@ export function Sidebar({ state }: Props) {
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <nav className="relative px-(--gutter) pb-4" aria-label="Sessions">
+        <nav className="relative px-(--sidebar-row-gutter) pb-4" aria-label="Sessions">
           {pinned && (
             <SidebarGroup
               label="Pinned"
@@ -299,7 +299,7 @@ function SidebarSkeleton() {
     <div aria-hidden className="late-enter flex flex-col gap-1">
       {[0, 1].map((group) => (
         <div key={group} className="flex flex-col">
-          <div className={cn(row, "flex items-center gap-1.5 pl-1.5")}>
+          <div className={cn(row, "flex items-center gap-1.5 pl-2")}>
             <Skeleton className="size-4 rounded-sm" />
             <Skeleton className={cn("h-3.5", group ? "w-16" : "w-24")} />
           </div>

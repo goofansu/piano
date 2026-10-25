@@ -162,11 +162,15 @@ export function LayoutView({ active = true, children }: { active?: boolean; chil
 export function LayoutHeader({ children }: { children?: ReactNode }) {
   const { hide } = useSidebarLayout();
   return (
-    // The sidebar shares the panes' gutter and, on desktop, the pane's inset and line, so the hide
-    // control sits on the rows' left edge and, once collapsed, each pane's show control appears at
-    // exactly the same point; its hairline is level with the pane header's, one band across the screen.
+    // Match the pane header's mobile gutter and button overhang. Desktop also accounts for the
+    // collapsed pane's outer inset and border, keeping Show and Hide at the same viewport position.
     <SidebarHeader className="h-16 shrink-0 flex-row items-center gap-2.5 border-b border-line px-(--gutter) md:mt-[calc(var(--pane-inset)+var(--pane-line))] md:pl-[calc(var(--gutter)+var(--pane-line))]">
-      <IconButton size="header" label="Hide sidebar" onClick={hide}>
+      <IconButton
+        size="header"
+        className="-ml-2 justify-start pl-2 md:ml-0"
+        label="Hide sidebar"
+        onClick={hide}
+      >
         <PanelLeftCloseIcon />
       </IconButton>
       <span className="flex-1" />
@@ -178,7 +182,7 @@ export function LayoutHeader({ children }: { children?: ReactNode }) {
 /** The sidebar's footer: its one plain action and the mark, which marks the app once, at rest. */
 export function LayoutFooter({ children }: { children: ReactNode }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 px-(--gutter) py-3">
+    <div className="flex shrink-0 items-center gap-2 px-(--sidebar-row-gutter) py-3">
       {children}
       <PianoMark className="mr-1 size-6 rounded-md shadow-none" />
     </div>

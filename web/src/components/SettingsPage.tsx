@@ -83,7 +83,7 @@ export function SettingsNavigation({
     <div className="flex h-full flex-col">
       <LayoutHeader />
       <SidebarContent>
-        <SidebarGroup className="px-(--gutter)">
+        <SidebarGroup className="px-(--sidebar-row-gutter)">
           <SidebarGroupContent>{menu}</SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
