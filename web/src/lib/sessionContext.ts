@@ -214,6 +214,8 @@ export interface SessionContext {
   changesWorkspace: Workspace | undefined;
   /** Changes can open: a Git workspace whose checkout is still there. */
   canOpenChanges: boolean;
+  /** Why Changes cannot open, when the session's facts say: a removed checkout, or no Git. */
+  changesUnavailable: string | undefined;
   checkoutMissing: boolean;
   /**
    * The selected session's draft while its composer takes input; `null` once it is read-only, so
@@ -234,6 +236,7 @@ export function sessionContext(state: AppState): SessionContext {
   const workspace = workspaceFor(state, session?.cwd);
   const checkoutMissing = !!session && checkoutMissingAt(state, session.cwd);
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;
+  const canOpenChanges = !!changesWorkspace && !checkoutMissing;
   return {
     cwd,
     folder,
@@ -245,7 +248,14 @@ export function sessionContext(state: AppState): SessionContext {
     sessionId: session?.sessionId ?? undefined,
     workspace,
     changesWorkspace,
-    canOpenChanges: !!changesWorkspace && !checkoutMissing,
+    canOpenChanges,
+    changesUnavailable: canOpenChanges
+      ? undefined
+      : checkoutMissing
+        ? "Checkout removed"
+        : workspace && !changesWorkspace
+          ? "Not a Git repository"
+          : undefined,
     checkoutMissing,
     draftKey: session && !checkoutMissing ? sessionDraftKey(session) : null,
   };

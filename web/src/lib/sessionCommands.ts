@@ -9,7 +9,6 @@ import type { NavigationState } from "./navigation.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
-  type SessionContext,
   sessionCheckoutMissing,
   sessionContext,
   sessionMutable,
@@ -268,7 +267,7 @@ export function sessionCommands(
         icon: "changes",
         enabled: ctx.canOpenChanges,
         keywords: ["diff"],
-        detail: changesUnavailable(ctx),
+        detail: ctx.changesUnavailable,
         intent: { kind: "changes" },
       },
       {
@@ -393,18 +392,6 @@ export function sessionCommands(
     });
   }
   return commands;
-}
-
-/** Why Changes cannot open, when the session's facts say: a removed checkout, or no Git. */
-function changesUnavailable(
-  ctx: Pick<
-    SessionContext,
-    "canOpenChanges" | "checkoutMissing" | "workspace" | "changesWorkspace"
-  >,
-): string | undefined {
-  if (ctx.canOpenChanges) return undefined;
-  if (ctx.checkoutMissing) return "Checkout removed";
-  return ctx.workspace && !ctx.changesWorkspace ? "Not a Git repository" : undefined;
 }
 
 /** The selected session's app commands; none unless its live Pi owns one. */

@@ -63,12 +63,15 @@ function useWorkspaceChanges(
 
 export function ChangesPanel({
   workspace,
+  unavailable,
   session,
   active,
   close,
   onAsk,
 }: {
   workspace: Workspace | undefined;
+  /** Why Changes cannot open; it then shows that alone and reads nothing until it can. */
+  unavailable: string | undefined;
   session: SessionView | null;
   /** Shown on screen: Git is read only then, and a hidden panel keeps its last observation. */
   active: boolean;
@@ -78,8 +81,8 @@ export function ChangesPanel({
   onAsk: ((text: string) => void) | undefined;
 }) {
   const { observation, error, busy, refresh } = useWorkspaceChanges(
-    workspace,
-    active,
+    unavailable ? undefined : workspace,
+    active && !unavailable,
     refreshKey(session),
   );
   const [disclosure, setDisclosure] = useState<Disclosure>(initialDisclosure);
@@ -94,13 +97,13 @@ export function ChangesPanel({
       closeLabel="Hide changes"
       status={
         <span role="status" className="truncate">
-          {sheet.status}
+          {unavailable ? "" : sheet.status}
         </span>
       }
       actions={
         <ChangesActions
           sheet={sheet}
-          canRefresh={!!workspace}
+          canRefresh={!!workspace && !unavailable}
           refresh={refresh}
           toggleEvery={() => setDisclosure(toggleEvery(disclosure, sheet))}
         />
@@ -109,7 +112,7 @@ export function ChangesPanel({
     >
       <div className="flex flex-col">
         <SheetBodyView
-          body={body}
+          body={unavailable ? { kind: "unavailable", reason: unavailable } : body}
           onOpenChange={(path, next) => setDisclosure((d) => toggleFile(d, path, next))}
           onAsk={ask}
         />
@@ -123,7 +126,7 @@ function SheetBodyView({
   onOpenChange,
   onAsk,
 }: {
-  body: SheetBody;
+  body: SheetBody | { kind: "unavailable"; reason: string };
   onOpenChange: (path: string, open: boolean) => void;
   onAsk: ((loaded: LoadedFile) => void) | undefined;
 }) {
@@ -142,6 +145,17 @@ function SheetBodyView({
           <AlertTitle>Changes unavailable</AlertTitle>
           <AlertDescription>{body.detail}</AlertDescription>
         </Alert>
+      );
+    case "unavailable":
+      return (
+        <Empty className="py-10">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FileDiffIcon />
+            </EmptyMedia>
+            <EmptyTitle>{body.reason}</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
       );
     case "empty":
       return (
