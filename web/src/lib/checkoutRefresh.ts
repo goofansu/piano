@@ -2,8 +2,8 @@
  * Keeps Git's branch projection current even with Changes closed (INV-01/06): while a session is
  * on screen and the socket connected, ask the server for the registry now, every 5 seconds and on
  * focus or a visibility change while the page is visible, and 250 ms after the session's checkout
- * may have moved (see `refreshKey`). The same refresh notices a saved session's checkout go or
- * come back. The server coalesces discovery; never infer a branch from tool arguments or the
+ * may have moved (see `refreshKey`). The same refresh notices the session's checkout go or come
+ * back, live or saved. The server coalesces discovery; never infer a branch from tool arguments or the
  * registry. Nothing here depends on React.
  */
 import type { ClientCommand, RenderMsg } from "@shared/wire";
