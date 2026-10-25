@@ -347,6 +347,39 @@ test("a reload brings back only the session last shown, and nothing once a page 
   assert.deepEqual(shownTabs(fresh.navigation).tabs, [], "leaving for the New page forgets them");
 });
 
+test("every move among a session's areas leaves Settings, so the move shows", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/guide.md");
+  const overSettings = (move: () => void) => {
+    p.navigation.openSettings("radius");
+    move();
+    return p.navigation.getState();
+  };
+
+  const views = overSettings(() => p.navigation.setViews(true));
+  assert.equal(views.settings, null, "the Views menu opens beside its trigger");
+  assert.equal(views.views, true);
+  assert.equal(p.path(), "/s/a");
+  p.navigation.setViews(false);
+
+  p.navigation.setSingle(true);
+  const agent = overSettings(() => p.navigation.showAgent());
+  assert.equal(agent.settings, null);
+  assert.equal(shownTabs(p.navigation).area, "agent");
+
+  const closed = overSettings(() => p.navigation.closeTab("file:docs/guide.md"));
+  assert.equal(closed.settings, null);
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["changes"]);
+
+  p.navigation.openSettings("radius");
+  p.navigation.setViews(false);
+  assert.equal(p.navigation.getState().settings, "radius", "closing the menu is not a move");
+});
+
 test("a session's surfaces close when another session is selected, and opening one leaves Settings", () => {
   const p = page("/new");
   p.registry();
