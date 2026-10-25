@@ -22,7 +22,7 @@ import {
   type ProjectDraft,
   projectSettingsSave,
 } from "./projectCommands.ts";
-import { sessionLabel } from "./sessionCatalog.ts";
+import { inSidebarGroups, sessionCatalog, sessionLabel } from "./sessionCatalog.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
 import { sessionMutable, sessionWorking, workspaceFor } from "./sessionContext.ts";
 import { sessionHasPreview } from "./sessionPreview.ts";
@@ -197,9 +197,13 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
         destructive: false,
       };
     case "delete-project": {
-      const count = state.sessionReferences.filter(
-        (s) => s.projectId === form.project.id && !s.archived,
-      ).length;
+      // Read from the sidebar as it is once the project is gone: a member whose folder is closed
+      // leaves it and a pinned one stays in Pinned, so only the rest move to No project.
+      const { id } = form.project;
+      const count = sessionCatalog({
+        ...state,
+        projects: state.projects.filter((p) => p.id !== id),
+      }).filter((s) => s.projectId === id && inSidebarGroups(s)).length;
       // Named as the sidebar's group is, so the reader knows where the sessions go.
       const moved =
         count === 0

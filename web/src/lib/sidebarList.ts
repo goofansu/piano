@@ -13,7 +13,7 @@ import {
   type PreferenceStorage,
   parseJson,
 } from "./preference.ts";
-import { folderFor, type SessionEntry, sessionCatalog } from "./sessionCatalog.ts";
+import { folderFor, inSidebarGroups, type SessionEntry, sessionCatalog } from "./sessionCatalog.ts";
 import { sessionReference } from "./sessionContext.ts";
 import {
   dateGroups,
@@ -184,7 +184,7 @@ function buildList(
     pinnedSessions.length > 0
       ? { key: PINNED, open: isOpen(PINNED), sessions: pinnedSessions }
       : null;
-  const listed = catalog.filter((s) => s.listed && !s.pinned);
+  const listed = catalog.filter(inSidebarGroups);
   const empty = (text: string): SidebarList => ({
     pinned,
     body: pinned ? null : { kind: "empty", text },
