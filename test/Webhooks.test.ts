@@ -56,6 +56,30 @@ const run = <A, E>(
       Effect.provideService(AllowedOrigins, new Set(["https://piano.example"])),
     ),
   );
+/** Webhooks fed by real session hosts on fake Pi, delivering into `requests`, until the scope
+ * closes as Piano's does at shutdown. */
+const live =
+  (name: string, requests: Received[]) =>
+  <A, E>(work: Effect.Effect<A, E, Webhooks | SessionHosts | Registry | Scope.Scope>) =>
+    work.pipe(
+      Effect.timeout("10 seconds"),
+      Effect.scoped,
+      Effect.provide(
+        SessionHostsLive({ idleMs: 0 }).pipe(
+          Layer.provide(PiSessionsLive),
+          Layer.provideMerge(RegistryLive),
+          Layer.provide(NodeServices.layer),
+        ),
+      ),
+      Effect.provideService(RegistryDatabasePath, join(root, `${name}.db`)),
+      Effect.provideService(WebhookFetch, receive(requests)),
+      Effect.provideService(PiCli, {
+        node: process.execPath,
+        cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
+        extraArgs: [],
+      }),
+      Effect.provideService(AllowedOrigins, new Set(["https://piano.example"])),
+    );
 const wait = (condition: () => boolean) =>
   Effect.gen(function* () {
     while (!condition()) yield* Effect.sleep(5);
@@ -620,8 +644,7 @@ test("live fake-Pi completion/dialog/exit drive the worker once; opening history
         ["session.completed"],
       );
       assert.equal(live.filter((r) => r.headers.get("x-piano-hook-id") === inactive.id).length, 0);
-      // Archive and delete stop Pi mid-work because the person asked: not a failure. The same
-      // stop without that request (release, as at shutdown) still is, and arrives after them.
+      // Archive and delete stop Pi mid-work because the person asked: not a failure.
       const stopMidWork = (id: string, stop: Effect.Effect<void, unknown>) =>
         Effect.gen(function* () {
           yield* (yield* Registry).addSession(cwd, id);
@@ -636,36 +659,33 @@ test("live fake-Pi completion/dialog/exit drive the worker once; opening history
         });
       yield* stopMidWork("archived", hosts.archive(cwd, "archived"));
       yield* stopMidWork("deleted", hosts.delete(cwd, "deleted"));
-      yield* stopMidWork("released", hosts.release(cwd, "released"));
-      yield* wait(() =>
-        requests.some(
-          (r) =>
-            r.body.session?.id === "released" && r.body.failure?.reason === "released_during_work",
-        ),
-      );
+      // Delivery is in order per hook, so Test arriving means their events would have too.
       yield* hooks.test(all.id);
       assert.deepEqual(
         requests.filter((r) => r.body.event === "session.failed").map((r) => r.body.session?.id),
-        ["s", "released"],
+        ["s"],
       );
-    }).pipe(
-      Effect.timeout("10 seconds"),
-      Effect.scoped,
-      Effect.provide(
-        SessionHostsLive({ idleMs: 0 }).pipe(
-          Layer.provide(PiSessionsLive),
-          Layer.provideMerge(RegistryLive),
-          Layer.provide(NodeServices.layer),
-        ),
-      ),
-      Effect.provideService(RegistryDatabasePath, join(root, "live.db")),
-      Effect.provideService(WebhookFetch, receive(requests)),
-      Effect.provideService(PiCli, {
-        node: process.execPath,
-        cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
-        extraArgs: [],
-      }),
-      Effect.provideService(AllowedOrigins, new Set(["https://piano.example"])),
-    ),
+    }).pipe(live("live", requests)),
+  );
+});
+
+test("a Piano shutdown during work announces nothing, as shutdown drops pending work", async () => {
+  const requests: Received[] = [];
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const hooks = yield* Webhooks,
+        hosts = yield* SessionHosts;
+      yield* registered;
+      yield* hooks.save({ ...input, events: WEBHOOK_EVENTS });
+      const session = yield* hosts.open({ cwd, sessionId: "s" });
+      yield* session.act({ _tag: "prompt", text: "ask before release" });
+      yield* wait(() => requests.some((r) => r.body.event === "session.needs_input"));
+    }).pipe(live("shutdown", requests)),
+  );
+  // The scope has closed, as at shutdown, with Pi still waiting on its dialog; nothing is left
+  // to send afterwards. A crash's session.failed arrives in the test above.
+  assert.deepEqual(
+    requests.map((r) => r.body.event),
+    ["session.needs_input"],
   );
 });
