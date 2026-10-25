@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChangesPanel } from "@/components/Changes";
 import { IconButton } from "@/components/IconButton";
 import {
+  PianoStripBar,
   PianoStripTab,
   PianoStripTabsList,
   PianoStripTabTrigger,
@@ -133,7 +134,7 @@ export function SessionPanel({
       >
         {!single && (
           // Only the tabs: the shown view's controls are its own toolbar beneath.
-          <div className="flex h-10 shrink-0 items-end border-b border-line bg-surface-0 px-2">
+          <PianoStripBar>
             <Tabs
               value={active ?? ""}
               onValueChange={selectTab}
@@ -168,7 +169,7 @@ export function SessionPanel({
                 })}
               </PianoStripTabsList>
             </Tabs>
-          </div>
+          </PianoStripBar>
         )}
         <div className="relative flex min-h-0 flex-1 flex-col">
           {keepChanges &&

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import {
   browserAddressBar,
+  browserSurfaceMemory,
   createNavigation,
   type Navigation,
   type NavigationOptions,
@@ -15,7 +16,7 @@ export function useNavigationController(
   moved: () => void,
 ): Navigation {
   const [navigation] = useState(() =>
-    createNavigation({ client, address: browserAddressBar, moved }),
+    createNavigation({ client, address: browserAddressBar, memory: browserSurfaceMemory, moved }),
   );
   useEffect(() => navigation.start(), [navigation]);
   return navigation;

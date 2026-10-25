@@ -57,29 +57,25 @@ function ScrollingTabsList({ className, onWheel, ...props }: ComponentProps<type
   );
 }
 
-/** Quiet navigation tabs: the line variant, its tabs sized by their text, not stretched. */
-export function PianoTabsList({ className, ...props }: ComponentProps<typeof TabsList>) {
-  return <ScrollingTabsList {...props} className={cn("gap-1", className)} />;
+/**
+ * Upstream focuses a pressed tab from script, which draws the keyboard ring whenever nothing had
+ * focus before (as after a reload). Focusing it first without the ring leaves upstream's focus
+ * nothing to do; keyboard focus still rings.
+ */
+function focusPressedTab(event: React.MouseEvent<HTMLButtonElement>) {
+  if (event.button === 0 && !event.ctrlKey && !event.currentTarget.disabled)
+    event.currentTarget.focus({ focusVisible: false });
 }
 
 /**
- * A tab as `PianoViewToggleItem` draws a choice: muted until selected, then ink with an underline
- * on the row's edge. Focus draws a ring, never the boxed border that would hide the underline.
+ * The darker band a tab strip sits on, its rule under the tabs. Hand-written: no shadcn component
+ * is a band for tabs.
  */
-export function PianoTabsTrigger({ className, ...props }: ComponentProps<typeof TabsTrigger>) {
+export function PianoStripBar({ children }: { children: React.ReactNode }) {
   return (
-    <TabsTrigger
-      {...props}
-      className={cn(
-        // Sized by pointer, not width: a touch screen keeps a 44px target at any width.
-        "h-8 max-w-48 flex-none gap-1.5 rounded-none border-0 px-2 text-xs text-ink-3 hover:text-ink data-active:text-ink pointer-coarse:h-11",
-        // The icon never gives way to the name: a long name truncates beside it.
-        "[&_svg:not([class*='size-'])]:size-3.5 [&>svg]:shrink-0",
-        "group-data-horizontal/tabs:after:inset-x-2 group-data-horizontal/tabs:after:bottom-0 after:rounded-full after:bg-ink",
-        "focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
-        className,
-      )}
-    />
+    <div className="flex h-10 shrink-0 items-end border-b border-line bg-surface-0 px-2 pointer-coarse:h-12">
+      {children}
+    </div>
   );
 }
 
@@ -112,8 +108,8 @@ export function PianoStripTab({
       data-selected={selected}
       className={cn(
         // Keyboard focus rings the whole tab, Close included, inside its edge so the strip
-        // never clips it.
-        "relative flex h-8 max-w-48 min-w-0 shrink-0 items-center gap-0.5 rounded-t-lg border border-b-0 pr-1 has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-inset",
+        // never clips it. Sized by pointer, not width: a touch screen keeps a 44px target.
+        "relative flex h-8 pointer-coarse:h-11 max-w-48 min-w-0 shrink-0 items-center gap-0.5 rounded-t-lg border border-b-0 pr-1 has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-inset",
         selected
           ? "z-10 border-line bg-conversation text-ink"
           : // Pointing at a tab outlines it, the shape it takes when chosen.
@@ -126,13 +122,24 @@ export function PianoStripTab({
   );
 }
 
-/** The strip tab's trigger: its icon and name, with no underline or fill of its own. */
-export function PianoStripTabTrigger({ className, ...props }: ComponentProps<typeof TabsTrigger>) {
+/**
+ * The strip tab's trigger: its icon and name, with no underline or fill of its own. A tab without
+ * Close (Agent) keeps the same room after its name as before it.
+ */
+export function PianoStripTabTrigger({
+  className,
+  onMouseDown,
+  ...props
+}: ComponentProps<typeof TabsTrigger>) {
   return (
     <TabsTrigger
       {...props}
+      onMouseDown={(event) => {
+        onMouseDown?.(event);
+        focusPressedTab(event);
+      }}
       className={cn(
-        "h-full min-w-0 flex-1 justify-start gap-1.5 rounded-md border-0 pl-2.5 pr-0.5 text-xs text-inherit after:hidden hover:text-inherit data-active:text-inherit dark:text-inherit dark:hover:text-inherit dark:data-active:text-inherit focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
+        "h-full min-w-0 flex-1 justify-start gap-1.5 rounded-md border-0 pl-2.5 pr-0.5 last:pr-1.5 text-xs text-inherit after:hidden hover:text-inherit data-active:text-inherit dark:text-inherit dark:hover:text-inherit dark:data-active:text-inherit focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
         className,
       )}
     />

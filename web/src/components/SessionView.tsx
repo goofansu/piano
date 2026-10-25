@@ -8,7 +8,13 @@ import { Banner } from "@/components/Banner";
 import { Composer } from "@/components/Composer";
 import { LocalFileContext } from "@/components/Markdown";
 import { MessageList, SessionDestinationContext } from "@/components/MessageList";
-import { PianoTabsList, PianoTabsTrigger, Tabs } from "@/components/PianoTabs";
+import {
+  PianoStripBar,
+  PianoStripTab,
+  PianoStripTabsList,
+  PianoStripTabTrigger,
+  Tabs,
+} from "@/components/PianoTabs";
 import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPanel, surfaceTabNames } from "@/components/SessionPanel";
@@ -290,36 +296,47 @@ function AreaTabs({
   const { showAgent, openChanges, selectTab } = useNavigation();
   const tabs = surface?.tabs ?? [];
   const value = agentShown || !surface ? "agent" : surface.active;
+  // The Surface area's strip tabs, so the session's tabs look alike at every width.
   const trigger = (key: string, icon: React.ReactNode, label: string, controls: string) => (
-    <PianoTabsTrigger key={key} value={key} id={tabId(key)} aria-controls={controls}>
-      {icon}
-      <span className="min-w-0 truncate">{label}</span>
-    </PianoTabsTrigger>
+    <PianoStripTab key={key} selected={key === value} className="-mb-px">
+      <PianoStripTabTrigger value={key} id={tabId(key)} aria-controls={controls}>
+        <span className="flex shrink-0 text-ink-3" aria-hidden>
+          {icon}
+        </span>
+        <span className="min-w-0 truncate font-medium">{label}</span>
+      </PianoStripTabTrigger>
+    </PianoStripTab>
   );
   return (
-    <Tabs
-      value={value}
-      onValueChange={(next) =>
-        next === "agent" ? showAgent() : next === "changes" ? openChanges() : selectTab(next)
-      }
-      className="shrink-0 gap-0 border-b border-line px-(--gutter)"
-    >
-      <PianoTabsList aria-label="Session views" className="-ml-2">
-        {trigger("agent", <MessagesSquareIcon aria-hidden />, "Agent", AREA_ID.agent)}
-        {tabs.map((tab) =>
-          trigger(
-            tabKey(tab),
-            tab === "changes" ? <FileDiffIcon aria-hidden /> : <FileTabIcon path={tab.path} />,
-            surfaceTabNames(tab).name,
-            AREA_ID.surface,
-          ),
-        )}
-        {/* Not open yet, Changes waits at the end, where opening it adds its tab. */}
-        {changes &&
-          !tabs.includes("changes") &&
-          trigger("changes", <FileDiffIcon aria-hidden />, "Changes", AREA_ID.surface)}
-      </PianoTabsList>
-    </Tabs>
+    <PianoStripBar>
+      <Tabs
+        value={value}
+        onValueChange={(next) =>
+          next === "agent" ? showAgent() : next === "changes" ? openChanges() : selectTab(next)
+        }
+        className="min-w-0 flex-1 gap-0 self-stretch"
+      >
+        <PianoStripTabsList aria-label="Session views">
+          {trigger("agent", <MessagesSquareIcon className="size-3.5" />, "Agent", AREA_ID.agent)}
+          {tabs.map((tab) =>
+            trigger(
+              tabKey(tab),
+              tab === "changes" ? (
+                <FileDiffIcon className="size-3.5" />
+              ) : (
+                <FileTabIcon path={tab.path} className="size-3.5" />
+              ),
+              surfaceTabNames(tab).name,
+              AREA_ID.surface,
+            ),
+          )}
+          {/* Not open yet, Changes waits at the end, where opening it adds its tab. */}
+          {changes &&
+            !tabs.includes("changes") &&
+            trigger("changes", <FileDiffIcon className="size-3.5" />, "Changes", AREA_ID.surface)}
+        </PianoStripTabsList>
+      </Tabs>
+    </PianoStripBar>
   );
 }
 

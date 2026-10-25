@@ -6,6 +6,7 @@ import {
   type AddressBar,
   createNavigation,
   initialView,
+  type SurfaceMemory,
   tabKey,
 } from "../web/src/lib/navigation.ts";
 import { parseRoute } from "../web/src/lib/routes.ts";
@@ -54,7 +55,7 @@ function addressBar(start: string) {
 }
 
 /** A page at `url`: the client seeded as App seeds it, navigation over a fake address bar, the test playing the server. */
-function page(url: string) {
+function page(url: string, memory?: SurfaceMemory) {
   const address = addressBar(url);
   const sent: ClientMessage[] = [];
   let handlers: ConnectionHandlers | undefined;
@@ -75,7 +76,12 @@ function page(url: string) {
     newSelectionId: () => `sel${++ids}`,
   });
   let moves = 0;
-  const navigation = createNavigation({ client, address: address.bar, moved: () => moves++ });
+  const navigation = createNavigation({
+    client,
+    address: address.bar,
+    memory,
+    moved: () => moves++,
+  });
   client.start();
   navigation.start();
   handlers!.onStatus(true);
@@ -262,6 +268,82 @@ function shownTabs(navigation: ReturnType<typeof createNavigation>) {
     ? { tabs: surface.tabs.map(tabKey), active: surface.active, area }
     : { tabs: [], active: null, area };
 }
+
+/** A browser tab's sessionStorage, which outlives a reload of the page. */
+function tabMemory(): SurfaceMemory {
+  let value: string | null = null;
+  return {
+    read: () => value,
+    write: (next) => {
+      value = next;
+    },
+  };
+}
+
+test("a reload brings back the session's open tabs, the one shown and its area", () => {
+  const memory = tabMemory();
+  const before = page("/s/a", memory);
+  before.registry();
+  before.selected("a");
+  before.navigation.openChanges();
+  before.navigation.openFile("docs/guide.md");
+  before.navigation.openFile("README.md");
+  before.navigation.selectTab("file:docs/guide.md");
+  before.navigation.showAgent();
+
+  const after = page("/s/a", memory);
+  assert.deepEqual(shownTabs(after.navigation), { tabs: [], active: null, area: "agent" });
+  after.registry();
+  after.selected("a");
+  assert.deepEqual(shownTabs(after.navigation), {
+    tabs: ["changes", "file:docs/guide.md", "file:README.md"],
+    active: "file:docs/guide.md",
+    area: "agent",
+  });
+
+  after.navigation.closeTab("changes");
+  const again = page("/s/a", memory);
+  again.registry();
+  again.selected("a");
+  assert.deepEqual(
+    shownTabs(again.navigation).tabs,
+    ["file:docs/guide.md", "file:README.md"],
+    "a closed tab stays closed",
+  );
+});
+
+test("a reload brings back only the session last shown, and nothing once a page replaced it", () => {
+  const memory = tabMemory();
+  const p = page("/s/a", memory);
+  p.registry();
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.select("/scratch", "b");
+  p.selected("b");
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  assert.deepEqual(
+    shownTabs(p.navigation).tabs,
+    [],
+    "coming back to a session without a reload starts on its Agent area",
+  );
+
+  p.navigation.openFile("README.md");
+  const other = page("/s/b", memory);
+  other.registry();
+  other.selected("b");
+  assert.deepEqual(shownTabs(other.navigation).tabs, [], "another session's tabs stay its own");
+
+  const q = page("/s/a", memory);
+  q.registry();
+  q.selected("a");
+  q.navigation.openFile("README.md");
+  q.navigation.openNew();
+  const fresh = page("/s/a", memory);
+  fresh.registry();
+  fresh.selected("a");
+  assert.deepEqual(shownTabs(fresh.navigation).tabs, [], "leaving for the New page forgets them");
+});
 
 test("a session's surfaces close when another session is selected, and opening one leaves Settings", () => {
   const p = page("/new");
