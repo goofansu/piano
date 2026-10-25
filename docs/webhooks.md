@@ -28,8 +28,10 @@ credentials.
 | `ping` | Test only; not subscribable | `null` |
 
 Only active, subscribed hooks receive live events. Delivery is immediate: no grace delay, no
-cancellation when someone opens the session, and no saved-history replay. Completion is an agent
-response, not proof that its task succeeded or its work was verified.
+cancellation when someone opens the session, and no saved-history replay. A Piano shutdown sends
+nothing, not even `session.failed` for work it cuts short: shutdown drops pending work (see
+[Delivery and storage](#delivery-and-storage)). Completion is an agent response, not proof that its
+task succeeded or its work was verified.
 
 ## Payload and headers
 
