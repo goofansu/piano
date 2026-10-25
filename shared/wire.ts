@@ -194,8 +194,12 @@ export type SessionStats = typeof SessionStats.Type;
 export const SessionClosure = Schema.Union([
   /** Released with nothing in flight: idle retirement, archive or shutdown of a settled session. */
   Schema.TaggedStruct("released", { detail: Schema.String }),
-  /** Released while work was in flight. Interrupted operations are not resumed. */
+  /** Released while work was in flight, unasked (shutdown, replacement). Interrupted operations
+   * are not resumed. */
   Schema.TaggedStruct("released_during_work", { detail: Schema.String }),
+  /** Stopped at the person's request (archive or delete) while work was in flight. Interrupted
+   * operations are not resumed. */
+  Schema.TaggedStruct("stopped", { detail: Schema.String }),
   /** Pi exited on its own. */
   Schema.TaggedStruct("exited", { code: Schema.Number, detail: Schema.String }),
   /** Pi's exit could not be observed. */

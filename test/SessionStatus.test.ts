@@ -288,6 +288,7 @@ test("the shared reading: a stopped Pi reads from its closure, and only a comple
     { _tag: "exited", code: 1, detail: "Pi exited (code 1)" },
     { _tag: "failed", detail: "exit not observed" },
     { _tag: "released_during_work", detail: "released while working" },
+    { _tag: "stopped", detail: "archived while working" },
   ] as const)
     assert.equal(dispositionOf(snapshot({ ...working, closure }), true).disposition, "exited");
   assert.equal(

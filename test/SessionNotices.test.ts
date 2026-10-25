@@ -51,8 +51,9 @@ test("a quiet session has no notices", () => {
   assert.deepEqual(ids(at()), []);
 });
 
-test("a release or a clean exit is quiet; a stop that may have cut work short is a destructive banner", () => {
+test("a release, a requested stop or a clean exit is quiet; a stop that may have cut work short is a destructive banner", () => {
   assert.deepEqual(ids(at({ closure: { _tag: "released", detail: "idle" } })), []);
+  assert.deepEqual(ids(at({ closure: { _tag: "stopped", detail: "archived while working" } })), []);
   assert.deepEqual(
     ids(at({ closure: { _tag: "exited", code: 0, detail: "exited with code 0" } })),
     [],

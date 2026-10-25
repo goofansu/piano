@@ -778,6 +778,33 @@ for (const exit of [
     },
   );
 
+test(
+  "a stop the person asked for while the child worked is cancelled, not settled",
+  bounded,
+  async () => {
+    const h = world();
+    const wait = waitSessions([await handleOf()], undefined, h.env);
+    h.last().accept();
+    const socket = h.last();
+    const selection = socket.selection();
+    socket.frame(
+      selected(
+        selection,
+        snapshotOf({ isStreaming: true, submission: { id: 1, outcome: "started" } }, answered()),
+      ),
+    );
+    socket.frame(
+      frameOf(
+        selection,
+        { _tag: "closed", closure: { _tag: "stopped", detail: "Pi was stopped during work" } },
+        { sequence: 2 },
+      ),
+    );
+    const [observation] = await wait;
+    assert.equal(observation!.status, "cancelled");
+  },
+);
+
 test("quiescence is confirmed from a fresh selection after a run drains", bounded, async () => {
   const h = world();
   const wait = waitSessions([await handleOf()], undefined, h.env);
@@ -909,6 +936,7 @@ for (const change of ["generation", "submission", "prefix", "later input", "hist
 for (const closure of [
   { _tag: "released", detail: "Pi was released" },
   { _tag: "released_during_work", detail: "Pi was released during work" },
+  { _tag: "stopped", detail: "Pi was stopped during work" },
   { _tag: "exited", code: 0, detail: "Pi exited with code 0" },
   { _tag: "failed", detail: "Pi failed" },
 ] as const)

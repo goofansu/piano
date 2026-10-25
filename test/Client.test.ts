@@ -469,6 +469,7 @@ test("INV-02: a closure notifies by its kind, never by its wording", () => {
   const cases: Array<[SessionClosure, boolean]> = [
     [{ _tag: "released", detail: "Pi was released" }, false],
     [{ _tag: "exited", code: 0, detail: "Pi exited with code 0" }, false],
+    [{ _tag: "stopped", detail: "Pi was stopped during work" }, false],
     [{ _tag: "released_during_work", detail: "Pi was released during work" }, true],
     [{ _tag: "exited", code: 1, detail: "Pi exited with code 1: lock released" }, true],
     [{ _tag: "failed", detail: "Pi exit could not be observed" }, true],

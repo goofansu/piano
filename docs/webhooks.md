@@ -24,7 +24,7 @@ credentials.
 | --- | --- | --- |
 | `session.completed` | Successful final response (`response_completed`), including a token-limit ending | `null` |
 | `session.needs_input` | A dialog becomes the session's `needs_input` disposition | `Answer in Piano: <url>` |
-| `session.failed` | Pi closes with `failed`, a non-zero `exited` or `released_during_work`; a clean exit (code 0), and an archive or delete that stops the session mid-work, are not failures | `Open session in Piano: <url>` |
+| `session.failed` | Pi closes with `failed`, a non-zero `exited` or `released_during_work`; a clean exit (code 0), and `stopped` (an archive or delete that stops the session mid-work), are not failures | `Open session in Piano: <url>` |
 | `ping` | Test only; not subscribable | `null` |
 
 Only active, subscribed hooks receive live events. Delivery is immediate: no grace delay, no
