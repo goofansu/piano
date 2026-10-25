@@ -328,7 +328,18 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
           : Effect.void,
       ),
     );
-    yield* mode === "delete" ? hosts.delete(cwd, sessionId) : hosts.archive(cwd, sessionId);
+    yield* (mode === "delete" ? hosts.delete(cwd, sessionId) : hosts.archive(cwd, sessionId)).pipe(
+      // A refused retire leaves Pi running: show the selection again, so this client reattaches.
+      Effect.tapError(() =>
+        selected?.cwd === cwd && selected.sessionId === sessionId
+          ? show(selected).pipe(
+              Effect.catchTag("PiSessionError", (e) =>
+                Effect.logWarning(`Could not show the session again: ${e.detail}`),
+              ),
+            )
+          : Effect.void,
+      ),
+    );
     if (selected?.cwd === cwd && selected.sessionId === sessionId) {
       const selectionId = selected.selectionId;
       selected = null;

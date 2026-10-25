@@ -847,6 +847,63 @@ test("INV-02: retiring the selected session detaches before Pi stops, clears the
   );
 });
 
+test("INV-02: a refused archive leaves the selected session attached and controllable", async () => {
+  class BrokenCleanup extends PreviewAdapter {
+    override async request(): Promise<never> {
+      throw new Error("no supervisor in this test");
+    }
+    override async retire(): Promise<boolean> {
+      throw new Error("cleanup broke");
+    }
+  }
+  const dir = mkdtempSync(join(root, "refused-archive-"));
+  const audit = join(dir, "audit.jsonl");
+  writeFileSync(audit, "");
+  const owner = () =>
+    readFileSync(audit, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { event: string; previewOwner?: string })
+      .find((r) => r.event === "spawn")!.previewOwner!;
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const id = (yield* started()).spec.sessionId;
+      // A preview start makes this owner ask its adapter, which fails, before release.
+      yield* Effect.promise(() =>
+        assert.rejects(ownerRequest(owner(), { action: "start", command: ["/bin/false"] })),
+      );
+      const { sessions, sent, next } = yield* client;
+      yield* yield* sessions.select({ cwd, sessionId: id, selectionId: "S" });
+      yield* next((m) => m._tag === "selected");
+      const before = sent.length;
+      const refused = yield* Effect.result(sessions.retire(cwd, id, "archive"));
+      assert.equal(refused._tag, "Failure", "failed cleanup refuses the archive");
+      assert.deepEqual(
+        (yield* hosts.list).map((h) => h.sessionId),
+        [id],
+        "Pi still runs",
+      );
+      const shown = sent.slice(before).filter((m) => m._tag === "selected");
+      assert.deepEqual(
+        shown.map((m) => m._tag === "selected" && [m.selectionId, m.sessionId, m.hosted]),
+        [["S", id, true]],
+        "shown live again",
+      );
+      // An action that cannot start Pi reaches the running session.
+      yield* sessions.act("S", { _tag: "restore_queue" });
+      yield* next((m) => m._tag === "action_result");
+    }).pipe(
+      Effect.provideService(PreviewOwnerOptions, {
+        adapter: new BrokenCleanup(),
+        root: join(dir, "previews"),
+      }),
+    ),
+    undefined,
+    { cli: new URL("./fake-host-pi.mjs", import.meta.url).pathname, extraArgs: ["--audit", audit] },
+  );
+});
+
 const firstSnapshot = (session: PiSession) =>
   session.events.pipe(
     Stream.filter((e) => e._tag === "snapshot"),
