@@ -480,6 +480,14 @@ export function createNavigation({
       moved();
     });
 
+  /** A user's move among the session's areas (the Agent area, a tab closing, the Views menu);
+   * like `show`, it leaves Settings, which would otherwise hide what the move changed. */
+  const moveArea = (patch: Partial<NavigationState>) =>
+    batch(() => {
+      set({ ...patch, settings: null });
+      moved();
+    });
+
   const closeSettings = () =>
     batch(() => {
       set({ settings: null });
@@ -545,26 +553,22 @@ export function createNavigation({
       if (!state.surface?.tabs.some((tab) => tabKey(tab) === key)) return;
       show({ ...state.surface, active: key });
     },
-    closeTab: (key) =>
-      batch(() => {
-        const surface = state.surface;
-        const at = surface?.tabs.findIndex((tab) => tabKey(tab) === key) ?? -1;
-        if (!surface || at < 0 || !closable(surface.tabs[at], state.single)) return;
-        const closing = surface.tabs[at];
-        const tabs = surface.tabs.toSpliced(at, 1);
-        if (!tabs.length) return set({ surface: null, area: "agent" });
-        const active =
-          surface.active === key ? tabKey(tabs[Math.min(at, tabs.length - 1)]) : surface.active;
-        const back =
-          state.single &&
-          surface.active === key &&
-          closing !== "changes" &&
-          closing.from === "agent";
-        set({ surface: { tabs, active }, area: back ? "agent" : state.area });
-      }),
-    showAgent: () => batch(() => set({ area: "agent" })),
+    closeTab: (key) => {
+      const surface = state.surface;
+      const at = surface?.tabs.findIndex((tab) => tabKey(tab) === key) ?? -1;
+      if (!surface || at < 0 || !closable(surface.tabs[at], state.single)) return;
+      const closing = surface.tabs[at];
+      const tabs = surface.tabs.toSpliced(at, 1);
+      if (!tabs.length) return moveArea({ surface: null, area: "agent" });
+      const active =
+        surface.active === key ? tabKey(tabs[Math.min(at, tabs.length - 1)]) : surface.active;
+      const back =
+        state.single && surface.active === key && closing !== "changes" && closing.from === "agent";
+      moveArea({ surface: { tabs, active }, area: back ? "agent" : state.area });
+    },
+    showAgent: () => moveArea({ area: "agent" }),
     setSingle: (single) => batch(() => set({ single, views: single ? false : state.views })),
-    setViews: (open) => batch(() => set({ views: open })),
+    setViews: (open) => (open ? moveArea({ views: true }) : batch(() => set({ views: false }))),
     openPullRequest: () =>
       batch(() => {
         set({ settings: null, pullRequest: true });
