@@ -1,6 +1,5 @@
 import { CHANGES_INITIAL_PATCH_BYTES } from "@shared/wire";
 import { InfoIcon, RefreshCwIcon } from "lucide-react";
-import { BranchLabel } from "@/components/BranchLabel";
 import { IconButton } from "@/components/IconButton";
 import {
   Popover,
@@ -9,7 +8,6 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/PianoPopover";
-import { PanelHeader } from "@/components/RightSidebar";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { type ChangesSheetView, FILE_PATCH_LIMIT } from "@/lib/changesView";
@@ -17,84 +15,64 @@ import { abbrevHome } from "@/lib/format";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 
 /**
- * The Changes header: the title with the branch beneath it, then a toolbar with the size of the
- * change and the view controls. What is compared and when lives in Details.
+ * Changes' toolbar actions: the view controls, then Refresh and Details. The size of the change sits
+ * at the toolbar's start and the tab names the view (`SurfaceFrame`); the session header already
+ * names the branch, and what is compared and when lives in Details.
  */
-export function ChangesHeader({
+export function ChangesActions({
   sheet,
   canRefresh,
   refresh,
   toggleEvery,
-  close,
 }: {
   sheet: ChangesSheetView;
   canRefresh: boolean;
   refresh: () => void;
   toggleEvery: () => void;
-  close: () => void;
 }) {
   const [wrap, setWrap] = useChangesWrap();
   return (
-    <div className="shrink-0">
-      <PanelHeader
-        label="Changes"
-        close={close}
-        actions={
-          <>
-            <IconButton
-              size="header"
-              label={sheet.refreshing ? "Refreshing changes…" : "Refresh changes"}
-              aria-busy={sheet.refreshing}
-              disabled={!canRefresh}
-              onClick={refresh}
-            >
-              {/* The icon turns while Git is read, the one in-progress sign every refresh shares. */}
-              <RefreshCwIcon className={sheet.refreshing ? "animate-spin" : undefined} />
-            </IconButton>
-            <ChangesDetails sheet={sheet} />
-          </>
-        }
+    <>
+      <Button
+        variant="ghost"
+        size="xs"
+        disabled={sheet.body.kind !== "files"}
+        onClick={toggleEvery}
+        className="text-ink-2 pointer-coarse:min-h-11"
       >
-        <h2 className="text-sm font-medium">Changes</h2>
-        <div className="flex min-w-0 items-center text-xs text-ink-3">
-          {sheet.branch ? (
-            <BranchLabel branch={sheet.branch} className="min-w-0" />
-          ) : (
-            <span className="truncate">Working tree vs HEAD</span>
-          )}
-        </div>
-      </PanelHeader>
-      {/* Plain comparison status and view controls have no dedicated shadcn layout. */}
-      <div className="flex h-10 min-w-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
-        <span role="status" className="min-w-0 truncate">
-          {sheet.status}
-        </span>
-        <div className="flex shrink-0 items-center">
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={sheet.body.kind !== "files"}
-            onClick={toggleEvery}
-            className="text-ink-2 pointer-coarse:min-h-11"
-          >
-            {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
-          </Button>
-          <Toggle
-            size="sm"
-            pressed={wrap}
-            onPressedChange={setWrap}
-            className="h-6 min-w-0 px-2 text-xs text-ink-2 pointer-coarse:min-h-11"
-          >
-            Wrap
-          </Toggle>
-        </div>
-      </div>
-      {sheet.staleNote && (
-        <p role="status" className="border-b border-line px-4 py-2 text-xs text-ink-2">
-          {sheet.staleNote.text}
-        </p>
-      )}
-    </div>
+        {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
+      </Button>
+      <Toggle
+        size="sm"
+        pressed={wrap}
+        onPressedChange={setWrap}
+        className="h-6 min-w-0 px-2 text-xs text-ink-2 pointer-coarse:min-h-11"
+      >
+        Wrap
+      </Toggle>
+      <IconButton
+        size="header"
+        label={sheet.refreshing ? "Refreshing changes…" : "Refresh changes"}
+        aria-busy={sheet.refreshing}
+        disabled={!canRefresh}
+        onClick={refresh}
+      >
+        {/* The icon turns while Git is read, the one in-progress sign every refresh shares. */}
+        <RefreshCwIcon className={sheet.refreshing ? "animate-spin" : undefined} />
+      </IconButton>
+      <ChangesDetails sheet={sheet} />
+    </>
+  );
+}
+
+/** The note under the toolbar while the last observation is stale. */
+export function ChangesStaleNote({ sheet }: { sheet: ChangesSheetView }) {
+  return (
+    sheet.staleNote && (
+      <p role="status" className="border-b border-line px-4 py-2 text-xs text-ink-2">
+        {sheet.staleNote.text}
+      </p>
+    )
   );
 }
 

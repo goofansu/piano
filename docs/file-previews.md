@@ -1,8 +1,11 @@
 # Local file previews
 
 Click a local Markdown link such as `[guide](docs/guide.md)` in a session to open it read-only in
-the right sidebar beside the conversation, where Changes opens too. On desktop the sidebar is
-resizable from its left edge and remembers its width; on a phone it covers the page. Links in the conversation use the session's working directory;
+the Surface area beside the conversation, where Changes opens too. Side by side the area is
+resizable from its left edge and remembers its width; where the areas take turns, the file gets
+Each file opens in a tab of its own, added at the end; a file already open is read again in its
+tab. Closing a tab shows its neighbour; one area at a time, closing a file opened from the
+conversation returns there. Links in the conversation use the session's working directory;
 links and images in a Markdown preview use that document's directory, in the same workspace.
 Absolute paths must still be inside that workspace. There is no directory browser or path entry.
 Click the original link again to reread; **Preview / Source** only changes presentation.

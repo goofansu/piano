@@ -29,7 +29,8 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 | Status badge and warning alert variants | `StatusBadge`, `PianoAlert` |
 | Status dot (session, preview, delivery state) | `StatusDot` |
 | Settings page frame, groups and hairline lists | `SettingsSectionFrame`, `SettingsGroup`, `SettingsList`, `settingsRow` |
-| Right sidebar shell and its 48px header | `RightSidebar`, `PanelHeader` |
+| Surface area column and a view's toolbar (status and actions) | `SurfaceColumn`, `SurfaceFrame` |
+| Underlined navigation tabs (Agent / Changes / files); the Surface area's browser-style strip tabs; sideways scrolling for both | `PianoTabsList`, `PianoTabsTrigger`, `PianoStripTabsList`, `PianoStripTab`, `PianoStripTabTrigger` |
 | Overlay surfaces and stacking | `PianoDialog`, `PianoSheet`, `PianoSelect`, `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/overlayStyles.ts` |
 | Pointer-close focus; keyboard/hover tooltips | `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/pointerClose.ts` |
 | Search/option row heights, including touch and the palette dialog | `PianoCommand` |

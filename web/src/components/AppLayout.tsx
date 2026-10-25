@@ -18,14 +18,11 @@ export function AppLayout({
   navigation,
   navigationTitle,
   content,
-  aside,
   children,
 }: {
   navigation: ReactNode;
   navigationTitle: string;
   content: ReactNode;
-  /** The right sidebar, when one is open: a second sheet beside the conversation. */
-  aside?: ReactNode;
   children?: ReactNode;
 }) {
   const layout = useSidebarLayout();
@@ -128,14 +125,10 @@ export function AppLayout({
           "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-(--pane-inset) md:mr-(--pane-inset) md:rounded-2xl md:border-(length:--pane-line) md:border-line md:shadow-1",
           // With the sidebar collapsed the pane keeps the gap the column gave it.
           collapsed && "md:ml-(--pane-inset)",
-          // With the right sidebar open the two are one sheet, split by a hairline (RightSidebar).
-          // The conversation keeps a readable column; the sidebar gives way when space runs short.
-          "md:[&:has(~[data-slot=layout-panel])]:mr-0 md:[&:has(~[data-slot=layout-panel])]:min-w-[28rem] md:[&:has(~[data-slot=layout-panel])]:rounded-r-none md:[&:has(~[data-slot=layout-panel])]:border-r-0",
         )}
       >
         {content}
       </main>
-      {aside}
       {children}
     </SidebarProvider>
   );

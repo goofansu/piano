@@ -158,11 +158,17 @@ phones, where the sheet's project page covers it. The branch is in the menu's de
 the path; the segments carry no tooltips, since they show their own text. The design is in
 [session views](session-views.md).
 
-The right sidebar (Changes, an open file) shares the conversation's sheet, split off by a hairline,
-rather than floating as a second card; its header has the same shape, a title with a line beneath
-it. Its remembered width is a preference, not a claim on the conversation: the conversation keeps
-at least 28rem and the sidebar shrinks first, down to its 20rem minimum and never past half the
-viewport.
+The Surface area (Changes, open files) sits beside the Agent area under the one session header,
+on the same sheet, split off by a hairline rather than floating as a second card; the Agent area
+has no title. Its views are browser-style tabs on a darker strip, each a small icon, its name and
+Close, outlined while pointed at; the shown view's toolbar is a row of its own beneath them, what
+it shows on the left and its small-text actions on the right, so naming and closing never mix
+with acting. A new view's tab joins the end, Changes included; opening one already open shows it
+in place. Tabs that no longer fit scroll sideways. Views at the header's end opens Changes, or
+shows it where it is already open. The Surface area's remembered width is a
+preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
+shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the
+viewport) the areas take turns under Agent and Changes tabs, each at full width.
 
 ## Linear
 

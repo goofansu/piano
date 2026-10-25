@@ -2,20 +2,14 @@ import type { ChangeFile, Workspace, WorkspaceChanges } from "@shared/wire";
 import { cn } from "cn";
 import { FileDiffIcon, MessageSquarePlusIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { ChangesHeader } from "@/components/ChangesHeader";
+import { ChangesActions, ChangesStaleNote } from "@/components/ChangesHeader";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
-import { RightSidebar } from "@/components/RightSidebar";
+import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import {
   Item,
   ItemActions,
@@ -46,18 +40,18 @@ import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useObservation } from "@/lib/useObservation";
 import type { SessionView } from "@/store";
 
-/** Live on open, focus and edits (a quiet 600 ms after the checkout may have moved); a response for another workspace never shows. */
+/** Live while shown: on showing, focus and edits (a quiet 600 ms after the checkout may have moved); a response for another workspace never shows. */
 function useWorkspaceChanges(
   workspace: Workspace | undefined,
   active: boolean,
   refreshKey: string,
 ) {
-  const key = active && workspace ? JSON.stringify([workspace.id, workspace.path]) : null;
+  const key = workspace ? JSON.stringify([workspace.id, workspace.path]) : null;
   const { value, failure, loading, refresh } = useObservation<WorkspaceChanges>(
     key,
     async (signal) =>
       checkWorkspaceResponse(workspace!, await workspaceChanges(workspace!.id, { signal })),
-    { focus: true, trigger: refreshKey, debounce: 600 },
+    { enabled: active, focus: true, trigger: refreshKey, debounce: 600 },
   );
   return {
     observation: value ?? null,
@@ -70,11 +64,14 @@ function useWorkspaceChanges(
 export function ChangesPanel({
   workspace,
   session,
+  active,
   close,
   onAsk,
 }: {
   workspace: Workspace | undefined;
   session: SessionView | null;
+  /** Shown on screen: Git is read only then, and a hidden panel keeps its last observation. */
+  active: boolean;
   close: () => void;
   /** Receives review text for the composer draft; the caller decides how to confirm. Omitted
    * while the draft takes no additions, which hides Ask. */
@@ -82,7 +79,7 @@ export function ChangesPanel({
 }) {
   const { observation, error, busy, refresh } = useWorkspaceChanges(
     workspace,
-    true,
+    active,
     refreshKey(session),
   );
   const [disclosure, setDisclosure] = useState<Disclosure>(initialDisclosure);
@@ -91,19 +88,24 @@ export function ChangesPanel({
   const ask = onAsk && ((loaded: LoadedFile) => onAsk(askText(loaded)));
 
   return (
-    <RightSidebar
+    <SurfaceFrame
       label="Changes"
-      title="Changes"
       close={close}
-      header={
-        <ChangesHeader
+      closeLabel="Hide changes"
+      status={
+        <span role="status" className="truncate">
+          {sheet.status}
+        </span>
+      }
+      actions={
+        <ChangesActions
           sheet={sheet}
           canRefresh={!!workspace}
           refresh={refresh}
           toggleEvery={() => setDisclosure(toggleEvery(disclosure, sheet))}
-          close={close}
         />
       }
+      below={<ChangesStaleNote sheet={sheet} />}
     >
       <div className="flex flex-col">
         <SheetBodyView
@@ -112,7 +114,7 @@ export function ChangesPanel({
           onAsk={ask}
         />
       </div>
-    </RightSidebar>
+    </SurfaceFrame>
   );
 }
 
@@ -149,9 +151,6 @@ function SheetBodyView({
               <FileDiffIcon />
             </EmptyMedia>
             <EmptyTitle>No changes</EmptyTitle>
-            <EmptyDescription>
-              The working tree matches HEAD. Untracked files would appear here too.
-            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       );
@@ -286,10 +285,11 @@ function FileSection({
             className="h-auto min-h-9 min-w-0 justify-start gap-2 whitespace-normal px-2 py-2 text-left font-normal aria-expanded:bg-transparent pointer-coarse:min-h-11"
             aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
           >
-            <span className="self-start">
+            {/* One filename line tall, so the chevron centres on the first line however the name wraps. */}
+            <span className="flex h-[1lh] items-center self-start text-xs">
               <DisclosureChevron open={open} />
             </span>
-            <ItemContent className="min-w-0 gap-0">
+            <ItemContent className="min-w-0 gap-0 self-start">
               <ItemTitle className="block w-full min-w-0 line-clamp-none font-mono text-xs [overflow-wrap:anywhere]">
                 {filename}
               </ItemTitle>
@@ -303,7 +303,8 @@ function FileSection({
           </Button>
         </CollapsibleTrigger>
         {canAsk && (
-          <ItemActions>
+          // The name's button has a 1px border before its padding; Ask drops by the same.
+          <ItemActions className="mt-px">
             <IconButton
               size="list"
               label={`Ask about ${file.path}`}

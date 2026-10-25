@@ -1,7 +1,7 @@
 /**
  * What is on screen and how it maps to the address bar. The client owns the main pane's view (a
- * session or a page); navigation owns what sits over it (Settings, the selected session's right
- * sidebar and PR, the palette), reconciles the address bar's route with the registry once it
+ * session or a page); navigation owns what sits over it (Settings, the selected session's areas
+ * and PR, the palette), reconciles the address bar's route with the registry once it
  * loads, and keeps the URL and title following the screen. A page's address and title are decided
  * once, in `pageAddress`. Sessions are addressed by ID, never by directory. Nothing here depends on
  * render timing.
@@ -12,13 +12,30 @@ import { findProject } from "./projectCommands.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
 import { catalogEntry } from "./sessionCatalog.ts";
 
-/** What the selected session's right sidebar shows: its Changes, or a file a link opened. */
-export type SidebarPanel = "changes" | { kind: "file"; path: string };
 /**
- * Something that belongs to the selected session and closes when that session changes: a right
- * sidebar view, or the PR. The sidebar is nonmodal, so the PR opens over it without replacing it.
+ * One tab in the selected session's Surface area: its Changes, or a file a link opened. A file
+ * remembers the area it was opened from, so closing it one area at a time returns there.
  */
-export type Panel = SidebarPanel | "pr";
+export type SurfaceTab = "changes" | { kind: "file"; path: string; from: SessionArea };
+
+/** What the Surface area shows beside (or, one area at a time, instead of) the Agent area. */
+export interface Surface {
+  /** Open tabs in the order they were opened: each new one, Changes included, at the end. */
+  tabs: SurfaceTab[];
+  /** The key (`tabKey`) of the tab shown. */
+  active: string;
+}
+
+/** A tab's identity: one Changes, and one tab per file path. */
+export const tabKey = (tab: SurfaceTab): string =>
+  tab === "changes" ? "changes" : `file:${tab.path}`;
+
+/** The tab shown, if the area is open. */
+export const activeTab = (surface: Surface | null): SurfaceTab | undefined =>
+  surface?.tabs.find((tab) => tabKey(tab) === surface.active);
+
+/** The session's two areas: the conversation and its composer, and the Surface area. */
+export type SessionArea = "agent" | "surface";
 
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */
@@ -28,7 +45,22 @@ export interface NavigationState {
    * that reveals part of a page reads it so asking again reveals it again (INV-07).
    */
   settingsRequest: number;
-  sidebar: SidebarPanel | null;
+  /** The Surface area's tabs; `null` while it has none, and so is hidden. */
+  surface: Surface | null;
+  /**
+   * The area the user moved to last: the one a single-view layout shows. Only showing a surface
+   * moves it there; files changing or the agent finishing never do.
+   */
+  area: SessionArea;
+  /**
+   * Counts the requests to show a surface, including repeats of the one already shown, so asking
+   * again focuses it without reopening or refreshing it.
+   */
+  surfaceRequest: number;
+  /** Whether the session is laid out one area at a time, as its available width decides. */
+  single: boolean;
+  /** The session header's Views menu, which the palette can open too. */
+  views: boolean;
   pullRequest: boolean;
   palette: boolean;
 }
@@ -64,8 +96,25 @@ export interface Navigation {
   openProject: (projectId: string) => void;
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
-  openPanel: (panel: Panel) => void;
-  closeSidebar: () => void;
+  /** Shows Changes, opening its tab at the end if needed, or focuses it; never a toggle. */
+  openChanges: () => void;
+  /** Shows a file's tab, opening it at the end if needed; an open file is read again. */
+  openFile: (path: string) => void;
+  /** Shows an open tab by its key. */
+  selectTab: (key: string) => void;
+  /**
+   * Closes a tab; its neighbour shows. Closing the last hides the area, and one area at a time a
+   * file opened from the Agent area returns there.
+   */
+  closeTab: (key: string) => void;
+  /** Shows the Agent area in a single-view layout, keeping the surface for the next visit. */
+  showAgent: () => void;
+  /** Shows the surface already open in a single-view layout, as it was left. */
+  showSurface: () => void;
+  /** The session reports its layout as its available width changes. */
+  setSingle: (single: boolean) => void;
+  setViews: (open: boolean) => void;
+  openPullRequest: () => void;
   closePullRequest: () => void;
   setPalette: (open: boolean) => void;
 }
@@ -181,7 +230,11 @@ export function createNavigation({
   let state: NavigationState = {
     settings: wanted.kind === "settings" ? wanted.section : null,
     settingsRequest: 0,
-    sidebar: null,
+    surface: null,
+    area: "agent",
+    surfaceRequest: 0,
+    single: false,
+    views: false,
     pullRequest: false,
     palette: false,
   };
@@ -235,7 +288,8 @@ export function createNavigation({
       const next = panelOwner(client.getState());
       if (next !== owner) {
         owner = next;
-        set({ sidebar: null, pullRequest: false });
+        // Inspection belongs to one session: another one starts with only its Agent area.
+        set({ surface: null, area: "agent", views: false, pullRequest: false });
       }
     } finally {
       depth--;
@@ -275,6 +329,19 @@ export function createNavigation({
     batch(() => {
       set({ settings: null });
       client.dispatch({ type: "open", page });
+      moved();
+    });
+
+  /** Shows `surface` in the Surface area as a request of its own; it leaves Settings. */
+  const show = (surface: Surface) =>
+    batch(() => {
+      set({
+        settings: null,
+        surface,
+        area: "surface",
+        surfaceRequest: state.surfaceRequest + 1,
+        views: false,
+      });
       moved();
     });
 
@@ -321,16 +388,52 @@ export function createNavigation({
         moved();
       }),
     closeSettings,
-    openPanel: (panel) =>
+    openChanges: () => {
+      const tabs = state.surface?.tabs ?? [];
+      show({
+        tabs: tabs.includes("changes") ? tabs : [...tabs, "changes"],
+        active: "changes",
+      });
+    },
+    openFile: (path) => {
+      const tabs = state.surface?.tabs ?? [];
+      const key = `file:${path}`;
+      const at = tabs.findIndex((tab) => tabKey(tab) === key);
+      const from = state.surface && state.area === "surface" ? "surface" : "agent";
+      // A fresh tab object for an open file: the viewer reads it again, as clicking a link did.
+      const tab: SurfaceTab = {
+        kind: "file",
+        path,
+        from: at < 0 ? from : (tabs[at] as { from: SessionArea }).from,
+      };
+      show({ tabs: at < 0 ? [...tabs, tab] : tabs.with(at, tab), active: key });
+    },
+    selectTab: (key) => {
+      if (!state.surface?.tabs.some((tab) => tabKey(tab) === key)) return;
+      show({ ...state.surface, active: key });
+    },
+    closeTab: (key) =>
       batch(() => {
-        set(
-          panel === "pr"
-            ? { settings: null, pullRequest: true }
-            : { settings: null, sidebar: panel },
-        );
+        const surface = state.surface;
+        const at = surface?.tabs.findIndex((tab) => tabKey(tab) === key) ?? -1;
+        if (!surface || at < 0) return;
+        const closing = surface.tabs[at];
+        const tabs = surface.tabs.toSpliced(at, 1);
+        if (!tabs.length) return set({ surface: null, area: "agent" });
+        const active =
+          surface.active === key ? tabKey(tabs[Math.min(at, tabs.length - 1)]) : surface.active;
+        const back = surface.active === key && closing !== "changes" && closing.from === "agent";
+        set({ surface: { tabs, active }, area: back ? "agent" : state.area });
+      }),
+    showAgent: () => batch(() => set({ area: "agent" })),
+    showSurface: () => batch(() => set({ area: state.surface ? "surface" : "agent" })),
+    setSingle: (single) => batch(() => set({ single, views: single ? false : state.views })),
+    setViews: (open) => batch(() => set({ views: open })),
+    openPullRequest: () =>
+      batch(() => {
+        set({ settings: null, pullRequest: true });
         moved();
       }),
-    closeSidebar: () => batch(() => set({ sidebar: null })),
     closePullRequest: () => batch(() => set({ pullRequest: false })),
     setPalette: (open) => batch(() => set({ palette: open })),
   };

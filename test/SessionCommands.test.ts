@@ -62,7 +62,10 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "copy-branch": true,
     "copy-session-id": true,
     "copy-all": true,
+    views: true,
     changes: true,
+    "hide-changes": false,
+    agent: false,
     "wrap-changes": true,
     "pull-request": true,
     "messages-only": true,
@@ -104,6 +107,14 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     [missing.rename, missing.changes, missing["new-session-here"], missing.archive, missing.delete],
     [false, false, false, true, true],
   );
+  const changesOf = (state: AppState) =>
+    sessionCommands(state).find((c) => c.id === "changes")?.detail;
+  assert.equal(
+    changesOf({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) }),
+    "Checkout removed",
+    "unavailable Changes says why, never No changes",
+  );
+  assert.equal(changesOf(base), undefined);
   const missingRow = enabled(
     {
       ...base,
@@ -259,7 +270,7 @@ test("the header menu: copy beside the details, open, manage with share only whe
     );
     assert.deepEqual(
       menu.open.map((c) => c.id),
-      ["changes", "pull-request"],
+      ["pull-request"],
     );
     assert.deepEqual(
       menu.manage.map((c) => c.id),
@@ -350,7 +361,7 @@ test("preview commands exist only while the selected session's live Pi owns an a
   // The header's preview control offers open and stop itself; the menu does not repeat them.
   assert.deepEqual(
     sessionHeaderMenu(sessionCommands(running)).open.map((c) => c.id),
-    ["changes", "pull-request"],
+    ["pull-request"],
   );
 
   // An app that is not answering has nothing to open, but can still be inspected and stopped.
@@ -394,4 +405,33 @@ test("archiving a session that owns an app asks first, from the header or its si
   assert.equal((archive(running) as { confirm: boolean }).confirm, true);
   const background = { ...base, hosts: [{ ...other, streaming: false, preview: true }] };
   assert.equal((archive(background, other) as { confirm: boolean }).confirm, true);
+});
+
+test("view commands follow the session's areas: Views and Hide changes side by side, Agent one at a time", () => {
+  const ofAreas = ({ surface, single }: { surface: "changes" | null; single: boolean }) =>
+    Object.fromEntries(
+      sessionCommands(base, undefined, {
+        areas: { single, surface: surface && { tabs: [surface], active: surface } },
+      })
+        .filter((c) => ["views", "changes", "hide-changes", "agent"].includes(c.id))
+        .map((c) => [c.id, c.enabled]),
+    );
+  assert.deepEqual(ofAreas({ surface: null, single: false }), {
+    views: true,
+    changes: true,
+    "hide-changes": false,
+    agent: false,
+  });
+  assert.deepEqual(ofAreas({ surface: "changes", single: false }), {
+    views: true,
+    changes: true,
+    "hide-changes": true,
+    agent: false,
+  });
+  assert.deepEqual(ofAreas({ surface: "changes", single: true }), {
+    views: false,
+    changes: true,
+    "hide-changes": false,
+    agent: true,
+  });
 });

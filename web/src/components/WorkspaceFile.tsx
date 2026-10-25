@@ -15,7 +15,7 @@ import { IconButton } from "@/components/IconButton";
 import { LocalFileContext, Markdown } from "@/components/Markdown";
 import { NativeFile } from "@/components/NativeFile";
 import { PianoViewToggle, PianoViewToggleItem } from "@/components/PianoViewToggle";
-import { RightSidebar } from "@/components/RightSidebar";
+import { SurfaceFrame } from "@/components/SurfaceArea";
 import { workspaceFile, workspaceFileDownload } from "@/lib/api";
 import { renderMarkdown } from "@/lib/markdown";
 
@@ -39,7 +39,32 @@ const KIND_ICON: Record<Preview["kind"], typeof FileIcon> = {
   pdf: FileIcon,
 };
 
-/** A file a local link opened, read-only, in the right sidebar.
+const EXTENSION_KIND: Record<string, Preview["kind"]> = {
+  md: "markdown",
+  markdown: "markdown",
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  webp: "image",
+  svg: "image",
+  pdf: "pdf",
+  mp3: "audio",
+  wav: "audio",
+  ogg: "audio",
+  mp4: "video",
+  webm: "video",
+  mov: "video",
+};
+
+/** A file tab's icon, by the kind its extension suggests before the file is read. */
+export function FileTabIcon({ path, className }: { path: string; className?: string }) {
+  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  const Icon = KIND_ICON[EXTENSION_KIND[extension] ?? "text"] ?? FileIcon;
+  return <Icon className={className} aria-hidden />;
+}
+
+/** A file a local link opened, read-only, in the Surface area.
  * The owner keys it by session, workspace and path, so new destinations never flash old content. */
 export function WorkspaceFile({
   workspaceId,
@@ -163,36 +188,39 @@ export function WorkspaceFile({
     }
   };
   const path = result?.path ?? file.path;
-  const Icon = result ? KIND_ICON[result.kind] : FileIcon;
   return (
-    <RightSidebar
+    <SurfaceFrame
       label="File viewer"
       close={close}
-      title={
-        <>
-          <Icon className="size-4 shrink-0 text-ink-3" aria-hidden />
-          <span className="min-w-0 truncate font-mono text-xs font-normal" title={path}>
-            {path}
-          </span>
-        </>
+      closeLabel={`Close ${path.slice(path.lastIndexOf("/") + 1)}`}
+      closeWhenSingle
+      status={
+        <span className="min-w-0 truncate font-mono" title={path}>
+          {path}
+        </span>
       }
       actions={
-        <IconButton size="header" label="Download file" disabled={!result || saving} onClick={save}>
-          <DownloadIcon />
-        </IconButton>
-      }
-      toolbar={
-        result?.kind === "markdown" && (
-          <PianoViewToggle
-            type="single"
-            value={mode}
-            onValueChange={(value) => value && setMode(value)}
-            aria-label="Markdown view"
+        <>
+          {result?.kind === "markdown" && (
+            <PianoViewToggle
+              type="single"
+              value={mode}
+              onValueChange={(value) => value && setMode(value)}
+              aria-label="Markdown view"
+            >
+              <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
+              <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
+            </PianoViewToggle>
+          )}
+          <IconButton
+            size="header"
+            label="Download file"
+            disabled={!result || saving}
+            onClick={save}
           >
-            <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
-            <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
-          </PianoViewToggle>
-        )
+            <DownloadIcon />
+          </IconButton>
+        </>
       }
     >
       {status && <Notice>{status}</Notice>}
@@ -220,6 +248,6 @@ export function WorkspaceFile({
           )}
         </section>
       )}
-    </RightSidebar>
+    </SurfaceFrame>
   );
 }
