@@ -26,7 +26,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { FileTabIcon } from "@/components/WorkspaceFile";
 import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
-import { type Surface, tabKey } from "@/lib/navigation";
+import { shownAreas, tabKey } from "@/lib/navigation";
 import { AGENT_MIN_WIDTH, PANEL_WIDTH, singleArea } from "@/lib/panelLayout";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
@@ -55,6 +55,7 @@ const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`
 export function SessionView({ state, send }: Props) {
   // The selected session's PR popover; hidden while Settings covers the view. Its Changes and
   // open file live in the Surface area (SessionPanel).
+  const navigation = useNavigation();
   const {
     settings,
     pullRequest: pullRequestOpened,
@@ -63,10 +64,9 @@ export function SessionView({ state, send }: Props) {
     openFile,
     single,
     setSingle,
-    area,
     surface,
     showAgent,
-  } = useNavigation();
+  } = navigation;
   const pullRequestOpen = !settings && pullRequestOpened;
   const onPullRequestOpenChange = (open: boolean) =>
     open ? openPullRequest() : closePullRequest();
@@ -85,7 +85,7 @@ export function SessionView({ state, send }: Props) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [setSingle]);
-  const agentHidden = single && area === "surface" && !!surface;
+  const agentHidden = !shownAreas(navigation).agent;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
@@ -150,9 +150,7 @@ export function SessionView({ state, send }: Props) {
           )
         }
       />
-      {single && (openChanges || surface) && (
-        <AreaTabs surface={surface} agentShown={!agentHidden} openChanges={openChanges} />
-      )}
+      {single && (openChanges || surface) && <AreaTabs openChanges={openChanges} />}
       <div
         ref={areas}
         className="relative flex min-h-0 min-w-0 flex-1"
@@ -286,18 +284,15 @@ export function SessionView({ state, send }: Props) {
  * file closes from its own toolbar.
  */
 function AreaTabs({
-  surface,
-  agentShown,
   openChanges,
 }: {
-  surface: Surface | null;
-  agentShown: boolean;
   /** Runs the Changes command; omitted while it is disabled, which leaves Changes out. */
   openChanges: (() => void) | undefined;
 }) {
-  const { showAgent, selectTab } = useNavigation();
+  const navigation = useNavigation();
+  const { surface, showAgent, selectTab } = navigation;
   const tabs = surface?.tabs ?? [];
-  const value = agentShown || !surface ? "agent" : surface.active;
+  const value = surface && shownAreas(navigation).surface ? surface.active : "agent";
   // The Surface area's strip tabs, so the session's tabs look alike at every width.
   const trigger = (key: string, icon: React.ReactNode, label: string, controls: string) => (
     <PianoStripTab key={key} selected={key === value} className="-mb-px">
