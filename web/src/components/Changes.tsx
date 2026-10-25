@@ -1,7 +1,7 @@
 import type { ChangeFile, Workspace, WorkspaceChanges } from "@shared/wire";
 import { cn } from "cn";
 import { FileDiffIcon, MessageSquarePlusIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { ChangesActions, ChangesStaleNote } from "@/components/ChangesHeader";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
@@ -35,7 +35,8 @@ import {
   toggleEvery,
   toggleFile,
 } from "@/lib/changesView";
-import { type DiffFile, lineCount } from "@/lib/diff";
+import { type DiffFile, type DiffLine, lineCount } from "@/lib/diff";
+import { lineBlocks } from "@/lib/lineBlocks";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useObservation } from "@/lib/useObservation";
 import type { SessionView } from "@/store";
@@ -389,31 +390,55 @@ function Hunks({ file }: { file: DiffFile }) {
       for (const line of hunk.lines) largest = Math.max(largest, line.old ?? 0, line.new ?? 0);
     return String(largest).length;
   }, [file]);
+  // Each block is its own table so the browser can skip blocks off screen (`lazy-lines`); the
+  // shared column widths keep them aligned. Unwrapped, every block takes the widest one's width.
+  const blocks = useMemo(
+    () =>
+      lineBlocks(
+        file.hunks.flatMap((hunk): DiffRow[] => [
+          { header: hunk.header },
+          ...hunk.lines.map((line) => ({ line })),
+        ]),
+      ),
+    [file],
+  );
   return (
     <div className="overflow-x-auto border-t border-line">
-      <table
-        className={cn("w-full border-collapse font-mono text-xs leading-5", wrap && "table-fixed")}
+      <section
         aria-label={`Diff of ${file.path}`}
+        className={cn("font-mono text-xs leading-5", !wrap && "w-max min-w-full")}
       >
-        <colgroup>
-          <col style={{ width: `calc(${digits}ch + 1rem)` }} />
-          <col style={{ width: `calc(${digits}ch + 1rem)` }} />
-          <col />
-        </colgroup>
-        <tbody>
-          {file.hunks.map((hunk, h) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: a diff's hunks are positional and never reorder.
-            <HunkRows key={h} hunk={hunk} wrap={wrap} />
-          ))}
-        </tbody>
-      </table>
+        {blocks.map((block) => (
+          <div
+            key={block.start}
+            className="lazy-lines"
+            style={{ "--lines": block.items.length } as CSSProperties}
+          >
+            <table className={cn("w-full border-collapse", wrap && "table-fixed")}>
+              <colgroup>
+                <col style={{ width: `calc(${digits}ch + 1rem)` }} />
+                <col style={{ width: `calc(${digits}ch + 1rem)` }} />
+                <col />
+              </colgroup>
+              <tbody>
+                {block.items.map((row, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a diff's rows are positional and never reorder.
+                  <DiffRowView key={i} row={row} wrap={wrap} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </section>
     </div>
   );
 }
 
-function HunkRows({ hunk, wrap }: { hunk: DiffFile["hunks"][number]; wrap: boolean }) {
-  return (
-    <>
+type DiffRow = { header: string } | { line: DiffLine };
+
+function DiffRowView({ row, wrap }: { row: DiffRow; wrap: boolean }) {
+  if ("header" in row)
+    return (
       <tr className="bg-fill text-ink-3">
         <td
           colSpan={3}
@@ -422,48 +447,46 @@ function HunkRows({ hunk, wrap }: { hunk: DiffFile["hunks"][number]; wrap: boole
             wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "whitespace-pre",
           )}
         >
-          {hunk.header}
+          {row.header}
         </td>
       </tr>
-      {hunk.lines.map((line, i) => (
-        <tr
-          // biome-ignore lint/suspicious/noArrayIndexKey: a hunk's lines are positional and never reorder.
-          key={i}
-          className={cn(
-            line.kind === "add" && "bg-ok/10",
-            line.kind === "del" && "bg-err/10",
-            line.kind === "meta" && "text-ink-3",
-          )}
-        >
-          <td className="select-none pl-2 pr-1 text-right align-top text-ink-3 tabular-nums">
-            {line.old ?? ""}
-          </td>
-          <td className="select-none pr-2 text-right align-top text-ink-3 tabular-nums">
-            {line.new ?? ""}
-          </td>
-          <td className="pr-3 align-top">
-            <span className={cn(wrap ? "grid grid-cols-[1rem_minmax(0,1fr)]" : "whitespace-pre")}>
-              <span
-                className={cn(
-                  "inline-block w-4 select-none",
-                  line.kind === "add" ? "text-ok" : line.kind === "del" ? "text-err" : "text-ink-3",
-                )}
-              >
-                {line.kind === "add"
-                  ? "+"
-                  : line.kind === "del"
-                    ? "−"
-                    : line.kind === "meta"
-                      ? "\\"
-                      : " "}
-              </span>
-              <span className={cn(wrap && "whitespace-pre-wrap [overflow-wrap:anywhere]")}>
-                {line.text}
-              </span>
-            </span>
-          </td>
-        </tr>
-      ))}
-    </>
+    );
+  const { line } = row;
+  return (
+    <tr
+      className={cn(
+        line.kind === "add" && "bg-ok/10",
+        line.kind === "del" && "bg-err/10",
+        line.kind === "meta" && "text-ink-3",
+      )}
+    >
+      <td className="select-none pl-2 pr-1 text-right align-top text-ink-3 tabular-nums">
+        {line.old ?? ""}
+      </td>
+      <td className="select-none pr-2 text-right align-top text-ink-3 tabular-nums">
+        {line.new ?? ""}
+      </td>
+      <td className="pr-3 align-top">
+        <span className={cn(wrap ? "grid grid-cols-[1rem_minmax(0,1fr)]" : "whitespace-pre")}>
+          <span
+            className={cn(
+              "inline-block w-4 select-none",
+              line.kind === "add" ? "text-ok" : line.kind === "del" ? "text-err" : "text-ink-3",
+            )}
+          >
+            {line.kind === "add"
+              ? "+"
+              : line.kind === "del"
+                ? "−"
+                : line.kind === "meta"
+                  ? "\\"
+                  : " "}
+          </span>
+          <span className={cn(wrap && "whitespace-pre-wrap [overflow-wrap:anywhere]")}>
+            {line.text}
+          </span>
+        </span>
+      </td>
+    </tr>
   );
 }
