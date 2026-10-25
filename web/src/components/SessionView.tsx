@@ -205,7 +205,7 @@ export function SessionView({ state, send }: Props) {
             ))}
           <AddToChat draftKey={draftKey} className="relative flex min-h-0 flex-1 flex-col">
             {pane.list && (
-              <LocalFileContext value={openFile}>
+              <LocalFileContext value={(path) => openFile(path, "agent")}>
                 <SessionDestinationContext value={destination}>
                   <MessageList
                     showTools={!messagesOnly}

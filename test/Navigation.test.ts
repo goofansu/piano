@@ -540,6 +540,29 @@ test("one area at a time, closing a file opened from the Agent area returns ther
   assert.equal(shownTabs(p.navigation).area, "surface");
 });
 
+test("a file remembers the area it was opened from when the layout narrows", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/a.md", "agent");
+  p.navigation.openFile("docs/b.md", "surface");
+  p.navigation.setSingle(true);
+  p.navigation.closeTab("file:docs/b.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes", "file:docs/a.md"], active: "file:docs/a.md", area: "surface" },
+    "opened from a file, back to the Surface area",
+  );
+  p.navigation.closeTab("file:docs/a.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes"], active: "changes", area: "agent" },
+    "opened from the transcript side by side, back to Agent one area at a time",
+  );
+});
+
 test("side by side both areas show while there are tabs; one area at a time, the one moved to", () => {
   const p = page("/new");
   p.registry();

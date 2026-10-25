@@ -15,7 +15,7 @@ interface Props {
 
 /**
  * The files Pi wrote or edited in this session, opened from the usage row beside Links. Each
- * opens in the right sidebar's file viewer, as a local file link in the transcript does.
+ * opens as a Surface tab, as a local file link in the transcript does.
  * Absent while the session wrote nothing.
  */
 export function SessionFiles({ files, cwd }: Props) {
@@ -35,7 +35,7 @@ export function SessionFiles({ files, cwd }: Props) {
           <li key={file.path} className="flex items-center">
             <button
               type="button"
-              onClick={() => openFile(file.path)}
+              onClick={() => openFile(file.path, "agent")}
               className={cn(listRow, "min-w-0 flex-1 px-4 py-1.5")}
             >
               {/* Two lines in mono, as the transcript names paths: files in one session mostly

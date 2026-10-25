@@ -140,8 +140,12 @@ export interface Navigation {
   closeSettings: () => void;
   /** Shows Changes, opening its tab at the end if needed, or focuses it; never a toggle. */
   openChanges: () => void;
-  /** Shows a file's tab, opening it at the end if needed; an open file, however spelled, is read again. */
-  openFile: (path: string) => void;
+  /**
+   * Shows a file's tab, opening it at the end if needed; an open file, however spelled, is read
+   * again. `from` is the area the link was in; without one (the palette), the area shown one at a
+   * time, or Agent side by side.
+   */
+  openFile: (path: string, from?: SessionArea) => void;
   /** Shows an open tab by its key. */
   selectTab: (key: string) => void;
   /**
@@ -519,10 +523,9 @@ export function createNavigation({
         active: "changes",
       });
     },
-    openFile: (spelled) => {
+    openFile: (spelled, from = shownAreas(state).agent ? "agent" : "surface") => {
       const path = filePath(spelled, client.getState().session?.cwd);
       const tabs = state.surface?.tabs ?? [];
-      const from = state.surface && state.area === "surface" ? "surface" : "agent";
       const key = tabKey({ kind: "file", path, from });
       const at = tabs.findIndex((tab) => tabKey(tab) === key);
       // A fresh tab object for an open file: the viewer reads it again, as clicking a link did.
@@ -547,7 +550,11 @@ export function createNavigation({
         if (!tabs.length) return set({ surface: null, area: "agent" });
         const active =
           surface.active === key ? tabKey(tabs[Math.min(at, tabs.length - 1)]) : surface.active;
-        const back = surface.active === key && closing !== "changes" && closing.from === "agent";
+        const back =
+          state.single &&
+          surface.active === key &&
+          closing !== "changes" &&
+          closing.from === "agent";
         set({ surface: { tabs, active }, area: back ? "agent" : state.area });
       }),
     showAgent: () => batch(() => set({ area: "agent" })),
