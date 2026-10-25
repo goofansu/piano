@@ -147,8 +147,9 @@ export class SessionHosts extends Context.Service<
      * after this returns is missed. */
     readonly subscribe: Effect.Effect<Stream.Stream<ReadonlyArray<HostInfo>>, never, Scope.Scope>;
     /** Acquisition or completed retirement may have changed Pi history. Coalesced invalidations,
-     * not a lifecycle log: re-read current facts. Ordinary session state changes do not emit. */
-    readonly lifecycleChanges: Stream.Stream<void>;
+     * not a lifecycle log: re-read current facts. Ordinary session state changes do not emit.
+     * Subscribes now, so nothing acquired or retired after this returns is missed. */
+    readonly lifecycleChanges: Effect.Effect<Stream.Stream<void>, never, Scope.Scope>;
   }
 >()("piano/SessionHosts") {}
 
@@ -608,7 +609,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           const subscription = yield* PubSub.subscribe(changed);
           return Stream.concat(Stream.make(yield* list), Stream.fromSubscription(subscription));
         }),
-        lifecycleChanges: Stream.fromPubSub(lifecycle),
+        lifecycleChanges: Effect.map(PubSub.subscribe(lifecycle), Stream.fromSubscription),
       });
     }),
   ).pipe(

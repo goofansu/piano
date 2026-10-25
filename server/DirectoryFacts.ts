@@ -10,7 +10,7 @@
  * session's commands come from that session, not from here.
  */
 import { homedir } from "node:os";
-import { Context, Data, Effect, Layer, PubSub, Semaphore, Stream } from "effect";
+import { Context, Data, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
 import type { ModelCatalog, ProjectTrust, SlashCommand } from "../shared/wire.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiSessions } from "./PiSessions.ts";
@@ -50,8 +50,9 @@ export class DirectoryFacts extends Context.Service<
     ) => Effect.Effect<DirectoryTrust & { readonly catalog: ModelCatalog }, ProjectTrustError>;
     /** Pi's resources changed (credentials, defaults, packages, MCP config); every catalog must re-probe. */
     readonly invalidate: Effect.Effect<void>;
-    /** Fires after each invalidation; every client re-requests its pickers. */
-    readonly changes: Stream.Stream<void>;
+    /** Fires after each invalidation; every client re-requests its pickers. Subscribes now, so
+     * nothing invalidated after this returns is missed. */
+    readonly changes: Effect.Effect<Stream.Stream<void>, never, Scope.Scope>;
   }
 >()("piano/DirectoryFacts") {}
 
@@ -162,7 +163,7 @@ export const DirectoryFactsLive = Layer.effect(
         return { ...(yield* trust(cwd)), catalog };
       }),
       invalidate,
-      changes: Stream.fromPubSub(changes),
+      changes: Effect.map(PubSub.subscribe(changes), Stream.fromSubscription),
     });
   }),
 );

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Stream } from "effect";
 import {
   DirectoryCommandsError,
   DirectoryFacts,
@@ -117,6 +117,20 @@ test("a directory whose probe fails has no commands, and the failure is not cach
       yield* Effect.flip(facts.commands(missing));
       assert.equal(probes(), 2, "the next request probes again");
     }),
+  );
+});
+
+test("a subscriber hears an invalidation that happens before it reads the stream", async () => {
+  await run((facts) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const changes = yield* facts.changes;
+        // As when a browser connects: Pi's resources change before anything reads the stream.
+        yield* facts.invalidate;
+        const heard = yield* changes.pipe(Stream.take(1), Stream.runCollect);
+        assert.equal([...heard].length, 1);
+      }),
+    ),
   );
 });
 

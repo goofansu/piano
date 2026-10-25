@@ -245,10 +245,10 @@ test("INV-01: a trust decision is saved in Pi's store and every client's model c
         const commands = yield* WorkspaceCommands,
           facts = yield* DirectoryFacts;
         // Each socket forwards this stream as `catalogs_invalidated`.
-        const invalidated = yield* facts.changes.pipe(
+        const invalidated = yield* (yield* facts.changes).pipe(
           Stream.take(2),
           Stream.runCollect,
-          Effect.forkChild({ startImmediately: true }),
+          Effect.forkChild,
         );
         const trusted = yield* commands.setTrust(cwd, true);
         assert.deepEqual([trusted.cwd, trusted.trust], [cwd, { required: true, trusted: true }]);

@@ -358,18 +358,18 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       });
       // Subscribe during construction, before callers can start a host. A bounded invalidation
       // survives even if acquisition and retirement coalesce to the same empty host list.
-      yield* hosts.lifecycleChanges.pipe(
+      yield* (yield* hosts.lifecycleChanges).pipe(
         Stream.runForEach(() => availability.request()),
-        Effect.forkScoped({ startImmediately: true }),
+        Effect.forkScoped,
       );
-      // Started now, so a trust decision made once the layer is built is not missed.
-      yield* facts.changes.pipe(
+      // Subscribed now, so a trust decision made once the layer is built is not missed.
+      yield* (yield* facts.changes).pipe(
         Stream.runForEach(() =>
           retrust.pipe(
             Effect.catchCause((cause) => Effect.logWarning("sidebar trust update failed", cause)),
           ),
         ),
-        Effect.forkScoped({ startImmediately: true }),
+        Effect.forkScoped,
       );
       yield* refresh;
 

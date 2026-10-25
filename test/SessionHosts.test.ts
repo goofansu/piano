@@ -533,6 +533,23 @@ test("a subscriber hears a session stop that happens before it reads the stream"
   );
 });
 
+test("a lifecycle subscriber hears a retirement that completes before it reads the stream", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      yield* quiescent(yield* registered("subscribed-retire"));
+      const changes = yield* hosts.lifecycleChanges;
+      yield* hosts.archive(cwd, "subscribed-retire");
+      const heard = yield* changes.pipe(
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.timeout("5 seconds"),
+      );
+      assert.equal([...heard].length, 1, "the retirement invalidates history");
+    }),
+  );
+});
+
 test("INV-02: concurrent public opens through real/symlink paths have one child lifetime", async () => {
   await run(
     Effect.gen(function* () {
