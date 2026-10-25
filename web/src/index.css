@@ -497,12 +497,23 @@
 .file-source .line::before {
   counter-increment: line;
   content: counter(line);
+}
+/* Plain source numbers each block of lines in a gutter column of its own. */
+.file-source .line::before,
+.file-source .file-gutter {
   display: inline-block;
+  flex: none;
   width: 3.25rem;
   padding-right: 1rem;
   text-align: right;
   color: var(--ink-3);
   user-select: none;
+}
+/* A block of `--lines` rows of a long file or diff (lib/lineBlocks). Off screen it is skipped by
+ * layout and paint and holds an estimated height until first shown, then its real one. */
+.lazy-lines {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto calc(var(--lines) * 1lh);
 }
 
 /* Markdown from the assistant. The gutter glyph sits outside; this sets only the text. */

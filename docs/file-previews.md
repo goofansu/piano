@@ -27,7 +27,10 @@ A decoder failure asks you to convert the original. Media never autoplays. SVG i
 source only**, not an injected SVG or an image. HTML and MDX are not executed.
 
 Highlighting uses a disposable worker, lazy grammars/themes, at most 65,536 characters and
-2,000 characters per line, and a three-second work budget. Larger files stay readable as source.
+2,000 characters per line, and a three-second work budget. Larger files stay readable as source,
+rendered in blocks of 500 lines (one text and one line-number gutter each) that the browser lays
+out and paints only near the view, so a file up to the 1 MiB limit opens without blocking the
+page. An expanded diff in Changes renders its rows in the same blocks.
 Markdown previews load at most eight distinct local images, sequentially, retaining at most
 20 MiB of image bytes. Other images remain clickable local links; remote images never load.
 Markdown diagrams remain escaped code in file previews.

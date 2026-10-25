@@ -1,9 +1,10 @@
 import { useTheme } from "next-themes";
-import { Fragment, useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
+import { lineBlocks } from "@/lib/lineBlocks";
 
 /** Read-only text adapter. Tokenization runs off-thread and is killed on disposal or timeout.
- * Both the highlighted and the plain rendering are one `span.line` per line, which the
- * `file-source` style numbers. */
+ * The highlighted rendering is one `span.line` per line, which the `file-source` style numbers;
+ * the plain one, used for every long file, is blocks of lines, each one text beside its gutter. */
 export function FileText({ content, language }: { content: string; language: string }) {
   const { resolvedTheme } = useTheme();
   const [highlighted, setHighlighted] = useState<{
@@ -41,16 +42,23 @@ export function FileText({ content, language }: { content: string; language: str
     );
   if (!content) return <p className="p-4 text-sm text-ink-3">(Empty file)</p>;
   const lines = content.replace(/\n$/, "").split("\n");
+  // A few elements per block, not per line, and blocks off screen skip layout and paint, so a
+  // long file opens without blocking the page.
   return (
     <div className="file-source">
       <pre>
-        <code>
-          {lines.map((line, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: lines are positional and never reorder.
-            <Fragment key={i}>
-              {i > 0 && "\n"}
-              <span className="line">{line}</span>
-            </Fragment>
+        <code className="block w-max min-w-full">
+          {lineBlocks(lines).map((block) => (
+            <span
+              key={block.start}
+              className="lazy-lines flex"
+              style={{ "--lines": block.items.length } as CSSProperties}
+            >
+              <span className="file-gutter" aria-hidden>
+                {block.items.map((_, i) => block.start + i + 1).join("\n")}
+              </span>
+              <span>{block.items.join("\n")}</span>
+            </span>
           ))}
         </code>
       </pre>
