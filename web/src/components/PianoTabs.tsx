@@ -71,9 +71,21 @@ function focusPressedTab(event: React.MouseEvent<HTMLButtonElement>) {
  * The darker band a tab strip sits on, its rule under the tabs. Hand-written: no shadcn component
  * is a band for tabs.
  */
-export function PianoStripBar({ children }: { children: React.ReactNode }) {
+export function PianoStripBar({
+  children,
+  variant = "connected",
+}: {
+  children: React.ReactNode;
+  variant?: "connected" | "pills";
+}) {
   return (
-    <div className="flex h-10 shrink-0 items-end border-b border-line bg-surface-0 px-2 pointer-coarse:h-12">
+    <div
+      data-variant={variant}
+      className={cn(
+        "group/strip flex shrink-0 items-end border-b border-line bg-surface-0 px-2",
+        variant === "pills" ? "h-11 pointer-coarse:h-14" : "h-10 pointer-coarse:h-12",
+      )}
+    >
       {children}
     </div>
   );
@@ -88,7 +100,10 @@ export function PianoStripTabsList({ className, ...props }: ComponentProps<typeo
   return (
     <ScrollingTabsList
       {...props}
-      className={cn("w-full min-w-0 flex-1 items-end gap-1 self-stretch rounded-none", className)}
+      className={cn(
+        "w-full min-w-0 flex-1 items-end gap-1 self-stretch rounded-none group-data-[variant=pills]/strip:items-center",
+        className,
+      )}
     />
   );
 }
@@ -110,6 +125,8 @@ export function PianoStripTab({
         // Keyboard focus rings the whole tab, Close included, inside its edge so the strip
         // never clips it. Sized by pointer, not width: a touch screen keeps a 44px target.
         "relative flex h-8 pointer-coarse:h-11 max-w-48 min-w-0 shrink-0 items-center gap-0.5 rounded-t-lg border border-b-0 pr-1 has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-inset",
+        // Single-area navigation stays separate from the content rather than joining its edge.
+        "group-data-[variant=pills]/strip:mb-0 group-data-[variant=pills]/strip:rounded-full group-data-[variant=pills]/strip:border-b",
         selected
           ? "z-10 border-line bg-conversation text-ink"
           : // Pointing at a tab outlines it, the shape it takes when chosen.
