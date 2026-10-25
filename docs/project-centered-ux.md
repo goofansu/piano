@@ -1,8 +1,10 @@
 # Project-centered UX
 
-Status: 2026-10-24, after a walk through Amp Code's Projects surface. The Projects index is
-built (see [its verification map](../.agents/skills/verify-piano/features/projects-index.md));
-the project home changes below remain a proposal. Mockups of the
+Status: 2026-10-25, after a walk through Amp Code's Projects surface. The Projects index is
+built (see [its verification map](../.agents/skills/verify-piano/features/projects-index.md)),
+and so are the project home's breadcrumb header and Sessions group (see
+[the home's map](../.agents/skills/verify-piano/features/project-home.md)); the home's status
+slot and Pull requests group remain proposals. Mockups of the
 three screens below, drawn in Moonstone's tokens, are on the
 [Piano Projects UX canvas](https://claude.ai/artifact/BPYBKxLhtck57L52S2m2sD). Terms follow
 [the glossary](glossary.md); the grouping model is [ADR 0002](adr/0002-outcome-projects.md) and
@@ -60,16 +62,21 @@ the page's one primary action in the header.
 
 Keeps its two jobs, start work here and read the project's work, and takes Linear's structure.
 
-- **Header:** "Projects / Verify Project" as the title line, the project's name being the `h1`;
-  beneath it the folders and the count ("piano, api · 3 sessions"), which replaces today's
-  "1 session" line. The `…` menu stays at the end with Project settings and Delete project.
+- **Header:** one line, "Projects / Verify Project", the same shadcn Breadcrumb as the session
+  header's: "Projects" is the way up to the index and the project's name is the `h1`. No context
+  line: the session count moved to the Sessions heading, and the folders are on each row. The
+  `…` menu stays at the end with Project settings and Delete project. (A context line with the
+  folders and the count was considered and dropped: it repeated what the rows show.)
 - **Composer:** unchanged, first in the column: a session started here joins the project and runs
   in the most recent member's folder.
-- **Sessions:** a titled group whose rows sit in one hairline-divided list instead of today's
-  spaced cards. A row keeps today's facts, title, folder, branch, saved pull request number and
-  last activity, and gains the `StatusDot` slot that breathes while that session's Pi is working.
-  Rows keep their place while the page is open, as they do now.
-- **Empty project:** the composer and one line, "No sessions yet", as the sidebar group says it.
+- **Sessions:** a titled group, as a Settings page's (`SettingsGroup`), "Sessions" with the count
+  beside the name as a muted number, whose rows sit in one hairline-divided list
+  (`SettingsList`) as the index's do. A row keeps its facts, title, folder, branch, saved pull
+  request number and last activity, and keeps its place while the page is open. Later it gains
+  the `StatusDot` slot that breathes while that session's Pi is working.
+- **Empty project:** the composer, the "Sessions" heading without a count, and one line, "No
+  sessions yet", as the sidebar group and the index say it; the count is left off so the fact
+  is stated once.
 - **Later, Pull requests:** a second group, one row per member session with a saved pull request
   link: number, title, and its state ("Open", "Merged", with the matching dot tone). Piano reads
   GitHub only for linked sessions already, in the session header; this group shows the same

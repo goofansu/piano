@@ -1,0 +1,3 @@
+# Gitignored files Worktrunk copies into a new worktree (`wt step copy-ignored`, in .config/wt.toml).
+# Only the installed packages: builds, scratch files and tsbuildinfo are made fresh per worktree.
+node_modules/

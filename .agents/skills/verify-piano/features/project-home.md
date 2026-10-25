@@ -1,8 +1,10 @@
 # Project home
 
-A project's home at `/projects/<id>` lists its member sessions as cards (title, folder, branch, PR
-number, last activity), newest first, and starts a new session filed in the project. Users reach it
-from the session header, the sidebar's project groups and the Mod+K palette. Deleting a project
+A project's home at `/projects/<id>` lists its member sessions as hairline rows (title, folder,
+branch, PR number, last activity) under a "Sessions" heading that carries their count, newest
+first, and starts a new session filed in the project. Its header is the breadcrumb "Projects /
+<name>". Users reach it from the session header, the sidebar's project groups and the Mod+K
+palette, and the Projects index from its crumb. Deleting a project
 moves its sessions to "No project"; unknown IDs show "Project not found".
 
 ## Sub-features
@@ -12,13 +14,18 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 - `project-menu`: the group's "Project menu for <name>" holds "Project settings", then a red
   "Delete project", as the home's header menu does.
 - `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
-- `member-cards`: one `button[data-slot=item]` card per member session; clicking opens `/s/<id>`.
+- `member-cards`: one `button[data-slot=item]` row per member session in the Sessions group's
+  hairline list; clicking opens `/s/<id>`.
 - `new-in-project`: the composer above the cards ("First message") starts in the folder of the
   most recently active member, at the folder's own checkout;
   sending opens the new session, which joins the project.
-- `header`: the pane header names the project with its session count beneath ("1 session") and
-  ends with "Project menu for <name>": "Project settings", then a red "Delete project".
-- `empty`: a project with no sessions shows its header ("0 sessions") and the composer on "Choose a folder".
+- `header`: the pane header is one breadcrumb line, "Projects / <name>", the name being the `h1`,
+  and ends with "Project menu for <name>": "Project settings", then a red "Delete project".
+- `crumb`: the header's "Projects" button opens the Projects index at `/projects`.
+- `sessions-heading`: the `h2` "Sessions" above the rows carries their count ("Sessions 1"); the
+  header shows no count.
+- `empty`: a project with no sessions shows its header, the composer on "Choose a folder", the
+  heading "Sessions" with no count, and the line "No sessions yet".
 - `settings`: "Project settings" (the header menu, the sidebar's project menu, Mod+K on the home) opens a
   dialog in place: Name and Instructions fields with a live count under Instructions ("14 / 20,000",
   red past the limit with Save off), Save off until a field changes; saving closes it
@@ -48,14 +55,19 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
     .agents/skills/verify-piano/scripts/capture.sh "$RUN" project-home 01-session;
     ab find role button click --name "Project: Verify Project" --exact; ab wait --url "**/projects/verify"`
-  - Result: `ab get url` ends in `/projects/verify`, `ab get title` is `Verify Project - Piano`, and
-    `ab eval "document.querySelector('main').innerText"` starts with `Verify Project` and
-    `1 session`, then the composer's directory `repo`. Capture `02-home`.
+  - Result: `ab get url` ends in `/projects/verify`, `ab get title` is `Verify Project - Piano`,
+    `ab eval "document.querySelector('main header').innerText"` is `Projects` / `/` /
+    `Verify Project`, and `main`'s text continues with the composer's directory `repo` and the
+    heading `Sessions` / `1`. Capture `02-home`.
+- `crumb`
+  - Action: `ab find role button click --name "Projects" --exact; ab wait --url "**/projects"`
+  - Result: `ab get url` ends in `/projects` and `ab get title` is `Projects - Piano`. Capture
+    `02b-index`.
 - `member-cards`
   - Action: read the cards, then open the only one.
     `ab eval "[...document.querySelectorAll('main button[data-slot=item]')].map(b => b.innerText.replace(/\n+/g, ' | '))"`;
     `ab click 'main button[data-slot=item]'; ab wait --url "**/s/verify-plan"`
-  - Result: exactly one card, `Plan the verification | repo | main | #222 | 1 hour ago`; "Loose
+  - Result: exactly one row, `Plan the verification | repo | main | #222 | 1 hour ago`; "Loose
     session" (no project) is absent; the click lands on `/s/verify-plan`. Capture `03-card-opened`.
 - `open-from-sidebar`
   - Action: `ab find role button click --name "View options" --exact;
@@ -68,7 +80,8 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     project". Capture `04-empty`.
 - `empty`
   - Action: read the page.
-  - Result: main text starts `Empty Project` / `0 sessions` / `Choose a folder`, and no card.
+  - Result: the header reads `Projects` / `/` / `Empty Project`; main text continues `Choose a
+    folder`, then `Sessions` (the `h2`, with no count) and `No sessions yet`; no row.
 - `open-from-palette`
   - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4."; ab press Control+k;
     ab wait "[cmdk-input]"; ab fill "[cmdk-input]" "open project";
@@ -80,8 +93,8 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   - Action: on `/projects/verify`, `ab fill '[aria-label="First message"]' "from project home";
     ab click '[aria-label="Send"]'; ab wait --text "echo: from project home"`
   - Result: combobox "Directory" read `repo` before sending, and no "Project" button; the send
-    lands on `/s/<new id>`, and back on `/projects/verify` the header reads `2 sessions` with the
-    new card first. Capture `05-new-in-project`. Sending changes the database; relaunch afterwards.
+    lands on `/s/<new id>`, and back on `/projects/verify` the heading reads `Sessions` / `2`
+    with the new row first. Capture `05-new-in-project`. Sending changes the database; relaunch afterwards.
 - `delete`
   - Action: with Group by Project, on `/projects/verify`,
     `ab find role button click --name "Project menu for Verify Project" --exact;
@@ -108,5 +121,5 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
 - The sidebar group name only folds the group; its "New session in <name>" button is the way home.
 - "Group by" is a submenu whose trigger's name includes the current choice (`Group by Date`).
 - `ab wait --text "X" --state hidden` is not a valid form; wait on a URL or a `--fn` predicate.
-- Card times are relative ("1 hour ago") and age while you drive.
+- Row times are relative ("1 hour ago") and age while you drive.
 - The tab title briefly reads `Project - Piano` before the project loads; wait for the heading.
