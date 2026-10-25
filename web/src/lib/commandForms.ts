@@ -5,8 +5,8 @@
  * the form was open, and a form closes only after its answer was sent; a refused answer leaves it
  * open having sent nothing. Project settings starts from the project as saved when it opens. Sharing is a phase of its form (confirm, publishing, shared or failed) and publishes
  * at most once per opening. A new project not created for a session opens once it is saved: its
- * home, or the New page for it when the New page's project picker created it. That page, and the New
- * page a deleted project's page gives way to, waits for the page's state to show the change (`settle`);
+ * home, or the New page for it when the New page's project picker created it. That page, and the
+ * Projects index a deleted project's page gives way to, waits for the page's state to show the change (`settle`);
  * a server error or a dropped connection first leaves the user where they are.
  * `CommandHost` and the dialogs render this state and nothing else. Nothing here depends on React.
  */
@@ -35,15 +35,19 @@ export interface FormAnswer {
   /**
    * The page submitting opens once the server confirms the change. A new project not created for a
    * session opens its home, or the New page for it when the New page's project picker created it; a
-   * deleted project's home or New page, when on screen, gives way to the plain New page.
+   * deleted project's home or New page, when on screen, gives way to the Projects index the
+   * project was listed in.
    */
   open?: FormPage;
   /** What submitting a share form publishes; present exactly when an allowed share form. */
   share?: { workspaceId: string; sessionId: string };
 }
 
-/** A page a submitted form opens: a project's home, or the New page, for a project or none. */
-export type FormPage = { kind: "project"; projectId: string } | { kind: "new"; projectId?: string };
+/** A page a submitted form opens: a project's home, the New page for a project, or the Projects index. */
+export type FormPage =
+  | { kind: "project"; projectId: string }
+  | { kind: "new"; projectId: string }
+  | { kind: "projects" };
 
 export interface AnswerContext {
   /** Share publishes only while signed in to Radius. */
@@ -109,7 +113,7 @@ export function answerForm(
         allowed: true,
         command: { _tag: "delete_project", id: form.project.id },
         ...("projectId" in state.view && state.view.projectId === form.project.id
-          ? { open: { kind: "new" } }
+          ? { open: { kind: "projects" } }
           : {}),
       };
     case "project": {
@@ -244,8 +248,10 @@ export interface CommandFormsOptions {
   share: (workspaceId: string, sessionId: string) => Promise<SessionShare>;
   /** A project's home. */
   openProject: (id: string) => void;
-  /** The New page, for `projectId` or, without it, for no project. */
-  openNew: (projectId?: string) => void;
+  /** The New page for `projectId`. */
+  openNew: (projectId: string) => void;
+  /** The Projects index. */
+  openProjects: () => void;
   newId?: () => string;
 }
 
@@ -308,6 +314,7 @@ export function createCommandForms({
   share,
   openProject,
   openNew,
+  openProjects,
   newId,
 }: CommandFormsOptions): CommandForms {
   let state = CLOSED;
@@ -402,7 +409,8 @@ export function createCommandForms({
       const { page } = waiting;
       waiting = null;
       if (page.kind === "project") openProject(page.projectId);
-      else openNew(page.projectId);
+      else if (page.kind === "new") openNew(page.projectId);
+      else openProjects();
     },
     hear: (message) => {
       if (message._tag === "error" && !message.selectionId) waiting = null;

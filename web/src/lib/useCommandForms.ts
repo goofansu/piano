@@ -6,7 +6,7 @@ import { type CommandForms, type CommandFormsState, createCommandForms } from ".
 
 /**
  * The command host's forms, answered against the latest render's state. `state`, `radiusSignedIn`,
- * `send`, `openProject` and `openNew` may change between renders. Each rendered state settles the
+ * `send`, `openProject`, `openNew` and `openProjects` may change between renders. Each rendered state settles the
  * page a submit waits on before it is painted, and `listen` hands every server frame to the forms.
  */
 export function useCommandForms(deps: {
@@ -14,7 +14,8 @@ export function useCommandForms(deps: {
   radiusSignedIn: boolean;
   send: (command: ClientCommand) => void;
   openProject: (id: string) => void;
-  openNew: (projectId?: string) => void;
+  openNew: (projectId: string) => void;
+  openProjects: () => void;
   listen: (listener: (message: ServerMessage) => void) => () => void;
 }): CommandForms & CommandFormsState {
   const latest = useRef(deps);
@@ -27,6 +28,7 @@ export function useCommandForms(deps: {
       share: shareSession,
       openProject: (id) => latest.current.openProject(id),
       openNew: (projectId) => latest.current.openNew(projectId),
+      openProjects: () => latest.current.openProjects(),
     }),
   );
   const { listen } = deps;

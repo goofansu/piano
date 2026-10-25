@@ -1,8 +1,8 @@
 /**
  * The Projects index, from what the browser already holds: every project with the folders its
  * sessions run in, how many sessions it has and when one last moved. It sends no request, reads no
- * Git, starts no Pi and opens no history. The index is for scanning: a row carries no state and
- * no menu; those live on the project's home.
+ * Git, starts no Pi and opens no history. The index is for scanning: a row carries no state; that
+ * lives on the project's home.
  */
 import type { Project } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";

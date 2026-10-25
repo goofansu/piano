@@ -25,9 +25,10 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   and toasts "Project saved". Scope selectors to `[role=dialog]`: the page's composer is a
   `textarea` too. What reaches Pi needs the real Pi: fake Pi ignores the extension, so check the
   model's request with a scripted loopback model, as `test/fixtures/RealPiDispatch.ts` does.
-- `delete`: "Delete project" (the header menu, the sidebar's project menu, Mod+K on the home) asks
-  first, saying how many sessions move to "No project"; confirming toasts "Project deleted", and on
-  the project's own home leaves for the New page.
+- `delete`: "Delete project" (the header menu, the sidebar's project menu, the Projects index's row
+  menu, Mod+K on the home) asks first, saying how many sessions move to "No project"; confirming
+  toasts "Project deleted", and on the project's own home or New page leaves for `/projects`.
+  Anywhere else, the Projects index included, the page stays.
 - `missing`: an unknown ID shows the alert "Project not found".
 
 ## How to get to it (user POV)
@@ -86,9 +87,9 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     `ab find role button click --name "Project menu for Verify Project" --exact;
     ab find role menuitem click --name "Delete project" --exact;
     ab wait --text "Delete project?"`, capture `06-confirm`, then
-    `ab find role button click --name "Delete" --exact; ab wait --url "**/new"`
+    `ab find role button click --name "Delete" --exact; ab wait --url "**/projects"`
   - Result: the dialog "Delete project?" reads `"Verify Project" is deleted; its session moves to No
-    project. This cannot be undone.`; confirming lands on `/new`, the sidebar has no "Verify
+    project. This cannot be undone.`; confirming lands on `/projects` without a "Verify Project" row, the sidebar has no "Verify
     Project" group and "Plan the verification" sits under "No project", and `/s/verify-plan`
     still opens with its history. Capture `06-deleted`. Deleting changes the database; relaunch
     afterwards.

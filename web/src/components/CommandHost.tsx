@@ -191,6 +191,7 @@ export function CommandHost({
     openProject,
     // The New page keeps the directory chosen there when it opens for a project.
     openNew: (projectId) => openNew(undefined, projectId),
+    openProjects,
     listen,
   });
   const { form } = forms;

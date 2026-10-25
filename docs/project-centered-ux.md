@@ -43,9 +43,10 @@ the page's one primary action in the header.
   does. No context line: the list is the content.
 - **Row:** the project's name, a context line with the folders its sessions run in and its
   session count ("piano, api · 3 sessions"; "No sessions yet" for an empty project), and the
-  time of its last activity at the end. The row is one link to the home and carries no menu and
-  no status glyph: the index is for scanning what exists and when it last moved, and operations
-  (Project settings, Delete project) and per-session state live on the home.
+  time of its last activity at the end. The row opens the home and carries no status glyph: the
+  index is for scanning what exists and when it last moved, and per-session state lives on the
+  home. On hover it shows the sidebar's project menu (Project settings, Delete project); deleting
+  from it stays on the index, and deleting from the project's home lands here.
 - **Order:** last activity first, from the newest member's `updatedAt`, the registry field that
   already exists so "a project's recency follows its members".
 - **Empty state:** one line, "No projects yet"; New project stays in the header.
