@@ -15,7 +15,8 @@ Tokens are stored as written, not encrypted, in Piano's private SQLite database;
 too.
 
 **Test** posts `ping` even for an inactive webhook. It carries `ignore: true`, so a receiver
-should acknowledge it without acting. The result shows as a toast and on the row: the HTTP status,
+should acknowledge it without acting. A Test waits only for a request already in flight to its
+receiver, ahead of that receiver's pending deliveries. The result shows as a toast and on the row: the HTTP status,
 or a generic transport/timeout failure. Responses are never displayed, since they might echo
 credentials.
 
@@ -95,7 +96,7 @@ A failure can be ambiguous: the receiver may have acted before Piano lost the re
 One background owner schedules separate per-hook lanes: at most 32 hooks can be configured, each
 with one in-flight request and at most 32 pending deliveries behind it. A slow receiver fills only
 its own lane; it does not stall the session observer or delay, drop or refuse another receiver's
-deliveries or Test. Overflow is dropped and logged without URLs, tokens or payloads. Pending live
+deliveries or Test. Tests have their own 32 pending places, ahead of the deliveries. Overflow is dropped and logged without URLs, tokens or payloads. Pending live
 events are rechecked for active/subscribed status before sending. Disabling or deleting a hook
 does not recall an already-sent request. Shutdown drops pending work.
 

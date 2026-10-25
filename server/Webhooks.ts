@@ -189,12 +189,17 @@ export const WebhooksLive = Layer.effect(
       Effect.forkScoped,
     );
 
+    // A Test checks the receiver, often one that is failing: it waits only for the request in
+    // flight, ahead of its hook's backlog, and Tests are bounded apart from live deliveries.
     const admit = Effect.fn("Webhooks.admit")(function* (job: Job) {
-      if (pending.filter((queued) => queued.hook.id === job.hook.id).length >= perHook) {
+      const lane = pending.filter((queued) => queued.hook.id === job.hook.id);
+      if (lane.filter((queued) => !queued.result === !job.result).length >= perHook) {
         yield* Effect.logWarning("Webhook pending capacity reached; delivery dropped.");
         return false;
       }
-      pending.push(job);
+      const backlog = job.result ? lane.find((queued) => !queued.result) : undefined;
+      if (backlog) pending.splice(pending.indexOf(backlog), 0, job);
+      else pending.push(job);
       yield* Queue.offer(wake, undefined);
       return true;
     });
