@@ -484,6 +484,33 @@ test("archiving or deleting working Pi announces a quiet stop to every viewer; r
   );
 });
 
+test("archiving or deleting working Pi whose checkout is gone announces a quiet stop", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      for (const operation of ["archive", "delete"] as const) {
+        const id = `missing-requested-${operation}`,
+          path = join(root, id);
+        mkdirSync(path);
+        yield* (yield* Registry).addSession(path, id);
+        const session = yield* hosts.open({ cwd: path, sessionId: id });
+        yield* prompt(session, "/hold");
+        assert.equal((yield* session.state).isQuiescent, false, "Pi is working when it stops");
+        const viewer = yield* observe(session, (e) => e._tag === "closed");
+        rmSync(path, { recursive: true });
+        yield* hosts[operation](path, id);
+        const closed = (yield* Fiber.join(viewer)).find((e) => e._tag === "closed");
+        assert.ok(closed?._tag === "closed", `${operation}: the viewer sees Pi stop`);
+        assert.equal(
+          closureNeedsAttention(closed.closure),
+          false,
+          `${operation}: ${JSON.stringify(closed.closure)}`,
+        );
+      }
+    }),
+  );
+});
+
 test("a subscriber hears a session stop that happens before it reads the stream", async () => {
   await run(
     Effect.gen(function* () {

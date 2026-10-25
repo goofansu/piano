@@ -238,13 +238,14 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
        * Resolve a session under its ownership lock, once: its reference and Pi file, whether its
        * checkout is missing, and its live host. A caller can beat the event watcher to this lock
        * after Pi exits or the checkout disappears, so a dead host is stopped first and the
-       * reference re-read: stopping may persist the Pi file and final statistics.
+       * reference re-read: stopping may persist the Pi file and final statistics. `how` is the
+       * caller's reason for that stop, so an archive or delete stays a stop the person asked for.
        */
       const resolved = <A, E>(
         cwd: string,
         id: string,
         work: (r: Resolved) => Effect.Effect<A, E>,
-        create = false,
+        { create = false, how }: { create?: boolean; how?: CloseHow } = {},
       ) =>
         keyed(cwd, id, (key) =>
           Effect.gen(function* () {
@@ -254,7 +255,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
             let ref = yield* references.resolve(cwd, id, { create: fresh });
             let host = hosts.get(key);
             if (host && (ref.checkoutMissing || (yield* host.session.state).closure)) {
-              yield* close(key, host);
+              yield* close(key, host, how);
               host = undefined;
               ref = yield* references.resolve(cwd, id);
             }
@@ -329,7 +330,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               yield* announce;
               return { session: host.session, launched: true };
             }),
-          creation !== undefined,
+          { create: creation !== undefined },
         ).pipe(Effect.mapError((e) => (registered ? e : refuse(e))));
       };
       const open = (spec: OpenSpec) =>
@@ -537,17 +538,22 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           const host = hosts.get(key);
           return host ? close(key, host) : Effect.void;
         });
+      // The person asked for this stop, whether Pi is still running or its checkout already went.
       const retire = (cwd: string, id: string, remove: boolean) =>
-        resolved(cwd, id, ({ key, ref, host }) =>
-          Effect.gen(function* () {
-            // Discover the final file AFTER shutdown; a last response may have persisted it.
-            const final = host
-              ? yield* close(key, host, { requested: true }).pipe(
-                  Effect.andThen(references.resolve(ref.cwd, id)),
-                )
-              : ref;
-            yield* remove ? references.remove(final) : references.archive(final);
-          }),
+        resolved(
+          cwd,
+          id,
+          ({ key, ref, host }) =>
+            Effect.gen(function* () {
+              // Discover the final file AFTER shutdown; a last response may have persisted it.
+              const final = host
+                ? yield* close(key, host, { requested: true }).pipe(
+                    Effect.andThen(references.resolve(ref.cwd, id)),
+                  )
+                : ref;
+              yield* remove ? references.remove(final) : references.archive(final);
+            }),
+          { how: { requested: true } },
         );
 
       if (options.idleMs > 0)
