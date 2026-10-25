@@ -3,6 +3,8 @@
  * answer it carries. Pure, so every reader of a session (the host's quiescence, the status read, a
  * project's home, the wait tool) says the same thing about the same snapshot.
  */
+
+import { cutText } from "./cutText.ts";
 import { type Disposition, LAST_ANSWER_CHARS } from "./dispatch.ts";
 import { isWorking } from "./sessionProjection.ts";
 import { turnEnding } from "./turnEnding.ts";
@@ -108,5 +110,5 @@ export function lastAnswerOf(snapshot: Snapshot, limit = LAST_ANSWER_CHARS): str
   const last = turn.findLast((m) => m.role === "assistant");
   if (!last?.text.trim() || last.isError || turnEnding(last.stopReason) !== "completed")
     return null;
-  return last.text.slice(0, limit);
+  return cutText(last.text, limit);
 }

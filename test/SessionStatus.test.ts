@@ -310,6 +310,12 @@ test("the shared reading: a stopped Pi reads from its closure, and only a comple
   const answerOf = (over: Partial<RenderMsg>) =>
     lastAnswerOf(snapshot({}, [prompt, reply("Half an answer", over)]));
   assert.equal(answerOf({ stopReason: "stop" }), "Half an answer");
+  // An emoji straddling the limit is left out whole, never cut to a lone surrogate.
+  const straddling = lastAnswerOf(
+    snapshot({}, [prompt, reply(`abc\u{1F600}def`, { stopReason: "stop" })]),
+    4,
+  );
+  assert.equal(straddling, "abc");
   assert.equal(answerOf({ stopReason: "length" }), "Half an answer", "cut off, but finished");
   // Still being written, waiting on a tool, interrupted or failed: text that is not an answer.
   for (const over of [

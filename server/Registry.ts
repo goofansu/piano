@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, type Scope, Semaphore } from "effect";
+import { cutText } from "../shared/cutText.ts";
 import { RadiusShareLink } from "../shared/share.ts";
 import type { WebhookEvent } from "../shared/webhooks.ts";
 import {
@@ -417,9 +418,7 @@ export const RegistryLive = Layer.effect(
     const titleOf = (text: string | undefined, max = SESSION_TITLE_MAX) => {
       const trimmed = text?.trim();
       if (!trimmed) return undefined;
-      // Never cut a surrogate pair in half: the lone half shows as a replacement character.
-      const high = trimmed.length > max && (trimmed.charCodeAt(max - 1) & 0xfc00) === 0xd800;
-      return trimmed.slice(0, high ? max - 1 : max).trim() || undefined;
+      return cutText(trimmed, max).trim() || undefined;
     };
     const isSession = (cwd: string, sessionId: string) => (t: SessionEntry) =>
       sameSession(t, { cwd, sessionId });

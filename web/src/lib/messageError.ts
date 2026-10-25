@@ -1,4 +1,5 @@
 import type { RenderMsg, ToolExecution } from "@shared/wire";
+import { cutText } from "../../../shared/cutText.ts";
 
 export interface MessageError {
   summary: string;
@@ -53,6 +54,6 @@ export function messageError(
       // Unknown or partial provider payloads stay readable, with the original on demand.
     }
   }
-  if (summary.length > 240) summary = `${summary.slice(0, 237)}…`;
+  if (summary.length > 240) summary = `${cutText(summary, 237)}…`;
   return { summary, ...(summary !== raw ? { details: raw } : {}) };
 }

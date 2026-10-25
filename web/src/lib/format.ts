@@ -1,3 +1,5 @@
+import { cutText } from "../../../shared/cutText.ts";
+
 export function abbrevHome(p: string | undefined, home?: string): string {
   if (!p) return "";
   const h =
@@ -14,7 +16,7 @@ export function abbrevHome(p: string | undefined, home?: string): string {
 
 export function clamp(text: string | undefined, max: number): string {
   if (!text || text.length <= max) return text ?? "";
-  return `${text.slice(0, max)}\n…(truncated)`;
+  return `${cutText(text, max)}\n…(truncated)`;
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   MAX_ATTACHMENTS,
   MAX_IMAGE_BYTES,
 } from "../../../shared/attachments.ts";
+import { cutText } from "../../../shared/cutText.ts";
 import { sessionKey } from "../../../shared/wire.ts";
 import type { SendDisposition } from "./ws.ts";
 
@@ -241,7 +242,7 @@ export function createDrafts(): Drafts {
         for (const [i, file] of files.entries())
           added.push({
             kind: "image",
-            name: file.name.slice(0, 255),
+            name: cutText(file.name, 255),
             mimeType: check.mimeTypes[i],
             data: await encode(file),
           });
