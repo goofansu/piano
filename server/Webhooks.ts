@@ -17,7 +17,7 @@ import {
 import { type Snapshot, sameSession } from "../shared/wire.ts";
 import { KNOWN_SECRET_MIN, projectDisplay } from "./DisplayProjection.ts";
 import { pullRequestIdentity } from "./GitHubPullRequests.ts";
-import { AllowedOrigins, sessionLinkOrigin } from "./OriginPolicy.ts";
+import { SessionLinkOrigin } from "./OriginPolicy.ts";
 import { Registry, type StoredWebhook } from "./Registry.ts";
 
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
@@ -67,7 +67,7 @@ export const WebhooksLive = Layer.effect(
     const registry = yield* Registry;
     const fetch = yield* WebhookFetch;
     const timeout = yield* WebhookTimeoutMs;
-    const origin = sessionLinkOrigin(yield* AllowedOrigins);
+    const origin = yield* SessionLinkOrigin;
     const lock = yield* Semaphore.make(1);
     const scope = yield* Effect.scope;
     const wake = yield* Queue.sliding<void>(1);

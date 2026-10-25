@@ -6,6 +6,24 @@ export const AllowedOrigins = Context.Reference<ReadonlySet<string>>("piano/Allo
   defaultValue: () => new Set(),
 });
 
+/** The `sessionLinkOrigin` `main` decides at startup; unset, Piano hands out no `/s/<id>` link. */
+export const SessionLinkOrigin = Context.Reference<string | undefined>("piano/SessionLinkOrigin", {
+  defaultValue: () => undefined,
+});
+
+/** The address and port Piano listens on, as `HOST` and `PORT` give them. */
+export interface Listener {
+  readonly host: string;
+  readonly port: number;
+}
+
+/** Wildcard bind addresses are not connectable, and a bare IPv6 literal needs brackets in a URL. */
+export const connectableHost = (host: string): string => {
+  if (host === "" || host === "0.0.0.0") return "127.0.0.1";
+  if (host === "::" || host === "::0" || host === "0:0:0:0:0:0:0:0") return "[::1]";
+  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+};
+
 /** Unset means local built UI only. An explicit list replaces (not extends) the defaults. */
 export function configuredOrigins(port: number, configured?: string): ReadonlySet<string> {
   const entries =
@@ -66,18 +84,17 @@ export function hostAllowed(origins: ReadonlySet<string>, host: string | undefin
  * hands out for dispatched sessions. Chosen from the configured
  * set, never from a request (INV-11). The first HTTPS origin wins, since a link has to open from a
  * remote browser; otherwise the origin naming `listener` (`host:port`); otherwise the first
- * configured, which in development is the Vite origin. While an HTTPS origin is configured the
- * answer does not depend on `listener`, so a caller that does not know it agrees with one that
- * does.
+ * configured, which in development is the Vite origin.
  */
 export function sessionLinkOrigin(
   origins: ReadonlySet<string>,
-  listener?: string,
+  listener: Listener,
 ): string | undefined {
   const allowed = [...origins];
+  const authority = `${connectableHost(listener.host)}:${listener.port}`;
   return (
     allowed.find((value) => value.startsWith("https://")) ??
-    allowed.find((value) => new URL(value).host === listener) ??
+    allowed.find((value) => new URL(value).host === authority) ??
     allowed[0]
   );
 }

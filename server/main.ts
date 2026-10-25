@@ -9,7 +9,12 @@ import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { inboundLimits } from "./InboundCapacity.ts";
-import { AllowedOrigins, configuredOrigins } from "./OriginPolicy.ts";
+import {
+  AllowedOrigins,
+  configuredOrigins,
+  SessionLinkOrigin,
+  sessionLinkOrigin,
+} from "./OriginPolicy.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "./PianoServices.ts";
 import { defaultPiCli, PiCli } from "./PiCli.ts";
 import { agentDir } from "./PiEnv.ts";
@@ -20,11 +25,12 @@ import { staticAssets } from "./StaticAssets.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";
+const listener = { host: HOST, port: PORT };
 const origins = configuredOrigins(PORT, process.env.PIANO_ALLOWED_ORIGINS);
 const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
 // Every Pi child loads Piano's session extension and is told how to reach this instance.
-const endpoint = sessionEndpoint({ host: HOST, port: PORT }, origins);
+const endpoint = sessionEndpoint(listener, origins);
 const Launch = Layer.succeed(PiCli, {
   ...defaultPiCli(),
   ...(endpoint ? { env: sessionEnvironment(endpoint) } : {}),
@@ -77,7 +83,13 @@ const Routes = Layer.mergeAll(AppRouter, staticAssets({ root: WEB_DIST }), Drain
 
 const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog: true }).pipe(
   Layer.provide(Services),
-  Layer.provide(Layer.succeed(AllowedOrigins, origins)),
+  Layer.provide(
+    Layer.mergeAll(
+      Layer.succeed(AllowedOrigins, origins),
+      // Webhooks link to sessions by the same rule the session endpoint hands Pi.
+      Layer.succeed(SessionLinkOrigin, sessionLinkOrigin(origins, listener)),
+    ),
+  ),
   Layer.provide(Infra),
 );
 

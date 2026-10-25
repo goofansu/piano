@@ -91,8 +91,8 @@ the backend address. For the exe.dev setup, see
 
 ### Session link origin
 
-Piano links into its UI, `<origin>/s/<sessionId>`, from a dispatched session. It takes the origin
-from `PIANO_ALLOWED_ORIGINS`, by one rule:
+Piano links into its UI, `<origin>/s/<sessionId>`, from a dispatched session and in a webhook
+payload. It takes the origin from `PIANO_ALLOWED_ORIGINS`, by one rule:
 
 1. the first HTTPS origin, because a link has to open from a remote browser;
 2. otherwise the origin naming the listener (`HOST:PORT`);

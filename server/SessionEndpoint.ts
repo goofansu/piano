@@ -12,7 +12,7 @@
  */
 import { type LaunchEnv, SESSION_ORIGIN, SESSION_WS_URL } from "../shared/dispatch.ts";
 import { isLoopbackHostname } from "../shared/loopback.ts";
-import { sessionLinkOrigin } from "./OriginPolicy.ts";
+import { connectableHost, type Listener, sessionLinkOrigin } from "./OriginPolicy.ts";
 
 export interface SessionEndpoint {
   /** The WebSocket Piano already serves, addressed on the listener. */
@@ -21,26 +21,19 @@ export interface SessionEndpoint {
   readonly origin: string;
 }
 
-/** Wildcard bind addresses are not connectable, and a bare IPv6 literal needs brackets in a URL. */
-const connectableHost = (host: string): string => {
-  if (host === "" || host === "0.0.0.0") return "127.0.0.1";
-  if (host === "::" || host === "::0" || host === "0:0:0:0:0:0:0:0") return "[::1]";
-  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-};
-
 /**
  * Undefined when no origin is configured: without one the child cannot pass the origin check,
  * and inventing an origin for it would be the policy change this function exists to prevent.
  */
 export function sessionEndpoint(
-  listener: { readonly host: string; readonly port: number },
+  listener: Listener,
   origins: ReadonlySet<string>,
 ): SessionEndpoint | undefined {
   const host = connectableHost(listener.host);
   if (!isLoopbackHostname(host)) return undefined;
   const authority = `${host}:${listener.port}`;
   // Any allowed origin passes the upgrade check, so the one links use serves as the header too.
-  const origin = sessionLinkOrigin(origins, authority);
+  const origin = sessionLinkOrigin(origins, listener);
   if (origin === undefined) return undefined;
   return { wsUrl: `ws://${authority}/ws`, origin };
 }
