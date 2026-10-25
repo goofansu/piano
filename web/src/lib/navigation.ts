@@ -26,6 +26,25 @@ export interface Surface {
   active: string;
 }
 
+/**
+ * A file's one spelling, so each file opens one tab: `.`, `..` and repeated slashes resolved, and
+ * a path inside the session's directory relative to it, as a link in its transcript names it.
+ * A directory reached through a symlink still has a spelling of its own; only the server sees it.
+ */
+function filePath(path: string, cwd: string | undefined): string {
+  const absolute = path.startsWith("/");
+  const parts: string[] = [];
+  for (const part of path.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === ".." && parts.length && parts.at(-1) !== "..") parts.pop();
+    else if (part !== ".." || !absolute) parts.push(part);
+  }
+  const resolved = (absolute ? "/" : "") + parts.join("/");
+  if (!absolute || !cwd) return resolved || ".";
+  const root = cwd.endsWith("/") ? cwd.slice(0, -1) : cwd;
+  return resolved.startsWith(`${root}/`) ? resolved.slice(root.length + 1) : resolved;
+}
+
 /** A tab's identity: one Changes, and one tab per file path. */
 export const tabKey = (tab: SurfaceTab): string =>
   tab === "changes" ? "changes" : `file:${tab.path}`;
@@ -121,7 +140,7 @@ export interface Navigation {
   closeSettings: () => void;
   /** Shows Changes, opening its tab at the end if needed, or focuses it; never a toggle. */
   openChanges: () => void;
-  /** Shows a file's tab, opening it at the end if needed; an open file is read again. */
+  /** Shows a file's tab, opening it at the end if needed; an open file, however spelled, is read again. */
   openFile: (path: string) => void;
   /** Shows an open tab by its key. */
   selectTab: (key: string) => void;
@@ -500,7 +519,8 @@ export function createNavigation({
         active: "changes",
       });
     },
-    openFile: (path) => {
+    openFile: (spelled) => {
+      const path = filePath(spelled, client.getState().session?.cwd);
       const tabs = state.surface?.tabs ?? [];
       const from = state.surface && state.area === "surface" ? "surface" : "agent";
       const key = tabKey({ kind: "file", path, from });
