@@ -94,7 +94,7 @@ export function ProjectHome({
             project={project}
             commands={projectCommands(state, project)}
             run={run}
-            size="icon-sm"
+            size="header"
           />
         }
       >

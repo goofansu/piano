@@ -10,7 +10,8 @@ import {
   SquarePenIcon,
   Trash2Icon,
 } from "lucide-react";
-import { type ComponentProps, useId, useRef } from "react";
+import { useId, useRef } from "react";
+import { type IconPlace, PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
   DialogContent,
@@ -90,34 +91,27 @@ function ProjectCommandMenuItem({
 
 /**
  * A project's ⋯ menu, from `projectCommands` as `projectMenu` lays it out: its rows, then Delete
- * apart, as on a session's menu. The sidebar's project group and the project's home differ only in
- * the trigger's size and class. `run` is the command host's runner.
+ * apart, as on a session's menu. The sidebar's project group, the Projects index and the project's
+ * home differ only in the trigger's place. `run` is the command host's runner.
  */
 export function ProjectCommandsMenu({
   project,
   commands,
   run,
   size,
-  className,
 }: {
   project: Project;
   commands: readonly ProjectCommand[];
   run: (command: ProjectCommand) => void;
-  size: ComponentProps<typeof Button>["size"];
-  className?: string;
+  size: IconPlace;
 }) {
   const menu = projectMenu(commands);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size={size}
-          className={className}
-          aria-label={`Project menu for ${project.name}`}
-        >
+        <PianoButton variant="ghost" size={size} aria-label={`Project menu for ${project.name}`}>
           <MoreHorizontalIcon />
-        </Button>
+        </PianoButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {menu.manage.length > 0 && (

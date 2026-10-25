@@ -10,6 +10,7 @@ import {
 } from "@/components/CommandHost";
 import { MobileSessionSheet, SessionDetails } from "@/components/MobileSessionSheet";
 import { PaneHeader } from "@/components/Pane";
+import { PianoButton } from "@/components/PianoButton";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -29,7 +30,6 @@ import {
   BreadcrumbList,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
@@ -69,16 +69,15 @@ export function SessionHeader({
   const openProject = projectMenu?.open;
   const { display } = menu;
   const menuButton = (
-    <Button
+    <PianoButton
       ref={menuTrigger}
       variant="ghost"
-      size="icon-sm"
-      className="max-md:size-11"
+      size="header"
       aria-label="Session information and actions"
       disabled={!session}
     >
       <MoreHorizontalIcon />
-    </Button>
+    </PianoButton>
   );
   const heading = (
     <h1 className="min-w-0 truncate text-sm font-medium text-ink">

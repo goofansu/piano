@@ -110,11 +110,7 @@ export function PanelHeader({
       <div className="flex min-w-0 flex-1 flex-col gap-1 py-0.5">{children}</div>
       <div className="flex shrink-0 items-center gap-0.5">
         {actions}
-        <IconButton
-          label={`Close ${label.toLowerCase()}`}
-          onClick={close}
-          className="pointer-coarse:size-11"
-        >
+        <IconButton size="header" label={`Close ${label.toLowerCase()}`} onClick={close}>
           <XIcon />
         </IconButton>
       </div>

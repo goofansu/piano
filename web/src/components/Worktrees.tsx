@@ -111,6 +111,7 @@ export function WorktreesPopover({
         >
           <div className="flex items-center gap-1">
             <IconButton
+              size="header"
               type="button"
               label="Back to worktrees"
               disabled={pending}
@@ -173,6 +174,7 @@ export function WorktreesPopover({
             >
               {target && (
                 <IconButton
+                  size="header"
                   label="New worktree"
                   disabled={!view.canStart}
                   onClick={() => startCreating()}
@@ -181,6 +183,7 @@ export function WorktreesPopover({
                 </IconButton>
               )}
               <IconButton
+                size="header"
                 label="Refresh worktrees"
                 disabled={view.busy}
                 onClick={operation.refresh}

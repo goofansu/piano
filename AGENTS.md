@@ -99,6 +99,16 @@ reads; a Settings page listing things (providers, webhooks) is `SettingsGroup`s 
 in its header; editing one thing's few fields (Project settings) is a dialog opened where the
 thing is shown, its fields in place and Save in its footer.
 
+An icon-only button takes its size from its place, `size="header"`, `"list"`, `"row"` or
+`"inline"` on `PianoButton` and `IconButton`, never a pixel size or a touch override of its own:
+a header or toolbar (a pane's, the sidebar's, a picker's, a Settings group's) and a list row's
+action outside the sidebar are 32px, 44px on touch; a sidebar row's are 24px, 36px on touch;
+a control inside content (a code block, a quote, the PDF toolbar) is 24px. A one-off (the
+composer's Attach and Send, Scroll to bottom, the phone sheet's) and a button inside a field
+(`InputGroupButton`) keep their own sizes. A row's actions are `RowActions`: over the row's end,
+revealed while it is pointed at, focused or has its menu open, its title fading or its value
+stepping aside beneath them, so the row reserves no empty slot.
+
 Build UI from shadcn/ui components (the `shadcn` skill: search the registry, add with
 `npx shadcn@latest add`). Hand-written markup is for the case where no standard component exists,
 and says so in a comment. `web/src/components/ui/` stays upstream-owned: Piano's variants, overlay

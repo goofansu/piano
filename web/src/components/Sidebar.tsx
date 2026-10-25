@@ -37,6 +37,7 @@ import {
 import { Keys } from "@/components/PianoMark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { ProjectCommandIconView, ProjectCommandsMenu, ProjectMenu } from "@/components/Projects";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { Hint } from "@/components/Shortcut";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -62,10 +63,12 @@ interface Props {
 
 /** Row heights: 36px with a pointer, 44px on touch desktops, 48px on phones. */
 const row = "h-9 pointer-coarse:h-11 max-md:h-12";
-/** Row actions live in a fixed slot on the right and appear on hover, so nothing shifts. */
-const hoverSlot =
-  "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100";
-const groupRow = cn(row, "group flex items-center gap-1 rounded-lg pr-1 hover:bg-fill-hover");
+/** Row actions sit over the row's end, inside its right padding (`RowActions`). */
+const rowActions = "inset-y-0 right-1";
+const groupRow = cn(
+  row,
+  "group relative flex items-center gap-1 rounded-lg pr-1 hover:bg-fill-hover",
+);
 const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
@@ -142,6 +145,7 @@ export function Sidebar({ state }: Props) {
     <div data-slot="session-sidebar" className="flex h-full flex-col">
       <LayoutHeader>
         <IconButton
+          size="header"
           label="Search sessions"
           tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>}
           onClick={() => setPalette(true)}
@@ -150,7 +154,7 @@ export function Sidebar({ state }: Props) {
         </IconButton>
         <ViewMenu />
         {/* The sidebar's one primary action, filled, at the header's end. */}
-        <IconButton label="New session" variant="default" onClick={() => openNew()}>
+        <IconButton size="header" label="New session" variant="default" onClick={() => openNew()}>
           <SquarePenIcon />
         </IconButton>
       </LayoutHeader>
@@ -228,7 +232,7 @@ function ViewMenu() {
       <Tooltip>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="View options">
+            <Button variant="ghost" size="header" aria-label="View options">
               <SlidersHorizontalIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -336,9 +340,11 @@ const SessionRow = memo(
     const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
     return (
       <li
+        data-row
         className={cn(
           row,
-          "group flex items-center rounded-lg pr-1 hover:bg-fill-hover",
+          // The menu shows from md up; the phone opens a session's sheet instead.
+          "group relative flex items-center rounded-lg pr-1 hover:bg-fill-hover md:[--row-actions:1.75rem]",
           selected && "bg-(--selected) hover:bg-(--selected)",
         )}
       >
@@ -358,6 +364,7 @@ const SessionRow = memo(
             )}
           </span>
           <span
+            data-motion="yield"
             className={cn(
               "min-w-0 flex-1 truncate",
               selected && "font-medium",
@@ -373,21 +380,18 @@ const SessionRow = memo(
           ) : null}
           {hint && <span className="sr-only">{hint}</span>}
         </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className={cn(hoverSlot, "max-md:hidden")}
-              aria-label={`Session menu for ${t.label}`}
-            >
-              <MoreHorizontalIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <SessionMenu target={target} />
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowActions className={cn(rowActions, "max-md:hidden")}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="row" aria-label={`Session menu for ${t.label}`}>
+                <MoreHorizontalIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <SessionMenu target={target} />
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </RowActions>
       </li>
     );
   },
@@ -482,11 +486,13 @@ function SidebarGroup({
   title?: string;
   "aria-label"?: string;
   className?: string;
-  actions?: React.ReactNode;
+  /** The row's actions, each an `icon-xs` button; `false` leaves one out. */
+  actions?: readonly (React.ReactElement | false | null | undefined)[];
   /** A line between the row and its sessions, shown folded or not. */
   notice?: React.ReactNode;
   sessions: readonly SessionEntry[];
 }) {
+  const shown = (actions ?? []).filter((a) => !!a);
   return (
     <Collapsible
       open={open}
@@ -494,11 +500,18 @@ function SidebarGroup({
       aria-label={ariaLabel}
       className={className}
     >
-      <div className={groupRow}>
+      <div
+        data-row
+        className={cn(
+          groupRow,
+          rowActionsWidth.row[shown.length as keyof typeof rowActionsWidth.row],
+        )}
+      >
         <CollapsibleTrigger asChild>
           <button type="button" className={groupTrigger} title={title}>
             <Chevron open={open} />
             <span
+              data-motion="yield"
               className={cn(
                 "min-w-0 flex-1 truncate text-sm font-medium",
                 muted ? "text-ink-3" : "text-ink-2",
@@ -508,7 +521,7 @@ function SidebarGroup({
             </span>
           </button>
         </CollapsibleTrigger>
-        {actions}
+        {shown.length > 0 && <RowActions className={rowActions}>{shown}</RowActions>}
       </div>
       {notice}
       <CollapsibleContent className="disclosure-content">
@@ -543,30 +556,28 @@ function ProjectGroup({
       open={open}
       onOpenChange={onOpenChange}
       select={select}
-      actions={
-        <>
-          {create?.enabled && (
-            <IconButton
-              size="icon-xs"
-              className={hoverSlot}
-              label={create.ariaLabel ?? create.label}
-              tooltip={create.label}
-              onClick={() => run(create)}
-            >
-              <ProjectCommandIconView icon={create.icon} />
-            </IconButton>
-          )}
-          {project && (
-            <ProjectCommandsMenu
-              project={project}
-              commands={commands}
-              run={run}
-              size="icon-xs"
-              className={hoverSlot}
-            />
-          )}
-        </>
-      }
+      actions={[
+        create?.enabled && (
+          <IconButton
+            key="new"
+            size="row"
+            label={create.ariaLabel ?? create.label}
+            tooltip={create.label}
+            onClick={() => run(create)}
+          >
+            <ProjectCommandIconView icon={create.icon} />
+          </IconButton>
+        ),
+        project && (
+          <ProjectCommandsMenu
+            key="menu"
+            project={project}
+            commands={commands}
+            run={run}
+            size="row"
+          />
+        ),
+      ]}
     />
   );
 }
@@ -590,38 +601,31 @@ function FolderGroup({
       open={open}
       onOpenChange={onOpenChange}
       select={select}
-      actions={
-        <>
-          <IconButton
-            size="icon-xs"
-            className={hoverSlot}
-            label={create.ariaLabel ?? create.label}
-            tooltip={create.label}
-            onClick={() => run(create)}
-          >
-            <SquarePenIcon />
-          </IconButton>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className={hoverSlot}
-                aria-label={`Folder menu for ${folder.name}`}
-              >
-                <MoreHorizontalIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuGroup>
-                <DropdownMenuItem disabled={!close.enabled} onSelect={() => run(close)}>
-                  <XIcon /> {close.label}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </>
-      }
+      actions={[
+        <IconButton
+          key="new"
+          size="row"
+          label={create.ariaLabel ?? create.label}
+          tooltip={create.label}
+          onClick={() => run(create)}
+        >
+          <SquarePenIcon />
+        </IconButton>,
+        <DropdownMenu key="menu">
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="row" aria-label={`Folder menu for ${folder.name}`}>
+              <MoreHorizontalIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
+              <DropdownMenuItem disabled={!close.enabled} onSelect={() => run(close)}>
+                <XIcon /> {close.label}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>,
+      ]}
       notice={
         folder.discovery.status === "error" && (
           <Badge variant="destructive" className="ml-7" title={folder.discovery.detail}>

@@ -305,11 +305,11 @@ function FileSection({
         {canAsk && (
           <ItemActions>
             <IconButton
+              size="list"
               label={`Ask about ${file.path}`}
               tooltip="Ask about this file"
               disabled={!onAsk}
               onClick={onAsk}
-              className="pointer-coarse:size-11"
             >
               <MessageSquarePlusIcon />
             </IconButton>

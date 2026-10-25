@@ -843,6 +843,62 @@
     opacity: 0;
   }
 }
+/* A row's actions (`RowActions`) sit over its end and come forward while the row is pointed at,
+ * holds keyboard focus or has its menu open; what they cover makes room. The row says how wide they
+ * are in `--row-actions`. A value beside them steps aside (`aside`); a title fades out beneath them
+ * (`yield`, a mask, since rows' fills are translucent). Keyboard focus shows them at once. On a
+ * touch screen nothing hovers: the actions stay in the row's flow, always shown. */
+@property --yield {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+[data-motion="reveal"] {
+  opacity: 0;
+  transition: opacity 100ms ease-out;
+}
+[data-motion="aside"] {
+  transition: translate 100ms ease-out;
+}
+[data-motion="yield"] {
+  mask-image: linear-gradient(
+    to left,
+    transparent var(--yield),
+    #000 calc(var(--yield) + min(var(--yield), 0.75rem))
+  );
+  transition: --yield 100ms ease-out;
+}
+/* `:where`, so the focus, touch and reduced-motion rules after it win. */
+[data-row]:where(:hover, :has(:focus-visible), :has([aria-haspopup="menu"][data-state="open"])) {
+  & [data-motion="reveal"] {
+    opacity: 1;
+  }
+  & [data-motion="aside"] {
+    translate: calc(-1 * var(--row-actions, 0px)) 0;
+  }
+  & [data-motion="yield"] {
+    --yield: var(--row-actions, 0px);
+  }
+  & :is([data-motion="reveal"], [data-motion="aside"], [data-motion="yield"]) {
+    transition-duration: 150ms;
+    transition-timing-function: var(--ease-out);
+  }
+}
+[data-row]:has(:focus-visible)
+  :is([data-motion="reveal"], [data-motion="aside"], [data-motion="yield"]) {
+  transition-duration: 0ms;
+}
+@media (pointer: coarse) {
+  [data-row] [data-motion="reveal"] {
+    opacity: 1;
+  }
+  [data-row] [data-motion="aside"] {
+    translate: none;
+  }
+  [data-row] [data-motion="yield"] {
+    mask-image: none;
+  }
+}
 /* biome-ignore-start lint/complexity/noImportantStyles: the reset must beat every component's own motion. */
 :not(
   [data-motion],
@@ -878,6 +934,9 @@
     scale: none;
   }
   [data-motion="turn"] {
+    transition: none;
+  }
+  [data-row] :is([data-motion="aside"], [data-motion="yield"]) {
     transition: none;
   }
   /* The keys hold their pressed state instead of playing, and a status dot holds its colour. */

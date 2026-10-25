@@ -69,7 +69,7 @@ export default function FilePdf({ bytes }: { bytes: Uint8Array }) {
             <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-line bg-conversation px-3 py-1.5 text-xs text-ink-2 tabular-nums">
               <IconButton
                 label="Previous page"
-                size="icon-xs"
+                size="inline"
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
               >
@@ -80,7 +80,7 @@ export default function FilePdf({ bytes }: { bytes: Uint8Array }) {
               </span>
               <IconButton
                 label="Next page"
-                size="icon-xs"
+                size="inline"
                 disabled={page >= pages}
                 onClick={() => setPage(page + 1)}
               >
@@ -89,7 +89,7 @@ export default function FilePdf({ bytes }: { bytes: Uint8Array }) {
               <span className="ml-auto" />
               <IconButton
                 label="Zoom out"
-                size="icon-xs"
+                size="inline"
                 disabled={zoom <= 0.5}
                 onClick={() => setZoom(zoom - 0.25)}
               >
@@ -98,7 +98,7 @@ export default function FilePdf({ bytes }: { bytes: Uint8Array }) {
               <span className="min-w-10 text-center">{Math.round(zoom * 100)}%</span>
               <IconButton
                 label="Zoom in"
-                size="icon-xs"
+                size="inline"
                 disabled={zoom >= 2}
                 onClick={() => setZoom(zoom + 0.25)}
               >

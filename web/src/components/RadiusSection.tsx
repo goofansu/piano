@@ -64,6 +64,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
               Setup guide
             </SettingsExternalLink>
             <IconButton
+              size="header"
               label={setup.refreshing ? "Refreshing setup…" : "Refresh setup"}
               aria-busy={setup.refreshing}
               disabled={!view.canRefresh}

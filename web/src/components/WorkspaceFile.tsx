@@ -177,12 +177,7 @@ export function WorkspaceFile({
         </>
       }
       actions={
-        <IconButton
-          label="Download file"
-          disabled={!result || saving}
-          onClick={save}
-          className="pointer-coarse:size-11"
-        >
+        <IconButton size="header" label="Download file" disabled={!result || saving} onClick={save}>
           <DownloadIcon />
         </IconButton>
       }

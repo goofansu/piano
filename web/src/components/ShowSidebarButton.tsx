@@ -1,8 +1,8 @@
 import { cn } from "cn";
 import { PanelLeftOpenIcon } from "lucide-react";
 import { createContext, useCallback, useContext } from "react";
+import { PianoButton } from "@/components/PianoButton";
 import { StatusDot } from "@/components/StatusDot";
-import { Button } from "@/components/ui/button";
 import { useSidebarLayout, useSidebarLayoutState } from "@/lib/useSidebarLayout";
 
 /** Whether any session's Pi is working: the one signal the hidden sidebar's rows would have shown. */
@@ -33,16 +33,16 @@ export function ShowSidebarButton({
     [layout],
   );
   return (
-    <Button
+    <PianoButton
       ref={register}
       variant="ghost"
-      size="icon-sm"
+      size="header"
       className={cn("relative", !collapsed && "md:hidden", className)}
       aria-label={label}
       onClick={layout.show}
     >
       {children}
       {working && <StatusDot tone="busy" pulse className="absolute top-1.5 right-1.5" />}
-    </Button>
+    </PianoButton>
   );
 }

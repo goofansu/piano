@@ -15,6 +15,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { PianoButton } from "@/components/PianoButton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/PianoDialog";
 import {
   Popover,
@@ -258,15 +259,15 @@ export function SessionPullRequestControl({
             ) : (
               <PopoverTitle id={titleId}>Pull request</PopoverTitle>
             )}
-            <Button
+            <PianoButton
               ref={closeRef}
               variant="ghost"
-              size="icon-xs"
+              size="inline"
               aria-label="Close pull request"
               onClick={pr.close}
             >
               <XIcon />
-            </Button>
+            </PianoButton>
           </PopoverHeader>
           {showingDetails && !loaded ? (
             <PullRequestDetailsSkeleton />

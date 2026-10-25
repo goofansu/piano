@@ -72,6 +72,7 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
         }}
       />
       <IconButton
+        size="icon-sm"
         type="button"
         className="shrink-0"
         label="Attach images"

@@ -9,6 +9,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
   DialogContent,
@@ -198,23 +199,23 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
                   data-bwignore="true"
                   data-form-type="other"
                 />
-                <Button
+                <PianoButton
                   type="submit"
-                  size="icon-xs"
+                  size="inline"
                   aria-label="Create"
                   disabled={!ready || !newName.trim()}
                 >
                   <CheckIcon />
-                </Button>
-                <Button
+                </PianoButton>
+                <PianoButton
                   type="button"
-                  size="icon-xs"
+                  size="inline"
                   variant="ghost"
                   aria-label="Cancel"
                   onClick={browser.cancelCreating}
                 >
                   <XIcon />
-                </Button>
+                </PianoButton>
               </form>
             )}
             {hidden > 0 && (

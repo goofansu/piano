@@ -42,11 +42,11 @@ export function ChangesHeader({
         actions={
           <>
             <IconButton
+              size="header"
               label={sheet.refreshing ? "Refreshing changes…" : "Refresh changes"}
               aria-busy={sheet.refreshing}
               disabled={!canRefresh}
               onClick={refresh}
-              className="pointer-coarse:size-11"
             >
               {/* The icon turns while Git is read, the one in-progress sign every refresh shares. */}
               <RefreshCwIcon className={sheet.refreshing ? "animate-spin" : undefined} />
@@ -103,7 +103,7 @@ function ChangesDetails({ sheet }: { sheet: ChangesSheetView }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <IconButton label="Changes details" className="pointer-coarse:size-11">
+        <IconButton size="header" label="Changes details">
           <InfoIcon />
         </IconButton>
       </PopoverTrigger>

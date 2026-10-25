@@ -166,7 +166,7 @@ export function LayoutHeader({ children }: { children?: ReactNode }) {
     // control sits on the rows' left edge and, once collapsed, each pane's show control appears at
     // exactly the same point; its hairline is level with the pane header's, one band across the screen.
     <SidebarHeader className="h-16 shrink-0 flex-row items-center gap-2.5 border-b border-line px-(--gutter) md:mt-[calc(var(--pane-inset)+var(--pane-line))] md:pl-[calc(var(--gutter)+var(--pane-line))]">
-      <IconButton label="Hide sidebar" onClick={hide}>
+      <IconButton size="header" label="Hide sidebar" onClick={hide}>
         <PanelLeftCloseIcon />
       </IconButton>
       <span className="flex-1" />

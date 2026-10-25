@@ -222,6 +222,7 @@ export function ModelSelect({
           >
             {refresh && (
               <IconButton
+                size="header"
                 label="Refresh models"
                 disabled={disabled || refreshing}
                 onClick={refresh}

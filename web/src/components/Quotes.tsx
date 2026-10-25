@@ -1,5 +1,6 @@
 import { MessageSquareQuoteIcon, XIcon } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { PianoButton } from "@/components/PianoButton";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/PianoPopover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { Button } from "@/components/ui/button";
@@ -40,17 +41,17 @@ export function QuoteChips({ draft, disabled }: { draft: QuoteDraft; disabled: b
               {quote}
             </TooltipContent>
           </Tooltip>
-          <Button
+          <PianoButton
             type="button"
             variant="ghost"
-            size="icon-xs"
+            size="inline"
             aria-label="Remove quote"
             disabled={disabled}
             className="mr-0.5 opacity-0 group-hover/quote:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
             onClick={() => draft.remove(i)}
           >
             <XIcon />
-          </Button>
+          </PianoButton>
         </li>
       ))}
     </ul>
