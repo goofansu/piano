@@ -63,21 +63,40 @@ export const activeTab = (surface: Surface | null): SurfaceTab | undefined =>
 export type SessionArea = "agent" | "surface";
 
 /**
- * Which of the session's areas show, and whether the session rail does. Side by side, the Agent
- * area always, and on its right either the Surface area, while it has tabs and the rail does not
- * cover it, or the rail, while it is on: whichever came in last. One area at a time, the one the
- * user moved to last, and never the rail, which has no room there.
+ * The session's layout: which of its areas show, and whether the session rail does. Side by
+ * side, the Agent area always, and on its right either the Surface area, while it has tabs and
+ * the rail does not cover it, or the rail, while it is on: whichever came in last. One area at a
+ * time, the one the user moved to last, and never the rail, which has no room there; Agent is
+ * then a tab while something is open beside it.
  */
-export function shownAreas(
+export interface SessionLayout {
+  /** One area at a time, as the session's width decides. */
+  single: boolean;
+  agent: boolean;
+  surface: boolean;
+  rail: boolean;
+  /** Agent exists as a tab: one area at a time, with something open beside it. */
+  agentTab: boolean;
+}
+
+/** The one derivation of the layout from what navigation holds. */
+function sessionLayout(
   state: Pick<NavigationState, "surface" | "area" | "single" | "rail" | "covered">,
-): { agent: boolean; surface: boolean; rail: boolean } {
+): SessionLayout {
   if (state.single) {
     const surface = !!state.surface && state.area === "surface";
-    return { agent: !surface, surface, rail: false };
+    return { single: true, agent: !surface, surface, rail: false, agentTab: !!state.surface };
   }
   const surface = !!state.surface && !state.covered;
-  return { agent: true, surface, rail: state.rail && !surface };
+  return { single: false, agent: true, surface, rail: state.rail && !surface, agentTab: false };
 }
+
+const sameLayout = (a: SessionLayout, b: SessionLayout) =>
+  a.single === b.single &&
+  a.agent === b.agent &&
+  a.surface === b.surface &&
+  a.rail === b.rail &&
+  a.agentTab === b.agentTab;
 
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */
@@ -108,6 +127,8 @@ export interface NavigationState {
   surfaceRequest: number;
   /** Whether the session is laid out one area at a time, as its available width decides. */
   single: boolean;
+  /** What the fields above show, derived once per move; the same object while it is unchanged. */
+  layout: SessionLayout;
   pullRequest: boolean;
   palette: boolean;
 }
@@ -165,9 +186,10 @@ export interface Navigation {
   /** Shows Changes, opening its tab at the end if needed, or focuses it; never a toggle. */
   openChanges: () => void;
   /**
-   * Turns the session rail on or off for every session. Turning it on hides the Surface area until
-   * a tab is shown again or the rail goes off. One area at a time it does nothing: the rail has no
-   * room there, and keeps its switch for when the session is wide again.
+   * Shows the session rail on the Agent area's right, or hides it, for every session: on hides
+   * the Surface area until a tab is shown again or the rail goes off. Side by side only: one area
+   * at a time the rail has no room, so the `session-rail` command is not offered there, and the
+   * switch keeps for when the session is wide again.
    */
   toggleRail: () => void;
   /**
@@ -346,15 +368,19 @@ export function createNavigation({
 }: NavigationOptions): Navigation {
   // A route read from the address bar (on start, or on back/forward) that has not been applied yet.
   let wanted: Route | null = parseRoute(address.location());
-  let state: NavigationState = {
-    settings: wanted.kind === "settings" ? wanted.section : null,
-    settingsRequest: 0,
+  const fields = {
     surface: null,
     rail: railPreference?.get() ?? false,
     covered: false,
-    area: "agent",
-    surfaceRequest: 0,
+    area: "agent" as const,
     single: false,
+  };
+  let state: NavigationState = {
+    settings: wanted.kind === "settings" ? wanted.section : null,
+    settingsRequest: 0,
+    ...fields,
+    layout: sessionLayout(fields),
+    surfaceRequest: 0,
     pullRequest: false,
     palette: false,
   };
@@ -412,10 +438,12 @@ export function createNavigation({
    * identity, so nobody is notified. The session reports its layout on every resize, mostly
    * unchanged.
    */
-  const set = (patch: Partial<NavigationState>) => {
-    const keys = Object.keys(patch) as (keyof NavigationState)[];
+  const set = (patch: Partial<Omit<NavigationState, "layout">>) => {
+    const keys = Object.keys(patch) as (keyof typeof patch)[];
     if (keys.every((key) => Object.is(state[key], patch[key]))) return;
-    state = { ...state, ...patch };
+    const next = { ...state, ...patch };
+    const layout = sessionLayout(next);
+    state = sameLayout(layout, state.layout) ? next : { ...next, layout };
   };
 
   /**
@@ -595,10 +623,8 @@ export function createNavigation({
       }),
     closeSettings,
     openChanges: () => openView("changes"),
-    toggleRail: () => {
-      if (!state.single) setRail(!shownAreas(state).rail);
-    },
-    openFile: (spelled, from = shownAreas(state).agent ? "agent" : "surface") => {
+    toggleRail: () => setRail(!state.layout.rail),
+    openFile: (spelled, from = state.layout.agent ? "agent" : "surface") => {
       const path = filePath(spelled, client.getState().session?.cwd);
       const tabs = state.surface?.tabs ?? [];
       // A fresh tab object for an open file: the viewer reads it again, as clicking a link did,

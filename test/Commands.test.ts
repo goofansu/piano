@@ -78,6 +78,10 @@ test("a disabled command does nothing, whichever surface offers it", () => {
     assignProjectCommand(offline, other, "p1"),
     folderCommands(offline, folder).close,
     ...sessionCommands(offline, other),
+    // One area at a time the session rail has no room: the command, not navigation, refuses it.
+    ...sessionCommands(selected, undefined, {
+      layout: { single: true, agent: true, surface: false, rail: false, agentTab: false },
+    }).filter((c) => c.id === "session-rail"),
   ];
   for (const command of disabled) {
     assert.equal(command.enabled, false, command.label);

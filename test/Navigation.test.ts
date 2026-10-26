@@ -7,7 +7,6 @@ import {
   createNavigation,
   initialView,
   type SurfaceMemory,
-  shownAreas,
   tabKey,
 } from "../web/src/lib/navigation.ts";
 import {
@@ -456,8 +455,8 @@ test("choosing Changes again shows its one tab in place: no toggle, no duplicate
 
 /** What sits on the Agent area's right side by side: the session rail, the Surface area, or nothing. */
 function rightSide(navigation: ReturnType<typeof createNavigation>) {
-  const shown = shownAreas(navigation.getState());
-  return shown.rail ? "rail" : shown.surface ? "surface" : null;
+  const { layout } = navigation.getState();
+  return layout.rail ? "rail" : layout.surface ? "surface" : null;
 }
 
 /** A browser's localStorage for one preference, which outlives every page. */
@@ -580,13 +579,13 @@ test("one area at a time the session rail never shows, and comes back once the s
   assert.equal(rightSide(p.navigation), "rail");
 
   p.navigation.setSingle(true);
-  assert.deepEqual(shownAreas(p.navigation.getState()), {
+  assert.deepEqual(p.navigation.getState().layout, {
+    single: true,
     agent: true,
     surface: false,
     rail: false,
+    agentTab: false,
   });
-  p.navigation.toggleRail();
-  assert.equal(shownAreas(p.navigation.getState()).rail, false, "nothing to turn on there");
 
   p.navigation.setSingle(false);
   assert.equal(rightSide(p.navigation), "rail", "the switch was kept");
@@ -806,7 +805,7 @@ test("side by side both areas show while there are tabs; one area at a time, the
   p.navigation.select("/scratch", "a");
   p.selected("a");
   const shown = () => {
-    const { agent, surface } = shownAreas(p.navigation.getState());
+    const { agent, surface } = p.navigation.getState().layout;
     return { agent, surface };
   };
   assert.deepEqual(shown(), { agent: true, surface: false }, "no tabs: only the Agent area");

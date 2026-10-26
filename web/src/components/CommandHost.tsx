@@ -40,11 +40,11 @@ import { Input } from "@/components/ui/input";
 import { confirmation } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
+import type { SessionLayout } from "@/lib/navigation";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
 import {
-  type SessionAreas,
   type SessionCommand,
   type SessionCommandIcon,
   type SessionTarget,
@@ -99,7 +99,7 @@ export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {
 interface CommandsValue {
   run: (command: Command) => void;
   messagesOnly: boolean;
-  areas: SessionAreas;
+  layout: SessionLayout;
   changesWrap: boolean;
   state: AppState;
   radiusSignedIn: boolean;
@@ -116,9 +116,9 @@ export function useCommands() {
 
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
-  const { state, run, messagesOnly, changesWrap, radiusSignedIn, areas } = useCommands();
+  const { state, run, messagesOnly, changesWrap, radiusSignedIn, layout } = useCommands();
   return {
-    commands: sessionCommands(state, target, { messagesOnly, changesWrap, radiusSignedIn, areas }),
+    commands: sessionCommands(state, target, { messagesOnly, changesWrap, radiusSignedIn, layout }),
     run,
     messagesOnly,
   };
@@ -194,11 +194,7 @@ export function CommandHost({
     openSettings,
     closeSettings,
     settings,
-    surface,
-    single,
-    area,
-    rail,
-    covered,
+    layout,
   } = useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [changesWrap, setChangesWrap] = useChangesWrap();
@@ -260,7 +256,7 @@ export function CommandHost({
       value={{
         run,
         messagesOnly,
-        areas: { surface, single, area, rail, covered },
+        layout,
         changesWrap,
         state,
         radiusSignedIn,
