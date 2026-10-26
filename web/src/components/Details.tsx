@@ -64,7 +64,7 @@ export function DetailsRail({
       data-slot="details-rail"
       role={labelledBy ? "tabpanel" : undefined}
       aria-labelledby={labelledBy}
-      aria-label={labelledBy ? undefined : "Session details"}
+      aria-label={labelledBy ? undefined : "Session rail"}
       inert={!shown}
       aria-hidden={!shown}
       className={cn(

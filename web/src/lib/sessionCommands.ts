@@ -63,7 +63,7 @@ export type SessionCommandIcon =
   | "copy"
   | "views"
   | "changes"
-  | "info"
+  | "list"
   | "hide"
   | "agent"
   | "pull-request"
@@ -214,8 +214,8 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
- * - details: always; the session's facts need neither Git nor a live Pi. It is `checked` while
- *   Details shows beside the Agent area, and running it then turns Details off.
+ * - details: always; the session's facts need neither Git nor a live Pi. Beside the Agent area it
+ *   is "Hide session rail" while Details shows and turns it off, else "Show session rail".
  * - views: the session is laid out side by side, where the header shows the Views menu.
  * - hide changes: Changes has a tab beside the Agent area; hiding closes it.
  * - agent: the session is laid out one area at a time, where Details always has a tab beside Agent.
@@ -301,11 +301,15 @@ export function sessionCommands(
       },
       {
         id: "details",
-        label: "Details",
-        icon: "info",
+        // Beside the Agent area the header's toggle names it; one area at a time its tab does.
+        label: single
+          ? "Session rail"
+          : shownAreas(areas).details
+            ? "Hide session rail"
+            : "Show session rail",
+        icon: "list",
         enabled: true,
-        checked: shownAreas(areas).details,
-        keywords: ["info", "outputs", "files", "links", "branch"],
+        keywords: ["details", "info", "outputs", "files", "links", "branch"],
         intent: { kind: "details" },
       },
       {

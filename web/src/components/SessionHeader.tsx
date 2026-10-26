@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { ChevronDownIcon, MoreHorizontalIcon } from "lucide-react";
+import { ChevronDownIcon, ListIcon, MoreHorizontalIcon } from "lucide-react";
 import { useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import {
@@ -8,6 +8,7 @@ import {
   useSessionCommands,
   useSessionProjectMenu,
 } from "@/components/CommandHost";
+import { IconButton } from "@/components/IconButton";
 import { MobileSessionSheet, SessionDetails } from "@/components/MobileSessionSheet";
 import { PaneHeader } from "@/components/Pane";
 import { PianoButton } from "@/components/PianoButton";
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { shownAreas } from "@/lib/navigation";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
@@ -220,6 +222,7 @@ export function SessionHeader({
           <SessionPreviewControl />
           {pullRequest(menuTrigger)}
           {views && <ViewsMenu />}
+          {views && <SessionRailToggle />}
           {mobile && sessionMenu}
         </div>
       </PaneHeader>
@@ -228,14 +231,37 @@ export function SessionHeader({
 }
 
 /**
- * Views, at the header's end beside the Agent area: Details, checked while it shows and turned on
- * or off for every session, then Changes, which shows it, or focuses it where it already shows,
- * and never hides it. The palette's Views opens this same menu.
+ * The session rail's toggle, last in the header beside the Agent area, over where the rail shows:
+ * the rail on or off for every session, its name ("Show session rail", "Hide session rail") saying
+ * which, and filled while the rail shows, as Changes' Wrap toggle is while on.
+ */
+function SessionRailToggle() {
+  const { commands, run } = useSessionCommands();
+  const shown = shownAreas(useNavigation()).details;
+  const command = commands.find((c) => c.id === "details");
+  if (!command) return null;
+  return (
+    <IconButton
+      size="header"
+      label={command.label}
+      aria-pressed={shown}
+      onClick={() => run(command)}
+      className="aria-pressed:bg-muted"
+    >
+      <ListIcon />
+    </IconButton>
+  );
+}
+
+/**
+ * Views, at the header's end beside the Agent area: the views the Surface area can show. Choosing
+ * one shows it, or focuses it where it already shows; it never hides it. The palette's Views opens
+ * this same menu.
  */
 function ViewsMenu() {
   const { views, setViews } = useNavigation();
   const { commands, run } = useSessionCommands();
-  const viewCommands = (["details", "changes"] as const).flatMap(
+  const viewCommands = (["changes"] as const).flatMap(
     (id) => commands.find((c) => c.id === id) ?? [],
   );
   // A chosen view takes focus itself; the trigger takes it back only when the menu is dismissed.
@@ -261,32 +287,21 @@ function ViewsMenu() {
           chose.current = false;
         }}
       >
-        {viewCommands.map((command) =>
-          command.checked !== undefined ? (
-            // Details turns on and off for every session; the trigger keeps focus.
-            <DropdownMenuCheckboxItem
-              key={command.id}
-              checked={command.checked}
-              onCheckedChange={() => run(command)}
-            >
-              <CommandIcon icon={command.icon} /> {command.label}
-            </DropdownMenuCheckboxItem>
-          ) : (
-            <DropdownMenuItem
-              key={command.id}
-              disabled={!command.enabled}
-              onSelect={() => {
-                chose.current = true;
-                run(command);
-              }}
-            >
-              <CommandIcon icon={command.icon} /> {command.label}
-              {command.detail && (
-                <span className="ml-auto pl-4 text-xs text-muted-foreground">{command.detail}</span>
-              )}
-            </DropdownMenuItem>
-          ),
-        )}
+        {viewCommands.map((command) => (
+          <DropdownMenuItem
+            key={command.id}
+            disabled={!command.enabled}
+            onSelect={() => {
+              chose.current = true;
+              run(command);
+            }}
+          >
+            <CommandIcon icon={command.icon} /> {command.label}
+            {command.detail && (
+              <span className="ml-auto pl-4 text-xs text-muted-foreground">{command.detail}</span>
+            )}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

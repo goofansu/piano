@@ -1,7 +1,7 @@
 import { isWorking } from "@shared/sessionProjection";
 import type { ExtensionState } from "@shared/wire";
 import { cn } from "cn";
-import { InfoIcon, MessagesSquareIcon } from "lucide-react";
+import { ListIcon, MessagesSquareIcon } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
@@ -348,9 +348,9 @@ function AreaTabs({
               value="details"
               id={tabId("details")}
               aria-controls={AREA_ID.details}
-              icon={<InfoIcon className="size-3.5" />}
+              icon={<ListIcon className="size-3.5" />}
             >
-              Details
+              Session rail
             </PianoStripTabTrigger>
           </PianoStripTab>
           {(openChanges || tabs.includes("changes")) && view("changes")}

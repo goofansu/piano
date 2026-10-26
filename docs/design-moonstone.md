@@ -172,23 +172,25 @@ cut off at the edge showing there is more (a native bar takes the list's bottom 
 the tabs off the rule; an edge fade fades a lone tab in browsers without scroll-driven
 animations). Reloading the page brings back the session's
 tabs, the one shown and its area; another session, or a new browser tab, starts with only the
-Agent area. Pressing a tab never draws the keyboard ring. Views at the header's end turns Details
-on or off (a checked item) and opens Changes, or shows it where it is already open.
+Agent area. Pressing a tab never draws the keyboard ring. Views near the header's end opens
+Changes, or shows it where it is already open; the list icon after it, last in the header and
+over where the rail shows, is "Show session rail" or "Hide session rail", and the palette's row
+carries the same name.
 
-Details is the session's rail, as Claude Code's is: one switch for every session, remembered by
-the browser, so switching sessions shows the next session's Details in the same place. Beside the
+The session rail is like Claude Code's: one switch for every session, remembered by
+the browser, so switching sessions shows the next session's rail in the same place. Beside the
 Agent area it is a fixed 320px column on the right, split off by a hairline like the Surface area,
-and the two share that side: whichever came in last shows. Opening a Surface tab hides Details;
-closing the last one brings it back; turning Details on while tabs are open hides them until a
-tab is shown again or Details goes off. Details has no header or toolbar: its folding sections are
+and the two share that side: whichever came in last shows. Opening a Surface tab hides the rail;
+closing the last one brings it back; turning the rail on while tabs are open hides them until a
+tab is shown again or the rail goes off. The rail has no header or toolbar: its folding sections are
 Workspace (folder, worktree, branch, working directory), Outputs, the files Pi wrote or edited,
 and Links, the web links the conversation mentions, the last two only once they have a row; the
 composer's usage row once held both as popovers, and the palette no longer searches them. The
 Surface area's remembered width is a
 preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
 shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the
-viewport) the areas take turns under Agent, Details and Changes tabs, each at full width, drawn as
-the same strip tabs without Close (a file closes from its toolbar); there Details is an area of
+viewport) the areas take turns under Agent, Session rail and Changes tabs, each at full width, drawn as
+the same strip tabs without Close (a file closes from its toolbar); there the session rail is an area of
 its own whatever the switch, and a file opened from its Outputs closes back to it.
 
 ## Linear
