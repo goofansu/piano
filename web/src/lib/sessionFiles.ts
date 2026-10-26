@@ -1,5 +1,5 @@
 /**
- * The files a session's conversation wrote or edited, for the composer's Files popover. Only
+ * The files a session's conversation wrote or edited, for the session rail's Outputs. Only
  * Pi's own write and edit calls count, and only ones that succeeded: a failed edit changed
  * nothing, and a bash command's effects are unknowable from its text.
  */

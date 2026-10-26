@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
 import { useSessionCommands } from "@/components/CommandHost";
 import { Composer } from "@/components/Composer";
-import { DetailsRail } from "@/components/Details";
 import { LocalFileContext } from "@/components/Markdown";
 import { MessageList, SessionDestinationContext } from "@/components/MessageList";
 import {
@@ -21,13 +20,14 @@ import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPanel, SurfaceTabTrigger } from "@/components/SessionPanel";
 import { SessionPullRequestControl } from "@/components/SessionPullRequest";
+import { SessionRail } from "@/components/SessionRail";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
 import { shownAreas, tabKey } from "@/lib/navigation";
-import { AGENT_MIN_WIDTH, DETAILS_WIDTH, PANEL_WIDTH, singleArea } from "@/lib/panelLayout";
+import { AGENT_MIN_WIDTH, PANEL_WIDTH, RAIL_WIDTH, singleArea } from "@/lib/panelLayout";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
   completionTarget,
@@ -88,7 +88,7 @@ export function SessionView({ state, send }: Props) {
   const shown = shownAreas(navigation);
   const agentHidden = !shown.agent;
   // The rail, only ever side by side, is pinned inside the transcript's scroller.
-  const railInside = shown.details;
+  const railInside = shown.rail;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
@@ -179,9 +179,7 @@ export function SessionView({ state, send }: Props) {
           )}
           // Beside the Agent area the rail floats in it, and what reads and writes keeps clear.
           style={
-            railInside
-              ? ({ "--rail-inset": `${DETAILS_WIDTH}px` } as React.CSSProperties)
-              : undefined
+            railInside ? ({ "--rail-inset": `${RAIL_WIDTH}px` } as React.CSSProperties) : undefined
           }
         >
           {notices
@@ -276,7 +274,7 @@ export function SessionView({ state, send }: Props) {
                 send={send}
               />
             </div>
-            {railInside && <DetailsRail state={state} />}
+            {railInside && <SessionRail state={state} />}
           </div>
         </div>
         <SessionPanel

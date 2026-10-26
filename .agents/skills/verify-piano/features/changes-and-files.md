@@ -69,7 +69,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
 - `details-open`, `files-list` and `file-viewer`
   - Action: `ab find role button click --name "Show session rail" --exact;
     ab wait --text "Working directory"`
-  - Result: `ab eval "document.querySelector('[data-slot=details-rail]:not([inert])').innerText"`
+  - Result: `ab eval "document.querySelector('[data-slot=session-rail]:not([inert])').innerText"`
     is `Workspace` / `Folder:` / `repo` / `Git branch:` / `main` / `Working directory:` /
     `<$REPO>` / `Outputs` / `answer.ts` (no Links yet): bordered lists of icon rows, the field
     names read only by screen readers; each heading folds its section,
@@ -79,7 +79,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     hides; closing it shows the rail again. Capture `03-file-viewer`.
   - Links: send `Read https://example.com/docs/guide please` from the composer; fake Pi echoes
     it, and the rail's Links lists `example.com/docs/guide` with "Jump to message". At 700px wide
-    the tabs read `Agent | Changes`, and `[data-slot=details-rail]` and "Show session rail" are
+    the tabs read `Agent | Changes`, and `[data-slot=session-rail]` and "Show session rail" are
     absent.
 
 ## Gotchas

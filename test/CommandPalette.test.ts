@@ -123,7 +123,7 @@ test("a command only the other layout offers is left out, while an unavailable o
     const groups = commandPalette(inSession, {
       globalCommands: [],
       sessionCommands: sessionCommands(inSession, undefined, {
-        areas: { single, surface: null, area: "agent", details: false, covered: false },
+        areas: { single, surface: null, area: "agent", rail: false, covered: false },
       }),
     });
     const group = groups.find((g) => g.id === "session");

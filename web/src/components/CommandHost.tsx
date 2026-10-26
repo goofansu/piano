@@ -188,7 +188,7 @@ export function CommandHost({
     openProjects,
     openProject,
     openChanges,
-    toggleDetails,
+    toggleRail,
     showAgent,
     openPullRequest,
     openSettings,
@@ -197,7 +197,7 @@ export function CommandHost({
     surface,
     single,
     area,
-    details,
+    rail,
     covered,
   } = useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
@@ -234,7 +234,7 @@ export function CommandHost({
     openProjects,
     openProject,
     openChanges,
-    toggleDetails,
+    toggleRail,
     showAgent,
     openPullRequest,
     toggleSidebar: sidebar.toggle,
@@ -260,7 +260,7 @@ export function CommandHost({
       value={{
         run,
         messagesOnly,
-        areas: { surface, single, area, details, covered },
+        areas: { surface, single, area, rail, covered },
         changesWrap,
         state,
         radiusSignedIn,
