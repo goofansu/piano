@@ -5,7 +5,7 @@
  */
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import { type NavigationState, shownAreas } from "./navigation.ts";
+import type { SessionLayout } from "./navigation.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
@@ -21,19 +21,13 @@ import { previewHost, selectedPreview, sessionHasPreview, stopPreview } from "./
 
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
-/** The selected session's areas as navigation has them, which the view commands follow. */
-export type SessionAreas = Pick<
-  NavigationState,
-  "surface" | "single" | "area" | "rail" | "covered"
->;
-
 /** Side by side with only the Agent area and the session rail off. */
-const NO_AREAS: SessionAreas = {
-  surface: null,
+const AGENT_ONLY: SessionLayout = {
   single: false,
-  area: "agent",
+  agent: true,
+  surface: false,
   rail: false,
-  covered: false,
+  agentTab: false,
 };
 
 export type SessionCommandId =
@@ -232,8 +226,8 @@ export function sessionCommands(
     messagesOnly?: boolean;
     changesWrap?: boolean;
     radiusSignedIn?: boolean;
-    /** The session's areas as navigation has them; by default side by side with only Agent. */
-    areas?: SessionAreas;
+    /** The session's layout as navigation has it; by default side by side with only Agent. */
+    layout?: SessionLayout;
   } = {},
 ): SessionCommand[] {
   const session = state.session;
@@ -245,10 +239,7 @@ export function sessionCommands(
   const commands: SessionCommand[] = [];
   if (selected && session) {
     const messagesOnly = options.messagesOnly ?? false;
-    const areas = options.areas ?? NO_AREAS;
-    const { surface, single } = areas;
-    // One area at a time, Agent has a tab while something is open beside it.
-    const agentTab = single && !!surface;
+    const { single, agentTab, rail } = options.layout ?? AGENT_ONLY;
     const sessionPath = session.state.sessionFile;
     commands.push(
       {
@@ -295,8 +286,9 @@ export function sessionCommands(
       },
       {
         id: "session-rail",
-        label: shownAreas(areas).rail ? "Hide session rail" : "Show session rail",
+        label: rail ? "Hide session rail" : "Show session rail",
         icon: "list",
+        // The rail has no room one area at a time: the one place that decides it.
         enabled: !single,
         hidden: single,
         keywords: ["details", "info", "outputs", "files", "links", "branch"],

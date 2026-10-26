@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionPreview, SessionState, WorktreeView } from "../shared/wire.ts";
+import type { SessionLayout } from "../web/src/lib/navigation.ts";
 import {
   type SessionCommandId,
   type SessionHeaderMenu,
@@ -429,44 +430,32 @@ test("archiving a session that owns an app asks first, from the header or its si
   assert.equal((archive(background, other) as { confirm: boolean }).confirm, true);
 });
 
-test("view commands follow the session's areas: the session rail side by side, Agent one at a time beside an open tab", () => {
-  const ofAreas = (
-    { surface, single }: { surface: "changes" | null; single: boolean },
-    state = base,
-  ) =>
+test("view commands follow the session's layout: the session rail side by side, Agent one at a time beside an open tab", () => {
+  const ofLayout = (layout: SessionLayout, state = base) =>
     Object.fromEntries(
-      sessionCommands(state, undefined, {
-        areas: {
-          single,
-          surface: surface && { tabs: [surface], active: surface },
-          area: surface ? "surface" : "agent",
-          rail: false,
-          covered: false,
-        },
-      })
+      sessionCommands(state, undefined, { layout })
         .filter((c) => ["changes", "session-rail", "agent"].includes(c.id))
         .map((c) => [c.id, c.enabled]),
     );
-  assert.deepEqual(ofAreas({ surface: null, single: false }), {
+  const sideBySide = { single: false, agent: true, rail: false, agentTab: false };
+  assert.deepEqual(ofLayout({ ...sideBySide, surface: false }), {
     changes: true,
     "session-rail": true,
     agent: false,
   });
-  assert.deepEqual(ofAreas({ surface: "changes", single: false }), {
+  assert.deepEqual(ofLayout({ ...sideBySide, surface: true }), {
     changes: true,
     "session-rail": true,
     agent: false,
   });
-  assert.deepEqual(ofAreas({ surface: "changes", single: true }), {
-    changes: true,
-    "session-rail": false,
-    agent: true,
-  });
+  assert.deepEqual(
+    ofLayout({ single: true, agent: false, surface: true, rail: false, agentTab: true }),
+    { changes: true, "session-rail": false, agent: true },
+  );
   // Nothing open: Agent needs no tab even where Changes could open, and the session rail has no
   // room one area at a time.
-  assert.deepEqual(ofAreas({ surface: null, single: true }), {
-    changes: true,
-    "session-rail": false,
-    agent: false,
-  });
+  assert.deepEqual(
+    ofLayout({ single: true, agent: true, surface: false, rail: false, agentTab: false }),
+    { changes: true, "session-rail": false, agent: false },
+  );
 });

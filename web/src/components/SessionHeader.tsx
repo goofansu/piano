@@ -34,7 +34,6 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { shownAreas } from "@/lib/navigation";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
@@ -238,7 +237,7 @@ export function SessionHeader({
  */
 function SessionRailToggle() {
   const { commands, run } = useSessionCommands();
-  const shown = shownAreas(useNavigation()).rail;
+  const shown = useNavigation().layout.rail;
   const command = commands.find((c) => c.id === "session-rail");
   if (!command) return null;
   return (
@@ -263,7 +262,7 @@ function SessionRailToggle() {
 function ChangesToggle() {
   const { commands, run } = useSessionCommands();
   const navigation = useNavigation();
-  const shown = shownAreas(navigation).surface && navigation.surface?.active === "changes";
+  const shown = navigation.layout.surface && navigation.surface?.active === "changes";
   const command = commands.find((c) => c.id === "changes");
   if (!command?.enabled) return null;
   return (

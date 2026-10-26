@@ -26,7 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
-import { shownAreas, tabKey } from "@/lib/navigation";
+import { tabKey } from "@/lib/navigation";
 import { AGENT_MIN_WIDTH, PANEL_WIDTH, RAIL_WIDTH, singleArea } from "@/lib/panelLayout";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
@@ -85,10 +85,9 @@ export function SessionView({ state, send }: Props) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [setSingle]);
-  const shown = shownAreas(navigation);
-  const agentHidden = !shown.agent;
+  const agentHidden = !navigation.layout.agent;
   // The rail, only ever side by side, is pinned inside the transcript's scroller.
-  const railInside = shown.rail;
+  const railInside = navigation.layout.rail;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
@@ -299,7 +298,7 @@ function AreaTabs() {
   const navigation = useNavigation();
   const { surface, showAgent, selectTab } = navigation;
   const tabs = surface?.tabs ?? [];
-  const value = surface && shownAreas(navigation).surface ? surface.active : "agent";
+  const value = surface && navigation.layout.surface ? surface.active : "agent";
   return (
     <PianoStripBar variant="pills">
       <Tabs
