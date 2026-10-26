@@ -37,6 +37,12 @@ export interface TranscriptViewport {
    * short of the end unpins, so small steps up from the bottom are not undone by new output.
    */
   scrolled: () => void;
+  /**
+   * Moves the reader by `delta` pixels, as a wheel over the transcript would, and applies the
+   * same policy as `scrolled`; nothing happens without a transcript. The browser then reports the
+   * move as a scroll too, which repeats the policy on the same position and changes nothing.
+   */
+  scrollBy: (delta: number) => void;
   /** The transcript re-rendered: a pinned view follows the bottom. */
   rendered: () => void;
   /**
@@ -104,6 +110,15 @@ export function createTranscriptViewport(): TranscriptViewport {
     lastTop = el.scrollTop;
   };
 
+  const scrolled = () => {
+    if (!element) return;
+    const top = element.scrollTop;
+    const end = element.scrollHeight - top - element.clientHeight < AT_END;
+    stick = end || (near(element) && top >= lastTop);
+    lastTop = top;
+    setBottom(near(element));
+  };
+
   return {
     attach: (el) => {
       element = el;
@@ -112,13 +127,11 @@ export function createTranscriptViewport(): TranscriptViewport {
       lastTop = el.scrollTop;
       setBottom(true);
     },
-    scrolled: () => {
+    scrolled,
+    scrollBy: (delta) => {
       if (!element) return;
-      const top = element.scrollTop;
-      const end = element.scrollHeight - top - element.clientHeight < AT_END;
-      stick = end || (near(element) && top >= lastTop);
-      lastTop = top;
-      setBottom(near(element));
+      element.scrollTop = element.scrollTop + delta;
+      scrolled();
     },
     rendered: () => {
       if (element) follow(element);

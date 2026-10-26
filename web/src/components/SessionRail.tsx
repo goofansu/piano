@@ -12,8 +12,10 @@ import { abbrevHome } from "@/lib/format";
 import { createPreference, parseJson } from "@/lib/preference";
 import { sessionContext } from "@/lib/sessionContext";
 import { sessionLinks } from "@/lib/sessionLinks";
+import type { TranscriptViewport } from "@/lib/transcriptViewport";
 import { usePreference } from "@/lib/usePreference";
 import { useSessionFiles } from "@/lib/useSessionFiles";
+import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { type AppState, sessionKey } from "@/store";
 
 /** The rail's sections, each folding on its own. */
@@ -46,12 +48,13 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
  * follows the selected session. Hand-written: no shadcn component is a pinned side column.
  */
 export function SessionRail({ state }: { state: AppState }) {
+  const viewport = useTranscriptViewport();
   if (!state.session) return null;
   return (
     <aside
       data-slot="session-rail"
       aria-label="Session rail"
-      onWheel={passWheel}
+      onWheel={(event) => passWheel(event, viewport)}
       // Clear of the scrollbar at the area's edge; its first section level with the transcript's
       // first row, its last ending as far above the area's bottom as the composer's footer does.
       // It scrolls without a scrollbar, as the tab strips do.
@@ -64,14 +67,14 @@ export function SessionRail({ state }: { state: AppState }) {
 
 /**
  * A rail that fits has nothing to scroll, and the transcript beside it is no ancestor the wheel
- * would reach, so the wheel is handed to the transcript, scrolling it as anywhere else in the area.
+ * would reach, so the wheel is handed to the transcript through its viewport, scrolling it as
+ * anywhere else in the area.
  */
-function passWheel(event: React.WheelEvent<HTMLElement>) {
+function passWheel(event: React.WheelEvent<HTMLElement>, viewport: TranscriptViewport | null) {
   const rail = event.currentTarget;
   if (rail.scrollHeight > rail.clientHeight || event.ctrlKey) return;
-  const transcript = rail.parentElement?.querySelector<HTMLElement>("[data-slot=transcript]");
   const lines = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
-  transcript?.scrollBy({ top: event.deltaY * lines });
+  viewport?.scrollBy(event.deltaY * lines);
 }
 
 /** The rail's folding sections for the selected session. */

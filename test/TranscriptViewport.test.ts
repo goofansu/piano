@@ -176,3 +176,22 @@ test("current is bottom near the end, top near the start, else the last message 
   el.anchors.delete("u1");
   assert.equal(viewport.current(entries), "top", "nothing rendered above the line");
 });
+
+test("scrollBy moves the reader as a wheel would: pinned on landing at the end, unpinned short of it", () => {
+  const { viewport, el } = setup();
+  viewport.scrollBy(-300);
+  assert.equal(el.scrollTop, 1200);
+  assert.equal(viewport.atBottom(), false, "a step up from the bottom unpins the view");
+  el.scrollHeight = 2600;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 1200, "new output does not undo the step");
+  viewport.scrollBy(5000);
+  assert.equal(el.scrollTop, 2100, "the container clamps the move at its end");
+  assert.equal(viewport.atBottom(), true);
+  el.scrollHeight = 2700;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2200, "landing at the end pins the view again");
+  viewport.attach(null);
+  viewport.scrollBy(100);
+  assert.equal(el.scrollTop, 2200, "without a transcript nothing moves");
+});
