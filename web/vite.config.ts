@@ -117,6 +117,11 @@ export default defineConfig({
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),
       "@shared": path.resolve(import.meta.dirname, "../shared"),
+      // Remark also runs in the command palette worker. Its browser entity decoder uses
+      // document.createElement; use the package's DOM-free implementation in both contexts.
+      "decode-named-character-reference": fileURLToPath(
+        import.meta.resolve("decode-named-character-reference"),
+      ),
     },
   },
   server: {

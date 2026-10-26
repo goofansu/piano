@@ -17,7 +17,7 @@ import { NativeFile } from "@/components/NativeFile";
 import { PianoViewToggle, PianoViewToggleItem } from "@/components/PianoViewToggle";
 import { SurfaceFrame } from "@/components/SurfaceArea";
 import { workspaceFile, workspaceFileDownload } from "@/lib/api";
-import { renderMarkdown } from "@/lib/markdown";
+import { markdownImages } from "@/lib/markdown";
 import type { SurfaceTab } from "@/lib/navigation";
 import { useNavigation } from "@/lib/useNavigation";
 
@@ -125,18 +125,7 @@ export function WorkspaceFile({
     const urls = new Map<string, string>();
     let paths: string[];
     try {
-      const document = new DOMParser().parseFromString(
-        renderMarkdown(result.content, true),
-        "text/html",
-      );
-      paths = [
-        ...new Set(
-          Array.from(
-            document.querySelectorAll<HTMLElement>("[data-local-image]"),
-            (element) => element.dataset.localImage!,
-          ),
-        ),
-      ].slice(0, 8);
+      paths = markdownImages(result.content).slice(0, 8);
     } catch {
       // Image enhancement is optional; preview fallback and Source must remain available.
       return;
@@ -238,6 +227,7 @@ export function WorkspaceFile({
             >
               <Markdown
                 text={result.content}
+                mode="static"
                 className="prose-chat p-4 text-sm md:p-5"
                 images={images}
                 diagrams={false}

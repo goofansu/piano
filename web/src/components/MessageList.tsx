@@ -264,7 +264,11 @@ function TranscriptRowView({ row }: { row: TranscriptRow }) {
             >
               {/* Labels and controls are select-none, so copied or quoted text is only what was said. */}
               <span className="sr-only select-none">Pi said</span>
-              <Markdown text={text} className={cn("prose-chat", streaming && "streaming-caret")} />
+              <Markdown
+                text={text}
+                streaming={streaming}
+                className={cn("prose-chat", streaming && "streaming-caret")}
+              />
               {row.jump && <CopyResponse text={text} />}
             </Row>
           )}
