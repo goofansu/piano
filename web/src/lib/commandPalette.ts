@@ -5,13 +5,10 @@
 
 import { defaultFilter } from "cmdk";
 import { type AppState, sessionKey } from "../store.ts";
-import { abbrevHome } from "./format.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
 import type { ProjectCommand, SessionProjectMenu } from "./projectCommands.ts";
 import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
 import type { SessionCommand } from "./sessionCommands.ts";
-import { displayPath, type SessionFile, splitPath } from "./sessionFiles.ts";
-import { displayUrl, type SessionLink, sessionLinks } from "./sessionLinks.ts";
 
 /**
  * A row's own search text always outranks a match that needs a hidden alias. Keep cmdk's fuzzy
@@ -34,14 +31,6 @@ export function paletteFilter(value: string, search: string, keywords?: string[]
 
 /** Before a search the palette offers this many recent sessions; a search reaches every one. */
 export const RECENT_SESSION_LIMIT = 8;
-/** Before a search the palette offers this many of the session's latest links; a search reaches every one. */
-export const RECENT_LINK_LIMIT = 5;
-/** The query that lists every link and only links; a plain word would also fuzzy-match sessions. */
-export const LINKS_QUERY = "!links";
-/** Before a search the palette offers this many of the session's latest files; a search reaches every one. */
-export const RECENT_FILE_LIMIT = 5;
-/** The query that lists every file the session wrote and only those. */
-export const FILES_QUERY = "!files";
 
 export interface PaletteSessionRow {
   key: string;
@@ -84,27 +73,6 @@ export type PaletteSessionCommandRow =
   | (PaletteCommandRow<SessionCommand> & { kind: "session" })
   | (PaletteCommandRow<ProjectCommand> & { kind: "project" });
 
-export interface PaletteLinkRow {
-  key: string;
-  /** Search text: the label and the URL. */
-  value: string;
-  keywords: string[];
-  /** The URL as shown, without its scheme. */
-  display: string;
-  link: Pick<SessionLink, "url" | "label">;
-}
-
-export interface PaletteFileRow {
-  key: string;
-  /** cmdk's search text: the path as shown. */
-  value: string;
-  keywords: string[];
-  /** The file name, and the directory as shown: relative to the session's directory when inside it. */
-  name: string;
-  dir: string;
-  file: Pick<SessionFile, "path">;
-}
-
 export type PaletteGroup =
   | { id: "sessions"; heading: "Recent sessions" | "Sessions"; rows: PaletteSessionRow[] }
   | { id: "global"; heading: "Global commands"; rows: PaletteCommandRow<GlobalCommand>[] }
@@ -112,11 +80,7 @@ export type PaletteGroup =
       id: "session";
       heading: "Session commands";
       rows: PaletteSessionCommandRow[];
-    }
-  /** The selected session's web links, each opened in a new tab. */
-  /** The files the selected session wrote or edited, each opened in the file viewer. */
-  | { id: "files"; heading: "Files"; rows: PaletteFileRow[] }
-  | { id: "links"; heading: "Links"; rows: PaletteLinkRow[] };
+    };
 
 export interface PaletteInput {
   /** Global commands as the host provides them, with the same context as the sidebar's View menu. */
@@ -125,8 +89,6 @@ export interface PaletteInput {
   sessionCommands: readonly SessionCommand[];
   /** The selected session's project membership, as its header menu offers it. */
   sessionProject?: SessionProjectMenu;
-  /** The files the selected session wrote, in conversation order, as `useSessionFiles` resolves them. */
-  files: readonly SessionFile[];
 }
 
 function sessionRow(t: SessionEntry): PaletteSessionRow {
@@ -144,44 +106,6 @@ function sessionRow(t: SessionEntry): PaletteSessionRow {
     folder: t.folder,
     branch: t.branch && t.inWorktree ? t.branch : undefined,
     session: { cwd: t.cwd, sessionId: t.sessionId },
-  };
-}
-
-/**
- * The words a URL is searched by after `LINKS_QUERY`, where aliases match by word prefix: the shown
- * URL ("github.com/…", "localhost:3036/…"), its host, port and path segments ("vite-dev"), and each
- * run of letters or digits ("dev", "26674"), so "!link localhost" and "!link vite" each reach their
- * link.
- */
-function urlWords(url: string): string[] {
-  const shown = displayUrl(url);
-  const segments = shown.split(/[/:?#&=]+/);
-  return [shown, ...segments, ...shown.split(/[^\p{L}\p{N}]+/u)].filter(Boolean);
-}
-
-function linkRow(link: SessionLink): PaletteLinkRow {
-  return {
-    key: link.url,
-    value: `${link.label ?? ""} ${link.url}`,
-    // "!link" reaches every row and nothing else: no title, folder or command contains "!".
-    keywords: [LINKS_QUERY, link.url, ...urlWords(link.url)],
-    display: displayUrl(link.url),
-    link: { url: link.url, label: link.label },
-  };
-}
-
-/** The words a file is searched by after `FILES_QUERY`: the shown path, its segments and each run of
- * letters or digits, so "!files app" and "!files src" each reach src/app.ts. */
-function fileRow(file: SessionFile, cwd: string | undefined): PaletteFileRow {
-  const shown = displayPath(file, cwd, abbrevHome);
-  const { name, dir } = splitPath(shown);
-  return {
-    key: file.path,
-    value: shown,
-    keywords: [FILES_QUERY, ...shown.split("/"), ...shown.split(/[^\p{L}\p{N}]+/u)].filter(Boolean),
-    name,
-    dir,
-    file: { path: file.path },
   };
 }
 
@@ -246,9 +170,6 @@ export function commandPalette(
   state: AppState,
   input: PaletteInput,
   sessions = recentSessions(state).map(sessionRow),
-  links = sessionLinks(state.session?.messages ?? [])
-    .reverse()
-    .map(linkRow),
 ): PaletteGroup[] {
   const groups: PaletteGroup[] = [];
   if (sessions.length > 0)
@@ -268,20 +189,6 @@ export function commandPalette(
       heading: "Session commands",
       rows: sessionRows(input),
     });
-    // Newest first, like Recent sessions; the popovers keep conversation order.
-    const files = [...input.files].reverse();
-    if (files.length > 0)
-      groups.push({
-        id: "files",
-        heading: "Files",
-        rows: files.map((file) => fileRow(file, state.session?.cwd)),
-      });
-    if (links.length > 0)
-      groups.push({
-        id: "links",
-        heading: "Links",
-        rows: links,
-      });
   }
   return groups;
 }
@@ -311,8 +218,6 @@ function sameRows(a: readonly object[], b: readonly object[]): boolean {
 export function createPaletteCatalog() {
   let dependencies: unknown[] = [];
   let sessions: PaletteSessionRow[] = [];
-  let messages: unknown;
-  let links: PaletteLinkRow[] = [];
   let previous: PaletteGroup[] = [];
   return (state: AppState, input: PaletteInput): PaletteGroup[] => {
     const current = state.session ?? state.selecting;
@@ -331,16 +236,10 @@ export function createPaletteCatalog() {
       // the worker or reset pagination/selection on those refreshes (or stats-only changes).
       if (!sameRows(updated, sessions)) sessions = updated;
     }
-    if (messages !== state.session?.messages) {
-      messages = state.session?.messages;
-      links = sessionLinks(state.session?.messages ?? [])
-        .reverse()
-        .map(linkRow);
-    }
-    const groups = commandPalette(state, input, sessions, links).map((group) => {
+    const groups = commandPalette(state, input, sessions).map((group) => {
       const old = previous.find((g) => g.id === group.id);
-      // Streaming often changes the source objects of commands, files and links without
-      // changing any searchable value, action, or availability.
+      // Streaming often changes the source objects of commands without changing any searchable
+      // value, action, or availability.
       return old && sameData(old, group) ? old : group;
     });
     if (groups.length === previous.length && groups.every((g, i) => g === previous[i]))

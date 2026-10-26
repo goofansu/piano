@@ -28,9 +28,9 @@ interface Props {
 }
 
 /**
- * One of the usage row's list popovers (Files, Links, Jump to): a count that opens a list above
- * the composer, and the short divider after it. Callers own their rows; the trigger, panel, list,
- * scrolling and closing are the same for all three.
+ * A usage row list popover (Jump to): a count that opens a list above the composer, and the short
+ * divider after it. The caller owns its rows; the trigger, panel, list, scrolling and closing live
+ * here.
  */
 export function UsageListPopover({
   label,

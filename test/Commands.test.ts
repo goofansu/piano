@@ -23,6 +23,38 @@ const online: AppState = {
   trusts: { "/repo": { required: true, trusted: false } },
 };
 const other = { cwd: "/repo", sessionId: "s2", title: "Other" };
+/** A selected session in the registered folder, whose Changes and Details both open. */
+const selected: AppState = {
+  ...online,
+  view: { kind: "session" },
+  folders: [
+    {
+      path: "/repo",
+      name: "repo",
+      worktrees: [
+        {
+          workspace: { id: "ws:/repo", folder: "/repo", path: "/repo" },
+          trust: { required: false, trusted: true },
+          branch: "main",
+          path: "/repo",
+          root: true,
+          status: "current",
+        },
+      ],
+      discovery: { status: "non-git", observedAt: "2026-01-01T00:00:00.000Z" },
+    },
+  ],
+  workspaces: [{ id: "ws:/repo", folder: "/repo", path: "/repo" }],
+  session: {
+    cwd: "/repo",
+    sessionId: "s1",
+    hosted: true,
+    cursor: null,
+    state: { sessionId: "s1", isStreaming: false } as SessionState,
+    messages: [],
+    dialogs: [],
+  },
+};
 
 /** Runs `command` against effects that record each call by name. */
 function effectsOf(command: Command) {
@@ -105,6 +137,8 @@ test("enabled commands reach the effect their intent names", () => {
       byId(sessionCommands(online, other), "archive"),
       ["send", { _tag: "archive_session", cwd: "/repo", sessionId: "s2" }],
     ],
+    [byId(sessionCommands(selected), "changes"), ["openChanges"]],
+    [byId(sessionCommands(selected), "details"), ["openDetails"]],
   ];
   for (const [command, call] of cases)
     assert.deepEqual(effectsOf(command), { ran: true, calls: [call] }, command.label);

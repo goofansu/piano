@@ -53,7 +53,7 @@ export default function App() {
   useEffect(() => drafts.follow(client), [client]);
   useEffect(() => previewObservation.follow(client, notify), [client]);
   const layout = useSidebarLayoutController();
-  // The composer's Files popover and the palette's Files group read this one answer.
+  // Details' Outputs reads this one answer, filtered by Git once per change.
   const sessionFiles = useSessionFilesController(state);
 
   const navigation = useNavigationController(client, layout.closeMobile);

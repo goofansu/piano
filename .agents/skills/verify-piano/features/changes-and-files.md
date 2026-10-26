@@ -3,8 +3,10 @@
 From a session the user sees what changed in its workspace: Changes, in the Surface area beside
 the Agent area (or under its own tab where the areas take turns), shows the Git diff of
 the session's folder or worktree against HEAD (per-file additions and removals, new files, a diff
-per file), and the composer's Files list shows the files Pi wrote or edited in this session, each
-opening a file viewer.
+per file), and Details, the other view in Views, shows where the session runs (Folder, Worktree,
+Branch, Working directory) as the Workspace section, Outputs, the files Pi wrote or edited in this session, each opening
+a file viewer, and Links, the web links the conversation mentions, each with "Jump to message".
+The palette (Mod+K) searches neither outputs nor links.
 
 ## Sub-features
 
@@ -16,7 +18,11 @@ opening a file viewer.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
 - `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to Views;
   reopening shows the same scroll and expanded files.
-- `files-list`: the composer's "Files" button (`<n> file(s)`) lists files written in the session.
+- `details-open`: Views → "Details" opens the Details tab (no toolbar); narrow, the "Agent" /
+  "Changes" / "Details" tabs replace Views, and Details is offered even without Git.
+- `files-list`: Details' "Outputs" lists files written in the session by name only, and its
+  "Links" lists the conversation's web links, each with "Jump to message", which narrow shows
+  the Agent area first. Either section appears only once it has a row.
 - `file-viewer`: a Files row opens the file in a tab of its own at the strip's end (tab = file
   name, toolbar = path, "Close <file name>"); opening it again shows the same tab.
 
@@ -24,7 +30,8 @@ opening a file viewer.
 
 - Session page header → Views → Changes; the palette's "Views" opens the same menu, its "Changes"
   opens Changes directly, "Hide changes" and (one area at a time) "Agent" go back.
-- Session page composer footer → Files → a file.
+- Session page header → Views → Details → an Outputs row → a file; the palette's "Details" opens
+  Details directly.
 - The same diff over HTTP: `POST /api/workspace/changes?workspaceId=<id>` with an allowed Origin.
 
 ## Driving it with agent-browser
@@ -54,18 +61,26 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Action: `ab find role button click --name "Hide changes" --exact`
   - Result: `document.querySelector('[data-slot=surface-area]:not([inert])')` is null and the
     focused element is the Views button.
-- `files-list` and `file-viewer`
-  - Action: `ab find role button click --name "Files" --exact`
-  - Result: `ab eval "document.querySelector('[role=dialog]')?.innerText"` is `Files` /
-    `answer.ts` / `src`. Then `ab find role button click --name "answer.ts src" --exact` opens
-    a tab `answer.ts` with toolbar `src/answer.ts`, the file's current contents and "Close
-    answer.ts". Capture
-    `03-file-viewer`.
+- `details-open`, `files-list` and `file-viewer`
+  - Action: `ab find role button click --name "Views" --exact;
+    ab find role menuitem click --name "Details" --exact; ab wait --text "Working directory"`
+  - Result: `ab eval "document.querySelector('[data-slot=surface-area]:not([inert])').innerText"`
+    is `Details` / `Workspace` / `Folder:` / `repo` / `Git branch:` / `main` / `Working directory:` /
+    `<$REPO>` / `Outputs` / `answer.ts` (no Links yet): bordered lists of icon rows, the field
+    names read only by screen readers; each heading folds its section,
+    and folds are remembered across reloads. Then
+    `ab find role button click --name "answer.ts" --exact` opens a tab `answer.ts` with
+    toolbar `src/answer.ts`, the file's current contents and "Close answer.ts"; closing it shows
+    Details again. Capture `03-file-viewer`.
+  - Links: send `Read https://example.com/docs/guide please` from the composer; fake Pi echoes
+    it, and Details' Links lists `example.com/docs/guide` with "Jump to message". At 700px wide
+    the tabs read `Agent | Details | Changes`, and "Jump to message" selects Agent.
 
 ## Gotchas
 
-- Fake Pi makes no tool calls, so the Files list is only reachable through the seeded, hand-written
-  history; report it as such. A real Pi write is not exercised.
+- Fake Pi makes no tool calls, so Outputs is only reachable through the seeded, hand-written
+  history; report it as such. A real Pi write is not exercised. The seeded sessions run in the
+  folder root, so Details' Worktree row is not shown there.
 - The Files list hides paths ignored by the workspace's `.gitignore` (the throwaway repo ignores
   `ignored/`).
 - The Surface area is `[data-slot=surface-area]`; hidden, it stays mounted but `inert` (so its

@@ -1,6 +1,7 @@
-import { FileDiffIcon, XIcon } from "lucide-react";
+import { FileDiffIcon, InfoIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ChangesPanel } from "@/components/Changes";
+import { DetailsPanel } from "@/components/Details";
 import { IconButton } from "@/components/IconButton";
 import {
   PianoStripBar,
@@ -11,7 +12,7 @@ import {
 } from "@/components/PianoTabs";
 import { SurfaceColumn, surfaceTabNames } from "@/components/SurfaceArea";
 import { FileTabIcon, WorkspaceFile } from "@/components/WorkspaceFile";
-import { activeTab, closable, type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
+import { activeTab, closable, isView, type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
@@ -36,10 +37,12 @@ export function SurfaceTabTrigger({
       value={tabKey(tab)}
       id={id}
       aria-controls={controls}
-      title={tab === "changes" ? undefined : tab.path}
+      title={isView(tab) ? undefined : tab.path}
       icon={
         tab === "changes" ? (
           <FileDiffIcon className="size-3.5" />
+        ) : tab === "details" ? (
+          <InfoIcon className="size-3.5" />
         ) : (
           <FileTabIcon path={tab.path} className="size-3.5" />
         )
@@ -51,13 +54,14 @@ export function SurfaceTabTrigger({
 }
 
 /**
- * The selected session's Surface area: its tabs, Changes and the files links opened. Beside the
- * Agent area a strip holds the tabs, each with its Close, above the shown view's own toolbar; one
- * area at a time the session's tabs name the views instead. Every open tab stays
+ * The selected session's Surface area: its tabs, Changes, Details and the files links opened.
+ * Beside the Agent area a strip holds the tabs, each with its Close, above the shown view's own
+ * toolbar; one area at a time the session's tabs name the views instead. Every open tab stays
  * mounted, hidden while another shows, so scroll and expanded files survive switching; Changes
  * stays mounted for the session once opened, even after its tab closes, and reads Git only while
- * shown. Views are keyed by session (and a file by workspace and path), so a new destination
- * never flashes old content (INV-07).
+ * shown; Details, which reads nothing, is mounted while its tab is open. Views are keyed by
+ * session (and a file by workspace and path), so a new destination never flashes old content
+ * (INV-07).
  */
 export function SessionPanel({
   state,
@@ -138,7 +142,7 @@ export function SessionPanel({
   if (!t) return null;
   const { workspace, changesWorkspace, canOpenChanges, changesUnavailable, checkoutMissing } =
     sessionContext(state);
-  const files = tabs.filter((tab): tab is Exclude<SurfaceTab, "changes"> => tab !== "changes");
+  const files = tabs.filter((tab): tab is Exclude<SurfaceTab, string> => !isView(tab));
   const view = (k: string, children: React.ReactNode) => (
     <SurfaceView key={k} tab={k} shown={active === k} single={single}>
       {children}
@@ -199,6 +203,7 @@ export function SessionPanel({
               onAsk={onAsk}
             />,
           )}
+        {tabs.includes("details") && view("details", <DetailsPanel key={key} state={state} />)}
         {files.map((file) =>
           view(
             tabKey(file),

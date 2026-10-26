@@ -75,6 +75,7 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "copy-session-path": false,
     views: true,
     changes: true,
+    details: true,
     "hide-changes": false,
     agent: false,
     "wrap-changes": true,
@@ -427,34 +428,39 @@ test("view commands follow the session's areas: Views and Hide changes side by s
       sessionCommands(state, undefined, {
         areas: { single, surface: surface && { tabs: [surface], active: surface } },
       })
-        .filter((c) => ["views", "changes", "hide-changes", "agent"].includes(c.id))
+        .filter((c) => ["views", "changes", "details", "hide-changes", "agent"].includes(c.id))
         .map((c) => [c.id, c.enabled]),
     );
   assert.deepEqual(ofAreas({ surface: null, single: false }), {
     views: true,
     changes: true,
+    details: true,
     "hide-changes": false,
     agent: false,
   });
   assert.deepEqual(ofAreas({ surface: "changes", single: false }), {
     views: true,
     changes: true,
+    details: true,
     "hide-changes": true,
     agent: false,
   });
   assert.deepEqual(ofAreas({ surface: "changes", single: true }), {
     views: false,
     changes: true,
+    details: true,
     "hide-changes": false,
     agent: true,
   });
-  // No Changes to open and no tab open: no tab beside Agent, so Agent is not offered.
+  // A removed checkout closes Changes, but Details still describes the session, so one area at
+  // a time Agent always has a tab beside it.
   const removed = { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) };
   assert.deepEqual(ofAreas({ surface: null, single: true }, removed), {
     views: false,
     changes: false,
+    details: true,
     "hide-changes": false,
-    agent: false,
+    agent: true,
   });
-  assert.equal(ofAreas({ surface: "changes", single: true }, removed).agent, true, "a tab is open");
+  assert.equal(ofAreas({ surface: null, single: false }, removed).agent, false, "side by side");
 });

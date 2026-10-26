@@ -1,10 +1,4 @@
-import {
-  type PaletteGroup,
-  paletteFilter,
-  RECENT_FILE_LIMIT,
-  RECENT_LINK_LIMIT,
-  RECENT_SESSION_LIMIT,
-} from "./commandPalette.ts";
+import { type PaletteGroup, paletteFilter, RECENT_SESSION_LIMIT } from "./commandPalette.ts";
 
 export const PALETTE_PAGE_SIZE = 50;
 export type PalettePages = Partial<Record<PaletteGroup["id"], number>>;
@@ -29,14 +23,7 @@ export function searchPalette<G extends PaletteDocuments>(
   const query = search.trim();
   if (!query)
     return groups.map((group) => {
-      const limit =
-        group.id === "sessions"
-          ? RECENT_SESSION_LIMIT
-          : group.id === "files"
-            ? RECENT_FILE_LIMIT
-            : group.id === "links"
-              ? RECENT_LINK_LIMIT
-              : Infinity;
+      const limit = group.id === "sessions" ? RECENT_SESSION_LIMIT : Infinity;
       return {
         ...group,
         heading: group.id === "sessions" ? "Recent sessions" : group.heading,
