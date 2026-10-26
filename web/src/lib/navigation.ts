@@ -138,7 +138,11 @@ export interface NavigationOptions {
   memory?: SurfaceMemory;
   /** Whether the session rail is on; without one it starts off and lasts for this navigation only. */
   rail?: Preference<boolean>;
-  /** Called on every move the user or history makes, e.g. to close the mobile sidebar. */
+  /**
+   * Called on every move the user or history makes, e.g. to close the mobile sidebar: once per
+   * request, whether or not it changed anything, so asking for the Agent area reveals it even
+   * when it is already the area shown.
+   */
   moved?: () => void;
 }
 
@@ -357,8 +361,9 @@ export function createNavigation({
   let notified = state;
   let owner = panelOwner(client.getState());
   let depth = 0;
-  // A move that changed something, went through the client or came from history re-checks the
-  // address; otherwise only the screen's inputs changing does.
+  // True from a move through the client (select, open) or from history (back/forward) until it
+  // settles: those re-check the address even when nothing here changed. Navigation's own state
+  // never changes the address, which derives from the client's inputs and the Settings section.
   let moving = false;
   let synced: unknown[] = [];
   let kept: (Omit<KeptSurface, "owner"> & { owner: string | null }) | undefined;
@@ -404,25 +409,29 @@ export function createNavigation({
 
   /**
    * Applies what a move changes. A move that changes nothing is no move: the state keeps its
-   * identity, so nobody is notified and the address bar is left alone. The session reports its
-   * layout on every resize, mostly unchanged.
+   * identity, so nobody is notified. The session reports its layout on every resize, mostly
+   * unchanged.
    */
   const set = (patch: Partial<NavigationState>) => {
     const keys = Object.keys(patch) as (keyof NavigationState)[];
     if (keys.every((key) => Object.is(state[key], patch[key]))) return;
     state = { ...state, ...patch };
-    moving = true;
   };
 
-  /** Runs one move; the route, panels and address settle once at the end, as one history entry. */
+  /**
+   * Runs one move; the route, panels and address settle once at the end, as one history entry.
+   * A move that changed nothing, touched neither client nor history and has no route waiting
+   * settles nothing: there is nothing to apply, remember or address.
+   */
   const batch = (fn: () => void) => {
+    const before = state;
     depth++;
     try {
       fn();
     } finally {
       depth--;
     }
-    if (depth === 0) settle();
+    if (depth === 0 && (state !== before || moving || wanted)) settle();
   };
 
   const select = (cwd: string, sessionId: string | null) =>
