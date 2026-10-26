@@ -63,6 +63,10 @@ export function PianoButton({ variant, size, leading, trailing, className, ...pr
     isPlace(size) && places[size].className,
     leading && leadingPad,
     trailing && trailingPad,
+    // Radix focuses menu items on pointer hover too. Their focus background, not a second
+    // button ring, marks the active item for both pointer and keyboard navigation.
+    props.role === "menuitem" &&
+      "focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
     className,
   );
   const sized = { size: isPlace(size) ? places[size].size : size, className: placed };

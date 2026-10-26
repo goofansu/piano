@@ -100,17 +100,13 @@ export function SessionHeader({
         collisionPadding={16}
         className="w-96 max-w-[calc(100vw-2rem)]"
       >
-        <DropdownMenuGroup className="flex items-start">
+        <DropdownMenuGroup className="flex items-center">
           <SessionDetails className="px-2" sessionId={sessionId} />
           {menu.details.map((c) => (
-            <DropdownMenuItem
-              key={c.id}
-              className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5"
-              aria-label={c.label}
-              disabled={!c.enabled}
-              onSelect={() => run(c)}
-            >
-              <CommandIcon icon={c.icon} />
+            <DropdownMenuItem key={c.id} asChild disabled={!c.enabled} onSelect={() => run(c)}>
+              <PianoButton variant="ghost" size="row" className="shrink-0" aria-label={c.label}>
+                <CommandIcon icon={c.icon} />
+              </PianoButton>
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>

@@ -7,6 +7,7 @@ import {
   useSessionCommands,
   useSessionProjectMenu,
 } from "@/components/CommandHost";
+import { PianoButton } from "@/components/PianoButton";
 import { SheetClose, SheetContent, SheetTitle } from "@/components/PianoSheet";
 import { ProjectCommandIconView } from "@/components/Projects";
 import { Button } from "@/components/ui/button";
@@ -129,20 +130,20 @@ export function MobileSessionSheet() {
         {page === "actions" && (
           <>
             <SheetTitle className="sr-only">Session</SheetTitle>
-            <div className="flex items-start gap-1 pl-3">
+            <div className="flex items-center gap-1 pl-3">
               <SessionDetails sessionId={sessionId} />
               {menu.details.map((c) => (
                 <SheetClose asChild key={c.id}>
-                  <Button
+                  <PianoButton
                     variant="ghost"
-                    size="icon-lg"
-                    className="size-11 shrink-0"
+                    size="row"
+                    className="shrink-0"
                     aria-label={c.label}
                     disabled={!c.enabled}
                     onClick={() => run(c)}
                   >
                     <CommandIcon icon={c.icon} />
-                  </Button>
+                  </PianoButton>
                 </SheetClose>
               ))}
             </div>
