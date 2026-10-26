@@ -24,6 +24,7 @@ import {
 import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
 import { SessionPreviewControl } from "@/components/SessionPreview";
+import { surfaceTabNames } from "@/components/SurfaceArea";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -254,29 +255,27 @@ function SessionRailToggle() {
 }
 
 /**
- * Changes' toggle, at the header's end right of the session rail's: shows Changes in the Surface
- * area, or hides it while it shows, its name ("Changes", "Hide changes") the command it runs, and
- * filled while Changes shows, as the rail's toggle is. Left out while Changes cannot open; the
- * palette's Changes row says why.
+ * Changes' toggle, at the header's end right of the session rail's: the Changes command, which
+ * shows Changes in the Surface area, or, while Changes shows, its tab's Close ("Hide changes"),
+ * filled then, as the rail's toggle is. Left out while Changes cannot open; the palette's Changes
+ * row says why.
  */
 function ChangesToggle() {
   const { commands, run } = useSessionCommands();
   const navigation = useNavigation();
   const shown = shownAreas(navigation).surface && navigation.surface?.active === "changes";
-  const show = commands.find((c) => c.id === "changes");
-  const hide = commands.find((c) => c.id === "hide-changes");
-  const command = shown ? hide : show;
-  if (!show?.enabled || !command) return null;
+  const command = commands.find((c) => c.id === "changes");
+  if (!command?.enabled) return null;
   return (
     <IconButton
       data-changes-trigger
       size="header"
-      label={command.label}
+      label={shown ? surfaceTabNames("changes").close : command.label}
       aria-pressed={shown}
-      onClick={() => run(command)}
+      onClick={() => (shown ? navigation.closeTab("changes") : run(command))}
       className="aria-pressed:bg-muted"
     >
-      <CommandIcon icon={show.icon} />
+      <CommandIcon icon={command.icon} />
     </IconButton>
   );
 }

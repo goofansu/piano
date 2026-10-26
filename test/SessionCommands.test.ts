@@ -76,7 +76,6 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "copy-session-path": false,
     changes: true,
     details: true,
-    "hide-changes": false,
     agent: false,
     "wrap-changes": true,
     "pull-request": true,
@@ -445,25 +444,22 @@ test("view commands follow the session's areas: the session rail side by side, A
           covered: false,
         },
       })
-        .filter((c) => ["changes", "details", "hide-changes", "agent"].includes(c.id))
+        .filter((c) => ["changes", "details", "agent"].includes(c.id))
         .map((c) => [c.id, c.enabled]),
     );
   assert.deepEqual(ofAreas({ surface: null, single: false }), {
     changes: true,
     details: true,
-    "hide-changes": false,
     agent: false,
   });
   assert.deepEqual(ofAreas({ surface: "changes", single: false }), {
     changes: true,
     details: true,
-    "hide-changes": true,
     agent: false,
   });
   assert.deepEqual(ofAreas({ surface: "changes", single: true }), {
     changes: true,
     details: false,
-    "hide-changes": true,
     agent: true,
   });
   // Nothing open: Agent needs no tab even where Changes could open, and the session rail has no
@@ -471,7 +467,6 @@ test("view commands follow the session's areas: the session rail side by side, A
   assert.deepEqual(ofAreas({ surface: null, single: true }), {
     changes: true,
     details: false,
-    "hide-changes": false,
     agent: false,
   });
 });

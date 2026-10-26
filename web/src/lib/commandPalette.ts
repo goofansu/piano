@@ -154,7 +154,7 @@ function projectRows(menu: SessionProjectMenu): PaletteSessionCommandRow[] {
  */
 function sessionRows(input: PaletteInput): PaletteSessionCommandRow[] {
   const rows: PaletteSessionCommandRow[] = input.sessionCommands
-    .filter((c) => c.id !== "hide-changes" && !c.hidden)
+    .filter((c) => !c.hidden)
     .map((c) => ({
       ...commandRow(c),
       kind: "session",

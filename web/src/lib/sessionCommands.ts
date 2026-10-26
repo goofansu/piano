@@ -43,7 +43,6 @@ export type SessionCommandId =
   | "copy-session-path"
   | "changes"
   | "details"
-  | "hide-changes"
   | "agent"
   | "wrap-changes"
   | "pull-request"
@@ -62,7 +61,6 @@ export type SessionCommandIcon =
   | "copy"
   | "changes"
   | "list"
-  | "hide"
   | "agent"
   | "pull-request"
   | "preview"
@@ -86,7 +84,6 @@ export type SessionCommandIntent =
    * links) on or off beside the Agent area.
    */
   | { kind: "details" }
-  | { kind: "hide-changes" }
   /** Show the Agent area in a single-view layout. */
   | { kind: "agent" }
   | { kind: "wrap-changes"; on: boolean }
@@ -219,7 +216,6 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - details: the session is laid out side by side, the only layout with room for the session
  *   rail (its facts need neither Git nor a live Pi); "Hide session rail" while it shows, else
  *   "Show session rail".
- * - hide changes: Changes has a tab; hiding closes it.
  * - agent: the session is laid out one area at a time and the Agent tab shows, beside an open
  *   Surface tab.
  * - pull request, copy session ID: the selected session has a Pi session ID.
@@ -305,14 +301,6 @@ export function sessionCommands(
         hidden: single,
         keywords: ["details", "info", "outputs", "files", "links", "branch"],
         intent: { kind: "details" },
-      },
-      {
-        id: "hide-changes",
-        label: "Hide changes",
-        icon: "hide",
-        enabled: !!surface?.tabs.includes("changes"),
-        keywords: ["close"],
-        intent: { kind: "hide-changes" },
       },
       {
         id: "agent",
