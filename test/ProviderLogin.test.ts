@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { Effect, Fiber, Layer } from "effect";
+import { Effect, Exit, Fiber, Layer } from "effect";
 import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiSessions } from "../server/PiSessions.ts";
 import { ProviderLogin, ProviderLoginLive, ProviderLoginRuntime } from "../server/ProviderLogin.ts";
@@ -366,6 +366,10 @@ const disconnectDuring = (
     stalled.release();
     yield* Effect.promise(() => stalled.completed);
     yield* Fiber.join(disconnect);
+    // The write ran to its end: the interrupt lands only once the uninterruptible region is over,
+    // so a refusal before Pi was asked would show here as a failure, not as a timeout later.
+    const exit = yield* Fiber.await(writing);
+    assert(!Exit.hasFails(exit) && !Exit.hasDies(exit), `the write failed: ${exit}`);
   });
 
 test("INV-02: disconnecting during an API-key write still finishes persistence and invalidates models", async () => {

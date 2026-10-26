@@ -163,16 +163,19 @@ export const ProviderLoginLive = Layer.effect(
         };
       },
     });
-    /** A credential write through Pi, on the sign-in lane so no attempt overlaps it. Once the
-     * lane is claimed, persistence, catalog invalidation and `after` finish even if the HTTP
-     * client disconnects: releasing early would let another write race Pi's promise, and a
-     * credential Pi persisted must change the usable models (INV-02). `run` refuses by throwing;
-     * `failure` is all the person sees of why (INV-11). */
+    /** A credential write through Pi, on the sign-in lane so no attempt overlaps it. The whole
+     * operation runs uninterruptible: a Promise cannot be stopped once Pi is asked, releasing the
+     * lane early would let another write race Pi's promise, and a credential Pi persisted must
+     * change the usable models (INV-02), so persistence, catalog invalidation and `after` finish
+     * even if the HTTP client disconnects. `run` refuses by throwing; `failure` is all the person
+     * sees of why (INV-11), and `busy` when the lane is taken. */
     const write = Effect.fn("ProviderLogin.write")(function* (
-      busy: string,
-      failure: string,
+      {
+        busy,
+        failure,
+        after = Effect.void,
+      }: { busy: string; failure: string; after?: Effect.Effect<void> },
       run: (runtime: Runtime) => Promise<void>,
-      after: Effect.Effect<void> = Effect.void,
     ) {
       yield* attempts
         .exclusive(
@@ -219,8 +222,10 @@ export const ProviderLoginLive = Layer.effect(
           Effect.mapError(() => new SignInError({ detail: API_KEY_INVALID })),
         );
         yield* write(
-          "A provider operation is already in progress. Finish it before changing an API key.",
-          "Could not change API key. Check the key and try again.",
+          {
+            busy: "A provider operation is already in progress. Finish it before changing an API key.",
+            failure: "Could not change API key. Check the key and try again.",
+          },
           async (runtime) => {
             if (!apiKeyProvider(runtime, change.provider))
               throw new Error("Unsupported API-key provider.");
@@ -249,16 +254,18 @@ export const ProviderLoginLive = Layer.effect(
       // The flow itself reports a provider without OAuth sign-in, so the attempt shows why.
       signIn: attempts.lane((provider) => Effect.succeed(source(provider))),
       signOut: Effect.fn("ProviderLogin.signOut")(function* (provider) {
-        const refused = "Could not sign out. Finish any sign-in in progress and try again.";
         yield* write(
-          refused,
-          refused,
+          {
+            busy: "Could not sign out. Finish any sign-in in progress and try again.",
+            // No OAuth credential (signed out elsewhere) or Pi refused: the list shows what holds.
+            failure: "Could not sign out. Refresh and try again.",
+            after: attempts.forget(provider),
+          },
           async (runtime) => {
             if (!oauthProvider(runtime, provider) || !(await signedIn(runtime)).has(provider))
               throw new Error("No OAuth credential for this provider.");
             await persisted("logout", () => runtime.logout(provider));
           },
-          attempts.forget(provider),
         );
       }),
       bearer: Effect.fn("ProviderLogin.bearer")(function* (provider: string) {
