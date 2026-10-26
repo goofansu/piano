@@ -33,7 +33,7 @@ export function PaneHeader({
   return (
     // No shadcn component is a page header; this row is Piano's own.
     <header className={paneHeaderRow}>
-      <ShowSidebarButton className="-ml-(--glyph-pad)" />
+      <ShowSidebarButton className="-ml-(--glyph-pad) -mr-2" />
       {children}
       {actions}
     </header>
