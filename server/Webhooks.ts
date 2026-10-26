@@ -4,7 +4,6 @@ import { basename } from "node:path";
 import { Clock, Context, Data, Deferred, Effect, Layer, Queue, Schema, Semaphore } from "effect";
 import { cutText } from "../shared/cutText.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
-import { isLoopbackHostname } from "../shared/loopback.ts";
 import { closureNeedsAttention, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import {
   type Webhook,
@@ -19,6 +18,7 @@ import { KNOWN_SECRET_MIN, projectDisplay } from "./DisplayProjection.ts";
 import { pullRequestIdentity } from "./GitHubPullRequests.ts";
 import { SessionLinkOrigin } from "./OriginPolicy.ts";
 import { Registry, type StoredWebhook } from "./Registry.ts";
+import { webhookFetch, webhookReceiver } from "./WebhookReceiver.ts";
 
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
 export class WebhookError extends Data.TaggedError("WebhookError")<{
@@ -28,7 +28,7 @@ export class WebhookError extends Data.TaggedError("WebhookError")<{
 const refused = (detail: string, field?: WebhookField) =>
   new WebhookError(field ? { detail, field } : { detail });
 export const WebhookFetch = Context.Reference<typeof fetch>("piano/WebhookFetch", {
-  defaultValue: () => globalThis.fetch,
+  defaultValue: () => webhookFetch,
 });
 export const WebhookTimeoutMs = Context.Reference<number>("piano/WebhookTimeoutMs", {
   defaultValue: () => 10_000,
@@ -108,7 +108,7 @@ export const WebhooksLive = Layer.effect(
       const { hook, payload } = job;
       const outcome = yield* Effect.tryPromise({
         try: async (signal) => {
-          const response = await fetch(hook.url, {
+          const response = await fetch(webhookReceiver(hook.url).href, {
             method: "POST",
             redirect: "error",
             signal,
@@ -203,28 +203,11 @@ export const WebhooksLive = Layer.effect(
       yield* Queue.offer(wake, undefined);
       return true;
     });
-    /** A receiver URL Piano will post to: HTTPS, or HTTP on loopback, without credentials or a fragment. */
     const receiverUrl = Effect.fn("Webhooks.receiverUrl")(function* (text: string) {
-      let url: URL;
-      try {
-        url = new URL(text);
-      } catch {
-        return yield* refused("Enter a valid HTTPS URL.", "url");
-      }
-      if (
-        url.username ||
-        url.password ||
-        url.hash ||
-        !(
-          url.protocol === "https:" ||
-          (url.protocol === "http:" && isLoopbackHostname(url.hostname))
-        )
-      )
-        return yield* refused(
-          "Use HTTPS (HTTP is allowed only on loopback), without credentials or a fragment.",
-          "url",
-        );
-      return url;
+      return yield* Effect.try({
+        try: () => webhookReceiver(text),
+        catch: () => refused("Use a public HTTPS URL without credentials or a fragment.", "url"),
+      });
     });
     return Webhooks.of({
       list,

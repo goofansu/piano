@@ -278,7 +278,7 @@ test("INV-07: a batched read stops at an abort and refuses a reply naming anothe
 });
 
 test("webhooks: a receiver URL with a token reads back as stored, and saving other fields keeps it", async () => {
-  const url = "https://localhost/h?token=abc123";
+  const url = "https://receiver.example/h?token=abc123";
   const saved = await saveWebhook({ url, events: ["session.completed"], active: true });
   assert.equal(saved.url, url);
   assert.equal((await listWebhooks()).find((h) => h.id === saved.id)?.url, url);
