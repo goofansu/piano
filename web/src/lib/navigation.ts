@@ -8,12 +8,13 @@
  */
 import { type AppState, type Page, sessionKey } from "../store.ts";
 import type { Client } from "./client.ts";
+import type { Preference } from "./preference.ts";
 import { findProject } from "./projectCommands.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
 import { catalogEntry } from "./sessionCatalog.ts";
 
-/** The session's own views in the Surface area, one tab each: Changes and Details. */
-export type SurfaceView = "changes" | "details";
+/** The session's own views in the Surface area, one tab each: Changes. */
+export type SurfaceView = "changes";
 
 /**
  * One tab in the selected session's Surface area: one of its views, or a file a link opened. A
@@ -58,24 +59,32 @@ export const tabKey = (tab: SurfaceTab): string => (isView(tab) ? tab : `file:${
 export const activeTab = (surface: Surface | null): SurfaceTab | undefined =>
   surface?.tabs.find((tab) => tabKey(tab) === surface.active);
 
-/** The session's two areas: the conversation and its composer, and the Surface area. */
-export type SessionArea = "agent" | "surface";
+/**
+ * The session's areas: the conversation and its composer, the Surface area, and Details, the
+ * session's facts, outputs and links.
+ */
+export type SessionArea = "agent" | "surface" | "details";
 
 /**
- * Which of the session's areas show: side by side, the Agent area always and the Surface area
- * while it has tabs; one area at a time, the one the user moved to last.
+ * Which of the session's areas show. Side by side, the Agent area always, and on its right either
+ * the Surface area, while it has tabs and Details does not cover it, or Details, while it is on:
+ * whichever came in last. One area at a time, the one the user moved to last.
  */
-export function shownAreas(state: Pick<NavigationState, "surface" | "area" | "single">): {
-  agent: boolean;
-  surface: boolean;
-} {
-  const surface = !!state.surface && (!state.single || state.area === "surface");
-  return { agent: !state.single || !surface, surface };
+export function shownAreas(
+  state: Pick<NavigationState, "surface" | "area" | "single" | "details" | "covered">,
+): { agent: boolean; surface: boolean; details: boolean } {
+  if (state.single) {
+    const surface = !!state.surface && state.area === "surface";
+    const details = state.area === "details";
+    return { agent: !surface && !details, surface, details };
+  }
+  const surface = !!state.surface && !state.covered;
+  return { agent: true, surface, details: state.details && !surface };
 }
 
 /**
  * Whether a Surface tab closes: side by side every tab does (its strip X, Escape, Hide changes);
- * one area at a time only a file does, from its toolbar, and a view (Changes, Details) stays,
+ * one area at a time only a file does, from its toolbar, and a view (Changes) stays,
  * Agent being the way back from it.
  */
 export const closable = (tab: SurfaceTab, single: boolean): boolean => !single || !isView(tab);
@@ -90,6 +99,13 @@ export interface NavigationState {
   settingsRequest: number;
   /** The Surface area's tabs; `null` while it has none, and so is hidden. */
   surface: Surface | null;
+  /**
+   * Whether Details is on: one choice for every session, remembered by the browser. Side by side
+   * it shows on the Agent area's right whenever the Surface area does not.
+   */
+  details: boolean;
+  /** Side by side, whether Details, turned on after the Surface area, hides it; its tabs wait. */
+  covered: boolean;
   /**
    * The area the user moved to last: the one a single-view layout shows. Only showing a surface
    * moves it there; files changing or the agent finishing never do.
@@ -132,6 +148,8 @@ export interface NavigationOptions {
   address: AddressBar;
   /** Without one, a reload starts every session on its Agent area. */
   memory?: SurfaceMemory;
+  /** Whether Details is on; without one it starts off and lasts for this navigation only. */
+  details?: Preference<boolean>;
   /** Called on every move the user or history makes, e.g. to close the mobile sidebar. */
   moved?: () => void;
 }
@@ -154,8 +172,13 @@ export interface Navigation {
   closeSettings: () => void;
   /** Shows Changes, opening its tab at the end if needed, or focuses it; never a toggle. */
   openChanges: () => void;
-  /** Shows Details, the session's facts with its outputs and links, as `openChanges` shows Changes. */
-  openDetails: () => void;
+  /**
+   * Turns Details on or off. Side by side, turning it on hides the Surface area until a tab is
+   * shown again or Details goes off; one area at a time, it moves to Details or back to Agent.
+   */
+  toggleDetails: () => void;
+  /** Shows Details: turns it on side by side, moves to it one area at a time. */
+  showDetails: () => void;
   /**
    * Shows a file's tab, opening it at the end if needed; an open file, however spelled, is read
    * again. `from` is the area the link was in, which closing the file returns to, even when it was
@@ -287,11 +310,11 @@ interface KeptSurface {
   area: SessionArea;
 }
 
-const isArea = (value: unknown): value is SessionArea => value === "agent" || value === "surface";
+const isArea = (value: unknown): value is SessionArea =>
+  value === "agent" || value === "surface" || value === "details";
 
 const isTab = (value: unknown): value is SurfaceTab =>
   value === "changes" ||
-  value === "details" ||
   (typeof value === "object" &&
     value !== null &&
     (value as { kind?: unknown }).kind === "file" &&
@@ -311,21 +334,18 @@ function decodeKept(
     return null;
   }
   const surface = value?.owner === owner ? value.surface : null;
-  if (
-    !surface ||
-    !isArea(value?.area) ||
-    !Array.isArray(surface.tabs) ||
-    !surface.tabs.every(isTab) ||
-    !surface.tabs.some((tab) => tabKey(tab) === surface.active)
-  )
-    return null;
-  return { surface: { tabs: surface.tabs, active: surface.active }, area: value.area };
+  if (!surface || !isArea(value?.area) || !Array.isArray(surface.tabs)) return null;
+  // A tab kind that no longer exists (Details was one) is left behind.
+  const tabs = surface.tabs.filter(isTab);
+  if (!tabs.some((tab) => tabKey(tab) === surface.active)) return null;
+  return { surface: { tabs, active: surface.active }, area: value.area };
 }
 
 export function createNavigation({
   client,
   address,
   memory,
+  details: detailsPreference,
   moved = () => {},
 }: NavigationOptions): Navigation {
   // A route read from the address bar (on start, or on back/forward) that has not been applied yet.
@@ -334,6 +354,8 @@ export function createNavigation({
     settings: wanted.kind === "settings" ? wanted.section : null,
     settingsRequest: 0,
     surface: null,
+    details: detailsPreference?.get() ?? false,
+    covered: false,
     area: "agent",
     surfaceRequest: 0,
     single: false,
@@ -429,6 +451,7 @@ export function createNavigation({
         set({
           surface: back?.surface ?? null,
           area: back?.area ?? "agent",
+          covered: false,
           views: false,
           pullRequest: false,
         });
@@ -482,6 +505,7 @@ export function createNavigation({
         settings: null,
         surface,
         area: "surface",
+        covered: false,
         surfaceRequest: state.surfaceRequest + 1,
         views: false,
       });
@@ -501,6 +525,12 @@ export function createNavigation({
       set({ settings: null });
       moved();
     });
+
+  /** Turns Details on or off for every session; side by side, on covers the Surface area. */
+  const setDetails = (on: boolean) => {
+    detailsPreference?.set(on);
+    moveArea({ details: on, covered: on && !!state.surface });
+  };
 
   /** Shows one of the session's views, opening its tab at the end if needed, or focuses it. */
   const openView = (view: SurfaceView) => {
@@ -547,8 +577,17 @@ export function createNavigation({
       }),
     closeSettings,
     openChanges: () => openView("changes"),
-    openDetails: () => openView("details"),
-    openFile: (spelled, from = shownAreas(state).agent ? "agent" : "surface") => {
+    toggleDetails: () =>
+      state.single
+        ? moveArea({ area: state.area === "details" ? "agent" : "details" })
+        : setDetails(!shownAreas(state).details),
+    showDetails: () =>
+      state.single
+        ? moveArea({ area: "details" })
+        : shownAreas(state).details
+          ? moveArea({})
+          : setDetails(true),
+    openFile: (spelled, from = state.single ? state.area : "agent") => {
       const path = filePath(spelled, client.getState().session?.cwd);
       const tabs = state.surface?.tabs ?? [];
       // A fresh tab object for an open file: the viewer reads it again, as clicking a link did,
@@ -568,12 +607,19 @@ export function createNavigation({
       if (!surface || at < 0 || !closable(surface.tabs[at], state.single)) return;
       const closing = surface.tabs[at];
       const tabs = surface.tabs.toSpliced(at, 1);
-      if (!tabs.length) return moveArea({ surface: null, area: "agent" });
+      // One area at a time, closing the file shown returns to the area its link was in.
+      const back =
+        state.single && surface.active === key && !isView(closing) && closing.from !== "surface"
+          ? closing.from
+          : undefined;
+      if (!tabs.length)
+        return moveArea({
+          surface: null,
+          area: back ?? (state.area === "surface" ? "agent" : state.area),
+        });
       const active =
         surface.active === key ? tabKey(tabs[Math.min(at, tabs.length - 1)]) : surface.active;
-      const back =
-        state.single && surface.active === key && !isView(closing) && closing.from === "agent";
-      moveArea({ surface: { tabs, active }, area: back ? "agent" : state.area });
+      moveArea({ surface: { tabs, active }, area: back ?? state.area });
     },
     showAgent: () => moveArea({ area: "agent" }),
     setSingle: (single) => batch(() => set({ single, views: single ? false : state.views })),

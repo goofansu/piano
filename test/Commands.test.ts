@@ -138,7 +138,7 @@ test("enabled commands reach the effect their intent names", () => {
       ["send", { _tag: "archive_session", cwd: "/repo", sessionId: "s2" }],
     ],
     [byId(sessionCommands(selected), "changes"), ["openChanges"]],
-    [byId(sessionCommands(selected), "details"), ["openDetails"]],
+    [byId(sessionCommands(selected), "details"), ["toggleDetails"]],
   ];
   for (const [command, call] of cases)
     assert.deepEqual(effectsOf(command), { ran: true, calls: [call] }, command.label);

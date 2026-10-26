@@ -11,9 +11,14 @@ import {
   shownAreas,
   tabKey,
 } from "../web/src/lib/navigation.ts";
+import {
+  createPreference,
+  type Preference,
+  type PreferenceStorage,
+} from "../web/src/lib/preference.ts";
 import { parseRoute } from "../web/src/lib/routes.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
-import { initialState } from "../web/src/store.ts";
+import { initialState, sessionKey } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
 /** An address bar with a history stack: push, replace, back and forward, like the browser's. */
@@ -57,7 +62,7 @@ function addressBar(start: string) {
 }
 
 /** A page at `url`: the client seeded as App seeds it, navigation over a fake address bar, the test playing the server. */
-function page(url: string, memory?: SurfaceMemory) {
+function page(url: string, memory?: SurfaceMemory, details?: Preference<boolean>) {
   const address = addressBar(url);
   const sent: ClientMessage[] = [];
   let handlers: ConnectionHandlers | undefined;
@@ -82,6 +87,7 @@ function page(url: string, memory?: SurfaceMemory) {
     client,
     address: address.bar,
     memory,
+    details,
     moved: () => moves++,
   });
   client.start();
@@ -454,44 +460,122 @@ test("choosing Changes again shows its one tab in place: no toggle, no duplicate
   assert.equal(p.navigation.getState().views, false, "choosing a view dismisses Views");
 });
 
-test("Details opens as its own tab beside Changes, in place when chosen again, and comes back after a reload", () => {
-  const memory = tabMemory();
-  const before = page("/s/a", memory);
+/** What sits on the Agent area's right side by side: Details, the Surface area, or nothing. */
+function rightSide(navigation: ReturnType<typeof createNavigation>) {
+  const shown = shownAreas(navigation.getState());
+  return shown.details ? "details" : shown.surface ? "surface" : null;
+}
+
+/** A browser's localStorage for one preference, which outlives every page. */
+function detailsStorage(): PreferenceStorage {
+  const values = new Map<string, string>();
+  return {
+    read: (key) => values.get(key) ?? null,
+    write: (key, value) => {
+      values.set(key, value);
+    },
+    onChange: () => () => {},
+  };
+}
+
+const detailsPreference = (storage: PreferenceStorage) =>
+  createPreference<boolean>({ key: "details", decode: (raw) => raw === "true", storage });
+
+test("side by side, Details and the Surface area share the right side: whichever came in last shows", () => {
+  const p = page("/s/a");
+  p.registry();
+  p.selected("a");
+  assert.equal(rightSide(p.navigation), null, "Details starts off");
+
+  p.navigation.toggleDetails();
+  assert.equal(rightSide(p.navigation), "details");
+
+  p.navigation.openChanges();
+  assert.equal(rightSide(p.navigation), "surface", "a surface coming in hides Details");
+  assert.equal(p.navigation.getState().details, true, "hidden, Details stays on");
+
+  p.navigation.closeTab("changes");
+  assert.equal(rightSide(p.navigation), "details", "the last tab closing brings Details back");
+
+  p.navigation.openFile("README.md");
+  p.navigation.toggleDetails();
+  assert.equal(rightSide(p.navigation), "details", "turned on over a surface, Details covers it");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md"], "the covered tabs wait");
+
+  p.navigation.toggleDetails();
+  assert.equal(rightSide(p.navigation), "surface", "turned off, the covered surface returns");
+
+  p.navigation.toggleDetails();
+  p.navigation.selectTab("file:README.md");
+  assert.equal(rightSide(p.navigation), "surface", "showing a tab uncovers the surface");
+  p.navigation.toggleDetails();
+  assert.equal(rightSide(p.navigation), "details");
+  p.navigation.toggleDetails();
+  assert.equal(rightSide(p.navigation), "surface");
+  assert.equal(p.navigation.getState().details, false);
+});
+
+test("Details is one choice for every session, and the browser remembers it", () => {
+  const storage = detailsStorage();
+  const before = page("/s/a", undefined, detailsPreference(storage));
   before.registry();
   before.selected("a");
-  before.navigation.openChanges();
-  before.navigation.openDetails();
-  assert.deepEqual(shownTabs(before.navigation), {
-    tabs: ["changes", "details"],
-    active: "details",
-    area: "surface",
-  });
-  before.navigation.openFile("README.md");
-  before.navigation.openDetails();
-  assert.deepEqual(
-    shownTabs(before.navigation),
-    { tabs: ["changes", "details", "file:README.md"], active: "details", area: "surface" },
-    "no toggle and no duplicate",
-  );
-  before.navigation.setSingle(true);
-  before.navigation.closeTab("details");
-  assert.deepEqual(
-    shownTabs(before.navigation).tabs,
-    ["changes", "details", "file:README.md"],
-    "one area at a time Details stays, as Changes does",
-  );
-  before.navigation.setSingle(false);
+  before.navigation.toggleDetails();
+  before.navigation.select("/scratch", "b");
+  before.selected("b");
+  assert.equal(rightSide(before.navigation), "details", "another session shows its Details");
 
-  const after = page("/s/a", memory);
+  const after = page("/s/a", undefined, detailsPreference(storage));
   after.registry();
   after.selected("a");
-  assert.deepEqual(shownTabs(after.navigation), {
-    tabs: ["changes", "details", "file:README.md"],
-    active: "details",
+  assert.equal(rightSide(after.navigation), "details", "a new page starts with Details on");
+  after.navigation.toggleDetails();
+
+  const off = page("/s/a", undefined, detailsPreference(storage));
+  off.registry();
+  off.selected("a");
+  assert.equal(rightSide(off.navigation), null);
+});
+
+test("one area at a time Details is an area of its own, and a file opened from it closes back to it", () => {
+  const p = page("/s/a");
+  p.registry();
+  p.selected("a");
+  p.navigation.setSingle(true);
+  p.navigation.showDetails();
+  assert.deepEqual(shownAreas(p.navigation.getState()), {
+    agent: false,
+    surface: false,
+    details: true,
+  });
+  assert.equal(p.navigation.getState().details, false, "moving to it changes no choice");
+
+  p.navigation.openFile("docs/out.md", "details");
+  assert.equal(shownAreas(p.navigation.getState()).surface, true);
+  p.navigation.closeTab("file:docs/out.md");
+  assert.equal(shownAreas(p.navigation.getState()).details, true, "back where its link was");
+
+  p.navigation.toggleDetails();
+  assert.equal(shownAreas(p.navigation.getState()).agent, true, "chosen again, back to Agent");
+});
+
+test("a reload drops a Details tab kept by an older Piano and keeps the other tabs", () => {
+  const memory = tabMemory();
+  memory.write(
+    JSON.stringify({
+      owner: sessionKey({ cwd: "/scratch", sessionId: "a" }),
+      surface: { tabs: ["changes", "details"], active: "changes" },
+      area: "surface",
+    }),
+  );
+  const p = page("/s/a", memory);
+  p.registry();
+  p.selected("a");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["changes"],
+    active: "changes",
     area: "surface",
   });
-  after.navigation.closeTab("details");
-  assert.deepEqual(shownTabs(after.navigation).tabs, ["changes", "file:README.md"]);
 });
 
 test("each new view is added at the end, Changes included; reopening one keeps its place", () => {
@@ -660,13 +744,11 @@ test("one area at a time, a file opened again returns to the area of its latest 
   );
 });
 
-test("side by side every tab closes; one area at a time Changes and Details stay and a file closes", () => {
+test("side by side every tab closes; one area at a time Changes stays and a file closes", () => {
   const file = { kind: "file", path: "docs/a.md", from: "agent" } as const;
   assert.equal(closable("changes", false), true);
-  assert.equal(closable("details", false), true);
   assert.equal(closable(file, false), true);
   assert.equal(closable("changes", true), false);
-  assert.equal(closable("details", true), false);
   assert.equal(closable(file, true), true);
 
   const p = page("/new");
@@ -694,7 +776,10 @@ test("side by side both areas show while there are tabs; one area at a time, the
   p.registry();
   p.navigation.select("/scratch", "a");
   p.selected("a");
-  const shown = () => shownAreas(p.navigation.getState());
+  const shown = () => {
+    const { agent, surface } = shownAreas(p.navigation.getState());
+    return { agent, surface };
+  };
   assert.deepEqual(shown(), { agent: true, surface: false }, "no tabs: only the Agent area");
   p.navigation.openChanges();
   assert.deepEqual(shown(), { agent: true, surface: true }, "side by side");

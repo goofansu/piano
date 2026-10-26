@@ -16,7 +16,8 @@ SQLite, UI and documentation. Some describe the target model in
 | Page | A main-pane view other than a session: the New page, the Projects index, a project's home, or Session not found. Opening one leaves the selected session; each has its own address. |
 | Conversation | The user messages and final assistant replies within a session, rather than its tool activity or intermediate assistant output. Use for navigation through that exchange, such as "Top of conversation" and "End of conversation"; not a separate session identity. |
 | Agent area | The selected session's interaction region: transcript, tool activity and composer. It is the session's default content and has no title of its own; "Agent" names it only as a tab where the areas take turns on a narrow screen. |
-| Surface area | The selected session's inspection region beside the Agent area, showing views of the session's workspace as tabs: Changes, Details (its workspace, outputs and links), and the files links opened. Name the view ("Changes", "Details"), never "Surface", in the UI. |
+| Surface area | The selected session's inspection region beside the Agent area, showing views of the session's workspace as tabs: Changes and the files links opened. Name the view ("Changes"), never "Surface", in the UI. |
+| Details | The selected session's rail: its workspace, outputs and links. One switch for every session, remembered by the browser; beside the Agent area it shares the right side with the Surface area, and whichever came in last shows. Where the areas take turns it is an area with its own tab. |
 | Task | An intended outcome that may span sessions; session completion does not establish task acceptance. |
 | Acceptance criterion | An observable requirement with an identity and captured version, against which evidence can be evaluated. |
 | Revision | A captured identity for relevant repository content, including uncommitted inputs; HEAD alone is insufficient. |

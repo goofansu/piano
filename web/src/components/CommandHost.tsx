@@ -42,11 +42,11 @@ import { Input } from "@/components/ui/input";
 import { confirmation } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
-import type { NavigationState } from "@/lib/navigation";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
 import {
+  type SessionAreas,
   type SessionCommand,
   type SessionCommandIcon,
   type SessionTarget,
@@ -103,7 +103,7 @@ export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {
 interface CommandsValue {
   run: (command: Command) => void;
   messagesOnly: boolean;
-  areas: Pick<NavigationState, "surface" | "single">;
+  areas: SessionAreas;
   changesWrap: boolean;
   state: AppState;
   radiusSignedIn: boolean;
@@ -192,7 +192,7 @@ export function CommandHost({
     openProjects,
     openProject,
     openChanges,
-    openDetails,
+    toggleDetails,
     closeTab,
     showAgent,
     setViews,
@@ -202,6 +202,9 @@ export function CommandHost({
     settings,
     surface,
     single,
+    area,
+    details,
+    covered,
   } = useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [changesWrap, setChangesWrap] = useChangesWrap();
@@ -237,7 +240,7 @@ export function CommandHost({
     openProjects,
     openProject,
     openChanges,
-    openDetails,
+    toggleDetails,
     hideChanges: () => closeTab("changes"),
     showAgent,
     openViews: () => setViews(true),
@@ -265,7 +268,7 @@ export function CommandHost({
       value={{
         run,
         messagesOnly,
-        areas: { surface, single },
+        areas: { surface, single, area, details, covered },
         changesWrap,
         state,
         radiusSignedIn,

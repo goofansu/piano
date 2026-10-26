@@ -6,6 +6,8 @@
 import { readStorage, writeStorage } from "./storage.ts";
 
 export const PANEL_WIDTH = { min: 400, max: 1024, default: 480 };
+/** Details' fixed width beside the Agent area; narrower than the Surface area's minimum, so it fits wherever that does. */
+export const DETAILS_WIDTH = 320;
 /** The narrowest Agent area that sits beside a surface: a readable column and its composer. */
 export const AGENT_MIN_WIDTH = 448;
 /**

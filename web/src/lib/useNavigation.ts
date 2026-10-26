@@ -7,6 +7,13 @@ import {
   type NavigationOptions,
   type NavigationState,
 } from "./navigation.ts";
+import { createPreference } from "./preference.ts";
+
+/** Whether Details is on, for every session in this browser. */
+const detailsPreference = createPreference<boolean>({
+  key: "piano.details",
+  decode: (raw) => raw === "true",
+});
 
 export const NavigationContext = createContext<Navigation | null>(null);
 
@@ -16,7 +23,13 @@ export function useNavigationController(
   moved: () => void,
 ): Navigation {
   const [navigation] = useState(() =>
-    createNavigation({ client, address: browserAddressBar, memory: browserSurfaceMemory, moved }),
+    createNavigation({
+      client,
+      address: browserAddressBar,
+      memory: browserSurfaceMemory,
+      details: detailsPreference,
+      moved,
+    }),
   );
   useEffect(() => navigation.start(), [navigation]);
   return navigation;

@@ -438,7 +438,13 @@ test("view commands follow the session's areas: Views and Hide changes side by s
   ) =>
     Object.fromEntries(
       sessionCommands(state, undefined, {
-        areas: { single, surface: surface && { tabs: [surface], active: surface } },
+        areas: {
+          single,
+          surface: surface && { tabs: [surface], active: surface },
+          area: surface ? "surface" : "agent",
+          details: false,
+          covered: false,
+        },
       })
         .filter((c) => ["views", "changes", "details", "hide-changes", "agent"].includes(c.id))
         .map((c) => [c.id, c.enabled]),

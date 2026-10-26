@@ -34,7 +34,7 @@ export function SessionOutputs({ files, cwd }: Props) {
               "cursor-pointer hover:bg-fill-hover focus-visible:bg-fill-hover",
             )}
           >
-            <button type="button" onClick={() => openFile(file.path, "surface")} title={shown}>
+            <button type="button" onClick={() => openFile(file.path, "details")} title={shown}>
               <ItemMedia variant="icon" className="text-ink-3">
                 <FileTabIcon path={file.path} />
               </ItemMedia>

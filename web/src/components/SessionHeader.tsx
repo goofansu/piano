@@ -228,9 +228,9 @@ export function SessionHeader({
 }
 
 /**
- * Views, at the header's end beside the Agent area: the views the Surface area can show, Details
- * then Changes. Choosing one shows it, or focuses it where it already shows; it never hides it.
- * The palette's Views opens this same menu.
+ * Views, at the header's end beside the Agent area: Details, checked while it shows and turned on
+ * or off for every session, then Changes, which shows it, or focuses it where it already shows,
+ * and never hides it. The palette's Views opens this same menu.
  */
 function ViewsMenu() {
   const { views, setViews } = useNavigation();
@@ -261,21 +261,32 @@ function ViewsMenu() {
           chose.current = false;
         }}
       >
-        {viewCommands.map((command) => (
-          <DropdownMenuItem
-            key={command.id}
-            disabled={!command.enabled}
-            onSelect={() => {
-              chose.current = true;
-              run(command);
-            }}
-          >
-            <CommandIcon icon={command.icon} /> {command.label}
-            {command.detail && (
-              <span className="ml-auto pl-4 text-xs text-muted-foreground">{command.detail}</span>
-            )}
-          </DropdownMenuItem>
-        ))}
+        {viewCommands.map((command) =>
+          command.checked !== undefined ? (
+            // Details turns on and off for every session; the trigger keeps focus.
+            <DropdownMenuCheckboxItem
+              key={command.id}
+              checked={command.checked}
+              onCheckedChange={() => run(command)}
+            >
+              <CommandIcon icon={command.icon} /> {command.label}
+            </DropdownMenuCheckboxItem>
+          ) : (
+            <DropdownMenuItem
+              key={command.id}
+              disabled={!command.enabled}
+              onSelect={() => {
+                chose.current = true;
+                run(command);
+              }}
+            >
+              <CommandIcon icon={command.icon} /> {command.label}
+              {command.detail && (
+                <span className="ml-auto pl-4 text-xs text-muted-foreground">{command.detail}</span>
+              )}
+            </DropdownMenuItem>
+          ),
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

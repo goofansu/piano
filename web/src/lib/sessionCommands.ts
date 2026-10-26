@@ -5,7 +5,7 @@
  */
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import { closable, type NavigationState } from "./navigation.ts";
+import { closable, type NavigationState, shownAreas } from "./navigation.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
@@ -20,6 +20,21 @@ import {
 import { previewHost, selectedPreview, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
 
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
+
+/** The selected session's areas as navigation has them, which the view commands follow. */
+export type SessionAreas = Pick<
+  NavigationState,
+  "surface" | "single" | "area" | "details" | "covered"
+>;
+
+/** Side by side with only the Agent area and Details off. */
+const NO_AREAS: SessionAreas = {
+  surface: null,
+  single: false,
+  area: "agent",
+  details: false,
+  covered: false,
+};
 
 export type SessionCommandId =
   | "copy-working-directory"
@@ -68,7 +83,10 @@ export type SessionCommandIntent =
   | { kind: "send"; command: ClientCommand }
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
-  /** Show Details: the session's folder, branch and directory, its outputs and its links. */
+  /**
+   * Turn Details (the session's folder, branch and directory, its outputs and its links) on or
+   * off beside the Agent area; one area at a time, move to it or back to Agent.
+   */
   | { kind: "details" }
   /** Open the session header's Views menu. */
   | { kind: "views" }
@@ -196,10 +214,11 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
- * - details: always; the session's facts need neither Git nor a live Pi.
+ * - details: always; the session's facts need neither Git nor a live Pi. It is `checked` while
+ *   Details shows beside the Agent area, and running it then turns Details off.
  * - views: the session is laid out side by side, where the header shows the Views menu.
  * - hide changes: Changes has a tab beside the Agent area; hiding closes it.
- * - agent: the session is laid out one area at a time, where Details always sits beside Agent.
+ * - agent: the session is laid out one area at a time, where Details always has a tab beside Agent.
  * - pull request, copy session ID: the selected session has a Pi session ID.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
  *   an app; open needs its link, stop needs the attachment (`sessionReady`).
@@ -215,7 +234,7 @@ export function sessionCommands(
     changesWrap?: boolean;
     radiusSignedIn?: boolean;
     /** The session's areas as navigation has them; by default side by side with only Agent. */
-    areas?: Pick<NavigationState, "surface" | "single">;
+    areas?: SessionAreas;
   } = {},
 ): SessionCommand[] {
   const session = state.session;
@@ -227,7 +246,8 @@ export function sessionCommands(
   const commands: SessionCommand[] = [];
   if (selected && session) {
     const messagesOnly = options.messagesOnly ?? false;
-    const { surface = null, single = false } = options.areas ?? {};
+    const areas = options.areas ?? NO_AREAS;
+    const { surface, single } = areas;
     const sessionPath = session.state.sessionFile;
     commands.push(
       {
@@ -284,6 +304,7 @@ export function sessionCommands(
         label: "Details",
         icon: "info",
         enabled: true,
+        checked: shownAreas(areas).details,
         keywords: ["info", "outputs", "files", "links", "branch"],
         intent: { kind: "details" },
       },

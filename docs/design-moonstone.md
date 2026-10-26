@@ -158,7 +158,7 @@ phones, where the sheet's project page covers it. The branch is in the menu's de
 the path; the segments carry no tooltips, since they show their own text. The design is in
 [session views](session-views.md).
 
-The Surface area (Changes, Details, open files) sits beside the Agent area under the one session header,
+The Surface area (Changes, open files) sits beside the Agent area under the one session header,
 on the same sheet, split off by a hairline rather than floating as a second card; the Agent area
 has no title. Its views are flat tabs on the sheet, each a small icon, its name and Close, the
 shown one underlined on the strip's rule and the pointed-at one filled, so the header, the strip
@@ -172,15 +172,24 @@ cut off at the edge showing there is more (a native bar takes the list's bottom 
 the tabs off the rule; an edge fade fades a lone tab in browsers without scroll-driven
 animations). Reloading the page brings back the session's
 tabs, the one shown and its area; another session, or a new browser tab, starts with only the
-Agent area. Pressing a tab never draws the keyboard ring. Views at the header's end opens Details or
-Changes, or shows it where it is already open. Details has no toolbar: its folding sections are Workspace (folder,
-worktree, branch, working directory), Outputs, the files Pi wrote or edited, and Links, the web
-links the conversation mentions, the last two only once they have a row; the composer's usage row once held both as
-popovers, and the palette no longer searches them. The Surface area's remembered width is a
+Agent area. Pressing a tab never draws the keyboard ring. Views at the header's end turns Details
+on or off (a checked item) and opens Changes, or shows it where it is already open.
+
+Details is the session's rail, as Claude Code's is: one switch for every session, remembered by
+the browser, so switching sessions shows the next session's Details in the same place. Beside the
+Agent area it is a fixed 320px column on the right, split off by a hairline like the Surface area,
+and the two share that side: whichever came in last shows. Opening a Surface tab hides Details;
+closing the last one brings it back; turning Details on while tabs are open hides them until a
+tab is shown again or Details goes off. Details has no header or toolbar: its folding sections are
+Workspace (folder, worktree, branch, working directory), Outputs, the files Pi wrote or edited,
+and Links, the web links the conversation mentions, the last two only once they have a row; the
+composer's usage row once held both as popovers, and the palette no longer searches them. The
+Surface area's remembered width is a
 preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
 shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the
 viewport) the areas take turns under Agent, Details and Changes tabs, each at full width, drawn as
-the same strip tabs without Close (a file closes from its toolbar).
+the same strip tabs without Close (a file closes from its toolbar); there Details is an area of
+its own whatever the switch, and a file opened from its Outputs closes back to it.
 
 ## Linear
 

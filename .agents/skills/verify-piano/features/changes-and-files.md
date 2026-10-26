@@ -3,7 +3,8 @@
 From a session the user sees what changed in its workspace: Changes, in the Surface area beside
 the Agent area (or under its own tab where the areas take turns), shows the Git diff of
 the session's folder or worktree against HEAD (per-file additions and removals, new files, a diff
-per file), and Details, the other view in Views, shows where the session runs (Folder, Worktree,
+per file), and Details, the session's rail (turned on or off for every session from Views, and
+sharing the right side with the Surface area: whichever came in last shows), shows where the session runs (Folder, Worktree,
 Branch, Working directory) as the Workspace section, Outputs, the files Pi wrote or edited in this session, each opening
 a file viewer, and Links, the web links the conversation mentions, each with "Jump to message".
 The palette (Mod+K) searches neither outputs nor links.
@@ -18,8 +19,10 @@ The palette (Mod+K) searches neither outputs nor links.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
 - `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to Views;
   reopening shows the same scroll and expanded files.
-- `details-open`: Views → "Details" opens the Details tab (no toolbar); narrow, the "Agent" /
-  "Changes" / "Details" tabs replace Views, and Details is offered even without Git.
+- `details-open`: Views → "Details" (a checked item) turns the Details rail on or off; it stays on
+  across sessions and reloads, hides while a Surface tab shows, and returns when the last one
+  closes; turned on over open tabs, it hides them until Details goes off. Narrow, the "Agent" /
+  "Details" / "Changes" tabs replace Views, and Details is offered even without Git.
 - `files-list`: Details' "Outputs" lists files written in the session by name only, and its
   "Links" lists the conversation's web links, each with "Jump to message", which narrow shows
   the Agent area first. Either section appears only once it has a row.
@@ -30,8 +33,8 @@ The palette (Mod+K) searches neither outputs nor links.
 
 - Session page header → Views → Changes; the palette's "Views" opens the same menu, its "Changes"
   opens Changes directly, "Hide changes" and (one area at a time) "Agent" go back.
-- Session page header → Views → Details → an Outputs row → a file; the palette's "Details" opens
-  Details directly.
+- Session page header → Views → Details → an Outputs row → a file; the palette's "Details" turns
+  Details on or off directly.
 - The same diff over HTTP: `POST /api/workspace/changes?workspaceId=<id>` with an allowed Origin.
 
 ## Driving it with agent-browser
@@ -63,15 +66,15 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     focused element is the Views button.
 - `details-open`, `files-list` and `file-viewer`
   - Action: `ab find role button click --name "Views" --exact;
-    ab find role menuitem click --name "Details" --exact; ab wait --text "Working directory"`
-  - Result: `ab eval "document.querySelector('[data-slot=surface-area]:not([inert])').innerText"`
-    is `Details` / `Workspace` / `Folder:` / `repo` / `Git branch:` / `main` / `Working directory:` /
+    ab find role menuitemcheckbox click --name "Details" --exact; ab wait --text "Working directory"`
+  - Result: `ab eval "document.querySelector('[data-slot=details-rail]:not([inert])').innerText"`
+    is `Workspace` / `Folder:` / `repo` / `Git branch:` / `main` / `Working directory:` /
     `<$REPO>` / `Outputs` / `answer.ts` (no Links yet): bordered lists of icon rows, the field
     names read only by screen readers; each heading folds its section,
     and folds are remembered across reloads. Then
     `ab find role button click --name "answer.ts" --exact` opens a tab `answer.ts` with
-    toolbar `src/answer.ts`, the file's current contents and "Close answer.ts"; closing it shows
-    Details again. Capture `03-file-viewer`.
+    toolbar `src/answer.ts`, the file's current contents and "Close answer.ts", and the rail
+    hides; closing it shows Details again. Capture `03-file-viewer`.
   - Links: send `Read https://example.com/docs/guide please` from the composer; fake Pi echoes
     it, and Details' Links lists `example.com/docs/guide` with "Jump to message". At 700px wide
     the tabs read `Agent | Details | Changes`, and "Jump to message" selects Agent.

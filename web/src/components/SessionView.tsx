@@ -1,12 +1,13 @@
 import { isWorking } from "@shared/sessionProjection";
 import type { ExtensionState } from "@shared/wire";
 import { cn } from "cn";
-import { MessagesSquareIcon } from "lucide-react";
+import { InfoIcon, MessagesSquareIcon } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
 import { useSessionCommands } from "@/components/CommandHost";
 import { Composer } from "@/components/Composer";
+import { DetailsRail } from "@/components/Details";
 import { LocalFileContext } from "@/components/Markdown";
 import { MessageList, SessionDestinationContext } from "@/components/MessageList";
 import {
@@ -25,8 +26,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
-import { isView, type SurfaceTab, type SurfaceView, shownAreas, tabKey } from "@/lib/navigation";
-import { AGENT_MIN_WIDTH, PANEL_WIDTH, singleArea } from "@/lib/panelLayout";
+import { isView, type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
+import { AGENT_MIN_WIDTH, DETAILS_WIDTH, PANEL_WIDTH, singleArea } from "@/lib/panelLayout";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
   completionTarget,
@@ -48,7 +49,11 @@ interface Props {
 }
 
 /** The session's areas share one tab list one at a time; these name its parts for each other. */
-const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" } as const;
+const AREA_ID = {
+  agent: "session-agent-area",
+  surface: "session-surface-area",
+  details: "session-details-area",
+} as const;
 const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
 export function SessionView({ state, send }: Props) {
@@ -84,7 +89,8 @@ export function SessionView({ state, send }: Props) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [setSingle]);
-  const agentHidden = !shownAreas(navigation).agent;
+  const shown = shownAreas(navigation);
+  const agentHidden = !shown.agent;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
@@ -97,11 +103,8 @@ export function SessionView({ state, send }: Props) {
   const { workspace, draftKey } = sessionContext(state);
   // A view opens through its session command, whose rule Views and the palette follow too.
   const { commands, run } = useSessionCommands();
-  const opener = (id: SurfaceView) => {
-    const command = commands.find((c) => c.id === id);
-    return command?.enabled ? () => run(command) : undefined;
-  };
-  const openView = { changes: opener("changes"), details: opener("details") };
+  const changes = commands.find((c) => c.id === "changes");
+  const openChanges = changes?.enabled ? () => run(changes) : undefined;
   // The area tabs show where the Agent command is offered; only then is each area their panel.
   const areaTabs = !!commands.find((c) => c.id === "agent")?.enabled;
   // Ask adds to the draft and never sends; one area at a time, it returns to the draft.
@@ -154,7 +157,7 @@ export function SessionView({ state, send }: Props) {
           )
         }
       />
-      {areaTabs && <AreaTabs openView={openView} />}
+      {areaTabs && <AreaTabs openChanges={openChanges} />}
       <div
         ref={areas}
         className="relative flex min-h-0 min-w-0 flex-1"
@@ -162,6 +165,7 @@ export function SessionView({ state, send }: Props) {
           {
             "--agent-min": `${AGENT_MIN_WIDTH}px`,
             "--surface-min": `${PANEL_WIDTH.min}px`,
+            "--details-width": `${DETAILS_WIDTH}px`,
           } as React.CSSProperties
         }
       >
@@ -275,6 +279,13 @@ export function SessionView({ state, send }: Props) {
           id={AREA_ID.surface}
           labelledBy={areaTabs && surface ? tabId(surface.active) : undefined}
         />
+        <DetailsRail
+          state={state}
+          id={AREA_ID.details}
+          labelledBy={areaTabs ? tabId("details") : undefined}
+          single={single}
+          shown={shown.details}
+        />
       </div>
     </TranscriptViewportContext>
   );
@@ -287,15 +298,16 @@ export function SessionView({ state, send }: Props) {
  * as it was left. A file closes from its own toolbar.
  */
 function AreaTabs({
-  openView,
+  openChanges,
 }: {
-  /** Runs a view's command; omitted while it is disabled, which leaves the view out. */
-  openView: Record<SurfaceView, (() => void) | undefined>;
+  /** Runs the Changes command; omitted while it is disabled, which leaves Changes out. */
+  openChanges: (() => void) | undefined;
 }) {
   const navigation = useNavigation();
-  const { surface, showAgent, selectTab } = navigation;
+  const { surface, showAgent, showDetails, selectTab } = navigation;
   const tabs = surface?.tabs ?? [];
-  const value = surface && shownAreas(navigation).surface ? surface.active : "agent";
+  const shown = shownAreas(navigation);
+  const value = shown.details ? "details" : surface && shown.surface ? surface.active : "agent";
   // The Surface area's strip tabs, so the session's tabs look alike at every width.
   const view = (tab: SurfaceTab) => {
     const key = tabKey(tab);
@@ -312,9 +324,11 @@ function AreaTabs({
         onValueChange={(next) =>
           next === "agent"
             ? showAgent()
-            : (next === "changes" || next === "details") && !tabs.includes(next)
-              ? openView[next]?.()
-              : selectTab(next)
+            : next === "details"
+              ? showDetails()
+              : next === "changes" && !tabs.includes(next)
+                ? openChanges?.()
+                : selectTab(next)
         }
         className="min-w-0 flex-1 gap-0 self-stretch"
       >
@@ -329,8 +343,17 @@ function AreaTabs({
               Agent
             </PianoStripTabTrigger>
           </PianoStripTab>
-          {(openView.details || tabs.includes("details")) && view("details")}
-          {(openView.changes || tabs.includes("changes")) && view("changes")}
+          <PianoStripTab selected={value === "details"}>
+            <PianoStripTabTrigger
+              value="details"
+              id={tabId("details")}
+              aria-controls={AREA_ID.details}
+              icon={<InfoIcon className="size-3.5" />}
+            >
+              Details
+            </PianoStripTabTrigger>
+          </PianoStripTab>
+          {(openChanges || tabs.includes("changes")) && view("changes")}
           {tabs.filter((tab) => !isView(tab)).map(view)}
         </PianoStripTabsList>
       </Tabs>
