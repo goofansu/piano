@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RenderMsg } from "../shared/wire.ts";
-import { renderMarkdown } from "../web/src/lib/markdown.ts";
 import { displayUrl, sessionLinks } from "../web/src/lib/sessionLinks.ts";
+import { renderMarkdown } from "./fixtures/markdown.ts";
 
 const msg = (id: string, role: RenderMsg["role"], text: string): RenderMsg => ({ id, role, text });
 
@@ -60,7 +60,7 @@ test("the Links list and the transcript agree on which text is a link", () => {
       ["https://example.com/pr", "https://github.com/a/b/pull/7"],
     ],
     ["1. Step\n\n    See [docs](https://example.com/docs)", ["https://example.com/docs"]],
-    ["~~~\nhttps://github.com/a/b/pull/8\n~~~", ["https://github.com/a/b/pull/8"]],
+    ["~~~\nhttps://github.com/a/b/pull/8\n~~~", []],
     [
       "```\nhttps://github.com/a/b/pull/9\n```\nhttps://github.com/a/b/pull/10",
       ["https://github.com/a/b/pull/10"],

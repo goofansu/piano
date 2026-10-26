@@ -31,6 +31,12 @@ Highlighting uses a disposable worker, lazy grammars/themes, at most 65,536 char
 rendered in blocks of 500 lines (one text and one line-number gutter each) that the browser lays
 out and paints only near the view, so a file up to the 1 MiB limit opens without blocking the
 page. An expanded diff in Changes renders its rows in the same blocks.
+Markdown uses Streamdown in static mode, with CommonMark/GFM support including fenced code
+inside lists, tables and reference links. Conversations use its streaming mode to format incomplete
+responses; files do not repair unfinished Markdown. Piano retains its own links, code-copy controls
+and resource policy. Input above 262,144 characters or the nesting/structure budgets falls back to
+readable source. Link and image discovery use the same remark grammar as rendering.
+
 Markdown previews load at most eight distinct local images, sequentially, retaining at most
 20 MiB of image bytes. Other images remain clickable local links; remote images never load.
 Markdown diagrams remain escaped code in file previews.

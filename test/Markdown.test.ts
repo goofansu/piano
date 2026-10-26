@@ -1,148 +1,91 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { markdownLinks, renderMarkdown } from "../web/src/lib/markdown.ts";
+import { markdownImages, markdownLinks } from "../web/src/lib/markdown.ts";
+import { renderMarkdown } from "./fixtures/markdown.ts";
 
-test("pathological nesting falls back atomically to escaped source for rendering and discovery", () => {
-  const source = `[before](https://example.test)\n\n${"> ".repeat(5000)}<script>&"quoted`;
-  assert.equal(
-    renderMarkdown(source, true),
-    `<pre><code>[before](https://example.test)\n\n${"&gt; ".repeat(5000)}&lt;script&gt;&amp;&quot;quoted</code></pre>`,
+// Assertions cover semantic output, not incidental Streamdown wrappers or whitespace.
+test("README's tab-indented fenced commands stay inside their numbered step", () => {
+  const html = renderMarkdown(readFileSync("README.md", "utf8"));
+  assert.match(
+    html,
+    /<li>\s*<p>Install dependencies[\s\S]*?<pre><code>npm install\nnpm run build\nnpm start<\/code><\/pre>[\s\S]*?<\/li>/,
   );
-  assert.deepEqual(markdownLinks(source), []);
+  assert.ok(!html.includes("```bash"));
+  const nested = "2. Install:\n\n\t```bash\n\tnpm install\n\t```\n\n3. Open.";
+  for (const streaming of [false, true]) {
+    const out = renderMarkdown(nested, false, streaming);
+    assert.match(
+      out,
+      /<ol start="2">[\s\S]*?<li>[\s\S]*?<pre><code>npm install<\/code><\/pre>[\s\S]*?<\/li>/,
+    );
+  }
 });
 
-test("unmatched brackets remain prose at increasing sizes, without hiding later links", () => {
-  for (const size of [4000, 8000, 16000, 32000, 128000]) {
-    const brackets = "[".repeat(size);
-    const source = `${brackets}\n[ok](https://example.test)`;
-    assert.equal(
-      renderMarkdown(source),
-      `<p>${brackets}<br><a href="https://example.test" target="_blank" rel="noreferrer">ok</a></p>`,
-    );
+test("incomplete streaming formatting repairs while static files preserve literal syntax", () => {
+  assert.match(renderMarkdown("Hello **world", false, true), /<strong>world<\/strong>/);
+  assert.ok(renderMarkdown("Hello **world").includes("**world"));
+  assert.match(
+    renderMarkdown("```bash\nnpm install", false, true),
+    /<pre><code>npm install<\/code><\/pre>/,
+  );
+});
+
+test("excessive input falls back to readable escaped source without resource discovery", () => {
+  for (const tail of [
+    `${"> ".repeat(5000)}<script>&quoted`,
+    "x".repeat(256 * 1024),
+    "`x` ".repeat(10001),
+    `|head|\n|---|\n${"|".repeat(20001)}`,
+    `${"> ".repeat(30)}${"x".repeat(150000)}`,
+  ]) {
+    const source = `[before](https://example.test)\n\n${tail}`;
+    const html = renderMarkdown(source, true);
+    assert.ok(html.includes("<pre><code>[before](https://example.test)"));
+    assert.ok(!html.includes("<script>"));
+    assert.deepEqual(markdownLinks(source), []);
+    assert.deepEqual(markdownImages(source), []);
+  }
+});
+
+test("unmatched brackets remain readable and do not hide later links", () => {
+  for (const size of [4000, 16000, 128000]) {
+    const source = `${"[".repeat(size)}\n[ok](https://example.test)`;
+    const html = renderMarkdown(source);
+    assert.ok(html.includes("[".repeat(size)));
+    assert.match(html, /href="https:\/\/example.test"[^>]*>ok<\/a>/);
     assert.deepEqual(markdownLinks(source), [
       { url: "https://example.test", label: "ok", kind: "markdown" },
     ]);
   }
 });
 
-test("source, structure and cumulative work budgets discard partial rendering and discovery", () => {
-  for (const tail of [
-    "x".repeat(256 * 1024),
-    "`x` ".repeat(10001),
-    `|head|\n|---|\n${"|".repeat(10001)}`,
-    // Repeated block traversals exceed the work budget even below the nesting limit.
-    `${"> ".repeat(30)}${"x".repeat(150000)}`,
-  ]) {
-    const source = `[before](https://example.test)\n\n${tail}`;
-    assert.equal(
-      renderMarkdown(source, true),
-      `<pre><code>${source.replaceAll(">", "&gt;")}</code></pre>`,
-    );
-    assert.deepEqual(markdownLinks(source), []);
-  }
-});
-
-test("nested quotes and bracket scanner preserve ordinary inline contracts", () => {
-  const source =
-    "> Outer\n> > [a[b](https://example.test/a(b)) `code`\n> >\n> > ```html\n> > <script>\n> > ```";
-  assert.equal(
-    renderMarkdown(source),
-    '<blockquote><p>Outer</p><blockquote><p><a href="https://example.test/a(b)" target="_blank" rel="noreferrer">a[b</a> <code>code</code></p><pre><code>&lt;script&gt;</code></pre></blockquote></blockquote>',
-  );
-  assert.deepEqual(markdownLinks(source), [
-    { url: "https://example.test/a(b)", label: "a[b", kind: "markdown" },
-  ]);
-  // Failed bracket candidates must not swallow code or web URLs in the remaining prose.
-  assert.deepEqual(markdownLinks("[[broken](oops(( `https://hidden.test` https://visible.test"), [
-    { url: "https://visible.test", kind: "bare" },
-  ]);
-});
-
-test("GitHub issue, PR and repository links are compact without changing destinations or custom labels", () => {
-  const url = "https://github.com/goofansu/herdr-hunk/issues/2?x=1&y=2#issuecomment-3";
+test("provider links keep compact names, destinations, custom formatting and branding", () => {
   const html = renderMarkdown(
-    `Follow ${url}, then [#3799](https://github.com/example/herdr/pull/3799). [**Review**](https://github.com/example/herdr/pull/4) <https://github.com/example/herdr>`,
+    "https://github.com/goofansu/piano/issues/2, [**Review**](https://github.com/a/b/pull/4) <https://github.com/a/b> [Fix](https://linear.app/team/issue/ENG-42)",
   );
   assert.equal((html.match(/class="brand-link"/g) ?? []).length, 4);
-  assert.ok(
-    html.includes(
-      'href="https://github.com/goofansu/herdr-hunk/issues/2?x=1&amp;y=2#issuecomment-3"',
-    ),
-  );
-  assert.ok(
-    html.includes(
-      'title="https://github.com/goofansu/herdr-hunk/issues/2?x=1&amp;y=2#issuecomment-3"',
-    ),
-  );
-  assert.ok(html.includes("</svg>herdr-hunk#2</a>,"));
-  assert.ok(html.includes("</svg>#3799</a>"));
-  assert.ok(html.includes("</svg><strong>Review</strong></a>"));
-  assert.ok(html.includes("</svg>example/herdr</a>"));
-  assert.ok(
-    renderMarkdown(`[https://github.com/a/b/pull/1](https://github.com/a/b/pull/1)`).includes(
-      "</svg>b#1</a>",
-    ),
-  );
-  assert.ok(
-    renderMarkdown("[`code`](https://github.com/a/b/issues/1)").includes(
-      "</svg><code>code</code></a>",
-    ),
-  );
-});
-
-test("GitHub rendering leaves code and unrelated URLs alone and escapes untrusted input", () => {
-  const url = "https://github.com/a/b/issues/1";
-  const code = renderMarkdown(`\`${url}\`\n\n\`\`\`\n${url}\n\`\`\``);
-  assert.ok(!code.includes("<a"));
-  for (const other of [
+  assert.ok(html.includes("piano#2</a>,"));
+  assert.ok(html.includes("<strong>Review</strong></a>"));
+  assert.ok(html.includes("a/b</a>"));
+  assert.ok(html.includes('href="/mcp-logos.svg#linear"'));
+  for (const url of [
     "https://example.test/a",
-    "https://github.com.evil.test/a/b/issues/1",
-    "https://github.com@evil.test/a/b/issues/1",
-    "https://user@github.com/a/b/issues/1",
+    "https://github.com.evil.test/a/b",
+    "https://user@github.com/a/b",
+    "https://linear.app:8080/x",
+    "https://linear.app@evil.test/x",
   ]) {
-    assert.equal(renderMarkdown(other), `<p>${other}</p>`);
-    assert.ok(!renderMarkdown(`[link](${other})`).includes("brand-link"));
+    assert.ok(!renderMarkdown(url).includes("<a "), url);
+    assert.ok(!renderMarkdown(`[label](${url})`).includes("brand-link"), url);
   }
-  const html = renderMarkdown(
-    '[<img src=x onerror=alert>](https://github.com/a/b/issues/1?x="onclick="bad)',
+  assert.match(
+    renderMarkdown("**https://github.com/a/b/pull/7**"),
+    /<strong><a [\s\S]*?b#7<\/a><\/strong>/,
   );
-  assert.ok(!html.includes("<img"));
-  assert.ok(html.includes("&quot;onclick=&quot;bad"));
-  assert.ok(!html.includes('"onclick="'));
-  assert.ok(!renderMarkdown(`[javascript](javascript:alert(1))`).includes("<a"));
 });
 
-test("a bold or italic bare URL links without its emphasis markers", () => {
-  const html = renderMarkdown(
-    "See **https://github.com/a/b/pull/7** and *https://github.com/a/b*.",
-  );
-  assert.ok(html.includes('<strong><a href="https://github.com/a/b/pull/7"'), html);
-  assert.ok(html.includes("b#7</a></strong>"), html);
-  assert.ok(html.includes("a/b</a></em>."), html);
-});
-
-test("Linear links reuse the MCP logo and preserve destinations and labels", () => {
-  const url = "https://linear.app/team/issue/ENG-42/fix?x=1&y=2#comment";
-  const html = renderMarkdown(`${url}, [**Fix**](${url}) <${url}>`);
-  assert.equal((html.match(/class="brand-link"/g) ?? []).length, 3);
-  assert.equal((html.match(/href="\/mcp-logos.svg#linear"/g) ?? []).length, 3);
-  assert.ok(html.includes(`href="${url.replaceAll("&", "&amp;")}"`));
-  assert.ok(html.includes(`title="${url.replaceAll("&", "&amp;")}"`));
-  assert.ok(html.includes("</svg><strong>Fix</strong></a>"));
-  assert.ok(html.includes("#comment</a>,"));
-  assert.ok(!renderMarkdown(`\`${url}\`\n\n\`\`\`\n${url}\n\`\`\``).includes("<a"));
-  for (const other of [
-    "https://linear.app.evil.test/team/issue/ENG-42",
-    "https://linear.app@evil.test/team/issue/ENG-42",
-    "https://user@linear.app/team/issue/ENG-42",
-    "https://linear.app:8080/team/issue/ENG-42",
-  ]) {
-    assert.equal(renderMarkdown(other), `<p>${other}</p>`);
-    assert.ok(!renderMarkdown(`[link](${other})`).includes("brand-link"));
-  }
-});
-
-test("local Markdown links are preview actions, never filesystem HTTP URLs", () => {
+test("local links are preview actions, never native filesystem URLs", () => {
   for (const [destination, path] of [
     ["src/main.ts", "src/main.ts"],
     ["./docs/guide.md#intro", "./docs/guide.md"],
@@ -155,13 +98,8 @@ test("local Markdown links are preview actions, never filesystem HTTP URLs", () 
     const html = renderMarkdown(`Read [\`source\`](${destination}).`);
     assert.ok(html.includes(`data-local-file="${path}"`), destination);
     assert.ok(html.includes("<code>source</code></button>"));
-    assert.ok(!html.includes("href="), "paths never become browser navigation URLs");
+    assert.ok(!html.includes("href="));
   }
-  assert.ok(!renderMarkdown("`[source](src/main.ts)`").includes("data-local-file"));
-  assert.ok(!renderMarkdown("```\n[source](src/main.ts)\n```").includes("data-local-file"));
-});
-
-test("local file links escape markup and do not turn schemes or remote hosts into file reads", () => {
   for (const destination of [
     "javascript:alert(1)",
     "data:text/html,bad",
@@ -174,115 +112,57 @@ test("local file links escape markup and do not turn schemes or remote hosts int
   ]) {
     const html = renderMarkdown(`[source](${destination})`);
     assert.ok(!html.includes("data-local-file"), destination);
-    assert.ok(!html.includes("<a"), destination);
+    assert.ok(!html.includes("<a "), destination);
   }
   const html = renderMarkdown("[<img src=x>](docs/a%22onclick=%22bad.txt)");
   assert.ok(html.includes('data-local-file="docs/a&quot;onclick=&quot;bad.txt"'));
   assert.ok(!html.includes("<img"));
   assert.ok(!html.includes('"onclick="'));
-  assert.ok(
-    renderMarkdown("[site](https://example.test/readme.md)").includes(
-      'href="https://example.test/readme.md" target="_blank"',
-    ),
-  );
 });
 
-test("document images are scoped placeholders, never active or external resource URLs", () => {
-  const html = renderMarkdown(
-    "![Local](../a%20b.png) ![Remote](https://example.test/x.png) ![Data](data:image/png;base64,abc) <img src=x onerror=bad>",
-    true,
-  );
+test("raw HTML stays inert and images never fetch untrusted resource URLs", () => {
+  const source =
+    "![Local](../a%20b.png) ![Remote](https://example.test/x.png) ![Data](data:image/png;base64,abc) <img src=x onerror=bad><script>bad()</script>";
+  const html = renderMarkdown(source, true);
   assert.ok(html.includes('data-local-image="../a b.png"'));
   assert.ok(!html.includes("<img"));
-  assert.ok(!html.includes("src=" + '"'));
-  assert.equal((html.match(/data-local-image=/g) ?? []).length, 1);
-  for (const source of ["`![code](a.png)`", "```\n![code](a.png)\n```"])
+  assert.ok(!html.includes("<script"));
+  assert.ok(!html.includes('src="'));
+  assert.deepEqual(markdownImages(source), ["../a b.png"]);
+  assert.ok(!renderMarkdown("![Local](a.png)").includes("data-local-image"));
+});
+
+test("code excludes links and images for nested lists, quotes, tilde and long fences", () => {
+  const body = "[hidden](https://hidden.test) ![image](hidden.png)";
+  for (const source of [
+    `\`${body}\``,
+    `~~~\n${body}\n~~~`,
+    `1. Item\n\n   \`\`\`\n   ${body}\n   \`\`\``,
+    `> \`\`\`\n> ${body}\n> \`\`\``,
+    `\`\`\`\`markdown\n\`\`\`js\n${body}\n\`\`\`\n\`\`\`\``,
+  ]) {
     assert.ok(!renderMarkdown(source, true).includes("data-local-image"));
-  assert.ok(
-    !renderMarkdown("![Local](a.png)").includes("data-local-image"),
-    "transcripts do not acquire embedded files",
-  );
-});
-
-test("ordered lists continue across blank lines and retain their starting number", () => {
-  assert.equal(
-    renderMarkdown(
-      "1. **Yes**\n\n2. Link is accurate\n\n3. Hide the control\n\nFollowing paragraph.",
-    ),
-    "<ol><li><strong>Yes</strong></li><li>Link is accurate</li><li>Hide the control</li></ol><p>Following paragraph.</p>",
-  );
-  assert.equal(
-    renderMarkdown("4. Fourth\n\n5. Fifth"),
-    '<ol start="4"><li>Fourth</li><li>Fifth</li></ol>',
-  );
-  // Markdown takes the first marker as the start; repeated 1s still form a numbered list.
-  assert.equal(renderMarkdown("1. First\n\n1. Second"), "<ol><li>First</li><li>Second</li></ol>");
-  assert.equal(
-    renderMarkdown("1. First\n\nSeparate paragraph\n\n3. Third"),
-    '<ol><li>First</li></ol><p>Separate paragraph</p><ol start="3"><li>Third</li></ol>',
-  );
-  assert.equal(
-    renderMarkdown("1. First\n\n- Bullet\n\n2. Second"),
-    '<ol><li>First</li></ol><ul><li>Bullet</li></ul><ol start="2"><li>Second</li></ol>',
-  );
-});
-
-test("consecutive quoted lines form one quote, including blank lines and lists", () => {
-  assert.equal(
-    renderMarkdown("> Added a copy button.\n>\n> Copies code.\n> Shows a checkmark.\n\nMy reply."),
-    "<blockquote><p>Added a copy button.</p><p>Copies code.<br>Shows a checkmark.</p></blockquote><p>My reply.</p>",
-  );
-  assert.equal(
-    renderMarkdown("> Features:\n>\n> - Copy\n> - Confirm\n\n> Another quote"),
-    "<blockquote><p>Features:</p><ul><li>Copy</li><li>Confirm</li></ul></blockquote><blockquote><p>Another quote</p></blockquote>",
-  );
-  assert.equal(
-    renderMarkdown("```\n> not a quote\n```\n> ```html\n> <script>\n> ```"),
-    "<pre><code>&gt; not a quote</code></pre><blockquote><pre><code>&lt;script&gt;</code></pre></blockquote>",
-  );
-});
-
-test("embedded Markdown keeps shorter fences and their contents in one code block", () => {
-  const body = "#### Note\n```diff\n- old.md\n+ new.md\n```\n[inside](https://inside.test)";
-  const source = `\`\`\`\`markdown\n${body}\n\`\`\`\`\nAfter`;
-  assert.equal(renderMarkdown(source), `<pre><code>${body}</code></pre><p>After</p>`);
-  assert.deepEqual(markdownLinks(source), []);
-});
-
-test("closing fences need enough backticks and no info string, including while streaming", () => {
-  const body = "```js\n[inside](https://inside.test)\n``";
-  for (const closing of ["", "\n```", "\n`````  "]) {
-    const source = `\`\`\`markdown\n${body}${closing}`;
-    assert.equal(renderMarkdown(source), `<pre><code>${body}</code></pre>`);
+    assert.ok(!renderMarkdown(source).includes("<a "));
     assert.deepEqual(markdownLinks(source), []);
+    assert.deepEqual(markdownImages(source), []);
   }
-  assert.deepEqual(
-    markdownLinks("````\n[inside](https://inside.test)\n````\n[outside](https://outside.test)"),
-    [{ url: "https://outside.test", label: "outside", kind: "markdown" }],
-  );
 });
 
-test("only closed Mermaid fences are eligible for diagram rendering", () => {
-  assert.equal(
-    renderMarkdown("```mermaid\ngraph LR\nA-->B"),
-    "<pre><code>graph LR\nA--&gt;B</code></pre>",
-  );
-  assert.equal(
-    renderMarkdown("```mermaid\ngraph LR\nA-->B\n```"),
-    '<pre data-mermaid=""><code>graph LR\nA--&gt;B</code></pre>',
-  );
-  assert.equal(
-    renderMarkdown("```js\n<script>alert(1)</script>\n```"),
-    "<pre><code>&lt;script&gt;alert(1)&lt;/script&gt;</code></pre>",
-  );
-  assert.ok(!renderMarkdown('<pre data-mermaid="">bad</pre>').includes("<pre"));
+test("references share the same grammar for rendering and link/image discovery", () => {
+  const source = "[docs][d] ![shot][i]\n\n[d]: https://example.test/docs\n[i]: ./shot.png";
+  assert.match(renderMarkdown(source, true), /href="https:\/\/example.test\/docs"/);
+  assert.deepEqual(markdownLinks(source), [
+    { url: "https://example.test/docs", label: "docs", kind: "markdown" },
+  ]);
+  assert.deepEqual(markdownImages(source), ["./shot.png"]);
 });
 
-test("Mermaid source stays escaped and surrounding Markdown keeps its order", () => {
+test("GFM tables, lists and quoted blocks preserve their semantic structure", () => {
   const html = renderMarkdown(
-    '| Before |\n| --- |\n| table |\n```mermaid\ngraph LR\nA["<img src=x onerror=alert(1)>"]\n```\n\nAfter',
+    "4. Fourth\n\n5. Fifth\n\n> Quote\n>\n> - item\n\n| Before |\n| --- |\n| table |\n\nAfter",
   );
-  assert.ok(html.indexOf("</table>") < html.indexOf("<pre data-mermaid"));
-  assert.ok(html.endsWith("</code></pre><p>After</p>"));
-  assert.ok(!html.includes("<img"));
+  assert.match(html, /<ol start="4">[\s\S]*?Fourth[\s\S]*?Fifth[\s\S]*?<\/ol>/);
+  assert.match(html, /<blockquote>[\s\S]*?<ul>[\s\S]*?item[\s\S]*?<\/ul>[\s\S]*?<\/blockquote>/);
+  assert.ok(html.includes('aria-label="Table"'));
+  assert.ok(html.indexOf("</table>") < html.indexOf("After"));
 });

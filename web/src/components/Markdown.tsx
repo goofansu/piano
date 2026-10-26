@@ -2,22 +2,29 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
   Component,
+  type ComponentProps,
   createContext,
   type ReactNode,
   useContext,
   useEffect,
-  useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { type Components, type ExtraProps, Streamdown, useIsCodeFenceIncomplete } from "streamdown";
 import { IconButton } from "@/components/IconButton";
-import { renderMarkdown } from "@/lib/markdown";
+import {
+  githubLabel,
+  isLinearLink,
+  localFilePath,
+  markdownPlugins,
+  markdownWithinBudget,
+} from "@/lib/markdown";
 
 /** The owning session supplies workspace-scoped preview navigation to every prose surface. */
 export const LocalFileContext = createContext<(path: string) => void>(() => {});
+const ImagesContext = createContext<ReadonlyMap<string, string> | undefined>(undefined);
+const DiagramsContext = createContext(true);
 
 function CopyCode({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -50,6 +57,9 @@ type MarkdownProps = {
   className?: string;
   images?: ReadonlyMap<string, string>;
   diagrams?: boolean;
+  /** Conversations retain streaming block identities after completion; files use static mode. */
+  mode?: "static" | "streaming";
+  streaming?: boolean;
 };
 
 /** Keep unexpected render/layout-effect failures inside this prose surface, not the session or
@@ -84,118 +94,230 @@ export function Markdown(props: MarkdownProps) {
   );
 }
 
-/** HTML-safe prose, enhanced with diagrams only after their closing fence arrives. */
-function MarkdownContent({ text, className, images, diagrams = true }: MarkdownProps) {
+function MarkdownLink({ href = "", children, node }: ComponentProps<"a"> & ExtraProps) {
   const openFile = useContext(LocalFileContext);
-  const ref = useRef<HTMLDivElement>(null);
-  const { resolvedTheme } = useTheme();
-  const html = useMemo(() => renderMarkdown(text, images !== undefined), [text, images]);
-  // Seed server/initial rendering only; the layout effect owns subsequent DOM updates.
-  const initialHtml = useRef(html);
-  const [codeBlocks, setCodeBlocks] = useState<{ host: HTMLDivElement; text: string }[]>([]);
-  const hosts = useRef<HTMLDivElement[]>([]);
-  useLayoutEffect(() => {
-    const root = ref.current;
-    if (!root) return;
-    // Build offscreen and retain portal hosts: streaming must not remount copy controls.
-    // Commit before paint so code never appears without its control.
-    const next = document.createElement("div");
-    next.innerHTML = html;
-    const focused = root.contains(document.activeElement) ? document.activeElement : null;
-    const codeBlocks = Array.from(next.querySelectorAll<HTMLPreElement>("pre")).map(
-      (block, index) => {
-        // Custom code host: shadcn has no HTML-string Markdown renderer. The control is a portal.
-        const host = hosts.current[index] ?? document.createElement("div");
-        host.className = "markdown-code-block";
-        block.replaceWith(host);
-        // Leave React's portal children intact, replacing only code/diagram content.
-        host.querySelector("pre, .mermaid-diagram")?.remove();
-        host.prepend(block);
-        return { host, text: block.querySelector("code")?.textContent ?? "" };
-      },
+  const path = localFilePath(href);
+  if (path) {
+    // Custom inline action: no shadcn primitive represents a Markdown local-file link.
+    return (
+      <button
+        type="button"
+        className="local-file-link"
+        data-local-file={path}
+        onClick={() => openFile(path)}
+      >
+        {children}
+      </button>
     );
-    hosts.current = codeBlocks.map(({ host }) => host);
-    root.replaceChildren(...next.childNodes);
-    if (focused instanceof HTMLElement && root.contains(focused))
-      focused.focus({ preventScroll: true });
-    setCodeBlocks(codeBlocks);
-    for (const host of root.querySelectorAll<HTMLElement>("[data-local-image]")) {
-      const url = images?.get(host.dataset.localImage!);
-      if (!url) continue;
-      const img = document.createElement("img");
-      img.alt = host.textContent ?? "Image";
-      img.src = url;
-      img.style.maxWidth = "100%";
-      img.onerror = () => img.remove();
-      host.prepend(img);
-    }
-    const blocks = diagrams
-      ? Array.from(root.querySelectorAll<HTMLPreElement>("pre[data-mermaid]"))
-      : [];
-    if (!blocks.length) return;
+  }
+  if (!/^https?:\/\//i.test(href)) return <>{children}</>;
+  const label = githubLabel(href);
+  const linear = isLinearLink(href);
+  const kind = node?.properties["data-link-kind"];
+  if (kind && kind !== "markdown" && !label && !linear) return <>{children}</>;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className={label || linear ? "brand-link" : undefined}
+      title={label || linear ? href : undefined}
+    >
+      {label ? (
+        <svg
+          className="brand-link-icon"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+        </svg>
+      ) : linear ? (
+        <svg
+          className="brand-link-icon"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <use href="/mcp-logos.svg#linear" />
+        </svg>
+      ) : null}
+      {label && children === href ? label : children}
+    </a>
+  );
+}
+
+function MarkdownImage({ src, alt }: ComponentProps<"img"> & ExtraProps) {
+  const images = useContext(ImagesContext);
+  const openFile = useContext(LocalFileContext);
+  const path = typeof src === "string" ? localFilePath(src) : undefined;
+  const url = path && images?.get(path);
+  const [failed, setFailed] = useState<string>();
+  if (!path || !images) return <>{alt}</>;
+  // Images can only use blob URLs supplied by WorkspaceFile, never a Markdown resource URL.
+  return (
+    <span data-local-image={path}>
+      {url && url !== failed && (
+        <img src={url} alt={alt ?? "Image"} className="max-w-full" onError={() => setFailed(url)} />
+      )}
+      <button
+        type="button"
+        className="local-file-link"
+        data-local-file={path}
+        onClick={() => openFile(path)}
+      >
+        {alt || "Image"}
+      </button>
+    </span>
+  );
+}
+
+function MarkdownPre({ node }: ComponentProps<"pre"> & ExtraProps) {
+  const code = node?.children.find((child) => child.type === "element" && child.tagName === "code");
+  const text =
+    code?.type === "element"
+      ? code.children
+          .map((child) => (child.type === "text" ? child.value : ""))
+          .join("")
+          .replace(/\n$/, "")
+      : "";
+  const language = code?.type === "element" ? String(code.properties.className ?? "") : "";
+  const incomplete = useIsCodeFenceIncomplete();
+  const closed = code?.type === "element" && code.properties["data-code-closed"] === true;
+  const diagrams = useContext(DiagramsContext);
+  const { resolvedTheme } = useTheme();
+  const ref = useRef<HTMLDivElement>(null);
+  const [rendered, setRendered] = useState(false);
+  useEffect(() => {
+    const host = ref.current;
+    setRendered(false);
+    if (
+      !host ||
+      !diagrams ||
+      incomplete ||
+      !closed ||
+      language !== "language-mermaid" ||
+      !text.trim() ||
+      text.length > 50_000
+    )
+      return;
     let cancelled = false;
     void (async () => {
       try {
         const { renderDiagram } = await import("@/lib/mermaid");
-        for (const block of blocks) {
-          if (cancelled) return;
-          const source = block.textContent ?? "";
-          // Oversized/invalid diagrams stay readable as code, without a persistent warning.
-          if (!source.trim() || source.length > 50_000) continue;
-          try {
-            const svg = await renderDiagram(source, resolvedTheme === "dark");
-            if (cancelled) return;
-            const diagram = document.createElement("div");
-            diagram.className = "mermaid-diagram";
-            diagram.setAttribute("role", "img");
-            diagram.setAttribute("aria-label", "Mermaid diagram");
-            diagram.tabIndex = 0;
-            // Isolate diagram CSS from the app. No shadcn primitive renders Mermaid SVG.
-            const shadow = diagram.attachShadow({ mode: "open" });
-            shadow.innerHTML = `<style>:host { display:block; overflow:auto; }</style>${svg}`;
-            // Mermaid defaults to width:100%, which makes long diagrams illegible.
-            // Keep SVG units at natural size; the focusable host owns overflow.
-            const image = shadow.querySelector("svg");
-            const bounds = image?.viewBox.baseVal;
-            if (image && bounds && bounds.width > 0 && bounds.height > 0) {
-              image.style.width = `${bounds.width}px`;
-              image.style.height = `${bounds.height}px`;
-              image.style.maxWidth = "none";
-            }
-            block.replaceWith(diagram);
-          } catch {
-            // Parsing/rendering failure is local to this block; keep its escaped source.
-          }
+        const svg = await renderDiagram(text, resolvedTheme === "dark");
+        if (cancelled) return;
+        const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
+        shadow.innerHTML = `<style>:host { display:block; overflow:auto; } :host([hidden]) { display:none; }</style>${svg}`;
+        const image = shadow.querySelector("svg");
+        const bounds = image?.viewBox.baseVal;
+        if (image && bounds && bounds.width > 0 && bounds.height > 0) {
+          image.style.width = `${bounds.width}px`;
+          image.style.height = `${bounds.height}px`;
+          image.style.maxWidth = "none";
         }
+        setRendered(true);
       } catch {
-        // A failed lazy chunk load must not hide the response.
+        // Invalid diagrams and failed lazy loads remain readable code.
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [html, resolvedTheme, images, diagrams]);
-  // Custom prose host: shadcn has no Markdown/Mermaid renderer. HTML is escaped by renderMarkdown.
+  }, [text, language, incomplete, closed, diagrams, resolvedTheme]);
+  // Custom code/diagram host: shadcn has no Markdown renderer or shadow-isolated Mermaid host.
   return (
-    <>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: delegates native button clicks from the HTML-string renderer, including keyboard activation. */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the generated buttons already provide Enter and Space activation. */}
+    <div className="markdown-code-block">
+      {!rendered && (
+        <pre>
+          <code>{text}</code>
+        </pre>
+      )}
       <div
         ref={ref}
-        className={className}
-        onClick={(event) => {
-          const button =
-            event.target instanceof Element
-              ? event.target.closest<HTMLButtonElement>("button[data-local-file]")
-              : null;
-          if (button && event.currentTarget.contains(button)) openFile(button.dataset.localFile!);
-        }}
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdown escapes source before adding markup.
-        dangerouslySetInnerHTML={{ __html: initialHtml.current }}
+        hidden={!rendered}
+        data-mermaid-diagram=""
+        role="img"
+        aria-label="Mermaid diagram"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users scroll the diagram's overflow.
+        tabIndex={0}
       />
-      {codeBlocks.map(({ host, text }, index) =>
-        createPortal(<CopyCode text={text} />, host, String(index)),
-      )}
-    </>
+      <CopyCode text={text} />
+    </div>
+  );
+}
+
+// Keep Piano typography and controls rather than importing Streamdown's alternative visual system.
+const components: Components = {
+  a: MarkdownLink,
+  img: MarkdownImage,
+  pre: MarkdownPre,
+  code: "code",
+  p: "p",
+  h1: "h1",
+  h2: "h2",
+  h3: "h3",
+  h4: "h4",
+  h5: "h5",
+  h6: "h6",
+  ul: "ul",
+  ol: "ol",
+  li: "li",
+  blockquote: "blockquote",
+  strong: "strong",
+  hr: "hr",
+  table: ({ children }) => (
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users scroll wide tables.
+    <section className="markdown-table-scroll" aria-label="Table" tabIndex={0}>
+      <table>{children}</table>
+    </section>
+  ),
+  thead: "thead",
+  tbody: "tbody",
+  tr: "tr",
+  th: "th",
+  td: "td",
+};
+const rehypePlugins: [] = [];
+// The custom link/image components own destination policy; no native URL is emitted unvalidated.
+const urlTransform = (url: string) => url;
+
+function MarkdownContent({
+  text,
+  className,
+  images,
+  diagrams = true,
+  mode = "streaming",
+  streaming = false,
+}: MarkdownProps) {
+  if (!markdownWithinBudget(text))
+    return (
+      <div className={className}>
+        <pre>
+          <code>{text}</code>
+        </pre>
+      </div>
+    );
+  return (
+    <ImagesContext value={images}>
+      <DiagramsContext value={diagrams}>
+        <Streamdown
+          className={className}
+          mode={mode}
+          isAnimating={streaming}
+          parseIncompleteMarkdown={mode === "streaming" && streaming}
+          components={components}
+          remarkPlugins={markdownPlugins}
+          rehypePlugins={rehypePlugins}
+          skipHtml
+          urlTransform={urlTransform}
+          controls={false}
+        >
+          {text}
+        </Streamdown>
+      </DiagramsContext>
+    </ImagesContext>
   );
 }
