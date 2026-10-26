@@ -56,7 +56,6 @@ export interface CommandEffects {
   openProject: (projectId: string) => void;
   openChanges: () => void;
   toggleDetails: () => void;
-  hideChanges: () => void;
   showAgent: () => void;
   openPullRequest: () => void;
   toggleSidebar: () => void;
@@ -129,9 +128,6 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
     case "wrap-changes":
       effects.setChangesWrap(intent.on);
       effects.openChanges();
-      break;
-    case "hide-changes":
-      effects.hideChanges();
       break;
     case "agent":
       effects.showAgent();
