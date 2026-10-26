@@ -18,6 +18,11 @@ const NEAR_TOP = 40;
 const READING_LINE = 80;
 /** A jump lands a message this far under the container's top edge. */
 const JUMP_MARGIN = 16;
+/** A wheel's `deltaMode` values: pixels, lines (`WheelEvent.DOM_DELTA_LINE`) or pages. */
+const DELTA_LINE = 1;
+const DELTA_PAGE = 2;
+/** Pixels per wheel line, where the browser reports lines. */
+const LINE_PX = 16;
 
 /** The transcript's scroll container, as the viewport sees it. */
 export interface ViewportElement {
@@ -37,6 +42,14 @@ export interface TranscriptViewport {
    * short of the end unpins, so small steps up from the bottom are not undone by new output.
    */
   scrolled: () => void;
+  /**
+   * A wheel turned elsewhere in the area, handed to the transcript: moves the reader by the
+   * wheel's `deltaY` in its `deltaMode` units (pixels, lines, or pages of the container) and
+   * applies the same policy as `scrolled`; nothing happens without a transcript. The browser then
+   * reports the move as a scroll of its own, which `scrolled` sees as a repeated position and
+   * leaves the decision alone.
+   */
+  wheel: (deltaY: number, deltaMode: number) => void;
   /** The transcript re-rendered: a pinned view follows the bottom. */
   rendered: () => void;
   /**
@@ -104,6 +117,20 @@ export function createTranscriptViewport(): TranscriptViewport {
     lastTop = el.scrollTop;
   };
 
+  // A scroll reported at the position already decided on (the browser's own event after a
+  // handed wheel, or after a follow) keeps that decision; a move up from the bottom would
+  // otherwise read as a move down to it.
+  const scrolled = () => {
+    if (!element) return;
+    const top = element.scrollTop;
+    if (top !== lastTop) {
+      const end = element.scrollHeight - top - element.clientHeight < AT_END;
+      stick = end || (near(element) && top >= lastTop);
+      lastTop = top;
+    }
+    setBottom(near(element));
+  };
+
   return {
     attach: (el) => {
       element = el;
@@ -112,13 +139,13 @@ export function createTranscriptViewport(): TranscriptViewport {
       lastTop = el.scrollTop;
       setBottom(true);
     },
-    scrolled: () => {
+    scrolled,
+    wheel: (deltaY, deltaMode) => {
       if (!element) return;
-      const top = element.scrollTop;
-      const end = element.scrollHeight - top - element.clientHeight < AT_END;
-      stick = end || (near(element) && top >= lastTop);
-      lastTop = top;
-      setBottom(near(element));
+      const unit =
+        deltaMode === DELTA_PAGE ? element.clientHeight : deltaMode === DELTA_LINE ? LINE_PX : 1;
+      element.scrollTop = element.scrollTop + deltaY * unit;
+      scrolled();
     },
     rendered: () => {
       if (element) follow(element);
