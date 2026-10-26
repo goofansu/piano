@@ -25,7 +25,7 @@ export type SessionCommandId =
   | "copy-working-directory"
   | "copy-branch"
   | "copy-session-id"
-  | "copy-all"
+  | "copy-session-path"
   | "views"
   | "changes"
   | "hide-changes"
@@ -122,7 +122,7 @@ export interface SessionHeaderMenu {
 /** The row puts archive beside delete, though only delete is destructive. */
 const ROW_SECTIONS = [["rename", "pin"], ["share"], ["archive", "delete"]] as const;
 const HEADER_SECTIONS = {
-  details: ["copy-all"],
+  details: ["copy-session-path"],
   // The header's preview control carries open and stop, and Views (or, one area at a time, the
   // area tabs) Changes; the menu lists none of them twice.
   open: ["pull-request"],
@@ -194,7 +194,8 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
  *   an app; open needs its link, stop needs the attachment (`sessionReady`).
  * - new session here: the checkout is present.
- * - copy and Messages only: always.
+ * - copy session path: saved history has supplied its file path; no live Pi needed.
+ * - other copy commands and Messages only: always (session ID requires an ID).
  */
 export function sessionCommands(
   state: AppState,
@@ -217,10 +218,7 @@ export function sessionCommands(
   if (selected && session) {
     const messagesOnly = options.messagesOnly ?? false;
     const { surface = null, single = false } = options.areas ?? {};
-    const all = [
-      `Working directory: ${session.cwd}`,
-      ...(ctx.sessionId ? [`Session ID: ${ctx.sessionId}`] : []),
-    ].join("\n");
+    const sessionPath = session.state.sessionFile;
     commands.push(
       {
         id: "copy-working-directory",
@@ -249,11 +247,11 @@ export function sessionCommands(
         intent: { kind: "copy", value: ctx.sessionId ?? "", label: "Session ID" },
       },
       {
-        id: "copy-all",
-        label: "Copy session details",
+        id: "copy-session-path",
+        label: "Copy session path",
         icon: "copy",
-        enabled: true,
-        intent: { kind: "copy", value: all, label: "Session details" },
+        enabled: !!sessionPath,
+        intent: { kind: "copy", value: sessionPath ?? "", label: "Session path" },
       },
       {
         id: "views",

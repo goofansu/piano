@@ -239,7 +239,7 @@ test("search uses direct command synonyms, not related topics or opposite displa
   assert.deepEqual(matches("diff"), ["changes"]);
   assert.deepEqual(matches("theme"), ["appearance-light", "appearance-dark", "appearance-system"]);
   assert.ok(matches("pr").includes("pull-request"));
-  assert.deepEqual(matches("path"), ["copy-working-directory"]);
+  assert.deepEqual(matches("path"), ["copy-working-directory", "copy-session-path"]);
 });
 
 test("label matches rank ahead of aliases, without aliases changing a label match's score", () => {

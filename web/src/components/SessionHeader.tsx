@@ -101,17 +101,13 @@ export function SessionHeader({
         className="w-96 max-w-[calc(100vw-2rem)]"
       >
         <DropdownMenuGroup className="flex items-start">
-          <SessionDetails
-            className="px-2"
-            cwd={session?.cwd}
-            branch={branch}
-            sessionId={sessionId}
-          />
+          <SessionDetails className="px-2" sessionId={sessionId} />
           {menu.details.map((c) => (
             <DropdownMenuItem
               key={c.id}
               className="-mt-1 size-11 shrink-0 justify-center md:-mt-1.5"
               aria-label={c.label}
+              disabled={!c.enabled}
               onSelect={() => run(c)}
             >
               <CommandIcon icon={c.icon} />
