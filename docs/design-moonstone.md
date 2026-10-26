@@ -195,8 +195,10 @@ composer's usage row once held both as popovers, and the palette no longer searc
 Surface area's remembered width is a
 preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
 shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the
-viewport) the areas take turns under Agent and Changes tabs, each at full width, drawn as
-the same strip tabs without Close (a file closes from its toolbar). There neither the Changes icon
+viewport) the areas take turns, each at full width, under tabs that show only while something is
+open beside the Agent area: Agent, then the open tabs ("Agent | README.md"), drawn as the same
+strip tabs without Close (each view closes from its toolbar). With nothing open the bar is left
+out to save its row; Changes opens from the palette. There neither the Changes icon
 nor the session rail shows: the rail has no room, its toggle and palette row are unavailable, and its
 switch waits for the session to be wide again.
 

@@ -5,7 +5,7 @@
  */
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import { closable, type NavigationState, shownAreas } from "./navigation.ts";
+import { type NavigationState, shownAreas } from "./navigation.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
@@ -219,9 +219,9 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - details: the session is laid out side by side, the only layout with room for the session
  *   rail (its facts need neither Git nor a live Pi); "Hide session rail" while it shows, else
  *   "Show session rail".
- * - hide changes: Changes has a tab beside the Agent area; hiding closes it.
- * - agent: the session is laid out one area at a time and the Agent tab shows, beside a Surface
- *   tab or Changes that can open.
+ * - hide changes: Changes has a tab; hiding closes it.
+ * - agent: the session is laid out one area at a time and the Agent tab shows, beside an open
+ *   Surface tab.
  * - pull request, copy session ID: the selected session has a Pi session ID.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
  *   an app; open needs its link, stop needs the attachment (`sessionReady`).
@@ -251,8 +251,8 @@ export function sessionCommands(
     const messagesOnly = options.messagesOnly ?? false;
     const areas = options.areas ?? NO_AREAS;
     const { surface, single } = areas;
-    // One area at a time, Agent has a tab while something sits beside it.
-    const agentTab = single && (!!surface || ctx.canOpenChanges);
+    // One area at a time, Agent has a tab while something is open beside it.
+    const agentTab = single && !!surface;
     const sessionPath = session.state.sessionFile;
     commands.push(
       {
@@ -310,7 +310,7 @@ export function sessionCommands(
         id: "hide-changes",
         label: "Hide changes",
         icon: "hide",
-        enabled: closable("changes", single) && !!surface?.tabs.includes("changes"),
+        enabled: !!surface?.tabs.includes("changes"),
         keywords: ["close"],
         intent: { kind: "hide-changes" },
       },

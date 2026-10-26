@@ -14,7 +14,8 @@ The palette (Mod+K) searches neither outputs nor links.
 - `changes-open`: the header's last control, the "Changes" toggle, opens the Surface area and is
   pressed while Changes shows, then named "Hide changes", which hides it; the palette's "Changes"
   focuses Changes without rereading, collapsing or hiding it. Below 849px of session width the
-  "Agent" / "Changes" tabs replace the toggle.
+  toggle goes and the palette opens Changes; the "Agent" tab bar shows only while something is open
+  (`Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar closes it.
 - `changes-list`: list "Changed files" with one collapsible row per file
   (`<path>, <n> added, <n> removed: collapse`), "New file" for untracked files, and the diff.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
@@ -24,7 +25,7 @@ The palette (Mod+K) searches neither outputs nor links.
   rail", turns the session rail on or off; it stays on
   across sessions and reloads, hides while a Surface tab shows, and returns when the last one
   closes; turned on over open tabs, it hides them until the rail goes off. It is offered even
-  without Git. Narrow, the "Agent" / "Changes" tabs replace the "Changes" icon, and neither the rail nor its
+  without Git. Narrow, neither the "Changes" icon nor the rail nor its
   toggle shows; widening again brings the rail back if it was on.
 - `files-list`: The rail's "Outputs" lists files written in the session by name only, and its
   "Links" lists the conversation's web links, each with "Jump to message". Either section

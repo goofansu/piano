@@ -79,13 +79,6 @@ export function shownAreas(
   return { agent: true, surface, details: state.details && !surface };
 }
 
-/**
- * Whether a Surface tab closes: side by side every tab does (its strip X, Escape, Hide changes);
- * one area at a time only a file does, from its toolbar, and a view (Changes) stays,
- * Agent being the way back from it.
- */
-export const closable = (tab: SurfaceTab, single: boolean): boolean => !single || !isView(tab);
-
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */
   settings: SettingsSection | null;
@@ -586,7 +579,7 @@ export function createNavigation({
     closeTab: (key) => {
       const surface = state.surface;
       const at = surface?.tabs.findIndex((tab) => tabKey(tab) === key) ?? -1;
-      if (!surface || at < 0 || !closable(surface.tabs[at], state.single)) return;
+      if (!surface || at < 0) return;
       const closing = surface.tabs[at];
       const tabs = surface.tabs.toSpliced(at, 1);
       if (!tabs.length) return moveArea({ surface: null, area: "agent" });

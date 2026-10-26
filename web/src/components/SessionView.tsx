@@ -26,7 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
-import { isView, type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
+import { shownAreas, tabKey } from "@/lib/navigation";
 import { AGENT_MIN_WIDTH, DETAILS_WIDTH, PANEL_WIDTH, singleArea } from "@/lib/panelLayout";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
@@ -99,10 +99,7 @@ export function SessionView({ state, send }: Props) {
   );
   const input = state.pendingCreate;
   const { workspace, draftKey } = sessionContext(state);
-  // A view opens through its session command, whose rule the header and the palette follow too.
-  const { commands, run } = useSessionCommands();
-  const changes = commands.find((c) => c.id === "changes");
-  const openChanges = changes?.enabled ? () => run(changes) : undefined;
+  const { commands } = useSessionCommands();
   // The area tabs show where the Agent command is offered; only then is each area their panel.
   const areaTabs = !!commands.find((c) => c.id === "agent")?.enabled;
   // Ask adds to the draft and never sends; one area at a time, it returns to the draft.
@@ -155,7 +152,7 @@ export function SessionView({ state, send }: Props) {
           )
         }
       />
-      {areaTabs && <AreaTabs openChanges={openChanges} />}
+      {areaTabs && <AreaTabs />}
       <div
         ref={areas}
         className="relative flex min-h-0 min-w-0 flex-1"
@@ -294,41 +291,22 @@ export function SessionView({ state, send }: Props) {
 }
 
 /**
- * One area at a time, the tabs between them: Agent, Changes when available or already open, then
- * files in opening order. The session rail has no room here and no tab. A view keeps its place even before it opens. Choosing
- * Agent never focuses the composer, so a phone keeps its keyboard down; choosing a view shows it
- * as it was left. A file closes from its own toolbar.
+ * One area at a time, the tabs between them while something is open beside the Agent area:
+ * Agent, then the open tabs in opening order ("Agent | README.md"). Without one the bar is left
+ * out, saving its row; Changes opens from the palette and becomes a tab. The session rail has no
+ * room here and no tab. Choosing Agent never focuses the composer, so a phone keeps its keyboard
+ * down; choosing a view shows it as it was left. A tab closes from its view's toolbar.
  */
-function AreaTabs({
-  openChanges,
-}: {
-  /** Runs the Changes command; omitted while it is disabled, which leaves Changes out. */
-  openChanges: (() => void) | undefined;
-}) {
+function AreaTabs() {
   const navigation = useNavigation();
   const { surface, showAgent, selectTab } = navigation;
   const tabs = surface?.tabs ?? [];
   const value = surface && shownAreas(navigation).surface ? surface.active : "agent";
-  // The Surface area's strip tabs, so the session's tabs look alike at every width.
-  const view = (tab: SurfaceTab) => {
-    const key = tabKey(tab);
-    return (
-      <PianoStripTab key={key} selected={key === value}>
-        <SurfaceTabTrigger tab={tab} id={tabId(key)} controls={AREA_ID.surface} />
-      </PianoStripTab>
-    );
-  };
   return (
     <PianoStripBar variant="pills">
       <Tabs
         value={value}
-        onValueChange={(next) =>
-          next === "agent"
-            ? showAgent()
-            : next === "changes" && !tabs.includes(next)
-              ? openChanges?.()
-              : selectTab(next)
-        }
+        onValueChange={(next) => (next === "agent" ? showAgent() : selectTab(next))}
         className="min-w-0 flex-1 gap-0 self-stretch"
       >
         <PianoStripTabsList aria-label="Session views">
@@ -342,8 +320,15 @@ function AreaTabs({
               Agent
             </PianoStripTabTrigger>
           </PianoStripTab>
-          {(openChanges || tabs.includes("changes")) && view("changes")}
-          {tabs.filter((tab) => !isView(tab)).map(view)}
+          {/* The Surface area's strip tabs, so the session's tabs look alike at every width. */}
+          {tabs.map((tab) => {
+            const key = tabKey(tab);
+            return (
+              <PianoStripTab key={key} selected={key === value}>
+                <SurfaceTabTrigger tab={tab} id={tabId(key)} controls={AREA_ID.surface} />
+              </PianoStripTab>
+            );
+          })}
         </PianoStripTabsList>
       </Tabs>
     </PianoStripBar>

@@ -430,7 +430,7 @@ test("archiving a session that owns an app asks first, from the header or its si
   assert.equal((archive(background, other) as { confirm: boolean }).confirm, true);
 });
 
-test("view commands follow the session's areas: the session rail and Hide changes side by side, Agent one at a time", () => {
+test("view commands follow the session's areas: the session rail side by side, Agent one at a time beside an open tab", () => {
   const ofAreas = (
     { surface, single }: { surface: "changes" | null; single: boolean },
     state = base,
@@ -463,17 +463,15 @@ test("view commands follow the session's areas: the session rail and Hide change
   assert.deepEqual(ofAreas({ surface: "changes", single: true }), {
     changes: true,
     details: false,
-    "hide-changes": false,
+    "hide-changes": true,
     agent: true,
   });
-  // A removed checkout closes Changes, and the session rail has no room one area at a time, so
-  // nothing sits beside Agent and it needs no tab.
-  const removed = { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) };
-  assert.deepEqual(ofAreas({ surface: null, single: true }, removed), {
-    changes: false,
+  // Nothing open: Agent needs no tab even where Changes could open, and the session rail has no
+  // room one area at a time.
+  assert.deepEqual(ofAreas({ surface: null, single: true }), {
+    changes: true,
     details: false,
     "hide-changes": false,
     agent: false,
   });
-  assert.equal(ofAreas({ surface: null, single: false }, removed).agent, false, "side by side");
 });
