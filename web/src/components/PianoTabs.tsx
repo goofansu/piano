@@ -34,8 +34,12 @@ function wheelSideways(event: React.WheelEvent<HTMLDivElement>) {
 
 /**
  * What every tab list shares once its tabs no longer fit: they start at the first tab (upstream
- * centres them, which strands the overflow before the scroll start), scroll sideways by a thin
- * scrollbar, a wheel or trackpad, or the arrow keys, and keep the selected tab in view.
+ * centres them, which strands the overflow before the scroll start), scroll sideways by a wheel,
+ * a trackpad, a finger or the arrow keys, and keep the selected tab in view. No scrollbar, as a
+ * browser's tab strip has none: a styled one is a classic bar that takes the list's bottom edge
+ * and lifts the tabs off the strip's rule. No edge fade either: a tab cut off at the edge says
+ * there is more, and `scroll-fade-x` fades both edges always in a browser without scroll-driven
+ * animations, even a lone tab's underline.
  */
 function ScrollingTabsList({ className, onWheel, ...props }: ComponentProps<typeof TabsList>) {
   const ref = useRef<HTMLDivElement>(null);
@@ -50,7 +54,7 @@ function ScrollingTabsList({ className, onWheel, ...props }: ComponentProps<type
         wheelSideways(event);
       }}
       className={cn(
-        "relative max-w-full justify-start overflow-x-auto overflow-y-hidden p-0 group-data-horizontal/tabs:h-auto [scrollbar-color:var(--line-strong)_transparent] [scrollbar-width:thin]",
+        "relative max-w-full scrollbar-none justify-start overflow-x-auto overflow-y-hidden p-0 group-data-horizontal/tabs:h-auto",
         className,
       )}
     />
@@ -68,8 +72,9 @@ function focusPressedTab(event: React.MouseEvent<HTMLButtonElement>) {
 }
 
 /**
- * The darker band a tab strip sits on, its rule under the tabs. Hand-written: no shadcn component
- * is a band for tabs.
+ * The row a tab strip sits on: the sheet itself, with its rule under the tabs, so the session
+ * header, the strip and the view beneath are one surface divided by hairlines. Hand-written: no
+ * shadcn component is a row for tabs.
  */
 export function PianoStripBar({
   children,
@@ -82,7 +87,7 @@ export function PianoStripBar({
     <div
       data-variant={variant}
       className={cn(
-        "group/strip flex shrink-0 items-end border-b border-line bg-surface-0 px-2",
+        "group/strip flex shrink-0 items-end border-b border-line px-2",
         // Pills keep the strip's side padding above and below them too.
         variant === "pills" ? "h-11 pointer-coarse:h-15" : "h-10 pointer-coarse:h-12",
       )}
@@ -93,9 +98,8 @@ export function PianoStripBar({
 }
 
 /**
- * The Surface area's tab strip: browser-style tabs on a darker strip, the selected one joining the
- * view beneath. The strip draws its rule under the tabs, so the selected tab covers it; tabs keep
- * their width and scroll as every tab list does.
+ * The Surface area's tab strip: flat tabs on the sheet, the selected one underlined on the
+ * strip's rule, as Linear's are. Tabs keep their width and scroll as every tab list does.
  */
 export function PianoStripTabsList({ className, ...props }: ComponentProps<typeof TabsList>) {
   return (
@@ -125,14 +129,15 @@ export function PianoStripTab({
       className={cn(
         // Keyboard focus rings the whole tab, Close included, inside its edge so the strip
         // never clips it. Sized by pointer, not width: a touch screen keeps a 44px target.
-        "relative -mb-px flex h-8 pointer-coarse:h-11 max-w-48 min-w-0 shrink-0 items-center gap-0.5 rounded-t-lg border border-b-0 pr-1 has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-inset",
-        // Single-area navigation stays a whole rectangle apart from the content rather than
-        // joining its edge.
-        "group-data-[variant=pills]/strip:h-7 group-data-[variant=pills]/strip:rounded-sm group-data-[variant=pills]/strip:border-b pointer-coarse:group-data-[variant=pills]/strip:h-11",
+        "relative -mb-px flex h-8 pointer-coarse:h-11 max-w-48 min-w-0 shrink-0 items-center gap-0.5 rounded-md pr-1 has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-inset",
+        // The chosen tab's bar, 2px of ink sitting on the strip's rule (brand means "live").
+        "after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-ink after:opacity-0",
+        // Single-area navigation is a filled pill, a whole rectangle apart from the content.
+        "group-data-[variant=pills]/strip:mb-0 group-data-[variant=pills]/strip:h-7 group-data-[variant=pills]/strip:rounded-sm group-data-[variant=pills]/strip:after:hidden pointer-coarse:group-data-[variant=pills]/strip:h-11",
         selected
-          ? "z-10 border-line bg-conversation text-ink"
-          : // Pointing at a tab outlines it, the shape it takes when chosen.
-            "border-transparent text-ink-3 hover:border-line hover:text-ink",
+          ? "text-ink after:opacity-100 group-data-[variant=pills]/strip:bg-fill-active"
+          : // Pointing at a tab fills it, as pointing at a ghost control does.
+            "text-ink-3 hover:bg-fill hover:text-ink",
         className,
       )}
     >

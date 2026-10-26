@@ -160,11 +160,17 @@ the path; the segments carry no tooltips, since they show their own text. The de
 
 The Surface area (Changes, Details, open files) sits beside the Agent area under the one session header,
 on the same sheet, split off by a hairline rather than floating as a second card; the Agent area
-has no title. Its views are browser-style tabs on a darker strip, each a small icon, its name and
-Close, outlined while pointed at; the shown view's toolbar is a row of its own beneath them, what
+has no title. Its views are flat tabs on the sheet, each a small icon, its name and Close, the
+shown one underlined on the strip's rule and the pointed-at one filled, so the header, the strip
+and the view are one surface divided by hairlines (a darker strip with browser-style joined tabs
+was tried: it punched the canvas colour into the sheet and ended at a different height on each
+side of the split); the shown view's toolbar is a row of its own beneath them, what
 it shows on the left and its small-text actions on the right, so naming and closing never mix
 with acting. A new view's tab joins the end, Changes included; opening one already open shows it
-in place. Tabs that no longer fit scroll sideways. Reloading the page brings back the session's
+in place. Tabs that no longer fit scroll sideways with no scrollbar, as a browser's tabs do, a tab
+cut off at the edge showing there is more (a native bar takes the list's bottom edge and lifts
+the tabs off the rule; an edge fade fades a lone tab in browsers without scroll-driven
+animations). Reloading the page brings back the session's
 tabs, the one shown and its area; another session, or a new browser tab, starts with only the
 Agent area. Pressing a tab never draws the keyboard ring. Views at the header's end opens Details or
 Changes, or shows it where it is already open. Details has no toolbar: its folding sections are Workspace (folder,
