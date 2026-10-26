@@ -163,6 +163,31 @@ export const ProviderLoginLive = Layer.effect(
         };
       },
     });
+    /** A credential write through Pi, on the sign-in lane so no attempt overlaps it. Once the
+     * lane is claimed, persistence, catalog invalidation and `after` finish even if the HTTP
+     * client disconnects: releasing early would let another write race Pi's promise, and a
+     * credential Pi persisted must change the usable models (INV-02). `run` refuses by throwing;
+     * `failure` is all the person sees of why (INV-11). */
+    const write = Effect.fn("ProviderLogin.write")(function* (
+      busy: string,
+      failure: string,
+      run: (runtime: Runtime) => Promise<void>,
+      after: Effect.Effect<void> = Effect.void,
+    ) {
+      yield* attempts
+        .exclusive(
+          Effect.gen(function* () {
+            yield* Effect.tryPromise({
+              try: async () => run(await factory.create()),
+              catch: () => new SignInError({ detail: failure }),
+            });
+            yield* facts.invalidate;
+            yield* after;
+          }),
+          busy,
+        )
+        .pipe(Effect.uninterruptible);
+    });
     return ProviderLogin.of({
       providers: Effect.tryPromise({
         try: async () => {
@@ -190,68 +215,52 @@ export const ProviderLoginLive = Layer.effect(
         catch: () => new ProvidersError({ detail: "Could not load API keys." }),
       }),
       changeApiKey: Effect.fn("ProviderLogin.changeApiKey")(function* (change) {
-        const failure = "Could not change API key. Check the key and try again.";
-        // Share the OAuth lane. Once claimed, finish persistence and catalog invalidation even
-        // if the HTTP client disconnects; releasing early would let another write race Pi's promise.
-        yield* attempts
-          .exclusive(
-            Effect.gen(function* () {
-              yield* Schema.decodeUnknownEffect(ProviderApiKeyChange)(change).pipe(
-                Effect.mapError(() => new SignInError({ detail: API_KEY_INVALID })),
+        yield* Schema.decodeUnknownEffect(ProviderApiKeyChange)(change).pipe(
+          Effect.mapError(() => new SignInError({ detail: API_KEY_INVALID })),
+        );
+        yield* write(
+          "A provider operation is already in progress. Finish it before changing an API key.",
+          "Could not change API key. Check the key and try again.",
+          async (runtime) => {
+            if (!apiKeyProvider(runtime, change.provider))
+              throw new Error("Unsupported API-key provider.");
+            const credential = (await runtime.listCredentials()).find(
+              (c) => c.providerId === change.provider,
+            );
+            // Never overwrite/remove an OAuth credential through the API Keys surface.
+            if (credential && credential.type !== "api_key") throw new Error("Not an API key.");
+            if (change.action === "remove" && !credential) throw new Error("No saved key.");
+            if (change.action === "remove")
+              await persisted("logout", () => runtime.logout(change.provider));
+            else
+              await persisted("login", () =>
+                runtime.login(change.provider, "api_key", {
+                  signal: new AbortController().signal,
+                  notify: () => {},
+                  prompt: async (prompt) => {
+                    if (prompt.type !== "secret") throw new Error("Unsupported API-key prompt.");
+                    return change.key;
+                  },
+                }),
               );
-              yield* Effect.tryPromise({
-                try: async () => {
-                  const runtime = await factory.create();
-                  if (!apiKeyProvider(runtime, change.provider))
-                    throw new Error("Unsupported API-key provider.");
-                  const credential = (await runtime.listCredentials()).find(
-                    (c) => c.providerId === change.provider,
-                  );
-                  // Never overwrite/remove an OAuth credential through the API Keys surface.
-                  if (credential && credential.type !== "api_key")
-                    throw new Error("Not an API key.");
-                  if (change.action === "remove" && !credential) throw new Error("No saved key.");
-                  if (change.action === "remove")
-                    await persisted("logout", () => runtime.logout(change.provider));
-                  else
-                    await persisted("login", () =>
-                      runtime.login(change.provider, "api_key", {
-                        signal: new AbortController().signal,
-                        notify: () => {},
-                        prompt: async (prompt) => {
-                          if (prompt.type !== "secret")
-                            throw new Error("Unsupported API-key prompt.");
-                          return change.key;
-                        },
-                      }),
-                    );
-                },
-                catch: () => new SignInError({ detail: failure }),
-              });
-              yield* facts.invalidate;
-            }),
-            "A provider operation is already in progress. Finish it before changing an API key.",
-          )
-          .pipe(Effect.uninterruptible);
+          },
+        );
       }),
       // The flow itself reports a provider without OAuth sign-in, so the attempt shows why.
       signIn: attempts.lane((provider) => Effect.succeed(source(provider))),
-      signOut: (provider) =>
-        attempts.exclusive(
-          Effect.tryPromise({
-            try: async () => {
-              const runtime = await factory.create();
-              if (!oauthProvider(runtime, provider) || !(await signedIn(runtime)).has(provider))
-                throw new Error("No OAuth credential for this provider.");
-              await persisted("logout", () => runtime.logout(provider));
-            },
-            catch: () =>
-              new SignInError({
-                detail: "Could not sign out. Finish any sign-in in progress and try again.",
-              }),
-          }).pipe(Effect.andThen(facts.invalidate), Effect.andThen(attempts.forget(provider))),
-          "Could not sign out. Finish any sign-in in progress and try again.",
-        ),
+      signOut: Effect.fn("ProviderLogin.signOut")(function* (provider) {
+        const refused = "Could not sign out. Finish any sign-in in progress and try again.";
+        yield* write(
+          refused,
+          refused,
+          async (runtime) => {
+            if (!oauthProvider(runtime, provider) || !(await signedIn(runtime)).has(provider))
+              throw new Error("No OAuth credential for this provider.");
+            await persisted("logout", () => runtime.logout(provider));
+          },
+          attempts.forget(provider),
+        );
+      }),
       bearer: Effect.fn("ProviderLogin.bearer")(function* (provider: string) {
         return yield* Effect.tryPromise(async (signal) => {
           const runtime = await factory.create(signal);
