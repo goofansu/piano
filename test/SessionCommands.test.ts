@@ -75,7 +75,7 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "copy-session-id": true,
     "copy-session-path": false,
     changes: true,
-    details: true,
+    "session-rail": true,
     agent: false,
     "wrap-changes": true,
     "pull-request": true,
@@ -440,33 +440,33 @@ test("view commands follow the session's areas: the session rail side by side, A
           single,
           surface: surface && { tabs: [surface], active: surface },
           area: surface ? "surface" : "agent",
-          details: false,
+          rail: false,
           covered: false,
         },
       })
-        .filter((c) => ["changes", "details", "agent"].includes(c.id))
+        .filter((c) => ["changes", "session-rail", "agent"].includes(c.id))
         .map((c) => [c.id, c.enabled]),
     );
   assert.deepEqual(ofAreas({ surface: null, single: false }), {
     changes: true,
-    details: true,
+    "session-rail": true,
     agent: false,
   });
   assert.deepEqual(ofAreas({ surface: "changes", single: false }), {
     changes: true,
-    details: true,
+    "session-rail": true,
     agent: false,
   });
   assert.deepEqual(ofAreas({ surface: "changes", single: true }), {
     changes: true,
-    details: false,
+    "session-rail": false,
     agent: true,
   });
   // Nothing open: Agent needs no tab even where Changes could open, and the session rail has no
   // room one area at a time.
   assert.deepEqual(ofAreas({ surface: null, single: true }), {
     changes: true,
-    details: false,
+    "session-rail": false,
     agent: false,
   });
 });

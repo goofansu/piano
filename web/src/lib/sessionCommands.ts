@@ -24,15 +24,15 @@ export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 /** The selected session's areas as navigation has them, which the view commands follow. */
 export type SessionAreas = Pick<
   NavigationState,
-  "surface" | "single" | "area" | "details" | "covered"
+  "surface" | "single" | "area" | "rail" | "covered"
 >;
 
-/** Side by side with only the Agent area and Details off. */
+/** Side by side with only the Agent area and the session rail off. */
 const NO_AREAS: SessionAreas = {
   surface: null,
   single: false,
   area: "agent",
-  details: false,
+  rail: false,
   covered: false,
 };
 
@@ -42,7 +42,7 @@ export type SessionCommandId =
   | "copy-session-id"
   | "copy-session-path"
   | "changes"
-  | "details"
+  | "session-rail"
   | "agent"
   | "wrap-changes"
   | "pull-request"
@@ -83,7 +83,7 @@ export type SessionCommandIntent =
    * Turn the session rail (the session's folder, branch and directory, its outputs and its
    * links) on or off beside the Agent area.
    */
-  | { kind: "details" }
+  | { kind: "session-rail" }
   /** Show the Agent area in a single-view layout. */
   | { kind: "agent" }
   | { kind: "wrap-changes"; on: boolean }
@@ -213,9 +213,9 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
- * - details: the session is laid out side by side, the only layout with room for the session
- *   rail (its facts need neither Git nor a live Pi); "Hide session rail" while it shows, else
- *   "Show session rail".
+ * - session rail: the session is laid out side by side, the only layout with room for it (its
+ *   facts need neither Git nor a live Pi); "Hide session rail" while it shows, else "Show session
+ *   rail".
  * - agent: the session is laid out one area at a time and the Agent tab shows, beside an open
  *   Surface tab.
  * - pull request, copy session ID: the selected session has a Pi session ID.
@@ -294,13 +294,13 @@ export function sessionCommands(
         intent: { kind: "changes" },
       },
       {
-        id: "details",
-        label: shownAreas(areas).details ? "Hide session rail" : "Show session rail",
+        id: "session-rail",
+        label: shownAreas(areas).rail ? "Hide session rail" : "Show session rail",
         icon: "list",
         enabled: !single,
         hidden: single,
         keywords: ["details", "info", "outputs", "files", "links", "branch"],
-        intent: { kind: "details" },
+        intent: { kind: "session-rail" },
       },
       {
         id: "agent",

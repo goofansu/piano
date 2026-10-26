@@ -61,7 +61,7 @@ function addressBar(start: string) {
 }
 
 /** A page at `url`: the client seeded as App seeds it, navigation over a fake address bar, the test playing the server. */
-function page(url: string, memory?: SurfaceMemory, details?: Preference<boolean>) {
+function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
   const address = addressBar(url);
   const sent: ClientMessage[] = [];
   let handlers: ConnectionHandlers | undefined;
@@ -86,7 +86,7 @@ function page(url: string, memory?: SurfaceMemory, details?: Preference<boolean>
     client,
     address: address.bar,
     memory,
-    details,
+    rail,
     moved: () => moves++,
   });
   client.start();
@@ -445,14 +445,14 @@ test("choosing Changes again shows its one tab in place: no toggle, no duplicate
   );
 });
 
-/** What sits on the Agent area's right side by side: Details, the Surface area, or nothing. */
+/** What sits on the Agent area's right side by side: the session rail, the Surface area, or nothing. */
 function rightSide(navigation: ReturnType<typeof createNavigation>) {
   const shown = shownAreas(navigation.getState());
-  return shown.details ? "details" : shown.surface ? "surface" : null;
+  return shown.rail ? "rail" : shown.surface ? "surface" : null;
 }
 
 /** A browser's localStorage for one preference, which outlives every page. */
-function detailsStorage(): PreferenceStorage {
+function railStorage(): PreferenceStorage {
   const values = new Map<string, string>();
   return {
     read: (key) => values.get(key) ?? null,
@@ -463,60 +463,68 @@ function detailsStorage(): PreferenceStorage {
   };
 }
 
-const detailsPreference = (storage: PreferenceStorage) =>
-  createPreference<boolean>({ key: "details", decode: (raw) => raw === "true", storage });
+const railPreference = (storage: PreferenceStorage) =>
+  createPreference<boolean>({ key: "rail", decode: (raw) => raw === "true", storage });
 
-test("side by side, Details and the Surface area share the right side: whichever came in last shows", () => {
+test("side by side, the session rail and the Surface area share the right side: whichever came in last shows", () => {
   const p = page("/s/a");
   p.registry();
   p.selected("a");
-  assert.equal(rightSide(p.navigation), null, "Details starts off");
+  assert.equal(rightSide(p.navigation), null, "the rail starts off");
 
-  p.navigation.toggleDetails();
-  assert.equal(rightSide(p.navigation), "details");
+  p.navigation.toggleRail();
+  assert.equal(rightSide(p.navigation), "rail");
 
   p.navigation.openChanges();
-  assert.equal(rightSide(p.navigation), "surface", "a surface coming in hides Details");
-  assert.equal(p.navigation.getState().details, true, "hidden, Details stays on");
+  assert.equal(rightSide(p.navigation), "surface", "a surface coming in hides the session rail");
+  assert.equal(p.navigation.getState().rail, true, "hidden, the session rail stays on");
 
   p.navigation.closeTab("changes");
-  assert.equal(rightSide(p.navigation), "details", "the last tab closing brings Details back");
+  assert.equal(
+    rightSide(p.navigation),
+    "rail",
+    "the last tab closing brings the session rail back",
+  );
 
   p.navigation.openFile("README.md");
-  p.navigation.toggleDetails();
-  assert.equal(rightSide(p.navigation), "details", "turned on over a surface, Details covers it");
+  p.navigation.toggleRail();
+  assert.equal(
+    rightSide(p.navigation),
+    "rail",
+    "turned on over a surface, the session rail covers it",
+  );
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md"], "the covered tabs wait");
 
-  p.navigation.toggleDetails();
+  p.navigation.toggleRail();
   assert.equal(rightSide(p.navigation), "surface", "turned off, the covered surface returns");
 
-  p.navigation.toggleDetails();
+  p.navigation.toggleRail();
   p.navigation.selectTab("file:README.md");
   assert.equal(rightSide(p.navigation), "surface", "showing a tab uncovers the surface");
-  p.navigation.toggleDetails();
-  assert.equal(rightSide(p.navigation), "details");
-  p.navigation.toggleDetails();
+  p.navigation.toggleRail();
+  assert.equal(rightSide(p.navigation), "rail");
+  p.navigation.toggleRail();
   assert.equal(rightSide(p.navigation), "surface");
-  assert.equal(p.navigation.getState().details, false);
+  assert.equal(p.navigation.getState().rail, false);
 });
 
-test("Details is one choice for every session, and the browser remembers it", () => {
-  const storage = detailsStorage();
-  const before = page("/s/a", undefined, detailsPreference(storage));
+test("the session rail is one choice for every session, and the browser remembers it", () => {
+  const storage = railStorage();
+  const before = page("/s/a", undefined, railPreference(storage));
   before.registry();
   before.selected("a");
-  before.navigation.toggleDetails();
+  before.navigation.toggleRail();
   before.navigation.select("/scratch", "b");
   before.selected("b");
-  assert.equal(rightSide(before.navigation), "details", "another session shows its Details");
+  assert.equal(rightSide(before.navigation), "rail", "another session shows its the session rail");
 
-  const after = page("/s/a", undefined, detailsPreference(storage));
+  const after = page("/s/a", undefined, railPreference(storage));
   after.registry();
   after.selected("a");
-  assert.equal(rightSide(after.navigation), "details", "a new page starts with Details on");
-  after.navigation.toggleDetails();
+  assert.equal(rightSide(after.navigation), "rail", "a new page starts with the session rail on");
+  after.navigation.toggleRail();
 
-  const off = page("/s/a", undefined, detailsPreference(storage));
+  const off = page("/s/a", undefined, railPreference(storage));
   off.registry();
   off.selected("a");
   assert.equal(rightSide(off.navigation), null);
@@ -524,32 +532,32 @@ test("Details is one choice for every session, and the browser remembers it", ()
 
 test("a reload keeps the session rail over the tabs it covered, unless it was turned off meanwhile", () => {
   const memory = tabMemory();
-  const storage = detailsStorage();
-  const before = page("/s/a", memory, detailsPreference(storage));
+  const storage = railStorage();
+  const before = page("/s/a", memory, railPreference(storage));
   before.registry();
   before.selected("a");
   before.navigation.openChanges();
-  before.navigation.toggleDetails();
-  assert.equal(rightSide(before.navigation), "details");
+  before.navigation.toggleRail();
+  assert.equal(rightSide(before.navigation), "rail");
 
-  const after = page("/s/a", memory, detailsPreference(storage));
+  const after = page("/s/a", memory, railPreference(storage));
   after.registry();
   after.selected("a");
-  assert.equal(rightSide(after.navigation), "details", "the rail still covers the tabs");
+  assert.equal(rightSide(after.navigation), "rail", "the rail still covers the tabs");
   assert.deepEqual(shownTabs(after.navigation).tabs, ["changes"], "the covered tabs wait");
-  after.navigation.toggleDetails();
+  after.navigation.toggleRail();
   assert.equal(rightSide(after.navigation), "surface", "turned off, the covered tabs return");
 
   // Another tab of this browser turned the rail off (`storage` now says so) while this one was
   // away with the tabs covered: the tabs show, since no rail covers them.
   const away = tabMemory();
-  const left = page("/s/a", away, detailsPreference(detailsStorage()));
+  const left = page("/s/a", away, railPreference(railStorage()));
   left.registry();
   left.selected("a");
   left.navigation.openChanges();
-  left.navigation.toggleDetails();
-  assert.equal(rightSide(left.navigation), "details");
-  const off = page("/s/a", away, detailsPreference(storage));
+  left.navigation.toggleRail();
+  assert.equal(rightSide(left.navigation), "rail");
+  const off = page("/s/a", away, railPreference(storage));
   off.registry();
   off.selected("a");
   assert.equal(rightSide(off.navigation), "surface", "nothing is covered by a rail that is off");
@@ -559,23 +567,23 @@ test("one area at a time the session rail never shows, and comes back once the s
   const p = page("/s/a");
   p.registry();
   p.selected("a");
-  p.navigation.toggleDetails();
-  assert.equal(rightSide(p.navigation), "details");
+  p.navigation.toggleRail();
+  assert.equal(rightSide(p.navigation), "rail");
 
   p.navigation.setSingle(true);
   assert.deepEqual(shownAreas(p.navigation.getState()), {
     agent: true,
     surface: false,
-    details: false,
+    rail: false,
   });
-  p.navigation.toggleDetails();
-  assert.equal(shownAreas(p.navigation.getState()).details, false, "nothing to turn on there");
+  p.navigation.toggleRail();
+  assert.equal(shownAreas(p.navigation.getState()).rail, false, "nothing to turn on there");
 
   p.navigation.setSingle(false);
-  assert.equal(rightSide(p.navigation), "details", "the switch was kept");
+  assert.equal(rightSide(p.navigation), "rail", "the switch was kept");
 });
 
-test("a reload drops a Details tab kept by an older Piano and keeps the other tabs", () => {
+test("a reload drops a the session rail tab kept by an older Piano and keeps the other tabs", () => {
   const memory = tabMemory();
   memory.write(
     JSON.stringify({

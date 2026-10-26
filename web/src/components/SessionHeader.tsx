@@ -70,7 +70,7 @@ export function SessionHeader({
   const { commands, run } = useSessionCommands();
   const menu = sessionHeaderMenu(commands);
   // The session rail's switch is offered only side by side, where the Agent area has a right side.
-  const sideBySide = !!commands.find((c) => c.id === "details")?.enabled;
+  const sideBySide = !!commands.find((c) => c.id === "session-rail")?.enabled;
   const projectMenu = useSessionProjectMenu();
   const openProject = projectMenu?.open;
   const { display } = menu;
@@ -238,8 +238,8 @@ export function SessionHeader({
  */
 function SessionRailToggle() {
   const { commands, run } = useSessionCommands();
-  const shown = shownAreas(useNavigation()).details;
-  const command = commands.find((c) => c.id === "details");
+  const shown = shownAreas(useNavigation()).rail;
+  const command = commands.find((c) => c.id === "session-rail");
   if (!command) return null;
   return (
     <IconButton

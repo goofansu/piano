@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { DetailsList, DetailsRowTitle, detailsRow } from "@/components/DetailsList";
+import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { FileTabIcon } from "@/components/WorkspaceFile";
 import { abbrevHome } from "@/lib/format";
@@ -14,14 +14,14 @@ interface Props {
 }
 
 /**
- * Outputs: the files Pi wrote or edited in this session, listed in Details once there is one.
+ * Outputs: the files Pi wrote or edited in this session, listed in the session rail once there is one.
  * Each row is the file's name after its kind's icon, and opens the file as a Surface tab, as a
  * local file link in the transcript does; the tab and its toolbar carry the path.
  */
 export function SessionOutputs({ files, cwd }: Props) {
   const { openFile } = useNavigation();
   return (
-    <DetailsList aria-label="Outputs">
+    <RailList aria-label="Outputs">
       {files.map((file) => {
         const shown = displayPath(file, cwd, abbrevHome);
         return (
@@ -30,7 +30,7 @@ export function SessionOutputs({ files, cwd }: Props) {
             size="sm"
             asChild
             className={cn(
-              detailsRow,
+              railRow,
               "cursor-pointer hover:bg-fill-hover focus-visible:bg-fill-hover",
             )}
           >
@@ -39,14 +39,12 @@ export function SessionOutputs({ files, cwd }: Props) {
                 <FileTabIcon path={file.path} />
               </ItemMedia>
               <ItemContent className="min-w-0">
-                <DetailsRowTitle className="truncate font-mono">
-                  {splitPath(shown).name}
-                </DetailsRowTitle>
+                <RailRowTitle className="truncate font-mono">{splitPath(shown).name}</RailRowTitle>
               </ItemContent>
             </button>
           </Item>
         );
       })}
-    </DetailsList>
+    </RailList>
   );
 }

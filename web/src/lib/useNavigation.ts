@@ -9,8 +9,8 @@ import {
 } from "./navigation.ts";
 import { createPreference } from "./preference.ts";
 
-/** Whether Details is on, for every session in this browser. */
-const detailsPreference = createPreference<boolean>({
+/** Whether the session rail is on, for every session in this browser. The key predates the name. */
+const railPreference = createPreference<boolean>({
   key: "piano.details",
   decode: (raw) => raw === "true",
 });
@@ -27,7 +27,7 @@ export function useNavigationController(
       client,
       address: browserAddressBar,
       memory: browserSurfaceMemory,
-      details: detailsPreference,
+      rail: railPreference,
       moved,
     }),
   );

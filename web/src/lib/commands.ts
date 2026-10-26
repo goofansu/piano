@@ -55,7 +55,7 @@ export interface CommandEffects {
   openProjects: () => void;
   openProject: (projectId: string) => void;
   openChanges: () => void;
-  toggleDetails: () => void;
+  toggleRail: () => void;
   showAgent: () => void;
   openPullRequest: () => void;
   toggleSidebar: () => void;
@@ -122,8 +122,8 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
     case "changes":
       effects.openChanges();
       break;
-    case "details":
-      effects.toggleDetails();
+    case "session-rail":
+      effects.toggleRail();
       break;
     case "wrap-changes":
       effects.setChangesWrap(intent.on);

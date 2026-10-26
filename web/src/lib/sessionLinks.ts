@@ -1,5 +1,5 @@
 /**
- * The web links a session's conversation mentions, for Details' Links. Only what the user and Pi wrote counts: tool output is full of registry,
+ * The web links a session's conversation mentions, for the session rail's Links. Only what the user and Pi wrote counts: tool output is full of registry,
  * lockfile and error-text URLs nobody means to revisit.
  */
 import type { RenderMsg } from "../../../shared/wire.ts";

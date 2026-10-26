@@ -1,10 +1,10 @@
 import { isWorking } from "@shared/sessionProjection";
 import { FolderGit2Icon, FolderIcon, FolderOpenIcon, GitBranchIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
-import { DetailsList, DetailsRowTitle, detailsRow } from "@/components/DetailsList";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { SessionLinks } from "@/components/SessionLinks";
 import { SessionOutputs } from "@/components/SessionOutputs";
+import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
@@ -16,12 +16,13 @@ import { usePreference } from "@/lib/usePreference";
 import { useSessionFiles } from "@/lib/useSessionFiles";
 import { type AppState, sessionKey } from "@/store";
 
-/** Details' sections, each folding on its own. */
-type DetailsSection = "workspace" | "outputs" | "links";
-const SECTIONS: readonly DetailsSection[] = ["workspace", "outputs", "links"];
+/** The rail's sections, each folding on its own. */
+type RailSectionName = "workspace" | "outputs" | "links";
+const SECTIONS: readonly RailSectionName[] = ["workspace", "outputs", "links"];
 
-/** The sections the user folded, remembered across sessions and reloads; every section starts open. */
-const collapsedPreference = createPreference<readonly DetailsSection[]>({
+/** The sections the user folded, remembered across sessions and reloads; every section starts
+ * open. The key predates the rail's name. */
+const collapsedPreference = createPreference<readonly RailSectionName[]>({
   key: "piano.detailsCollapsed",
   decode: (raw) => {
     const value = parseJson(raw);
@@ -44,11 +45,11 @@ const collapsedPreference = createPreference<readonly DetailsSection[]>({
  * conversation. It shows only side by side, while the rail is on and the Surface area is not, and
  * follows the selected session. Hand-written: no shadcn component is a pinned side column.
  */
-export function DetailsRail({ state }: { state: AppState }) {
+export function SessionRail({ state }: { state: AppState }) {
   if (!state.session) return null;
   return (
     <aside
-      data-slot="details-rail"
+      data-slot="session-rail"
       aria-label="Session rail"
       onWheel={passWheel}
       // Clear of the scrollbar at the area's edge; its first section level with the transcript's
@@ -56,7 +57,7 @@ export function DetailsRail({ state }: { state: AppState }) {
       // It scrolls without a scrollbar, as the tab strips do.
       className="absolute inset-y-0 right-3 z-10 flex w-[calc(var(--rail-inset)-0.75rem)] scrollbar-none flex-col overflow-y-auto overscroll-y-contain pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:pt-5 md:pb-5"
     >
-      <DetailsSections key={sessionKey(state.session)} state={state} />
+      <RailSections key={sessionKey(state.session)} state={state} />
     </aside>
   );
 }
@@ -73,8 +74,8 @@ function passWheel(event: React.WheelEvent<HTMLElement>) {
   transcript?.scrollBy({ top: event.deltaY * lines });
 }
 
-/** Details' folding sections for the selected session. */
-function DetailsSections({ state }: { state: AppState }) {
+/** The rail's folding sections for the selected session. */
+function RailSections({ state }: { state: AppState }) {
   const session = state.session;
   const { cwd, folderName, worktreeName, branch } = sessionContext(state);
   const files = useSessionFiles();
@@ -82,15 +83,15 @@ function DetailsSections({ state }: { state: AppState }) {
   const working = !!session && isWorking(session.state);
   const links = useMemo(() => sessionLinks(messages), [messages]);
   const [collapsed, setCollapsed] = usePreference(collapsedPreference);
-  const group = (section: DetailsSection) => ({
+  const group = (section: RailSectionName) => ({
     open: !collapsed.includes(section),
     onOpenChange: (open: boolean) =>
       setCollapsed(open ? collapsed.filter((s) => s !== section) : [...collapsed, section]),
   });
   return (
     <div className="flex flex-col gap-4 px-3 pt-3">
-      <DetailsGroup title="Workspace" {...group("workspace")}>
-        <DetailsList aria-label="Workspace">
+      <RailSection title="Workspace" {...group("workspace")}>
+        <RailList aria-label="Workspace">
           <WorkspaceRow name="Folder" icon={<FolderIcon />}>
             {folderName}
           </WorkspaceRow>
@@ -109,17 +110,17 @@ function DetailsSections({ state }: { state: AppState }) {
               {abbrevHome(cwd)}
             </WorkspaceRow>
           )}
-        </DetailsList>
-      </DetailsGroup>
+        </RailList>
+      </RailSection>
       {files.length > 0 && (
-        <DetailsGroup title="Outputs" {...group("outputs")}>
+        <RailSection title="Outputs" {...group("outputs")}>
           <SessionOutputs files={files} cwd={cwd} />
-        </DetailsGroup>
+        </RailSection>
       )}
       {links.length > 0 && (
-        <DetailsGroup title="Links" {...group("links")}>
+        <RailSection title="Links" {...group("links")}>
           <SessionLinks links={links} messages={messages} working={working} />
-        </DetailsGroup>
+        </RailSection>
       )}
     </div>
   );
@@ -138,22 +139,22 @@ function WorkspaceRow({
   children: ReactNode;
 }) {
   return (
-    <Item size="sm" className={detailsRow} title={name}>
+    <Item size="sm" className={railRow} title={name}>
       <ItemMedia variant="icon" className="text-ink-3">
         {icon}
       </ItemMedia>
       <ItemContent>
-        <DetailsRowTitle className={mono ? "break-all font-mono" : "break-words"}>
+        <RailRowTitle className={mono ? "break-all font-mono" : "break-words"}>
           <span className="sr-only">{name}: </span>
           {children}
-        </DetailsRowTitle>
+        </RailRowTitle>
       </ItemContent>
     </Item>
   );
 }
 
-/** A section of Details: its name as a folding heading, then its list. */
-function DetailsGroup({
+/** A section of the rail: its name as a folding heading, then its list. */
+function RailSection({
   title,
   open,
   onOpenChange,

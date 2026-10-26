@@ -69,14 +69,14 @@ export type SessionArea = "agent" | "surface";
  * user moved to last, and never the rail, which has no room there.
  */
 export function shownAreas(
-  state: Pick<NavigationState, "surface" | "area" | "single" | "details" | "covered">,
-): { agent: boolean; surface: boolean; details: boolean } {
+  state: Pick<NavigationState, "surface" | "area" | "single" | "rail" | "covered">,
+): { agent: boolean; surface: boolean; rail: boolean } {
   if (state.single) {
     const surface = !!state.surface && state.area === "surface";
-    return { agent: !surface, surface, details: false };
+    return { agent: !surface, surface, rail: false };
   }
   const surface = !!state.surface && !state.covered;
-  return { agent: true, surface, details: state.details && !surface };
+  return { agent: true, surface, rail: state.rail && !surface };
 }
 
 export interface NavigationState {
@@ -90,11 +90,11 @@ export interface NavigationState {
   /** The Surface area's tabs; `null` while it has none, and so is hidden. */
   surface: Surface | null;
   /**
-   * Whether Details is on: one choice for every session, remembered by the browser. Side by side
-   * it shows on the Agent area's right whenever the Surface area does not.
+   * Whether the session rail is on: one choice for every session, remembered by the browser. Side
+   * by side it shows on the Agent area's right whenever the Surface area does not.
    */
-  details: boolean;
-  /** Side by side, whether Details, turned on after the Surface area, hides it; its tabs wait. */
+  rail: boolean;
+  /** Side by side, whether the rail, turned on after the Surface area, hides it; its tabs wait. */
   covered: boolean;
   /**
    * The area the user moved to last: the one a single-view layout shows. Only showing a surface
@@ -136,8 +136,8 @@ export interface NavigationOptions {
   address: AddressBar;
   /** Without one, a reload starts every session on its Agent area. */
   memory?: SurfaceMemory;
-  /** Whether Details is on; without one it starts off and lasts for this navigation only. */
-  details?: Preference<boolean>;
+  /** Whether the session rail is on; without one it starts off and lasts for this navigation only. */
+  rail?: Preference<boolean>;
   /** Called on every move the user or history makes, e.g. to close the mobile sidebar. */
   moved?: () => void;
 }
@@ -165,7 +165,7 @@ export interface Navigation {
    * a tab is shown again or the rail goes off. One area at a time it does nothing: the rail has no
    * room there, and keeps its switch for when the session is wide again.
    */
-  toggleDetails: () => void;
+  toggleRail: () => void;
   /**
    * Shows a file's tab, opening it at the end if needed; an open file, however spelled, is read
    * again. `from` is the area the link was in, which closing the file returns to, even when it was
@@ -337,7 +337,7 @@ export function createNavigation({
   client,
   address,
   memory,
-  details: detailsPreference,
+  rail: railPreference,
   moved = () => {},
 }: NavigationOptions): Navigation {
   // A route read from the address bar (on start, or on back/forward) that has not been applied yet.
@@ -346,7 +346,7 @@ export function createNavigation({
     settings: wanted.kind === "settings" ? wanted.section : null,
     settingsRequest: 0,
     surface: null,
-    details: detailsPreference?.get() ?? false,
+    rail: railPreference?.get() ?? false,
     covered: false,
     area: "agent",
     surfaceRequest: 0,
@@ -450,7 +450,7 @@ export function createNavigation({
         set({
           surface: back?.surface ?? null,
           area: back?.area ?? "agent",
-          covered: !!back?.covered && state.details,
+          covered: !!back?.covered && state.rail,
           pullRequest: false,
         });
       }
@@ -523,10 +523,10 @@ export function createNavigation({
       moved();
     });
 
-  /** Turns Details on or off for every session; side by side, on covers the Surface area. */
-  const setDetails = (on: boolean) => {
-    detailsPreference?.set(on);
-    moveArea({ details: on, covered: on && !!state.surface });
+  /** Turns the session rail on or off for every session; side by side, on covers the Surface area. */
+  const setRail = (on: boolean) => {
+    railPreference?.set(on);
+    moveArea({ rail: on, covered: on && !!state.surface });
   };
 
   /** Shows one of the session's views, opening its tab at the end if needed, or focuses it. */
@@ -574,8 +574,8 @@ export function createNavigation({
       }),
     closeSettings,
     openChanges: () => openView("changes"),
-    toggleDetails: () => {
-      if (!state.single) setDetails(!shownAreas(state).details);
+    toggleRail: () => {
+      if (!state.single) setRail(!shownAreas(state).rail);
     },
     openFile: (spelled, from = shownAreas(state).agent ? "agent" : "surface") => {
       const path = filePath(spelled, client.getState().session?.cwd);

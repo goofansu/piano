@@ -2,8 +2,8 @@ import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { LinkIcon, MessageSquareQuoteIcon } from "lucide-react";
 import { useMemo } from "react";
-import { DetailsList, DetailsRowTitle, detailsRow } from "@/components/DetailsList";
 import { IconButton } from "@/components/IconButton";
+import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
 import { displayUrl, type SessionLink } from "@/lib/sessionLinks";
 import { jumpEntries, revealEntries, transcriptRows } from "@/lib/transcript";
@@ -34,13 +34,13 @@ export function SessionLinks({ links, messages, working = false }: Props) {
       if (viewport?.jump(entry)) return;
   };
   return (
-    <DetailsList aria-label="Links">
+    <RailList aria-label="Links">
       {links.map((link) => (
         <Item
           key={link.url}
           size="sm"
           className={cn(
-            detailsRow,
+            railRow,
             "pr-1 has-[a:hover]:bg-fill-hover has-[a:focus-visible]:bg-fill-hover",
           )}
         >
@@ -57,15 +57,13 @@ export function SessionLinks({ links, messages, working = false }: Props) {
             <ItemContent className="min-w-0 gap-0">
               {link.label ? (
                 <>
-                  <DetailsRowTitle className="truncate">{link.label}</DetailsRowTitle>
+                  <RailRowTitle className="truncate">{link.label}</RailRowTitle>
                   <ItemDescription className="line-clamp-none block truncate font-mono text-xs text-ink-3">
                     {displayUrl(link.url)}
                   </ItemDescription>
                 </>
               ) : (
-                <DetailsRowTitle className="truncate font-mono">
-                  {displayUrl(link.url)}
-                </DetailsRowTitle>
+                <RailRowTitle className="truncate font-mono">{displayUrl(link.url)}</RailRowTitle>
               )}
             </ItemContent>
           </a>
@@ -83,6 +81,6 @@ export function SessionLinks({ links, messages, working = false }: Props) {
           </ItemActions>
         </Item>
       ))}
-    </DetailsList>
+    </RailList>
   );
 }

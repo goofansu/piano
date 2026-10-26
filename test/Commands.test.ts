@@ -23,7 +23,7 @@ const online: AppState = {
   trusts: { "/repo": { required: true, trusted: false } },
 };
 const other = { cwd: "/repo", sessionId: "s2", title: "Other" };
-/** A selected session in the registered folder, whose Changes and Details both open. */
+/** A selected session in the registered folder, whose Changes and session rail both open. */
 const selected: AppState = {
   ...online,
   view: { kind: "session" },
@@ -138,7 +138,7 @@ test("enabled commands reach the effect their intent names", () => {
       ["send", { _tag: "archive_session", cwd: "/repo", sessionId: "s2" }],
     ],
     [byId(sessionCommands(selected), "changes"), ["openChanges"]],
-    [byId(sessionCommands(selected), "details"), ["toggleDetails"]],
+    [byId(sessionCommands(selected), "session-rail"), ["toggleRail"]],
   ];
   for (const [command, call] of cases)
     assert.deepEqual(effectsOf(command), { ran: true, calls: [call] }, command.label);
