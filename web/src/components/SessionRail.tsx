@@ -7,7 +7,7 @@ import {
   FolderOpenIcon,
   GitBranchIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useMemo } from "react";
+import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DisclosureChevron } from "@/components/Disclosure";
 import {
@@ -17,7 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
-import { SessionLinks } from "@/components/SessionLinks";
+import { SessionLinks, SessionLinksBrowser } from "@/components/SessionLinks";
 import { SessionOutputs } from "@/components/SessionOutputs";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { createPreference, parseJson } from "@/lib/preference";
 import { sessionContext } from "@/lib/sessionContext";
-import { sessionLinks } from "@/lib/sessionLinks";
+import { type SessionLink, sessionLinks } from "@/lib/sessionLinks";
 import type { TranscriptViewport } from "@/lib/transcriptViewport";
 import { usePreference } from "@/lib/usePreference";
 import { useSessionFiles } from "@/lib/useSessionFiles";
@@ -50,7 +50,7 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
  * The session rail: Environment (its repository or folder, and branch), Outputs (the
  * files Pi wrote or edited) and Links (the web links the conversation mentions), each a section that folds; Outputs and Links appear once they have a row. It reads
  * nothing itself: the facts are the registry's and Pi's, the lists the transcript's, so it is
- * never stale and has no toolbar.
+ * never stale. Links shows five recent entries; its full, searchable view replaces the overview.
  *
  * It stands at the Agent area's right, as tall as the transcript and composer together, as Claude
  * Code's session rail does: the transcript's scroller keeps the area's full width, so its
@@ -61,6 +61,30 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
  * follows the selected session. Hand-written: no shadcn component is a pinned side column.
  */
 export function SessionRail({ state }: { state: AppState }) {
+  if (!state.session) return null;
+  return <SessionRailContent key={sessionKey(state.session)} state={state} />;
+}
+
+function SessionRailContent({ state }: { state: AppState }) {
+  const [browseLinks, setBrowseLinks] = useState(false);
+  const railRef = useRef<HTMLElement | null>(null);
+  const overviewScroll = useRef(0);
+  const showAllRef = useRef<HTMLButtonElement | null>(null);
+  const restoreFocus = useRef(false);
+  const messages = state.session?.messages ?? [];
+  const links = useMemo(() => sessionLinks(messages).reverse(), [messages]);
+  const working = !!state.session && isWorking(state.session.state);
+  const attachRail = useCallback((rail: HTMLElement | null) => {
+    railRef.current = rail;
+    return fadeOverflow(rail);
+  }, []);
+  useLayoutEffect(() => {
+    if (railRef.current) railRef.current.scrollTop = browseLinks ? 0 : overviewScroll.current;
+    if (!browseLinks && restoreFocus.current) {
+      showAllRef.current?.focus({ preventScroll: true });
+      restoreFocus.current = false;
+    }
+  }, [browseLinks]);
   const viewport = useTranscriptViewport();
   const onWheel = useCallback(
     (event: React.WheelEvent<HTMLElement>) => passWheel(event, viewport),
@@ -69,17 +93,40 @@ export function SessionRail({ state }: { state: AppState }) {
   if (!state.session) return null;
   return (
     <aside
-      key={sessionKey(state.session)}
-      ref={fadeOverflow}
+      key={browseLinks ? "links" : "overview"}
+      ref={attachRail}
       data-slot="session-rail"
       aria-label="Session rail"
-      onWheel={onWheel}
+      onWheel={browseLinks ? undefined : onWheel}
       // Clear of the scrollbar at the area's edge; its first section level with the transcript's
       // first row. Overflow fades at either edge; the last row clears the fade at the scroll end.
       // It scrolls without a scrollbar, as the tab strips do.
-      className="absolute inset-y-0 right-3 z-10 flex w-[calc(var(--rail-inset)-0.75rem)] scrollbar-none flex-col overflow-y-auto overscroll-y-contain pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pt-5"
+      className={cn(
+        "absolute inset-y-0 right-3 z-10 flex w-[calc(var(--rail-inset)-0.75rem)] scrollbar-none flex-col overscroll-y-contain pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pt-5",
+        browseLinks ? "overflow-hidden" : "overflow-y-auto",
+      )}
     >
-      <RailSections state={state} />
+      {browseLinks ? (
+        <SessionLinksBrowser
+          links={links}
+          messages={messages}
+          working={working}
+          onBack={() => {
+            restoreFocus.current = true;
+            setBrowseLinks(false);
+          }}
+        />
+      ) : (
+        <RailSections
+          state={state}
+          links={links}
+          showAllRef={showAllRef}
+          onShowLinks={() => {
+            overviewScroll.current = railRef.current?.scrollTop ?? 0;
+            setBrowseLinks(true);
+          }}
+        />
+      )}
     </aside>
   );
 }
@@ -115,7 +162,17 @@ function passWheel(event: React.WheelEvent<HTMLElement>, viewport: TranscriptVie
 }
 
 /** The rail's folding sections for the selected session. */
-function RailSections({ state }: { state: AppState }) {
+function RailSections({
+  state,
+  links,
+  onShowLinks,
+  showAllRef,
+}: {
+  state: AppState;
+  links: readonly SessionLink[];
+  onShowLinks: () => void;
+  showAllRef: React.Ref<HTMLButtonElement>;
+}) {
   const session = state.session;
   const { cwd, folder, branch } = sessionContext(state);
   const githubRepo = folder?.discovery.status === "ready" ? folder.discovery.githubRepo : undefined;
@@ -123,7 +180,6 @@ function RailSections({ state }: { state: AppState }) {
   const files = useSessionFiles();
   const messages = session?.messages ?? [];
   const working = !!session && isWorking(session.state);
-  const links = useMemo(() => sessionLinks(messages), [messages]);
   const [collapsed, setCollapsed] = usePreference(collapsedPreference);
   const group = (section: RailSectionName) => ({
     open: !collapsed.includes(section),
@@ -174,8 +230,19 @@ function RailSections({ state }: { state: AppState }) {
         </RailSection>
       )}
       {links.length > 0 && (
-        <RailSection title="Links" {...group("links")}>
-          <SessionLinks links={links} messages={messages} working={working} />
+        <RailSection title="Links" count={links.length} {...group("links")}>
+          <SessionLinks links={links.slice(0, 5)} messages={messages} working={working} />
+          {links.length > 5 && (
+            <Button
+              ref={showAllRef}
+              variant="ghost"
+              size="sm"
+              className="mt-2"
+              onClick={onShowLinks}
+            >
+              Show all links
+            </Button>
+          )}
         </RailSection>
       )}
     </div>
@@ -276,11 +343,13 @@ function EnvironmentRow({
 /** A section of the rail: its name as a folding heading, then its list. */
 function RailSection({
   title,
+  count,
   open,
   onOpenChange,
   children,
 }: {
   title: string;
+  count?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
@@ -296,6 +365,7 @@ function RailSection({
             className="-ml-2 h-7 gap-1 px-2 text-sm font-medium text-ink aria-expanded:bg-transparent pointer-coarse:min-h-11"
           >
             {title}
+            {count !== undefined && <span className="ml-1 text-xs text-ink-3">{count}</span>}
             <DisclosureChevron open={open} />
           </Button>
         </CollapsibleTrigger>

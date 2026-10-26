@@ -190,8 +190,15 @@ row. It and the Surface area share the session's right side: whichever came in l
 closing the last one brings it back; turning the rail on while tabs are open hides them until a
 tab is shown again or the rail goes off. The rail has no header or toolbar: its folding sections are
 Workspace (folder, worktree, branch, working directory), Outputs, the files Pi wrote or edited,
-and Links, the web links the conversation mentions, the last two only once they have a row; the
-composer's usage row once held both as popovers, and the palette no longer searches them. The
+and Links, the web links the conversation mentions, the last two only once they have a row.
+Links shows its count and five most recently mentioned URLs, each once, with its title and domain
+(or its bare URL); Jump to message is revealed on hover or keyboard focus and stays visible on
+touch. With more than five, Show all opens a Links view in the same rail, replacing the overview.
+Its header and Search links field stay above one scrolling list; search matches titles and URLs,
+including domains. Existing rows stay in place while browsing, with new URLs appended; Back
+restores the overview's scroll and focus. Links still open in a new tab, and Jump to message reveals
+the latest mention in the conversation beside the rail. The composer's usage row once held Outputs
+and Links as popovers, and the palette no longer searches them. The
 Surface area's remembered width is a
 preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
 shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the

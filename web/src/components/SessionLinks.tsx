@@ -1,16 +1,19 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
-import { LinkIcon, MessageSquareQuoteIcon } from "lucide-react";
-import { useMemo } from "react";
+import { ArrowLeftIcon, LinkIcon, MessageSquareQuoteIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "@/components/IconButton";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { Item, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
 import { displayUrl, type SessionLink } from "@/lib/sessionLinks";
 import { jumpEntries, revealEntries, transcriptRows } from "@/lib/transcript";
 import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
 interface Props {
-  /** The conversation's links (`sessionLinks`), in conversation order; the caller shows the section only with some. */
+  /** The links in display order; the overview supplies its five most recent. */
   links: readonly SessionLink[];
   messages: ReadonlyArray<RenderMsg>;
   working?: boolean;
@@ -18,7 +21,7 @@ interface Props {
 
 /**
  * The web links the conversation mentions, listed in the session rail once there is one. Each
- * row is a link that opens in a new tab, its title over its URL; nothing is previewed in Piano.
+ * row opens in a new tab, its title over its domain (or a bare URL); nothing is previewed in Piano.
  * Beside each, Jump to message scrolls the transcript, beside the rail, to the message that
  * mentioned the link last.
  */
@@ -39,27 +42,31 @@ export function SessionLinks({ links, messages, working = false }: Props) {
         <Item
           key={link.url}
           size="sm"
+          data-row
+          role="listitem"
           className={cn(
             railRow,
-            "pr-1 has-[a:hover]:bg-fill-hover has-[a:focus-visible]:bg-fill-hover",
+            rowActionsWidth.list[1],
+            "relative hover:bg-fill-hover focus-within:bg-fill-hover",
           )}
         >
           {/* The link covers the row up to its action, so the whole row reads as one target. */}
           <a
             href={link.url}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
+            title={link.url}
             className="flex min-w-0 flex-1 items-center gap-2.5 outline-none"
           >
             <ItemMedia variant="icon" className="text-ink-3">
               <LinkIcon />
             </ItemMedia>
-            <ItemContent className="min-w-0 gap-0">
+            <ItemContent data-motion="yield" className="min-w-0 gap-0">
               {link.label ? (
                 <>
                   <RailRowTitle className="truncate">{link.label}</RailRowTitle>
                   <ItemDescription className="line-clamp-none block truncate font-mono text-xs text-ink-3">
-                    {displayUrl(link.url)}
+                    {linkHost(link.url)}
                   </ItemDescription>
                 </>
               ) : (
@@ -67,7 +74,7 @@ export function SessionLinks({ links, messages, working = false }: Props) {
               )}
             </ItemContent>
           </a>
-          <ItemActions>
+          <RowActions className="top-1/2 right-1 -translate-y-1/2">
             {/* A bubble with quote marks: the message this link was cited in. */}
             <IconButton
               size="list"
@@ -78,9 +85,84 @@ export function SessionLinks({ links, messages, working = false }: Props) {
             >
               <MessageSquareQuoteIcon />
             </IconButton>
-          </ItemActions>
+          </RowActions>
         </Item>
       ))}
     </RailList>
+  );
+}
+
+/** Markdown can contain incomplete URLs, particularly while a reply is streaming. */
+function linkHost(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, "");
+  } catch {
+    return displayUrl(url);
+  }
+}
+
+/** A focused view in the rail, not a modal: the conversation stays available for Jump to message. */
+export function SessionLinksBrowser({
+  links,
+  messages,
+  working,
+  onBack,
+}: Props & { onBack: () => void }) {
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  // Keep the order the user opened. Newly mentioned URLs append, and repeated mentions update
+  // their destination without moving the row under someone's pointer or keyboard focus.
+  const [order, setOrder] = useState(() => links.map((link) => link.url));
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+  useEffect(() => {
+    setOrder((previous) => {
+      const known = new Set(previous);
+      const added = links.filter((link) => !known.has(link.url)).map((link) => link.url);
+      return added.length ? [...previous, ...added] : previous;
+    });
+  }, [links]);
+  const byUrl = new Map(links.map((link) => [link.url, link]));
+  const needle = query.trim().toLowerCase();
+  const visible = order.flatMap((url) => {
+    const link = byUrl.get(url);
+    return link && `${link.label ?? ""} ${link.url}`.toLowerCase().includes(needle) ? [link] : [];
+  });
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pt-3">
+      {/* No shadcn primitive is a rail header: title, count, then its navigation control. */}
+      <div className="flex shrink-0 items-center gap-2">
+        <h2 className="flex flex-1 items-center gap-2 text-sm font-medium">
+          Links <span className="text-xs font-normal text-ink-3">{links.length}</span>
+        </h2>
+        <IconButton size="header" label="Back" onClick={onBack}>
+          <ArrowLeftIcon />
+        </IconButton>
+      </div>
+      <Input
+        ref={searchRef}
+        type="search"
+        aria-label="Search links"
+        placeholder="Search links"
+        value={query}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          if (listRef.current) listRef.current.scrollTop = 0;
+        }}
+      />
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+        {visible.length ? (
+          <SessionLinks links={visible} messages={messages} working={working} />
+        ) : (
+          <Empty role="status">
+            <EmptyHeader>
+              <EmptyDescription>No links found</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )}
+      </div>
+    </div>
   );
 }
