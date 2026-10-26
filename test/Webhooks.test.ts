@@ -394,6 +394,15 @@ test("URL and token validation refuse unsafe transport without echoing secrets",
       const hooks = yield* Webhooks;
       for (const url of [
         "http://receiver.example",
+        "http://127.0.0.1:1234",
+        "http://localhost:1234",
+        "http://[::1]:1234",
+        "https://localhost./",
+        "https://127.1/",
+        "https://10.0.0.1/",
+        "https://169.254.169.254/",
+        "https://[::ffff:127.0.0.1]/",
+        "https://[fc00::1]/",
         "https://user:private-canary@example.com",
         "file:///tmp/private-canary",
         "https://example.com/#private-canary",
@@ -412,9 +421,40 @@ test("URL and token validation refuse unsafe transport without echoing secrets",
           .pipe(Effect.result))._tag,
         "Failure",
       );
-      for (const url of ["http://127.0.0.1:1234", "http://localhost:1234", "http://[::1]:1234"])
+      for (const url of [
+        "https://receiver.example",
+        "https://8.8.8.8/",
+        "https://[2606:4700:4700::1111]/",
+      ])
         yield* hooks.save({ ...input, url });
     }),
+  );
+});
+
+test("previously stored private receivers fail delivery without reaching the transport", async () => {
+  const requests: Received[] = [];
+  await run(
+    "legacy-private",
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      const hooks = yield* Webhooks;
+      for (const url of ["http://localhost/events", "https://10.0.0.1/events"]) {
+        yield* registry.saveWebhook({
+          id: "legacy",
+          url,
+          token: null,
+          events: ["session.completed"],
+          active: true,
+          createdAt: new Date().toISOString(),
+        });
+        assert.equal((yield* hooks.test("legacy")).status, "failed");
+      }
+      assert.equal(requests.length, 0);
+      const publicHook = yield* hooks.save(input);
+      assert.equal((yield* hooks.test(publicHook.id)).status, "delivered");
+      assert.equal(requests.length, 1);
+    }),
+    receive(requests),
   );
 });
 
@@ -478,7 +518,7 @@ test("one webhook's backlog never drops another webhook's deliveries or Test", a
   // Receiver A never answers; B answers at once.
   const fetch: typeof globalThis.fetch = async (url, init) => {
     const response = await receive(requests)(url, init);
-    if (String(url).startsWith("https://stuck.example"))
+    if (String(url) === "https://stuck.example/events")
       return new Promise<Response>((_, reject) =>
         init?.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
       );
@@ -563,7 +603,7 @@ test("a test queued behind a slow delivery answers, and sends nothing, once its 
   );
 });
 
-test("real HTTP: redirects/non-2xx fail, a dead receiver times out without blocking other hooks", async () => {
+test("loopback transport double: redirects/non-2xx fail, a dead receiver does not block other hooks", async () => {
   const paths: string[] = [];
   const server = createServer((req, res) => {
     paths.push(req.url!);
@@ -579,7 +619,10 @@ test("real HTTP: redirects/non-2xx fail, a dead receiver times out without block
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   assert.ok(address && typeof address === "object");
-  const url = `http://127.0.0.1:${address.port}`;
+  const url = "https://receiver.example";
+  // Only the injected network boundary routes these public URLs to a local test receiver.
+  const localFetch: typeof fetch = (target, init) =>
+    globalThis.fetch(`http://127.0.0.1:${address.port}${new URL(String(target)).pathname}`, init);
   try {
     await run(
       "http",
@@ -604,7 +647,7 @@ test("real HTTP: redirects/non-2xx fail, a dead receiver times out without block
         assert.ok(Date.now() - started >= 2900);
         assert.deepEqual(paths.sort(), ["/dead", "/fail", "/ok", "/redirect"]);
       }),
-      globalThis.fetch,
+      localFetch,
       3000,
     );
   } finally {
