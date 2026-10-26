@@ -35,6 +35,7 @@ type Preview = Awaited<ReturnType<typeof workspaceFile>>;
 const KIND_ICON: Record<Preview["kind"], typeof FileIcon> = {
   markdown: FileTextIcon,
   text: FileCodeIcon,
+  svg: ImageIcon,
   image: ImageIcon,
   audio: FileAudioIcon,
   video: FileVideoIcon,
@@ -110,10 +111,15 @@ export function WorkspaceFile({
   const [binary, setBinary] = useState<{ result: typeof result; url: string }>();
   useEffect(() => {
     setBinary(undefined);
-    if (!result || !("bytes" in result) || result.kind === "pdf") return;
-    const url = URL.createObjectURL(
-      new Blob([new Uint8Array(result.bytes)], { type: result.mime }),
-    );
+    if (!result || result.kind === "pdf") return;
+    const blob =
+      result.kind === "svg"
+        ? new Blob([result.content], { type: "image/svg+xml" })
+        : "bytes" in result
+          ? new Blob([new Uint8Array(result.bytes)], { type: result.mime })
+          : undefined;
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
     setBinary({ result, url });
     return () => URL.revokeObjectURL(url);
   }, [result]);
@@ -187,12 +193,12 @@ export function WorkspaceFile({
       }
       actions={
         <>
-          {result?.kind === "markdown" && (
+          {(result?.kind === "markdown" || result?.kind === "svg") && (
             <PianoViewToggle
               type="single"
               value={mode}
               onValueChange={(value) => value && setMode(value)}
-              aria-label="Markdown view"
+              aria-label={result.kind === "svg" ? "SVG view" : "Markdown view"}
             >
               <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
               <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
@@ -219,6 +225,10 @@ export function WorkspaceFile({
               </Suspense>
             ) : binary?.result === result ? (
               <NativeFile key={binary.url} kind={result.kind} url={binary.url} name={path} />
+            ) : null
+          ) : result.kind === "svg" && mode === "preview" ? (
+            binary?.result === result ? (
+              <NativeFile key={binary.url} kind="image" url={binary.url} name={path} svg />
             ) : null
           ) : result.kind === "markdown" && mode === "preview" ? (
             <LocalFileContext

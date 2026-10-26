@@ -55,13 +55,21 @@ test("workspace file reads are bounded and never fall back to a neighboring work
       ["settings.yml", "text", "yaml"],
       ["data.json", "text", "json"],
       ["output.log", "text", ""],
-      ["image.svg", "text", "xml"],
+      ["image.svg", "svg", "xml"],
+      ["image.SVG", "svg", "xml"],
       ["index.html", "text", "html"],
     ]) {
-      const content = name.endsWith("svg") ? "<svg><script>alert(1)</script></svg>" : "source\n";
+      const content = name.toLowerCase().endsWith("svg")
+        ? '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+        : "source\n";
       await writeFile(join(a, name), content);
       assert.deepEqual(await read(name), { workspaceId: "a", path: name, kind, language, content });
     }
+    // SVG remains bounded UTF-8 text; only its presentation changes.
+    await writeFile(join(a, "invalid.svg"), Buffer.from([255]));
+    await assert.rejects(read("invalid.svg"), /UTF-8 text/);
+    await writeFile(join(a, "large.svg"), "a".repeat(1024 * 1024 + 1));
+    await assert.rejects(read("large.svg"), /too large/);
     await writeFile(join(a, "fake.png"), "not an image");
     await assert.rejects(read("fake.png"), /malformed/);
     // PNG bytes, not the extension, establish the binary type. The binary payload is lossless.

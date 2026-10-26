@@ -243,10 +243,11 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
       return refuse("This file is not supported. Choose a UTF-8 text file.");
     }
     const markdown = /\.(md|markdown)$/i.test(extname(requested));
+    const svg = extname(requested).toLowerCase() === ".svg";
     return {
       preview: {
         ...identity,
-        kind: markdown ? ("markdown" as const) : ("text" as const),
+        kind: markdown ? ("markdown" as const) : svg ? ("svg" as const) : ("text" as const),
         language:
           specialLanguages[basename(requested).toLowerCase()] ??
           languages[extname(requested).slice(1).toLowerCase()] ??

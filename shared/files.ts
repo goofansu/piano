@@ -4,7 +4,7 @@ const identity = { workspaceId: Schema.String, path: Schema.String };
 export const FilePreview = Schema.Union([
   Schema.Struct({
     ...identity,
-    kind: Schema.Literals(["markdown", "text"]),
+    kind: Schema.Literals(["markdown", "text", "svg"]),
     language: Schema.String,
     content: Schema.String,
   }),

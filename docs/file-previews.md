@@ -16,6 +16,7 @@ Click the original link again to reread; **Preview / Source** only changes prese
 | --- | --- | --- |
 | UTF-8 Markdown (`.md`, `.markdown`) | Rendered Markdown, with Source toggle | 1 MiB |
 | UTF-8 source, JSON, YAML, logs, unknown text | Shiki highlighting when recognized; otherwise plain text | 1 MiB |
+| UTF-8 SVG (`.svg`) | Native image on a light background, with Source toggle | 1 MiB |
 | PNG, JPEG, GIF, WebP | Native image | 10 MiB |
 | MP3, WAV, Ogg audio, FLAC, M4A | Native audio controls | 20 MiB |
 | MP4, WebM | Native video controls | 32 MiB |
@@ -23,8 +24,10 @@ Click the original link again to reread; **Preview / Source** only changes prese
 
 Container recognition does not guarantee codec support. Common browser choices are PCM WAV,
 MP3, Opus/Vorbis Ogg, H.264/AAC MP4 and VP8/VP9 WebM; availability varies by browser and platform.
-A decoder failure asks you to convert the original. Media never autoplays. SVG is **escaped XML
-source only**, not an injected SVG or an image. HTML and MDX are not executed.
+A decoder failure asks you to convert the original. Media never autoplays. SVG previews use a Blob
+URL in an `<img>`, never inline SVG, an object or an iframe; scripts, event handlers and external
+resources are disabled by browser image mode. Source stays
+available even when the image cannot decode. HTML and MDX are not executed.
 
 Highlighting uses a disposable worker, lazy grammars/themes, at most 65,536 characters and
 2,000 characters per line, and a three-second work budget. Larger files stay readable as source,

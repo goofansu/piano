@@ -6,10 +6,12 @@ export function NativeFile({
   kind,
   url,
   name,
+  svg = false,
 }: {
   kind: "image" | "audio" | "video";
   url: string;
   name: string;
+  svg?: boolean;
 }) {
   const media = useRef<HTMLMediaElement | null>(null);
   const [failed, setFailed] = useState(false);
@@ -40,6 +42,8 @@ export function NativeFile({
           src={url}
           alt={name}
           className="max-h-full max-w-full rounded-lg shadow-1"
+          // SVG currentColor is isolated from the app theme in image mode.
+          style={svg ? { backgroundColor: "white" } : undefined}
           onError={() => setFailed(true)}
         />
       </div>
