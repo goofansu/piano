@@ -12,6 +12,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer, Schema } from "effect";
 import {
+  API_KEY_INVALID,
   API_KEY_PROVIDERS,
   type ApiKeyProvider,
   ProviderApiKeyChange,
@@ -71,6 +72,33 @@ const signedIn = async (runtime: Runtime, signal?: AbortSignal) =>
       .map((c) => c.providerId),
   );
 
+/** Piano's OAuth providers: those Pi signs in to with OAuth, except openai-codex. The one rule
+ * behind the Providers list, sign-in and sign-out, so none accepts a provider another refuses. */
+const oauthProvider = (runtime: Runtime, id: string) =>
+  id !== "openai-codex" && runtime.getProviders().some((p) => p.id === id && p.auth.oauth);
+
+/** Piano's API-key providers: Pi's single-key providers that the setup catalog names. */
+const apiKeyProvider = (runtime: Runtime, id: string) =>
+  API_KEY_PROVIDERS.some((p) => p.id === id) &&
+  runtime.getProviders().some((p) => p.id === id && p.auth.apiKey);
+
+/** A credential write through Pi. Pi persists the credential before refreshing its local
+ * snapshot, so a `CredentialSynchronizationError` for this `operation` means the write succeeded
+ * and only the refresh did not: `false`, never a failed write. Anything else is rethrown. */
+const persisted = async (
+  operation: "login" | "logout",
+  write: () => Promise<unknown>,
+): Promise<boolean> => {
+  try {
+    await write();
+    return true;
+  } catch (cause) {
+    if (cause instanceof CredentialSynchronizationError && cause.operation === operation)
+      return false;
+    throw cause;
+  }
+};
+
 export const ProviderLoginLive = Layer.effect(
   ProviderLogin,
   Effect.gen(function* () {
@@ -114,10 +142,7 @@ export const ProviderLoginLive = Layer.effect(
         };
         const runtime = await factory.create();
         if (signal.aborted) throw new Error("Sign-in cancelled.");
-        if (
-          provider === "openai-codex" ||
-          !runtime.getProviders().some((p) => p.id === provider && p.auth.oauth)
-        ) {
+        if (!oauthProvider(runtime, provider)) {
           return {
             status: "error",
             message: "This provider does not support OAuth sign-in in Piano.",
@@ -127,20 +152,14 @@ export const ProviderLoginLive = Layer.effect(
           return { status: "error", message: "Sign out of this provider before signing in again." };
         }
         if (signal.aborted) throw new Error("Sign-in cancelled.");
-        try {
-          await runtime.login(provider, "oauth", interaction, { getDeviceId: factory.deviceId });
-        } catch (cause) {
-          if (cause instanceof CredentialSynchronizationError && cause.operation === "login") {
-            return {
-              status: "success",
-              message: "Credentials saved. Start a new session to reload the provider catalog.",
-            };
-          }
-          throw cause;
-        }
+        const refreshed = await persisted("login", () =>
+          runtime.login(provider, "oauth", interaction, { getDeviceId: factory.deviceId }),
+        );
         return {
           status: "success",
-          message: "Signed in. Start a new session to use the updated providers.",
+          message: refreshed
+            ? "Signed in. Start a new session to use the updated providers."
+            : "Credentials saved. Start a new session to reload the provider catalog.",
         };
       },
     });
@@ -151,7 +170,7 @@ export const ProviderLoginLive = Layer.effect(
           const oauth = await signedIn(runtime);
           return runtime
             .getProviders()
-            .filter((p) => p.auth.oauth && p.id !== "openai-codex")
+            .filter((p) => oauthProvider(runtime, p.id))
             .map((p) => ({ id: p.id, name: p.name, signedIn: oauth.has(p.id) }))
             .sort((a, b) => a.id.localeCompare(b.id));
         },
@@ -161,12 +180,12 @@ export const ProviderLoginLive = Layer.effect(
         try: async () => {
           const runtime = await factory.create();
           const credentials = await runtime.listCredentials();
-          return API_KEY_PROVIDERS.filter((entry) =>
-            runtime.getProviders().some((p) => p.id === entry.id && p.auth.apiKey),
-          ).map((entry) => ({
-            ...entry,
-            saved: credentials.some((c) => c.providerId === entry.id && c.type === "api_key"),
-          }));
+          return API_KEY_PROVIDERS.filter((entry) => apiKeyProvider(runtime, entry.id)).map(
+            (entry) => ({
+              ...entry,
+              saved: credentials.some((c) => c.providerId === entry.id && c.type === "api_key"),
+            }),
+          );
         },
         catch: () => new ProvidersError({ detail: "Could not load API keys." }),
       }),
@@ -178,17 +197,12 @@ export const ProviderLoginLive = Layer.effect(
           .exclusive(
             Effect.gen(function* () {
               yield* Schema.decodeUnknownEffect(ProviderApiKeyChange)(change).pipe(
-                Effect.mapError(
-                  () => new SignInError({ detail: "Enter a valid API key, not a command." }),
-                ),
+                Effect.mapError(() => new SignInError({ detail: API_KEY_INVALID })),
               );
               yield* Effect.tryPromise({
                 try: async () => {
                   const runtime = await factory.create();
-                  if (
-                    !API_KEY_PROVIDERS.some((p) => p.id === change.provider) ||
-                    !runtime.getProviders().some((p) => p.id === change.provider && p.auth.apiKey)
-                  )
+                  if (!apiKeyProvider(runtime, change.provider))
                     throw new Error("Unsupported API-key provider.");
                   const credential = (await runtime.listCredentials()).find(
                     (c) => c.providerId === change.provider,
@@ -197,10 +211,11 @@ export const ProviderLoginLive = Layer.effect(
                   if (credential && credential.type !== "api_key")
                     throw new Error("Not an API key.");
                   if (change.action === "remove" && !credential) throw new Error("No saved key.");
-                  try {
-                    if (change.action === "remove") await runtime.logout(change.provider);
-                    else
-                      await runtime.login(change.provider, "api_key", {
+                  if (change.action === "remove")
+                    await persisted("logout", () => runtime.logout(change.provider));
+                  else
+                    await persisted("login", () =>
+                      runtime.login(change.provider, "api_key", {
                         signal: new AbortController().signal,
                         notify: () => {},
                         prompt: async (prompt) => {
@@ -208,18 +223,8 @@ export const ProviderLoginLive = Layer.effect(
                             throw new Error("Unsupported API-key prompt.");
                           return change.key;
                         },
-                      });
-                  } catch (cause) {
-                    // Persistence already succeeded; a failed snapshot refresh must not report a failed write.
-                    const operation = change.action === "save" ? "login" : "logout";
-                    if (
-                      !(
-                        cause instanceof CredentialSynchronizationError &&
-                        cause.operation === operation
-                      )
-                    )
-                      throw cause;
-                  }
+                      }),
+                    );
                 },
                 catch: () => new SignInError({ detail: failure }),
               });
@@ -236,21 +241,9 @@ export const ProviderLoginLive = Layer.effect(
           Effect.tryPromise({
             try: async () => {
               const runtime = await factory.create();
-              if (
-                !runtime.getProviders().some((p) => p.id === provider && p.auth.oauth) ||
-                !(await signedIn(runtime)).has(provider)
-              ) {
+              if (!oauthProvider(runtime, provider) || !(await signedIn(runtime)).has(provider))
                 throw new Error("No OAuth credential for this provider.");
-              }
-              try {
-                await runtime.logout(provider);
-              } catch (cause) {
-                // The credential was removed even if refreshing Pi's local snapshot failed.
-                if (
-                  !(cause instanceof CredentialSynchronizationError && cause.operation === "logout")
-                )
-                  throw cause;
-              }
+              await persisted("logout", () => runtime.logout(provider));
             },
             catch: () =>
               new SignInError({
