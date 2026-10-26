@@ -358,6 +358,40 @@ test("a body outside the endpoint's Schema is answered 400 with the endpoint's m
   });
 });
 
+test("INV-11: API-key routes keep invalid input and credential storage errors out of responses", async () => {
+  for (const key of ["", "!echo private-value", "private-value\nsecond-line"]) {
+    assert.deepEqual(
+      await reply(
+        await post(
+          "/api/provider-api-keys",
+          JSON.stringify({ action: "save", provider: "deepseek", key }),
+        ),
+      ),
+      {
+        status: 400,
+        body: { error: "Enter a valid API key, not a command." },
+      },
+    );
+  }
+  assert.deepEqual(
+    await reply(
+      await post(
+        "/api/provider-api-keys",
+        JSON.stringify({ action: "save", provider: "deepseek", key: "private-value" }),
+      ),
+    ),
+    {
+      status: 409,
+      body: { error: "Could not change API key. Check the key and try again." },
+    },
+  );
+  const response = await server.handle("/api/provider-api-keys");
+  assert.deepEqual(await reply(response), {
+    status: 502,
+    body: { error: "Could not load API keys." },
+  });
+});
+
 test("a result outside the response Schema is never sent", async () => {
   const { status, body } = await reply(
     await server.handle("/api/settings/defaults", {

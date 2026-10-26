@@ -288,6 +288,15 @@ export const signInApi =
     }
   };
 
+export const providerApiKeys = async (options?: RequestOptions) =>
+  (await call(Endpoints.providerApiKeys, {}, options)).providers;
+
+export const changeProviderApiKey = async (
+  body: typeof Endpoints.changeProviderApiKey.body.Type,
+) => {
+  await call(Endpoints.changeProviderApiKey, { body });
+};
+
 export const providerLogin = signInApi(Endpoints.providerLogin);
 /** The same sign-in attempt as providers', run by Pi's MCP OAuth for a catalog server. */
 export const mcpLogin = signInApi(Endpoints.mcpLogin);

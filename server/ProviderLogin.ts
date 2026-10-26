@@ -1,4 +1,4 @@
-/** Global OAuth orchestration only. Pi's SDK owns provider configuration, token
+/** Global provider credential orchestration. Pi's SDK owns provider configuration, token
  * exchange and locked credential persistence; no agent/session is embedded here.
  * SignInAttempts owns the attempt itself; this module is its provider source.
  * It is Piano's only reader of Pi credentials, so one signed-in rule serves the Providers UI,
@@ -10,7 +10,12 @@ import {
   ModelRuntime,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { Context, Data, Effect, Layer } from "effect";
+import { Context, Data, Effect, Layer, Schema } from "effect";
+import {
+  API_KEY_PROVIDERS,
+  type ApiKeyProvider,
+  ProviderApiKeyChange,
+} from "../shared/providerApiKeys.ts";
 import type { OAuthProvider } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { agentDir } from "./PiEnv.ts";
@@ -49,6 +54,8 @@ export class ProviderLogin extends Context.Service<
     /** Sign-in to a provider, by its id. */
     readonly signIn: SignInLane;
     readonly signOut: (provider: string) => Effect.Effect<void, SignInError>;
+    readonly apiKeys: Effect.Effect<readonly ApiKeyProvider[], ProvidersError>;
+    readonly changeApiKey: (change: ProviderApiKeyChange) => Effect.Effect<void, SignInError>;
     /** A bearer token valid for at least five more minutes, only while the user is signed in to
      * the provider; undefined otherwise. Ambient API keys never authorize a Piano feature. */
     readonly bearer: (provider: string) => Effect.Effect<string | undefined, Error>;
@@ -149,6 +156,78 @@ export const ProviderLoginLive = Layer.effect(
             .sort((a, b) => a.id.localeCompare(b.id));
         },
         catch: () => new ProvidersError({ detail: "Could not load OAuth providers." }),
+      }),
+      apiKeys: Effect.tryPromise({
+        try: async () => {
+          const runtime = await factory.create();
+          const credentials = await runtime.listCredentials();
+          return API_KEY_PROVIDERS.filter((entry) =>
+            runtime.getProviders().some((p) => p.id === entry.id && p.auth.apiKey),
+          ).map((entry) => ({
+            ...entry,
+            saved: credentials.some((c) => c.providerId === entry.id && c.type === "api_key"),
+          }));
+        },
+        catch: () => new ProvidersError({ detail: "Could not load API keys." }),
+      }),
+      changeApiKey: Effect.fn("ProviderLogin.changeApiKey")(function* (change) {
+        const failure = "Could not change API key. Check the key and try again.";
+        // Share the OAuth lane. Once claimed, finish persistence and catalog invalidation even
+        // if the HTTP client disconnects; releasing early would let another write race Pi's promise.
+        yield* attempts
+          .exclusive(
+            Effect.gen(function* () {
+              yield* Schema.decodeUnknownEffect(ProviderApiKeyChange)(change).pipe(
+                Effect.mapError(
+                  () => new SignInError({ detail: "Enter a valid API key, not a command." }),
+                ),
+              );
+              yield* Effect.tryPromise({
+                try: async () => {
+                  const runtime = await factory.create();
+                  if (
+                    !API_KEY_PROVIDERS.some((p) => p.id === change.provider) ||
+                    !runtime.getProviders().some((p) => p.id === change.provider && p.auth.apiKey)
+                  )
+                    throw new Error("Unsupported API-key provider.");
+                  const credential = (await runtime.listCredentials()).find(
+                    (c) => c.providerId === change.provider,
+                  );
+                  // Never overwrite/remove an OAuth credential through the API Keys surface.
+                  if (credential && credential.type !== "api_key")
+                    throw new Error("Not an API key.");
+                  if (change.action === "remove" && !credential) throw new Error("No saved key.");
+                  try {
+                    if (change.action === "remove") await runtime.logout(change.provider);
+                    else
+                      await runtime.login(change.provider, "api_key", {
+                        signal: new AbortController().signal,
+                        notify: () => {},
+                        prompt: async (prompt) => {
+                          if (prompt.type !== "secret")
+                            throw new Error("Unsupported API-key prompt.");
+                          return change.key;
+                        },
+                      });
+                  } catch (cause) {
+                    // Persistence already succeeded; a failed snapshot refresh must not report a failed write.
+                    const operation = change.action === "save" ? "login" : "logout";
+                    if (
+                      !(
+                        cause instanceof CredentialSynchronizationError &&
+                        cause.operation === operation
+                      )
+                    )
+                      throw cause;
+                  }
+                },
+                catch: () => new SignInError({ detail: failure }),
+              });
+              yield* facts.invalidate;
+            }),
+            "A provider operation is already in progress. Finish it before changing an API key.",
+          )
+          .pipe(Effect.uninterruptible);
       }),
       // The flow itself reports a provider without OAuth sign-in, so the attempt shows why.
       signIn: attempts.lane((provider) => Effect.succeed(source(provider))),
