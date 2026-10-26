@@ -222,7 +222,7 @@ export function SessionHeader({
           <SessionPreviewControl />
           {pullRequest(menuTrigger)}
           {sideBySide && <SessionRailToggle />}
-          {sideBySide && <ChangesButton />}
+          {sideBySide && <ChangesToggle />}
           {mobile && sessionMenu}
         </div>
       </PaneHeader>
@@ -254,22 +254,29 @@ function SessionRailToggle() {
 }
 
 /**
- * Changes, at the header's end right of the session rail's toggle: shows Changes in the Surface
- * area, or focuses it where it already shows; it never hides it. Left out while Changes cannot
- * open; the palette's Changes row says why.
+ * Changes' toggle, at the header's end right of the session rail's: shows Changes in the Surface
+ * area, or hides it while it shows, its name ("Changes", "Hide changes") the command it runs, and
+ * filled while Changes shows, as the rail's toggle is. Left out while Changes cannot open; the
+ * palette's Changes row says why.
  */
-function ChangesButton() {
+function ChangesToggle() {
   const { commands, run } = useSessionCommands();
-  const command = commands.find((c) => c.id === "changes");
-  if (!command?.enabled) return null;
+  const navigation = useNavigation();
+  const shown = shownAreas(navigation).surface && navigation.surface?.active === "changes";
+  const show = commands.find((c) => c.id === "changes");
+  const hide = commands.find((c) => c.id === "hide-changes");
+  const command = shown ? hide : show;
+  if (!show?.enabled || !command) return null;
   return (
     <IconButton
       data-changes-trigger
       size="header"
       label={command.label}
+      aria-pressed={shown}
       onClick={() => run(command)}
+      className="aria-pressed:bg-muted"
     >
-      <CommandIcon icon={command.icon} />
+      <CommandIcon icon={show.icon} />
     </IconButton>
   );
 }

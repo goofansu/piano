@@ -11,9 +11,10 @@ The palette (Mod+K) searches neither outputs nor links.
 
 ## Sub-features
 
-- `changes-open`: the header's last control, the "Changes" icon, opens the Surface area; choosing
-  it again focuses Changes without rereading, collapsing or hiding it. Below 849px of session
-  width the "Agent" / "Changes" tabs replace the icon.
+- `changes-open`: the header's last control, the "Changes" toggle, opens the Surface area and is
+  pressed while Changes shows, then named "Hide changes", which hides it; the palette's "Changes"
+  focuses Changes without rereading, collapsing or hiding it. Below 849px of session width the
+  "Agent" / "Changes" tabs replace the toggle.
 - `changes-list`: list "Changed files" with one collapsible row per file
   (`<path>, <n> added, <n> removed: collapse`), "New file" for untracked files, and the diff.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
