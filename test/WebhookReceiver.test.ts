@@ -4,7 +4,16 @@ import { EventEmitter } from "node:events";
 import https from "node:https";
 import { syncBuiltinESMExports } from "node:module";
 import { test } from "node:test";
-import { webhookFetch } from "../server/WebhookReceiver.ts";
+import {
+  RECEIVER_RULE,
+  REDIRECT_REFUSED,
+  ReceiverRefusal,
+  webhookFetch,
+} from "../server/WebhookReceiver.ts";
+
+/** The transport's own refusal, with the sentence a delivery row shows for it. */
+const refusal = (detail: string) => (error: unknown) =>
+  error instanceof ReceiverRefusal && error.message === detail;
 
 type LookupCallback = (error: Error | null, addresses: dns.LookupAddress[]) => void;
 type Respond = (response: { statusCode: number; destroy: () => void }) => void;
@@ -97,10 +106,13 @@ test("public answers reach the connector unchanged; later DNS changes fail, redi
     assert.deepEqual(connected, answers);
     assert.equal(lookups, 1, "no second, unchecked DNS resolution");
     status = 302;
-    await assert.rejects(webhookFetch("https://receiver.example/events"), /Redirects/);
+    await assert.rejects(
+      webhookFetch("https://receiver.example/events"),
+      refusal(REDIRECT_REFUSED),
+    );
     assert.equal(lookups, 2, "redirect did not initiate another request");
     answers = ["127.0.0.1"];
-    await assert.rejects(webhookFetch("https://receiver.example/events"), /public HTTPS/);
+    await assert.rejects(webhookFetch("https://receiver.example/events"), refusal(RECEIVER_RULE));
     assert.equal(connected.length, 4, "private answer never reaches the connector");
   } finally {
     t.mock.restoreAll();
