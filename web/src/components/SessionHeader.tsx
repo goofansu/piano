@@ -37,7 +37,7 @@ import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
-/** The title with its menu glued to it: the row's first item, so it shrinks last and never drops. */
+/** The title (with its menu on desktop): the row's first item, so it shrinks last and never drops. */
 const titleGroup = "flex min-w-0 max-w-max shrink grow basis-52 items-center gap-0.5";
 
 /** A fact about where the session runs: about 6rem on a tight row, else its own width. */
@@ -173,7 +173,7 @@ export function SessionHeader({
           // Match header buttons by pointer capability: a landscape phone is wide but still touch.
           <div className="flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-3 overflow-hidden pointer-coarse:h-11">
             {openProject && projectMenu?.current ? (
-              <Breadcrumb className={titleGroup}>
+              <Breadcrumb className={cn(titleGroup, mobile && "h-full")}>
                 <BreadcrumbList className="min-w-0 flex-nowrap gap-1.5 sm:gap-1.5">
                   {/* The crumb is the way up; on phones the sheet's project page covers it. */}
                   <BreadcrumbItem className="hidden min-w-0 max-w-32 shrink-0 md:inline-flex">
@@ -193,14 +193,14 @@ export function SessionHeader({
                   </BreadcrumbSeparator>
                   <BreadcrumbItem className="min-w-0 gap-0.5">
                     {heading}
-                    {sessionMenu}
+                    {!mobile && sessionMenu}
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
             ) : (
-              <div className={titleGroup}>
+              <div className={cn(titleGroup, mobile && "h-full")}>
                 {heading}
-                {sessionMenu}
+                {!mobile && sessionMenu}
               </div>
             )}
             <p className={fact}>
@@ -228,6 +228,7 @@ export function SessionHeader({
           <SessionPreviewControl />
           {pullRequest(menuTrigger)}
           {views && <ViewsMenu />}
+          {mobile && sessionMenu}
         </div>
       </PaneHeader>
     </>
