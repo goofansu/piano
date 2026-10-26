@@ -11,7 +11,7 @@ import { PiCli } from "../server/PiCli.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
-import { RECEIVER_RULE } from "../server/WebhookReceiver.ts";
+import { RECEIVER_RULE, REDIRECT_REFUSED, ReceiverRefusal } from "../server/WebhookReceiver.ts";
 import { WebhookFetch, Webhooks, WebhooksLive, WebhookTimeoutMs } from "../server/Webhooks.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
@@ -462,6 +462,34 @@ test("previously stored private receivers fail delivery without reaching the tra
   );
 });
 
+test("a refusal the transport makes names itself on the delivery row; a network failure does not echo", async () => {
+  // What `webhookFetch` rejects with (WebhookReceiver.test.ts proves it): a DNS answer the rule
+  // refuses, a redirect, and a socket error that could carry the host.
+  const rejections = [
+    new ReceiverRefusal(RECEIVER_RULE),
+    new ReceiverRefusal(REDIRECT_REFUSED),
+    new Error("connect ECONNREFUSED receiver.example:443"),
+  ];
+  const fetch: typeof globalThis.fetch = async () => {
+    throw rejections.shift();
+  };
+  await run(
+    "transport-refusal",
+    Effect.gen(function* () {
+      const hooks = yield* Webhooks;
+      const hook = yield* hooks.save(input);
+      const details: (string | null)[] = [];
+      for (let i = 0; i < 3; i++) {
+        const delivery = yield* hooks.test(hook.id);
+        assert.deepEqual([delivery.status, delivery.httpStatus], ["failed", null]);
+        details.push(delivery.detail);
+      }
+      assert.deepEqual(details, [RECEIVER_RULE, REDIRECT_REFUSED, "Could not reach the receiver."]);
+    }),
+    fetch,
+  );
+});
+
 test("admission stays bounded under a stalled receiver, a Test goes ahead of it; logs never hold secrets", async () => {
   const requests: Received[] = [];
   const logs: unknown[] = [];
@@ -648,6 +676,7 @@ test("loopback transport double: redirects/non-2xx fail, a dead receiver does no
         const timedOut = yield* Fiber.join(dead);
         assert.equal(timedOut.status, "failed");
         assert.equal(timedOut.httpStatus, null);
+        assert.equal(timedOut.detail, "Receiver did not answer in time.");
         assert.ok(Date.now() - started >= 2900);
         assert.deepEqual(paths.sort(), ["/dead", "/fail", "/ok", "/redirect"]);
       }),

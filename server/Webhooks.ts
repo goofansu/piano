@@ -18,7 +18,12 @@ import { KNOWN_SECRET_MIN, projectDisplay } from "./DisplayProjection.ts";
 import { pullRequestIdentity } from "./GitHubPullRequests.ts";
 import { SessionLinkOrigin } from "./OriginPolicy.ts";
 import { Registry, type StoredWebhook } from "./Registry.ts";
-import { RECEIVER_RULE, webhookFetch, webhookReceiver } from "./WebhookReceiver.ts";
+import {
+  RECEIVER_RULE,
+  ReceiverRefusal,
+  webhookFetch,
+  webhookReceiver,
+} from "./WebhookReceiver.ts";
 
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
 export class WebhookError extends Data.TaggedError("WebhookError")<{
@@ -27,6 +32,8 @@ export class WebhookError extends Data.TaggedError("WebhookError")<{
 }> {}
 const refused = (detail: string, field?: WebhookField) =>
   new WebhookError(field ? { detail, field } : { detail });
+/** A request that got no HTTP answer, with the one sentence the delivery row shows for it. */
+class DeliveryFailure extends Data.TaggedError("DeliveryFailure")<{ readonly detail: string }> {}
 export const WebhookFetch = Context.Reference<typeof fetch>("piano/WebhookFetch", {
   defaultValue: () => webhookFetch,
 });
@@ -142,15 +149,19 @@ export const WebhooksLive = Layer.effect(
           };
         },
         // Never retain fetch errors, response bodies or URLs: receivers can echo credentials.
-        catch: () => refused("Delivery failed. Check the receiver and URL."),
-      }).pipe(
-        Effect.timeout(timeout),
-        Effect.catch(() =>
-          Effect.succeed({
-            httpStatus: null,
-            status: "failed" as const,
-            detail: "Delivery failed or timed out. Redirects are not followed.",
+        // A refusal the transport itself made is Piano's own wording, and the row shows it.
+        catch: (error) =>
+          new DeliveryFailure({
+            detail:
+              error instanceof ReceiverRefusal ? error.message : "Could not reach the receiver.",
           }),
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: timeout,
+          orElse: () => new DeliveryFailure({ detail: "Receiver did not answer in time." }),
+        }),
+        Effect.catch((failure) =>
+          Effect.succeed({ httpStatus: null, status: "failed" as const, detail: failure.detail }),
         ),
       );
     });

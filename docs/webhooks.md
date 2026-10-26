@@ -96,6 +96,9 @@ There is no HMAC signature. Use HTTPS and verify the Bearer token at the receive
 
 Delivery is best-effort, with no automatic retry, log of past deliveries or redelivery action.
 Only 2xx counts as delivered. Redirects are refused and each request has a 10-second timeout.
+A failed delivery's detail names what happened: the receiver rule (a stored URL or a DNS answer
+the rule refuses), a redirect, an invalid status, a non-2xx status, an unreachable receiver or a
+timeout; it never echoes the URL, the response or the underlying error.
 A failure can be ambiguous: the receiver may have acted before Piano lost the response.
 
 One background owner schedules separate per-hook lanes: at most 32 hooks can be configured, each
