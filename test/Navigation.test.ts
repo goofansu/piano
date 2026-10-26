@@ -55,6 +55,7 @@ function addressBar(start: string) {
     entries,
     path: () => entries[index],
     title: () => titles.at(-1),
+    titles,
     back: () => go(-1),
     forward: () => go(1),
   };
@@ -82,8 +83,15 @@ function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
     newSelectionId: () => `sel${++ids}`,
   });
   let moves = 0;
+  let reads = 0;
   const navigation = createNavigation({
-    client,
+    client: {
+      ...client,
+      getState: () => {
+        reads++;
+        return client.getState();
+      },
+    },
     address: address.bar,
     memory,
     rail,
@@ -123,6 +131,7 @@ function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
     selected,
     selects,
     moves: () => moves,
+    reads: () => reads,
   };
 }
 
@@ -854,4 +863,59 @@ test("each request to open Settings is counted, so a repeat reveals its section 
   deepLink.registry();
   assert.equal(deepLink.navigation.getState().settings, "radius");
   assert.ok(deepLink.navigation.getState().settingsRequest > 0, "a cold deep link asks once");
+});
+
+test("a move that changes nothing notifies no one and leaves the address bar alone", () => {
+  const p = page("/new");
+  p.registry();
+  let notified = 0;
+  p.navigation.subscribe(() => notified++);
+  const before = {
+    state: p.navigation.getState(),
+    titles: p.titles.length,
+    entries: [...p.entries],
+    reads: p.reads(),
+  };
+  p.navigation.setSingle(false);
+  p.navigation.setSingle(false);
+  p.navigation.setPalette(false);
+  p.navigation.closePullRequest();
+  p.navigation.closeSettings();
+  p.navigation.showAgent();
+  assert.equal(notified, 0, "an unchanged move notified a subscriber");
+  assert.equal(p.navigation.getState(), before.state, "the state keeps its identity");
+  assert.equal(p.titles.length, before.titles, "no title written");
+  assert.deepEqual(p.entries, before.entries, "no history entry");
+  assert.equal(p.reads(), before.reads, "an unchanged move read the client, so it settled");
+  assert.equal(
+    p.moves(),
+    2,
+    "a request to see an area or leave Settings is a move, changed or not",
+  );
+  p.navigation.setSingle(true);
+  assert.equal(notified, 1, "a move that changed the layout notifies once");
+  assert.equal(p.navigation.getState().single, true);
+  p.navigation.openSettings("radius");
+  assert.equal(notified, 2);
+  assert.equal(p.path(), "/settings/radius", "a real move still syncs the address");
+});
+
+test("selecting another session with the same areas notifies no navigation subscriber", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  let notified = 0;
+  p.navigation.subscribe(() => notified++);
+  const before = p.navigation.getState();
+  p.navigation.select("/scratch", "b");
+  p.selected("b");
+  assert.equal(p.client.getState().session?.sessionId, "b", "the client store carries the change");
+  assert.equal(p.path(), "/s/b", "the address follows the client");
+  assert.equal(p.navigation.getState(), before, "the areas are as they were: no new state");
+  assert.equal(
+    notified,
+    0,
+    "a session change with unchanged areas notified a navigation subscriber",
+  );
 });
