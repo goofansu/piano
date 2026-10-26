@@ -10,6 +10,7 @@
 import { Schema } from "effect";
 import { FileDownload, FilePreview } from "./files.ts";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
+import { ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
 import { Webhook, WebhookDelivery, WebhookSave } from "./webhooks.ts";
@@ -384,6 +385,24 @@ export const Endpoints = {
     refused: 409,
     redact: false,
     fallback: "Could not change MCP setup.",
+  }),
+  providerApiKeys: endpoint({
+    method: "GET",
+    path: "/api/provider-api-keys",
+    noStore: true,
+    response: Schema.Struct({ providers: Schema.Array(ApiKeyProvider) }),
+    refused: 502,
+    fallback: "Could not load API keys.",
+  }),
+  changeProviderApiKey: endpoint({
+    method: "POST",
+    path: "/api/provider-api-keys",
+    body: ProviderApiKeyChange,
+    invalid: "Enter a valid API key, not a command.",
+    noStore: true,
+    response: Schema.Struct({ ok: Schema.Literal(true) }),
+    refused: 409,
+    fallback: "Could not change API key. Check the key and try again.",
   }),
   oauthProviders: endpoint({
     method: "GET",

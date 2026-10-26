@@ -1,5 +1,5 @@
 /**
- * What the Providers page's "Other providers" list shows and allows: whether the list shows at
+ * What the Providers page's "Accounts" list shows and allows: whether the list shows at
  * all, its load, failure and empty states, and one row per OAuth provider with its logo and its
  * sign-in or sign-out control. Radius is left out because its own section carries it. A sign-out
  * in flight disables every row. Pure; the page renders it.

@@ -2,6 +2,7 @@ import type { OAuthProvider } from "@shared/wire";
 import { CheckCircle2Icon, HomeIcon, PlugIcon } from "lucide-react";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { ApiKeySettings } from "@/components/ApiKeySettings";
 import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoButton } from "@/components/PianoButton";
@@ -175,7 +176,7 @@ function ProvidersSettings({
       <div className="flex flex-col gap-8">
         <RadiusSection reveal={revealRadius} />
         {body.kind !== "hidden" && (
-          <SettingsGroup id="settings-other-providers" title="Other providers">
+          <SettingsGroup id="settings-accounts" title="Accounts">
             {body.kind === "error" ? (
               <SettingsLoadFailure
                 title="Could not load providers"
@@ -241,6 +242,7 @@ function ProvidersSettings({
             )}
           </SettingsGroup>
         )}
+        <ApiKeySettings />
       </div>
     </SettingsSectionFrame>
   );

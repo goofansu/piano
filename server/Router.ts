@@ -335,6 +335,17 @@ export const AppRouter = HttpRouter.use((router) =>
       ),
     );
 
+    yield* serve(Endpoints.providerApiKeys, () =>
+      Effect.flatMap(ProviderLogin, (login) => login.apiKeys).pipe(
+        Effect.map((providers) => ({ providers })),
+      ),
+    );
+    yield* serve(Endpoints.changeProviderApiKey, ({ body }) =>
+      Effect.flatMap(ProviderLogin, (login) => login.changeApiKey(body)).pipe(
+        Effect.as({ ok: true as const }),
+      ),
+    );
+
     yield* serve(Endpoints.oauthProviders, () =>
       Effect.flatMap(ProviderLogin, (login) => login.providers).pipe(
         Effect.map((providers) => ({ providers })),
