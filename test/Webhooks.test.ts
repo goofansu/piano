@@ -11,6 +11,7 @@ import { PiCli } from "../server/PiCli.ts";
 import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
+import { RECEIVER_RULE } from "../server/WebhookReceiver.ts";
 import { WebhookFetch, Webhooks, WebhooksLive, WebhookTimeoutMs } from "../server/Webhooks.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
@@ -447,7 +448,10 @@ test("previously stored private receivers fail delivery without reaching the tra
           active: true,
           createdAt: new Date().toISOString(),
         });
-        assert.equal((yield* hooks.test("legacy")).status, "failed");
+        const delivery = yield* hooks.test("legacy");
+        assert.equal(delivery.status, "failed");
+        // The row names the rule the stored URL breaks, so the user knows to replace it.
+        assert.deepEqual([delivery.httpStatus, delivery.detail], [null, RECEIVER_RULE]);
       }
       assert.equal(requests.length, 0);
       const publicHook = yield* hooks.save(input);

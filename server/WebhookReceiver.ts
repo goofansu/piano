@@ -3,7 +3,8 @@ import { request } from "node:https";
 import { isIP } from "node:net";
 import ipaddr from "ipaddr.js";
 
-const refusal = "Use a public HTTPS URL without credentials or a fragment.";
+/** The receiver rule as the user reads it: in the editor's refusal and in a failed delivery's detail. */
+export const RECEIVER_RULE = "Use a public HTTPS URL without credentials or a fragment.";
 
 function publicAddress(address: string): boolean {
   if (!ipaddr.isValid(address)) return false;
@@ -29,7 +30,7 @@ export function webhookReceiver(text: string): URL {
     name.endsWith(".localhost") ||
     (isIP(hostname) !== 0 && !publicAddress(hostname))
   )
-    throw new Error(refusal);
+    throw new Error(RECEIVER_RULE);
   return url;
 }
 
@@ -50,7 +51,7 @@ export const webhookFetch: typeof fetch = async (input, init) => {
           lookup(hostname, { all: true }, (error, addresses) => {
             if (error) return callback(error, [], undefined);
             if (!addresses.length || addresses.some(({ address }) => !publicAddress(address)))
-              return callback(new Error(refusal), [], undefined);
+              return callback(new Error(RECEIVER_RULE), [], undefined);
             // Return the checked answers directly to the socket connector (DNS rebinding safe).
             if (options.all) callback(null, addresses);
             else callback(null, addresses[0]!.address, addresses[0]!.family);
