@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^1.4.0",
-    "@effect/platform-node": "^4.0.5",
+    "@effect/platform-node": "^4.0.6",
     "effect": "^4.0.6",
     "file-type": "^22.2.0",
     "ipaddr.js": "^2.5.0"
