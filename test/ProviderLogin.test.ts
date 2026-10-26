@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { Effect, Fiber, Layer } from "effect";
+import { Effect, Exit, Fiber, Layer } from "effect";
 import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiSessions } from "../server/PiSessions.ts";
 import { ProviderLogin, ProviderLoginLive, ProviderLoginRuntime } from "../server/ProviderLogin.ts";
@@ -328,6 +328,50 @@ test("INV-01/11/12: API keys persist through Pi, replace and remove without expo
   );
 });
 
+/** Holds Pi's `method` once entered until `release`, so a disconnect can land mid-write. */
+function stall(runtime: ModelRuntime, method: "login" | "logout") {
+  let enter!: () => void, release!: () => void, complete!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const completed = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  const write = (runtime[method] as (...args: unknown[]) => Promise<unknown>).bind(runtime);
+  (runtime as unknown as Record<string, unknown>)[method] = async (...args: unknown[]) => {
+    enter();
+    await released;
+    try {
+      return await write(...args);
+    } finally {
+      complete();
+    }
+  };
+  return { entered, release, completed };
+}
+
+/** Starts `write`, interrupts it as a disconnect would once Pi has been asked, and lets Pi finish. */
+const disconnectDuring = (
+  stalled: ReturnType<typeof stall>,
+  write: Effect.Effect<unknown, unknown>,
+) =>
+  Effect.gen(function* () {
+    const writing = yield* write.pipe(Effect.forkChild);
+    yield* Effect.promise(() => stalled.entered);
+    const disconnect = yield* Fiber.interrupt(writing).pipe(Effect.forkChild);
+    yield* Effect.yieldNow;
+    stalled.release();
+    yield* Effect.promise(() => stalled.completed);
+    yield* Fiber.join(disconnect);
+    // The write ran to its end: the interrupt lands only once the uninterruptible region is over,
+    // so a refusal before Pi was asked would show here as a failure, not as a timeout later.
+    const exit = yield* Fiber.await(writing);
+    assert(!Exit.hasFails(exit) && !Exit.hasDies(exit), `the write failed: ${exit}`);
+  });
+
 test("INV-02: disconnecting during an API-key write still finishes persistence and invalidates models", async () => {
   await fixture(
     async () => {
@@ -335,40 +379,43 @@ test("INV-02: disconnecting during an API-key write still finishes persistence a
     },
     (login, authPath, { catalog, count, runtime }) =>
       Effect.gen(function* () {
-        let enter!: () => void, release!: () => void, complete!: () => void;
-        const entered = new Promise<void>((resolve) => {
-          enter = resolve;
-        });
-        const released = new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        const completed = new Promise<void>((resolve) => {
-          complete = resolve;
-        });
-        const write = runtime.login.bind(runtime);
-        runtime.login = async (...args) => {
-          enter();
-          await released;
-          try {
-            return await write(...args);
-          } finally {
-            complete();
-          }
-        };
         const cwd = "/nonexistent/piano-key-disconnect";
         yield* catalog.catalog(cwd);
-        const saving = yield* login
-          .changeApiKey({ action: "save", provider: "deepseek", key: "private-key" })
-          .pipe(Effect.forkChild);
-        yield* Effect.promise(() => entered);
-        const disconnect = yield* Fiber.interrupt(saving).pipe(Effect.forkChild);
-        yield* Effect.yieldNow;
-        release();
-        yield* Effect.promise(() => completed);
-        yield* Fiber.join(disconnect);
+        yield* disconnectDuring(
+          stall(runtime, "login"),
+          login.changeApiKey({ action: "save", provider: "deepseek", key: "private-key" }),
+        );
         assert.equal(JSON.parse(readFileSync(authPath, "utf8")).deepseek.key, "private-key");
         yield* catalog.catalog(cwd);
         assert.equal(count(), 2, "disconnect must not skip invalidation after a persisted write");
+      }),
+  );
+});
+
+test("INV-02: disconnecting during a sign-out still finishes persistence and invalidates models", async () => {
+  await fixture(
+    async () => ({
+      type: "oauth",
+      access: "private-access",
+      refresh: "private-refresh",
+      expires: Date.now() + 3600_000,
+    }),
+    (login, authPath, { catalog, count, runtime }) =>
+      Effect.gen(function* () {
+        const cwd = "/nonexistent/piano-signout-disconnect";
+        yield* login.signIn.start("radius");
+        yield* until(login, (s) => s.status === "success");
+        yield* catalog.catalog(cwd);
+        assert.equal(count(), 1);
+        yield* disconnectDuring(stall(runtime, "logout"), login.signOut("radius"));
+        assert.equal(JSON.parse(readFileSync(authPath, "utf8")).radius, undefined);
+        assert.equal((yield* login.providers).find((p) => p.id === "radius")?.signedIn, false);
+        yield* catalog.catalog(cwd);
+        assert.equal(
+          count(),
+          2,
+          "disconnect must not skip invalidation after a persisted sign-out",
+        );
       }),
   );
 });
