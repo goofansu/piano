@@ -226,10 +226,12 @@ function projectRows(menu: SessionProjectMenu): PaletteSessionCommandRow[] {
 
 /** Session commands with the membership rows after the manage commands, where the header menu has them. */
 function sessionRows(input: PaletteInput): PaletteSessionCommandRow[] {
-  const rows: PaletteSessionCommandRow[] = input.sessionCommands.map((c) => ({
-    ...commandRow(c),
-    kind: "session",
-  }));
+  const rows: PaletteSessionCommandRow[] = input.sessionCommands
+    .filter((c) => c.id !== "hide-changes")
+    .map((c) => ({
+      ...commandRow(c),
+      kind: "session",
+    }));
   if (!input.sessionProject) return rows;
   const at = rows.findIndex((r) => r.key === "archive");
   rows.splice(at < 0 ? rows.length : at, 0, ...projectRows(input.sessionProject));
