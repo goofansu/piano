@@ -179,11 +179,12 @@ where it is already open.
 
 The session rail is like Claude Code's: one switch for every session, remembered by
 the browser, so switching sessions shows the next session's rail in the same place. Beside the
-Agent area it is pinned inside the transcript's scroller at its top right, 320px wide, with no
-hairline or fill of its own (unlike the Surface area, it is part of the session, not a second pane;
+Agent area it stands at its right, 320px wide and as tall as the transcript and composer
+together, with no hairline or fill of its own (unlike the Surface area, it is part of the session, not a second pane;
 a split column was tried first and read as one). The scroller keeps the area's full width, so its
-scrollbar stays at the pane's right edge past the rail, and the rail never scrolls itself: the
-wheel anywhere in the Agent area, over the rail too, scrolls the conversation. The transcript, its notices and the composer keep
+scrollbar stays at the pane's right edge past the rail. While the rail fits, the wheel anywhere in
+the Agent area, over the rail too, scrolls the conversation; taller, as Claude Code's does, the
+wheel over it scrolls the rail alone. The transcript, its notices and the composer keep
 clear of the rail (`--rail-inset`), and its first section sits level with the transcript's first
 row. It and the Surface area share the session's right side: whichever came in last shows. Opening a Surface tab hides the rail;
 closing the last one brings it back; turning the rail on while tabs are open hides them until a

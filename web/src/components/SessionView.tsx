@@ -215,68 +215,71 @@ export function SessionView({ state, send }: Props) {
                   : undefined}
               </Banner>
             ))}
-          <AddToChat draftKey={draftKey} className="relative flex min-h-0 flex-1 flex-col">
-            {pane.list && (
-              <LocalFileContext value={(path) => openFile(path, "agent")}>
-                <SessionDestinationContext value={destination}>
-                  <MessageList
-                    showTools={!messagesOnly}
-                    messages={t?.messages ?? []}
-                    pending={t?.pending ?? null}
-                    submittedInput={input}
-                    tools={tools}
-                    activity={replyActivity}
-                    working={!!t && isWorking(t.state)}
-                    placeholder={pane.placeholder}
-                    dispatchedFrom={dispatchedFrom}
-                    rail={railInside && <DetailsRail state={state} />}
-                  />
-                </SessionDestinationContext>
-              </LocalFileContext>
-            )}
-            {pane.skeleton && <TranscriptSkeleton />}
-            {!state.connected && (
-              <div
-                role="status"
-                className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center"
-              >
-                <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
-                  <Spinner className="size-3.5" /> Reconnecting…
-                </span>
-              </div>
-            )}
-          </AddToChat>
-          <div className="pr-(--rail-inset)">
-            {notices
-              .filter((n) => n.placement === "status")
-              .map((n) =>
-                n.extension ? (
-                  <ExtensionBlock
-                    key={n.id}
-                    extension={n.extension}
-                    used={usedEditorRequest}
-                    onAppend={
-                      draftKey
-                        ? (request) => {
-                            drafts.paragraph(draftKey, request.text);
-                            setUsedEditorRequest(request.id);
-                          }
-                        : undefined
-                    }
-                  />
-                ) : (
-                  <StatusLine key={n.id} notice={n} />
-                ),
+          {/* The transcript and the composer, with the session rail at their right, as tall as both. */}
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <AddToChat draftKey={draftKey} className="relative flex min-h-0 flex-1 flex-col">
+              {pane.list && (
+                <LocalFileContext value={(path) => openFile(path, "agent")}>
+                  <SessionDestinationContext value={destination}>
+                    <MessageList
+                      showTools={!messagesOnly}
+                      messages={t?.messages ?? []}
+                      pending={t?.pending ?? null}
+                      submittedInput={input}
+                      tools={tools}
+                      activity={replyActivity}
+                      working={!!t && isWorking(t.state)}
+                      placeholder={pane.placeholder}
+                      dispatchedFrom={dispatchedFrom}
+                    />
+                  </SessionDestinationContext>
+                </LocalFileContext>
               )}
-            <Composer
-              session={t}
-              draftKey={draftKey}
-              completion={completionTarget(state)}
-              disabled={!draftKey || input?.outcome === "starting"}
-              actionsDisabled={pane.composerDisabled}
-              readOnly={readOnly}
-              send={send}
-            />
+              {pane.skeleton && <TranscriptSkeleton />}
+              {!state.connected && (
+                <div
+                  role="status"
+                  className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center"
+                >
+                  <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
+                    <Spinner className="size-3.5" /> Reconnecting…
+                  </span>
+                </div>
+              )}
+            </AddToChat>
+            <div className="pr-(--rail-inset)">
+              {notices
+                .filter((n) => n.placement === "status")
+                .map((n) =>
+                  n.extension ? (
+                    <ExtensionBlock
+                      key={n.id}
+                      extension={n.extension}
+                      used={usedEditorRequest}
+                      onAppend={
+                        draftKey
+                          ? (request) => {
+                              drafts.paragraph(draftKey, request.text);
+                              setUsedEditorRequest(request.id);
+                            }
+                          : undefined
+                      }
+                    />
+                  ) : (
+                    <StatusLine key={n.id} notice={n} />
+                  ),
+                )}
+              <Composer
+                session={t}
+                draftKey={draftKey}
+                completion={completionTarget(state)}
+                disabled={!draftKey || input?.outcome === "starting"}
+                actionsDisabled={pane.composerDisabled}
+                readOnly={readOnly}
+                send={send}
+              />
+            </div>
+            {railInside && <DetailsRail state={state} />}
           </div>
         </div>
         <SessionPanel

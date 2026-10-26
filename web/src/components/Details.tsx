@@ -36,13 +36,13 @@ const collapsedPreference = createPreference<readonly DetailsSection[]>({
  * nothing itself: the facts are the registry's and Pi's, the lists the transcript's, so it is
  * never stale and has no toolbar.
  *
- * It is pinned at the top right inside the transcript's scroller (`MessageList`'s `rail`), as
- * Claude Code's session rail is: the scroller keeps the Agent area's full width, so its scrollbar
- * stays at the pane's edge, and the transcript, notices and composer keep clear of it through
- * `--rail-inset`. It never scrolls itself, so the wheel anywhere in the Agent area, the rail
- * included, scrolls the conversation. It shows only side by side, while the rail is on and the
- * Surface area is not, and follows the selected session. Hand-written: no shadcn component is a
- * pinned side column.
+ * It stands at the Agent area's right, as tall as the transcript and composer together, as Claude
+ * Code's session rail does: the transcript's scroller keeps the area's full width, so its
+ * scrollbar stays at the pane's edge, and the transcript, notices and composer keep clear of it
+ * through `--rail-inset`. While it fits, the wheel over it scrolls the conversation as anywhere in
+ * the area; taller, the wheel over it scrolls the rail alone and never runs on into the
+ * conversation. It shows only side by side, while the rail is on and the Surface area is not, and
+ * follows the selected session. Hand-written: no shadcn component is a pinned side column.
  */
 export function DetailsRail({ state }: { state: AppState }) {
   if (!state.session) return null;
@@ -50,13 +50,27 @@ export function DetailsRail({ state }: { state: AppState }) {
     <aside
       data-slot="details-rail"
       aria-label="Session rail"
+      onWheel={passWheel}
       // Clear of the scrollbar at the area's edge; its first section level with the transcript's
-      // first row.
-      className="absolute top-0 right-3 flex w-[calc(var(--rail-inset)-0.75rem)] flex-col pt-3 md:pt-5"
+      // first row, its last ending as far above the area's bottom as the composer's footer does.
+      // It scrolls without a scrollbar, as the tab strips do.
+      className="absolute inset-y-0 right-3 z-10 flex w-[calc(var(--rail-inset)-0.75rem)] scrollbar-none flex-col overflow-y-auto overscroll-y-contain pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:pt-5 md:pb-5"
     >
       <DetailsSections key={sessionKey(state.session)} state={state} />
     </aside>
   );
+}
+
+/**
+ * A rail that fits has nothing to scroll, and the transcript beside it is no ancestor the wheel
+ * would reach, so the wheel is handed to the transcript, scrolling it as anywhere else in the area.
+ */
+function passWheel(event: React.WheelEvent<HTMLElement>) {
+  const rail = event.currentTarget;
+  if (rail.scrollHeight > rail.clientHeight || event.ctrlKey) return;
+  const transcript = rail.parentElement?.querySelector<HTMLElement>("[data-slot=transcript]");
+  const lines = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
+  transcript?.scrollBy({ top: event.deltaY * lines });
 }
 
 /** Details' folding sections for the selected session. */
@@ -74,7 +88,7 @@ function DetailsSections({ state }: { state: AppState }) {
       setCollapsed(open ? collapsed.filter((s) => s !== section) : [...collapsed, section]),
   });
   return (
-    <div className="flex flex-col gap-4 px-3 py-3">
+    <div className="flex flex-col gap-4 px-3 pt-3">
       <DetailsGroup title="Workspace" {...group("workspace")}>
         <DetailsList aria-label="Workspace">
           <WorkspaceRow name="Folder" icon={<FolderIcon />}>
