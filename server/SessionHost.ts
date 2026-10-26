@@ -5,7 +5,6 @@
  */
 import { Clock, Deferred, Effect, Exit, Fiber, Scope, Semaphore, Stream } from "effect";
 import { applySessionEvent } from "../shared/sessionProjection.ts";
-import { dispositionOf } from "../shared/sessionStatus.ts";
 import type { SessionClosure, Snapshot } from "../shared/wire.ts";
 import {
   type PiSession,
@@ -195,30 +194,20 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
 
   yield* mirrorStats;
   const ready = yield* Deferred.make<void>();
+  // The session's live view, folded from its events for Webhooks, which decides what it sends.
   let observed: Snapshot | undefined;
   yield* session.events.pipe(
     Stream.runForEach((event) =>
       Effect.gen(function* () {
-        const previousDialog = observed && dispositionOf(observed, true).dialog;
+        const previous = observed;
         observed =
           event._tag === "snapshot"
             ? event.snapshot
-            : observed
-              ? applySessionEvent(observed, event)
+            : previous
+              ? applySessionEvent(previous, event)
               : undefined;
-        if (observed && event._tag !== "snapshot") {
-          const dialog = dispositionOf(observed, true).dialog;
-          if (event._tag === "response_completed")
-            yield* webhooks.emit("session.completed", raw.spec.cwd, raw.spec.sessionId, observed);
-          if (
-            dialog &&
-            (dialog.id !== previousDialog?.id || dialog.generation !== previousDialog?.generation)
-          )
-            yield* webhooks.emit("session.needs_input", raw.spec.cwd, raw.spec.sessionId, observed);
-          // Webhooks decide from the closure, by the rule the browser follows.
-          if (event._tag === "closed")
-            yield* webhooks.emit("session.failed", raw.spec.cwd, raw.spec.sessionId, observed);
-        }
+        if (observed)
+          yield* webhooks.observe(raw.spec.cwd, raw.spec.sessionId, previous, event, observed);
         // Signal attachment before taking ownership's lock: the opener holds it until ready.
         if (event._tag === "snapshot") yield* Deferred.succeed(ready, undefined);
         if (event._tag === "state" || event._tag === "snapshot")
