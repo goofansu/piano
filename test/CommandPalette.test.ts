@@ -118,6 +118,30 @@ test("a session row is found by its title, folder, branch, project and ID, and n
   assert.match(untitled.value, /^Untitled repo main/);
 });
 
+test("a command only the other layout offers is left out, while an unavailable one is greyed", () => {
+  const rows = (single: boolean) => {
+    const groups = commandPalette(inSession, {
+      globalCommands: [],
+      sessionCommands: sessionCommands(inSession, undefined, {
+        areas: { single, surface: null, area: "agent", details: false, covered: false },
+      }),
+    });
+    const group = groups.find((g) => g.id === "session");
+    return group?.id === "session"
+      ? Object.fromEntries(group.rows.map((r) => [r.label, r.enabled]))
+      : {};
+  };
+  const wide = rows(false);
+  assert.equal(wide["Show session rail"], true);
+  assert.equal(wide.Views, true);
+  assert.equal("Agent" in wide, false, "Agent is a narrow layout's tab");
+  const narrow = rows(true);
+  assert.equal("Show session rail" in narrow, false, "the rail has no room");
+  assert.equal("Views" in narrow, false);
+  // Saved history has not named the session's file yet: a reason, so the row stays, greyed.
+  assert.equal(narrow["Copy session path"], false);
+});
+
 test("groups come in order, with Session commands only while a session is selected", () => {
   assert.deepEqual(headings(home), ["Recent sessions", "Global commands"]);
   assert.deepEqual(headings(inSession), ["Recent sessions", "Global commands", "Session commands"]);

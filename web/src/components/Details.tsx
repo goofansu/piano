@@ -1,5 +1,4 @@
 import { isWorking } from "@shared/sessionProjection";
-import { cn } from "cn";
 import { FolderGit2Icon, FolderIcon, FolderOpenIcon, GitBranchIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { DetailsList, DetailsRowTitle, detailsRow } from "@/components/DetailsList";
@@ -31,50 +30,29 @@ const collapsedPreference = createPreference<readonly DetailsSection[]>({
 });
 
 /**
- * Details, the session's rail: Workspace (where the session runs: its folder, worktree, branch and
- * working directory), Outputs (the files Pi wrote or edited) and Links (the web links the
- * conversation mentions), each a section that folds; Outputs and Links appear once they have a
- * row. It reads nothing itself: the facts are the registry's and Pi's, the lists the
- * transcript's, so it is never stale and has no toolbar.
+ * The session rail: Workspace (where the session runs: its folder, worktree, branch and working
+ * directory), Outputs (the files Pi wrote or edited) and Links (the web links the conversation
+ * mentions), each a section that folds; Outputs and Links appear once they have a row. It reads
+ * nothing itself: the facts are the registry's and Pi's, the lists the transcript's, so it is
+ * never stale and has no toolbar.
  *
- * Beside the Agent area it is a narrow column on the right of the conversation's own surface, with
- * no hairline, so it reads as part of the session rather than a second pane; it shows while the
- * rail is on and the Surface area is not, and follows the selected session. One area at a time it
- * takes the session's full width under its Session rail tab. Hidden, it keeps its layout box
- * (invisible and inert), so its scroll waits for its return. Hand-written: no shadcn component is
- * a nonmodal side column.
+ * It is pinned at the top right inside the transcript's scroller (`MessageList`'s `rail`), as
+ * Claude Code's session rail is: the scroller keeps the Agent area's full width, so its scrollbar
+ * stays at the pane's edge, and the transcript, notices and composer keep clear of it through
+ * `--rail-inset`. It never scrolls itself, so the wheel anywhere in the Agent area, the rail
+ * included, scrolls the conversation. It shows only side by side, while the rail is on and the
+ * Surface area is not, and follows the selected session. Hand-written: no shadcn component is a
+ * pinned side column.
  */
-export function DetailsRail({
-  state,
-  id,
-  labelledBy,
-  single,
-  shown,
-}: {
-  state: AppState;
-  id: string;
-  /** One area at a time, the rail is the tab panel its tab names. */
-  labelledBy: string | undefined;
-  single: boolean;
-  shown: boolean;
-}) {
+export function DetailsRail({ state }: { state: AppState }) {
   if (!state.session) return null;
   return (
     <aside
-      id={id}
       data-slot="details-rail"
-      role={labelledBy ? "tabpanel" : undefined}
-      aria-labelledby={labelledBy}
-      aria-label={labelledBy ? undefined : "Session rail"}
-      inert={!shown}
-      aria-hidden={!shown}
-      className={cn(
-        "relative flex min-h-0 min-w-0 flex-col overflow-auto bg-conversation",
-        // Beside the Agent area it is part of the conversation's surface: no hairline, and its
-        // first section starts level with the transcript's first row.
-        single ? "flex-1" : "w-(--details-width) shrink-0 pt-3 md:pt-5",
-        !shown && (single ? "invisible absolute inset-0" : "invisible absolute inset-y-0 right-0"),
-      )}
+      aria-label="Session rail"
+      // Clear of the scrollbar at the area's edge; its first section level with the transcript's
+      // first row.
+      className="absolute top-0 right-3 flex w-[calc(var(--rail-inset)-0.75rem)] flex-col pt-3 md:pt-5"
     >
       <DetailsSections key={sessionKey(state.session)} state={state} />
     </aside>

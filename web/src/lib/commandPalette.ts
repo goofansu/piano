@@ -148,10 +148,13 @@ function projectRows(menu: SessionProjectMenu): PaletteSessionCommandRow[] {
   ];
 }
 
-/** Session commands with the membership rows after the manage commands, where the header menu has them. */
+/**
+ * Session commands with the membership rows after the manage commands, where the header menu has
+ * them. A command this screen does not have (`hidden`) is left out rather than greyed.
+ */
 function sessionRows(input: PaletteInput): PaletteSessionCommandRow[] {
   const rows: PaletteSessionCommandRow[] = input.sessionCommands
-    .filter((c) => c.id !== "hide-changes")
+    .filter((c) => c.id !== "hide-changes" && !c.hidden)
     .map((c) => ({
       ...commandRow(c),
       kind: "session",

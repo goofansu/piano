@@ -22,11 +22,12 @@ The palette (Mod+K) searches neither outputs nor links.
 - `details-open`: the header's last control, a list icon named "Show session rail" / "Hide session
   rail", turns the session rail on or off; it stays on
   across sessions and reloads, hides while a Surface tab shows, and returns when the last one
-  closes; turned on over open tabs, it hides them until the rail goes off. Narrow, the "Agent" /
-  "Session rail" / "Changes" tabs replace Views, and the rail is offered even without Git.
+  closes; turned on over open tabs, it hides them until the rail goes off. It is offered even
+  without Git. Narrow, the "Agent" / "Changes" tabs replace Views, and neither the rail nor its
+  toggle shows; widening again brings the rail back if it was on.
 - `files-list`: The rail's "Outputs" lists files written in the session by name only, and its
-  "Links" lists the conversation's web links, each with "Jump to message", which narrow shows
-  the Agent area first. Either section appears only once it has a row.
+  "Links" lists the conversation's web links, each with "Jump to message". Either section
+  appears only once it has a row.
 - `file-viewer`: a Files row opens the file in a tab of its own at the strip's end (tab = file
   name, toolbar = path, "Close <file name>"); opening it again shows the same tab.
 
@@ -78,7 +79,8 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     hides; closing it shows the rail again. Capture `03-file-viewer`.
   - Links: send `Read https://example.com/docs/guide please` from the composer; fake Pi echoes
     it, and the rail's Links lists `example.com/docs/guide` with "Jump to message". At 700px wide
-    the tabs read `Agent | Session rail | Changes`, and "Jump to message" selects Agent.
+    the tabs read `Agent | Changes`, and `[data-slot=details-rail]` and "Show session rail" are
+    absent.
 
 ## Gotchas
 

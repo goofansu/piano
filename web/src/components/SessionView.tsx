@@ -1,7 +1,7 @@
 import { isWorking } from "@shared/sessionProjection";
 import type { ExtensionState } from "@shared/wire";
 import { cn } from "cn";
-import { ListIcon, MessagesSquareIcon } from "lucide-react";
+import { MessagesSquareIcon } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
@@ -49,11 +49,7 @@ interface Props {
 }
 
 /** The session's areas share one tab list one at a time; these name its parts for each other. */
-const AREA_ID = {
-  agent: "session-agent-area",
-  surface: "session-surface-area",
-  details: "session-details-area",
-} as const;
+const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" } as const;
 const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
 export function SessionView({ state, send }: Props) {
@@ -91,6 +87,8 @@ export function SessionView({ state, send }: Props) {
   }, [setSingle]);
   const shown = shownAreas(navigation);
   const agentHidden = !shown.agent;
+  // The rail, only ever side by side, is pinned inside the transcript's scroller.
+  const railInside = shown.details;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
@@ -165,7 +163,6 @@ export function SessionView({ state, send }: Props) {
           {
             "--agent-min": `${AGENT_MIN_WIDTH}px`,
             "--surface-min": `${PANEL_WIDTH.min}px`,
-            "--details-width": `${DETAILS_WIDTH}px`,
           } as React.CSSProperties
         }
       >
@@ -183,6 +180,12 @@ export function SessionView({ state, send }: Props) {
             // Hidden in place, not display:none, so the transcript keeps its reading position.
             agentHidden && "invisible absolute inset-0",
           )}
+          // Beside the Agent area the rail floats in it, and what reads and writes keeps clear.
+          style={
+            railInside
+              ? ({ "--rail-inset": `${DETAILS_WIDTH}px` } as React.CSSProperties)
+              : undefined
+          }
         >
           {notices
             .filter((n) => n.placement === "banner")
@@ -226,6 +229,7 @@ export function SessionView({ state, send }: Props) {
                     working={!!t && isWorking(t.state)}
                     placeholder={pane.placeholder}
                     dispatchedFrom={dispatchedFrom}
+                    rail={railInside && <DetailsRail state={state} />}
                   />
                 </SessionDestinationContext>
               </LocalFileContext>
@@ -242,36 +246,38 @@ export function SessionView({ state, send }: Props) {
               </div>
             )}
           </AddToChat>
-          {notices
-            .filter((n) => n.placement === "status")
-            .map((n) =>
-              n.extension ? (
-                <ExtensionBlock
-                  key={n.id}
-                  extension={n.extension}
-                  used={usedEditorRequest}
-                  onAppend={
-                    draftKey
-                      ? (request) => {
-                          drafts.paragraph(draftKey, request.text);
-                          setUsedEditorRequest(request.id);
-                        }
-                      : undefined
-                  }
-                />
-              ) : (
-                <StatusLine key={n.id} notice={n} />
-              ),
-            )}
-          <Composer
-            session={t}
-            draftKey={draftKey}
-            completion={completionTarget(state)}
-            disabled={!draftKey || input?.outcome === "starting"}
-            actionsDisabled={pane.composerDisabled}
-            readOnly={readOnly}
-            send={send}
-          />
+          <div className="pr-(--rail-inset)">
+            {notices
+              .filter((n) => n.placement === "status")
+              .map((n) =>
+                n.extension ? (
+                  <ExtensionBlock
+                    key={n.id}
+                    extension={n.extension}
+                    used={usedEditorRequest}
+                    onAppend={
+                      draftKey
+                        ? (request) => {
+                            drafts.paragraph(draftKey, request.text);
+                            setUsedEditorRequest(request.id);
+                          }
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <StatusLine key={n.id} notice={n} />
+                ),
+              )}
+            <Composer
+              session={t}
+              draftKey={draftKey}
+              completion={completionTarget(state)}
+              disabled={!draftKey || input?.outcome === "starting"}
+              actionsDisabled={pane.composerDisabled}
+              readOnly={readOnly}
+              send={send}
+            />
+          </div>
         </div>
         <SessionPanel
           state={state}
@@ -279,21 +285,14 @@ export function SessionView({ state, send }: Props) {
           id={AREA_ID.surface}
           labelledBy={areaTabs && surface ? tabId(surface.active) : undefined}
         />
-        <DetailsRail
-          state={state}
-          id={AREA_ID.details}
-          labelledBy={areaTabs ? tabId("details") : undefined}
-          single={single}
-          shown={shown.details}
-        />
       </div>
     </TranscriptViewportContext>
   );
 }
 
 /**
- * One area at a time, the tabs between them: Agent, Details, Changes when available or already
- * open, then files in opening order. A view keeps its place even before it opens. Choosing
+ * One area at a time, the tabs between them: Agent, Changes when available or already open, then
+ * files in opening order. The session rail has no room here and no tab. A view keeps its place even before it opens. Choosing
  * Agent never focuses the composer, so a phone keeps its keyboard down; choosing a view shows it
  * as it was left. A file closes from its own toolbar.
  */
@@ -304,10 +303,9 @@ function AreaTabs({
   openChanges: (() => void) | undefined;
 }) {
   const navigation = useNavigation();
-  const { surface, showAgent, showDetails, selectTab } = navigation;
+  const { surface, showAgent, selectTab } = navigation;
   const tabs = surface?.tabs ?? [];
-  const shown = shownAreas(navigation);
-  const value = shown.details ? "details" : surface && shown.surface ? surface.active : "agent";
+  const value = surface && shownAreas(navigation).surface ? surface.active : "agent";
   // The Surface area's strip tabs, so the session's tabs look alike at every width.
   const view = (tab: SurfaceTab) => {
     const key = tabKey(tab);
@@ -324,11 +322,9 @@ function AreaTabs({
         onValueChange={(next) =>
           next === "agent"
             ? showAgent()
-            : next === "details"
-              ? showDetails()
-              : next === "changes" && !tabs.includes(next)
-                ? openChanges?.()
-                : selectTab(next)
+            : next === "changes" && !tabs.includes(next)
+              ? openChanges?.()
+              : selectTab(next)
         }
         className="min-w-0 flex-1 gap-0 self-stretch"
       >
@@ -341,16 +337,6 @@ function AreaTabs({
               icon={<MessagesSquareIcon className="size-3.5" />}
             >
               Agent
-            </PianoStripTabTrigger>
-          </PianoStripTab>
-          <PianoStripTab selected={value === "details"}>
-            <PianoStripTabTrigger
-              value="details"
-              id={tabId("details")}
-              aria-controls={AREA_ID.details}
-              icon={<ListIcon className="size-3.5" />}
-            >
-              Session rail
             </PianoStripTabTrigger>
           </PianoStripTab>
           {(openChanges || tabs.includes("changes")) && view("changes")}

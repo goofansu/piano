@@ -537,26 +537,24 @@ test("Details is one choice for every session, and the browser remembers it", ()
   assert.equal(rightSide(off.navigation), null);
 });
 
-test("one area at a time Details is an area of its own, and a file opened from it closes back to it", () => {
+test("one area at a time the session rail never shows, and comes back once the session is wide", () => {
   const p = page("/s/a");
   p.registry();
   p.selected("a");
-  p.navigation.setSingle(true);
-  p.navigation.showDetails();
-  assert.deepEqual(shownAreas(p.navigation.getState()), {
-    agent: false,
-    surface: false,
-    details: true,
-  });
-  assert.equal(p.navigation.getState().details, false, "moving to it changes no choice");
-
-  p.navigation.openFile("docs/out.md", "details");
-  assert.equal(shownAreas(p.navigation.getState()).surface, true);
-  p.navigation.closeTab("file:docs/out.md");
-  assert.equal(shownAreas(p.navigation.getState()).details, true, "back where its link was");
-
   p.navigation.toggleDetails();
-  assert.equal(shownAreas(p.navigation.getState()).agent, true, "chosen again, back to Agent");
+  assert.equal(rightSide(p.navigation), "details");
+
+  p.navigation.setSingle(true);
+  assert.deepEqual(shownAreas(p.navigation.getState()), {
+    agent: true,
+    surface: false,
+    details: false,
+  });
+  p.navigation.toggleDetails();
+  assert.equal(shownAreas(p.navigation.getState()).details, false, "nothing to turn on there");
+
+  p.navigation.setSingle(false);
+  assert.equal(rightSide(p.navigation), "details", "the switch was kept");
 });
 
 test("a reload drops a Details tab kept by an older Piano and keeps the other tabs", () => {

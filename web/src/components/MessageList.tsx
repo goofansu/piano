@@ -87,6 +87,11 @@ interface Props {
   showTools?: boolean;
   /** The session that dispatched this one; "unlisted" when the catalog cannot open it. */
   dispatchedFrom?: SessionDestination | "unlisted";
+  /**
+   * Pinned at the scroller's top right, in the room `--rail-inset` keeps clear: the session rail.
+   * It sits inside the scroller, so the wheel over it scrolls the conversation as anywhere else.
+   */
+  rail?: React.ReactNode;
 }
 
 /**
@@ -105,6 +110,7 @@ export function MessageList({
   className,
   showTools = true,
   dispatchedFrom,
+  rail,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -152,8 +158,15 @@ export function MessageList({
         ref={ref}
         onScroll={viewport.scrolled}
         data-slot="transcript"
-        className="h-full overflow-y-auto px-(--gutter)"
+        // The scroller spans the area, so its scrollbar keeps the pane's edge beside the rail.
+        className="h-full overflow-y-auto pl-(--gutter) pr-[calc(var(--gutter)+var(--rail-inset))]"
       >
+        {rail && (
+          // A zero-height sticky strip, out to the scroller's edges, that the rail hangs from.
+          <div className="sticky top-0 z-10 -mr-[calc(var(--gutter)+var(--rail-inset))] -ml-(--gutter) h-0">
+            {rail}
+          </div>
+        )}
         <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
           {placeholder && (
             <Empty className="py-16">
@@ -192,7 +205,7 @@ export function MessageList({
           aria-label="Scroll to bottom"
           data-motion="enter"
           onClick={() => viewport.jump(BOTTOM_ENTRY)}
-          className="absolute inset-x-0 bottom-4 mx-auto rounded-full shadow-2 [&_svg:not([class*='size-'])]:size-5"
+          className="absolute left-0 right-(--rail-inset) bottom-4 mx-auto rounded-full shadow-2 [&_svg:not([class*='size-'])]:size-5"
         >
           <ArrowDownIcon />
         </PianoButton>

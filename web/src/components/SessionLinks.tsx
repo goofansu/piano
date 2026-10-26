@@ -7,7 +7,6 @@ import { IconButton } from "@/components/IconButton";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
 import { displayUrl, type SessionLink } from "@/lib/sessionLinks";
 import { jumpEntries, revealEntries, transcriptRows } from "@/lib/transcript";
-import { useNavigation } from "@/lib/useNavigation";
 import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
 interface Props {
@@ -18,21 +17,19 @@ interface Props {
 }
 
 /**
- * The web links the conversation mentions, listed in Details once there is one. Each row is a
- * link that opens in a new tab, its title over its URL; nothing is previewed in Piano. Beside
- * each, Jump to message scrolls the transcript to the message that mentioned the link last,
- * showing the Agent area first where the areas take turns.
+ * The web links the conversation mentions, listed in the session rail once there is one. Each
+ * row is a link that opens in a new tab, its title over its URL; nothing is previewed in Piano.
+ * Beside each, Jump to message scrolls the transcript, beside the rail, to the message that
+ * mentioned the link last.
  */
 export function SessionLinks({ links, messages, working = false }: Props) {
   const viewport = useTranscriptViewport();
-  const { single, showAgent } = useNavigation();
   // Fallback destinations, from the rows the transcript renders, like the jump list's entries.
   const entries = useMemo(
     () => jumpEntries(transcriptRows(messages, { working })),
     [messages, working],
   );
   const reveal = (link: SessionLink) => {
-    if (single) showAgent();
     for (const entry of revealEntries(messages, entries, link.messageId))
       if (viewport?.jump(entry)) return;
   };

@@ -84,8 +84,8 @@ export type SessionCommandIntent =
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
   /**
-   * Turn Details (the session's folder, branch and directory, its outputs and its links) on or
-   * off beside the Agent area; one area at a time, move to it or back to Agent.
+   * Turn the session rail (the session's folder, branch and directory, its outputs and its
+   * links) on or off beside the Agent area.
    */
   | { kind: "details" }
   /** Open the session header's Views menu. */
@@ -112,6 +112,12 @@ export interface SessionCommand {
   enabled: boolean;
   /** Shown in the destructive style: Delete. */
   destructive?: true;
+  /**
+   * Not offered on this screen at all, so the palette leaves it out instead of greying it: a
+   * command only one layout has (Views and the session rail side by side, Agent one area at a
+   * time). Always with `enabled` false; a command disabled for a reason the user can act on stays.
+   */
+  hidden?: boolean;
   /** A display toggle that is currently on. */
   checked?: boolean;
   /** Direct synonyms of the label, for palette search; not topics or what the command touches. */
@@ -214,11 +220,13 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
- * - details: always; the session's facts need neither Git nor a live Pi. Beside the Agent area it
- *   is "Hide session rail" while Details shows and turns it off, else "Show session rail".
+ * - details: the session is laid out side by side, the only layout with room for the session
+ *   rail (its facts need neither Git nor a live Pi); "Hide session rail" while it shows, else
+ *   "Show session rail".
  * - views: the session is laid out side by side, where the header shows the Views menu.
  * - hide changes: Changes has a tab beside the Agent area; hiding closes it.
- * - agent: the session is laid out one area at a time, where Details always has a tab beside Agent.
+ * - agent: the session is laid out one area at a time and the Agent tab shows, beside a Surface
+ *   tab or Changes that can open.
  * - pull request, copy session ID: the selected session has a Pi session ID.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
  *   an app; open needs its link, stop needs the attachment (`sessionReady`).
@@ -248,6 +256,8 @@ export function sessionCommands(
     const messagesOnly = options.messagesOnly ?? false;
     const areas = options.areas ?? NO_AREAS;
     const { surface, single } = areas;
+    // One area at a time, Agent has a tab while something sits beside it.
+    const agentTab = single && (!!surface || ctx.canOpenChanges);
     const sessionPath = session.state.sessionFile;
     commands.push(
       {
@@ -288,6 +298,7 @@ export function sessionCommands(
         label: "Views",
         icon: "views",
         enabled: !single,
+        hidden: single,
         intent: { kind: "views" },
       },
       {
@@ -301,14 +312,10 @@ export function sessionCommands(
       },
       {
         id: "details",
-        // Beside the Agent area the header's toggle names it; one area at a time its tab does.
-        label: single
-          ? "Session rail"
-          : shownAreas(areas).details
-            ? "Hide session rail"
-            : "Show session rail",
+        label: shownAreas(areas).details ? "Hide session rail" : "Show session rail",
         icon: "list",
-        enabled: true,
+        enabled: !single,
+        hidden: single,
         keywords: ["details", "info", "outputs", "files", "links", "branch"],
         intent: { kind: "details" },
       },
@@ -324,7 +331,9 @@ export function sessionCommands(
         id: "agent",
         label: "Agent",
         icon: "agent",
-        enabled: single,
+        enabled: agentTab,
+        // Agent exists only as a tab, so without one there is nothing to grey.
+        hidden: !agentTab,
         keywords: ["conversation"],
         intent: { kind: "agent" },
       },

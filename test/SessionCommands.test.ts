@@ -466,19 +466,19 @@ test("view commands follow the session's areas: Views and Hide changes side by s
   assert.deepEqual(ofAreas({ surface: "changes", single: true }), {
     views: false,
     changes: true,
-    details: true,
+    details: false,
     "hide-changes": false,
     agent: true,
   });
-  // A removed checkout closes Changes, but Details still describes the session, so one area at
-  // a time Agent always has a tab beside it.
+  // A removed checkout closes Changes, and the session rail has no room one area at a time, so
+  // nothing sits beside Agent and it needs no tab.
   const removed = { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) };
   assert.deepEqual(ofAreas({ surface: null, single: true }, removed), {
     views: false,
     changes: false,
-    details: true,
+    details: false,
     "hide-changes": false,
-    agent: true,
+    agent: false,
   });
   assert.equal(ofAreas({ surface: null, single: false }, removed).agent, false, "side by side");
 });

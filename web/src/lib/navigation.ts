@@ -59,24 +59,21 @@ export const tabKey = (tab: SurfaceTab): string => (isView(tab) ? tab : `file:${
 export const activeTab = (surface: Surface | null): SurfaceTab | undefined =>
   surface?.tabs.find((tab) => tabKey(tab) === surface.active);
 
-/**
- * The session's areas: the conversation and its composer, the Surface area, and Details, the
- * session's facts, outputs and links.
- */
-export type SessionArea = "agent" | "surface" | "details";
+/** The session's two areas: the conversation and its composer, and the Surface area. */
+export type SessionArea = "agent" | "surface";
 
 /**
- * Which of the session's areas show. Side by side, the Agent area always, and on its right either
- * the Surface area, while it has tabs and Details does not cover it, or Details, while it is on:
- * whichever came in last. One area at a time, the one the user moved to last.
+ * Which of the session's areas show, and whether the session rail does. Side by side, the Agent
+ * area always, and on its right either the Surface area, while it has tabs and the rail does not
+ * cover it, or the rail, while it is on: whichever came in last. One area at a time, the one the
+ * user moved to last, and never the rail, which has no room there.
  */
 export function shownAreas(
   state: Pick<NavigationState, "surface" | "area" | "single" | "details" | "covered">,
 ): { agent: boolean; surface: boolean; details: boolean } {
   if (state.single) {
     const surface = !!state.surface && state.area === "surface";
-    const details = state.area === "details";
-    return { agent: !surface && !details, surface, details };
+    return { agent: !surface, surface, details: false };
   }
   const surface = !!state.surface && !state.covered;
   return { agent: true, surface, details: state.details && !surface };
@@ -173,12 +170,11 @@ export interface Navigation {
   /** Shows Changes, opening its tab at the end if needed, or focuses it; never a toggle. */
   openChanges: () => void;
   /**
-   * Turns Details on or off. Side by side, turning it on hides the Surface area until a tab is
-   * shown again or Details goes off; one area at a time, it moves to Details or back to Agent.
+   * Turns the session rail on or off for every session. Turning it on hides the Surface area until
+   * a tab is shown again or the rail goes off. One area at a time it does nothing: the rail has no
+   * room there, and keeps its switch for when the session is wide again.
    */
   toggleDetails: () => void;
-  /** Shows Details: turns it on side by side, moves to it one area at a time. */
-  showDetails: () => void;
   /**
    * Shows a file's tab, opening it at the end if needed; an open file, however spelled, is read
    * again. `from` is the area the link was in, which closing the file returns to, even when it was
@@ -310,8 +306,7 @@ interface KeptSurface {
   area: SessionArea;
 }
 
-const isArea = (value: unknown): value is SessionArea =>
-  value === "agent" || value === "surface" || value === "details";
+const isArea = (value: unknown): value is SessionArea => value === "agent" || value === "surface";
 
 const isTab = (value: unknown): value is SurfaceTab =>
   value === "changes" ||
@@ -577,17 +572,10 @@ export function createNavigation({
       }),
     closeSettings,
     openChanges: () => openView("changes"),
-    toggleDetails: () =>
-      state.single
-        ? moveArea({ area: state.area === "details" ? "agent" : "details" })
-        : setDetails(!shownAreas(state).details),
-    showDetails: () =>
-      state.single
-        ? moveArea({ area: "details" })
-        : shownAreas(state).details
-          ? moveArea({})
-          : setDetails(true),
-    openFile: (spelled, from = state.single ? state.area : "agent") => {
+    toggleDetails: () => {
+      if (!state.single) setDetails(!shownAreas(state).details);
+    },
+    openFile: (spelled, from = shownAreas(state).agent ? "agent" : "surface") => {
       const path = filePath(spelled, client.getState().session?.cwd);
       const tabs = state.surface?.tabs ?? [];
       // A fresh tab object for an open file: the viewer reads it again, as clicking a link did,
@@ -607,19 +595,12 @@ export function createNavigation({
       if (!surface || at < 0 || !closable(surface.tabs[at], state.single)) return;
       const closing = surface.tabs[at];
       const tabs = surface.tabs.toSpliced(at, 1);
-      // One area at a time, closing the file shown returns to the area its link was in.
-      const back =
-        state.single && surface.active === key && !isView(closing) && closing.from !== "surface"
-          ? closing.from
-          : undefined;
-      if (!tabs.length)
-        return moveArea({
-          surface: null,
-          area: back ?? (state.area === "surface" ? "agent" : state.area),
-        });
+      if (!tabs.length) return moveArea({ surface: null, area: "agent" });
       const active =
         surface.active === key ? tabKey(tabs[Math.min(at, tabs.length - 1)]) : surface.active;
-      moveArea({ surface: { tabs, active }, area: back ?? state.area });
+      const back =
+        state.single && surface.active === key && !isView(closing) && closing.from === "agent";
+      moveArea({ surface: { tabs, active }, area: back ? "agent" : state.area });
     },
     showAgent: () => moveArea({ area: "agent" }),
     setSingle: (single) => batch(() => set({ single, views: single ? false : state.views })),

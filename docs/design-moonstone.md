@@ -179,10 +179,13 @@ carries the same name.
 
 The session rail is like Claude Code's: one switch for every session, remembered by
 the browser, so switching sessions shows the next session's rail in the same place. Beside the
-Agent area it is a fixed 320px column on the right of the conversation's own surface, with no
-hairline (unlike the Surface area, it is part of the session, not a second pane; a split column was
-tried first and read as one), its first section level with the transcript's first row. It and the
-Surface area share that side: whichever came in last shows. Opening a Surface tab hides the rail;
+Agent area it is pinned inside the transcript's scroller at its top right, 320px wide, with no
+hairline or fill of its own (unlike the Surface area, it is part of the session, not a second pane;
+a split column was tried first and read as one). The scroller keeps the area's full width, so its
+scrollbar stays at the pane's right edge past the rail, and the rail never scrolls itself: the
+wheel anywhere in the Agent area, over the rail too, scrolls the conversation. The transcript, its notices and the composer keep
+clear of the rail (`--rail-inset`), and its first section sits level with the transcript's first
+row. It and the Surface area share the session's right side: whichever came in last shows. Opening a Surface tab hides the rail;
 closing the last one brings it back; turning the rail on while tabs are open hides them until a
 tab is shown again or the rail goes off. The rail has no header or toolbar: its folding sections are
 Workspace (folder, worktree, branch, working directory), Outputs, the files Pi wrote or edited,
@@ -191,9 +194,10 @@ composer's usage row once held both as popovers, and the palette no longer searc
 Surface area's remembered width is a
 preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
 shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the
-viewport) the areas take turns under Agent, Session rail and Changes tabs, each at full width, drawn as
-the same strip tabs without Close (a file closes from its toolbar); there the session rail is an area of
-its own whatever the switch, and a file opened from its Outputs closes back to it.
+viewport) the areas take turns under Agent and Changes tabs, each at full width, drawn as
+the same strip tabs without Close (a file closes from its toolbar). There neither Views nor the
+session rail shows: the rail has no room, its toggle and palette row are unavailable, and its
+switch waits for the session to be wide again.
 
 ## Linear
 

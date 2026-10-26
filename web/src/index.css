@@ -89,6 +89,9 @@
   --gutter: 1rem;
   --glyph-pad: 0.5rem;
   --row-inset: calc(var(--gutter) - var(--glyph-pad));
+  /* The room the session rail takes at the Agent area's right while it floats over the
+   * transcript's scroller; the transcript, notices and composer keep clear of it. */
+  --rail-inset: 0px;
 
   /* Compact UI must be as readable as the composer on phones. */
   --type-label: 1rem;
