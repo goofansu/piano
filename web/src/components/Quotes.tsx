@@ -84,6 +84,7 @@ export function AddToChat({
   useEffect(() => {
     const touchInput = window.matchMedia("(pointer: coarse)");
     let pressed = false;
+    let selectionEnabled = true;
     let frame = 0;
     const read = () => {
       cancelAnimationFrame(frame);
@@ -91,6 +92,7 @@ export function AddToChat({
         const selection = document.getSelection();
         const selected =
           !touchInput.matches &&
+          selectionEnabled &&
           !pressed &&
           selection &&
           selection.rangeCount > 0 &&
@@ -108,6 +110,8 @@ export function AddToChat({
     };
     const press = (e: PointerEvent) => {
       if (e.target instanceof Node && pill.current?.contains(e.target)) return;
+      // Menus can preserve a transcript selection. An outside click must not revive its pill.
+      selectionEnabled = e.target instanceof Node && !!area.current?.contains(e.target);
       pressed = true;
       read();
     };
@@ -115,7 +119,11 @@ export function AddToChat({
       pressed = false;
       read();
     };
+    const key = (e: KeyboardEvent) => {
+      if (e.target instanceof Node && area.current?.contains(e.target)) selectionEnabled = true;
+    };
     touchInput.addEventListener("change", read);
+    document.addEventListener("keydown", key, true);
     document.addEventListener("selectionchange", read);
     document.addEventListener("pointerdown", press, true);
     document.addEventListener("pointerup", release, true);
@@ -123,6 +131,7 @@ export function AddToChat({
     return () => {
       cancelAnimationFrame(frame);
       touchInput.removeEventListener("change", read);
+      document.removeEventListener("keydown", key, true);
       document.removeEventListener("selectionchange", read);
       document.removeEventListener("pointerdown", press, true);
       document.removeEventListener("pointerup", release, true);
