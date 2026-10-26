@@ -179,8 +179,10 @@ carries the same name.
 
 The session rail is like Claude Code's: one switch for every session, remembered by
 the browser, so switching sessions shows the next session's rail in the same place. Beside the
-Agent area it is a fixed 320px column on the right, split off by a hairline like the Surface area,
-and the two share that side: whichever came in last shows. Opening a Surface tab hides the rail;
+Agent area it is a fixed 320px column on the right of the conversation's own surface, with no
+hairline (unlike the Surface area, it is part of the session, not a second pane; a split column was
+tried first and read as one), its first section level with the transcript's first row. It and the
+Surface area share that side: whichever came in last shows. Opening a Surface tab hides the rail;
 closing the last one brings it back; turning the rail on while tabs are open hides them until a
 tab is shown again or the rail goes off. The rail has no header or toolbar: its folding sections are
 Workspace (folder, worktree, branch, working directory), Outputs, the files Pi wrote or edited,

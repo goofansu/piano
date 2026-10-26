@@ -37,9 +37,10 @@ const collapsedPreference = createPreference<readonly DetailsSection[]>({
  * row. It reads nothing itself: the facts are the registry's and Pi's, the lists the
  * transcript's, so it is never stale and has no toolbar.
  *
- * Beside the Agent area it is a narrow column on the right, split off by a hairline, shown while
- * Details is on and the Surface area is not; it follows the selected session. One area at a time
- * it takes the session's full width under its Details tab. Hidden, it keeps its layout box
+ * Beside the Agent area it is a narrow column on the right of the conversation's own surface, with
+ * no hairline, so it reads as part of the session rather than a second pane; it shows while the
+ * rail is on and the Surface area is not, and follows the selected session. One area at a time it
+ * takes the session's full width under its Session rail tab. Hidden, it keeps its layout box
  * (invisible and inert), so its scroll waits for its return. Hand-written: no shadcn component is
  * a nonmodal side column.
  */
@@ -69,7 +70,9 @@ export function DetailsRail({
       aria-hidden={!shown}
       className={cn(
         "relative flex min-h-0 min-w-0 flex-col overflow-auto bg-conversation",
-        single ? "flex-1" : "w-(--details-width) shrink-0 border-l border-line",
+        // Beside the Agent area it is part of the conversation's surface: no hairline, and its
+        // first section starts level with the transcript's first row.
+        single ? "flex-1" : "w-(--details-width) shrink-0 pt-3 md:pt-5",
         !shown && (single ? "invisible absolute inset-0" : "invisible absolute inset-y-0 right-0"),
       )}
     >
