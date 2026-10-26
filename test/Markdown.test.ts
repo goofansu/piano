@@ -4,6 +4,39 @@ import { test } from "node:test";
 import { markdownImages, markdownLinks } from "../web/src/lib/markdown.ts";
 import { renderMarkdown } from "./fixtures/markdown.ts";
 
+test("footnotes link to their definitions and back to every reference", () => {
+  for (const streaming of [false, true]) {
+    const html = renderMarkdown(
+      "Read[^note] and again[^note].\n\n[^note]: The note.",
+      false,
+      streaming,
+    );
+    const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+    const links = [...html.matchAll(/<a\b[^>]*href="#([^"]+)"[^>]*>/g)];
+    assert.equal(links.length, 4, "two references and two return links");
+    for (const link of links) {
+      assert.ok(ids.includes(link[1]), `target ${link[1]} exists`);
+      assert.ok(!link[0].includes('target="_blank"'));
+    }
+    assert.equal(new Set(ids).size, ids.length);
+  }
+});
+
+test("footnotes with the same name stay within their Markdown message", () => {
+  const html = renderMarkdown([
+    "First[^1].\n\n[^1]: First note.",
+    "Second[^1].\n\n[^1]: Second note.",
+  ]);
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(new Set(ids).size, ids.length, "IDs are unique across messages");
+  const sections = html.split("</section>");
+  for (const section of sections.slice(0, 2)) {
+    const targets = [...section.matchAll(/(?:href="#|aria-describedby=")([^"]+)"/g)];
+    assert.equal(targets.length, 3, "reference, accessible label and return link");
+    for (const target of targets) assert.ok(section.includes(`id="${target[1]}"`));
+  }
+});
+
 // Assertions cover semantic output, not incidental Streamdown wrappers or whitespace.
 test("README's tab-indented fenced commands stay inside their numbered step", () => {
   const html = renderMarkdown(readFileSync("README.md", "utf8"));

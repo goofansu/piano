@@ -1,3 +1,4 @@
+import type { Root, RootContent } from "hast";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -7,6 +8,8 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useId,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -94,8 +97,19 @@ export function Markdown(props: MarkdownProps) {
   );
 }
 
-function MarkdownLink({ href = "", children, node }: ComponentProps<"a"> & ExtraProps) {
+function MarkdownLink({ href = "", children, node, ...props }: ComponentProps<"a"> & ExtraProps) {
   const openFile = useContext(LocalFileContext);
+  if (
+    href.startsWith("#") &&
+    (node?.properties.dataFootnoteRef != null || node?.properties.dataFootnoteBackref != null)
+  ) {
+    // Native anchors preserve keyboard navigation and focus without leaving the conversation.
+    return (
+      <a {...props} href={href}>
+        {children}
+      </a>
+    );
+  }
   const path = localFilePath(href);
   if (path) {
     // Custom inline action: no shadcn primitive represents a Markdown local-file link.
@@ -280,7 +294,27 @@ const components: Components = {
   th: "th",
   td: "td",
 };
-const rehypePlugins: [] = [];
+/** Scope generated IDs, references and accessible labels to one Markdown surface. */
+function footnoteScope({ prefix }: { prefix: string }) {
+  return (tree: Root) => {
+    const visit = (node: Root | RootContent) => {
+      if (node.type === "element") {
+        const props = node.properties;
+        if (typeof props.id === "string") props.id = prefix + props.id;
+        if (props.dataFootnoteRef != null || props.dataFootnoteBackref != null) {
+          if (typeof props.href === "string" && props.href.startsWith("#")) {
+            props.href = `#${prefix}${props.href.slice(1)}`;
+          }
+          if (Array.isArray(props.ariaDescribedBy)) {
+            props.ariaDescribedBy = props.ariaDescribedBy.map((id) => prefix + id);
+          }
+        }
+      }
+      if ("children" in node) node.children.forEach(visit);
+    };
+    visit(tree);
+  };
+}
 // The custom link/image components own destination policy; no native URL is emitted unvalidated.
 const urlTransform = (url: string) => url;
 
@@ -292,6 +326,14 @@ function MarkdownContent({
   mode = "streaming",
   streaming = false,
 }: MarkdownProps) {
+  const id = useId();
+  // Streamdown keys cached processors by plugin name and serialized options, not closure identity.
+  const rehypePlugins = useMemo(
+    () => [
+      [footnoteScope, { prefix: `markdown-${id}-` }] as [typeof footnoteScope, { prefix: string }],
+    ],
+    [id],
+  );
   if (!markdownWithinBudget(text))
     return (
       <div className={className}>

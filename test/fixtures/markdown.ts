@@ -19,16 +19,19 @@ const { Markdown } = (await vite.ssrLoadModule("/src/components/Markdown.tsx")) 
     streaming?: boolean;
   }>;
 };
-export const renderMarkdown = (text: string, images = false, streaming = false) =>
+export const renderMarkdown = (text: string | string[], images = false, streaming = false) =>
   renderToStaticMarkup(
     createElement(
       TooltipProvider,
       null,
-      createElement(Markdown, {
-        text,
-        images: images ? new Map() : undefined,
-        mode: streaming ? "streaming" : "static",
-        streaming,
-      }),
+      ...(Array.isArray(text) ? text : [text]).map((message, key) =>
+        createElement(Markdown, {
+          key,
+          text: message,
+          images: images ? new Map() : undefined,
+          mode: streaming ? "streaming" : "static",
+          streaming,
+        }),
+      ),
     ),
   );
