@@ -99,9 +99,13 @@ export interface SessionCommand {
   intent: SessionCommandIntent;
 }
 
-/** The sidebar row's menu: separated sections in order, an empty one left out. */
+/**
+ * The sidebar row's menu: separated sections in order, an empty one left out; the project picker
+ * follows them, and the destructive commands come last.
+ */
 export interface SessionRowMenu {
   sections: SessionCommand[][];
+  destructive: SessionCommand[];
 }
 
 /**
@@ -119,15 +123,16 @@ export interface SessionHeaderMenu {
   destructive: SessionCommand[];
 }
 
-/** The row puts archive beside delete, though only delete is destructive. */
-const ROW_SECTIONS = [["rename", "pin"], ["share"], ["archive", "delete"]] as const;
+const ROW_SECTIONS = [["rename", "pin"], ["share"]] as const;
+/** Archive sits beside delete, though only delete is destructive: both end the session's life. */
+const DESTRUCTIVE = ["archive", "delete"] as const;
 const HEADER_SECTIONS = {
   details: ["copy-session-path"],
   // The header's preview control carries open and stop, and Views (or, one area at a time, the
   // area tabs) Changes; the menu lists none of them twice.
   open: ["pull-request"],
   manage: ["rename", "pin", "share"],
-  destructive: ["archive", "delete"],
+  destructive: DESTRUCTIVE,
 } as const satisfies Record<string, readonly SessionCommandId[]>;
 
 const pick = (commands: readonly SessionCommand[], ids: readonly SessionCommandId[]) =>
@@ -137,6 +142,7 @@ const pick = (commands: readonly SessionCommand[], ids: readonly SessionCommandI
 export function sessionRowMenu(commands: readonly SessionCommand[]): SessionRowMenu {
   return {
     sections: ROW_SECTIONS.map((ids) => pick(commands, ids)).filter((s) => s.length > 0),
+    destructive: pick(commands, DESTRUCTIVE),
   };
 }
 

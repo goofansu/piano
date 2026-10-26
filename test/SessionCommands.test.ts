@@ -4,6 +4,7 @@ import type { FolderView, SessionPreview, SessionState, WorktreeView } from "../
 import {
   type SessionCommandId,
   type SessionHeaderMenu,
+  type SessionRowMenu,
   sessionCommands,
   sessionHeaderMenu,
   sessionRowMenu,
@@ -237,37 +238,48 @@ const headerIds = ({ details, open, manage, display, destructive }: SessionHeade
   ...(display ? [display.id] : []),
 ];
 
+const rowCommands = ({ sections, destructive }: SessionRowMenu) => [
+  ...sections.flat(),
+  ...destructive,
+];
+
 test("the palette offers every command the session header and the sidebar row menu offer", () => {
   const options = { radiusSignedIn: true };
   const commands = sessionCommands(base, undefined, options);
   const palette = new Set(commands.map((c) => c.id));
   for (const id of headerIds(sessionHeaderMenu(commands)))
     assert.ok(palette.has(id), `header ${id}`);
-  for (const id of sessionRowMenu(commands)
-    .sections.flat()
-    .map((c) => c.id))
+  for (const id of rowCommands(sessionRowMenu(commands)).map((c) => c.id))
     assert.ok(palette.has(id), `row ${id}`);
   // The selected session's own row menu resolves to the same commands, with the same enablement.
-  const row = sessionRowMenu(
-    sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" }, options),
-  ).sections.flat();
-  const fromPalette = sessionRowMenu(commands).sections.flat();
+  const row = rowCommands(
+    sessionRowMenu(sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" }, options)),
+  );
+  const fromPalette = rowCommands(sessionRowMenu(commands));
   assert.deepEqual(
     row.map((c) => [c.id, c.label, c.enabled]),
     fromPalette.map((c) => [c.id, c.label, c.enabled]),
   );
 });
 
-test("the row menu: rename and pin, share only when signed in to Radius, then archive with delete", () => {
-  const sections = (radiusSignedIn: boolean) =>
-    sessionRowMenu(sessionCommands(base, other, { radiusSignedIn })).sections.map((s) =>
-      s.map((c) => c.id),
+test("the row menu: rename and pin, share only when signed in to Radius, then archive with delete last", () => {
+  const menu = (radiusSignedIn: boolean) => {
+    const { sections, destructive } = sessionRowMenu(
+      sessionCommands(base, other, { radiusSignedIn }),
     );
-  assert.deepEqual(sections(true), [["rename", "pin"], ["share"], ["archive", "delete"]]);
-  assert.deepEqual(sections(false), [
-    ["rename", "pin"],
-    ["archive", "delete"],
-  ]);
+    return {
+      sections: sections.map((s) => s.map((c) => c.id)),
+      destructive: destructive.map((c) => c.id),
+    };
+  };
+  assert.deepEqual(menu(true), {
+    sections: [["rename", "pin"], ["share"]],
+    destructive: ["archive", "delete"],
+  });
+  assert.deepEqual(menu(false), {
+    sections: [["rename", "pin"]],
+    destructive: ["archive", "delete"],
+  });
 });
 
 test("the header menu: copy beside the details, open, manage with share only when signed in, a Messages only switch, then archive with delete", () => {

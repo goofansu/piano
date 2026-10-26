@@ -17,6 +17,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
@@ -105,13 +106,14 @@ export function ApiKeySettings() {
                           <DropdownMenuItem onSelect={() => setEditing(provider)}>
                             Replace key
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={() => actions.confirm(provider)}
-                          >
-                            Remove key
-                          </DropdownMenuItem>
                         </DropdownMenuGroup>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => actions.confirm(provider)}
+                        >
+                          Remove key
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </RowActions>

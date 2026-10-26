@@ -412,7 +412,7 @@ function SessionMenu({
 }) {
   const { state } = useCommands();
   const { commands, run } = useSessionCommands(target);
-  const { sections } = sessionRowMenu(commands);
+  const { sections, destructive } = sessionRowMenu(commands);
   return (
     <>
       {sections.map((section) => (
@@ -428,6 +428,16 @@ function SessionMenu({
       <DropdownMenuGroup>
         <ProjectMenu menu={sessionProjectMenu(state, target)} run={run} />
       </DropdownMenuGroup>
+      {destructive.length > 0 && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            {destructive.map((c) => (
+              <SessionCommandMenuItem key={c.id} command={c} run={run} />
+            ))}
+          </DropdownMenuGroup>
+        </>
+      )}
     </>
   );
 }

@@ -81,7 +81,7 @@ passes these checks:
   them, case included ("No project", "Delete project").
 - **Same shape:** a new screen matches an existing screen of its kind (a settings page matches
   Webhooks); compare their screenshots side by side. A destructive action is the red
-  `destructive` menu item and asks first.
+  `destructive` menu item, last in its menu after a separator, and asks first.
 - **Feedback:** every action answers where it was taken, once the server confirms it: a saved,
   deleted or sent change ends with a toast that names it ("Project saved", "Session deleted"),
   a failure with the error's toast, a read in progress with its own control turning.
