@@ -55,13 +55,24 @@ const enabled = (state: AppState, target?: typeof other) =>
     Record<SessionCommandId, boolean>
   >;
 
+test("saved session path copies without a running Pi, and is unavailable without a file", () => {
+  const path = "/home/test/.pi/agent/sessions/--repo--/2026-01-01_s1.jsonl";
+  const saved = { ...session("/repo", { sessionFile: path }), hosted: false };
+  const command = sessionCommands({ ...base, session: saved }).find(
+    (c) => c.id === "copy-session-path",
+  );
+  assert.equal(command?.enabled, true);
+  assert.deepEqual(command?.intent, { kind: "copy", value: path, label: "Session path" });
+  assert.equal(enabled(base)["copy-session-path"], false);
+});
+
 test("session command availability: settled, disconnected, resyncing, missing checkout, no workspace", () => {
   const settled = enabled(base);
   assert.deepEqual(settled, {
     "copy-working-directory": true,
     "copy-branch": true,
     "copy-session-id": true,
-    "copy-all": true,
+    "copy-session-path": false,
     views: true,
     changes: true,
     "hide-changes": false,
@@ -266,7 +277,7 @@ test("the header menu: copy beside the details, open, manage with share only whe
     );
     assert.deepEqual(
       menu.details.map((c) => c.id),
-      ["copy-all"],
+      ["copy-session-path"],
     );
     assert.deepEqual(
       menu.open.map((c) => c.id),
