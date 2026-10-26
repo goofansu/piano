@@ -522,6 +522,39 @@ test("Details is one choice for every session, and the browser remembers it", ()
   assert.equal(rightSide(off.navigation), null);
 });
 
+test("a reload keeps the session rail over the tabs it covered, unless it was turned off meanwhile", () => {
+  const memory = tabMemory();
+  const storage = detailsStorage();
+  const before = page("/s/a", memory, detailsPreference(storage));
+  before.registry();
+  before.selected("a");
+  before.navigation.openChanges();
+  before.navigation.toggleDetails();
+  assert.equal(rightSide(before.navigation), "details");
+
+  const after = page("/s/a", memory, detailsPreference(storage));
+  after.registry();
+  after.selected("a");
+  assert.equal(rightSide(after.navigation), "details", "the rail still covers the tabs");
+  assert.deepEqual(shownTabs(after.navigation).tabs, ["changes"], "the covered tabs wait");
+  after.navigation.toggleDetails();
+  assert.equal(rightSide(after.navigation), "surface", "turned off, the covered tabs return");
+
+  // Another tab of this browser turned the rail off (`storage` now says so) while this one was
+  // away with the tabs covered: the tabs show, since no rail covers them.
+  const away = tabMemory();
+  const left = page("/s/a", away, detailsPreference(detailsStorage()));
+  left.registry();
+  left.selected("a");
+  left.navigation.openChanges();
+  left.navigation.toggleDetails();
+  assert.equal(rightSide(left.navigation), "details");
+  const off = page("/s/a", away, detailsPreference(storage));
+  off.registry();
+  off.selected("a");
+  assert.equal(rightSide(off.navigation), "surface", "nothing is covered by a rail that is off");
+});
+
 test("one area at a time the session rail never shows, and comes back once the session is wide", () => {
   const p = page("/s/a");
   p.registry();
