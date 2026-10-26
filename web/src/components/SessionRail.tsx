@@ -56,17 +56,38 @@ export function SessionRail({ state }: { state: AppState }) {
   if (!state.session) return null;
   return (
     <aside
+      key={sessionKey(state.session)}
+      ref={fadeOverflow}
       data-slot="session-rail"
       aria-label="Session rail"
       onWheel={onWheel}
       // Clear of the scrollbar at the area's edge; its first section level with the transcript's
-      // first row, its last ending as far above the area's bottom as the composer's footer does.
+      // first row. Overflow fades at either edge; the last row clears the fade at the scroll end.
       // It scrolls without a scrollbar, as the tab strips do.
-      className="absolute inset-y-0 right-3 z-10 flex w-[calc(var(--rail-inset)-0.75rem)] scrollbar-none flex-col overflow-y-auto overscroll-y-contain pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:pt-5 md:pb-5"
+      className="absolute inset-y-0 right-3 z-10 flex w-[calc(var(--rail-inset)-0.75rem)] scrollbar-none flex-col overflow-y-auto overscroll-y-contain pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pt-5"
     >
-      <RailSections key={sessionKey(state.session)} state={state} />
+      <RailSections state={state} />
     </aside>
   );
+}
+
+/** Fade only content beyond the viewport, including after a resize or a section folds. */
+function fadeOverflow(rail: HTMLElement | null) {
+  if (!rail) return;
+  const update = () => {
+    const remaining = rail.scrollHeight - rail.clientHeight - rail.scrollTop;
+    rail.style.setProperty("--rail-fade-top", `${Math.min(32, Math.max(0, rail.scrollTop))}px`);
+    rail.style.setProperty("--rail-fade-bottom", `${Math.min(32, Math.max(0, remaining))}px`);
+  };
+  const observer = new ResizeObserver(update);
+  observer.observe(rail);
+  if (rail.firstElementChild) observer.observe(rail.firstElementChild);
+  rail.addEventListener("scroll", update, { passive: true });
+  update();
+  return () => {
+    observer.disconnect();
+    rail.removeEventListener("scroll", update);
+  };
 }
 
 /**
@@ -95,7 +116,7 @@ function RailSections({ state }: { state: AppState }) {
       setCollapsed(open ? collapsed.filter((s) => s !== section) : [...collapsed, section]),
   });
   return (
-    <div className="flex flex-col gap-4 px-3 pt-3">
+    <div className="flex shrink-0 flex-col gap-4 px-3 pt-3">
       <RailSection title="Workspace" {...group("workspace")}>
         <RailList aria-label="Workspace">
           <WorkspaceRow name="Folder" icon={<FolderIcon />}>

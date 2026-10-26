@@ -452,6 +452,17 @@
   transition: none;
 }
 
+/* A spatial fade, not an animation: only edges with off-screen rail content soften. */
+[data-slot="session-rail"] {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--rail-fade-top, 0px),
+    black calc(100% - var(--rail-fade-bottom, 0px)),
+    transparent
+  );
+}
+
 /* Radix's inline display: table widens this internal wrapper to the longest line, defeating
  * truncation. There is no shadcn prop for it; preserve the existing block-layout fix. */
 [data-slot="scroll-area-viewport"] > div {

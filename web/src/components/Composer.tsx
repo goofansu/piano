@@ -131,7 +131,7 @@ export function Composer({
   }
 
   return (
-    <div className="px-(--gutter) pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 md:pb-5">
+    <div className="px-(--gutter) pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-3">
       <DraftEditor
         editor={editor}
         completion={completion}
