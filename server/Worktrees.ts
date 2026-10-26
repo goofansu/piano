@@ -13,6 +13,7 @@ import {
 } from "../shared/wire.ts";
 import { gitText, observeGit } from "./GitCheckout.ts";
 import { gitEnvironment } from "./GitEnvironment.ts";
+import { githubRemote } from "./GitHubPullRequests.ts";
 import { run as runProcess } from "./Subprocess.ts";
 
 export class WorktreeError extends Data.TaggedError("WorktreeError")<{
@@ -167,7 +168,13 @@ export const listWorktrees = Effect.fn("Worktrees.listWorktrees")(function* (
         detail:
           "Git listed no worktree for this checkout. Refresh after checking git worktree list.",
       });
-    return { status: "ready" as const, observedAt, currentPath, worktrees };
+    // A missing/unreadable remote must not hide healthy local worktrees. Only the parsed
+    // repository name crosses the wire, never credentials or a private remote URL.
+    const remote = yield* gitText(folder, ["remote", "get-url", "origin"], {
+      userConfig: true,
+    }).pipe(Effect.orElseSucceed(() => ""));
+    const githubRepo = githubRemote(remote.trim())?.repo;
+    return { status: "ready" as const, observedAt, currentPath, worktrees, githubRepo };
   }).pipe(
     Effect.catchTag("WorktreeError", (e) =>
       Effect.succeed({

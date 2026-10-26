@@ -1,14 +1,28 @@
 import { isWorking } from "@shared/sessionProjection";
-import { FolderGit2Icon, FolderIcon, FolderOpenIcon, GitBranchIcon } from "lucide-react";
+import { cn } from "cn";
+import {
+  ChevronDownIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  FolderOpenIcon,
+  GitBranchIcon,
+} from "lucide-react";
 import { type ReactNode, useCallback, useMemo } from "react";
+import { toast } from "sonner";
 import { DisclosureChevron } from "@/components/Disclosure";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/PianoDropdownMenu";
 import { SessionLinks } from "@/components/SessionLinks";
 import { SessionOutputs } from "@/components/SessionOutputs";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
-import { abbrevHome } from "@/lib/format";
 import { createPreference, parseJson } from "@/lib/preference";
 import { sessionContext } from "@/lib/sessionContext";
 import { sessionLinks } from "@/lib/sessionLinks";
@@ -33,9 +47,8 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
 });
 
 /**
- * The session rail: Workspace (where the session runs: its folder, worktree, branch and working
- * directory), Outputs (the files Pi wrote or edited) and Links (the web links the conversation
- * mentions), each a section that folds; Outputs and Links appear once they have a row. It reads
+ * The session rail: Environment (its repository or folder, and branch), Outputs (the
+ * files Pi wrote or edited) and Links (the web links the conversation mentions), each a section that folds; Outputs and Links appear once they have a row. It reads
  * nothing itself: the facts are the registry's and Pi's, the lists the transcript's, so it is
  * never stale and has no toolbar.
  *
@@ -104,7 +117,9 @@ function passWheel(event: React.WheelEvent<HTMLElement>, viewport: TranscriptVie
 /** The rail's folding sections for the selected session. */
 function RailSections({ state }: { state: AppState }) {
   const session = state.session;
-  const { cwd, folderName, worktreeName, branch } = sessionContext(state);
+  const { cwd, folder, branch } = sessionContext(state);
+  const githubRepo = folder?.discovery.status === "ready" ? folder.discovery.githubRepo : undefined;
+  const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;
   const files = useSessionFiles();
   const messages = session?.messages ?? [];
   const working = !!session && isWorking(session.state);
@@ -117,25 +132,39 @@ function RailSections({ state }: { state: AppState }) {
   });
   return (
     <div className="flex shrink-0 flex-col gap-4 px-3 pt-3">
-      <RailSection title="Workspace" {...group("workspace")}>
-        <RailList aria-label="Workspace">
-          <WorkspaceRow name="Folder" icon={<FolderIcon />}>
-            {folderName}
-          </WorkspaceRow>
-          {worktreeName && (
-            <WorkspaceRow name="Worktree" icon={<FolderGit2Icon />} mono>
-              {worktreeName}
-            </WorkspaceRow>
-          )}
+      <RailSection title="Environment" {...group("workspace")}>
+        <RailList aria-label="Environment">
+          {githubRepo ? (
+            <EnvironmentRow
+              name="Repository"
+              menu="repository"
+              icon={
+                <svg aria-hidden="true">
+                  <use href="/github.svg#github" />
+                </svg>
+              }
+              href={repositoryUrl}
+              cwd={cwd}
+            >
+              {githubRepo}
+            </EnvironmentRow>
+          ) : cwd ? (
+            <EnvironmentRow name="Folder" menu="folder" icon={<FolderOpenIcon />} cwd={cwd}>
+              {cwd.split("/").filter(Boolean).at(-1) || cwd}
+            </EnvironmentRow>
+          ) : null}
           {branch && (
-            <WorkspaceRow name="Git branch" icon={<GitBranchIcon />} mono>
+            <EnvironmentRow
+              name="Branch"
+              menu="branch"
+              icon={<GitBranchIcon />}
+              mono
+              href={
+                repositoryUrl ? `${repositoryUrl}/tree/${encodeURIComponent(branch)}` : undefined
+              }
+            >
               {branch}
-            </WorkspaceRow>
-          )}
-          {cwd && (
-            <WorkspaceRow name="Working directory" icon={<FolderOpenIcon />} mono>
-              {abbrevHome(cwd)}
-            </WorkspaceRow>
+            </EnvironmentRow>
           )}
         </RailList>
       </RailSection>
@@ -154,19 +183,25 @@ function RailSections({ state }: { state: AppState }) {
 }
 
 /** One fact about where the session runs: its icon, then its value; the name is read, not shown, as in the header. */
-function WorkspaceRow({
+function EnvironmentRow({
   name,
   icon,
   mono = false,
+  href,
+  menu,
+  cwd,
   children,
 }: {
   name: string;
   icon: ReactNode;
   mono?: boolean;
-  children: ReactNode;
+  href?: string;
+  menu: "folder" | "repository" | "branch";
+  cwd?: string;
+  children: string;
 }) {
-  return (
-    <Item size="sm" className={railRow} title={name}>
+  const content = (
+    <>
       <ItemMedia variant="icon" className="text-ink-3">
         {icon}
       </ItemMedia>
@@ -176,7 +211,65 @@ function WorkspaceRow({
           {children}
         </RailRowTitle>
       </ItemContent>
-    </Item>
+    </>
+  );
+  const copy = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error(`Couldn’t copy the ${label.toLowerCase()}.`);
+    }
+  };
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Item
+          size="sm"
+          className={cn(
+            railRow,
+            "cursor-pointer text-left hover:bg-fill-hover data-[state=open]:bg-fill-hover",
+          )}
+          title={cwd ?? name}
+          asChild
+        >
+          <button type="button">
+            {content}
+            <ItemMedia variant="icon" className="text-ink-3">
+              <ChevronDownIcon aria-hidden />
+            </ItemMedia>
+          </button>
+        </Item>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuGroup>
+          {menu !== "folder" && (
+            <DropdownMenuItem
+              onSelect={() =>
+                void copy(children, menu === "repository" ? "Repository name" : "Branch name")
+              }
+            >
+              <CopyIcon aria-hidden />
+              Copy {menu} name
+            </DropdownMenuItem>
+          )}
+          {cwd && (
+            <DropdownMenuItem onSelect={() => void copy(cwd, "Working directory")}>
+              <CopyIcon aria-hidden />
+              Copy working directory
+            </DropdownMenuItem>
+          )}
+          {href && (
+            <DropdownMenuItem asChild>
+              <a href={href} target="_blank" rel="noreferrer">
+                <ExternalLinkIcon aria-hidden />
+                Open {menu} on GitHub
+              </a>
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

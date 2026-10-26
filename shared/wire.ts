@@ -579,6 +579,8 @@ export const WorktreeDiscovery = Schema.Union([
     status: Schema.Literal("ready"),
     observedAt: Schema.String,
     currentPath: Schema.String,
+    /** GitHub owner/repo from origin, shared by this folder’s worktrees; never a raw remote URL. */
+    githubRepo: Schema.optional(Schema.String),
     worktrees: Schema.Array(WorktreeFacts),
   }),
   Schema.Struct({ status: Schema.Literal("non-git"), observedAt: Schema.String }),

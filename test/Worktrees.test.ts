@@ -103,6 +103,27 @@ test("INV-06: discovery reads Git worktrees without Worktrunk and reports failur
   assert.equal("worktrees" in broken, false);
 });
 
+test("discovery exposes only GitHub repository identity from origin, including linked worktrees", async (t) => {
+  const { root, repo } = fixture(t);
+  const linked = join(root, "feature");
+  git(repo, "worktree", "add", "--quiet", "-b", "feature/links", linked);
+  const repository = async (path: string) => {
+    const result = await Effect.runPromise(listWorktrees(path));
+    assert.equal(result.status, "ready");
+    return result.status === "ready" ? result.githubRepo : undefined;
+  };
+  assert.equal(await repository(repo), undefined);
+  git(repo, "remote", "add", "origin", "git@github.com:Example/Repo.git");
+  assert.equal(await repository(repo), "example/repo");
+  assert.equal(await repository(linked), "example/repo");
+  git(repo, "remote", "set-url", "origin", "https://github.com/other/project.git");
+  assert.equal(await repository(repo), "other/project");
+  git(repo, "remote", "set-url", "origin", "https://gitlab.com/example/repo.git");
+  assert.equal(await repository(repo), undefined);
+  git(repo, "remote", "set-url", "origin", "https://user:password@github.com/example/repo.git");
+  assert.equal(await repository(repo), undefined);
+});
+
 test("INV-06: inherited GIT_* state cannot redirect discovery or directory hints", async (t) => {
   const { root, repo } = fixture(t);
   git(repo, "worktree", "add", "--quiet", "-b", "feature", join(root, "feature"));
