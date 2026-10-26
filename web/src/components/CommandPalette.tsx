@@ -1,5 +1,4 @@
 import { cn } from "cn";
-import { CheckIcon } from "lucide-react";
 import {
   Fragment,
   memo,
@@ -40,13 +39,9 @@ interface Props {
   state: AppState;
 }
 
+/** Read for a checked row, whose mark is the stock item's own, shown by `data-checked`. */
 function Current() {
-  return (
-    <>
-      <CheckIcon className="ml-auto" aria-hidden />
-      <span className="sr-only">current</span>
-    </>
-  );
+  return <span className="sr-only">current</span>;
 }
 
 /**
@@ -309,6 +304,7 @@ const PaletteResults = memo(function PaletteResults({
                       key={r.key}
                       value={`${group.id}:${r.key}`}
                       disabled={!r.enabled}
+                      data-checked={r.checked}
                       onSelect={() => run(() => runCommand(r.command))}
                     >
                       <GlobalCommandIcon icon={r.command.icon} /> {r.label}
@@ -320,6 +316,7 @@ const PaletteResults = memo(function PaletteResults({
                       key={r.key}
                       value={`${group.id}:${r.key}`}
                       disabled={!r.enabled}
+                      data-checked={r.checked}
                       onSelect={() => run(() => runCommand(r.command))}
                     >
                       {r.kind === "session" ? (
