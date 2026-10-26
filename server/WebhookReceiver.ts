@@ -5,6 +5,19 @@ import ipaddr from "ipaddr.js";
 
 /** The receiver rule as the user reads it: in the editor's refusal and in a failed delivery's detail. */
 export const RECEIVER_RULE = "Use a public HTTPS URL without credentials or a fragment.";
+/** A redirect is never followed: it could lead to a destination the rule refuses. */
+export const REDIRECT_REFUSED = "Receiver redirected.";
+/** A status outside 200-599 is not an HTTP answer Piano can report. */
+export const INVALID_STATUS = "Receiver returned an invalid HTTP status.";
+
+/**
+ * A refusal the transport itself makes, as opposed to a failure of the network or the receiver:
+ * its message is one of Piano's own fixed sentences, never the URL, the response or an underlying
+ * error, so a delivery row may show it.
+ */
+export class ReceiverRefusal extends Error {
+  override readonly name = "ReceiverRefusal";
+}
 
 function publicAddress(address: string): boolean {
   if (!ipaddr.isValid(address)) return false;
@@ -30,7 +43,7 @@ export function webhookReceiver(text: string): URL {
     name.endsWith(".localhost") ||
     (isIP(hostname) !== 0 && !publicAddress(hostname))
   )
-    throw new Error(RECEIVER_RULE);
+    throw new ReceiverRefusal(RECEIVER_RULE);
   return url;
 }
 
@@ -51,7 +64,7 @@ export const webhookFetch: typeof fetch = async (input, init) => {
           lookup(hostname, { all: true }, (error, addresses) => {
             if (error) return callback(error, [], undefined);
             if (!addresses.length || addresses.some(({ address }) => !publicAddress(address)))
-              return callback(new Error(RECEIVER_RULE), [], undefined);
+              return callback(new ReceiverRefusal(RECEIVER_RULE), [], undefined);
             // Return the checked answers directly to the socket connector (DNS rebinding safe).
             if (options.all) callback(null, addresses);
             else callback(null, addresses[0]!.address, addresses[0]!.family);
@@ -61,8 +74,8 @@ export const webhookFetch: typeof fetch = async (input, init) => {
       (response) => {
         const status = response.statusCode ?? 500;
         response.destroy();
-        if (status >= 300 && status < 400) reject(new Error("Redirects are not followed."));
-        else if (status < 200 || status > 599) reject(new Error("Invalid HTTP status."));
+        if (status >= 300 && status < 400) reject(new ReceiverRefusal(REDIRECT_REFUSED));
+        else if (status < 200 || status > 599) reject(new ReceiverRefusal(INVALID_STATUS));
         else resolve(new Response(null, { status }));
       },
     );
