@@ -289,7 +289,9 @@ function EnvironmentRow({
     }
   };
   return (
-    <DropdownMenu>
+    // Keep rail clicks on their controls: modal pointer blocking lets repeated clicks select
+    // the transcript beneath the rail through the document root.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Item
           size="sm"
