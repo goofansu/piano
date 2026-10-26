@@ -18,7 +18,7 @@ import { KNOWN_SECRET_MIN, projectDisplay } from "./DisplayProjection.ts";
 import { pullRequestIdentity } from "./GitHubPullRequests.ts";
 import { SessionLinkOrigin } from "./OriginPolicy.ts";
 import { Registry, type StoredWebhook } from "./Registry.ts";
-import { webhookFetch, webhookReceiver } from "./WebhookReceiver.ts";
+import { RECEIVER_RULE, webhookFetch, webhookReceiver } from "./WebhookReceiver.ts";
 
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
 export class WebhookError extends Data.TaggedError("WebhookError")<{
@@ -104,11 +104,23 @@ export const WebhooksLive = Layer.effect(
         pullRequest: null,
       };
     });
-    const send = Effect.fn("Webhooks.send")(function* (job: Job) {
-      const { hook, payload } = job;
-      const outcome = yield* Effect.tryPromise({
+    /** The stored URL under today's rule, or undefined: a hook saved under an older rule is never
+     * sent, and its delivery says why, so the user knows to replace it. */
+    const receiverOf = (hook: StoredWebhook): string | undefined => {
+      try {
+        return webhookReceiver(hook.url).href;
+      } catch {
+        return undefined;
+      }
+    };
+    const deliver = Effect.fn("Webhooks.deliver")(function* (
+      receiver: string,
+      hook: StoredWebhook,
+      payload: WebhookPayload,
+    ) {
+      return yield* Effect.tryPromise({
         try: async (signal) => {
-          const response = await fetch(webhookReceiver(hook.url).href, {
+          const response = await fetch(receiver, {
             method: "POST",
             redirect: "error",
             signal,
@@ -141,6 +153,14 @@ export const WebhooksLive = Layer.effect(
           }),
         ),
       );
+    });
+    const send = Effect.fn("Webhooks.send")(function* (job: Job) {
+      const { hook, payload } = job;
+      const receiver = receiverOf(hook);
+      const outcome =
+        receiver === undefined
+          ? { httpStatus: null, status: "failed" as const, detail: RECEIVER_RULE }
+          : yield* deliver(receiver, hook, payload);
       const result: WebhookDelivery = {
         deliveryId: payload.deliveryId,
         occurredAt: payload.occurredAt,
@@ -206,7 +226,7 @@ export const WebhooksLive = Layer.effect(
     const receiverUrl = Effect.fn("Webhooks.receiverUrl")(function* (text: string) {
       return yield* Effect.try({
         try: () => webhookReceiver(text),
-        catch: () => refused("Use a public HTTPS URL without credentials or a fragment.", "url"),
+        catch: () => refused(RECEIVER_RULE, "url"),
       });
     });
     return Webhooks.of({
