@@ -172,10 +172,10 @@ cut off at the edge showing there is more (a native bar takes the list's bottom 
 the tabs off the rule; an edge fade fades a lone tab in browsers without scroll-driven
 animations). Reloading the page brings back the session's
 tabs, the one shown and its area; another session, or a new browser tab, starts with only the
-Agent area. Pressing a tab never draws the keyboard ring. Views near the header's end opens
-Changes, or shows it where it is already open; the list icon after it, last in the header and
-over where the rail shows, is "Show session rail" or "Hide session rail", and the palette's row
-carries the same name.
+Agent area. Pressing a tab never draws the keyboard ring. At the header's end, over where the
+rail shows, the list icon is "Show session rail" or "Hide session rail", and the palette's row
+carries the same name; the Changes icon after it, last in the header, opens Changes, or shows it
+where it is already open.
 
 The session rail is like Claude Code's: one switch for every session, remembered by
 the browser, so switching sessions shows the next session's rail in the same place. Beside the
@@ -195,8 +195,8 @@ Surface area's remembered width is a
 preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
 shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the
 viewport) the areas take turns under Agent and Changes tabs, each at full width, drawn as
-the same strip tabs without Close (a file closes from its toolbar). There neither Views nor the
-session rail shows: the rail has no room, its toggle and palette row are unavailable, and its
+the same strip tabs without Close (a file closes from its toolbar). There neither the Changes icon
+nor the session rail shows: the rail has no room, its toggle and palette row are unavailable, and its
 switch waits for the session to be wide again.
 
 ## Linear

@@ -58,7 +58,6 @@ export interface CommandEffects {
   toggleDetails: () => void;
   hideChanges: () => void;
   showAgent: () => void;
-  openViews: () => void;
   openPullRequest: () => void;
   toggleSidebar: () => void;
   setAppearance: (appearance: Appearance) => void;
@@ -136,9 +135,6 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "agent":
       effects.showAgent();
-      break;
-    case "views":
-      effects.openViews();
       break;
     case "pull-request":
       effects.openPullRequest();

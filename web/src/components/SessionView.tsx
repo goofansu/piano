@@ -99,7 +99,7 @@ export function SessionView({ state, send }: Props) {
   );
   const input = state.pendingCreate;
   const { workspace, draftKey } = sessionContext(state);
-  // A view opens through its session command, whose rule Views and the palette follow too.
+  // A view opens through its session command, whose rule the header and the palette follow too.
   const { commands, run } = useSessionCommands();
   const changes = commands.find((c) => c.id === "changes");
   const openChanges = changes?.enabled ? () => run(changes) : undefined;

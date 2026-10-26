@@ -41,7 +41,6 @@ export type SessionCommandId =
   | "copy-branch"
   | "copy-session-id"
   | "copy-session-path"
-  | "views"
   | "changes"
   | "details"
   | "hide-changes"
@@ -61,7 +60,6 @@ export type SessionCommandId =
 
 export type SessionCommandIcon =
   | "copy"
-  | "views"
   | "changes"
   | "list"
   | "hide"
@@ -88,8 +86,6 @@ export type SessionCommandIntent =
    * links) on or off beside the Agent area.
    */
   | { kind: "details" }
-  /** Open the session header's Views menu. */
-  | { kind: "views" }
   | { kind: "hide-changes" }
   /** Show the Agent area in a single-view layout. */
   | { kind: "agent" }
@@ -114,7 +110,7 @@ export interface SessionCommand {
   destructive?: true;
   /**
    * Not offered on this screen at all, so the palette leaves it out instead of greying it: a
-   * command only one layout has (Views and the session rail side by side, Agent one area at a
+   * command only one layout has (the session rail side by side, Agent one area at a
    * time). Always with `enabled` false; a command disabled for a reason the user can act on stays.
    */
   hidden?: boolean;
@@ -156,8 +152,8 @@ const ROW_SECTIONS = [["rename", "pin"], ["share"]] as const;
 const DESTRUCTIVE = ["archive", "delete"] as const;
 const HEADER_SECTIONS = {
   details: ["copy-session-path"],
-  // The header's preview control carries open and stop, and Views (or, one area at a time, the
-  // area tabs) Changes; the menu lists none of them twice.
+  // The header's preview control carries open and stop, and its Changes button (or, one area at a
+  // time, the area tabs) Changes; the menu lists none of them twice.
   open: ["pull-request"],
   manage: ["rename", "pin", "share"],
   destructive: DESTRUCTIVE,
@@ -223,7 +219,6 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - details: the session is laid out side by side, the only layout with room for the session
  *   rail (its facts need neither Git nor a live Pi); "Hide session rail" while it shows, else
  *   "Show session rail".
- * - views: the session is laid out side by side, where the header shows the Views menu.
  * - hide changes: Changes has a tab beside the Agent area; hiding closes it.
  * - agent: the session is laid out one area at a time and the Agent tab shows, beside a Surface
  *   tab or Changes that can open.
@@ -292,14 +287,6 @@ export function sessionCommands(
         icon: "copy",
         enabled: !!sessionPath,
         intent: { kind: "copy", value: sessionPath ?? "", label: "Session path" },
-      },
-      {
-        id: "views",
-        label: "Views",
-        icon: "views",
-        enabled: !single,
-        hidden: single,
-        intent: { kind: "views" },
       },
       {
         id: "changes",

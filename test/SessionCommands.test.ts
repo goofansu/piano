@@ -74,7 +74,6 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "copy-branch": true,
     "copy-session-id": true,
     "copy-session-path": false,
-    views: true,
     changes: true,
     details: true,
     "hide-changes": false,
@@ -431,7 +430,7 @@ test("archiving a session that owns an app asks first, from the header or its si
   assert.equal((archive(background, other) as { confirm: boolean }).confirm, true);
 });
 
-test("view commands follow the session's areas: Views and Hide changes side by side, Agent one at a time", () => {
+test("view commands follow the session's areas: the session rail and Hide changes side by side, Agent one at a time", () => {
   const ofAreas = (
     { surface, single }: { surface: "changes" | null; single: boolean },
     state = base,
@@ -446,25 +445,22 @@ test("view commands follow the session's areas: Views and Hide changes side by s
           covered: false,
         },
       })
-        .filter((c) => ["views", "changes", "details", "hide-changes", "agent"].includes(c.id))
+        .filter((c) => ["changes", "details", "hide-changes", "agent"].includes(c.id))
         .map((c) => [c.id, c.enabled]),
     );
   assert.deepEqual(ofAreas({ surface: null, single: false }), {
-    views: true,
     changes: true,
     details: true,
     "hide-changes": false,
     agent: false,
   });
   assert.deepEqual(ofAreas({ surface: "changes", single: false }), {
-    views: true,
     changes: true,
     details: true,
     "hide-changes": true,
     agent: false,
   });
   assert.deepEqual(ofAreas({ surface: "changes", single: true }), {
-    views: false,
     changes: true,
     details: false,
     "hide-changes": false,
@@ -474,7 +470,6 @@ test("view commands follow the session's areas: Views and Hide changes side by s
   // nothing sits beside Agent and it needs no tab.
   const removed = { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) };
   assert.deepEqual(ofAreas({ surface: null, single: true }, removed), {
-    views: false,
     changes: false,
     details: false,
     "hide-changes": false,

@@ -11,19 +11,19 @@ The palette (Mod+K) searches neither outputs nor links.
 
 ## Sub-features
 
-- `changes-open`: the header's "Views" menu → "Changes" opens the Surface area; choosing it again
-  focuses Changes without rereading, collapsing or hiding it. Below 849px of session width the
-  "Agent" / "Changes" tabs replace Views.
+- `changes-open`: the header's last control, the "Changes" icon, opens the Surface area; choosing
+  it again focuses Changes without rereading, collapsing or hiding it. Below 849px of session
+  width the "Agent" / "Changes" tabs replace the icon.
 - `changes-list`: list "Changed files" with one collapsible row per file
   (`<path>, <n> added, <n> removed: collapse`), "New file" for untracked files, and the diff.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
-- `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to Views;
+- `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to the header's "Changes" icon;
   reopening shows the same scroll and expanded files.
-- `details-open`: the header's last control, a list icon named "Show session rail" / "Hide session
+- `details-open`: the list icon left of "Changes" in the header, named "Show session rail" / "Hide session
   rail", turns the session rail on or off; it stays on
   across sessions and reloads, hides while a Surface tab shows, and returns when the last one
   closes; turned on over open tabs, it hides them until the rail goes off. It is offered even
-  without Git. Narrow, the "Agent" / "Changes" tabs replace Views, and neither the rail nor its
+  without Git. Narrow, the "Agent" / "Changes" tabs replace the "Changes" icon, and neither the rail nor its
   toggle shows; widening again brings the rail back if it was on.
 - `files-list`: The rail's "Outputs" lists files written in the session by name only, and its
   "Links" lists the conversation's web links, each with "Jump to message". Either section
@@ -33,8 +33,7 @@ The palette (Mod+K) searches neither outputs nor links.
 
 ## How to get to it (user POV)
 
-- Session page header → Views → Changes; the palette's "Views" opens the same menu, its "Changes"
-  opens Changes directly, "Hide changes" and (one area at a time) "Agent" go back.
+- Session page header → the "Changes" icon; the palette's "Changes" does the same, "Hide changes" and (one area at a time) "Agent" go back.
 - Session page header → "Show session rail" → an Outputs row → a file; the palette's "Show
   session rail" / "Hide session rail" does the same.
 - The same diff over HTTP: `POST /api/workspace/changes?workspaceId=<id>` with an allowed Origin.
@@ -48,8 +47,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
 
 - `changes-open` and `changes-list`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
-    ab find role button click --name "Views" --exact;
-    ab find role menuitem click --name "Changes" --exact; ab wait --text "new.txt"`
+    ab find role button click --name "Changes" --exact; ab wait --text "new.txt"`
   - Result: heading "Changes"; buttons `new.txt, 1 added, 0 removed: collapse` and
     `src/answer.ts, 1 added, 1 removed: collapse`; cells `− export const answer = 4;` and
     `+ export const answer = 5;`. `ab eval "document.querySelector('[aria-label=\"Changed files\"]').innerText"`
@@ -65,7 +63,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
 - `changes-close`
   - Action: `ab find role button click --name "Hide changes" --exact`
   - Result: `document.querySelector('[data-slot=surface-area]:not([inert])')` is null and the
-    focused element is the Views button.
+    focused element is the header's "Changes" button.
 - `details-open`, `files-list` and `file-viewer`
   - Action: `ab find role button click --name "Show session rail" --exact;
     ab wait --text "Working directory"`
@@ -91,9 +89,9 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   `ignored/`).
 - The Surface area is `[data-slot=surface-area]`; hidden, it stays mounted but `inert` (so its
   scroll survives), so select the shown one with `:not([inert])`.
-- "Changes" is in Views, the narrow tabs and the palette; neither the session header's menu nor
+- "Changes" is the header's icon, the narrow tabs and the palette; neither the session header's menu nor
   the sidebar's "Session menu for <title>" has a Changes item.
-- A non-Git folder's Views lists Changes disabled with "Not a Git repository"; narrow, there are
-  no tabs.
+- A non-Git folder's header has no "Changes" icon; the palette lists Changes disabled with "Not a
+  Git repository"; narrow, there are no tabs.
 - `changes-refresh` was written from the visible button; it was not run in the skill's first proof
   run.

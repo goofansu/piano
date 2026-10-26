@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { ChevronDownIcon, ListIcon, MoreHorizontalIcon } from "lucide-react";
+import { ListIcon, MoreHorizontalIcon } from "lucide-react";
 import { useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import {
@@ -68,8 +68,8 @@ export function SessionHeader({
   } = sessionContext(state);
   const { commands, run } = useSessionCommands();
   const menu = sessionHeaderMenu(commands);
-  // Views shows where its command is offered, so the palette's Views always has a menu to open.
-  const views = commands.find((c) => c.id === "views")?.enabled;
+  // The session rail's switch is offered only side by side, where the Agent area has a right side.
+  const sideBySide = !!commands.find((c) => c.id === "details")?.enabled;
   const projectMenu = useSessionProjectMenu();
   const openProject = projectMenu?.open;
   const { display } = menu;
@@ -221,8 +221,8 @@ export function SessionHeader({
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           <SessionPreviewControl />
           {pullRequest(menuTrigger)}
-          {views && <ViewsMenu />}
-          {views && <SessionRailToggle />}
+          {sideBySide && <SessionRailToggle />}
+          {sideBySide && <ChangesButton />}
           {mobile && sessionMenu}
         </div>
       </PaneHeader>
@@ -231,7 +231,7 @@ export function SessionHeader({
 }
 
 /**
- * The session rail's toggle, last in the header beside the Agent area, over where the rail shows:
+ * The session rail's toggle, at the header's end beside the Agent area, over where the rail shows:
  * the rail on or off for every session, its name ("Show session rail", "Hide session rail") saying
  * which, and filled while the rail shows, as Changes' Wrap toggle is while on.
  */
@@ -254,55 +254,22 @@ function SessionRailToggle() {
 }
 
 /**
- * Views, at the header's end beside the Agent area: the views the Surface area can show. Choosing
- * one shows it, or focuses it where it already shows; it never hides it. The palette's Views opens
- * this same menu.
+ * Changes, at the header's end right of the session rail's toggle: shows Changes in the Surface
+ * area, or focuses it where it already shows; it never hides it. Left out while Changes cannot
+ * open; the palette's Changes row says why.
  */
-function ViewsMenu() {
-  const { views, setViews } = useNavigation();
+function ChangesButton() {
   const { commands, run } = useSessionCommands();
-  const viewCommands = (["changes"] as const).flatMap(
-    (id) => commands.find((c) => c.id === id) ?? [],
-  );
-  // A chosen view takes focus itself; the trigger takes it back only when the menu is dismissed.
-  const chose = useRef(false);
+  const command = commands.find((c) => c.id === "changes");
+  if (!command?.enabled) return null;
   return (
-    <DropdownMenu modal={false} open={views} onOpenChange={setViews}>
-      <DropdownMenuTrigger asChild>
-        <PianoButton
-          data-views-trigger
-          variant="ghost"
-          size="sm"
-          trailing
-          className="pointer-coarse:h-11"
-        >
-          Views
-          <ChevronDownIcon data-icon="inline-end" aria-hidden />
-        </PianoButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        onCloseAutoFocus={(event) => {
-          if (chose.current) event.preventDefault();
-          chose.current = false;
-        }}
-      >
-        {viewCommands.map((command) => (
-          <DropdownMenuItem
-            key={command.id}
-            disabled={!command.enabled}
-            onSelect={() => {
-              chose.current = true;
-              run(command);
-            }}
-          >
-            <CommandIcon icon={command.icon} /> {command.label}
-            {command.detail && (
-              <span className="ml-auto pl-4 text-xs text-muted-foreground">{command.detail}</span>
-            )}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <IconButton
+      data-changes-trigger
+      size="header"
+      label={command.label}
+      onClick={() => run(command)}
+    >
+      <CommandIcon icon={command.icon} />
+    </IconButton>
   );
 }

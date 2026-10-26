@@ -113,7 +113,7 @@ export function SessionPanel({
   });
 
   // Closing a tab leaves focus where the user can go on: the tab now shown, else (beside the
-  // Agent area) Views, where it can be opened again. One area at a time, back on Agent, focus is
+  // Agent area) the header's Changes button, where it can be opened again. One area at a time, back on Agent, focus is
   // left alone so a phone keeps its keyboard down. Only focus that was lost is moved: an overlay
   // that closed with the tab (the palette) restores its own first, so this checks after it.
   const previous = useRef({ count: tabs.length, key });
@@ -126,7 +126,7 @@ export function SessionPanel({
       const lost = !focused || focused === document.body || !!focused.closest("[inert]");
       if (!lost) return;
       if (shown && focusShown()) return;
-      if (!single) document.querySelector<HTMLElement>("[data-views-trigger]")?.focus();
+      if (!single) document.querySelector<HTMLElement>("[data-changes-trigger]")?.focus();
     };
     const frame = requestAnimationFrame(settle);
     const late = setTimeout(settle, 300);

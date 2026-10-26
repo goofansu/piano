@@ -366,12 +366,6 @@ test("every move among a session's areas leaves Settings, so the move shows", ()
     return p.navigation.getState();
   };
 
-  const views = overSettings(() => p.navigation.setViews(true));
-  assert.equal(views.settings, null, "the Views menu opens beside its trigger");
-  assert.equal(views.views, true);
-  assert.equal(p.path(), "/s/a");
-  p.navigation.setViews(false);
-
   p.navigation.setSingle(true);
   const agent = overSettings(() => p.navigation.showAgent());
   assert.equal(agent.settings, null);
@@ -380,10 +374,6 @@ test("every move among a session's areas leaves Settings, so the move shows", ()
   const closed = overSettings(() => p.navigation.closeTab("file:docs/guide.md"));
   assert.equal(closed.settings, null);
   assert.deepEqual(shownTabs(p.navigation).tabs, ["changes"]);
-
-  p.navigation.openSettings("radius");
-  p.navigation.setViews(false);
-  assert.equal(p.navigation.getState().settings, "radius", "closing the menu is not a move");
 });
 
 test("a session's surfaces close when another session is selected, and opening one leaves Settings", () => {
@@ -454,10 +444,6 @@ test("choosing Changes again shows its one tab in place: no toggle, no duplicate
     { tabs: ["changes", "file:README.md"], active: "changes", area: "surface" },
     "Changes shows beside the open file's tab, not in place of it",
   );
-
-  p.navigation.setViews(true);
-  p.navigation.openChanges();
-  assert.equal(p.navigation.getState().views, false, "choosing a view dismisses Views");
 });
 
 /** What sits on the Agent area's right side by side: Details, the Surface area, or nothing. */
@@ -808,9 +794,6 @@ test("the layout and Settings leave the session's tabs as they were", () => {
     ["changes"],
     "Changes chosen one at a time shows beside Agent",
   );
-  p.navigation.setViews(true);
-  p.navigation.setSingle(true);
-  assert.equal(p.navigation.getState().views, false, "one area at a time there is no Views menu");
 });
 
 test("each request to open Settings is counted, so a repeat reveals its section again", () => {

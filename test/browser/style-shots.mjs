@@ -131,11 +131,8 @@ await run(
       await page.ab("wait", "--fn", "!!document.querySelector('[role=menu]')");
       await page.capture(`05-session-menu-${scheme}`);
       await page.ab("press", "Escape");
-      // Views at the header's end opens Changes in the Surface area beside the Agent area.
-      await page.click("button", "Views");
-      await page.ab("wait", "--fn", "!!document.querySelector('[role=menu]')");
-      await page.capture(`05b-views-${scheme}`);
-      await page.click("menuitem", "Changes");
+      // Changes at the header's end opens in the Surface area beside the Agent area.
+      await page.click("button", "Changes");
       await page.until("!!document.querySelector('[data-slot=surface-area]:not([inert])')");
       await page.capture(`05c-changes-${scheme}`);
       await page.click("button", "Hide changes");

@@ -115,8 +115,6 @@ export interface NavigationState {
   surfaceRequest: number;
   /** Whether the session is laid out one area at a time, as its available width decides. */
   single: boolean;
-  /** The session header's Views menu, which the palette can open too. */
-  views: boolean;
   pullRequest: boolean;
   palette: boolean;
 }
@@ -192,7 +190,6 @@ export interface Navigation {
   showAgent: () => void;
   /** The session reports its layout as its available width changes. */
   setSingle: (single: boolean) => void;
-  setViews: (open: boolean) => void;
   openPullRequest: () => void;
   closePullRequest: () => void;
   setPalette: (open: boolean) => void;
@@ -354,7 +351,6 @@ export function createNavigation({
     area: "agent",
     surfaceRequest: 0,
     single: false,
-    views: false,
     pullRequest: false,
     palette: false,
   };
@@ -447,7 +443,6 @@ export function createNavigation({
           surface: back?.surface ?? null,
           area: back?.area ?? "agent",
           covered: false,
-          views: false,
           pullRequest: false,
         });
       }
@@ -502,13 +497,12 @@ export function createNavigation({
         area: "surface",
         covered: false,
         surfaceRequest: state.surfaceRequest + 1,
-        views: false,
       });
       moved();
     });
 
-  /** A user's move among the session's areas (the Agent area, a tab closing, the Views menu);
-   * like `show`, it leaves Settings, which would otherwise hide what the move changed. */
+  /** A user's move among the session's areas (the Agent area, a tab closing); like `show`,
+   * it leaves Settings, which would otherwise hide what the move changed. */
   const moveArea = (patch: Partial<NavigationState>) =>
     batch(() => {
       set({ ...patch, settings: null });
@@ -603,8 +597,7 @@ export function createNavigation({
       moveArea({ surface: { tabs, active }, area: back ? "agent" : state.area });
     },
     showAgent: () => moveArea({ area: "agent" }),
-    setSingle: (single) => batch(() => set({ single, views: single ? false : state.views })),
-    setViews: (open) => (open ? moveArea({ views: true }) : batch(() => set({ views: false }))),
+    setSingle: (single) => batch(() => set({ single })),
     openPullRequest: () =>
       batch(() => {
         set({ settings: null, pullRequest: true });

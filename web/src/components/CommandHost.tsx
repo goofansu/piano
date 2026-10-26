@@ -10,7 +10,6 @@ import {
   MessageSquareIcon,
   MessagesSquareIcon,
   PanelRightCloseIcon,
-  PanelRightIcon,
   PinIcon,
   PinOffIcon,
   ScrollTextIcon,
@@ -75,7 +74,6 @@ async function copySessionValue(value: string, label: string) {
 
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   copy: CopyIcon,
-  views: PanelRightIcon,
   changes: FileDiffIcon,
   list: ListIcon,
   hide: PanelRightCloseIcon,
@@ -195,7 +193,6 @@ export function CommandHost({
     toggleDetails,
     closeTab,
     showAgent,
-    setViews,
     openPullRequest,
     openSettings,
     closeSettings,
@@ -243,7 +240,6 @@ export function CommandHost({
     toggleDetails,
     hideChanges: () => closeTab("changes"),
     showAgent,
-    openViews: () => setViews(true),
     openPullRequest,
     toggleSidebar: sidebar.toggle,
     setView,
