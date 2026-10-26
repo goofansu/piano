@@ -13,8 +13,6 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
-import { SessionFiles } from "@/components/SessionFiles";
-import { SessionLinks } from "@/components/SessionLinks";
 import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -38,7 +36,6 @@ import { composerAction, composerInput, footerPicker, footerPickerMenu } from "@
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { usePreference } from "@/lib/usePreference";
-import { useSessionFiles } from "@/lib/useSessionFiles";
 import type { SessionView } from "@/store";
 
 interface Props {
@@ -99,7 +96,6 @@ export function Composer({
   const streaming = !!t && isWorking(t.state);
   const usage = t?.state;
   const messages = t?.messages ?? [];
-  const files = useSessionFiles();
   const queuedMessages = t?.state.queuedMessages ?? [];
   const editor = useDraftEditor(draftKey);
   const [queueMode, setQueueMode] = usePreference(queueModePreference);
@@ -288,8 +284,6 @@ export function Composer({
           role="group"
           aria-label="Session usage"
         >
-          <SessionFiles files={files} cwd={t?.cwd} />
-          <SessionLinks messages={messages} working={streaming} />
           <JumpTo messages={messages} working={streaming} />
           <Popover>
             <PopoverTrigger asChild>

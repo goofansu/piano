@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PaletteGroup } from "../web/src/lib/commandPalette.ts";
+import type { GlobalCommand } from "../web/src/lib/globalCommands.ts";
 import {
   createPaletteSearch,
   type PalettePage,
@@ -40,18 +41,32 @@ class ControlledWorker implements PaletteSearchWorker {
   }
 }
 
+/** A catalog of command rows the client searches by key, value and keywords alone. */
 const catalog = (prefix: string, count = 1): PaletteGroup[] => [
   {
-    id: "files",
-    heading: "Files",
-    rows: Array.from({ length: count }, (_, i) => ({
-      key: `${prefix}-${i}`,
-      value: `${prefix}-${i}`,
-      keywords: ["!files"],
-      name: `${prefix}-${i}`,
-      dir: "src",
-      file: { path: `src/${prefix}-${i}` },
-    })),
+    id: "global",
+    heading: "Global commands",
+    rows: Array.from({ length: count }, (_, i) => {
+      const label = `${prefix}-${i}`;
+      const command: GlobalCommand = {
+        id: "new-session",
+        label,
+        icon: "new",
+        group: "navigate",
+        enabled: true,
+        intent: { kind: "new-session" },
+      };
+      return {
+        key: label,
+        value: label,
+        keywords: ["!files"],
+        label,
+        detail: undefined,
+        checked: false,
+        enabled: true,
+        command,
+      };
+    }),
   },
 ];
 
@@ -94,12 +109,12 @@ test("paging reuses the worker catalog but a refresh replaces it even for the sa
   client.search(groups, "!files", {}, accept);
   worker.deliver();
   assert.equal(received[0][0].group.rows.length, 50);
-  client.search(groups, "!files", { files: 1 }, accept);
+  client.search(groups, "!files", { global: 1 }, accept);
   assert.equal(worker.requests[1].groups, undefined, "paging must not retransmit the catalog");
   worker.deliver();
   assert.equal(received[1][0].group.rows[0], groups[0].rows[50]);
   const refreshed = catalog("replacement");
-  client.search(refreshed, "!files", { files: 1 }, accept);
+  client.search(refreshed, "!files", { global: 1 }, accept);
   worker.deliver();
   assert.equal(received[2][0].page, 0, "a shrunken catalog clamps the page");
   assert.equal(received[2][0].total, 1);

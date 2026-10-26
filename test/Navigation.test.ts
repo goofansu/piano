@@ -454,6 +454,46 @@ test("choosing Changes again shows its one tab in place: no toggle, no duplicate
   assert.equal(p.navigation.getState().views, false, "choosing a view dismisses Views");
 });
 
+test("Details opens as its own tab beside Changes, in place when chosen again, and comes back after a reload", () => {
+  const memory = tabMemory();
+  const before = page("/s/a", memory);
+  before.registry();
+  before.selected("a");
+  before.navigation.openChanges();
+  before.navigation.openDetails();
+  assert.deepEqual(shownTabs(before.navigation), {
+    tabs: ["changes", "details"],
+    active: "details",
+    area: "surface",
+  });
+  before.navigation.openFile("README.md");
+  before.navigation.openDetails();
+  assert.deepEqual(
+    shownTabs(before.navigation),
+    { tabs: ["changes", "details", "file:README.md"], active: "details", area: "surface" },
+    "no toggle and no duplicate",
+  );
+  before.navigation.setSingle(true);
+  before.navigation.closeTab("details");
+  assert.deepEqual(
+    shownTabs(before.navigation).tabs,
+    ["changes", "details", "file:README.md"],
+    "one area at a time Details stays, as Changes does",
+  );
+  before.navigation.setSingle(false);
+
+  const after = page("/s/a", memory);
+  after.registry();
+  after.selected("a");
+  assert.deepEqual(shownTabs(after.navigation), {
+    tabs: ["changes", "details", "file:README.md"],
+    active: "details",
+    area: "surface",
+  });
+  after.navigation.closeTab("details");
+  assert.deepEqual(shownTabs(after.navigation).tabs, ["changes", "file:README.md"]);
+});
+
 test("each new view is added at the end, Changes included; reopening one keeps its place", () => {
   const p = page("/new");
   p.registry();
@@ -620,11 +660,13 @@ test("one area at a time, a file opened again returns to the area of its latest 
   );
 });
 
-test("side by side every tab closes; one area at a time Changes stays and a file closes", () => {
+test("side by side every tab closes; one area at a time Changes and Details stay and a file closes", () => {
   const file = { kind: "file", path: "docs/a.md", from: "agent" } as const;
   assert.equal(closable("changes", false), true);
+  assert.equal(closable("details", false), true);
   assert.equal(closable(file, false), true);
   assert.equal(closable("changes", true), false);
+  assert.equal(closable("details", true), false);
   assert.equal(closable(file, true), true);
 
   const p = page("/new");

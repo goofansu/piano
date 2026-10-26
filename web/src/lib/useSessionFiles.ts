@@ -9,8 +9,7 @@ import { useObservation } from "./useObservation.ts";
 
 /**
  * The files the selected session wrote or edited that follow its workspace's `.gitignore` and still
- * exist, decided once for every surface that lists them (the composer's Files popover and the
- * palette's Files group), so they agree and Git is asked once. Git decides (INV-01), read afresh
+ * exist, decided once (Details' Outputs), so Git is asked once. Git decides (INV-01), read afresh
  * whenever the set of paths changes, after a tool call that may have moved the checkout, and on
  * focus; its answer also names the file each path places to, so one file
  * edited under several spellings is one entry. Until the next answer the last one still applies, so a known

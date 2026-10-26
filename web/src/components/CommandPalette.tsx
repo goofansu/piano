@@ -32,10 +32,8 @@ import { createPaletteCatalog } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod, isImeKey } from "@/lib/keys";
 import { PALETTE_PAGE_SIZE, type PalettePage, paletteSelection } from "@/lib/paletteSearch";
-import { openLink } from "@/lib/sessionLinks";
 import { useNavigation } from "@/lib/useNavigation";
 import { usePaletteSearch } from "@/lib/usePaletteSearch";
-import { useSessionFiles } from "@/lib/useSessionFiles";
 import type { AppState } from "@/store";
 
 interface Props {
@@ -97,7 +95,7 @@ function PaletteContents({
   selected,
   setSelected,
 }: Props & { selected: string; setSelected: (value: string) => void }) {
-  const { palette: open, setPalette: onOpenChange, select, openFile } = useNavigation();
+  const { palette: open, setPalette: onOpenChange, select } = useNavigation();
   const [catalog] = useState(createPaletteCatalog);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(false);
@@ -113,12 +111,10 @@ function PaletteContents({
   );
   const { commands: sessionCommandList } = useSessionCommands();
   const sessionProject = useSessionProjectMenu();
-  const files = useSessionFiles();
   const groups = catalog(state, {
     globalCommands: globalCommandList,
     sessionCommands: sessionCommandList,
     sessionProject,
-    files,
   });
   const results = usePaletteSearch(groups, search, editing || !open);
   const pending = editing || results.pending;
@@ -174,7 +170,6 @@ function PaletteContents({
           pages={results.result}
           run={run}
           select={select}
-          openFile={openFile}
           runCommand={executeCommand}
           page={changePage}
         />
@@ -253,14 +248,12 @@ const PaletteResults = memo(function PaletteResults({
   pages,
   run,
   select,
-  openFile,
   runCommand,
   page,
 }: {
   pages: PalettePage[];
   run: (action: () => void) => void;
   select: ReturnType<typeof useNavigation>["select"];
-  openFile: ReturnType<typeof useNavigation>["openFile"];
   runCommand: ReturnType<typeof useGlobalCommands>["run"];
   page: (group: PalettePage["group"]["id"], page: number) => void;
 }) {
@@ -322,69 +315,31 @@ const PaletteResults = memo(function PaletteResults({
                       {r.checked && <Current />}
                     </CommandItem>
                   ))
-                : group.id === "files"
-                  ? group.rows.map((r) => (
-                      <CommandItem
-                        key={r.key}
-                        value={`${group.id}:${r.key}`}
-                        onSelect={() => run(() => openFile(r.file.path))}
-                        className="gap-3 font-mono text-xs"
-                      >
-                        <span className="min-w-0 shrink-0 truncate">{r.name}</span>
-                        {r.dir && (
-                          <span className="min-w-0 flex-1 truncate text-ink-3">{r.dir}</span>
-                        )}
-                      </CommandItem>
-                    ))
-                  : group.id === "links"
-                    ? group.rows.map((r) => (
-                        <CommandItem
-                          key={r.key}
-                          value={`${group.id}:${r.key}`}
-                          onSelect={() => run(() => openLink(r.link.url))}
-                          className="gap-3"
-                        >
-                          {r.link.label ? (
-                            <>
-                              <span className="min-w-0 max-w-[45%] shrink-0 truncate">
-                                {r.link.label}
-                              </span>
-                              <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-3">
-                                {r.display}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="min-w-0 flex-1 truncate font-mono text-xs">
-                              {r.display}
-                            </span>
-                          )}
-                        </CommandItem>
-                      ))
-                    : group.rows.map((r) => (
-                        <CommandItem
-                          key={r.key}
-                          value={`${group.id}:${r.key}`}
-                          disabled={!r.enabled}
-                          onSelect={() => run(() => runCommand(r.command))}
-                        >
-                          {r.kind === "session" ? (
-                            <CommandIcon icon={r.command.icon} />
-                          ) : (
-                            <ProjectCommandIconView icon={r.command.icon} />
-                          )}{" "}
-                          {r.detail ? (
-                            <>
-                              <span className="shrink-0">{r.label}</span>{" "}
-                              <span className="min-w-0 truncate font-mono text-xs text-ink-3">
-                                {abbrevPath(r.detail)}
-                              </span>
-                            </>
-                          ) : (
-                            r.label
-                          )}
-                          {r.checked && <Current />}
-                        </CommandItem>
-                      ))}
+                : group.rows.map((r) => (
+                    <CommandItem
+                      key={r.key}
+                      value={`${group.id}:${r.key}`}
+                      disabled={!r.enabled}
+                      onSelect={() => run(() => runCommand(r.command))}
+                    >
+                      {r.kind === "session" ? (
+                        <CommandIcon icon={r.command.icon} />
+                      ) : (
+                        <ProjectCommandIconView icon={r.command.icon} />
+                      )}{" "}
+                      {r.detail ? (
+                        <>
+                          <span className="shrink-0">{r.label}</span>{" "}
+                          <span className="min-w-0 truncate font-mono text-xs text-ink-3">
+                            {abbrevPath(r.detail)}
+                          </span>
+                        </>
+                      ) : (
+                        r.label
+                      )}
+                      {r.checked && <Current />}
+                    </CommandItem>
+                  ))}
             {(current + 1) * PALETTE_PAGE_SIZE < total && (
               <CommandItem value={`${group.id}:next`} onSelect={() => page(group.id, current + 1)}>
                 Next {group.heading.toLowerCase()}

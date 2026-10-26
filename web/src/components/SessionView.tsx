@@ -25,7 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
-import { type SurfaceTab, shownAreas, tabKey } from "@/lib/navigation";
+import { isView, type SurfaceTab, type SurfaceView, shownAreas, tabKey } from "@/lib/navigation";
 import { AGENT_MIN_WIDTH, PANEL_WIDTH, singleArea } from "@/lib/panelLayout";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
@@ -95,10 +95,13 @@ export function SessionView({ state, send }: Props) {
   );
   const input = state.pendingCreate;
   const { workspace, draftKey } = sessionContext(state);
-  // Changes opens through its session command, whose rule Views and the palette follow too.
+  // A view opens through its session command, whose rule Views and the palette follow too.
   const { commands, run } = useSessionCommands();
-  const changes = commands.find((c) => c.id === "changes");
-  const openChanges = changes?.enabled ? () => run(changes) : undefined;
+  const opener = (id: SurfaceView) => {
+    const command = commands.find((c) => c.id === id);
+    return command?.enabled ? () => run(command) : undefined;
+  };
+  const openView = { changes: opener("changes"), details: opener("details") };
   // The area tabs show where the Agent command is offered; only then is each area their panel.
   const areaTabs = !!commands.find((c) => c.id === "agent")?.enabled;
   // Ask adds to the draft and never sends; one area at a time, it returns to the draft.
@@ -151,7 +154,7 @@ export function SessionView({ state, send }: Props) {
           )
         }
       />
-      {areaTabs && <AreaTabs openChanges={openChanges} />}
+      {areaTabs && <AreaTabs openView={openView} />}
       <div
         ref={areas}
         className="relative flex min-h-0 min-w-0 flex-1"
@@ -278,16 +281,16 @@ export function SessionView({ state, send }: Props) {
 }
 
 /**
- * One area at a time, the tabs between them: Agent, Changes when available or already open,
- * then files in opening order. Changes keeps its place even before it opens. Choosing Agent never focuses
- * the composer, so a phone keeps its keyboard down; choosing a view shows it as it was left. A
- * file closes from its own toolbar.
+ * One area at a time, the tabs between them: Agent, Details, Changes when available or already
+ * open, then files in opening order. A view keeps its place even before it opens. Choosing
+ * Agent never focuses the composer, so a phone keeps its keyboard down; choosing a view shows it
+ * as it was left. A file closes from its own toolbar.
  */
 function AreaTabs({
-  openChanges,
+  openView,
 }: {
-  /** Runs the Changes command; omitted while it is disabled, which leaves Changes out. */
-  openChanges: (() => void) | undefined;
+  /** Runs a view's command; omitted while it is disabled, which leaves the view out. */
+  openView: Record<SurfaceView, (() => void) | undefined>;
 }) {
   const navigation = useNavigation();
   const { surface, showAgent, selectTab } = navigation;
@@ -309,8 +312,8 @@ function AreaTabs({
         onValueChange={(next) =>
           next === "agent"
             ? showAgent()
-            : next === "changes" && !tabs.includes("changes")
-              ? openChanges?.()
+            : (next === "changes" || next === "details") && !tabs.includes(next)
+              ? openView[next]?.()
               : selectTab(next)
         }
         className="min-w-0 flex-1 gap-0 self-stretch"
@@ -326,8 +329,9 @@ function AreaTabs({
               Agent
             </PianoStripTabTrigger>
           </PianoStripTab>
-          {(openChanges || tabs.includes("changes")) && view("changes")}
-          {tabs.filter((tab) => tab !== "changes").map(view)}
+          {(openView.details || tabs.includes("details")) && view("details")}
+          {(openView.changes || tabs.includes("changes")) && view("changes")}
+          {tabs.filter((tab) => !isView(tab)).map(view)}
         </PianoStripTabsList>
       </Tabs>
     </PianoStripBar>

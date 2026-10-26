@@ -228,14 +228,16 @@ export function SessionHeader({
 }
 
 /**
- * Views, at the header's end beside the Agent area: the views the Surface area can show, today
- * only Changes. Choosing one shows it, or focuses it where it already shows; it never hides it.
+ * Views, at the header's end beside the Agent area: the views the Surface area can show, Details
+ * then Changes. Choosing one shows it, or focuses it where it already shows; it never hides it.
  * The palette's Views opens this same menu.
  */
 function ViewsMenu() {
   const { views, setViews } = useNavigation();
   const { commands, run } = useSessionCommands();
-  const changes = commands.find((c) => c.id === "changes");
+  const viewCommands = (["details", "changes"] as const).flatMap(
+    (id) => commands.find((c) => c.id === id) ?? [],
+  );
   // A chosen view takes focus itself; the trigger takes it back only when the menu is dismissed.
   const chose = useRef(false);
   return (
@@ -259,20 +261,21 @@ function ViewsMenu() {
           chose.current = false;
         }}
       >
-        {changes && (
+        {viewCommands.map((command) => (
           <DropdownMenuItem
-            disabled={!changes.enabled}
+            key={command.id}
+            disabled={!command.enabled}
             onSelect={() => {
               chose.current = true;
-              run(changes);
+              run(command);
             }}
           >
-            <CommandIcon icon={changes.icon} /> {changes.label}
-            {changes.detail && (
-              <span className="ml-auto pl-4 text-xs text-muted-foreground">{changes.detail}</span>
+            <CommandIcon icon={command.icon} /> {command.label}
+            {command.detail && (
+              <span className="ml-auto pl-4 text-xs text-muted-foreground">{command.detail}</span>
             )}
           </DropdownMenuItem>
-        )}
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

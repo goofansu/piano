@@ -24,15 +24,18 @@ const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 export function surfaceTabNames(tab: SurfaceTab) {
   return tab === "changes"
     ? { name: "Changes", close: "Hide changes", region: "Changes" }
-    : { name: fileName(tab.path), close: `Close ${fileName(tab.path)}`, region: "File viewer" };
+    : tab === "details"
+      ? { name: "Details", close: "Hide details", region: "Session details" }
+      : { name: fileName(tab.path), close: `Close ${fileName(tab.path)}`, region: "File viewer" };
 }
 
 /**
- * One view in the Surface area: a session's Changes or an open file. The area (`SessionPanel`)
- * draws the tabs, each with its name and Close, in a row of their own; a view owns the toolbar
- * beneath them, what it shows on the left and its actions on the right, so naming and closing
- * never mix with acting, and its scrolling body. One area at a time the session's tabs name the
- * view, so a file's Close joins the end of its toolbar; Agent is the way back from Changes.
+ * One view in the Surface area: a session's Changes or Details, or an open file. The area
+ * (`SessionPanel`) draws the tabs, each with its name and Close, in a row of their own; a view
+ * owns the toolbar beneath them, what it shows on the left and its actions on the right, so naming
+ * and closing never mix with acting, and its scrolling body. A view with nothing to show there
+ * (Details) has no toolbar. One area at a time the session's tabs name the view, so a file's
+ * Close joins the end of its toolbar; Agent is the way back from Changes and Details.
  */
 export function SurfaceFrame({
   tab,
@@ -55,6 +58,7 @@ export function SurfaceFrame({
   const names = surfaceTabNames(tab);
   const closes = closable(tab, single);
   const close = () => closeTab(tabKey(tab));
+  const toolbar = status !== undefined || actions !== undefined || (closes && single);
   return (
     <section
       aria-label={names.region}
@@ -66,18 +70,20 @@ export function SurfaceFrame({
         } else ownKeys(event);
       }}
     >
-      {/* Plain status and view controls have no dedicated shadcn layout. */}
-      <div className="flex min-h-10 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
-        <div className="flex min-w-0 items-center truncate">{status}</div>
-        <div className="flex shrink-0 items-center">
-          {actions}
-          {closes && single && (
-            <IconButton size="header" label={names.close} onClick={close}>
-              <XIcon />
-            </IconButton>
-          )}
+      {toolbar && (
+        // Plain status and view controls have no dedicated shadcn layout.
+        <div className="flex min-h-10 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
+          <div className="flex min-w-0 items-center truncate">{status}</div>
+          <div className="flex shrink-0 items-center">
+            {actions}
+            {closes && single && (
+              <IconButton size="header" label={names.close} onClick={close}>
+                <XIcon />
+              </IconButton>
+            )}
+          </div>
         </div>
-      </div>
+      )}
       {below}
       <div data-slot="panel-body" className="relative min-h-0 flex-1 overflow-auto">
         {children}

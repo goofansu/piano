@@ -12,11 +12,17 @@ import { findProject } from "./projectCommands.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
 import { catalogEntry } from "./sessionCatalog.ts";
 
+/** The session's own views in the Surface area, one tab each: Changes and Details. */
+export type SurfaceView = "changes" | "details";
+
 /**
- * One tab in the selected session's Surface area: its Changes, or a file a link opened. A file
- * remembers the area its latest link was in, so closing it one area at a time returns there.
+ * One tab in the selected session's Surface area: one of its views, or a file a link opened. A
+ * file remembers the area its latest link was in, so closing it one area at a time returns there.
  */
-export type SurfaceTab = "changes" | { kind: "file"; path: string; from: SessionArea };
+export type SurfaceTab = SurfaceView | { kind: "file"; path: string; from: SessionArea };
+
+/** Whether a tab is one of the session's views rather than an open file. */
+export const isView = (tab: SurfaceTab): tab is SurfaceView => typeof tab === "string";
 
 /** What the Surface area shows beside (or, one area at a time, instead of) the Agent area. */
 export interface Surface {
@@ -45,9 +51,8 @@ function filePath(path: string, cwd: string | undefined): string {
   return resolved.startsWith(`${root}/`) ? resolved.slice(root.length + 1) : resolved;
 }
 
-/** A tab's identity: one Changes, and one tab per file path. */
-export const tabKey = (tab: SurfaceTab): string =>
-  tab === "changes" ? "changes" : `file:${tab.path}`;
+/** A tab's identity: one per view, and one tab per file path. */
+export const tabKey = (tab: SurfaceTab): string => (isView(tab) ? tab : `file:${tab.path}`);
 
 /** The tab shown, if the area is open. */
 export const activeTab = (surface: Surface | null): SurfaceTab | undefined =>
@@ -70,10 +75,10 @@ export function shownAreas(state: Pick<NavigationState, "surface" | "area" | "si
 
 /**
  * Whether a Surface tab closes: side by side every tab does (its strip X, Escape, Hide changes);
- * one area at a time only a file does, from its toolbar, and Changes stays, Agent being the way
- * back from it.
+ * one area at a time only a file does, from its toolbar, and a view (Changes, Details) stays,
+ * Agent being the way back from it.
  */
-export const closable = (tab: SurfaceTab, single: boolean): boolean => !single || tab !== "changes";
+export const closable = (tab: SurfaceTab, single: boolean): boolean => !single || !isView(tab);
 
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */
@@ -149,6 +154,8 @@ export interface Navigation {
   closeSettings: () => void;
   /** Shows Changes, opening its tab at the end if needed, or focuses it; never a toggle. */
   openChanges: () => void;
+  /** Shows Details, the session's facts with its outputs and links, as `openChanges` shows Changes. */
+  openDetails: () => void;
   /**
    * Shows a file's tab, opening it at the end if needed; an open file, however spelled, is read
    * again. `from` is the area the link was in, which closing the file returns to, even when it was
@@ -284,6 +291,7 @@ const isArea = (value: unknown): value is SessionArea => value === "agent" || va
 
 const isTab = (value: unknown): value is SurfaceTab =>
   value === "changes" ||
+  value === "details" ||
   (typeof value === "object" &&
     value !== null &&
     (value as { kind?: unknown }).kind === "file" &&
@@ -494,6 +502,12 @@ export function createNavigation({
       moved();
     });
 
+  /** Shows one of the session's views, opening its tab at the end if needed, or focuses it. */
+  const openView = (view: SurfaceView) => {
+    const tabs = state.surface?.tabs ?? [];
+    show({ tabs: tabs.includes(view) ? tabs : [...tabs, view], active: view });
+  };
+
   return {
     getState: () => state,
     subscribe: (listener) => {
@@ -532,13 +546,8 @@ export function createNavigation({
         moved();
       }),
     closeSettings,
-    openChanges: () => {
-      const tabs = state.surface?.tabs ?? [];
-      show({
-        tabs: tabs.includes("changes") ? tabs : [...tabs, "changes"],
-        active: "changes",
-      });
-    },
+    openChanges: () => openView("changes"),
+    openDetails: () => openView("details"),
     openFile: (spelled, from = shownAreas(state).agent ? "agent" : "surface") => {
       const path = filePath(spelled, client.getState().session?.cwd);
       const tabs = state.surface?.tabs ?? [];
@@ -563,7 +572,7 @@ export function createNavigation({
       const active =
         surface.active === key ? tabKey(tabs[Math.min(at, tabs.length - 1)]) : surface.active;
       const back =
-        state.single && surface.active === key && closing !== "changes" && closing.from === "agent";
+        state.single && surface.active === key && !isView(closing) && closing.from === "agent";
       moveArea({ surface: { tabs, active }, area: back ? "agent" : state.area });
     },
     showAgent: () => moveArea({ area: "agent" }),

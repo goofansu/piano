@@ -28,6 +28,7 @@ export type SessionCommandId =
   | "copy-session-path"
   | "views"
   | "changes"
+  | "details"
   | "hide-changes"
   | "agent"
   | "wrap-changes"
@@ -47,6 +48,7 @@ export type SessionCommandIcon =
   | "copy"
   | "views"
   | "changes"
+  | "info"
   | "hide"
   | "agent"
   | "pull-request"
@@ -66,6 +68,8 @@ export type SessionCommandIntent =
   | { kind: "send"; command: ClientCommand }
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
+  /** Show Details: the session's folder, branch and directory, its outputs and its links. */
+  | { kind: "details" }
   /** Open the session header's Views menu. */
   | { kind: "views" }
   | { kind: "hide-changes" }
@@ -192,10 +196,10 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
+ * - details: always; the session's facts need neither Git nor a live Pi.
  * - views: the session is laid out side by side, where the header shows the Views menu.
  * - hide changes: Changes has a tab beside the Agent area; hiding closes it.
- * - agent: the session is laid out one area at a time and the Agent tab shows, beside a Surface
- *   tab or Changes that can open.
+ * - agent: the session is laid out one area at a time, where Details always sits beside Agent.
  * - pull request, copy session ID: the selected session has a Pi session ID.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
  *   an app; open needs its link, stop needs the attachment (`sessionReady`).
@@ -276,6 +280,14 @@ export function sessionCommands(
         intent: { kind: "changes" },
       },
       {
+        id: "details",
+        label: "Details",
+        icon: "info",
+        enabled: true,
+        keywords: ["info", "outputs", "files", "links", "branch"],
+        intent: { kind: "details" },
+      },
+      {
         id: "hide-changes",
         label: "Hide changes",
         icon: "hide",
@@ -287,7 +299,7 @@ export function sessionCommands(
         id: "agent",
         label: "Agent",
         icon: "agent",
-        enabled: single && (!!surface || ctx.canOpenChanges),
+        enabled: single,
         keywords: ["conversation"],
         intent: { kind: "agent" },
       },
