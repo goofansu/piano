@@ -26,7 +26,31 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      # The module suite includes a real Worktrunk lifecycle test, not just fake CLI tests.
+      - name: Clean install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      # biome check also enforces the formatter; do not run auto-fixes in CI.
+      - name: Lint and formatting
+        run: npm run lint
+      - name: Test (fake Pi, no model credentials)
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  worktrunk:
+    name: Worktrunk integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      # Real Worktrunk integration tests are separate from the module suite.
       # Piano supports the latest Worktrunk, so CI tests the latest release, checked against
       # the checksum file published with it.
       - name: Install the latest Worktrunk
@@ -45,15 +69,8 @@ jobs:
           "$RUNNER_TEMP/worktrunk/wt" --version
       - name: Clean install
         run: npm ci
-      - name: Typecheck
-        run: npm run typecheck
-      # biome check also enforces the formatter; do not run auto-fixes in CI.
-      - name: Lint and formatting
-        run: npm run lint
-      - name: Test (fake Pi, no model credentials)
-        run: npm test
-      - name: Build
-        run: npm run build
+      - name: Worktrunk integration tests (fake Pi, no model credentials)
+        run: npm run test:worktrunk
 
   browser:
     name: Critical paths

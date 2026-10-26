@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs, {
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -22,7 +20,6 @@ import { PiCli } from "../server/PiCli.ts";
 import { type PiSession, PiSessionsLive, PreviewOwnerOptions } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
-import { WorktrunkCommand } from "../server/Worktrees.ts";
 import type { ServerMessage } from "../shared/wire.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-client-sessions-")));
@@ -497,89 +494,6 @@ test("a new-session selection shows what it creates only while it is still selec
       yield* sessions.act("new", restoreQueue);
       assert.deepEqual(resultFor(sent), [selected.sessionId]);
     }),
-  );
-});
-
-test("INV-05: selecting another session while a worktree is still being created shows it at once", {
-  timeout: 30_000,
-}, async () => {
-  const git = (dir: string, ...args: string[]) => {
-    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
-    assert.equal(result.status, 0, result.stderr);
-  };
-  const repo = join(root, "creating-repo");
-  mkdirSync(repo);
-  git(repo, "init", "--quiet", "-b", "main");
-  git(
-    repo,
-    "-c",
-    "user.name=Test",
-    "-c",
-    "user.email=test@example.invalid",
-    "commit",
-    "--quiet",
-    "--allow-empty",
-    "-m",
-    "baseline",
-  );
-  // The installed Worktrunk, isolated from the user's configuration, held at `switch` until the
-  // test releases it (or 20 seconds pass, so a failing run cannot leave it waiting).
-  const config = join(root, "creating-wt", "config", "worktrunk");
-  mkdirSync(config, { recursive: true });
-  writeFileSync(join(config, "config.toml"), "");
-  const isolated = {
-    HOME: join(root, "creating-wt", "home"),
-    XDG_CONFIG_HOME: join(root, "creating-wt", "config"),
-    XDG_CACHE_HOME: join(root, "creating-wt", "cache"),
-    XDG_STATE_HOME: join(root, "creating-wt", "state"),
-    WORKTRUNK_CONFIG_PATH: join(config, "config.toml"),
-  };
-  mkdirSync(isolated.HOME);
-  const real = spawnSync("which", ["wt"], { encoding: "utf8" }).stdout.trim();
-  const waiting = join(root, "creating-wt", "waiting");
-  const release = join(root, "creating-wt", "release");
-  const wt = join(root, "creating-wt", "wt");
-  writeFileSync(
-    wt,
-    `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';import {existsSync,writeFileSync} from 'node:fs';
-const a=process.argv.slice(2);
-if(a.includes('switch')){writeFileSync(${JSON.stringify(waiting)},'');for(let n=0;n<1000&&!existsSync(${JSON.stringify(release)});n++)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);}
-const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env,...${JSON.stringify(isolated)}}});process.exit(r.status??1);\n`,
-    { mode: 0o755 },
-  );
-  await run(
-    Effect.gen(function* () {
-      const b = yield* started();
-      const { sessions, sent, next } = yield* client;
-      const creating = yield* (yield* sessions.create({
-        selectionId: "creating",
-        cwd: repo,
-        options: {},
-        worktree: { branch: "held" },
-      })).pipe(Effect.forkChild);
-      for (let n = 0; !existsSync(waiting); n++) {
-        if (n > 250) return yield* Effect.die(new Error("Worktrunk never started"));
-        yield* Effect.sleep("20 millis");
-      }
-      yield* yield* sessions.select({ cwd, sessionId: b.spec.sessionId, selectionId: "B" });
-      const selected = yield* next((m) => m._tag === "selected");
-      assert.ok(selected._tag === "selected");
-      assert.deepEqual([selected.selectionId, selected.sessionId], ["B", b.spec.sessionId]);
-      assert.equal(existsSync(release), false, "B was shown while Worktrunk was still held");
-      writeFileSync(release, "");
-      yield* Fiber.join(creating);
-      // The finished creation is registered but not shown, and B stays the attached selection.
-      assert.ok((yield* (yield* Registry).get).sessions.some((s) => s.cwd !== cwd));
-      assert.deepEqual(
-        sent.filter((m) => "selectionId" in m && m.selectionId === "creating"),
-        [],
-      );
-      yield* sessions.act("B", restoreQueue);
-      assert.deepEqual(resultFor(sent), [b.spec.sessionId]);
-    }).pipe(
-      Effect.ensuring(Effect.sync(() => writeFileSync(release, ""))),
-      Effect.provideService(WorktrunkCommand, wt),
-    ),
   );
 });
 

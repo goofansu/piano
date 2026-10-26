@@ -27,20 +27,21 @@ commit.
 
 ## Tests
 
-Module tests (`npm test`) run against a fake Pi and need no model credentials. One test drives a
-real Worktrunk and needs `wt` 0.80.0 or later on `PATH`. The critical-path browser journeys in
-`test/browser/` run with `npm run test:browser`.
+Module tests (`npm test`) run against a fake Pi and need neither model credentials nor Worktrunk.
+The [Worktrunk integration suite](testing.md#worktrunk-integration-tests) runs separately with
+`npm run test:worktrunk` and needs `wt` 0.80.0 or later on `PATH`. The critical-path browser journeys
+in `test/browser/` run with `npm run test:browser`.
 
 ## CI and merging
 
 [Quality CI](../.github/workflows/quality.yml) runs on every pull request, every push to `main` and
 every merge-queue candidate, on Node 24. The quality job runs `npm ci`, `npm run typecheck`,
-`npm run lint`, `npm test` and `npm run build`, with the latest Worktrunk release, checked against
-the checksum file published with it. A second job runs `npm run test:browser`. CI gets no model
-secrets.
+`npm run lint`, `npm test` and `npm run build`, without installing Worktrunk. Separate jobs run
+`npm run test:worktrunk` and `npm run test:browser`. Only the Worktrunk job installs the latest
+Worktrunk release, checked against the checksum file published with it. CI gets no model secrets.
 
 No branch protection enforces these jobs: the owner canceled it (PIN-17). Before you merge, check
-that **Quality gates** passed on the latest commit.
+that **Quality gates**, **Worktrunk integration** and **Critical paths** passed on the latest commit.
 
 The Piano host must be private: reachable only by its trusted developer, on loopback or through a
 private authenticated proxy such as exe.dev's (INV-11). Development has no privacy requirement;

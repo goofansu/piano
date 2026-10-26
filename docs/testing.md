@@ -96,6 +96,18 @@ where boundaries matter, backed by focused lower-level tests for distinct logic.
 test validates Piano's contract handling, not the real Pi release; a real-runtime smoke check serves
 a different purpose.
 
+## Worktrunk integration tests
+
+`npm test` includes Git discovery and fake-Worktrunk contract tests, but does not require
+Worktrunk installed. `npm run test:worktrunk` runs the `test/*.worktrunk.ts` integration
+tests against the installed `wt` in throwaway repositories, with fake Pi and no model credentials.
+A missing or unsupported Worktrunk fails the suite rather than skipping it.
+
+Like `test:browser`, this suite runs in CI and is opt-in locally. Run it locally for worktree
+lifecycle changes (INV-02, INV-05–07), including creation, hooks and session creation races.
+CI installs the latest Worktrunk and runs the suite in its own job. Keep real-CLI tests in
+`*.worktrunk.ts` files so the default `*.test.ts` suite stays independent of Worktrunk.
+
 ## Browser tests
 
 Browser evidence for a change is an observation through `agent-browser` on a scratch instance,

@@ -19,6 +19,8 @@ or mock choreography. Documentation-only changes need document/link review, not 
 
 - **Code or dependency changes:** run `npm run typecheck`, `npm run lint` and `npm test`
   (module tests against `test/fake-pi.mjs`, no credentials). All three must pass.
+- **Worktree lifecycle changes:** also run `npm run test:worktrunk`; see
+  [Worktrunk integration tests](docs/testing.md#worktrunk-integration-tests).
 - **Application behavior:** observe the affected journey through `npx agent-browser` on a
   [scratch instance](#scratch-instance) and keep the output as PR evidence.
 - **UI changes:** list every string, control and action the change adds, from its screenshots,
