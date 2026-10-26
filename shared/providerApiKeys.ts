@@ -6,6 +6,9 @@ export const API_KEY_PROVIDERS = [
   { id: "vercel-ai-gateway", name: "Vercel AI Gateway", logo: "vercel" },
 ] as const;
 
+/** The one refusal of a key that is not literal, at the endpoint and in the service alike. */
+export const API_KEY_INVALID = "Enter a valid API key, not a command.";
+
 /** Literal keys only: Pi interprets a leading ! as a command in auth.json. */
 export const ProviderApiKey = Schema.String.check(
   Schema.isPattern(/^[^\s!]\S*$/u),

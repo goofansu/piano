@@ -10,7 +10,7 @@
 import { Schema } from "effect";
 import { FileDownload, FilePreview } from "./files.ts";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
-import { ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
+import { API_KEY_INVALID, ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
 import { Webhook, WebhookDelivery, WebhookSave } from "./webhooks.ts";
@@ -398,7 +398,7 @@ export const Endpoints = {
     method: "POST",
     path: "/api/provider-api-keys",
     body: ProviderApiKeyChange,
-    invalid: "Enter a valid API key, not a command.",
+    invalid: API_KEY_INVALID,
     noStore: true,
     response: Schema.Struct({ ok: Schema.Literal(true) }),
     refused: 409,
