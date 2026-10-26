@@ -289,11 +289,13 @@ export function addressFor(
 
 const panelOwner = (s: AppState) => (s.session ? sessionKey(s.session) : null);
 
-/** What a reload brings back: one session's tabs and the area it was on. */
+/** What a reload brings back: one session's tabs, the area it was on, and whether the session
+ * rail covered the tabs, so the right side comes back as it was left. */
 interface KeptSurface {
   owner: string;
   surface: Surface | null;
   area: SessionArea;
+  covered: boolean;
 }
 
 const isArea = (value: unknown): value is SessionArea => value === "agent" || value === "surface";
@@ -310,7 +312,7 @@ const isTab = (value: unknown): value is SurfaceTab =>
 function decodeKept(
   raw: string | null,
   owner: string,
-): { surface: Surface; area: SessionArea } | null {
+): { surface: Surface; area: SessionArea; covered: boolean } | null {
   if (raw === null) return null;
   let value: Partial<KeptSurface> | null;
   try {
@@ -323,7 +325,12 @@ function decodeKept(
   // A tab kind that no longer exists (Details was one) is left behind.
   const tabs = surface.tabs.filter(isTab);
   if (!tabs.some((tab) => tabKey(tab) === surface.active)) return null;
-  return { surface: { tabs, active: surface.active }, area: value.area };
+  // Kept by an older Piano without it: the tabs were showing.
+  return {
+    surface: { tabs, active: surface.active },
+    area: value.area,
+    covered: value.covered === true,
+  };
 }
 
 export function createNavigation({
@@ -353,7 +360,7 @@ export function createNavigation({
   // A user or history move always re-checks the address; otherwise only the screen's inputs changing does.
   let moving = false;
   let synced: unknown[] = [];
-  let kept: { owner: string | null; surface: Surface | null; area: SessionArea } | undefined;
+  let kept: (Omit<KeptSurface, "owner"> & { owner: string | null }) | undefined;
 
   /** The surface this browser tab kept for `key` before a reload. */
   const recall = (key: string) => {
@@ -369,8 +376,14 @@ export function createNavigation({
     if (!memory) return;
     // While a session URL loads there is no owner yet, and what it kept must survive.
     if (!owner && client.getState().view.kind === "session") return;
-    if (kept?.owner === owner && kept.surface === state.surface && kept.area === state.area) return;
-    kept = { owner, surface: state.surface, area: state.area };
+    if (
+      kept?.owner === owner &&
+      kept.surface === state.surface &&
+      kept.area === state.area &&
+      kept.covered === state.covered
+    )
+      return;
+    kept = { owner, surface: state.surface, area: state.area, covered: state.covered };
     try {
       memory.write(
         owner
@@ -378,6 +391,7 @@ export function createNavigation({
               owner,
               surface: state.surface,
               area: state.area,
+              covered: state.covered,
             } satisfies KeptSurface)
           : null,
       );
@@ -430,12 +444,13 @@ export function createNavigation({
       if (next !== owner) {
         owner = next;
         // Inspection belongs to one session: another one starts with only its Agent area. The
-        // session this browser tab showed last comes back as it was left, as after a reload.
+        // session this browser tab showed last comes back as it was left, as after a reload: the
+        // rail still over the tabs it covered, unless it has since been turned off.
         const back = next ? recall(next) : null;
         set({
           surface: back?.surface ?? null,
           area: back?.area ?? "agent",
-          covered: false,
+          covered: !!back?.covered && state.details,
           pullRequest: false,
         });
       }
