@@ -278,8 +278,8 @@ export function SessionView({ state, send }: Props) {
 }
 
 /**
- * One area at a time, the tabs between them: Agent, then the open views in the order they were
- * opened, then Changes while it is not open yet and can open. Choosing Agent never focuses
+ * One area at a time, the tabs between them: Agent, Changes when available or already open,
+ * then files in opening order. Changes keeps its place even before it opens. Choosing Agent never focuses
  * the composer, so a phone keeps its keyboard down; choosing a view shows it as it was left. A
  * file closes from its own toolbar.
  */
@@ -326,9 +326,8 @@ function AreaTabs({
               Agent
             </PianoStripTabTrigger>
           </PianoStripTab>
-          {tabs.map(view)}
-          {/* Not open yet, Changes waits at the end, where opening it adds its tab. */}
-          {openChanges && !tabs.includes("changes") && view("changes")}
+          {(openChanges || tabs.includes("changes")) && view("changes")}
+          {tabs.filter((tab) => tab !== "changes").map(view)}
         </PianoStripTabsList>
       </Tabs>
     </PianoStripBar>
