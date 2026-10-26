@@ -177,21 +177,31 @@ test("current is bottom near the end, top near the start, else the last message 
   assert.equal(viewport.current(entries), "top", "nothing rendered above the line");
 });
 
-test("scrollBy moves the reader as a wheel would: pinned on landing at the end, unpinned short of it", () => {
+/** A wheel handed to the transcript; the browser then reports the move as a scroll of its own. */
+const wheel = (viewport: ReturnType<typeof setup>["viewport"], deltaY: number, deltaMode = 0) => {
+  viewport.wheel(deltaY, deltaMode);
+  viewport.scrolled();
+};
+
+test("a wheel handed to the transcript moves the reader as a wheel on it would", () => {
   const { viewport, el } = setup();
-  viewport.scrollBy(-300);
-  assert.equal(el.scrollTop, 1200);
-  assert.equal(viewport.atBottom(), false, "a step up from the bottom unpins the view");
+  wheel(viewport, -40);
+  assert.equal(el.scrollTop, 1460);
+  assert.equal(viewport.atBottom(), true, "40px up is still near the bottom");
   el.scrollHeight = 2600;
   viewport.rendered();
-  assert.equal(el.scrollTop, 1200, "new output does not undo the step");
-  viewport.scrollBy(5000);
+  assert.equal(el.scrollTop, 1460, "a small step up is not undone by new output");
+  wheel(viewport, -10, 1);
+  assert.equal(el.scrollTop, 1300, "a line is 16px");
+  wheel(viewport, -1, 2);
+  assert.equal(el.scrollTop, 800, "a page is the container's height");
+  wheel(viewport, 5000);
   assert.equal(el.scrollTop, 2100, "the container clamps the move at its end");
   assert.equal(viewport.atBottom(), true);
   el.scrollHeight = 2700;
   viewport.rendered();
   assert.equal(el.scrollTop, 2200, "landing at the end pins the view again");
   viewport.attach(null);
-  viewport.scrollBy(100);
+  viewport.wheel(100, 0);
   assert.equal(el.scrollTop, 2200, "without a transcript nothing moves");
 });

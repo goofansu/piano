@@ -1,6 +1,6 @@
 import { isWorking } from "@shared/sessionProjection";
 import { FolderGit2Icon, FolderIcon, FolderOpenIcon, GitBranchIcon } from "lucide-react";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useCallback, useMemo } from "react";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { SessionLinks } from "@/components/SessionLinks";
 import { SessionOutputs } from "@/components/SessionOutputs";
@@ -49,12 +49,16 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
  */
 export function SessionRail({ state }: { state: AppState }) {
   const viewport = useTranscriptViewport();
+  const onWheel = useCallback(
+    (event: React.WheelEvent<HTMLElement>) => passWheel(event, viewport),
+    [viewport],
+  );
   if (!state.session) return null;
   return (
     <aside
       data-slot="session-rail"
       aria-label="Session rail"
-      onWheel={(event) => passWheel(event, viewport)}
+      onWheel={onWheel}
       // Clear of the scrollbar at the area's edge; its first section level with the transcript's
       // first row, its last ending as far above the area's bottom as the composer's footer does.
       // It scrolls without a scrollbar, as the tab strips do.
@@ -67,14 +71,13 @@ export function SessionRail({ state }: { state: AppState }) {
 
 /**
  * A rail that fits has nothing to scroll, and the transcript beside it is no ancestor the wheel
- * would reach, so the wheel is handed to the transcript through its viewport, scrolling it as
- * anywhere else in the area.
+ * would reach, so the wheel is handed to the transcript's viewport, which moves the conversation
+ * as a wheel anywhere else in the area does. The rail decides only whether to hand it over.
  */
 function passWheel(event: React.WheelEvent<HTMLElement>, viewport: TranscriptViewport | null) {
   const rail = event.currentTarget;
   if (rail.scrollHeight > rail.clientHeight || event.ctrlKey) return;
-  const lines = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
-  viewport?.scrollBy(event.deltaY * lines);
+  viewport?.wheel(event.deltaY, event.deltaMode);
 }
 
 /** The rail's folding sections for the selected session. */
