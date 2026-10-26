@@ -13,7 +13,7 @@ import {
   type WebhookPayload,
   WebhookSave,
 } from "../shared/webhooks.ts";
-import { type Snapshot, sameSession } from "../shared/wire.ts";
+import { type SessionEvent, type Snapshot, sameSession } from "../shared/wire.ts";
 import { KNOWN_SECRET_MIN, projectDisplay } from "./DisplayProjection.ts";
 import { pullRequestIdentity } from "./GitHubPullRequests.ts";
 import { SessionLinkOrigin } from "./OriginPolicy.ts";
@@ -47,13 +47,18 @@ export class Webhooks extends Context.Service<
     readonly save: (input: WebhookSave) => Effect.Effect<Webhook, WebhookError>;
     readonly remove: (id: string) => Effect.Effect<void, WebhookError>;
     readonly test: (id: string) => Effect.Effect<WebhookDelivery, WebhookError>;
-    /** Admission only. Snapshot is the live event's view, never a history read. An event the
-     * snapshot does not bear out (no dialog, a stop that is not a failure) sends nothing. */
-    readonly emit: (
-      event: WebhookEvent,
+    /** Admission only, from a running session's live events: `observed` is its view after
+     * `event` and `previous` its view before, never a history read. Webhooks alone decide which
+     * events are sent: a completed response is `session.completed`; a dialog Pi newly asks, told
+     * from a resent frame by id and generation, is `session.needs_input`; a stop the browser
+     * would flag as needing attention is `session.failed`. A snapshot is an attachment, never a
+     * trigger, so opening history replays nothing. */
+    readonly observe: (
       cwd: string,
       sessionId: string,
-      snapshot: Snapshot,
+      previous: Snapshot | undefined,
+      event: SessionEvent,
+      observed: Snapshot,
     ) => Effect.Effect<void>;
   }
 >()("piano/Webhooks") {}
@@ -234,12 +239,108 @@ export const WebhooksLive = Layer.effect(
       yield* Queue.offer(wake, undefined);
       return true;
     });
+    /** The webhook events one live session event is, in the order they are sent. */
+    const triggered = (
+      previous: Snapshot | undefined,
+      event: SessionEvent,
+      observed: Snapshot,
+    ): WebhookEvent[] => {
+      if (event._tag === "snapshot") return [];
+      const events: WebhookEvent[] = [];
+      if (event._tag === "response_completed") events.push("session.completed");
+      const dialog = dispositionOf(observed, true).dialog;
+      const before = previous && dispositionOf(previous, true).dialog;
+      if (dialog && (dialog.id !== before?.id || dialog.generation !== before?.generation))
+        events.push("session.needs_input");
+      // Webhooks decide from the closure, by the rule the browser follows.
+      if (event._tag === "closed" && closureNeedsAttention(observed.state.closure))
+        events.push("session.failed");
+      return events;
+    };
     const receiverUrl = Effect.fn("Webhooks.receiverUrl")(function* (text: string) {
       return yield* Effect.try({
         try: () => webhookReceiver(text),
         catch: () => refused(RECEIVER_RULE, "url"),
       });
     });
+    const emit = Effect.fn("Webhooks.emit")(
+      function* (event: WebhookEvent, cwd: string, sessionId: string, snapshot: Snapshot) {
+        const configured = yield* stored;
+        const hooks = configured.filter((h) => h.active && h.events.includes(event));
+        if (!hooks.length) return;
+        const data = yield* registry.get;
+        const workspace = data.workspaces.find((w) => w.path === cwd);
+        const entry = data.sessions.find((s) => sameSession(s, { cwd, sessionId }));
+        if (!workspace || !entry) return;
+        const url = origin ? `${origin}/s/${encodeURIComponent(sessionId)}` : null;
+        const pr = entry.pullRequest ? pullRequestIdentity(entry.pullRequest.url) : null;
+        // Free-form Pi text is display-projected and strips filesystem paths, including known
+        // credentials. This is best-effort redaction, not a security boundary for conversation text.
+        const clean = (value: string | undefined | null): string | null => {
+          if (value == null) return null;
+          let text = projectDisplay(value);
+          // A token saved before the minimum existed is too short to tell from ordinary words.
+          for (const h of configured)
+            if (h.token && h.token.length >= KNOWN_SECRET_MIN)
+              text = text.replaceAll(h.token, "[redacted]");
+          return text
+            .replaceAll(cwd, "[folder]")
+            .replaceAll(workspace.folder, "[folder]")
+            .replace(
+              /(^|[\s`"'(])(?:\/[\w.-]+(?:\/[^\s`"'<>)]*)?|[A-Za-z]:\\[^\s`"'<>)]*)/g,
+              "$1[path]",
+            );
+        };
+        // Redact whole values, then cut: a token straddling the cut would survive as a fragment.
+        const full = clean(lastAnswerOf(snapshot, Infinity));
+        const answer = full == null ? null : cutText(full, LAST_ANSWER_CHARS);
+        const { dialog } = dispositionOf(snapshot, true);
+        const closure = snapshot.state.closure;
+        for (const hook of hooks) {
+          const payload: WebhookPayload = {
+            ...(yield* envelope(event)),
+            workspace: { id: workspace.id, folder: basename(workspace.folder) },
+            session: {
+              id: sessionId,
+              title: clean(entry.title),
+              url,
+              model: clean(snapshot.state.model),
+            },
+            pullRequest: pr ? { number: pr.number, url: pr.url, state: null } : null,
+            ...(event === "session.completed"
+              ? {
+                  answer,
+                  answerTruncated: (full?.length ?? 0) > LAST_ANSWER_CHARS,
+                }
+              : {}),
+            ...(event === "session.needs_input" && dialog
+              ? {
+                  action: url ? `Answer in Piano: ${url}` : "Answer in Piano.",
+                  question: {
+                    kind: dialog.method,
+                    title: clean(dialog.title),
+                    message: clean(dialog.message),
+                    options: dialog.options?.map((s) => clean(s)!) ?? null,
+                  },
+                }
+              : {}),
+            ...(event === "session.failed" && closure
+              ? {
+                  action: url ? `Open session in Piano: ${url}` : "Open session in Piano.",
+                  failure: {
+                    reason: closure._tag,
+                    detail: clean(closure.detail),
+                    exitCode: closure._tag === "exited" ? closure.code : null,
+                  },
+                  answer,
+                }
+              : {}),
+          };
+          yield* admit({ hook, payload });
+        }
+      },
+      Effect.catchCause(() => Effect.logWarning("A webhook event could not be queued.")),
+    );
     return Webhooks.of({
       list,
       // Read-modify-write under one lock, removal included, so a save never acts on a row read
@@ -302,87 +403,10 @@ export const WebhooksLive = Layer.effect(
           return yield* refused("Delivery queue is full. Try again later.");
         return yield* Deferred.await(result);
       }),
-      emit: Effect.fn("Webhooks.emit")(
-        function* (event, cwd, sessionId, snapshot) {
-          const configured = yield* stored;
-          const hooks = configured.filter((h) => h.active && h.events.includes(event));
-          if (!hooks.length) return;
-          const data = yield* registry.get;
-          const workspace = data.workspaces.find((w) => w.path === cwd);
-          const entry = data.sessions.find((s) => sameSession(s, { cwd, sessionId }));
-          if (!workspace || !entry) return;
-          const url = origin ? `${origin}/s/${encodeURIComponent(sessionId)}` : null;
-          const pr = entry.pullRequest ? pullRequestIdentity(entry.pullRequest.url) : null;
-          // Free-form Pi text is display-projected and strips filesystem paths, including known
-          // credentials. This is best-effort redaction, not a security boundary for conversation text.
-          const clean = (value: string | undefined | null): string | null => {
-            if (value == null) return null;
-            let text = projectDisplay(value);
-            // A token saved before the minimum existed is too short to tell from ordinary words.
-            for (const h of configured)
-              if (h.token && h.token.length >= KNOWN_SECRET_MIN)
-                text = text.replaceAll(h.token, "[redacted]");
-            return text
-              .replaceAll(cwd, "[folder]")
-              .replaceAll(workspace.folder, "[folder]")
-              .replace(
-                /(^|[\s`"'(])(?:\/[\w.-]+(?:\/[^\s`"'<>)]*)?|[A-Za-z]:\\[^\s`"'<>)]*)/g,
-                "$1[path]",
-              );
-          };
-          // Redact whole values, then cut: a token straddling the cut would survive as a fragment.
-          const full = clean(lastAnswerOf(snapshot, Infinity));
-          const answer = full == null ? null : cutText(full, LAST_ANSWER_CHARS);
-          const { dialog } = dispositionOf(snapshot, true);
-          const closure = snapshot.state.closure;
-          if (event === "session.needs_input" && !dialog) return;
-          // Webhooks alone decide whether a stop is a failure, by the rule the browser follows.
-          if (event === "session.failed" && !closureNeedsAttention(closure)) return;
-          for (const hook of hooks) {
-            const payload: WebhookPayload = {
-              ...(yield* envelope(event)),
-              workspace: { id: workspace.id, folder: basename(workspace.folder) },
-              session: {
-                id: sessionId,
-                title: clean(entry.title),
-                url,
-                model: clean(snapshot.state.model),
-              },
-              pullRequest: pr ? { number: pr.number, url: pr.url, state: null } : null,
-              ...(event === "session.completed"
-                ? {
-                    answer,
-                    answerTruncated: (full?.length ?? 0) > LAST_ANSWER_CHARS,
-                  }
-                : {}),
-              ...(event === "session.needs_input" && dialog
-                ? {
-                    action: url ? `Answer in Piano: ${url}` : "Answer in Piano.",
-                    question: {
-                      kind: dialog.method,
-                      title: clean(dialog.title),
-                      message: clean(dialog.message),
-                      options: dialog.options?.map((s) => clean(s)!) ?? null,
-                    },
-                  }
-                : {}),
-              ...(event === "session.failed" && closure
-                ? {
-                    action: url ? `Open session in Piano: ${url}` : "Open session in Piano.",
-                    failure: {
-                      reason: closure._tag,
-                      detail: clean(closure.detail),
-                      exitCode: closure._tag === "exited" ? closure.code : null,
-                    },
-                    answer,
-                  }
-                : {}),
-            };
-            yield* admit({ hook, payload });
-          }
-        },
-        Effect.catchCause(() => Effect.logWarning("A webhook event could not be queued.")),
-      ),
+      observe: Effect.fn("Webhooks.observe")(function* (cwd, sessionId, previous, event, observed) {
+        for (const sent of triggered(previous, event, observed))
+          yield* emit(sent, cwd, sessionId, observed);
+      }),
     });
   }),
 );

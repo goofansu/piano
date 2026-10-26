@@ -16,7 +16,7 @@ import { WebhookFetch, Webhooks, WebhooksLive, WebhookTimeoutMs } from "../serve
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import { WEBHOOK_EVENTS, type WebhookPayload, type WebhookSave } from "../shared/webhooks.ts";
-import type { Snapshot } from "../shared/wire.ts";
+import type { Dialog, SessionClosure, Snapshot } from "../shared/wire.ts";
 
 const root = mkdtempSync(join(tmpdir(), "piano-webhooks-"));
 const cwd = join(root, "checkout");
@@ -94,6 +94,31 @@ const registered = Effect.gen(function* () {
   yield* registry.addSession(cwd, "s", "Test session");
   return registry;
 });
+/** Session "s" completed a response, as a running host observes it. */
+const responseCompleted = (hooks: Webhooks["Service"], observed: Snapshot = snapshot) =>
+  hooks.observe(cwd, "s", observed, { _tag: "response_completed" }, observed);
+/** Session "s" stopped with `closure`. */
+const stopped = (hooks: Webhooks["Service"], closure: SessionClosure) =>
+  hooks.observe(
+    cwd,
+    "s",
+    snapshot,
+    { _tag: "closed", closure },
+    { ...snapshot, state: { ...snapshot.state, closure } },
+  );
+const choose: Dialog = {
+  id: "d",
+  generation: "g",
+  receivedAt: 0,
+  deadlineAt: 9999,
+  deadlineKind: "pi-timeout",
+  method: "select",
+  title: "Choose",
+  options: ["yes", "no"],
+};
+/** Session "s" hears a dialog event for `dialog`; `before` is its view before it. */
+const asked = (hooks: Webhooks["Service"], dialog: Dialog, before: Snapshot = emptySnapshot("s")) =>
+  hooks.observe(cwd, "s", before, { _tag: "dialog", dialog }, { ...before, dialogs: [dialog] });
 
 test("webhook preferences survive restart; token is write-only, preserved, replaced and cleared", async () => {
   let id = "";
@@ -163,44 +188,20 @@ test("subscription/active filtering is paired with positive delivery; payloads a
       const completed = yield* hooks.save({ ...input, token: "secret-canary" });
       const all = yield* hooks.save({ ...input, events: WEBHOOK_EVENTS });
       const inactive = yield* hooks.save({ ...input, active: false, events: WEBHOOK_EVENTS });
-      yield* hooks.emit("session.completed", cwd, "s", snapshot);
-      const dialog: Snapshot = {
-        ...emptySnapshot("s"),
-        dialogs: [
-          {
-            id: "d",
-            generation: "g",
-            receivedAt: 0,
-            deadlineAt: 9999,
-            deadlineKind: "pi-timeout",
-            method: "select",
-            title: "Choose",
-            options: ["yes", "no"],
-          },
-        ],
-      };
-      yield* hooks.emit("session.needs_input", cwd, "s", dialog);
-      yield* hooks.emit("session.failed", cwd, "s", {
-        ...snapshot,
-        state: {
-          ...snapshot.state,
-          closure: {
-            _tag: "exited",
-            code: 3,
-            detail: `Failed in ${cwd} /tmp/elsewhere secret-canary`,
-          },
-        },
+      yield* responseCompleted(hooks);
+      yield* asked(hooks, choose);
+      yield* stopped(hooks, {
+        _tag: "exited",
+        code: 3,
+        detail: `Failed in ${cwd} /tmp/elsewhere secret-canary`,
       });
       // Stops the browser does not flag are not failures: a quiet release and a clean exit.
       for (const closure of [
         { _tag: "released", detail: "Released" },
         { _tag: "exited", code: 0, detail: "Pi exited with code 0" },
       ] as const)
-        yield* hooks.emit("session.failed", cwd, "s", {
-          ...snapshot,
-          state: { ...snapshot.state, closure },
-        });
-      // Emit admits synchronously, so once the subscribed deliveries arrive nothing else is queued;
+        yield* stopped(hooks, closure);
+      // Observe admits synchronously, so once the subscribed deliveries arrive nothing else is queued;
       // the inactive hook still answers its Test, so its receiver can be heard.
       yield* wait(() => requests.length === 4);
       assert.equal((yield* hooks.test(inactive.id)).status, "delivered");
@@ -261,7 +262,7 @@ test("subscription/active filtering is paired with positive delivery; payloads a
         assert.equal("hookId" in r.body, false);
       }
       yield* registry.setSessionLink((yield* registry.get).sessions[0], "pullRequest", null);
-      yield* hooks.emit("session.completed", cwd, "s", {
+      yield* responseCompleted(hooks, {
         ...snapshot,
         messages: [{ ...snapshot.messages[0], text: "short" }],
       });
@@ -269,6 +270,46 @@ test("subscription/active filtering is paired with positive delivery; payloads a
       const short = requests.find((r) => r.body.answer === "short")!.body;
       assert.equal(short.answerTruncated, false);
       assert.equal(short.pullRequest, null);
+    }),
+    receive(requests),
+  );
+});
+
+test("Webhooks decides which live events it sends: a completion, a dialog newly asked, a stop that needs attention; never a snapshot", async () => {
+  const requests: Received[] = [];
+  await run(
+    "trigger",
+    Effect.gen(function* () {
+      yield* registered;
+      const hooks = yield* Webhooks;
+      yield* hooks.save({ ...input, events: WEBHOOK_EVENTS });
+      const sent = () => requests.map((r) => r.body.event);
+      // An attachment replays nothing, whatever its snapshot shows.
+      const asking: Snapshot = { ...snapshot, dialogs: [choose] };
+      yield* hooks.observe(cwd, "s", undefined, { _tag: "snapshot", snapshot: asking }, asking);
+      yield* responseCompleted(hooks);
+      yield* wait(() => requests.length === 1);
+      assert.deepEqual(sent(), ["session.completed"]);
+      // A dialog is asked once: a resent frame with the same id and generation sends nothing,
+      // a new generation of the same dialog asks again.
+      yield* asked(hooks, choose);
+      yield* asked(hooks, choose, asking);
+      yield* asked(hooks, { ...choose, generation: "g2" }, asking);
+      yield* wait(() => requests.length === 3);
+      assert.deepEqual(sent(), ["session.completed", "session.needs_input", "session.needs_input"]);
+      // A stop the browser would not flag sends nothing; one it would is a failure.
+      yield* stopped(hooks, { _tag: "stopped", detail: "Stopped" });
+      yield* stopped(hooks, { _tag: "exited", code: 0, detail: "Pi exited with code 0" });
+      yield* stopped(hooks, { _tag: "exited", code: 1, detail: "Pi exited with code 1" });
+      yield* wait(() => requests.length === 4);
+      yield* Effect.sleep(50);
+      assert.deepEqual(sent(), [
+        "session.completed",
+        "session.needs_input",
+        "session.needs_input",
+        "session.failed",
+      ]);
+      assert.equal(requests[3].body.failure?.exitCode, 1);
     }),
     receive(requests),
   );
@@ -289,15 +330,10 @@ test("a webhook token is redacted whole before the answer is cut, even across th
       const hooks = yield* Webhooks;
       yield* hooks.save({ ...input, token });
       const b = yield* hooks.save(input);
-      yield* hooks.emit("session.completed", cwd, "s", answered(`${"x".repeat(100)} ${token}`));
+      yield* responseCompleted(hooks, answered(`${"x".repeat(100)} ${token}`));
       // The token spans characters 1,982-2,021; the tail keeps the redacted answer over 2,000.
-      yield* hooks.emit(
-        "session.completed",
-        cwd,
-        "s",
-        answered(`${"x".repeat(1980)} ${token} ${"y".repeat(100)}`),
-      );
-      yield* hooks.emit("session.completed", cwd, "s", answered("z".repeat(LAST_ANSWER_CHARS)));
+      yield* responseCompleted(hooks, answered(`${"x".repeat(1980)} ${token} ${"y".repeat(100)}`));
+      yield* responseCompleted(hooks, answered("z".repeat(LAST_ANSWER_CHARS)));
       const fromB = () => requests.filter((r) => r.headers.get("x-piano-hook-id") === b.id);
       yield* wait(() => fromB().length === 3);
       const [whole, straddling, exact] = fromB().map((r) => r.body);
@@ -329,7 +365,7 @@ test("an answer cut at an emoji leaves the emoji out whole, and is flagged trunc
       yield* hooks.save(input);
       // The emoji's two UTF-16 units sit at 1,999-2,000, across the limit.
       const head = "x".repeat(LAST_ANSWER_CHARS - 1);
-      yield* hooks.emit("session.completed", cwd, "s", answered(`${head}\u{1F600} tail`));
+      yield* responseCompleted(hooks, answered(`${head}\u{1F600} tail`));
       yield* wait(() => requests.length === 1);
       const [body] = requests.map((r) => r.body);
       assert.ok(body.answer === head, `answer ends ${JSON.stringify(body.answer?.slice(-3))}`);
@@ -515,7 +551,7 @@ test("admission stays bounded under a stalled receiver, a Test goes ahead of it;
       const hook = yield* hooks.save({ ...input, token: "private-canary" });
       const test = yield* hooks.test(hook.id).pipe(Effect.forkChild);
       yield* wait(() => requests.length === 1);
-      for (let i = 0; i < 100; i++) yield* hooks.emit("session.completed", cwd, "s", snapshot);
+      for (let i = 0; i < 100; i++) yield* responseCompleted(hooks);
       assert.equal(
         requests.length,
         1,
@@ -563,13 +599,10 @@ test("one webhook's backlog never drops another webhook's deliveries or Test", a
       const hooks = yield* Webhooks;
       const stuck = yield* hooks.save({ ...input, url: "https://stuck.example/events" });
       const healthy = yield* hooks.save({ ...input, events: ["session.failed"] });
-      for (let i = 0; i < 100; i++) yield* hooks.emit("session.completed", cwd, "s", snapshot);
+      for (let i = 0; i < 100; i++) yield* responseCompleted(hooks);
       yield* wait(() => requests.length === 1);
       assert.ok(logs.length > 0, "the stuck webhook's own overflow is dropped and logged");
-      yield* hooks.emit("session.failed", cwd, "s", {
-        ...snapshot,
-        state: { ...snapshot.state, closure: { _tag: "exited", code: 3, detail: "boom" } },
-      });
+      yield* stopped(hooks, { _tag: "exited", code: 3, detail: "boom" });
       const ping = yield* hooks.test(healthy.id).pipe(Effect.result);
       assert.equal(ping._tag, "Success", JSON.stringify(ping));
       const toHealthy = () =>
@@ -616,7 +649,7 @@ test("a test queued behind a slow delivery answers, and sends nothing, once its 
       yield* registered;
       const hooks = yield* Webhooks;
       const hook = yield* hooks.save({ ...input, token: "private-canary" });
-      yield* hooks.emit("session.completed", cwd, "s", snapshot);
+      yield* responseCompleted(hooks);
       yield* wait(() => requests.length === 1);
       const test = yield* hooks.test(hook.id).pipe(Effect.result, Effect.forkChild);
       // Let the test pass admission, which still finds the webhook, and wait in its lane.
