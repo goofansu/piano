@@ -55,6 +55,7 @@ function addressBar(start: string) {
     entries,
     path: () => entries[index],
     title: () => titles.at(-1),
+    titles,
     back: () => go(-1),
     forward: () => go(1),
   };
@@ -854,4 +855,32 @@ test("each request to open Settings is counted, so a repeat reveals its section 
   deepLink.registry();
   assert.equal(deepLink.navigation.getState().settings, "radius");
   assert.ok(deepLink.navigation.getState().settingsRequest > 0, "a cold deep link asks once");
+});
+
+test("a move that changes nothing notifies no one and leaves the address bar alone", () => {
+  const p = page("/new");
+  p.registry();
+  let notified = 0;
+  p.navigation.subscribe(() => notified++);
+  const before = {
+    state: p.navigation.getState(),
+    titles: p.titles.length,
+    entries: [...p.entries],
+  };
+  p.navigation.setSingle(false);
+  p.navigation.setSingle(false);
+  p.navigation.setPalette(false);
+  p.navigation.closePullRequest();
+  p.navigation.closeSettings();
+  p.navigation.showAgent();
+  assert.equal(notified, 0, "the session reports its unchanged layout on every resize");
+  assert.equal(p.navigation.getState(), before.state, "the state keeps its identity");
+  assert.equal(p.titles.length, before.titles, "no title written");
+  assert.deepEqual(p.entries, before.entries, "no history entry");
+  p.navigation.setSingle(true);
+  assert.equal(notified, 1, "a move that changed the layout notifies once");
+  assert.equal(p.navigation.getState().single, true);
+  p.navigation.openSettings("radius");
+  assert.equal(notified, 2);
+  assert.equal(p.path(), "/settings/radius", "a real move still syncs the address");
 });

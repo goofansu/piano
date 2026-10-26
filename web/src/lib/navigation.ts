@@ -357,7 +357,8 @@ export function createNavigation({
   let notified = state;
   let owner = panelOwner(client.getState());
   let depth = 0;
-  // A user or history move always re-checks the address; otherwise only the screen's inputs changing does.
+  // A move that changed something, went through the client or came from history re-checks the
+  // address; otherwise only the screen's inputs changing does.
   let moving = false;
   let synced: unknown[] = [];
   let kept: (Omit<KeptSurface, "owner"> & { owner: string | null }) | undefined;
@@ -401,13 +402,20 @@ export function createNavigation({
   };
   const listeners = new Set<() => void>();
 
+  /**
+   * Applies what a move changes. A move that changes nothing is no move: the state keeps its
+   * identity, so nobody is notified and the address bar is left alone. The session reports its
+   * layout on every resize, mostly unchanged.
+   */
   const set = (patch: Partial<NavigationState>) => {
+    const keys = Object.keys(patch) as (keyof NavigationState)[];
+    if (keys.every((key) => Object.is(state[key], patch[key]))) return;
     state = { ...state, ...patch };
+    moving = true;
   };
 
   /** Runs one move; the route, panels and address settle once at the end, as one history entry. */
   const batch = (fn: () => void) => {
-    moving = true;
     depth++;
     try {
       fn();
@@ -421,6 +429,8 @@ export function createNavigation({
     batch(() => {
       moved();
       set({ settings: null });
+      // A move through the client re-checks the address even when nothing here changed.
+      moving = true;
       client.select(cwd, sessionId);
     });
 
@@ -492,6 +502,7 @@ export function createNavigation({
   const open = (page: Page) =>
     batch(() => {
       set({ settings: null });
+      moving = true;
       client.dispatch({ type: "open", page });
       moved();
     });
@@ -553,6 +564,7 @@ export function createNavigation({
           const route = parseRoute(address.location());
           set({ settings: route.kind === "settings" ? route.section : null });
           wanted = route;
+          moving = true;
         }),
       );
       settle();
