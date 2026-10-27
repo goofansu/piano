@@ -229,7 +229,8 @@ export function SessionHeader({
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           <SessionPreviewControl />
           {sideBySide && <SessionRailToggle />}
-          <ReviewToggle pr={pullRequest} />
+          <PullRequestChip pr={pullRequest} />
+          <ChangesToggle />
           {mobile && sessionMenu}
         </div>
       </PaneHeader>
@@ -262,55 +263,60 @@ function SessionRailToggle() {
 }
 
 /**
- * The review control, last at the header's end: the Changes command, which shows Changes in the
- * Surface area, or, while Changes shows beside the Agent area, its tab's Close ("Hide changes"),
- * filled then, as the rail's toggle is. Once a pull request is linked it wears the pull request's
- * face, the state's icon and `#123`, since the pull request is read in Changes; the state in
- * words is the row's. One area at a time it shows the Changes area, and the tabs say which
- * area shows. Left out while Changes cannot open; the palette's Changes row says why.
+ * Changes' toggle, always last at the header's end, on every layout: the Changes command, which
+ * shows Changes in the Surface area, or, while Changes shows beside the Agent area, its tab's
+ * Close ("Hide changes"), filled then, as the rail's toggle is. One area at a time it shows the
+ * Changes area, and the tabs say which area shows. Left out while Changes cannot open; the
+ * palette's Changes row says why.
  */
-function ReviewToggle({ pr }: { pr: PullRequestControl }) {
+function ChangesToggle() {
   const { commands, run } = useSessionCommands();
   const navigation = useNavigation();
   const { single } = navigation.layout;
   const shown = navigation.layout.surface && navigation.surface?.active === "changes";
   const command = commands.find((c) => c.id === "changes");
   if (!command?.enabled) return null;
+  const closes = shown && !single;
+  return (
+    <IconButton
+      data-changes-trigger
+      size="header"
+      label={closes ? surfaceTabNames("changes").close : command.label}
+      aria-pressed={single ? undefined : shown}
+      onClick={() => (closes ? navigation.closeTab("changes") : run(command))}
+      className="aria-pressed:bg-muted"
+    >
+      <CommandIcon icon={command.icon} />
+    </IconButton>
+  );
+}
+
+/**
+ * The linked pull request, before Changes' toggle: the state's icon in its colour and `#123`, a
+ * state that is also the way to where the pull request is read, the row in Changes. The state in
+ * words is the row's; here it is only described. Nothing while no pull request is linked.
+ */
+function PullRequestChip({ pr }: { pr: PullRequestControl }) {
+  const { commands, run } = useSessionCommands();
+  const command = commands.find((c) => c.id === "changes");
   const face = reviewControl(pullRequestViewOf(pr), pr.loading);
-  const label = shown && !single ? surfaceTabNames("changes").close : command.label;
-  const onClick = () => (shown && !single ? navigation.closeTab("changes") : run(command));
-  if (!face.text)
-    return (
-      <IconButton
-        data-changes-trigger
-        size="header"
-        label={label}
-        aria-pressed={single ? undefined : shown}
-        onClick={onClick}
-        className="aria-pressed:bg-muted"
-      >
-        <CommandIcon icon={command.icon} />
-      </IconButton>
-    );
+  if (!face.text || !command?.enabled) return null;
   const Icon = face.state ? pullRequestStates[face.state].Icon : GitPullRequestIcon;
+  const waiting = pr.loading && !pr.value;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <PianoButton
-          data-changes-trigger
           variant="ghost"
           size="sm"
           trailing
-          aria-label={label}
-          aria-description={face.description}
-          aria-pressed={single ? undefined : shown}
-          aria-busy={(pr.loading && !pr.value) || undefined}
-          onClick={onClick}
-          className="aria-pressed:bg-muted"
+          aria-label={face.description ?? "Pull request"}
+          aria-busy={waiting || undefined}
+          onClick={() => run(command)}
         >
           <Icon
             data-icon="inline-start"
-            data-motion={pr.loading && !pr.value ? "pulse" : undefined}
+            data-motion={waiting ? "pulse" : undefined}
             data-late=""
             className={face.state ? pullRequestStates[face.state].color : "text-muted-foreground"}
             aria-hidden

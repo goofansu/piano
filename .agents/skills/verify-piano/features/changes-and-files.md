@@ -13,11 +13,12 @@ The palette (Mod+K) searches neither outputs nor links.
 
 - `changes-open`: the header's last control, the "Changes" toggle, opens the Surface area and is
   pressed while Changes shows, then named "Hide changes", which hides it; the palette's "Changes"
-  focuses Changes without rereading, collapsing or hiding it. Once a pull request is linked the
-  same control wears its face: the state's icon (green open, grey draft, purple merged, red
-  closed) and `#<number>`, with `aria-description` "Pull request #<n>, <state>". Below 849px of
-  session width the toggle shows the Changes area (the "Agent" tab bar shows only while something
-  is open: `Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar closes it.
+  focuses Changes without rereading, collapsing or hiding it. The toggle shows on every layout;
+  below 849px of session width it shows the Changes area (the "Agent" tab bar shows only while
+  something is open: `Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar
+  closes it. Once a pull request is linked, a chip named "Pull request #<n>, <state>" sits before
+  the toggle: the state's icon (green open, grey draft, purple merged, red closed) and
+  `#<number>`; it opens Changes, where the pull request row is.
 - `changes-scope`: the toolbar starts with the comparison menu ("Comparison: Branch · main" or
   "Comparison: Uncommitted"): Branch compares with the branch's target (the pull request's base,
   the base Worktrunk reported at creation, the remote's default branch, or a local main/master
