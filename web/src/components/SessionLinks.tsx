@@ -1,6 +1,6 @@
 import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
-import { ArrowLeftIcon, LinkIcon, MessageSquareQuoteIcon } from "lucide-react";
+import { ChevronLeftIcon, LinkIcon, MessageSquareQuoteIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "@/components/IconButton";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
@@ -132,14 +132,14 @@ export function SessionLinksBrowser({
   });
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pt-3">
-      {/* No shadcn primitive is a rail header: title, count, then its navigation control. */}
-      <div className="flex shrink-0 items-center gap-2">
+      {/* No shadcn primitive is a rail header: back navigation, then title and count. */}
+      <div className="flex min-h-8 shrink-0 items-center gap-2 pointer-coarse:min-h-11">
+        <IconButton size="header" label="Back to overview" onClick={onBack}>
+          <ChevronLeftIcon />
+        </IconButton>
         <h2 className="flex flex-1 items-center gap-2 text-sm font-medium">
           Links <span className="text-xs font-normal text-ink-3">{links.length}</span>
         </h2>
-        <IconButton size="header" label="Back" onClick={onBack}>
-          <ArrowLeftIcon />
-        </IconButton>
       </div>
       <Input
         ref={searchRef}

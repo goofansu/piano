@@ -230,19 +230,19 @@ function RailSections({
         </RailSection>
       )}
       {links.length > 0 && (
-        <RailSection title="Links" count={links.length} {...group("links")}>
+        <RailSection
+          title="Links"
+          count={links.length}
+          {...group("links")}
+          action={
+            links.length > 5 && (
+              <Button ref={showAllRef} variant="ghost" size="sm" onClick={onShowLinks}>
+                Show all
+              </Button>
+            )
+          }
+        >
           <SessionLinks links={links.slice(0, 5)} messages={messages} working={working} />
-          {links.length > 5 && (
-            <Button
-              ref={showAllRef}
-              variant="ghost"
-              size="sm"
-              className="mt-2"
-              onClick={onShowLinks}
-            >
-              Show all links
-            </Button>
-          )}
         </RailSection>
       )}
     </div>
@@ -346,32 +346,37 @@ function EnvironmentRow({
 function RailSection({
   title,
   count,
+  action,
   open,
   onOpenChange,
   children,
 }: {
   title: string;
   count?: number;
+  action?: ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
 }) {
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} className="flex flex-col gap-2">
-      <h2 className="flex">
-        <CollapsibleTrigger asChild>
-          {/* The heading is the fold: its name, then the chevron turned by its state. */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-2 h-7 gap-1 px-2 text-sm font-medium text-ink aria-expanded:bg-transparent pointer-coarse:min-h-11"
-          >
-            {title}
-            {count !== undefined && <span className="ml-1 text-xs text-ink-3">{count}</span>}
-            <DisclosureChevron open={open} />
-          </Button>
-        </CollapsibleTrigger>
-      </h2>
+      <div className="flex min-h-8 items-center justify-between gap-2 pointer-coarse:min-h-11">
+        <h2 className="flex min-w-0">
+          <CollapsibleTrigger asChild>
+            {/* The heading is the fold: its name, then the chevron turned by its state. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-ml-2 h-7 gap-1 px-2 text-sm font-medium text-ink aria-expanded:bg-transparent pointer-coarse:min-h-11"
+            >
+              {title}
+              {count !== undefined && <span className="ml-1 text-xs text-ink-3">{count}</span>}
+              <DisclosureChevron open={open} />
+            </Button>
+          </CollapsibleTrigger>
+        </h2>
+        {action}
+      </div>
       <CollapsibleContent className="disclosure-content">{children}</CollapsibleContent>
     </Collapsible>
   );
