@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { GitPullRequestIcon, ListIcon, MoreHorizontalIcon } from "lucide-react";
+import { ListIcon, MoreHorizontalIcon } from "lucide-react";
 import { useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import {
@@ -22,15 +22,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { Sheet, SheetTrigger } from "@/components/PianoSheet";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { ProjectMenu } from "@/components/Projects";
 import { SessionPreviewControl } from "@/components/SessionPreview";
-import {
-  type PullRequestControl,
-  PullRequestLinkDialog,
-  pullRequestStates,
-  pullRequestViewOf,
-} from "@/components/SessionPullRequest";
+import { type PullRequestControl, PullRequestLinkDialog } from "@/components/SessionPullRequest";
 import { surfaceTabNames } from "@/components/SurfaceArea";
 import {
   Breadcrumb,
@@ -41,7 +35,6 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { reviewControl } from "@/lib/pullRequestView";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
@@ -229,7 +222,6 @@ export function SessionHeader({
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           <SessionPreviewControl />
           {sideBySide && <SessionRailToggle />}
-          <PullRequestChip pr={pullRequest} />
           <ChangesToggle />
           {mobile && sessionMenu}
         </div>
@@ -288,45 +280,5 @@ function ChangesToggle() {
     >
       <CommandIcon icon={command.icon} />
     </IconButton>
-  );
-}
-
-/**
- * The linked pull request, before Changes' toggle: the state's icon in its colour and `#123`, a
- * state that is also the way to where the pull request is read, the row in Changes. The state in
- * words is the row's; here it is only described. Nothing while no pull request is linked.
- */
-function PullRequestChip({ pr }: { pr: PullRequestControl }) {
-  const { commands, run } = useSessionCommands();
-  const command = commands.find((c) => c.id === "changes");
-  const face = reviewControl(pullRequestViewOf(pr), pr.loading);
-  if (!face.text || !command?.enabled) return null;
-  const Icon = face.state ? pullRequestStates[face.state].Icon : GitPullRequestIcon;
-  const waiting = pr.loading && !pr.value;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <PianoButton
-          variant="ghost"
-          size="sm"
-          trailing
-          aria-label={face.description ?? "Pull request"}
-          aria-busy={waiting || undefined}
-          onClick={() => run(command)}
-        >
-          <Icon
-            data-icon="inline-start"
-            data-motion={waiting ? "pulse" : undefined}
-            data-late=""
-            className={face.state ? pullRequestStates[face.state].color : "text-muted-foreground"}
-            aria-hidden
-          />{" "}
-          {face.text}
-        </PianoButton>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-80">
-        <p className="text-wrap">{face.tooltip}</p>
-      </TooltipContent>
-    </Tooltip>
   );
 }

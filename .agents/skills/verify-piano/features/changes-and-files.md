@@ -16,9 +16,8 @@ The palette (Mod+K) searches neither outputs nor links.
   focuses Changes without rereading, collapsing or hiding it. The toggle shows on every layout;
   below 849px of session width it shows the Changes area (the "Agent" tab bar shows only while
   something is open: `Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar
-  closes it. Once a pull request is linked, a chip named "Pull request #<n>, <state>" sits before
-  the toggle: the state's icon (green open, grey draft, purple merged, red closed) and
-  `#<number>`; it opens Changes, where the pull request row is.
+  closes it. The header's end holds only "Show session rail" / "Hide session rail" and this
+  toggle (plus the preview control while an app runs); the pull request is read in Changes.
 - `changes-scope`: the toolbar starts with the comparison menu ("Comparison: Branch · main" or
   "Comparison: Uncommitted"): Branch compares with the branch's target (the pull request's base,
   the base Worktrunk reported at creation, the remote's default branch, or a local main/master

@@ -324,7 +324,9 @@ Built on the same worktree after slice 1. What it adds:
 
 - **Revised the same evening:** the Changes toggle keeps its diff icon on every layout, phones
   included, and a linked pull request is a chip before it (`⑂ #123`, the state's colour) that
-  opens Changes; the user wanted the Changes icon always visible. The Details popover went too:
+  opens Changes; the user wanted the Changes icon always visible. Then the chip went as well:
+  the header's end is the rail toggle and the Changes toggle, and the pull request is read in
+  Changes alone. The Details popover went too:
   the menu item already says what is compared and why, the header says where, and the rest was
   diagnostics; a failed refresh's reason now sits in the stale note. The toolbar is the
   comparison, the count, and Collapse all, Wrap and Refresh as icons.

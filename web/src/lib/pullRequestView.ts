@@ -83,32 +83,6 @@ export function pullRequestView(
 /** Shown wherever a linked PR's live GitHub status could not be read. */
 export const STATUS_UNAVAILABLE = "Status unavailable";
 
-/** The header's review control once a pull request is linked: its face beside the Changes icon. */
-export interface ReviewControl {
-  /** The number, else "PR"; absent while no pull request is linked. */
-  text: string | undefined;
-  /** Read after the control's name: the pull request and its state. */
-  description: string | undefined;
-  /** Colours the icon; absent while the state is unknown. */
-  state: PullRequest["state"] | undefined;
-  tooltip: string | undefined;
-}
-
-/** The face the Changes control wears for `view`; `loading` while GitHub's facts are being read. */
-export function reviewControl(view: PullRequestView | undefined, loading = false): ReviewControl {
-  if (!view)
-    return { text: undefined, description: undefined, state: undefined, tooltip: undefined };
-  const { number, status, title } = view;
-  const name = number ? `Pull request #${number}` : "Pull request";
-  const label = status?.label ?? (loading ? "Loading" : STATUS_UNAVAILABLE);
-  return {
-    text: number ? `#${number}` : "PR",
-    description: `${name}, ${label}`,
-    state: status?.state,
-    tooltip: `${title ?? name} · ${label}`,
-  };
-}
-
 /** The row under the Changes toolbar: the pull request, its state and what is still only local. */
 export interface PullRequestRow {
   /** "#42", else "PR". */

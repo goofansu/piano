@@ -5,7 +5,6 @@ import {
   pullRequestForm,
   pullRequestRow,
   pullRequestView,
-  reviewControl,
 } from "../web/src/lib/pullRequestView.ts";
 
 const url = "https://github.com/example/repo/pull/42";
@@ -95,41 +94,6 @@ test("diff and branch facts appear only when GitHub reports them in full", () =>
 test("a just-updated PR reads as just now", () => {
   const view = pullRequestView(linked(pr({ at: new Date(now - 30_000).toISOString() })), now);
   assert.equal(view?.timeLabel, "updated just now");
-});
-
-test("the review control wears the PR's number and state once linked, else nothing", () => {
-  assert.deepEqual(reviewControl(undefined), {
-    text: undefined,
-    description: undefined,
-    state: undefined,
-    tooltip: undefined,
-  });
-  assert.deepEqual(reviewControl(pullRequestView(linked(pr({ state: "merged" })), now)), {
-    text: "#42",
-    description: "Pull request #42, Merged",
-    state: "merged",
-    tooltip: "The session deliverable · Merged",
-  });
-  assert.deepEqual(reviewControl(pullRequestView(linked(null), now)), {
-    text: "#42",
-    description: "Pull request #42, Status unavailable",
-    state: undefined,
-    tooltip: "Pull request #42 · Status unavailable",
-  });
-  assert.equal(
-    reviewControl(pullRequestView(linked(null), now), true).description,
-    "Pull request #42, Loading",
-  );
-  assert.equal(
-    reviewControl(pullRequestView(linked(pr()), now), true).description,
-    "Pull request #42, Open",
-    "a refresh keeps the known status",
-  );
-  const unnamed: SessionPullRequest = {
-    link: { url: "https://github.com/", source: "manual" },
-    pullRequest: null,
-  };
-  assert.equal(reviewControl(pullRequestView(unnamed, now)).text, "PR");
 });
 
 test("the row names the PR, its state and what is still only local; branches only when the head is another branch", () => {
