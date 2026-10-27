@@ -1,4 +1,4 @@
-// Opt-in sidebar baseline, not a timing gate. Uses the real app and isolated browser harness.
+// Opt-in sidebar benchmark, not a timing gate. Uses the real app and isolated browser harness.
 // node test/performance-sidebar-sessions.mjs <evidence-directory> [100 500 1000 2000]
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -91,7 +91,12 @@ for (const n of sizes) {
     },
     async (page) => {
       await page.open("/new");
-      await page.until(`document.querySelectorAll('${rows}').length === ${n}`);
+      const ready = `(() => {
+        const rows = [...document.querySelectorAll('${rows}')];
+        return rows.length >= Math.min(${n}, 10) && rows.length <= 50 &&
+          rows[0]?.getAttribute('aria-setsize') === '${n}';
+      })()`;
+      await page.until(ready);
       const cdp = await connect(page);
       try {
         // Run before application code. No automation-process/CLI startup time in these clocks.
@@ -103,7 +108,7 @@ for (const n of sizes) {
               window.sidebarBench.longTasks.push(...list.getEntries().map(e => ({start: e.startTime, duration: e.duration})));
             }).observe({type: 'longtask', buffered: true});
             const observer = new MutationObserver(() => {
-              if (document.querySelectorAll(${JSON.stringify(rows)}).length !== ${n}) return;
+              if (!${ready}) return;
               observer.disconnect();
               window.sidebarBench.rowsCommittedMs = performance.now();
               requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -129,10 +134,10 @@ for (const n of sizes) {
             throw error;
           }
           result.navigation.push(await page.evaluate("window.sidebarBench"));
-          assert.equal(await page.evaluate(`document.querySelectorAll('${rows}').length`), n);
+          assert.ok(await page.evaluate(ready), "only the initial window mounts");
         }
         report.environment.browser = await page.evaluate("navigator.userAgent");
-        // Default Date grouping: every fixture is Today. Closing must unmount all N rows.
+        // Default Date grouping: every fixture is Today. Closing must unmount every windowed row.
         for (let repeat = 0; repeat < 3; repeat++) {
           await page.click("button", "Today");
           await page.until(`document.querySelectorAll('${rows}').length === 0`);
@@ -141,7 +146,7 @@ for (const n of sizes) {
             document.addEventListener('click', () => {
               const start = performance.now();
               const observer = new MutationObserver(() => {
-                if (document.querySelectorAll('${rows}').length !== ${n}) return;
+                if (!${ready}) return;
                 observer.disconnect();
                 requestAnimationFrame(() => requestAnimationFrame(() => {
                   window.sidebarOpen = performance.now() - start;
@@ -186,8 +191,28 @@ for (const n of sizes) {
           assert.ok(scroll.travelledPx > 0, "sidebar actually scrolled");
           result.scroll.push(scroll);
         }
+        result.scrolledDomRows = await page.evaluate(`document.querySelectorAll('${rows}').length`);
+        assert.ok(
+          result.scrolledDomRows <= 50,
+          "scrolling keeps a bounded window, not N mounted rows",
+        );
+        // Jump beyond the sweep: the middle and very last session must remain reachable.
+        for (const fraction of [0.5, 1, 0]) {
+          await page.evaluate(`(() => {
+            const viewport = document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]');
+            viewport.scrollTop = (viewport.scrollHeight - viewport.clientHeight) * ${fraction};
+            return true;
+          })()`);
+          await page.until(`(() => {
+            const viewport = document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]');
+            const box = viewport.getBoundingClientRect();
+            const rows = [...document.querySelectorAll('${rows}')];
+            const visible = rows.filter(r => { const b = r.getBoundingClientRect(); return b.bottom > box.top && b.top < box.bottom; });
+            return rows.length <= 50 && visible.length >= Math.min(${n}, 10) &&
+              visible.every((r, i) => !i || Number(r.getAttribute('aria-posinset')) === Number(visible[i-1].getAttribute('aria-posinset')) + 1);
+          })()`);
+        }
         result.domRows = await page.evaluate(`document.querySelectorAll('${rows}').length`);
-        assert.equal(result.domRows, n, "all rows stay mounted after scrolling");
         result.sidebarElements = await page.evaluate(
           "document.querySelector('[data-slot=\"session-sidebar\"]').querySelectorAll('*').length",
         );
@@ -196,6 +221,80 @@ for (const n of sizes) {
         result.heap = await cdp.call("Runtime.getHeapUsage");
         result.dom = await cdp.call("Memory.getDOMCounters");
         await page.capture(`sidebar-${n}`);
+        if (n >= 100) {
+          // Retaining a row means retaining its actual node, not a replacement with the same ID.
+          await page.evaluate(`(() => {
+            const row = document.querySelectorAll('${rows}')[10];
+            window.sidebarRetainedRow = row;
+            row.querySelector('button').focus();
+            document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]').scrollTop = 1000;
+            return true;
+          })()`);
+          await page.until(`document.querySelector('${rows}[aria-posinset="30"]') !== null`);
+          assert.ok(
+            await page.evaluate(
+              `window.sidebarRetainedRow.isConnected && window.sidebarRetainedRow.contains(document.activeElement)`,
+            ),
+            "scroll retains focused row and focus",
+          );
+          await page.press("Tab");
+          await page.press("Tab");
+          await page.until(
+            `document.activeElement?.closest('li')?.getAttribute('aria-posinset') === '12'`,
+          );
+          await page.press("Shift+Tab");
+          await page.until(
+            `document.activeElement?.closest('li')?.getAttribute('aria-posinset') === '11'`,
+          );
+          const label = await page.evaluate(
+            `window.sidebarRetainedRow.querySelector('[aria-label]').getAttribute('aria-label')`,
+          );
+          await page.click("button", label);
+          await page.until(`document.querySelector('[role="menu"]') !== null`);
+          await page.evaluate(`(() => {
+            document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]').scrollTop = 2000;
+            return true;
+          })()`);
+          await page.until(`document.querySelector('${rows}[aria-posinset="55"]') !== null`);
+          assert.ok(
+            await page.evaluate(
+              `window.sidebarRetainedRow.isConnected && !!document.querySelector('[role="menu"]')`,
+            ),
+            "open menu and its anchor survive scrolling out of the window",
+          );
+          await page.capture(`sidebar-${n}-menu-retained`);
+          await page.press("Escape");
+          await page.until(
+            `!document.querySelector('[role="menu"]') && window.sidebarRetainedRow.contains(document.activeElement)`,
+          );
+          await page.capture(`sidebar-${n}-focus-restored`);
+          await page.evaluate(`(() => {
+            document.activeElement.blur();
+            document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]').scrollTop = 2000;
+            return true;
+          })()`);
+          await page.until("!window.sidebarRetainedRow.isConnected");
+          // Shrink a window currently at the end: stale range bounds must not address a removed row.
+          await page.evaluate(`(() => {
+            const viewport = document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]');
+            viewport.scrollTop = viewport.scrollHeight;
+            return true;
+          })()`);
+          await page.until(`document.querySelector('${rows}[aria-posinset="${n - 1}"]') !== null`);
+          const lastMenu = `Session menu for Benchmark session ${n - 1}`;
+          await page.click("button", lastMenu);
+          await page.click("menuitem", "Pin");
+          await page.until(
+            `document.querySelector('[aria-label="Pinned"]') !== null && document.querySelector('${rows}[aria-setsize="${n - 1}"]') !== null`,
+          );
+          await page.capture(`sidebar-${n}-pinned`);
+          await page.click("button", lastMenu);
+          await page.click("menuitem", "Unpin");
+          await page.until(
+            `document.querySelector('[aria-label="Pinned"]') === null && document.querySelector('${rows}[aria-setsize="${n}"]') !== null`,
+          );
+          await page.capture(`sidebar-${n}-unpinned`);
+        }
         assert.equal(page.prompts().length, 0, "no prompts sent");
         report.results.push(result);
         writeFileSync(`${evidence}/results.json`, `${JSON.stringify(report, null, 2)}\n`);

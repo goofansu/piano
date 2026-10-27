@@ -55,6 +55,7 @@ import type { SidebarSection } from "@/lib/sidebarList";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarList } from "@/lib/useSidebarList";
 import { useSidebarView } from "@/lib/useSidebarView";
+import { useSidebarWindow } from "@/lib/useSidebarWindow";
 import { type AppState, sessionKey } from "@/store";
 
 interface Props {
@@ -332,8 +333,16 @@ const SessionRow = memo(
   function SessionRow({
     t,
     select,
+    top,
+    index,
+    count,
+    onMenuChange,
   }: {
     t: SessionEntry;
+    top: number;
+    index: number;
+    count: number;
+    onMenuChange: (key: string, open: boolean) => void;
   } & Pick<GroupProps, "select">) {
     const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
     const { selected, disabled, hint, activity } = t;
@@ -342,6 +351,10 @@ const SessionRow = memo(
     return (
       <li
         data-row
+        data-session-key={sessionKey(t)}
+        aria-posinset={index + 1}
+        aria-setsize={count}
+        style={{ position: "absolute", top, left: 0, right: 0 }}
         className={cn(
           row,
           // The menu shows from md up; the phone opens a session's sheet instead.
@@ -382,13 +395,21 @@ const SessionRow = memo(
           {hint && <span className="sr-only">{hint}</span>}
         </button>
         <RowActions className={cn(rowActions, "max-md:hidden")}>
-          <DropdownMenu>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              if (open) onMenuChange(sessionKey(t), true);
+            }}
+          >
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="row" aria-label={`Session menu for ${t.label}`}>
                 <MoreHorizontalIcon />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent
+              align="end"
+              // Keep the anchor through Radix's close/focus-restore lifecycle, not just open=false.
+              onCloseAutoFocus={() => onMenuChange(sessionKey(t), false)}
+            >
               <SessionMenu target={target} />
             </DropdownMenuContent>
           </DropdownMenu>
@@ -398,6 +419,10 @@ const SessionRow = memo(
   },
   (previous, next) =>
     previous.select === next.select &&
+    previous.top === next.top &&
+    previous.index === next.index &&
+    previous.count === next.count &&
+    previous.onMenuChange === next.onMenuChange &&
     // Compare every catalog field, not the changing AppState.
     Object.keys(previous.t).every(
       (key) => previous.t[key as keyof SessionEntry] === next.t[key as keyof SessionEntry],
@@ -446,19 +471,36 @@ const Chevron = ({ open }: { open: boolean }) => (
   <DisclosureChevron open={open} className="size-4" />
 );
 
-/** Session rows from the catalog; each entry already says how it appears. */
+/** shadcn has no windowed list. Keep its ScrollArea and disclosures; only window their rows. */
 function SessionRows({
   sessions,
   className,
-  ...row
+  select,
 }: Pick<GroupProps, "select"> & {
   sessions: readonly SessionEntry[];
   className: string;
 }) {
+  const window = useSidebarWindow(sessions);
   return (
-    <ul className={className}>
-      {sessions.map((s) => (
-        <SessionRow key={sessionKey(s)} t={s} {...row} />
+    <ul
+      ref={window.list}
+      className={cn("relative", className)}
+      style={{ height: window.height }}
+      onFocusCapture={window.onFocusCapture}
+      onBlurCapture={window.onBlurCapture}
+    >
+      {/* A non-interactive CSS ruler, not a session: measure responsive row height without mounting content. */}
+      <li ref={window.measure} aria-hidden className={cn(row, "invisible absolute")} />
+      {window.indices.map((index) => (
+        <SessionRow
+          key={sessionKey(sessions[index])}
+          t={sessions[index]}
+          select={select}
+          top={window.top(index)}
+          index={index}
+          count={sessions.length}
+          onMenuChange={window.onMenuChange}
+        />
       ))}
     </ul>
   );
