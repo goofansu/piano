@@ -331,9 +331,15 @@ function FileSection({
   const directory = file.path.slice(0, slash + 1);
   const filename = file.path.slice(slash + 1);
   const large = isLarge(file);
+  // The file's kind sits on the name line beside its size; notes that need a sentence go beneath.
+  const kind =
+    [
+      file.status === "added" ? "New" : file.status === "deleted" ? "Deleted" : undefined,
+      file.binary ? "Binary" : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ") || undefined;
   const description = [
-    file.status === "added" ? "New file" : file.status === "deleted" ? "Deleted" : undefined,
-    file.binary ? "Binary; contents not shown" : undefined,
     ...file.notes,
     large && !open ? `Large change (${lineCount(file)} lines); expand to read it` : undefined,
   ]
@@ -368,12 +374,15 @@ function FileSection({
                 {filename}
               </ItemTitle>
             </ItemContent>
-            {!file.binary && (
-              <span className="ml-auto shrink-0 self-start font-mono text-xs tabular-nums">
-                <span className="text-ok">+{file.additions}</span>{" "}
-                <span className="text-err">−{file.deletions}</span>
-              </span>
-            )}
+            <span className="ml-auto flex shrink-0 items-center gap-2 self-start text-xs">
+              {kind && <span className="text-ink-3">{kind}</span>}
+              {!file.binary && (
+                <span className="font-mono tabular-nums">
+                  <span className="text-ok">+{file.additions}</span>{" "}
+                  <span className="text-err">−{file.deletions}</span>
+                </span>
+              )}
+            </span>
           </Button>
         </CollapsibleTrigger>
         {canAsk && (
@@ -400,7 +409,7 @@ function FileSection({
           </span>
         )}
         {description && (
-          <ItemDescription className="col-span-full line-clamp-none px-2 pb-1 text-xs [overflow-wrap:anywhere]">
+          <ItemDescription className="col-span-full line-clamp-none pr-2 pb-1 pl-7 text-xs [overflow-wrap:anywhere]">
             {description}
           </ItemDescription>
         )}

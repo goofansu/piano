@@ -35,7 +35,8 @@ The palette (Mod+K) searches neither outputs nor links.
   "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
   field, Link, Find from branch; "No open PR found for this branch." when none).
 - `changes-list`: list "Changed files" with one collapsible row per file
-  (`<path>, <n> added, <n> removed: collapse`), "New file" for untracked files, and the diff.
+  (`<path>, <n> added, <n> removed: collapse`), the kind beside the size on the name line
+  ("New" for untracked files, "Deleted", "Binary"), and the diff.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
 - `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to the header's "Changes" icon;
   reopening shows the same scroll and expanded files.
@@ -71,7 +72,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Result: heading "Changes"; buttons `new.txt, 1 added, 0 removed: collapse` and
     `src/answer.ts, 1 added, 1 removed: collapse`; cells `− export const answer = 4;` and
     `+ export const answer = 5;`. `ab eval "document.querySelector('[aria-label=\"Changed files\"]').innerText"`
-    shows `New file` under `new.txt`. Capture `01-changes`.
+    shows `New` beside `new.txt`. Capture `01-changes`.
   - Side effect (same answer over HTTP): take the root workspace ID from
     `curl -s "$API_URL/api/folders"` (`folders[0].worktrees[0].workspace.id`), then
     `curl -s -X POST -H "Origin: $ORIGIN" "$API_URL/api/workspace/changes?workspaceId=<id>"`
