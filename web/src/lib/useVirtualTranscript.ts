@@ -1,6 +1,6 @@
 import { elementScroll, useVirtualizer } from "@tanstack/react-virtual";
 import { type RefObject, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { TranscriptRow } from "./transcript";
+import { messageAnchorId, type TranscriptRow } from "./transcript";
 import {
   domViewportElement,
   TRANSCRIPT_JUMP_MARGIN,
@@ -16,7 +16,8 @@ export function useVirtualTranscript(
   viewport: TranscriptViewport,
 ) {
   const [margin, setMargin] = useState(0);
-  const [target, setTarget] = useState<string | null>(null);
+  const [target, setTarget] = useState<{ id: string; animate: boolean } | null>(null);
+  const highlight = useRef<Animation | null>(null);
   const getItemKey = useCallback((index: number) => rows[index].key, [rows]);
   const indexes = useMemo(() => new Map(rows.map((row, index) => [row.msg.id, index])), [rows]);
   const indexRef = useRef(indexes);
@@ -61,14 +62,16 @@ export function useVirtualTranscript(
         return el.clientHeight;
       },
       jumpToEdge: (edge) => {
+        highlight.current?.cancel();
         setTarget(null);
         if (edge === "bottom") virtual.scrollToEnd();
         else virtual.scrollToOffset(0);
       },
-      jumpToMessage: (id) => {
+      jumpToMessage: (id, animate) => {
         const index = indexRef.current.get(id);
         if (index === undefined) return false;
-        setTarget(id);
+        highlight.current?.cancel();
+        setTarget({ id, animate });
         virtual.scrollToIndex(index, { align: "start" });
         return true;
       },
@@ -80,7 +83,10 @@ export function useVirtualTranscript(
         return item ? item.start - el.scrollTop : undefined;
       },
     });
-    return () => viewport.attach(null);
+    return () => {
+      highlight.current?.cancel();
+      viewport.attach(null);
+    };
   }, [container, viewport, virtual]);
 
   useLayoutEffect(() => {
@@ -90,13 +96,50 @@ export function useVirtualTranscript(
     setMargin(inner.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop);
     viewport.rendered();
     if (target && !virtual.isScrolling) {
-      const top = domViewportElement(el).anchorTop(target);
+      const top = domViewportElement(el).anchorTop(target.id);
       if (
         top !== undefined &&
         (Math.abs(top - TRANSCRIPT_JUMP_MARGIN) < 1 ||
           el.scrollHeight - el.scrollTop - el.clientHeight < 1)
-      )
+      ) {
+        const content = el.ownerDocument
+          .getElementById(messageAnchorId(target.id))
+          ?.querySelector<HTMLElement>('[data-slot="row-content"]');
+        // A reply's Markdown excludes its trailing Copy response control. Other row kinds
+        // retain their full content (including prompt attachments and tool details).
+        const body = content?.querySelector<HTMLElement>(":scope > .prose-chat") ?? content;
+        if (body) {
+          const tint = "color-mix(in oklab, var(--brand) 12%, transparent)";
+          const fade = target.animate && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+          // A zero-blur spread gives the tint breathing room without padding or layout shifts.
+          // Paint only: no movement or fading of the message text.
+          // The longer duration is an orientation cue, not a wait for navigation to finish.
+          highlight.current = body.animate(
+            [
+              {
+                backgroundColor: tint,
+                boxShadow: `0 0 0 6px ${tint}`,
+                borderRadius: "var(--radius-md)",
+                offset: 0,
+              },
+              {
+                backgroundColor: tint,
+                boxShadow: `0 0 0 6px ${tint}`,
+                borderRadius: "var(--radius-md)",
+                offset: 0.25,
+              },
+              {
+                backgroundColor: "transparent",
+                boxShadow: "0 0 0 6px transparent",
+                borderRadius: "var(--radius-md)",
+                offset: 1,
+              },
+            ],
+            { duration: 800, easing: fade ? "linear" : "steps(1, end)" },
+          );
+        }
         setTarget(null);
+      }
     }
   });
   useLayoutEffect(() => {

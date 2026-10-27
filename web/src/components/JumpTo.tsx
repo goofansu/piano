@@ -47,7 +47,7 @@ export function JumpTo({ messages, working = false }: Props) {
             type="button"
             data-entry={entry.id}
             aria-current={entry.id === active ? "true" : undefined}
-            onClick={() => viewport?.jump(entry)}
+            onClick={(event) => viewport?.jump(entry, { animate: event.detail > 0 })}
             className={cn(
               listRow,
               "gap-3 px-4 py-1.5",

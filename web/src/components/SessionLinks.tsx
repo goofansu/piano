@@ -32,9 +32,9 @@ export function SessionLinks({ links, messages, working = false }: Props) {
     () => jumpEntries(transcriptRows(messages, { working })),
     [messages, working],
   );
-  const reveal = (link: SessionLink) => {
+  const reveal = (link: SessionLink, animate: boolean) => {
     for (const entry of revealEntries(messages, entries, link.messageId))
-      if (viewport?.jump(entry)) return;
+      if (viewport?.jump(entry, { animate })) return;
   };
   return (
     <RailList aria-label="Links">
@@ -81,7 +81,7 @@ export function SessionLinks({ links, messages, working = false }: Props) {
               label="Jump to message"
               side="left"
               className="text-ink-3"
-              onClick={() => reveal(link)}
+              onClick={(event) => reveal(link, event.detail > 0)}
             >
               <MessageSquareQuoteIcon />
             </IconButton>

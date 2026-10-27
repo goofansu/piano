@@ -33,7 +33,7 @@ export interface ViewportElement {
   /** A message's top edge relative to the container's top edge; `undefined` when it is not rendered. */
   anchorTop: (messageId: string) => number | undefined;
   /** Windowed transcripts locate an index, then refine the jump as its rows are measured. */
-  jumpToMessage?: (messageId: string) => boolean;
+  jumpToMessage?: (messageId: string, animate: boolean) => boolean;
   jumpToEdge?: (edge: "top" | "bottom") => void;
 }
 
@@ -70,7 +70,7 @@ export interface TranscriptViewport {
    * Only the transcript moves: `scrollIntoView` would also scroll `main` on phones and leave the
    * composer sitting high.
    */
-  jump: (entry: JumpEntry) => boolean;
+  jump: (entry: JumpEntry, options?: { animate: boolean }) => boolean;
   /** The entry the reader is looking at: bottom when there, top near the top, else the message under the top edge. */
   current: (entries: ReadonlyArray<JumpEntry>) => string;
 }
@@ -103,13 +103,13 @@ export function domViewportElement(container: HTMLElement): ViewportElement {
 }
 
 /** Destination geometry varies by adapter; jump intent does not. */
-function moveTo(el: ViewportElement, entry: JumpEntry): boolean {
+function moveTo(el: ViewportElement, entry: JumpEntry, animate: boolean): boolean {
   if (entry.kind === "top" || entry.kind === "bottom") {
     if (el.jumpToEdge) el.jumpToEdge(entry.kind);
     else el.scrollTo({ top: entry.kind === "top" ? 0 : el.scrollHeight });
     return true;
   }
-  if (el.jumpToMessage) return el.jumpToMessage(entry.messageId);
+  if (el.jumpToMessage) return el.jumpToMessage(entry.messageId, animate);
   const top = el.anchorTop(entry.messageId);
   if (top === undefined) return false;
   el.scrollTo({ top: top + el.scrollTop - TRANSCRIPT_JUMP_MARGIN });
@@ -188,7 +188,7 @@ export function createTranscriptViewport(): TranscriptViewport {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    jump: (entry) => {
+    jump: (entry, options) => {
       const el = element;
       if (!el) return false;
       // Consume older reader movement before choosing the explicit jump's intent. A virtual
@@ -197,7 +197,7 @@ export function createTranscriptViewport(): TranscriptViewport {
       scrolled();
       const previous = stick;
       stick = entry.kind === "bottom"; // Unpin before mounting an earlier destination.
-      const found = moveTo(el, entry);
+      const found = moveTo(el, entry, options?.animate ?? false);
       if (!found) stick = previous;
       lastTop = el.scrollTop;
       setBottom(near(el));
