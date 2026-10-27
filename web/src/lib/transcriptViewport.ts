@@ -45,8 +45,8 @@ export interface TranscriptViewport {
    * short of the end unpins, so small steps up from the bottom are not undone by new output.
    */
   scrolled: () => void;
-  /** Geometry compensation is not reader intent; acknowledge it before its scroll event. */
-  corrected: () => void;
+  /** Consume any pending reader scroll, then apply geometry compensation without changing intent. */
+  correct: (move: () => void) => void;
   /**
    * A wheel turned elsewhere in the area, handed to the transcript: moves the reader by the
    * wheel's `deltaY` in its `deltaMode` units (pixels, lines, or pages of the container) and
@@ -145,7 +145,11 @@ export function createTranscriptViewport(): TranscriptViewport {
       setBottom(true);
     },
     scrolled,
-    corrected: () => {
+    correct: (move) => {
+      // A native scroll's event can still be queued when a measurement changes geometry.
+      // Observe that move before acknowledging the programmatic correction, not afterwards.
+      scrolled();
+      move();
       if (!element) return;
       lastTop = element.scrollTop;
       setBottom(near(element));

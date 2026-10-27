@@ -159,8 +159,9 @@ test("index jumps unpin before asynchronous mounting and refinement", () => {
   el.scrollHeight = 3000;
   viewport.rendered();
   assert.equal(el.scrollTop, 1500, "rendering the destination must not follow the end");
-  el.scrollTop = 800;
-  viewport.corrected();
+  viewport.correct(() => {
+    el.scrollTop = 800;
+  });
   viewport.scrolled();
   viewport.rendered();
   assert.equal(el.scrollTop, 800);
@@ -168,19 +169,42 @@ test("index jumps unpin before asynchronous mounting and refinement", () => {
 
 test("measurement compensation preserves follow intent in both directions", () => {
   const { viewport, el } = setup();
-  el.scrollTop = 1400;
-  viewport.corrected();
+  viewport.correct(() => {
+    el.scrollTop = 1400;
+  });
   viewport.scrolled();
   el.scrollHeight = 3000;
   viewport.rendered();
   assert.equal(el.scrollTop, 2500, "a corrected pinned view still follows");
   scroll(el, viewport, 1800);
-  el.scrollTop = 2500;
-  viewport.corrected();
+  viewport.correct(() => {
+    el.scrollTop = 2500;
+  });
   viewport.scrolled();
   el.scrollHeight = 3500;
   viewport.rendered();
   assert.equal(el.scrollTop, 2500, "correction near the end must not re-pin a reader");
+});
+
+test("measurement compensation cannot swallow a native scroll whose event is still queued", () => {
+  const { viewport, el } = setup();
+  el.scrollTop = 1200; // Reader moves up; ResizeObserver runs before the scroll event.
+  viewport.correct(() => {
+    el.scrollTop += 100;
+  });
+  viewport.scrolled();
+  el.scrollHeight = 2600;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 1300, "the pending move up must unpin");
+
+  el.scrollTop = 2100; // Reader reaches the bottom, again before its event is dispatched.
+  viewport.correct(() => {
+    el.scrollTop -= 100;
+  });
+  viewport.scrolled();
+  el.scrollHeight = 3000;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2500, "the pending arrival must pin before compensation");
 });
 
 test("a viewport without a transcript goes nowhere and reports the bottom", () => {

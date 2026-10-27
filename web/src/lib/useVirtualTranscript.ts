@@ -29,10 +29,7 @@ export function useVirtualTranscript(
     scrollMargin: margin,
     scrollPaddingStart: 16,
     scrollToFn: (offset, options, instance) => {
-      elementScroll(offset, options, instance);
-      // Measurement compensation is not a reader scrolling up. Record the corrected position
-      // before the browser emits its scroll event, without changing follow intent.
-      viewport.corrected();
+      viewport.correct(() => elementScroll(offset, options, instance));
     },
   });
 

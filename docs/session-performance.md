@@ -78,7 +78,8 @@ do not combine shared-browser exploratory numbers with this method's baseline.
   The baseline deliberately varies Markdown complexity, not just message count.
 - `web/src/lib/transcriptViewport.ts` owns bottom pinning and reader intent on the real scroller.
   Capture-phase scroll handling runs before the virtualizer can render and follow; measurement
-  corrections acknowledge the new position without treating it as a reader gesture. Native browser
+  corrections first consume any queued native scroll, then acknowledge the corrected position
+  without treating that correction as a reader gesture. Native browser
   anchoring is disabled so it cannot compensate twice. `useVirtualTranscript.ts` adapts measured
   offsets to that seam: an offscreen jump locates the message index, mounts it and refines after
   measurement. Current-entry lookup uses measured DOM positions where present and estimated
