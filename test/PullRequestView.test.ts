@@ -104,6 +104,11 @@ test("the row names the PR, its state and what is still only local; branches onl
   });
   assert.equal(row.name, "#42");
   assert.equal(row.title, "The session deliverable");
+  assert.deepEqual(
+    pullRequestRow(view, { branch: "feature", local: undefined, loading: true }).status,
+    { state: "open", label: "Open" },
+    "refreshing keeps the known status",
+  );
   assert.deepEqual(row.status, { state: "open", label: "Open" });
   assert.deepEqual(
     row.signals.map((s) => s.label),
@@ -127,7 +132,7 @@ test("the row names the PR, its state and what is still only local; branches onl
     [],
     "nothing local says nothing",
   );
-  // Unreadable or still loading: the row keeps the link and says so, without a state colour.
+  // An unreadable status keeps its badge; a first read keeps only the link, without a badge.
   assert.deepEqual(
     pullRequestRow(pullRequestView(linked(null), now)!, { branch: "feature", local: undefined })
       .status,
@@ -141,8 +146,8 @@ test("the row names the PR, its state and what is still only local; branches onl
       branch: "feature",
       local: undefined,
       loading: true,
-    }).status.label,
-    "Loading…",
+    }).status,
+    undefined,
   );
 });
 

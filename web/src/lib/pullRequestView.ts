@@ -89,7 +89,8 @@ export interface PullRequestRow {
   name: string;
   title: string | undefined;
   url: string;
-  status: { state: PullRequest["state"] | undefined; label: string };
+  /** No badge during the first read; an unreadable status still has one. */
+  status: { state: PullRequest["state"] | undefined; label: string } | undefined;
   signals: PullRequestView["signals"];
   /** The pull request's branches, only when its head is not the branch Changes inspects. */
   branches: PullRequestView["branches"];
@@ -111,7 +112,7 @@ export function pullRequestRow(
     name: number ? `#${number}` : "PR",
     title: view.title,
     url: view.url,
-    status: status ?? { state: undefined, label: loading ? "Loading…" : STATUS_UNAVAILABLE },
+    status: status ?? (loading ? undefined : { state: undefined, label: STATUS_UNAVAILABLE }),
     signals: view.signals,
     branches: view.branches && view.branches.head !== branch ? view.branches : undefined,
     local: [
