@@ -401,15 +401,16 @@ function FileSection({
         )}
         {directory && (
           // The directory beneath the name completes the path; together they are the whole of it.
+          // Its bottom space matches the name's top space, so a row reads as one centred block.
           <span
-            className="col-span-full truncate pr-2 pb-1 pl-7 font-mono text-xs text-ink-3"
+            className="col-span-full truncate pr-2 pb-2.5 pl-7 font-mono text-xs text-ink-3"
             title={file.path}
           >
             {directory}
           </span>
         )}
         {description && (
-          <ItemDescription className="col-span-full line-clamp-none pr-2 pb-1 pl-7 text-xs [overflow-wrap:anywhere]">
+          <ItemDescription className="col-span-full line-clamp-none pr-2 pb-2.5 pl-7 text-xs [overflow-wrap:anywhere]">
             {description}
           </ItemDescription>
         )}
