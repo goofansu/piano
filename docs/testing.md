@@ -186,14 +186,14 @@ run them there too; never against a running checkout or the real registry.
 
 ## Sidebar sessions benchmark
 
-`test/performance-sidebar-sessions.mjs` is an opt-in rendering baseline, not a CI timing gate:
+`test/performance-sidebar-sessions.mjs` is an opt-in rendering benchmark, not a CI timing gate:
 
 ```sh
 npm ci
 npx agent-browser install
 node test/performance-sidebar-sessions.mjs .scratch/sidebar-performance
 # Override the session counts for a narrower comparison:
-node test/performance-sidebar-sessions.mjs .scratch/sidebar-performance 1000 1500 2000
+node test/performance-sidebar-sessions.mjs .scratch/sidebar-performance 2000 5000
 ```
 
 Requires Node 24, Git and agent-browser/Chromium (the same prerequisites as the browser journeys).
@@ -208,34 +208,43 @@ The default counts are 100, 500, 1,000 and 2,000, at 1280×900 without throttlin
 fresh scratch instance and browser. After an untimed app bootstrap (warming Vite and selecting the
 browser target), CDP installs instrumentation before application code and measures:
 
-- **Navigation to rows ready:** reload to all N sidebar rows committed, then two animation frames
+- **Navigation to rows ready:** reload to the initial sidebar window committed, then two animation frames
   (a paint opportunity, not a paint trace). First reload clears the browser HTTP cache; the next
   two retain it. This is cache-cold versus cache-warm, **not** cold process/server startup. Includes
   app startup, WebSocket registry delivery, development module loading, React and layout. JSON also
   retains the commit timestamp and observed long tasks; it is not isolated sidebar CPU time.
 - **Group reopen:** three real Today button clicks after collapsing and observing zero mounted
-  rows. Time starts at the captured browser click, ends two animation frames after N rows mount;
+  rows. Time starts at the captured browser click, ends two animation frames after the window mounts;
   CLI invocation latency is excluded. This does not time completion of the disclosure animation.
 - **Scroll cadence:** three 3-second requestAnimationFrame probes, advancing scrollTop by 120px
   each frame and reversing at the ends. JSON reports frame count, effective rate, p95/max interval,
   intervals over 34ms and distance actually travelled. This measures main-thread cadence during
   scripted scrolling, **not** compositor FPS or input-to-pixel latency. Large lists need not reach
-  the bottom. Row-count assertions before and after scrolling expose windowing changes.
+  the bottom. Assertions bound mounted rows independently of N, then jump to the middle and bottom
+  and verify contiguous visible rows. For N ≥ 100, untimed checks also retain the actual focused/menu
+  node while scrolling, Tab/Shift+Tab through it, dismiss its menu with focus restored, and verify
+  the offscreen row unmounts once neither focus nor menu needs it. Pin/Unpin at the list's end
+  checks that a shrinking window never reads past the new session count.
 - **Memory/DOM:** whole-page CDP JS heap after explicit GC, DOM node/listener counts and sidebar
   element count. Not browser RSS or sidebar-only heap. Screenshots show the actual tested surface.
 
 The implementation path is `web/src/store.ts` (registry snapshot) →
 `web/src/lib/sessionCatalog.ts` → `sidebarList.ts` / `sidebarView.ts` (filter/group/sort, cached
 against sidebar facts) → `useSidebarList.ts` → `web/src/components/Sidebar.tsx`.
-`SessionRows` maps every entry to a memoized `SessionRow`; Radix `ScrollArea` only supplies scrolling.
-There is no pagination or virtualization. Closed `CollapsibleContent` unmounts rows; opening a group
-mounts the full list. Memoization avoids unchanged row renders, and closed menus defer their command
-subscriptions, but neither bounds the DOM size of an open group.
+`SessionRows` uses `useSidebarWindow.ts` to mount visible rows plus five rows of overscan on each
+side, against the shared Radix `ScrollArea` viewport. Group headers stay in normal flow. A CSS ruler
+measures the existing responsive row heights and list gap/padding; each list preserves its full
+scroll height. Stable session keys retain row identity through range updates. Focused rows, their
+neighbours (including the nearest available sessions), open-menu anchors (through Radix focus
+restoration), and each list's keyboard entry/exit rows stay mounted outside the window. Closed groups still unmount their rows. This bounds session
+DOM by visible rows plus a small buffer per expanded group, not by sessions per group. It does not
+virtualize group headers or paginate/filter the catalog.
 
 Compare the raw runs, their environment/revision fields and repeated samples rather than treating
-one machine's times as budgets. This baseline intentionally leaves product behavior unchanged;
-production builds, real wheel/touch input, many-folder grouping, streaming, menus and session
-selection are separate experiments. No new UI strings, controls or actions are introduced.
+one machine's times as budgets. Before virtualization, the same instrumentation waited for all N
+rows; use the base revision's harness for that comparison. Production builds, real wheel/touch
+input, many-folder grouping, streaming and session selection are separate experiments. No new UI
+strings, controls or actions are introduced.
 
 ## Completion evidence
 
