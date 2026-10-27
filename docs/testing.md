@@ -184,6 +184,59 @@ output path, whose parent directory must exist. To compare before and after a ch
 `test/performance-{folder-registry,monitor}.mjs` into a separate checkout of the base revision and
 run them there too; never against a running checkout or the real registry.
 
+## Sidebar sessions benchmark
+
+`test/performance-sidebar-sessions.mjs` is an opt-in rendering baseline, not a CI timing gate:
+
+```sh
+npm ci
+npx agent-browser install
+node test/performance-sidebar-sessions.mjs .scratch/sidebar-performance
+# Override the session counts for a narrower comparison:
+node test/performance-sidebar-sessions.mjs .scratch/sidebar-performance 1000 1500 2000
+```
+
+Requires Node 24, Git and agent-browser/Chromium (the same prerequisites as the browser journeys).
+The existing browser harness starts a scratch backend and Vite **development** UI on free loopback
+ports, with isolated database, HOME and Pi directories, fake Pi and a throwaway repository. It
+creates N saved session references and empty synthetic histories, all in Today, with no pinned,
+archived or running sessions. No prompts or model calls; no live database/history. Recorded children
+and scratch data are cleaned up even on failure. Output JSON and screenshots survive in the chosen
+evidence directory; keep them on the PR, not in Git. Run uncontended, separately from test suites.
+
+The default counts are 100, 500, 1,000 and 2,000, at 1280×900 without throttling. Each count gets a
+fresh scratch instance and browser. After an untimed app bootstrap (warming Vite and selecting the
+browser target), CDP installs instrumentation before application code and measures:
+
+- **Navigation to rows ready:** reload to all N sidebar rows committed, then two animation frames
+  (a paint opportunity, not a paint trace). First reload clears the browser HTTP cache; the next
+  two retain it. This is cache-cold versus cache-warm, **not** cold process/server startup. Includes
+  app startup, WebSocket registry delivery, development module loading, React and layout. JSON also
+  retains the commit timestamp and observed long tasks; it is not isolated sidebar CPU time.
+- **Group reopen:** three real Today button clicks after collapsing and observing zero mounted
+  rows. Time starts at the captured browser click, ends two animation frames after N rows mount;
+  CLI invocation latency is excluded. This does not time completion of the disclosure animation.
+- **Scroll cadence:** three 3-second requestAnimationFrame probes, advancing scrollTop by 120px
+  each frame and reversing at the ends. JSON reports frame count, effective rate, p95/max interval,
+  intervals over 34ms and distance actually travelled. This measures main-thread cadence during
+  scripted scrolling, **not** compositor FPS or input-to-pixel latency. Large lists need not reach
+  the bottom. Row-count assertions before and after scrolling expose windowing changes.
+- **Memory/DOM:** whole-page CDP JS heap after explicit GC, DOM node/listener counts and sidebar
+  element count. Not browser RSS or sidebar-only heap. Screenshots show the actual tested surface.
+
+The implementation path is `web/src/store.ts` (registry snapshot) →
+`web/src/lib/sessionCatalog.ts` → `sidebarList.ts` / `sidebarView.ts` (filter/group/sort, cached
+against sidebar facts) → `useSidebarList.ts` → `web/src/components/Sidebar.tsx`.
+`SessionRows` maps every entry to a memoized `SessionRow`; Radix `ScrollArea` only supplies scrolling.
+There is no pagination or virtualization. Closed `CollapsibleContent` unmounts rows; opening a group
+mounts the full list. Memoization avoids unchanged row renders, and closed menus defer their command
+subscriptions, but neither bounds the DOM size of an open group.
+
+Compare the raw runs, their environment/revision fields and repeated samples rather than treating
+one machine's times as budgets. This baseline intentionally leaves product behavior unchanged;
+production builds, real wheel/touch input, many-folder grouping, streaming, menus and session
+selection are separate experiments. No new UI strings, controls or actions are introduced.
+
 ## Completion evidence
 
 For code or dependency changes, run `npm test`, `npm run typecheck` and `npm run lint` as the repository baseline.
