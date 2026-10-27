@@ -125,13 +125,12 @@ export interface SessionRowMenu {
 
 /**
  * The session header's menu, which the desktop dropdown and the phone sheet lay out alike: the
- * details with their copy action, then open, manage (the project picker follows it), the display
+ * details with their copy action, then manage (the project picker follows it), the display
  * switch, and the destructive commands last.
  */
 export interface SessionHeaderMenu {
   /** Icon actions beside the session's details. */
   details: SessionCommand[];
-  open: SessionCommand[];
   manage: SessionCommand[];
   /** The Messages only switch: `checked` while on; running it toggles. */
   display?: SessionCommand;
@@ -143,9 +142,7 @@ const ROW_SECTIONS = [["rename", "pin"], ["share"]] as const;
 const DESTRUCTIVE = ["archive", "delete"] as const;
 const HEADER_SECTIONS = {
   details: ["copy-session-path"],
-  // The header's preview control carries open and stop, and its Changes button (or, one area at a
-  // time, the area tabs) Changes; the menu lists none of them twice.
-  open: ["pull-request"],
+  // Preview and Changes have their own controls; PR linking lives in Changes.
   manage: ["rename", "pin", "share"],
   destructive: DESTRUCTIVE,
 } as const satisfies Record<string, readonly SessionCommandId[]>;
@@ -165,7 +162,6 @@ export function sessionRowMenu(commands: readonly SessionCommand[]): SessionRowM
 export function sessionHeaderMenu(commands: readonly SessionCommand[]): SessionHeaderMenu {
   return {
     details: pick(commands, HEADER_SECTIONS.details),
-    open: pick(commands, HEADER_SECTIONS.open),
     manage: pick(commands, HEADER_SECTIONS.manage),
     display: commands.find((c) => c.id === "messages-only"),
     destructive: pick(commands, HEADER_SECTIONS.destructive),

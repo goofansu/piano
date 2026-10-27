@@ -1,6 +1,6 @@
 import type { ChangeFile, ChangesScope, Comparison, Workspace } from "@shared/wire";
 import { cn } from "cn";
-import { FileDiffIcon, MessageSquarePlusIcon } from "lucide-react";
+import { FileDiffIcon, GitPullRequestIcon, MessageSquarePlusIcon } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChangesActions, ChangesScopeMenu, ChangesStaleNote } from "@/components/ChangesHeader";
@@ -111,7 +111,7 @@ export function ChangesPanel({
   /** Receives review text for the composer draft; the caller decides how to confirm. Omitted
    * while the draft takes no additions, which hides Ask. */
   onAsk: ((text: string) => void) | undefined;
-  /** The session's pull request: a row under the toolbar while one is linked. */
+  /** The session's pull request: a toolbar action until linked, then a row below it. */
   pullRequest: PullRequestControl;
 }) {
   const { observation, error, busy, refresh, setScope, readFile } = useSessionChanges(
@@ -141,12 +141,25 @@ export function ChangesPanel({
         </>
       }
       actions={
-        <ChangesActions
-          sheet={sheet}
-          canRefresh={!!workspace && !unavailable}
-          refresh={refresh}
-          toggleEvery={() => setDisclosure(toggleEvery(disclosure, sheet))}
-        />
+        <>
+          {!unavailable && !pullRequest.linked && (
+            <IconButton
+              data-pull-request-trigger
+              size="header"
+              label="Pull request"
+              disabled={!session?.sessionId || pullRequest.busy}
+              onClick={pullRequest.open}
+            >
+              <GitPullRequestIcon />
+            </IconButton>
+          )}
+          <ChangesActions
+            sheet={sheet}
+            canRefresh={!!workspace && !unavailable}
+            refresh={refresh}
+            toggleEvery={() => setDisclosure(toggleEvery(disclosure, sheet))}
+          />
+        </>
       }
       below={
         <>

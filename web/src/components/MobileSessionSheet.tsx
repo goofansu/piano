@@ -148,8 +148,6 @@ export function MobileSessionSheet() {
               ))}
             </div>
             <Separator className="my-1" />
-            {rows(menu.open)}
-            <Separator className="my-1" />
             {rows(menu.manage)}
             {projects && (
               <Button

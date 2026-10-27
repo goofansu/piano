@@ -233,8 +233,8 @@ test("Wrap reflects the diff preference and is only available for an inspectable
   assert.ok(!sessionCommands(base, other).some((c) => c.id === "wrap-changes"));
 });
 
-const headerIds = ({ details, open, manage, display, destructive }: SessionHeaderMenu) => [
-  ...[...details, ...open, ...manage, ...destructive].map((c) => c.id),
+const headerIds = ({ details, manage, display, destructive }: SessionHeaderMenu) => [
+  ...[...details, ...manage, ...destructive].map((c) => c.id),
   ...(display ? [display.id] : []),
 ];
 
@@ -282,7 +282,7 @@ test("the row menu: rename and pin, share only when signed in to Radius, then ar
   });
 });
 
-test("the header menu: copy beside the details, open, manage with share only when signed in, a Messages only switch, then archive with delete", () => {
+test("the header menu: copy beside the details, manage with share only when signed in, a Messages only switch, then archive with delete", () => {
   for (const messagesOnly of [false, true]) {
     const menu = sessionHeaderMenu(
       sessionCommands(base, undefined, { messagesOnly, radiusSignedIn: true }),
@@ -291,10 +291,8 @@ test("the header menu: copy beside the details, open, manage with share only whe
       menu.details.map((c) => c.id),
       ["copy-session-path"],
     );
-    assert.deepEqual(
-      menu.open.map((c) => c.id),
-      ["pull-request"],
-    );
+    assert.ok(!headerIds(menu).includes("pull-request"), "PR linking lives in Changes");
+    assert.ok(sessionCommands(base).some((c) => c.id === "pull-request" && c.enabled));
     assert.deepEqual(
       menu.manage.map((c) => c.id),
       ["rename", "pin", "share"],
@@ -313,7 +311,6 @@ test("the header menu: copy beside the details, open, manage with share only whe
   // Another session's commands carry no header: nothing to open or switch, only management.
   const other = sessionHeaderMenu(sessionCommands(base, { cwd: "/work/other", sessionId: "s9" }));
   assert.deepEqual(other.details, []);
-  assert.deepEqual(other.open, []);
   assert.equal(other.display, undefined);
 });
 
@@ -382,9 +379,8 @@ test("preview commands exist only while the selected session's live Pi owns an a
     command: { _tag: "act", action: { _tag: "preview_stop", instanceId: "i1" } },
   });
   // The header's preview control offers open and stop itself; the menu does not repeat them.
-  assert.deepEqual(
-    sessionHeaderMenu(sessionCommands(running)).open.map((c) => c.id),
-    ["pull-request"],
+  assert.ok(
+    !headerIds(sessionHeaderMenu(sessionCommands(running))).some((id) => id.includes("preview")),
   );
 
   // An app that is not answering has nothing to open, but can still be inspected and stopped.

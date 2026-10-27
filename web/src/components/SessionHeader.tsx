@@ -53,7 +53,7 @@ export function SessionHeader({
 }: {
   state: AppState;
   status: string;
-  /** The session's pull request: the review control's face, and the link dialog the menu opens. */
+  /** The link dialog stays mounted even when Changes is hidden (the palette can open it). */
   pullRequest: PullRequestControl;
 }) {
   const mobile = useIsMobile();
@@ -111,12 +111,6 @@ export function SessionHeader({
                 <CommandIcon icon={c.icon} />
               </PianoButton>
             </DropdownMenuItem>
-          ))}
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          {menu.open.map((c) => (
-            <SessionCommandMenuItem key={c.id} command={c} run={run} />
           ))}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
@@ -226,7 +220,7 @@ export function SessionHeader({
           {mobile && sessionMenu}
         </div>
       </PaneHeader>
-      <PullRequestLinkDialog pr={pullRequest} menuTrigger={menuTrigger} />
+      <PullRequestLinkDialog pr={pullRequest} fallbackTrigger={menuTrigger} />
     </>
   );
 }

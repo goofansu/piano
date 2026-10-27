@@ -25,13 +25,17 @@ The palette (Mod+K) searches neither outputs nor links.
   the base branch."). The choice is saved for the session. The toolbar's actions are Collapse all
   / Expand all, Wrap (pressed while on) and Refresh changes; a failed refresh keeps the previous
   list with "Refresh failed. Showing previous changes." and the reason.
+- `pull-request-link`: with no PR linked, the toolbar starts its actions with a ghost icon button,
+  "Pull request", before Expand / Collapse all. It opens the existing link dialog (URL field, Link,
+  Find from branch). Once linked, the button gives way to the PR row below. Removing the link
+  brings the button back. Keyboard dismissal returns focus to the visible PR control.
 - `pull-request-row`: region "Pull request" under the toolbar, only while the session has a
   linked pull request: `#<n> <title>` (a link to GitHub), the state badge, "Checks …",
   "Review …", "<n> commits not pushed", "Edits not committed", and `head → base` only when the
   head is not the inspected branch; "Status unavailable" when GitHub cannot be read. Its
   "Pull request actions" menu: Open pull request, Change link…, Find from branch, Remove link
-  (toasts "Pull request linked" / "Pull request link removed"). The session menu's and palette's
-  "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
+  (toasts "Pull request linked" / "Pull request link removed"). PR linking is absent from both
+  session menus. The palette's "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
   field, Link, Find from branch; "No open PR found for this branch." when none).
 - `changes-list`: list "Changed files" with one collapsible row per file
   (`<path>, <n> added, <n> removed: collapse`), the kind beside the size on the name line

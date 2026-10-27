@@ -169,7 +169,12 @@ function LinkedPullRequestRow({
       </div>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <IconButton size="list" label="Pull request actions" disabled={pr.busy}>
+          <IconButton
+            data-pull-request-trigger
+            size="list"
+            label="Pull request actions"
+            disabled={pr.busy}
+          >
             <MoreHorizontalIcon />
           </IconButton>
         </DropdownMenuTrigger>
@@ -208,26 +213,29 @@ function LinkedPullRequestRow({
 
 /**
  * The link dialog: linking a pull request to a session without one (with Find from branch), or
- * changing the saved link. Opened from the session menu, the palette and the row's menu; a link
+ * changing the saved link. Opened from Changes or the palette; a link
  * that appears closes it.
  */
 export function PullRequestLinkDialog({
   pr,
-  menuTrigger,
+  fallbackTrigger,
 }: {
   pr: PullRequestControl;
-  /** The session menu, which opens this dialog while no pull request is linked. */
-  menuTrigger: React.RefObject<HTMLButtonElement | null>;
+  /** The session menu: a stable focus fallback when the palette opens this with Changes hidden. */
+  fallbackTrigger: React.RefObject<HTMLButtonElement | null>;
 }) {
   const editing = pr.surface === "editing";
   const open = editing || pr.surface === "link-form";
-  // A keyboard close returns focus to the menu that can reopen this; a pointer close leaves focus
-  // where the click put it.
+  // Linking replaces the toolbar button with the row's menu. Return keyboard focus to whichever
+  // PR control is now visible; a pointer close leaves focus where the click put it.
   const restoreFocus = (event: Event) => {
     returnFocusForKeyboard(event);
     if (event.defaultPrevented) return;
     event.preventDefault();
-    menuTrigger.current?.focus();
+    const trigger = document.querySelector<HTMLButtonElement>(
+      '[data-slot="surface-area"]:not([inert]) [data-pull-request-trigger]',
+    );
+    (trigger ?? fallbackTrigger.current)?.focus();
   };
   return (
     <Dialog open={open} onOpenChange={(next) => !next && pr.cancel()}>
