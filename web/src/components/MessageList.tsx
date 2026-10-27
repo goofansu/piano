@@ -201,12 +201,13 @@ export function MessageList({
                             aria-hidden
                             style={{ height: Math.max(0, item.size - gap), overflow: "hidden" }}
                           >
-                            <Row glyph={<Skeleton className="size-1.5 rounded-full" />}>
-                              <div className="flex flex-col gap-3">
-                                <Skeleton className="h-4 w-[88%]" />
-                                <Skeleton className="h-4 w-[72%]" />
-                                <Skeleton className="h-4 w-[44%]" />
-                              </div>
+                            <Row
+                              className="h-full"
+                              glyph={<Skeleton className="size-1.5 rounded-full" />}
+                            >
+                              {/* Fill even a measured, very tall row: its first lines may already
+                                  be above the viewport during a fast scroll. */}
+                              <Skeleton className="h-full w-[88%] rounded-none [mask-image:repeating-linear-gradient(to_bottom,black_0,black_1rem,transparent_1rem,transparent_1.75rem)]" />
                             </Row>
                           </div>
                         )}
