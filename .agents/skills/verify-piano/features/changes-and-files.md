@@ -23,8 +23,9 @@ The palette (Mod+K) searches neither outputs nor links.
   "Comparison: Uncommitted"): Branch compares with the branch's target (the pull request's base,
   the base Worktrunk reported at creation, the remote's default branch, or a local main/master
   "(assumed)"), Uncommitted with HEAD; an unavailable scope is disabled with its reason ("main is
-  the base branch."). The choice is saved for the session; Details lists Compared with, Base and
-  Target.
+  the base branch."). The choice is saved for the session. The toolbar's actions are Collapse all
+  / Expand all, Wrap (pressed while on) and Refresh changes; a failed refresh keeps the previous
+  list with "Refresh failed. Showing previous changes." and the reason.
 - `pull-request-row`: region "Pull request" under the toolbar, only while the session has a
   linked pull request: `#<n> <title>` (a link to GitHub), the state badge, "Checks …",
   "Review …", "<n> commits not pushed", "Edits not committed", and `head → base` only when the

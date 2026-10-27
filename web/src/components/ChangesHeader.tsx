@@ -1,10 +1,8 @@
 import type { ChangesScope } from "@shared/wire";
-import { CHANGES_INITIAL_PATCH_BYTES } from "@shared/wire";
 import {
   ChevronDownIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
-  InfoIcon,
   RefreshCwIcon,
   WrapTextIcon,
 } from "lucide-react";
@@ -16,22 +14,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/PianoPopover";
 import { Button } from "@/components/ui/button";
-import {
-  type ChangesSheetView,
-  FILE_PATCH_LIMIT,
-  SCOPE_NAMES,
-  type ScopeView,
-  targetProvenance,
-} from "@/lib/changesView";
-import { abbrevHome } from "@/lib/format";
+import { type ChangesSheetView, SCOPE_NAMES, type ScopeView } from "@/lib/changesView";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 
 /**
@@ -147,90 +131,17 @@ export function ChangesActions({
         {/* The icon turns while Git is read, the one in-progress sign every refresh shares. */}
         <RefreshCwIcon className={sheet.refreshing ? "animate-spin" : undefined} />
       </IconButton>
-      <ChangesDetails sheet={sheet} />
     </>
   );
 }
 
-/** The note under the toolbar while the last observation is stale. */
+/** The note under the toolbar while the last observation is stale, with the failure's reason. */
 export function ChangesStaleNote({ sheet }: { sheet: ChangesSheetView }) {
   return (
     sheet.staleNote && (
       <p role="status" className="border-b border-line px-4 py-2 text-xs text-ink-2">
-        {sheet.staleNote.text}
+        {sheet.staleNote.text} <span className="text-ink-3">{sheet.staleNote.detail}</span>
       </p>
     )
-  );
-}
-
-const short = (commit: string) => commit.slice(0, 10);
-
-function ChangesDetails({ sheet }: { sheet: ChangesSheetView }) {
-  const { changes } = sheet;
-  const comparison = changes?.result.comparison;
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <IconButton size="header" label="Changes details">
-          <InfoIcon />
-        </IconButton>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        collisionPadding={12}
-        className="max-h-[min(32rem,70dvh)] w-96 max-w-[calc(100vw-1.5rem)] overflow-y-auto"
-      >
-        <PopoverHeader>
-          <PopoverTitle>Changes details</PopoverTitle>
-        </PopoverHeader>
-        <div className="flex flex-col gap-3 text-xs text-ink-2">
-          {changes && (
-            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 font-mono [overflow-wrap:anywhere]">
-              <dt>Checkout</dt>
-              <dd>{abbrevHome(changes.workspace.path)}</dd>
-              <dt>Branch</dt>
-              <dd>{sheet.branch}</dd>
-              <dt>HEAD</dt>
-              <dd>{changes.result.head ?? "No commits yet"}</dd>
-              {comparison && (
-                <>
-                  <dt>Compared with</dt>
-                  <dd>
-                    {comparison.scope === "branch" && comparison.target
-                      ? `Merge base with ${comparison.target.name}`
-                      : `${SCOPE_NAMES[comparison.scope]}: HEAD`}
-                  </dd>
-                  <dt>Base</dt>
-                  <dd>{short(comparison.base)}</dd>
-                  {comparison.target && (
-                    <>
-                      <dt>Target</dt>
-                      <dd>
-                        {comparison.target.ref} at {short(comparison.target.commit)},{" "}
-                        {targetProvenance(comparison.target.from)}
-                      </dd>
-                    </>
-                  )}
-                </>
-              )}
-              <dt>Observed</dt>
-              <dd>{new Date(changes.observedAt).toLocaleString()}</dd>
-            </dl>
-          )}
-          {sheet.staleNote && <p>{sheet.staleNote.detail}</p>}
-          <p>
-            Live Git reads, not an immutable review or verification evidence. Expanding unloaded
-            files reads them afresh; files may change between reads. Refresh reloads all patches.
-            Ignored files are excluded. Renames appear as deletion and addition. Nothing is fetched:
-            a target is the branch as Git holds it locally.
-          </p>
-          <p>
-            Initial patch: {CHANGES_INITIAL_PATCH_BYTES.toLocaleString("en-US")} bytes. Per-file
-            patch: {FILE_PATCH_LIMIT}.{" "}
-            {changes?.result.truncated ? "Expand unloaded files to read their patches." : ""}
-          </p>
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }
