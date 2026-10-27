@@ -26,6 +26,7 @@ let model = { provider, id };
 let thinkingLevel = arg("--thinking") ?? "medium";
 let sessionName = arg("--name");
 let streaming = false;
+let streamTimer;
 
 const out = (record) => process.stdout.write(`${JSON.stringify(record)}\n`);
 const respond = (cmd, data, error) =>
@@ -130,6 +131,7 @@ function handle(cmd) {
     case "clear_queue":
       return respond(cmd, { steering: [], followUp: [] });
     case "abort":
+      clearInterval(streamTimer);
       streaming = false;
       out({ type: "agent_end", messages: [], willRetry: false });
       out({ type: "agent_settled" });
@@ -144,7 +146,20 @@ function handle(cmd) {
       out({ type: "turn_start" });
       out({ type: "message_start", message: user });
       out({ type: "message_end", message: user });
-      if (cmd.message !== "hold") reply(`echo: ${cmd.message}`);
+      if (cmd.message === "stream") {
+        out({ type: "message_start", message: { role: "assistant", content: [] } });
+        let line = 0;
+        streamTimer = setInterval(() => {
+          out({
+            type: "message_update",
+            assistantMessageEvent: {
+              type: "text_delta",
+              contentIndex: 0,
+              delta: `Streaming line ${++line}. ${"Variable height output. ".repeat(12)}\n\n`,
+            },
+          });
+        }, 120);
+      } else if (cmd.message !== "hold") reply(`echo: ${cmd.message}`);
       return;
     }
     default:

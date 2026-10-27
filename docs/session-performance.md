@@ -30,14 +30,23 @@ not real-model latency or production/mobile performance.
   **not a production build**. Open `/` first to warm module transforms, then navigate through
   `about:blank`, collect garbage, disable browser HTTP cache and load `/s/<id>` directly.
   This is a fresh-document, cache-disabled open, not cold OS/filesystem/server caches.
-- **Ready ms:** navigation time origin to exactly N anchored transcript articles and an enabled
-  Message composer, followed by two animation frames. This is a rendered/usable proxy, **not
-  standardized TTI**, and does not guarantee all asynchronous syntax highlighting has settled.
-  The script asserts the article count. Browser FCP is recorded separately: it can be the shell,
+- **Ready ms:** navigation time origin to N messages in the in-memory transcript, its final
+  article mounted at the bottom and an enabled Message composer, followed by two animation frames.
+  The pre-virtualization harness instead required all N anchored articles; that assertion is
+  deliberately replaced by full-history readiness plus bounded mounting (at most 25 articles in
+  this fixture/viewport). This is a rendered/usable proxy, **not standardized TTI**, and does not
+  guarantee all asynchronous syntax highlighting has settled. Browser FCP is recorded separately: it can be the shell,
   so it is not the transcript paint metric. Long-task timings identify opening main-thread stalls.
 - **Scroll:** sweep the real transcript scroller top-to-bottom over two seconds using animation
   frames. Record interval p95/max, count over 33.4 ms, frame count and height; assert arrival at
-  the bottom. This stresses DOM rendering/scroll handlers but is not hardware wheel/compositor
+  the bottom. Also record placeholder frames, assert no sampled frame lacks a row covering the
+  viewport, and measure settlement to the real final article. Geometry updates synchronously;
+  expensive Markdown yields during rapid scrolling, with height-preserving placeholders rather
+  than blanks. These frames therefore measure scrolling, not full Markdown painting at every
+  intermediate position. After the memory sample, stop at the middle and measure real article
+  readiness there too; a smooth sweep must not hide a renderer that never catches up. Screenshots
+  show that middle destination. Estimated scroll height is not comparable to the old fully
+  measured height. This stresses DOM rendering/scroll handlers but is not hardware wheel/compositor
   FPS. Include max alongside p95: a single visible stall can disappear from p95.
 - **Append:** fill the real composer and click Send through agent-browser. Start the clock inside
   the click event; stop two frames after the fake Pi's echo appears. This measures a user/reply
@@ -53,23 +62,33 @@ A preliminary shared-browser experiment accumulated uncollected heap across navi
 one driver click timed out at 1,000 long messages. The harness therefore isolates each sample;
 do not combine shared-browser exploratory numbers with this method's baseline.
 
-## Rendering architecture (28e080a)
+## Rendering architecture
 
 - `web/src/components/SessionView.tsx` hands the complete session message array to `MessageList`.
-- `web/src/components/MessageList.tsx` memoizes `transcriptRows(...)`, then maps **every row** to
-  `TranscriptRowView`. There is no list virtualization or windowing. User/reply anchors remain
-  mounted, tool output folds beneath replies, and prompts are measured together in a layout effect.
+- `web/src/components/MessageList.tsx` memoizes `transcriptRows(...)`, then mounts the visible
+  window plus three buffer rows on each side through TanStack Virtual. All history stays in memory;
+  there is no pagination. Stable message/tool keys retain disclosure state outside recycled DOM.
+  Prompts are measured together in a layout effect; ResizeObserver remeasures variable-height rows.
+  Saved Markdown uses static parsing; a live reply retains streaming block identities through
+  completion. Fresh windows render concurrently behind height-preserving placeholders during
+  rapid scrolling; explicit jumps render immediately so their targets can be measured.
 - `web/src/lib/transcript.ts` projects history into rows and jump entries; Messages only changes
   this projection, not the authoritative history.
 - `web/src/components/Markdown.tsx` renders Markdown through Streamdown, including code rendering.
   The baseline deliberately varies Markdown complexity, not just message count.
-- `web/src/lib/transcriptViewport.ts` and `useTranscriptViewport.ts` manage bottom pinning,
-  ResizeObserver-driven updates and anchor-based jumps on the real scroll container. The current
-  entry lookup walks jump entries and reads anchor positions; rows are not recycled.
+- `web/src/lib/transcriptViewport.ts` owns bottom pinning and reader intent on the real scroller.
+  Capture-phase scroll handling runs before the virtualizer can render and follow; measurement
+  corrections first consume any queued native scroll, then acknowledge the corrected position
+  without treating that correction as a reader gesture. Native browser
+  anchoring is disabled so it cannot compensate twice. `useVirtualTranscript.ts` adapts measured
+  offsets to that seam: an offscreen jump locates the message index, mounts it and refines after
+  measurement. Current-entry lookup uses measured DOM positions where present and estimated
+  offsets elsewhere. Unmounted content is not available to native browser Find or select-all.
 - Messages only exists in session commands. These no-tool fixtures would not meaningfully exercise
   its filtering cost, so it is not benchmarked. There is no transcript full-text search measured
   here; the command palette searches sessions/commands, not transcript content.
 
 Use observed cliffs to select further sizes rather than treating 1,000 as a universal threshold.
-A production-build run, actual wheel input and a CDP trace around a stalled scroll would be useful
-next investigations before choosing an optimization. This harness makes no product changes.
+A production-build run, actual wheel/touch performance and real image/diagram-heavy sessions remain
+separate experiments. The open-session journey covers streaming follow/unpin, offscreen jumps,
+expansion across unmount/remount and resizing; the row journey checks glyph alignment.

@@ -49,6 +49,29 @@ await run(
     history({ sessionId: "login-bug", cwd, messages: [1, 2, 3, 4, 5, 6].flatMap(exchange) });
     // Alternating prompts and Markdown replies expose per-row forced layout on session switches.
     const release = Array.from({ length: 60 }, (_, i) => exchange(i + 1)).flat();
+    release.splice(
+      60,
+      0,
+      {
+        ...exchange(30)[1],
+        content: [
+          {
+            type: "toolCall",
+            id: "measured-tool",
+            name: "bash",
+            arguments: { command: "printf measured" },
+          },
+        ],
+      },
+      {
+        role: "toolResult",
+        toolCallId: "measured-tool",
+        toolName: "bash",
+        content: [{ type: "text", text: "measured tool output\n".repeat(30) }],
+        isError: false,
+        timestamp,
+      },
+    );
     release.at(-2).content += `\n\n${paragraph.repeat(4)}`;
     release.at(-1).content[0].text += '\n\n```ts\nconst release = "ready";\n```';
     history({ sessionId: "release-notes", cwd, messages: release });
@@ -85,6 +108,7 @@ await run(
         const box = document.querySelector('[data-slot="transcript"]').getBoundingClientRect();
         const article = [...document.querySelectorAll('[data-slot="transcript"] article')]
           .find(a => a.innerText.includes(${JSON.stringify(text)}));
+        if (!article) return false; // Offscreen rows are unmounted, not hidden history.
         const at = article.getBoundingClientRect();
         return at.top >= box.top && at.top < box.bottom;
       })()`);
@@ -126,7 +150,10 @@ await run(
 
     await page.ab("fill", '[aria-label="Message"]', "Add a regression test");
     await page.ab("press", "Enter");
+    // A reply below the window is still present in the full-history jump list.
+    await page.click("button", "Jump to message");
     await page.see("echo: Add a regression test");
+    await page.ab("press", "Escape");
     assert.equal(await inView("Question 1:"), true, "a reply does not move a reader who jumped up");
     await page.capture("4-follow-up");
 
@@ -181,7 +208,7 @@ await run(
     await page.until(
       "location.pathname.endsWith('/release-notes') && !document.querySelector('[cmdk-input]')",
     );
-    await page.see("Answer 1.");
+    await page.see("Answer 60.");
     await page.capture("7-palette-switch");
 
     // Reopening a long session must not force a transcript layout for every prompt. Counting
@@ -242,6 +269,95 @@ await run(
       );
     }
     await page.capture("8-reopened-long-session");
+    assert.ok(
+      await page.evaluate(
+        `document.querySelectorAll('[data-slot="transcript"] article[id]').length < 25`,
+      ),
+      "mounted transcript stays bounded",
+    );
+    const jump = async (label) => {
+      await page.click("button", "Jump to message");
+      await page.ab("find", "role", "button", "click", "--name", label);
+    };
+    // Far index jump: earlier unmeasured heights are estimates, then the target is refined.
+    await jump("You said Question 31: why does login fail?");
+    await page.until(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      const a = [...t.querySelectorAll('article')].find(a => a.textContent.includes('Question 31:'));
+      return a && Math.abs(a.getBoundingClientRect().top - t.getBoundingClientRect().top - 16) < 2;
+    })()`);
+    const tool = '[role="group"][aria-label="bash tool call"]';
+    await page.evaluate(`document.querySelector('[data-slot="transcript"]').scrollTop -= 200`);
+    await page.ab("click", `${tool} [data-slot="collapsible-trigger"]`);
+    await page.see("measured tool output");
+    await page.click("button", "… 26 more lines");
+    await page.capture("10-expanded-tool");
+    await page.click("button", "Scroll to bottom");
+    await page.until(`!document.querySelector('${tool}')`);
+    await jump("You said Question 31: why does login fail?");
+    await page.until(
+      `document.querySelector('${tool} [data-slot="collapsible-trigger"]')?.getAttribute('aria-expanded') === 'true'`,
+    );
+    await page.see("measured tool output");
+    assert.equal(
+      await page.evaluate(
+        `document.querySelector('${tool} [data-slot="tool-output"]').textContent.match(/measured tool output/g).length`,
+      ),
+      30,
+      "the expanded output stays expanded across remount",
+    );
+    await page.capture("11-remounted-tool");
+    await page.click("button", "Scroll to bottom");
+    await page.ab("fill", '[aria-label="Message"]', "stream");
+    await page.ab("press", "Enter");
+    await page.see("Streaming line 5.");
+    await page.until(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      return t.scrollHeight - t.scrollTop - t.clientHeight < 2;
+    })()`);
+    await page.evaluate(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      window.readerScrollEnded = false;
+      t.addEventListener('scrollend', function ended() {
+        if (t.scrollHeight - t.scrollTop - t.clientHeight > 100) {
+          window.readerScrollEnded = true;
+          t.removeEventListener('scrollend', ended);
+        }
+      });
+    })()`);
+    await page.ab("scroll", "up", "300", "--selector", '[data-slot="transcript"]');
+    await page.until("window.readerScrollEnded");
+    await page.evaluate(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      const row = [...t.querySelectorAll('[data-index]')].find(r => r.getBoundingClientRect().bottom > t.getBoundingClientRect().top + 80);
+      window.readingIndex = row.dataset.index;
+      window.readingTop = row.getBoundingClientRect().top;
+      window.streamingLength = t.textContent.length;
+    })()`);
+    await page.until(
+      `document.querySelector('[data-slot="transcript"]').textContent.length > window.streamingLength + 1000`,
+    );
+    const reading = await page.evaluate(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      const row = t.querySelector('[data-index="' + window.readingIndex + '"]');
+      return { index: window.readingIndex, before: window.readingTop, after: row?.getBoundingClientRect().top, top: t.scrollTop, gap: t.scrollHeight - t.scrollTop - t.clientHeight };
+    })()`);
+    console.log("Streaming reading anchor:", reading);
+    assert.ok(
+      Math.abs(reading.after - reading.before) < 2,
+      "streaming does not move an unpinned reader",
+    );
+    await page.capture("12-streaming-unpinned");
+    await page.click("button", "Scroll to bottom");
+    await page.evaluate(
+      `window.streamingLength = document.querySelector('[data-slot="transcript"]').textContent.length`,
+    );
+    await page.until(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      return t.textContent.length > window.streamingLength + 1000 && t.scrollHeight - t.scrollTop - t.clientHeight < 2;
+    })()`);
+    await page.capture("13-streaming-pinned");
+    await page.click("button", "Stop");
 
     // PIN-88: opening a project member keeps the branch shown on its home card, even after
     // Git stops listing its worktree. The same header segments remain on a live worktree.

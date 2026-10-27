@@ -148,6 +148,65 @@ test("a jump to a message lands it 16px under the top edge", () => {
   );
 });
 
+test("index jumps unpin before asynchronous mounting and refinement", () => {
+  const { viewport, el } = setup();
+  const virtual: ViewportElement = el;
+  virtual.jumpToMessage = (id) => id === "offscreen";
+  assert.equal(
+    viewport.jump({ kind: "user", id: "offscreen", messageId: "offscreen", label: "Earlier" }),
+    true,
+  );
+  el.scrollHeight = 3000;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 1500, "rendering the destination must not follow the end");
+  viewport.correct(() => {
+    el.scrollTop = 800;
+  });
+  viewport.scrolled();
+  viewport.rendered();
+  assert.equal(el.scrollTop, 800);
+});
+
+test("measurement compensation preserves follow intent in both directions", () => {
+  const { viewport, el } = setup();
+  viewport.correct(() => {
+    el.scrollTop = 1400;
+  });
+  viewport.scrolled();
+  el.scrollHeight = 3000;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2500, "a corrected pinned view still follows");
+  scroll(el, viewport, 1800);
+  viewport.correct(() => {
+    el.scrollTop = 2500;
+  });
+  viewport.scrolled();
+  el.scrollHeight = 3500;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2500, "correction near the end must not re-pin a reader");
+});
+
+test("measurement compensation cannot swallow a native scroll whose event is still queued", () => {
+  const { viewport, el } = setup();
+  el.scrollTop = 1200; // Reader moves up; ResizeObserver runs before the scroll event.
+  viewport.correct(() => {
+    el.scrollTop += 100;
+  });
+  viewport.scrolled();
+  el.scrollHeight = 2600;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 1300, "the pending move up must unpin");
+
+  el.scrollTop = 2100; // Reader reaches the bottom, again before its event is dispatched.
+  viewport.correct(() => {
+    el.scrollTop -= 100;
+  });
+  viewport.scrolled();
+  el.scrollHeight = 3000;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2500, "the pending arrival must pin before compensation");
+});
+
 test("a viewport without a transcript goes nowhere and reports the bottom", () => {
   const viewport = createTranscriptViewport();
   assert.equal(viewport.jump(BOTTOM_ENTRY), false);
