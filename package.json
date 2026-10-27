@@ -41,6 +41,9 @@
     "web"
   ],
   "overrides": {
+    "@earendil-works/pi-coding-agent": {
+      "undici": "^8.12.3"
+    },
     "shell-quote": "^1.11.0",
     "source-map-js": "^1.2.2",
     "mermaid": {
