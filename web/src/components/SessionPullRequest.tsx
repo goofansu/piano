@@ -83,16 +83,36 @@ export function PullRequestRow({
 }) {
   const view = pullRequestViewOf(pr);
   if (!pr.linked || !view) return null;
-  const row = pullRequestRow(view, { branch, local, loading: pr.loading && !pr.value });
-  const state = row.status.state && pullRequestStates[row.status.state];
+  return <LinkedPullRequestRow key={view.url} pr={pr} view={view} branch={branch} local={local} />;
+}
+
+function LinkedPullRequestRow({
+  pr,
+  view,
+  branch,
+  local,
+}: {
+  pr: PullRequestControl;
+  view: PullRequestView;
+  branch: string | undefined;
+  local: LocalWork | undefined;
+}) {
+  // Only facts arriving after the row was shown fade. Already-read facts appear at once.
+  // The group stays mounted across refreshes, including unavailable status and its recovery.
+  const [fadeFacts, setFadeFacts] = useState(() => !pr.value);
+  const loading = pr.loading && !pr.value;
+  const row = pullRequestRow(view, { branch, local, loading });
+  const state = row.status?.state && pullRequestStates[row.status.state];
   const Icon = state?.Icon ?? GitPullRequestIcon;
   return (
     <section
       aria-label="Pull request"
+      aria-busy={loading}
       className="flex min-w-0 items-center gap-x-3 border-b border-line py-1 pr-2 pl-4 text-xs text-ink-2"
     >
       <Icon
-        data-motion={pr.loading && !pr.value ? "pulse" : undefined}
+        data-motion={loading ? "pulse" : undefined}
+        data-late
         className={`size-3.5 shrink-0 ${state?.color ?? "text-muted-foreground"}`}
         aria-hidden
       />
@@ -108,38 +128,43 @@ export function PullRequestRow({
           {row.title && <span className="truncate">{row.title}</span>}
           <ExternalLinkIcon className="size-3 shrink-0 text-ink-3" aria-hidden />
         </a>
-        {state ? (
-          <Badge variant={state.variant}>{row.status.label}</Badge>
-        ) : (
-          <Badge variant="secondary">{row.status.label}</Badge>
-        )}
-        {row.signals.map((signal) => {
-          const { Icon: SignalIcon, color } = signalIcons[signal.outcome];
-          return (
-            <span
-              key={signal.label}
-              className="flex items-center gap-1.5 whitespace-nowrap text-muted-foreground"
-            >
-              <SignalIcon className={`size-3 shrink-0 ${color}`} aria-hidden />
-              {signal.label}
-            </span>
-          );
-        })}
-        {row.local.map((fact) => (
-          <span key={fact} className="whitespace-nowrap text-muted-foreground">
-            {fact}
-          </span>
-        ))}
-        {row.branches && (
-          <span
-            className="flex max-w-full min-w-0 items-center gap-1 font-mono text-muted-foreground"
-            title={`${row.branches.head} into ${row.branches.base}`}
+        {row.status && (
+          <div
+            data-motion={fadeFacts ? "fade" : undefined}
+            onTransitionEnd={() => setFadeFacts(false)}
+            onTransitionCancel={() => setFadeFacts(false)}
+            className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1"
           >
-            <GitBranchIcon className="size-3 shrink-0" aria-hidden />
-            <span className="truncate">{row.branches.head}</span>
-            <ArrowRightIcon className="size-3 shrink-0" aria-label="into" />
-            <span className="shrink-0">{row.branches.base}</span>
-          </span>
+            <Badge variant={state?.variant ?? "secondary"}>{row.status.label}</Badge>
+            {row.signals.map((signal) => {
+              const { Icon: SignalIcon, color } = signalIcons[signal.outcome];
+              return (
+                <span
+                  key={signal.label}
+                  className="flex items-center gap-1.5 whitespace-nowrap text-muted-foreground"
+                >
+                  <SignalIcon className={`size-3 shrink-0 ${color}`} aria-hidden />
+                  {signal.label}
+                </span>
+              );
+            })}
+            {row.local.map((fact) => (
+              <span key={fact} className="whitespace-nowrap text-muted-foreground">
+                {fact}
+              </span>
+            ))}
+            {row.branches && (
+              <span
+                className="flex max-w-full min-w-0 items-center gap-1 font-mono text-muted-foreground"
+                title={`${row.branches.head} into ${row.branches.base}`}
+              >
+                <GitBranchIcon className="size-3 shrink-0" aria-hidden />
+                <span className="truncate">{row.branches.head}</span>
+                <ArrowRightIcon className="size-3 shrink-0" aria-label="into" />
+                <span className="shrink-0">{row.branches.base}</span>
+              </span>
+            )}
+          </div>
         )}
       </div>
       <DropdownMenu modal={false}>
