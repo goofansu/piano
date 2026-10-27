@@ -4,8 +4,10 @@ import type { SessionEntry } from "./sessionCatalog.ts";
 
 const buffer = 5;
 
-/** Fixed-height session rows, windowed against the sidebar's ONE scroll viewport, not each group.
- * Measure the existing row CSS so touch, phone and rem sizing stay owned by Sidebar.
+/** Internal geometry/focus implementation of SidebarSessionList; callers render that list rather
+ * than wiring its ruler, positioned rows and menu-release lifecycle separately.
+ * Fixed-height rows use the sidebar's ONE scroll viewport, not one viewport per group.
+ * Measure the list's row CSS so touch, phone and rem sizing stay owned by SidebarSessionList.
  * Group headers remain ordinary flow; observing the nav catches groups above opening/closing.
  */
 export function useSidebarWindow(sessions: readonly SessionEntry[]) {
