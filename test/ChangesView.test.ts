@@ -46,6 +46,7 @@ const changes = (
       { scope: "branch", available: false, reason: "main is the base branch." },
       { scope: "uncommitted", available: true },
     ],
+    local: { commitsNotPushed: null, uncommitted: files.length > 0 },
     files: files.map(([p, n]) => meta(p, n)),
     diff,
     truncated,

@@ -26,8 +26,9 @@ export interface Comparisons {
   readonly head: string | null;
   readonly branch: string | null;
   readonly scopes: ScopeAvailability[];
-  /** The comparison for `scope`, or the reason it is unavailable. */
-  readonly of: (scope: ChangesScope) => { comparison: Comparison } | { unavailable: string };
+  /** The comparison for `scope`, or the reason it is unavailable; `uncommitted` always has one. */
+  readonly of: ((scope: "uncommitted") => { comparison: Comparison }) &
+    ((scope: ChangesScope) => { comparison: Comparison } | { unavailable: string });
   /** The scope Changes opens on when none was chosen: `branch` when it can be read. */
   readonly automatic: ChangesScope;
 }
@@ -125,6 +126,23 @@ async function branchScope(
   return { comparison: { scope: "branch", base: found[0]!, target } };
 }
 
+/**
+ * What of the branch is still only here: commits its remote-tracking ref does not have, as Git
+ * holds that ref locally (no fetch), or null when there is no such ref to compare with.
+ */
+export async function commitsNotPushed(
+  checkout: Checkout,
+  head: string | null,
+  branch: string | null,
+): Promise<number | null> {
+  if (!head || !branch) return null;
+  const remote = await trackingRemote(checkout, branch);
+  const ref = `refs/remotes/${remote}/${branch}`;
+  if (!(await commitOf(checkout, ref))) return null;
+  const count = (await checkout.text(["rev-list", "--count", `${ref}..${head}`])).trim();
+  return Number(count) || 0;
+}
+
 /** Resolve every scope for the checkout once; `of` then answers for the one asked for. */
 export async function resolveComparisons(
   checkout: Checkout,
@@ -149,11 +167,13 @@ export async function resolveComparisons(
       : { scope: "branch", available: false, reason: forBranch.unavailable },
     { scope: "uncommitted", available: true },
   ];
+  const of = (scope: ChangesScope) =>
+    scope === "uncommitted" ? { comparison: uncommitted } : forBranch;
   return {
     head,
     branch,
     scopes,
-    of: (scope) => (scope === "uncommitted" ? { comparison: uncommitted } : forBranch),
+    of: of as Comparisons["of"],
     automatic: "comparison" in forBranch ? "branch" : "uncommitted",
   };
 }

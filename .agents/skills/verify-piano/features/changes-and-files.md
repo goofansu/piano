@@ -13,9 +13,25 @@ The palette (Mod+K) searches neither outputs nor links.
 
 - `changes-open`: the header's last control, the "Changes" toggle, opens the Surface area and is
   pressed while Changes shows, then named "Hide changes", which hides it; the palette's "Changes"
-  focuses Changes without rereading, collapsing or hiding it. Below 849px of session width the
-  toggle goes and the palette opens Changes; the "Agent" tab bar shows only while something is open
-  (`Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar closes it.
+  focuses Changes without rereading, collapsing or hiding it. Once a pull request is linked the
+  same control wears its face: the state's icon (green open, grey draft, purple merged, red
+  closed) and `#<number>`, with `aria-description` "Pull request #<n>, <state>". Below 849px of
+  session width the toggle shows the Changes area (the "Agent" tab bar shows only while something
+  is open: `Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar closes it.
+- `changes-scope`: the toolbar starts with the comparison menu ("Comparison: Branch · main" or
+  "Comparison: Uncommitted"): Branch compares with the branch's target (the pull request's base,
+  the base Worktrunk reported at creation, the remote's default branch, or a local main/master
+  "(assumed)"), Uncommitted with HEAD; an unavailable scope is disabled with its reason ("main is
+  the base branch."). The choice is saved for the session; Details lists Compared with, Base and
+  Target.
+- `pull-request-row`: region "Pull request" under the toolbar, only while the session has a
+  linked pull request: `#<n> <title>` (a link to GitHub), the state badge, "Checks …",
+  "Review …", "<n> commits not pushed", "Edits not committed", and `head → base` only when the
+  head is not the inspected branch; "Status unavailable" when GitHub cannot be read. Its
+  "Pull request actions" menu: Open pull request, Change link…, Find from branch, Remove link
+  (toasts "Pull request linked" / "Pull request link removed"). The session menu's and palette's
+  "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
+  field, Link, Find from branch; "No open PR found for this branch." when none).
 - `changes-list`: list "Changed files" with one collapsible row per file
   (`<path>, <n> added, <n> removed: collapse`), "New file" for untracked files, and the diff.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.

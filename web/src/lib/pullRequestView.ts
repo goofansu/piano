@@ -3,7 +3,7 @@
  * open it, and how long ago it last moved; the trigger's face and the link form's wording and
  * submit rule. Pure, so the popover, its trigger and the form only render.
  */
-import type { PullRequest, SessionPullRequest } from "@shared/wire";
+import type { LocalWork, PullRequest, SessionPullRequest } from "@shared/wire";
 import { timeAgo } from "./format.ts";
 import { canLink } from "./sessionPullRequest.ts";
 
@@ -83,24 +83,67 @@ export function pullRequestView(
 /** Shown wherever a linked PR's live GitHub status could not be read. */
 export const STATUS_UNAVAILABLE = "Status unavailable";
 
-export interface PullRequestTrigger {
-  /** The button's visible face: the number, else "PR". */
-  label: string;
-  ariaLabel: string;
-  /** The status, read after the name; absent when nothing names the PR. */
-  ariaDescription: string | undefined;
-  tooltip: string;
+/** The header's review control once a pull request is linked: its face beside the Changes icon. */
+export interface ReviewControl {
+  /** The number, else "PR"; absent while no pull request is linked. */
+  text: string | undefined;
+  /** Read after the control's name: the pull request and its state. */
+  description: string | undefined;
+  /** Colours the icon; absent while the state is unknown. */
+  state: PullRequest["state"] | undefined;
+  tooltip: string | undefined;
 }
 
-/** The header button that opens a linked PR's details; `loading` while GitHub's facts are being read. */
-export function pullRequestTrigger(view: PullRequestView, loading = false): PullRequestTrigger {
+/** The face the Changes control wears for `view`; `loading` while GitHub's facts are being read. */
+export function reviewControl(view: PullRequestView | undefined, loading = false): ReviewControl {
+  if (!view)
+    return { text: undefined, description: undefined, state: undefined, tooltip: undefined };
   const { number, status, title } = view;
-  const missing = loading ? "Loading" : STATUS_UNAVAILABLE;
+  const name = number ? `Pull request #${number}` : "Pull request";
+  const label = status?.label ?? (loading ? "Loading" : STATUS_UNAVAILABLE);
   return {
-    label: number ? `#${number}` : "PR",
-    ariaLabel: number ? `Pull request #${number}` : "PR",
-    ariaDescription: number ? (status?.label ?? missing) : undefined,
-    tooltip: title ?? "Pull request",
+    text: number ? `#${number}` : "PR",
+    description: `${name}, ${label}`,
+    state: status?.state,
+    tooltip: `${title ?? name} · ${label}`,
+  };
+}
+
+/** The row under the Changes toolbar: the pull request, its state and what is still only local. */
+export interface PullRequestRow {
+  /** "#42", else "PR". */
+  name: string;
+  title: string | undefined;
+  url: string;
+  status: { state: PullRequest["state"] | undefined; label: string };
+  signals: PullRequestView["signals"];
+  /** The pull request's branches, only when its head is not the branch Changes inspects. */
+  branches: PullRequestView["branches"];
+  /** Values, each shown only when nonzero: commits not pushed, edits not committed. */
+  local: string[];
+}
+
+export function pullRequestRow(
+  view: PullRequestView,
+  {
+    branch,
+    local,
+    loading = false,
+  }: { branch: string | undefined; local: LocalWork | undefined; loading?: boolean },
+): PullRequestRow {
+  const { number, status } = view;
+  const commits = local?.commitsNotPushed ?? 0;
+  return {
+    name: number ? `#${number}` : "PR",
+    title: view.title,
+    url: view.url,
+    status: status ?? { state: undefined, label: loading ? "Loading…" : STATUS_UNAVAILABLE },
+    signals: view.signals,
+    branches: view.branches && view.branches.head !== branch ? view.branches : undefined,
+    local: [
+      ...(commits > 0 ? [`${commits} ${commits === 1 ? "commit" : "commits"} not pushed`] : []),
+      ...(local?.uncommitted ? ["Edits not committed"] : []),
+    ],
   };
 }
 

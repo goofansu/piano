@@ -3,8 +3,9 @@ import { test } from "node:test";
 import type { PullRequest, SessionPullRequest } from "../shared/wire.ts";
 import {
   pullRequestForm,
-  pullRequestTrigger,
+  pullRequestRow,
   pullRequestView,
+  reviewControl,
 } from "../web/src/lib/pullRequestView.ts";
 
 const url = "https://github.com/example/repo/pull/42";
@@ -96,40 +97,89 @@ test("a just-updated PR reads as just now", () => {
   assert.equal(view?.timeLabel, "updated just now");
 });
 
-test("the trigger names the PR by number with its status, else reads as PR", () => {
-  assert.deepEqual(pullRequestTrigger(pullRequestView(linked(pr({ state: "merged" })), now)!), {
-    label: "#42",
-    ariaLabel: "Pull request #42",
-    ariaDescription: "Merged",
-    tooltip: "The session deliverable",
+test("the review control wears the PR's number and state once linked, else nothing", () => {
+  assert.deepEqual(reviewControl(undefined), {
+    text: undefined,
+    description: undefined,
+    state: undefined,
+    tooltip: undefined,
   });
-  assert.deepEqual(pullRequestTrigger(pullRequestView(linked(null), now)!), {
-    label: "#42",
-    ariaLabel: "Pull request #42",
-    ariaDescription: "Status unavailable",
-    tooltip: "Pull request",
+  assert.deepEqual(reviewControl(pullRequestView(linked(pr({ state: "merged" })), now)), {
+    text: "#42",
+    description: "Pull request #42, Merged",
+    state: "merged",
+    tooltip: "The session deliverable · Merged",
   });
-  assert.deepEqual(pullRequestTrigger(pullRequestView(linked(null), now)!, true), {
-    label: "#42",
-    ariaLabel: "Pull request #42",
-    ariaDescription: "Loading",
-    tooltip: "Pull request",
+  assert.deepEqual(reviewControl(pullRequestView(linked(null), now)), {
+    text: "#42",
+    description: "Pull request #42, Status unavailable",
+    state: undefined,
+    tooltip: "Pull request #42 · Status unavailable",
   });
   assert.equal(
-    pullRequestTrigger(pullRequestView(linked(pr()), now)!, true).ariaDescription,
-    "Open",
+    reviewControl(pullRequestView(linked(null), now), true).description,
+    "Pull request #42, Loading",
+  );
+  assert.equal(
+    reviewControl(pullRequestView(linked(pr()), now), true).description,
+    "Pull request #42, Open",
     "a refresh keeps the known status",
   );
   const unnamed: SessionPullRequest = {
     link: { url: "https://github.com/", source: "manual" },
     pullRequest: null,
   };
-  assert.deepEqual(pullRequestTrigger(pullRequestView(unnamed, now)!), {
-    label: "PR",
-    ariaLabel: "PR",
-    ariaDescription: undefined,
-    tooltip: "Pull request",
+  assert.equal(reviewControl(pullRequestView(unnamed, now)).text, "PR");
+});
+
+test("the row names the PR, its state and what is still only local; branches only when the head is another branch", () => {
+  const view = pullRequestView(linked(pr()), now)!;
+  const row = pullRequestRow(view, {
+    branch: "feature",
+    local: { commitsNotPushed: 2, uncommitted: true },
   });
+  assert.equal(row.name, "#42");
+  assert.equal(row.title, "The session deliverable");
+  assert.deepEqual(row.status, { state: "open", label: "Open" });
+  assert.deepEqual(
+    row.signals.map((s) => s.label),
+    ["Checks failed", "Approved"],
+  );
+  assert.deepEqual(row.local, ["2 commits not pushed", "Edits not committed"]);
+  assert.equal(row.branches, undefined, "the PR's head is the inspected branch");
+  assert.deepEqual(
+    pullRequestRow(view, { branch: "main", local: { commitsNotPushed: 1, uncommitted: false } }),
+    {
+      ...row,
+      branches: { head: "feature", base: "main" },
+      local: ["1 commit not pushed"],
+    },
+  );
+  assert.deepEqual(
+    pullRequestRow(view, {
+      branch: "feature",
+      local: { commitsNotPushed: null, uncommitted: false },
+    }).local,
+    [],
+    "nothing local says nothing",
+  );
+  // Unreadable or still loading: the row keeps the link and says so, without a state colour.
+  assert.deepEqual(
+    pullRequestRow(pullRequestView(linked(null), now)!, { branch: "feature", local: undefined })
+      .status,
+    {
+      state: undefined,
+      label: "Status unavailable",
+    },
+  );
+  assert.equal(
+    pullRequestRow(pullRequestView(linked(null), now)!, {
+      branch: "feature",
+      local: undefined,
+      loading: true,
+    }).status.label,
+    "Loading…",
+  );
 });
 
 test("the link form submits only a non-blank URL while idle", () => {

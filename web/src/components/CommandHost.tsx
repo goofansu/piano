@@ -50,6 +50,7 @@ import {
   type SessionTarget,
   sessionCommands,
 } from "@/lib/sessionCommands";
+import { sessionReference } from "@/lib/sessionContext";
 import { openLink } from "@/lib/sessionLinks";
 import { selectedPreview } from "@/lib/sessionPreview";
 import { useChangesWrap } from "@/lib/useChangesWrap";
@@ -232,7 +233,15 @@ export function CommandHost({
     openChanges,
     toggleRail,
     showAgent,
-    openPullRequest,
+    // The pull request is read in Changes once linked; the dialog is for linking one.
+    openPullRequest: () => {
+      const t = state.session;
+      const linked =
+        !!t?.sessionId &&
+        !!sessionReference(state, { cwd: t.cwd, sessionId: t.sessionId })?.pullRequest;
+      if (linked) openChanges();
+      else openPullRequest();
+    },
     toggleSidebar: sidebar.toggle,
     setView,
     setMessagesOnly,

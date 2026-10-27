@@ -15,7 +15,7 @@ import {
   type WrittenFile,
   type WorkspaceWrittenFiles as WrittenObservation,
 } from "../shared/wire.ts";
-import { resolveComparisons, type TargetHints } from "./ComparisonBase.ts";
+import { commitsNotPushed, resolveComparisons, type TargetHints } from "./ComparisonBase.ts";
 import { type Checkout, type CheckoutObservation, observeCheckout } from "./GitCheckout.ts";
 import { place } from "./WorkspaceFiles.ts";
 
@@ -134,7 +134,20 @@ async function preview(
         deletions: Number(match[2]) || 0,
       };
     });
-    if (!patch) return { status: "ready", head, branch, comparison, scopes, files };
+    // What is still only here, whatever the scope: edits HEAD lacks (through the same private
+    // index, so untracked files count) and commits the remote-tracking ref lacks.
+    const uncommitted =
+      untracked.length > 0 ||
+      (
+        await git.run(
+          [...diffArgs, "--quiet", comparisons.of("uncommitted").comparison.base, "--"],
+          {
+            okCodes: [0, 1],
+          },
+        )
+      ).code === 1;
+    const local = { commitsNotPushed: await commitsNotPushed(checkout, head, branch), uncommitted };
+    if (!patch) return { status: "ready", head, branch, comparison, scopes, local, files };
     const excerpt = await git.excerpt(
       [...diffArgs, "--patch", base, "--", ...pathArgs],
       path === undefined ? CHANGES_INITIAL_PATCH_BYTES : CHANGES_FILE_PATCH_BYTES,
@@ -145,6 +158,7 @@ async function preview(
       branch,
       comparison,
       scopes,
+      local,
       files,
       diff: excerpt.text,
       truncated: excerpt.truncated,

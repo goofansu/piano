@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ChangesActions, ChangesScopeMenu, ChangesStaleNote } from "@/components/ChangesHeader";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
+import { type PullRequestControl, PullRequestRow } from "@/components/SessionPullRequest";
 import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -107,6 +108,7 @@ export function ChangesPanel({
   session,
   active,
   onAsk,
+  pullRequest,
 }: {
   workspace: Workspace | undefined;
   /** Why Changes cannot open; it then shows that alone and reads nothing until it can. */
@@ -117,6 +119,8 @@ export function ChangesPanel({
   /** Receives review text for the composer draft; the caller decides how to confirm. Omitted
    * while the draft takes no additions, which hides Ask. */
   onAsk: ((text: string) => void) | undefined;
+  /** The session's pull request: a row under the toolbar while one is linked. */
+  pullRequest: PullRequestControl;
 }) {
   const { observation, error, busy, refresh, setScope, readFile } = useSessionChanges(
     unavailable ? undefined : workspace,
@@ -152,7 +156,18 @@ export function ChangesPanel({
           toggleEvery={() => setDisclosure(toggleEvery(disclosure, sheet))}
         />
       }
-      below={<ChangesStaleNote sheet={sheet} />}
+      below={
+        <>
+          {!unavailable && (
+            <PullRequestRow
+              pr={pullRequest}
+              branch={sheet.branch}
+              local={sheet.changes?.result.local}
+            />
+          )}
+          <ChangesStaleNote sheet={sheet} />
+        </>
+      }
     >
       <div className="flex flex-col">
         <SheetBodyView

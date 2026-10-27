@@ -97,6 +97,7 @@ detach env -u PIANO_API_SOCKET \
   PI_CODING_AGENT_DIR="$RUN/pi-agent" PI_CODING_AGENT_SESSION_DIR="$RUN/pi-sessions" PI_OFFLINE=1 \
   PIANO_ALLOWED_ORIGINS="$WEB_URL,$API_URL" PIANO_PI_CLI="$PI_CLI" PIANO_PI_ARGS= \
   PIANO_TEST_AUDIT="$RUN/audit.jsonl" \
+  ${VERIFY_GH_CLI:+PIANO_GH_CLI="$VERIFY_GH_CLI"} \
   node server/main.ts > "$RUN/logs/server.log" 2>&1 < /dev/null &
 SERVER_PID=$!
 cd "$ROOT/web"

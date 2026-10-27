@@ -488,6 +488,14 @@ export const ScopeAvailability = Schema.Struct({
   target: Schema.optional(ComparisonTarget),
 });
 export type ScopeAvailability = typeof ScopeAvailability.Type;
+/** What of the checkout's work is still only local, whatever the scope on screen. */
+export const LocalWork = Schema.Struct({
+  /** Commits the branch's remote-tracking ref lacks, as Git holds it; null without such a ref. */
+  commitsNotPushed: Schema.NullOr(Schema.Number),
+  /** The working tree differs from HEAD, untracked non-ignored files included. */
+  uncommitted: Schema.Boolean,
+});
+export type LocalWork = typeof LocalWork.Type;
 export const WorkspaceChanges = Schema.Struct({
   workspace: Workspace,
   observedAt: Schema.String,
@@ -498,6 +506,7 @@ export const WorkspaceChanges = Schema.Struct({
       branch: Schema.NullOr(Schema.String),
       comparison: Comparison,
       scopes: Schema.Array(ScopeAvailability),
+      local: LocalWork,
       files: Schema.Array(ChangeFile),
       diff: Schema.String,
       truncated: Schema.Boolean,

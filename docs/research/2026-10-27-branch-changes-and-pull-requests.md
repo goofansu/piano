@@ -318,6 +318,51 @@ evidence for the session-level contract. Not exercised: a pull request base read
 GitHub (the link's branches came from the controlled `gh`), and a checkout whose remote default
 is set (rule 3 is covered by a module test only).
 
+## Prototype of slice 2 (2026-10-27)
+
+Built on the same worktree after slice 1. What it adds:
+
+- The header's Changes control is the review control: the diff icon, or, once a pull request is
+  linked, the state's icon and `#123` with the pull request and state as its description. It
+  shows on every layout where Changes can open; one area at a time it shows the Changes area.
+  The `#123` popover is gone with its trigger, diffstat and author line.
+- The pull request row under the Changes toolbar, while linked: `#123 Title ↗`, the state badge,
+  checks and review, `N commits not pushed` and `Edits not committed` (read by Git with the same
+  observation, no fetch), and `head → base` only when the head is not the inspected branch; its
+  menu is Open pull request, Change link…, Find from branch, Remove link. Linking and removing
+  answer with a toast.
+- The link dialog serves linking (URL, Link, Find from branch) and changing a link (prefilled,
+  Save link, Cancel). "Pull request" in the session menu and the palette opens Changes for a
+  linked session, else the dialog.
+- Polling and discovery follow the row: a linked session's facts poll while Changes shows; a
+  never-searched session is searched once when Changes first shows for it, as when its work
+  stops; a link removed elsewhere takes the row with it.
+- `PIANO_GH_CLI` points a scratch instance at a stand-in forge; `VERIFY_GH_CLI` passes it
+  through the verification launch.
+
+Observed on a seeded scratch instance with the stand-in `gh` answering `#222` as open with
+passing checks and review required, evidence under
+`verify-piano-evidence/20261027-221352-58247/pull-request-fold/`:
+
+| Step | Seen |
+| --- | --- |
+| Linked session, Changes closed (`01`) | Header control `#222`, green, description "Pull request #222, Open"; no popover. |
+| Changes open (`12`, `13`, `14`) | Row: `#222 Plan the verification ↗ · Open · Checks passed · Review required · Edits not committed · verify-plan → main` (the session is on `main`, so the pair shows); wraps whole facts at 390px and 320px. |
+| Row menu (`03`), Change link… (`04`) | Four items with Remove link last after a separator; the dialog "Change link" prefilled with the URL. |
+| Unlinked session, Changes open (`06`) | No row; the diff icon in the header. |
+| Session menu → Pull request (`07`, `08`) | The link dialog; Find from branch answers "No open PR found for this branch." |
+| Link by hand (`09`), Remove link (`10`) | "Pull request linked", the row and `#222` appear; "Pull request link removed", both go. |
+| Session menu → Pull request on a linked session (`11`) | Changes opens, the control reads "Hide changes", pressed. |
+
+Gates: `npm run typecheck`, `npm run lint`, `npm test` (1170 tests, 0 failed). New module tests
+cover the review control's face, the row's facts (including the branch pair only for another
+head, and nothing local saying nothing), and the state machine's `reveal` (search once, show a
+linked session's details, hide with Changes, a link removed elsewhere closing the row). Not
+exercised: a merged or closed pull request through the browser (the fixture answered open; the
+badges and colours are the ones the popover had), and `N commits not pushed` through the browser
+(the scratch repository has no remote; the count is covered by its Git read in module tests
+only through the wire type, so it is the one fact of the row with no observation yet).
+
 ## Rejected alternatives
 
 - **Keep the popover and enrich Changes too.** Two places for one pull request fails Once, and

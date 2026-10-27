@@ -1,9 +1,9 @@
+import type { LocalWork } from "@shared/wire";
 import {
   ArrowRightIcon,
-  BookMarkedIcon,
   CheckIcon,
   ClockIcon,
-  FileDiffIcon,
+  ExternalLinkIcon,
   GitBranchIcon,
   GitMergeIcon,
   GitPullRequestClosedIcon,
@@ -11,40 +11,36 @@ import {
   GitPullRequestIcon,
   type LucideIcon,
   MessageSquareIcon,
+  MoreHorizontalIcon,
   XCircleIcon,
-  XIcon,
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
-import { PianoButton } from "@/components/PianoButton";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { IconButton } from "@/components/IconButton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/PianoDialog";
 import {
-  Popover,
-  PopoverContent,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/PianoPopover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/PianoDropdownMenu";
 import { StatusBadge as Badge } from "@/components/StatusBadge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { returnFocusForKeyboard } from "@/lib/pointerClose";
 import {
   type PullRequestView,
   pullRequestForm,
-  pullRequestTrigger,
+  pullRequestRow,
   pullRequestView,
   type SignalOutcome,
-  STATUS_UNAVAILABLE,
 } from "@/lib/pullRequestView";
 import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 
-const states = {
+/** Each state's icon and colour, GitHub's: green open, grey draft, purple merged, red closed. */
+export const pullRequestStates = {
   open: { Icon: GitPullRequestIcon, color: "text-ok", variant: "success" },
   draft: { Icon: GitPullRequestDraftIcon, color: "text-muted-foreground", variant: "secondary" },
   merged: { Icon: GitMergeIcon, color: "text-merged", variant: "merged" },
@@ -60,300 +56,186 @@ const signalIcons: Record<SignalOutcome, { Icon: LucideIcon; color: string }> = 
   review_required: { Icon: MessageSquareIcon, color: "text-muted-foreground" },
 };
 
+export type PullRequestControl = ReturnType<typeof useSessionPullRequest>;
+
+/** The linked pull request as the control knows it: named from the registry's link at once. */
+export function pullRequestViewOf(pr: PullRequestControl): PullRequestView | undefined {
+  return pullRequestView(
+    pr.value ?? (pr.registered ? { link: pr.registered, pullRequest: null } : undefined),
+  );
+}
+
 /**
- * One associated PR, not transcript references or a decorative link stack. Named from the
- * registry's link as soon as the session has one; the icon breathes, as a status dot does, only
- * while the user waits on a read: the first one, or one while the details are open. A refresh
- * on returning to the tab or when work stops keeps valid facts on screen, so it is silent.
+ * The pull request row under the Changes toolbar, only while the registry links one: the number
+ * and title (the link to GitHub), its state, checks and review, what is still only local, and its
+ * branches when its head is not the branch Changes inspects. Its menu holds the link's actions.
+ * Hand-written: a one-line fact row with an actions menu has no shadcn component.
  */
-function SessionPullRequestTrigger({
-  view,
-  loading,
-  ref,
+export function PullRequestRow({
+  pr,
+  branch,
+  local,
 }: {
-  view: PullRequestView;
-  loading: boolean;
-  ref: React.Ref<HTMLButtonElement>;
+  pr: PullRequestControl;
+  /** The branch Changes inspects. */
+  branch: string | undefined;
+  local: LocalWork | undefined;
 }) {
-  const mobile = useIsMobile();
-  const { status } = view;
-  const face = pullRequestTrigger(view, loading);
-  const Icon = status ? states[status.state].Icon : GitPullRequestIcon;
+  const view = pullRequestViewOf(pr);
+  if (!pr.linked || !view) return null;
+  const row = pullRequestRow(view, { branch, local, loading: pr.loading && !pr.value });
+  const state = row.status.state && pullRequestStates[row.status.state];
+  const Icon = state?.Icon ?? GitPullRequestIcon;
   return (
-    <Tooltip>
-      <PopoverTrigger asChild>
-        <TooltipTrigger asChild>
-          <PianoButton
-            ref={ref}
-            variant="ghost"
-            size={mobile ? "xs" : "sm"}
-            trailing
-            aria-label={face.ariaLabel}
-            aria-description={face.ariaDescription}
-            aria-busy={loading || undefined}
-          >
-            <Icon
-              data-icon="inline-start"
-              data-motion={loading ? "pulse" : undefined}
-              data-late=""
-              className={status ? states[status.state].color : "text-muted-foreground"}
-              aria-hidden
-            />{" "}
-            {face.label}
-          </PianoButton>
-        </TooltipTrigger>
-      </PopoverTrigger>
-      <TooltipContent className="max-w-80">
-        <p className="text-wrap">{face.tooltip}</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-/** Where the facts will be while the first read is in flight; the header names it. */
-function PullRequestDetailsSkeleton() {
-  return (
-    <div className="flex flex-col gap-3" aria-busy="true">
-      <span className="sr-only">Loading pull request…</span>
-      <Skeleton className="h-4 w-4/5" />
-      <Skeleton className="h-5 w-16" />
-      <Skeleton className="h-3 w-1/2" />
-    </div>
-  );
-}
-
-/** Size of the change, as GitHub's PR header puts it: files changed, then lines added and removed. */
-function DiffStat({ diff }: { diff: NonNullable<PullRequestView["diff"]> }) {
-  const { additions, deletions, changedFiles } = diff;
-  return (
-    <div className="flex items-center gap-1.5 text-xs tabular-nums">
-      <FileDiffIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="mr-1.5 text-muted-foreground">
-        {changedFiles.toLocaleString()} {changedFiles === 1 ? "file" : "files"} changed
-      </span>
-      <span className="font-medium text-ok">
-        <span className="sr-only">Additions </span>+{additions.toLocaleString()}
-      </span>
-      <span className="font-medium text-err">
-        <span className="sr-only">Deletions </span>−{deletions.toLocaleString()}
-      </span>
-    </div>
-  );
-}
-
-/** Where, how big and how ready: the facts that decide whether to open the PR. */
-function PullRequestFacts({ view }: { view: PullRequestView }) {
-  const { branches, diff, signals } = view;
-  if (!branches && !diff && !signals.length) return null;
-  return (
-    <div className="flex flex-col gap-1.5">
-      {branches && (
-        <div
-          className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-muted-foreground"
-          title={`${branches.head} into ${branches.base}`}
+    <section
+      aria-label="Pull request"
+      className="flex min-w-0 items-center gap-x-3 border-b border-line py-1 pr-2 pl-4 text-xs text-ink-2"
+    >
+      <Icon
+        data-motion={pr.loading && !pr.value ? "pulse" : undefined}
+        className={`size-3.5 shrink-0 ${state?.color ?? "text-muted-foreground"}`}
+        aria-hidden
+      />
+      {/* One wrapping line: the link, then each fact whole; a narrow row flows them beneath. */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+        <a
+          href={row.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex max-w-full min-w-0 items-center gap-1 text-ink underline-offset-4 hover:underline"
         >
-          <GitBranchIcon className="size-3 shrink-0" aria-hidden />
-          <span className="truncate">{branches.head}</span>
-          <ArrowRightIcon className="size-3 shrink-0" aria-label="into" />
-          <span className="shrink-0">{branches.base}</span>
-        </div>
-      )}
-      {diff && <DiffStat diff={diff} />}
-      {signals.length > 0 && (
-        // Plain supporting facts, rather than competing status badges; only the icon carries the outcome color.
-        <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-          {signals.map((signal) => {
-            const { Icon, color } = signalIcons[signal.outcome];
-            return (
-              <span key={signal.label} className="flex items-center gap-1.5">
-                <Icon className={`size-3 shrink-0 ${color}`} aria-hidden />
-                {signal.label}
-              </span>
-            );
-          })}
-        </div>
-      )}
-    </div>
+          <span className="shrink-0">{row.name}</span>
+          {row.title && <span className="truncate">{row.title}</span>}
+          <ExternalLinkIcon className="size-3 shrink-0 text-ink-3" aria-hidden />
+        </a>
+        {state ? (
+          <Badge variant={state.variant}>{row.status.label}</Badge>
+        ) : (
+          <Badge variant="secondary">{row.status.label}</Badge>
+        )}
+        {row.signals.map((signal) => {
+          const { Icon: SignalIcon, color } = signalIcons[signal.outcome];
+          return (
+            <span
+              key={signal.label}
+              className="flex items-center gap-1.5 whitespace-nowrap text-muted-foreground"
+            >
+              <SignalIcon className={`size-3 shrink-0 ${color}`} aria-hidden />
+              {signal.label}
+            </span>
+          );
+        })}
+        {row.local.map((fact) => (
+          <span key={fact} className="whitespace-nowrap text-muted-foreground">
+            {fact}
+          </span>
+        ))}
+        {row.branches && (
+          <span
+            className="flex max-w-full min-w-0 items-center gap-1 font-mono text-muted-foreground"
+            title={`${row.branches.head} into ${row.branches.base}`}
+          >
+            <GitBranchIcon className="size-3 shrink-0" aria-hidden />
+            <span className="truncate">{row.branches.head}</span>
+            <ArrowRightIcon className="size-3 shrink-0" aria-label="into" />
+            <span className="shrink-0">{row.branches.base}</span>
+          </span>
+        )}
+      </div>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <IconButton size="list" label="Pull request actions" disabled={pr.busy}>
+            <MoreHorizontalIcon />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <a href={row.url} target="_blank" rel="noopener noreferrer">
+              Open pull request <ExternalLinkIcon data-icon="inline-end" aria-hidden />
+            </a>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={pr.open}>Change link…</DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              void pr.discover().then((outcome) => {
+                if (outcome._tag === "saved" && outcome.value.link)
+                  toast.success("Pull request linked");
+              });
+            }}
+          >
+            Find from branch
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              void pr.remove().then((outcome) => {
+                if (outcome._tag === "saved") toast.success("Pull request link removed");
+              });
+            }}
+          >
+            Remove link
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </section>
   );
 }
 
-function PullRequestStatusBadge({ status }: { status: NonNullable<PullRequestView["status"]> }) {
-  const { Icon, variant } = states[status.state];
-  return (
-    <Badge variant={variant}>
-      <Icon data-icon="inline-start" aria-hidden />
-      {status.label}
-    </Badge>
-  );
-}
-
-type PullRequestControl = ReturnType<typeof useSessionPullRequest>;
-
-/** Renders the surface `pr` decides on and moves focus between its controls. */
-export function SessionPullRequestControl({
+/**
+ * The link dialog: linking a pull request to a session without one (with Find from branch), or
+ * changing the saved link. Opened from the session menu, the palette and the row's menu; a link
+ * that appears closes it.
+ */
+export function PullRequestLinkDialog({
   pr,
   menuTrigger,
 }: {
   pr: PullRequestControl;
-  /** The session menu, which opens this control while no PR is linked. */
+  /** The session menu, which opens this dialog while no pull request is linked. */
   menuTrigger: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const titleId = useId();
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  // The registry's link names the PR before its first read lands; the read adds GitHub's facts.
-  const loaded = pr.value !== undefined;
-  const view = pullRequestView(
-    pr.value ?? (pr.registered ? { link: pr.registered, pullRequest: null } : undefined),
-  );
-  const popoverOpen = pr.surface === "details" || pr.surface === "editing";
-  // The registry's link decides that details show; until the first read lands they are loading.
-  const showingDetails = pr.linked && pr.surface === "details";
-  const waiting = pr.loading && (!loaded || showingDetails);
-  // Opening, cancel and successful discovery replace the focused form controls.
-  useEffect(() => {
-    if (showingDetails) closeRef.current?.focus();
-  }, [showingDetails]);
-  const onOpenChange = (open: boolean) => (open ? pr.open() : pr.close());
-  // A keyboard close returns focus to whichever control can reopen this: the PR button once
-  // linked, else the menu. A pointer close leaves focus where the click put it; moving it would
-  // dismiss the non-modal menu that the click just opened.
+  const editing = pr.surface === "editing";
+  const open = editing || pr.surface === "link-form";
+  // A keyboard close returns focus to the menu that can reopen this; a pointer close leaves focus
+  // where the click put it.
   const restoreFocus = (event: Event) => {
     returnFocusForKeyboard(event);
     if (event.defaultPrevented) return;
     event.preventDefault();
-    (view ? triggerRef : menuTrigger).current?.focus();
+    menuTrigger.current?.focus();
   };
   return (
-    <>
-      <Dialog open={pr.surface === "link-form"} onOpenChange={onOpenChange}>
-        <DialogContent
-          className="sm:max-w-sm"
-          aria-describedby={undefined}
-          onCloseAutoFocus={restoreFocus}
-        >
-          <DialogHeader>
-            <DialogTitle>Pull request</DialogTitle>
-          </DialogHeader>
-          <PullRequestForm pr={pr} editing={false} />
-        </DialogContent>
-      </Dialog>
-      <Popover open={popoverOpen} onOpenChange={onOpenChange}>
-        {view && <SessionPullRequestTrigger view={view} loading={waiting} ref={triggerRef} />}
-        <PopoverContent
-          onCloseAutoFocus={restoreFocus}
-          align="start"
-          sideOffset={8}
-          collisionPadding={16}
-          aria-labelledby={titleId}
-          className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 overflow-y-auto"
-        >
-          <PopoverHeader className="flex-row items-center justify-between gap-2">
-            {view && showingDetails ? (
-              <p className="flex min-w-0 items-center gap-2 text-muted-foreground">
-                <BookMarkedIcon className="size-4 shrink-0" aria-hidden />
-                <span className="min-w-0 break-all">
-                  {view.repo}{" "}
-                  {view.number && <span className="whitespace-nowrap">· #{view.number}</span>}
-                </span>
-              </p>
-            ) : (
-              <PopoverTitle id={titleId}>Pull request</PopoverTitle>
-            )}
-            <PianoButton
-              ref={closeRef}
-              variant="ghost"
-              size="inline"
-              aria-label="Close pull request"
-              onClick={pr.close}
-            >
-              <XIcon />
-            </PianoButton>
-          </PopoverHeader>
-          {showingDetails && !loaded ? (
-            <PullRequestDetailsSkeleton />
-          ) : view && showingDetails ? (
-            <>
-              {/* Plain PR facts, not a second card inside the popover; they fade in over the skeleton they replace. */}
-              <div data-motion="fade" className="flex min-w-0 flex-col gap-2">
-                <PopoverTitle id={titleId}>
-                  <a
-                    href={view.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="break-words hover:underline"
-                  >
-                    {view.title ?? "View pull request"}
-                  </a>
-                </PopoverTitle>
-                {/* Status, then provenance, each on its own line: the card never reflows as the time label grows. */}
-                <div className="flex flex-col items-start gap-3">
-                  {view.status ? (
-                    <PullRequestStatusBadge status={view.status} />
-                  ) : (
-                    <Badge variant="secondary">{STATUS_UNAVAILABLE}</Badge>
-                  )}
-                  {(view.author || view.timeLabel) && (
-                    <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                      {view.author && (
-                        <>
-                          <Avatar size="sm" className="size-4" aria-hidden>
-                            <AvatarImage
-                              src={`https://github.com/${view.author}.png?size=40`}
-                              alt=""
-                            />
-                            <AvatarFallback>{view.author.charAt(0).toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <span className="truncate text-foreground">{view.author}</span>
-                        </>
-                      )}
-                      {view.timeLabel && <span className="shrink-0">{view.timeLabel}</span>}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <PullRequestFacts view={view} />
-              <Separator className="opacity-50" />
-              {/* Pull the ghost buttons' padding out so their labels meet the content edge. */}
-              <div className="-mr-2 -mb-1 flex justify-end gap-1">
-                <Button variant="ghost" size="xs" disabled={pr.busy} onClick={pr.edit}>
-                  Change link
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  disabled={pr.busy}
-                  onClick={() => {
-                    void pr.remove();
-                  }}
-                >
-                  Remove link
-                </Button>
-              </div>
-            </>
-          ) : (
-            <PullRequestForm pr={pr} editing={pr.surface === "editing"} />
-          )}
-        </PopoverContent>
-      </Popover>
-    </>
+    <Dialog open={open} onOpenChange={(next) => !next && pr.cancel()}>
+      <DialogContent
+        className="sm:max-w-sm"
+        aria-describedby={undefined}
+        onCloseAutoFocus={restoreFocus}
+      >
+        <DialogHeader>
+          <DialogTitle>{editing ? "Change link" : "Pull request"}</DialogTitle>
+        </DialogHeader>
+        {open && <PullRequestForm pr={pr} editing={editing} />}
+      </DialogContent>
+    </Dialog>
   );
 }
 
-/** Mount a draft only when editing; background refreshes must not replace typed input. */
+/** Mount a draft only while open; background refreshes must not replace typed input. */
 function PullRequestForm({ pr, editing }: { pr: PullRequestControl; editing: boolean }) {
-  const [url, setUrl] = useState(pr.value?.link?.url ?? "");
+  const [url, setUrl] = useState(pr.value?.link?.url ?? pr.registered?.url ?? "");
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (editing) inputRef.current?.focus();
-  }, [editing]);
+    inputRef.current?.focus();
+  }, []);
   const form = pullRequestForm({ url, busy: pr.busy, finding: pr.finding, editing });
   const { secondary } = form;
   return (
     <form
       onSubmit={async (event) => {
         event.preventDefault();
-        if (form.canSubmit) await pr.link(url);
+        if (!form.canSubmit) return;
+        const outcome = await pr.link(url);
+        if (outcome._tag === "saved") toast.success("Pull request linked");
       }}
       className="flex flex-col gap-4"
     >
@@ -385,7 +267,10 @@ function PullRequestForm({ pr, editing }: { pr: PullRequestControl; editing: boo
             variant="outline"
             disabled={secondary.disabled}
             onClick={() => {
-              void pr.discover();
+              void pr.discover().then((outcome) => {
+                if (outcome._tag === "saved" && outcome.value.link)
+                  toast.success("Pull request linked");
+              });
             }}
           >
             <GitBranchIcon data-icon="inline-start" />
