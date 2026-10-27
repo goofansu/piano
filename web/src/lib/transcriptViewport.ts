@@ -17,7 +17,7 @@ const NEAR_TOP = 40;
 /** A message whose top is above this line under the container's top edge is the one being read. */
 const READING_LINE = 80;
 /** A jump lands a message this far under the container's top edge. */
-const JUMP_MARGIN = 16;
+export const TRANSCRIPT_JUMP_MARGIN = 16;
 /** A wheel's `deltaMode` values: pixels, lines (`WheelEvent.DOM_DELTA_LINE`) or pages. */
 const DELTA_LINE = 1;
 const DELTA_PAGE = 2;
@@ -102,6 +102,20 @@ export function domViewportElement(container: HTMLElement): ViewportElement {
   };
 }
 
+/** Destination geometry varies by adapter; jump intent does not. */
+function moveTo(el: ViewportElement, entry: JumpEntry): boolean {
+  if (entry.kind === "top" || entry.kind === "bottom") {
+    if (el.jumpToEdge) el.jumpToEdge(entry.kind);
+    else el.scrollTo({ top: entry.kind === "top" ? 0 : el.scrollHeight });
+    return true;
+  }
+  if (el.jumpToMessage) return el.jumpToMessage(entry.messageId);
+  const top = el.anchorTop(entry.messageId);
+  if (top === undefined) return false;
+  el.scrollTo({ top: top + el.scrollTop - TRANSCRIPT_JUMP_MARGIN });
+  return true;
+}
+
 export function createTranscriptViewport(): TranscriptViewport {
   let element: ViewportElement | null = null;
   let stick = true;
@@ -177,29 +191,17 @@ export function createTranscriptViewport(): TranscriptViewport {
     jump: (entry) => {
       const el = element;
       if (!el) return false;
-      if (entry.kind === "top" || entry.kind === "bottom") {
-        stick = entry.kind === "bottom";
-        if (el.jumpToEdge) el.jumpToEdge(entry.kind);
-        else el.scrollTo({ top: entry.kind === "top" ? 0 : el.scrollHeight });
-        lastTop = el.scrollTop;
-        setBottom(near(el));
-        return true;
-      }
-      const id = entry.messageId;
-      if (el.jumpToMessage) {
-        const previous = stick;
-        stick = false; // Mounting the destination must not follow the end in the meantime.
-        const found = el.jumpToMessage(id);
-        if (!found) stick = previous;
-        return found;
-      }
-      const top = el.anchorTop(id);
-      if (top === undefined) return false;
-      stick = false;
-      el.scrollTo({ top: top + el.scrollTop - JUMP_MARGIN });
+      // Consume older reader movement before choosing the explicit jump's intent. A virtual
+      // adapter can synchronously call correct() while moving; it must not rediscover that
+      // queued scroll and overwrite this decision. All destinations share this transaction.
+      scrolled();
+      const previous = stick;
+      stick = entry.kind === "bottom"; // Unpin before mounting an earlier destination.
+      const found = moveTo(el, entry);
+      if (!found) stick = previous;
       lastTop = el.scrollTop;
       setBottom(near(el));
-      return true;
+      return found;
     },
     current: (entries) => {
       const el = element;

@@ -167,6 +167,53 @@ test("index jumps unpin before asynchronous mounting and refinement", () => {
   assert.equal(el.scrollTop, 800);
 });
 
+test("explicit virtual jumps supersede native scrolls whose events are still queued", () => {
+  const { viewport, el } = setup();
+  const virtual: ViewportElement = el;
+  virtual.jumpToEdge = () => viewport.correct(() => el.scrollTo({ top: el.scrollHeight }));
+  virtual.jumpToMessage = () => {
+    viewport.correct(() => el.scrollTo({ top: 800 }));
+    return true;
+  };
+
+  el.scrollTop = 1200; // Pending move up, followed by an explicit request to follow the end.
+  assert.equal(viewport.jump(BOTTOM_ENTRY), true);
+  viewport.scrolled();
+  el.scrollHeight = 2600;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2100, "the jump to the end wins over the earlier move up");
+
+  scroll(el, viewport, 1000);
+  el.scrollTop = 2100; // Pending arrival at the end, followed by a jump to an earlier message.
+  assert.equal(
+    viewport.jump({ kind: "user", id: "earlier", messageId: "earlier", label: "Earlier" }),
+    true,
+  );
+  viewport.scrolled();
+  el.scrollHeight = 3000;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 800, "the message jump wins over the earlier arrival at the end");
+});
+
+test("a missing virtual destination preserves the reader's latest follow intent", () => {
+  const { viewport, el } = setup();
+  const virtual: ViewportElement = el;
+  virtual.jumpToMessage = () => false;
+  const missing: JumpEntry = { kind: "user", id: "gone", messageId: "gone", label: "Gone" };
+
+  el.scrollTop = 1200; // The queued move up must not be lost when the lookup fails.
+  assert.equal(viewport.jump(missing), false);
+  el.scrollHeight = 2600;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 1200);
+
+  el.scrollTop = 2100; // Nor may a failed lookup unpin a reader who just reached the end.
+  assert.equal(viewport.jump(missing), false);
+  el.scrollHeight = 3000;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2500);
+});
+
 test("measurement compensation preserves follow intent in both directions", () => {
   const { viewport, el } = setup();
   viewport.correct(() => {
