@@ -6,6 +6,7 @@ import {
   ChevronsUpDownIcon,
   InfoIcon,
   RefreshCwIcon,
+  WrapTextIcon,
 } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
 import {
@@ -31,6 +32,7 @@ import {
   targetProvenance,
 } from "@/lib/changesView";
 import { abbrevHome } from "@/lib/format";
+import { useChangesWrap } from "@/lib/useChangesWrap";
 
 /**
  * The comparison, at the toolbar's start: its face names the scope on screen (and Branch's target),
@@ -114,7 +116,7 @@ export function ChangesActions({
   refresh: () => void;
   toggleEvery: () => void;
 }) {
-  // Wrap, a remembered preference, is the palette's "Wrap" row; the toolbar keeps only actions.
+  const [wrap, setWrap] = useChangesWrap();
   return (
     <>
       <IconButton
@@ -124,6 +126,16 @@ export function ChangesActions({
         onClick={toggleEvery}
       >
         {sheet.everyCollapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+      </IconButton>
+      {/* The remembered wrap preference, filled while on, as the header's rail toggle is. */}
+      <IconButton
+        size="header"
+        label="Wrap"
+        aria-pressed={wrap}
+        onClick={() => setWrap(!wrap)}
+        className="aria-pressed:bg-muted"
+      >
+        <WrapTextIcon />
       </IconButton>
       <IconButton
         size="header"
