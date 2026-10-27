@@ -1,7 +1,11 @@
 import { elementScroll, useVirtualizer } from "@tanstack/react-virtual";
 import { type RefObject, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TranscriptRow } from "./transcript";
-import { domViewportElement, type TranscriptViewport } from "./transcriptViewport";
+import {
+  domViewportElement,
+  TRANSCRIPT_JUMP_MARGIN,
+  type TranscriptViewport,
+} from "./transcriptViewport";
 
 /** Geometry is a projection, never history. The viewport owns reader intent; the virtualizer
  * owns measured offsets and refines index jumps as the destination's neighbours mount. */
@@ -27,7 +31,7 @@ export function useVirtualTranscript(
     // A bounded first paint (also in static rendering); the real container replaces this guess.
     initialRect: { width: 768, height: 900 },
     scrollMargin: margin,
-    scrollPaddingStart: 16,
+    scrollPaddingStart: TRANSCRIPT_JUMP_MARGIN,
     scrollToFn: (offset, options, instance) => {
       viewport.correct(() => elementScroll(offset, options, instance));
     },
@@ -89,7 +93,8 @@ export function useVirtualTranscript(
       const top = domViewportElement(el).anchorTop(target);
       if (
         top !== undefined &&
-        (Math.abs(top - 16) < 1 || el.scrollHeight - el.scrollTop - el.clientHeight < 1)
+        (Math.abs(top - TRANSCRIPT_JUMP_MARGIN) < 1 ||
+          el.scrollHeight - el.scrollTop - el.clientHeight < 1)
       )
         setTarget(null);
     }
