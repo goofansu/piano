@@ -4,7 +4,7 @@
  * browser (which renders the tool calls). Each side imports these names and shapes rather than
  * spelling them, so a renamed tool, field or status fails the type check instead of drifting.
  */
-import type { SessionStatusFacts, ThinkingLevel, WorktreeRequest } from "./wire.ts";
+import type { SessionStatusFacts, WorktreeRequest } from "./wire.ts";
 
 /** A new worktree for the session: a new branch created through Worktrunk, as on the New page.
  * `hooks` runs approved Worktrunk hooks (unapproved ones refuse creation); off by default. */
@@ -102,8 +102,6 @@ export interface StartArguments {
   readonly cwd?: string;
   /** Create a new worktree from `cwd`'s repository and start the session there. */
   readonly worktree?: WorktreeRequest;
-  readonly model?: string;
-  readonly thinkingLevel?: ThinkingLevel;
 }
 
 /** The wait tool's arguments: handles exactly as a start returned them. */

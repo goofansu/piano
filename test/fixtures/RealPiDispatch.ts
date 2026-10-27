@@ -97,7 +97,7 @@ export interface RealPiDispatchFixture {
     readonly url: string;
     readonly origin: string;
   };
-  /** The `provider/model` both sessions run on. */
+  /** The parent's `provider/model`, deliberately different from the new-session default. */
   readonly model: string;
   /** Only in the parent's own conversation; a self-contained brief must not carry it to the child. */
   readonly parentSecret: string;
@@ -191,7 +191,7 @@ export async function startRealPiDispatch(
   const parentPrompt = `${parentSecret}. Dispatch this work in a new session and wait for its answer.`;
   const startTool = "piano_start_session";
   const waitTool = "piano_wait_sessions";
-  const model = "piano-dispatch/local";
+  const model = "piano-dispatch/override";
 
   const git = (...args: string[]) =>
     execFileSync(
@@ -283,7 +283,9 @@ export async function startRealPiDispatch(
       const schema = declared.find((tool) => tool.function?.name === startTool)?.function
         ?.parameters;
       if (!schema) return record(refuse(response, `${startTool} was not declared to the model`));
-      const args = { prompt: brief, model, thinkingLevel: "high" };
+      // Stale tool calls may still carry removed options, including a nonexistent model.
+      // Neither those options nor the parent's non-default model may override child defaults.
+      const args = { prompt: brief, model: "missing/nonexistent", thinkingLevel: "high" };
       respond(
         response,
         body.model,
@@ -365,17 +367,15 @@ export async function startRealPiDispatch(
         baseUrl: `http://127.0.0.1:${modelPort}/v1`,
         api: "openai-completions",
         apiKey: "scratch-not-a-credential",
-        models: [
-          {
-            id: "local",
-            name: "Dispatch fixture",
-            reasoning: true,
-            input: ["text"],
-            contextWindow: 200000,
-            maxTokens: 256,
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          },
-        ],
+        models: ["local", "override"].map((id) => ({
+          id,
+          name: "Dispatch fixture",
+          reasoning: true,
+          input: ["text"],
+          contextWindow: 200000,
+          maxTokens: 256,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        })),
       },
     },
   });

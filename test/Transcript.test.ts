@@ -483,7 +483,7 @@ test("a dispatch names each session it started or waited on, with the parent's o
     anchorMessageId: null,
   };
   const brief = "Review the current diff.\nDo not edit files.";
-  const params = `prompt:\n${brief}\nthinkingLevel: low`;
+  const params = `prompt:\n${brief}`;
   const start: RenderMsg = {
     id: "start",
     role: "assistant",
@@ -492,7 +492,7 @@ test("a dispatch names each session it started or waited on, with the parent's o
       {
         id: "s",
         name: "piano_start_session",
-        args: JSON.stringify({ prompt: brief, thinkingLevel: "low" } satisfies StartArguments),
+        args: JSON.stringify({ prompt: brief } satisfies StartArguments),
       },
     ],
   };

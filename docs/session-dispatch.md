@@ -126,18 +126,15 @@ while Worktrunk runs (a cancelled tool call, a closed terminal) does not interru
 its registration and the session complete, and `piano_session_status` or `list` finds the session;
 only its first prompt is not sent, since the caller was no longer attached to observe it.
 
-The optional `model` uses the normal `provider/model` selection;
-omitting it uses the new session's normal defaults, not necessarily the parent's model.
-The optional `thinkingLevel` sets reasoning effort: `off`, `minimal`, `low`, `medium`, `high`,
-`xhigh` or `max`. Choose a level supported by the selected model. Omitting it preserves normal
-new-session effort defaults; it does not inherit the parent's current effort.
+The tool always uses Piano's normal new-session model and effort defaults, not the parent's
+settings. It does not accept model or effort overrides; the human-facing CLI still supports
+`--model` and `--thinkingLevel`.
 
 For example, the agent can call `piano_start_session` with:
 
 ```json
 {
-  "prompt": "Review the current diff for correctness. Do not edit files. Report actionable findings and the checks you ran.",
-  "thinkingLevel": "high"
+  "prompt": "Review the current diff for correctness. Do not edit files. Report actionable findings and the checks you ran."
 }
 ```
 

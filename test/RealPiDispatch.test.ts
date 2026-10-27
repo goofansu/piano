@@ -103,12 +103,17 @@ test("a real Pi dispatches a brief and reads the child's answer back", {
     });
     const childView = await client.next(
       (message) => message._tag === "selected" && message.selectionId === childSelectionId,
-      "the child's requested thinking level",
+      "the child's default model and thinking level",
+    );
+    assert.equal(
+      childView._tag === "selected" && childView.snapshot.state.model,
+      "piano-dispatch/local",
+      "dispatch uses the configured default, not a supplied model or the parent's model",
     );
     assert.equal(
       childView._tag === "selected" && childView.snapshot.state.thinkingLevel,
-      "high",
-      "the tool's explicit effort overrides normal defaults in the real Pi session",
+      "low",
+      "dispatch uses the configured default effort, not a supplied override",
     );
     // The backlink lives in the child's own Pi history, written by Piano's extension.
     assert.equal(

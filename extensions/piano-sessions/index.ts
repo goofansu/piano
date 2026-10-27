@@ -23,7 +23,6 @@ import {
   type WaitArguments,
   type WaitToolResult,
 } from "../../shared/dispatch.ts";
-import { ThinkingLevel } from "../../shared/wire.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
 import { registerPreview } from "./Preview.ts";
 import { readStatus, startSession, waitSessions, withLinks } from "./SessionDispatch.ts";
@@ -74,12 +73,6 @@ const StartParameters = Type.Object({
   prompt: Type.String({ minLength: 1, description: "Self-contained work brief" }),
   cwd: Type.Optional(Type.String({ minLength: 1 })),
   worktree: Type.Optional(Worktree),
-  model: Type.Optional(Type.String({ minLength: 1 })),
-  thinkingLevel: Type.Optional(
-    literals(ThinkingLevel.literals, {
-      description: "Reasoning effort; choose a level supported by the selected model.",
-    }),
-  ),
 });
 const StartOutput = Type.Object({
   cwd: Type.String(),
@@ -237,7 +230,7 @@ export default function pianoSessions(pi: ExtensionAPI) {
         "Use Piano session tools only when the user explicitly asks to dispatch work through Piano. Otherwise, work in the current session. Waiting for that dispatched work is part of the authorized request.",
       ],
       description:
-        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there; use it for each concurrent writing task. A branch that exists, a hook that needs approval or a non-Git cwd refuses the start and creates no session. model is an optional provider/model; thinkingLevel optionally sets reasoning effort supported by that model. Omitted options use normal new-session defaults, not the parent's settings. Returns the initial prompt's disposition, a handle to pass unchanged to piano_wait_sessions, and an Open session link. Creation/admission is not completion. On uncertain delivery inspect Piano before trying again: never automatically repeat dispatch.",
+        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there; use it for each concurrent writing task. A branch that exists, a hook that needs approval or a non-Git cwd refuses the start and creates no session. Always uses normal new-session model and effort defaults, not the parent's settings. Returns the initial prompt's disposition, a handle to pass unchanged to piano_wait_sessions, and an Open session link. Creation/admission is not completion. On uncertain delivery inspect Piano before trying again: never automatically repeat dispatch.",
       parameters: StartParameters,
       outputSchema: StartOutput,
       async execute(_id, params, signal, _update, ctx) {
@@ -246,8 +239,9 @@ export default function pianoSessions(pi: ExtensionAPI) {
         return invoke(signal, async (observationSignal) => {
           const result = await startSession(
             {
-              ...params,
+              prompt: params.prompt,
               cwd: params.cwd ?? ctx.cwd,
+              worktree: params.worktree,
               dispatchedFrom: ctx.sessionManager.getSessionId(),
             },
             environment,
