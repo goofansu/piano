@@ -13,7 +13,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { Effect } from "effect";
-import { WorkspaceChanges, WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
+import {
+  type PreviewOptions,
+  WorkspaceChanges,
+  WorkspaceChangesLive,
+} from "../server/WorkspaceChanges.ts";
 import type { WorkspaceChanges as Observation } from "../shared/wire.ts";
 import { parseUnifiedDiff } from "../web/src/lib/diff.ts";
 
@@ -33,13 +37,21 @@ function fixture(t: TestContext) {
   const git = (...args: string[]) => gitInput(undefined, ...args);
   git("init", "-q");
   const workspace = { id: "scratch", folder: repo, path: repo };
-  const preview = (path?: string) =>
+  const read = (options: PreviewOptions & { readonly path?: string }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        return yield* (yield* WorkspaceChanges).preview(workspace, path);
+        return yield* (yield* WorkspaceChanges).preview(workspace, options);
       }).pipe(Effect.provide(WorkspaceChangesLive)),
     );
-  return { repo, git, gitInput, preview };
+  const preview = (path?: string) => read({ scope: "uncommitted", path });
+  return { repo, git, gitInput, preview, read };
+}
+
+/** The result of a read whose scope cannot be read, or the test fails. */
+function unavailable(value: Observation) {
+  assert.equal(value.result.status, "unavailable", JSON.stringify(value.result));
+  if (value.result.status !== "unavailable") throw new Error("Preview did not refuse");
+  return value.result;
 }
 test("written files: internal directory aliases share identity without poisoning Git's ignore query; a removed file is missing", async (t) => {
   const { repo } = fixture(t);
@@ -192,4 +204,145 @@ test("live changes: local filters and diff programs never run and intent-to-add 
   for (const marker of ["FILTER_RAN", "PROCESS_RAN", "DIFF_RAN", "TEXTCONV_RAN"])
     assert.equal(existsSync(join(repo, marker)), false);
   assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
+});
+
+test("branch scope: a commit or push keeps the branch's patch; advancing only the target adds nothing", async (t) => {
+  const { repo, git, read } = fixture(t);
+  git("switch", "-qc", "main");
+  writeFileSync(join(repo, "a"), "base\n");
+  git("add", ".");
+  git("commit", "-qm", "base");
+  git("switch", "-qc", "feature");
+  writeFileSync(join(repo, "a"), "edited\n");
+  writeFileSync(join(repo, "b"), "new\n");
+  const hints = { worktreeBase: "main" };
+  const before = ready(await read({ scope: "branch", hints }));
+  assert.equal(before.comparison.scope, "branch");
+  assert.equal(before.comparison.target?.name, "main");
+  assert.equal(before.comparison.target?.from, "worktree");
+  assert.deepEqual(
+    before.files.map((f) => f.path),
+    ["a", "b"],
+  );
+  assert.deepEqual(before.scopes, [
+    { scope: "branch", available: true, target: before.comparison.target },
+    { scope: "uncommitted", available: true },
+  ]);
+  // The comparison is content-preserving: committing changes nothing a reader sees.
+  git("add", ".");
+  git("commit", "-qm", "work");
+  const committed = ready(await read({ scope: "branch", hints }));
+  assert.equal(committed.diff, before.diff);
+  assert.equal(committed.comparison.base, before.comparison.base);
+  assert.deepEqual(ready(await read({ scope: "uncommitted" })).files, []);
+  // Only the target moves: the branch's patch is unchanged and the new target commit is not in it.
+  git("switch", "-q", "main");
+  writeFileSync(join(repo, "c"), "elsewhere\n");
+  git("add", ".");
+  git("commit", "-qm", "target moves");
+  git("switch", "-q", "feature");
+  const advanced = ready(await read({ scope: "branch", hints }));
+  assert.equal(advanced.diff, before.diff);
+  assert.equal(advanced.comparison.base, before.comparison.base);
+  // Without a scope the automatic one is Branch; with no hint and no remote, a local main is assumed.
+  assert.equal(ready(await read({ hints })).comparison.scope, "branch");
+  const assumed = ready(await read({}));
+  assert.equal(assumed.comparison.target?.from, "assumed");
+  assert.equal(assumed.comparison.target?.ref, "refs/heads/main");
+  // A per-file read names the same comparison, so the browser can refuse one that moved.
+  const single = ready(await read({ scope: "branch", hints, path: "a" }));
+  assert.deepEqual(single.comparison, advanced.comparison);
+  assert.match(single.diff, /\+edited/);
+});
+
+test("branch scope: the target is the pull request's base for its own head, else the worktree's base, else the remote's default", async (t) => {
+  const { git, read } = fixture(t);
+  git("switch", "-qc", "main");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  git("branch", "-q", "release");
+  git("switch", "-qc", "feature");
+  git("commit", "-q", "--allow-empty", "-m", "work");
+  const pullRequest = { head: "feature", base: "release" };
+  const fromPr = ready(
+    await read({ scope: "branch", hints: { pullRequest, worktreeBase: "main" } }),
+  );
+  assert.deepEqual(
+    [fromPr.comparison.target?.name, fromPr.comparison.target?.from],
+    ["release", "pull-request"],
+  );
+  // A pull request for another branch never retargets this one.
+  const other = ready(
+    await read({
+      scope: "branch",
+      hints: { pullRequest: { head: "other", base: "release" }, worktreeBase: "main" },
+    }),
+  );
+  assert.deepEqual(
+    [other.comparison.target?.name, other.comparison.target?.from],
+    ["main", "worktree"],
+  );
+  // The remote's default branch as Git holds it locally, never fetched.
+  const main = git("rev-parse", "main").trim();
+  git("update-ref", "refs/remotes/origin/main", main);
+  git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  const remote = ready(await read({ scope: "branch" }));
+  assert.deepEqual(
+    [remote.comparison.target?.ref, remote.comparison.target?.from],
+    ["refs/remotes/origin/main", "remote-default"],
+  );
+  // A hinted base Git does not hold falls through to the next rule, named.
+  const missing = ready(await read({ scope: "branch", hints: { worktreeBase: "gone" } }));
+  assert.equal(missing.comparison.target?.from, "remote-default");
+});
+
+test("branch scope: unavailable states are named, never another comparison", async (t) => {
+  const unborn = fixture(t);
+  assert.equal(unavailable(await unborn.read({ scope: "branch" })).detail, "No commits yet.");
+  assert.equal(ready(await unborn.read({})).comparison.scope, "uncommitted");
+
+  const { repo, git, read } = fixture(t);
+  git("switch", "-qc", "main");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  const onMain = unavailable(await read({ scope: "branch" }));
+  assert.equal(onMain.detail, "main is the base branch.");
+  assert.deepEqual(onMain.scopes, [
+    { scope: "branch", available: false, reason: "main is the base branch." },
+    { scope: "uncommitted", available: true },
+  ]);
+  assert.equal(ready(await read({})).comparison.scope, "uncommitted");
+  git("switch", "-q", "--detach");
+  assert.equal(unavailable(await read({ scope: "branch" })).detail, "Detached HEAD.");
+  git("switch", "-qc", "solo");
+  git("branch", "-qD", "main");
+  assert.equal(unavailable(await read({ scope: "branch" })).detail, "No base branch known.");
+  // Unrelated history: an orphan branch shares nothing with the target.
+  git("branch", "-q", "main");
+  git("switch", "-q", "--orphan", "orphan");
+  writeFileSync(join(repo, "o"), "orphan\n");
+  git("add", ".");
+  git("commit", "-qm", "orphan");
+  assert.equal(unavailable(await read({ scope: "branch" })).detail, "No common history with main.");
+  // A criss-cross merge has two merge bases: ambiguous, not one picked quietly.
+  git("switch", "-q", "main");
+  writeFileSync(join(repo, "m1"), "");
+  git("add", ".");
+  git("commit", "-qm", "A");
+  git("switch", "-qc", "feature");
+  writeFileSync(join(repo, "f1"), "");
+  git("add", ".");
+  git("commit", "-qm", "B");
+  const b = git("rev-parse", "HEAD").trim();
+  git("switch", "-q", "main");
+  writeFileSync(join(repo, "m2"), "");
+  git("add", ".");
+  git("commit", "-qm", "C");
+  git("switch", "-q", "feature");
+  git("merge", "-q", "--no-edit", "main");
+  git("switch", "-q", "main");
+  git("merge", "-q", "--no-edit", b);
+  git("switch", "-q", "feature");
+  assert.equal(
+    unavailable(await read({ scope: "branch" })).detail,
+    "Ambiguous merge base with main.",
+  );
 });

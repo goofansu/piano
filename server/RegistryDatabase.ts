@@ -20,7 +20,7 @@ const schema = `
   ) STRICT;
   CREATE TABLE worktrees (
     path TEXT PRIMARY KEY NOT NULL REFERENCES workspaces(path), folder_path TEXT NOT NULL,
-    branch TEXT NOT NULL, position INTEGER NOT NULL
+    branch TEXT NOT NULL, position INTEGER NOT NULL, base_branch TEXT
   ) STRICT;
   CREATE TABLE sessions (
     cwd TEXT NOT NULL REFERENCES workspaces(path), session_id TEXT NOT NULL,
@@ -31,6 +31,8 @@ const schema = `
     radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)),
     pull_request_state TEXT NOT NULL CHECK (pull_request_state IN ('discover', 'removed', 'linked')),
     pull_request_url TEXT, pull_request_source TEXT, pull_request_api_host TEXT CHECK (pull_request_api_host IS NULL OR pull_request_api_host = 'github.int.exe.xyz'), position INTEGER NOT NULL,
+    pull_request_head TEXT, pull_request_base TEXT,
+    changes_scope TEXT CHECK (changes_scope IS NULL OR changes_scope IN ('branch', 'uncommitted')),
     PRIMARY KEY (cwd, session_id),
     CHECK ((pull_request_state = 'linked' AND pull_request_url IS NOT NULL AND pull_request_source IS NOT NULL AND pull_request_source IN ('branch', 'manual'))
       OR (pull_request_state != 'linked' AND pull_request_url IS NULL AND pull_request_source IS NULL AND pull_request_api_host IS NULL))
@@ -99,14 +101,15 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
   },
   worktrees: {
     name: "worktrees",
-    columns: ["path", "folder_path", "branch", "position"],
+    columns: ["path", "folder_path", "branch", "position", "base_branch"],
     keys: 1,
     key: (w) => [w.path],
-    encode: (w, i) => [w.path, w.folder, w.branch, i],
+    encode: (w, i) => [w.path, w.folder, w.branch, i, w.baseBranch ?? null],
     decode: (r) => ({
       path: r.path as string,
       folder: r.folder_path as string,
       branch: r.branch as string,
+      ...(r.base_branch === null ? {} : { baseBranch: r.base_branch as string }),
     }),
   },
   sessions: {
@@ -127,6 +130,9 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       "pull_request_source",
       "pull_request_api_host",
       "position",
+      "pull_request_head",
+      "pull_request_base",
+      "changes_scope",
     ],
     keys: 2,
     key: (s) => [s.cwd, s.sessionId],
@@ -146,6 +152,9 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       s.pullRequest?.source ?? null,
       s.pullRequest?.apiHost ?? null,
       i,
+      s.pullRequest?.head ?? null,
+      s.pullRequest?.base ?? null,
+      s.changesScope ?? null,
     ],
     decode: (r) => ({
       cwd: r.cwd as string,
@@ -154,6 +163,9 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       updatedAt: r.updated_at as string,
       archived: Boolean(r.archived),
       ...(r.pinned ? { pinned: true } : {}),
+      ...(r.changes_scope === null
+        ? {}
+        : { changesScope: r.changes_scope as "branch" | "uncommitted" }),
       ...(r.project_id === null ? {} : { projectId: r.project_id as string }),
       ...(r.title === null ? {} : { title: r.title as string }),
       ...(r.stats === null ? {} : { stats: JSON.parse(r.stats as string) }),
@@ -170,6 +182,12 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
                     ...(r.pull_request_api_host === null
                       ? {}
                       : { apiHost: r.pull_request_api_host as "github.int.exe.xyz" }),
+                    ...(r.pull_request_head === null
+                      ? {}
+                      : { head: r.pull_request_head as string }),
+                    ...(r.pull_request_base === null
+                      ? {}
+                      : { base: r.pull_request_base as string }),
                   },
           }),
     }),
@@ -297,7 +315,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 7 &&
         version !== 8 &&
         version !== 9 &&
-        version !== 10
+        version !== 10 &&
+        version !== 11
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -330,6 +349,25 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           .get();
         if (!instructions) db.exec("ALTER TABLE projects ADD COLUMN instructions TEXT;");
         db.exec("PRAGMA user_version = 10;");
+      }
+      // Version 11 adds the Changes comparison: a worktree's base branch at creation, the pull
+      // request's branch names, and the session's chosen scope. A database created since already
+      // has the columns.
+      if (Number(version) < 11) {
+        const has = (table: string, column: string) =>
+          db.prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(column) !==
+          undefined;
+        if (!has("worktrees", "base_branch"))
+          db.exec("ALTER TABLE worktrees ADD COLUMN base_branch TEXT;");
+        if (!has("sessions", "pull_request_head"))
+          db.exec("ALTER TABLE sessions ADD COLUMN pull_request_head TEXT;");
+        if (!has("sessions", "pull_request_base"))
+          db.exec("ALTER TABLE sessions ADD COLUMN pull_request_base TEXT;");
+        if (!has("sessions", "changes_scope"))
+          db.exec(
+            "ALTER TABLE sessions ADD COLUMN changes_scope TEXT CHECK (changes_scope IS NULL OR changes_scope IN ('branch', 'uncommitted'));",
+          );
+        db.exec("PRAGMA user_version = 11;");
       }
       db.exec("COMMIT");
     } catch (error) {

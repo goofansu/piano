@@ -2,13 +2,93 @@
  * and files show and which start open, and the text the sheet shows or drafts. Pure; the sheet
  * keeps reads and markup.
  */
-import type { ChangeFile, RenderMsg, Workspace, WorkspaceChanges } from "@shared/wire";
+import type {
+  ChangeFile,
+  ChangesScope,
+  Comparison,
+  ComparisonTarget,
+  RenderMsg,
+  ScopeAvailability,
+  Workspace,
+  WorkspaceChanges,
+} from "@shared/wire";
 import { CHANGES_FILE_PATCH_BYTES } from "../../../shared/wire.ts";
 import { type DiffFile, lineCount, parseUnifiedDiff } from "./diff.ts";
 import { DETACHED_HEAD } from "./format.ts";
 
 export type ReadyResult = Extract<WorkspaceChanges["result"], { status: "ready" }>;
+export type UnavailableResult = Extract<WorkspaceChanges["result"], { status: "unavailable" }>;
 export type ReadyChanges = WorkspaceChanges & { result: ReadyResult };
+/** An answer the sheet shows: the files, or why the asked-for scope has none to show. */
+export type ShownChanges = WorkspaceChanges & { result: ReadyResult | UnavailableResult };
+
+/** Each scope as the menu names it, by the question it answers. */
+export const SCOPE_NAMES: Record<ChangesScope, string> = {
+  branch: "Branch",
+  uncommitted: "Uncommitted",
+};
+const SCOPE_ORDER: ChangesScope[] = ["branch", "uncommitted"];
+
+/** Where a Branch target came from, as Details and the menu say it. */
+export const targetProvenance = (from: ComparisonTarget["from"]): string =>
+  from === "pull-request"
+    ? "the pull request's base"
+    : from === "worktree"
+      ? "the worktree's base"
+      : from === "remote-default"
+        ? "the default branch"
+        : "assumed";
+
+/** The menu button's face: the scope, and for Branch its target (marked when assumed). */
+export function scopeLabel(comparison: Pick<Comparison, "scope" | "target">): string {
+  if (comparison.scope !== "branch" || !comparison.target) return SCOPE_NAMES[comparison.scope];
+  const { name, from } = comparison.target;
+  return `Branch · ${name}${from === "assumed" ? " (assumed)" : ""}`;
+}
+
+/** One scope as the menu lists it: its name, what it compares with or why it cannot, and whether it can be picked. */
+export interface ScopeOption {
+  scope: ChangesScope;
+  name: string;
+  detail: string;
+  available: boolean;
+}
+
+/** The comparison on screen and the ones the menu offers. */
+export interface ScopeView {
+  current: ChangesScope;
+  label: string;
+  options: ScopeOption[];
+}
+
+function scopeOption(availability: ScopeAvailability): ScopeOption {
+  const { scope, available } = availability;
+  const detail =
+    scope === "uncommitted"
+      ? "Against HEAD"
+      : available && availability.target
+        ? `Compared with ${availability.target.name}, ${targetProvenance(availability.target.from)}`
+        : (availability.reason ?? "Unavailable");
+  return { scope, name: SCOPE_NAMES[scope], detail, available };
+}
+
+function scopeView(result: ReadyResult | UnavailableResult): ScopeView {
+  const current = result.status === "ready" ? result.comparison.scope : result.scope;
+  const options = SCOPE_ORDER.map((scope) =>
+    scopeOption(
+      result.scopes.find((s) => s.scope === scope) ?? {
+        scope,
+        available: false,
+        reason: "Unavailable",
+      },
+    ),
+  );
+  return {
+    current,
+    label: result.status === "ready" ? scopeLabel(result.comparison) : SCOPE_NAMES[current],
+    options,
+  };
+}
 
 /** A file over this many diff lines starts folded. */
 export const LARGE_FILE_LINES = 800;
@@ -39,12 +119,15 @@ export function checkWorkspaceResponse(
   expected: Pick<Workspace, "id" | "path">,
   value: WorkspaceChanges,
   mismatch = "Changes returned a different workspace. Refresh before inspecting changes.",
-): ReadyChanges {
+): ShownChanges {
   if (value.workspace.id !== expected.id || value.workspace.path !== expected.path)
     throw new Error(mismatch);
   if (value.result.status === "error") throw new Error(value.result.detail);
-  return value as ReadyChanges;
+  return value as ShownChanges;
 }
+
+/** The sheet refreshes when the checkout's comparison moved under a file read. */
+export const CHANGES_MOVED = "Changes moved. Refresh changes.";
 
 export interface LoadedFile {
   file: DiffFile;
@@ -52,17 +135,27 @@ export interface LoadedFile {
   truncated: boolean;
 }
 
-/** One file's fresh read, matched to the file the sheet asked for. */
+/**
+ * One file's fresh read, matched to the file the sheet asked for and to the comparison the list was
+ * read with: a read under another scope or base (the checkout moved) never mixes into this list.
+ */
 export function changedFile(
   expected: Pick<Workspace, "id" | "path">,
   value: WorkspaceChanges,
   path: string,
+  comparison?: Pick<Comparison, "scope" | "base">,
 ): LoadedFile {
   const { result, observedAt } = checkWorkspaceResponse(
     expected,
     value,
     "File response belongs to another workspace.",
   );
+  if (result.status !== "ready") throw new Error(CHANGES_MOVED);
+  if (
+    comparison &&
+    (result.comparison.scope !== comparison.scope || result.comparison.base !== comparison.base)
+  )
+    throw new Error(CHANGES_MOVED);
   const file = parseUnifiedDiff(result.diff).find((f) => f.path === path);
   const stats = result.files.find((f) => f.path === path);
   if (!stats) throw new Error("File metadata is unavailable. Refresh changes.");
@@ -112,7 +205,7 @@ export interface SheetFile {
 export type SheetBody =
   | { kind: "idle" }
   | { kind: "reading" }
-  | { kind: "failed"; detail: string }
+  | { kind: "failed"; title?: string; detail: string }
   | { kind: "empty" }
   | { kind: "files"; changes: ReadyChanges; files: SheetFile[] };
 
@@ -121,6 +214,8 @@ export interface ChangesSheetView {
   status: string;
   /** The read on screen, for file reads and details. */
   changes?: ReadyChanges;
+  /** The comparison on screen and the menu's choices, from the last answer, ready or not. */
+  scope?: ScopeView;
   branch?: string;
   /** A re-read is in flight while a read is on screen. */
   refreshing: boolean;
@@ -138,6 +233,8 @@ const isOpen = (state: Disclosure, path: string, seed: ReadonlyMap<string, DiffF
 };
 
 function summary(result: WorkspaceChanges["result"] | undefined, failed: boolean): string {
+  // An unavailable scope's reason is the body; the menu already names the scope.
+  if (result?.status === "unavailable") return "";
   if (result?.status !== "ready") return failed || result ? "Changes unavailable" : "Loading…";
   const { files } = result;
   if (files.length === 0) return "no changes";
@@ -172,6 +269,7 @@ export function changesSheet({
     return {
       status,
       changes,
+      scope: scopeView(result),
       branch: result.branch ?? DETACHED_HEAD,
       refreshing: busy,
       staleNote: error
@@ -179,6 +277,24 @@ export function changesSheet({
         : undefined,
       body: files.length > 0 ? { kind: "files", changes, files } : { kind: "empty" },
       everyCollapsed: files.length > 0 && files.every((f) => !f.open),
+    };
+  }
+  if (observation && result?.status === "unavailable") {
+    // The scope asked for cannot be read here; the menu offers the others, never a quiet swap.
+    return {
+      status,
+      scope: scopeView(result),
+      branch: result.branch ?? DETACHED_HEAD,
+      refreshing: busy,
+      staleNote: error
+        ? { text: "Refresh failed. Showing previous changes.", detail: error }
+        : undefined,
+      body: {
+        kind: "failed",
+        title: `${SCOPE_NAMES[result.scope]} unavailable`,
+        detail: result.detail,
+      },
+      everyCollapsed: false,
     };
   }
   // The latest read's failure wins; a failed result's own detail shows only without one.

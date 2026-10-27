@@ -22,6 +22,7 @@ import { ProviderLoginLive } from "./ProviderLogin.ts";
 import { RadiusArtifactsLive } from "./RadiusArtifacts.ts";
 import { RadiusSetupLive } from "./RadiusSetup.ts";
 import { RegistryLive } from "./Registry.ts";
+import { SessionChangesLive } from "./SessionChanges.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
 import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
 import { SessionSharingLive } from "./SessionSharing.ts";
@@ -59,6 +60,7 @@ export const PianoServicesLive = (options: PianoServicesOptions) =>
     RadiusSetupLive,
     McpSetupLive,
     SessionStatusLive,
+    SessionChangesLive,
     SessionPullRequestsLive,
     SessionSharingLive.pipe(Layer.provideMerge(ProviderLoginLive)),
   ).pipe(Layer.provideMerge(WorkspaceChangesLive), Layer.provideMerge(PianoCoreLive(options)));

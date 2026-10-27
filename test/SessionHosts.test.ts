@@ -1451,8 +1451,9 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
       assert.ok(git(repo, "worktree", "list", "--porcelain").includes(`worktree ${entry.cwd}\n`));
       assert.equal(git(entry.cwd, "branch", "--show-current"), "slow");
       // Git reports physical paths; the fixture root may be reached through a symlink (macOS /var).
+      // Worktrunk's reported base branch is kept: Changes compares the branch with it.
       assert.deepEqual((yield* registry.get).worktrees, [
-        { folder: realpathSync(repo), path: entry.cwd, branch: "slow" },
+        { folder: realpathSync(repo), path: entry.cwd, branch: "slow", baseBranch: "main" },
       ]);
       yield* until(
         Effect.map(hosts.list, (list) =>

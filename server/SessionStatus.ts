@@ -77,8 +77,9 @@ export const SessionStatusLive = Layer.effect(
       const workspace = (yield* registry.get).workspaces.find((w) => w.path === entry.cwd);
       if (!workspace) return null;
       const remaining = Math.max(0, deadline - (yield* Clock.currentTimeMillis));
+      // The documented count is of uncommitted files, whatever comparison Changes opens on.
       const observed = yield* changes
-        .summary(workspace)
+        .summary(workspace, { scope: "uncommitted" })
         .pipe(Effect.timeoutOption(remaining), Effect.map(Option.getOrNull));
       if (observed?.result.status !== "ready") return null;
       const link = entry.pullRequest;

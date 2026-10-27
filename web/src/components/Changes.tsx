@@ -1,8 +1,9 @@
-import type { ChangeFile, Workspace, WorkspaceChanges } from "@shared/wire";
+import type { ChangeFile, ChangesScope, Comparison, Workspace } from "@shared/wire";
 import { cn } from "cn";
 import { FileDiffIcon, MessageSquarePlusIcon } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
-import { ChangesActions, ChangesStaleNote } from "@/components/ChangesHeader";
+import { toast } from "sonner";
+import { ChangesActions, ChangesScopeMenu, ChangesStaleNote } from "@/components/ChangesHeader";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
 import { SurfaceFrame } from "@/components/SurfaceArea";
@@ -19,7 +20,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
-import { workspaceChangedFile, workspaceChanges } from "@/lib/api";
+import { sessionChangedFile, sessionChanges, setSessionChangesScope } from "@/lib/api";
 import {
   askText,
   changedFile,
@@ -32,6 +33,7 @@ import {
   type LoadedFile,
   refreshKey,
   type SheetBody,
+  type ShownChanges,
   toggleEvery,
   toggleFile,
 } from "@/lib/changesView";
@@ -41,24 +43,61 @@ import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useObservation } from "@/lib/useObservation";
 import type { SessionView } from "@/store";
 
-/** Live while shown: on showing, focus and edits (a quiet 600 ms after the checkout may have moved); a response for another workspace never shows. */
-function useWorkspaceChanges(
+/** One file's fresh patch under the comparison its list was read with. */
+type ReadFile = (path: string, signal: AbortSignal) => Promise<LoadedFile>;
+
+/**
+ * The session's Changes, live while shown: on showing, focus and edits (a quiet 600 ms after the
+ * checkout may have moved); a response for another workspace never shows. Reads use the
+ * session's saved scope; choosing one saves it and the answer replaces the view.
+ */
+function useSessionChanges(
   workspace: Workspace | undefined,
+  sessionId: string | null | undefined,
   active: boolean,
   refreshKey: string,
 ) {
-  const key = workspace ? JSON.stringify([workspace.id, workspace.path]) : null;
-  const { value, failure, loading, refresh } = useObservation<WorkspaceChanges>(
+  const key =
+    workspace && sessionId ? JSON.stringify([workspace.id, workspace.path, sessionId]) : null;
+  const { value, failure, loading, mutating, refresh, mutate } = useObservation<ShownChanges>(
     key,
     async (signal) =>
-      checkWorkspaceResponse(workspace!, await workspaceChanges(workspace!.id, { signal })),
+      checkWorkspaceResponse(
+        workspace!,
+        await sessionChanges(workspace!.id, sessionId!, undefined, { signal }),
+      ),
     { enabled: active, focus: true, trigger: refreshKey, debounce: 600 },
   );
+  const setScope = (scope: ChangesScope) =>
+    mutate(async (signal) =>
+      checkWorkspaceResponse(
+        workspace!,
+        await setSessionChangesScope(workspace!.id, sessionId!, scope, { signal }),
+      ),
+    ).catch((error: unknown) => {
+      toast.error(error instanceof Error ? error.message : "Could not save the comparison.");
+    });
+  const readFile =
+    (comparison: Comparison): ReadFile =>
+    async (path, signal) =>
+      changedFile(
+        workspace!,
+        await sessionChangedFile(
+          workspace!.id,
+          sessionId!,
+          { path, scope: comparison.scope },
+          { signal },
+        ),
+        path,
+        comparison,
+      );
   return {
     observation: value ?? null,
     error: failure,
-    busy: loading,
+    busy: loading || mutating,
     refresh: () => void refresh(),
+    setScope,
+    readFile,
   };
 }
 
@@ -79,8 +118,9 @@ export function ChangesPanel({
    * while the draft takes no additions, which hides Ask. */
   onAsk: ((text: string) => void) | undefined;
 }) {
-  const { observation, error, busy, refresh } = useWorkspaceChanges(
+  const { observation, error, busy, refresh, setScope, readFile } = useSessionChanges(
     unavailable ? undefined : workspace,
+    session?.sessionId,
     active && !unavailable,
     refreshKey(session),
   );
@@ -93,9 +133,16 @@ export function ChangesPanel({
     <SurfaceFrame
       tab="changes"
       status={
-        <span role="status" className="truncate">
-          {unavailable ? "" : sheet.status}
-        </span>
+        // The comparison first, then the size of the change it shows.
+        <>
+          {!unavailable && sheet.scope && (
+            <ChangesScopeMenu scope={sheet.scope} disabled={busy} onScope={setScope} />
+          )}
+          {/* Shrinks with an ellipsis after the comparison, so a narrow toolbar never clips it whole. */}
+          <span role="status" className="min-w-0 truncate">
+            {unavailable ? "" : sheet.status}
+          </span>
+        </>
       }
       actions={
         <ChangesActions
@@ -110,6 +157,7 @@ export function ChangesPanel({
       <div className="flex flex-col">
         <SheetBodyView
           body={unavailable ? { kind: "unavailable", reason: unavailable } : body}
+          readFile={readFile}
           onOpenChange={(path, next) => setDisclosure((d) => toggleFile(d, path, next))}
           onAsk={ask}
         />
@@ -120,10 +168,12 @@ export function ChangesPanel({
 
 function SheetBodyView({
   body,
+  readFile,
   onOpenChange,
   onAsk,
 }: {
   body: SheetBody | { kind: "unavailable"; reason: string };
+  readFile: (comparison: Comparison) => ReadFile;
   onOpenChange: (path: string, open: boolean) => void;
   onAsk: ((loaded: LoadedFile) => void) | undefined;
 }) {
@@ -139,7 +189,7 @@ function SheetBodyView({
     case "failed":
       return (
         <Alert variant="destructive" className="m-4 w-auto">
-          <AlertTitle>Changes unavailable</AlertTitle>
+          <AlertTitle>{body.title ?? "Changes unavailable"}</AlertTitle>
           <AlertDescription>{body.detail}</AlertDescription>
         </Alert>
       );
@@ -175,6 +225,7 @@ function SheetBodyView({
               initial={initial}
               workspace={body.changes.workspace}
               observedAt={body.changes.observedAt}
+              readFile={readFile(body.changes.result.comparison)}
               open={open}
               onOpenChange={(next) => onOpenChange(metadata.path, next)}
               onAsk={onAsk}
@@ -190,6 +241,7 @@ function LiveFile({
   initial,
   workspace,
   observedAt,
+  readFile,
   open,
   onOpenChange,
   onAsk,
@@ -198,6 +250,7 @@ function LiveFile({
   initial?: DiffFile;
   workspace: Workspace;
   observedAt: string;
+  readFile: ReadFile;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAsk: ((loaded: LoadedFile) => void) | undefined;
@@ -212,12 +265,7 @@ function LiveFile({
   const [kept, setKept] = useState(false);
   const fetched = useObservation(
     JSON.stringify([workspace.id, workspace.path, metadata.path]),
-    async (signal) =>
-      changedFile(
-        workspace,
-        await workspaceChangedFile(workspace.id, metadata.path, { signal }),
-        metadata.path,
-      ),
+    (signal) => readFile(metadata.path, signal),
     { enabled: !seeded && (open || kept) },
   );
   useEffect(() => {

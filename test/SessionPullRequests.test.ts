@@ -329,3 +329,28 @@ test("INV-06: inherited GIT_* state cannot redirect discovery; the user's url.<b
   assert.equal(discovered.pullRequest?.number, 42, JSON.stringify(discovered));
   assert.deepEqual(discovered.link, { url: candidate(42).url, source: "branch", apiHost: host });
 });
+
+test("a link records the pull request's head and base as GitHub last reported them, so Changes can compare without a GitHub call", async (t) => {
+  const f = await fixture(t);
+  f.control({ prs: [{ ...candidate(42), baseRefName: "main" }] });
+  const found = await f.get();
+  assert.deepEqual([found.link?.head, found.link?.base], ["feature", "main"]);
+  // A retarget on GitHub moves the recorded base on the next read; nothing else about the link changes.
+  f.control({ prs: [{ ...candidate(42), baseRefName: "release" }] });
+  const retargeted = await f.get();
+  assert.deepEqual([retargeted.link?.source, retargeted.link?.base], ["branch", "release"]);
+  const persisted = await f.runtime.runPromise(f.registry.get);
+  assert.deepEqual(persisted.sessions[0].pullRequest, {
+    url: "https://github.com/example/repo/pull/42",
+    source: "branch",
+    head: "feature",
+    base: "release",
+  });
+  // A manual link learns its branches from the first successful read.
+  f.control({ prs: [{ ...candidate(7, "topic"), baseRefName: "main" }] });
+  const manual = await f.change({ action: "link", url: "https://github.com/example/repo/pull/7" });
+  assert.deepEqual(
+    [manual.link?.source, manual.link?.head, manual.link?.base],
+    ["manual", "topic", "main"],
+  );
+});
