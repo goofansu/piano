@@ -141,10 +141,14 @@ export async function run(name, setup, journey, options = {}) {
   const browser = `piano-${name}-${process.pid}`;
   const ab = async (...args) => {
     const result = await new Promise((done, fail) => {
-      const child = spawn("npx", ["agent-browser", "--session", browser, ...args], {
-        env: { ...process.env, AGENT_BROWSER_DEFAULT_TIMEOUT: "15000" },
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+      const child = spawn(
+        "npx",
+        [options.agentBrowser ?? "agent-browser", "--session", browser, ...args],
+        {
+          env: { ...process.env, AGENT_BROWSER_DEFAULT_TIMEOUT: "15000" },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
       let stdout = "";
       let stderr = "";
       child.stdout.on("data", (d) => (stdout += d));
