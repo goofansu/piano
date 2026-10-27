@@ -12,14 +12,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemTitle,
-} from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
 import { sessionChangedFile, sessionChanges, setSessionChangesScope } from "@/lib/api";
 import {
@@ -232,9 +224,7 @@ function SheetBodyView({
       );
     case "files":
       return (
-        // Rows abut on their hairlines: the group's own gap for small items would open 10px above
-        // each row, so the same variant sets it to nothing.
-        <ItemGroup className="gap-0 has-data-[size=sm]:gap-0" aria-label="Changed files">
+        <ul aria-label="Changed files">
           {body.files.map(({ metadata, initial, open }) => (
             <LiveFile
               key={`${body.changes.workspace.id}:${body.changes.observedAt}:${metadata.path}`}
@@ -248,7 +238,7 @@ function SheetBodyView({
               onAsk={onAsk}
             />
           ))}
-        </ItemGroup>
+        </ul>
       );
   }
 }
@@ -348,99 +338,83 @@ function FileSection({
     .filter(Boolean)
     .join(" · ");
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={onOpenChange}
-      className="border-b border-line"
-      data-path={file.path}
-    >
-      {/* A flat row, not a card: files read as one list. Sticky within the sheet's scroll area so
-       * the file name stays in view while its hunks scroll. */}
-      <Item
-        size="sm"
-        // One pixel less beneath than above: the row's hairline below is the rest of that space.
-        className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-0 rounded-none bg-conversation px-2 pt-1 pb-[3px]"
-      >
-        <CollapsibleTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            // The name's 16px line plus even padding makes the 36px (44px on touch) row, so the
-            // name sits centred and the chevron and Ask centre on its first line as it wraps.
-            className="h-auto min-w-0 justify-start gap-2 whitespace-normal px-2 py-2.5 text-left font-normal leading-4 aria-expanded:bg-transparent pointer-coarse:py-3.5"
+    <Collapsible open={open} onOpenChange={onOpenChange} asChild>
+      <li className="border-b border-line" data-path={file.path}>
+        {/* Hand-written: no standard component fits a flat, hairline-divided diff row. Collapsible
+         * supplies disclosure semantics only; this grid owns spacing, without Item/Button borders.
+         * Sticky within the sheet so the file name stays in view while its hunks scroll. */}
+        <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 bg-conversation px-2 py-1">
+          <CollapsibleTrigger
+            // A 16px line with even padding is 36px (44px on touch); longer names grow downward.
+            className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-2 rounded-md px-2 py-2.5 text-left text-xs leading-4 outline-none select-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:py-3.5"
             aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
           >
-            {/* One filename line tall, so the chevron centres on the first line however the name wraps. */}
-            <span className="flex h-[1lh] items-center self-start text-xs">
+            <span className="flex h-4 items-center">
               <DisclosureChevron open={open} />
             </span>
-            <ItemContent className="min-w-0 gap-0 self-start">
-              <ItemTitle className="block w-full min-w-0 line-clamp-none font-mono text-xs [overflow-wrap:anywhere]">
-                {filename}
-              </ItemTitle>
-            </ItemContent>
-            <span className="ml-auto flex shrink-0 items-center gap-2 self-start text-xs">
+            <span className="min-w-0 font-mono font-medium [overflow-wrap:anywhere]">
+              {filename}
+            </span>
+            <span className="flex items-center gap-2">
               {kind && <span className="text-ink-3">{kind}</span>}
               {!file.binary && (
-                <span className="font-mono tabular-nums">
+                <span className="whitespace-nowrap font-mono tabular-nums">
                   <span className="text-ok">+{file.additions}</span>{" "}
                   <span className="text-err">−{file.deletions}</span>
                 </span>
               )}
             </span>
-          </Button>
-        </CollapsibleTrigger>
-        {canAsk && (
-          // Ask (32px) centres on the name's 36px line: 3px down, the button's border included.
-          <ItemActions className="mt-[3px]">
-            <IconButton
-              size="list"
-              label={`Ask about ${file.path}`}
-              tooltip="Ask about this file"
-              disabled={!onAsk}
-              onClick={onAsk}
+          </CollapsibleTrigger>
+          {canAsk && (
+            // Centre Ask on the first line even when the filename wraps.
+            <div className="flex h-9 items-center pointer-coarse:h-11">
+              <IconButton
+                size="list"
+                label={`Ask about ${file.path}`}
+                tooltip="Ask about this file"
+                disabled={!onAsk}
+                onClick={onAsk}
+              >
+                <MessageSquarePlusIcon />
+              </IconButton>
+            </div>
+          )}
+          {directory && (
+            <span
+              className="col-span-full truncate pr-2 pb-3 pl-8 font-mono text-xs leading-4 text-ink-3"
+              title={file.path}
             >
-              <MessageSquarePlusIcon />
-            </IconButton>
-          </ItemActions>
-        )}
-        {directory && (
-          // The directory beneath the name completes the path; together they are the whole of it.
-          // Its bottom space matches the name's top space, so a row reads as one centred block.
-          <span
-            className="col-span-full truncate pr-2 pb-[11px] pl-7 font-mono text-xs leading-4 text-ink-3"
-            title={file.path}
-          >
-            {directory}
-          </span>
-        )}
-        {description && (
-          <ItemDescription className="col-span-full line-clamp-none pr-2 pb-2.5 pl-7 text-xs [overflow-wrap:anywhere]">
-            {description}
-          </ItemDescription>
-        )}
-      </Item>
-      <CollapsibleContent className="disclosure-content">
-        {message && (
-          <p role="status" className="px-3 py-2 text-xs text-ink-2">
-            {message}{" "}
-            {retry && (
-              <Button variant="ghost" size="sm" onClick={retry}>
-                Retry
-              </Button>
-            )}
-          </p>
-        )}
-        {file.binary || file.hunks.length === 0 ? (
-          !message && (
-            <p className="border-t border-line px-3 py-2 text-xs text-ink-3">
-              {file.binary ? "Binary file." : "No text changes."}
+              {directory}
+            </span>
+          )}
+          {description && (
+            <p className="col-span-full pr-2 pb-2.5 pl-8 text-xs leading-normal text-muted-foreground [overflow-wrap:anywhere]">
+              {description}
             </p>
-          )
-        ) : (
-          <Hunks file={file} />
-        )}
-      </CollapsibleContent>
+          )}
+        </div>
+        <CollapsibleContent className="disclosure-content">
+          {message && (
+            <p role="status" className="px-3 py-2 text-xs text-ink-2">
+              {message}{" "}
+              {retry && (
+                <Button variant="ghost" size="sm" onClick={retry}>
+                  Retry
+                </Button>
+              )}
+            </p>
+          )}
+          {file.binary || file.hunks.length === 0 ? (
+            !message && (
+              <p className="border-t border-line px-3 py-2 text-xs text-ink-3">
+                {file.binary ? "Binary file." : "No text changes."}
+              </p>
+            )
+          ) : (
+            <Hunks file={file} />
+          )}
+        </CollapsibleContent>
+      </li>
     </Collapsible>
   );
 }
