@@ -356,13 +356,16 @@ function FileSection({
        * the file name stays in view while its hunks scroll. */}
       <Item
         size="sm"
-        className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-0 rounded-none bg-conversation px-2 py-1"
+        // One pixel less beneath than above: the row's hairline below is the rest of that space.
+        className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-0 rounded-none bg-conversation px-2 pt-1 pb-[3px]"
       >
         <CollapsibleTrigger asChild>
           <Button
             variant="ghost"
             size="sm"
-            className="h-auto min-h-9 min-w-0 justify-start gap-2 whitespace-normal px-2 py-2 text-left font-normal aria-expanded:bg-transparent pointer-coarse:min-h-11"
+            // The name's 16px line plus even padding makes the 36px (44px on touch) row, so the
+            // name sits centred and the chevron and Ask centre on its first line as it wraps.
+            className="h-auto min-w-0 justify-start gap-2 whitespace-normal px-2 py-2.5 text-left font-normal leading-4 aria-expanded:bg-transparent pointer-coarse:py-3.5"
             aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
           >
             {/* One filename line tall, so the chevron centres on the first line however the name wraps. */}
@@ -386,8 +389,8 @@ function FileSection({
           </Button>
         </CollapsibleTrigger>
         {canAsk && (
-          // The name's button has a 1px border before its padding; Ask drops by the same.
-          <ItemActions className="mt-px">
+          // Ask (32px) centres on the name's 36px line: 3px down, the button's border included.
+          <ItemActions className="mt-[3px]">
             <IconButton
               size="list"
               label={`Ask about ${file.path}`}
@@ -403,7 +406,7 @@ function FileSection({
           // The directory beneath the name completes the path; together they are the whole of it.
           // Its bottom space matches the name's top space, so a row reads as one centred block.
           <span
-            className="col-span-full truncate pr-2 pb-2.5 pl-7 font-mono text-xs text-ink-3"
+            className="col-span-full truncate pr-2 pb-[11px] pl-7 font-mono text-xs leading-4 text-ink-3"
             title={file.path}
           >
             {directory}
