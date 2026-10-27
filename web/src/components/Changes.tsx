@@ -391,23 +391,13 @@ function FileSection({
           </ItemActions>
         )}
         {directory && (
-          <Collapsible className="col-span-full min-w-0">
-            <div className="flex min-w-0 items-center pr-2 pl-7">
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto min-h-6 min-w-0 flex-1 justify-start px-0 text-ink-3 aria-expanded:bg-transparent pointer-coarse:min-h-11"
-                  aria-label={`Full path for ${file.path}`}
-                >
-                  <span className="truncate font-mono text-xs font-normal">{directory}</span>
-                </Button>
-              </CollapsibleTrigger>
-            </div>
-            <CollapsibleContent className="disclosure-content px-2 py-2 font-mono text-xs text-ink-2 [overflow-wrap:anywhere]">
-              {file.path}
-            </CollapsibleContent>
-          </Collapsible>
+          // The directory beneath the name completes the path; together they are the whole of it.
+          <span
+            className="col-span-full truncate pr-2 pb-1 pl-7 font-mono text-xs text-ink-3"
+            title={file.path}
+          >
+            {directory}
+          </span>
         )}
         {description && (
           <ItemDescription className="col-span-full line-clamp-none px-2 pb-1 text-xs [overflow-wrap:anywhere]">

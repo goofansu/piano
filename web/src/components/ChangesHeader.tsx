@@ -1,6 +1,12 @@
 import type { ChangesScope } from "@shared/wire";
 import { CHANGES_INITIAL_PATCH_BYTES } from "@shared/wire";
-import { ChevronDownIcon, InfoIcon, RefreshCwIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
+  InfoIcon,
+  RefreshCwIcon,
+} from "lucide-react";
 import { IconButton } from "@/components/IconButton";
 import {
   DropdownMenu,
@@ -17,7 +23,6 @@ import {
   PopoverTrigger,
 } from "@/components/PianoPopover";
 import { Button } from "@/components/ui/button";
-import { Toggle } from "@/components/ui/toggle";
 import {
   type ChangesSheetView,
   FILE_PATCH_LIMIT,
@@ -26,7 +31,6 @@ import {
   targetProvenance,
 } from "@/lib/changesView";
 import { abbrevHome } from "@/lib/format";
-import { useChangesWrap } from "@/lib/useChangesWrap";
 
 /**
  * The comparison, at the toolbar's start: its face names the scope on screen (and Branch's target),
@@ -110,26 +114,17 @@ export function ChangesActions({
   refresh: () => void;
   toggleEvery: () => void;
 }) {
-  const [wrap, setWrap] = useChangesWrap();
+  // Wrap, a remembered preference, is the palette's "Wrap" row; the toolbar keeps only actions.
   return (
     <>
-      <Button
-        variant="ghost"
-        size="xs"
+      <IconButton
+        size="header"
+        label={sheet.everyCollapsed ? "Expand all" : "Collapse all"}
         disabled={sheet.body.kind !== "files"}
         onClick={toggleEvery}
-        className="text-ink-2 pointer-coarse:min-h-11"
       >
-        {sheet.everyCollapsed ? "Expand all" : "Collapse all"}
-      </Button>
-      <Toggle
-        size="sm"
-        pressed={wrap}
-        onPressedChange={setWrap}
-        className="h-6 min-w-0 px-2 text-xs text-ink-2 pointer-coarse:min-h-11"
-      >
-        Wrap
-      </Toggle>
+        {sheet.everyCollapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+      </IconButton>
       <IconButton
         size="header"
         label={sheet.refreshing ? "Refreshing changes…" : "Refresh changes"}
