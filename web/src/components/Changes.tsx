@@ -232,7 +232,9 @@ function SheetBodyView({
       );
     case "files":
       return (
-        <ItemGroup className="gap-0" aria-label="Changed files">
+        // Rows abut on their hairlines: the group's own gap for small items would open 10px above
+        // each row, so the same variant sets it to nothing.
+        <ItemGroup className="gap-0 has-data-[size=sm]:gap-0" aria-label="Changed files">
           {body.files.map(({ metadata, initial, open }) => (
             <LiveFile
               key={`${body.changes.workspace.id}:${body.changes.observedAt}:${metadata.path}`}
