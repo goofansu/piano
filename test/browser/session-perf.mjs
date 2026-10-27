@@ -136,7 +136,10 @@ for (let repeat = 0; repeat < repeats; repeat++)
       function ready() {
         const rows = document.querySelectorAll('[data-slot="transcript"] article[id]');
         const composer = document.querySelector('[aria-label="Message"]');
-        if (rows.length === n && composer && !composer.disabled) {
+        const transcript = document.querySelector('[data-slot="transcript"]');
+        const complete = Number(transcript?.dataset.messageCount) === n;
+        const end = [...rows].some(row => row.textContent.includes('Message ' + (n - 1) + '.'));
+        if (complete && end && transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 2 && composer && !composer.disabled) {
           requestAnimationFrame(() => requestAnimationFrame(() => { window.perfReady = performance.now(); }));
         } else requestAnimationFrame(ready);
       }
@@ -152,23 +155,46 @@ for (let repeat = 0; repeat < repeats; repeat++)
             const opening = await evaluate(
               `({ readyMs: window.perfReady, fcpMs: performance.getEntriesByName('first-contentful-paint')[0]?.startTime, longTasks: window.perfTasks.filter(t => t.start < window.perfReady), articles: document.querySelectorAll('[data-slot="transcript"] article[id]').length, nodes: document.querySelectorAll('*').length })`,
             );
-            assert.equal(opening.articles, n);
+            assert.ok(
+              opening.articles > 0 && opening.articles <= 25,
+              "only the visible window and buffer mount",
+            );
             const memory = await cdp("Runtime.getHeapUsage"); // No forced GC; not a retained-heap/leak claim.
             const scroll = await evaluate(`new Promise(resolve => {
         const el = document.querySelector('[data-slot="transcript"]');
         el.scrollTop = 0;
-        const frames = []; let start, last;
+        const frames = []; let start, last; let peakArticles = 0, placeholderFrames = 0, blankFrames = 0;
         function tick(now) {
           start ??= now;
           if (last !== undefined) frames.push(now - last);
           last = now;
+          peakArticles = Math.max(peakArticles, el.querySelectorAll('article[id]').length);
+          if (el.querySelector('[data-slot="transcript-placeholder"]')) placeholderFrames++;
+          const box = el.getBoundingClientRect();
+          if (![...el.querySelectorAll('[data-index]')].some(row => {
+            const r = row.getBoundingClientRect(); return r.bottom > box.top && r.top < box.bottom;
+          })) blankFrames++;
           el.scrollTop = (el.scrollHeight - el.clientHeight) * Math.min(1, (now - start) / 2000);
           if (now - start < 2000) requestAnimationFrame(tick);
-          else requestAnimationFrame(() => resolve({ frames, height: el.scrollHeight, bottomGap: el.scrollHeight - el.clientHeight - el.scrollTop }));
+          else requestAnimationFrame(() => resolve({ frames, peakArticles, placeholderFrames, blankFrames, endedAt: performance.now(), height: el.scrollHeight, bottomGap: el.scrollHeight - el.clientHeight - el.scrollTop }));
         }
         requestAnimationFrame(tick);
       })`);
+            const settleMs = await evaluate(`new Promise((resolve, reject) => {
+              const start = ${scroll.endedAt};
+              function check() {
+                const t = document.querySelector('[data-slot="transcript"]');
+                const end = [...t.querySelectorAll('article')].some(a => a.textContent.includes('Message ${n - 1}.'));
+                if (!t.hasAttribute('data-window-pending') && end && t.scrollHeight - t.scrollTop - t.clientHeight < 2)
+                  requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now() - start)));
+                else if (performance.now() - start > 10000) reject(new Error('scroll destination did not settle'));
+                else requestAnimationFrame(check);
+              }
+              check();
+            })`);
             assert.ok(Math.abs(scroll.bottomGap) < 2);
+            assert.ok(scroll.peakArticles <= 25, "scrolling keeps mounted rows bounded");
+            assert.equal(scroll.blankFrames, 0, "the moving window must not leave blank frames");
             // Measure the actual button click, not npx command startup; the fake Pi adds a user/reply pair.
             await page.ab("fill", '[aria-label="Message"]', `perf-append-${repeat}`);
             await evaluate(`(() => {
@@ -189,6 +215,25 @@ for (let repeat = 0; repeat < repeats; repeat++)
             const appendMs = await evaluate("window.perfAppendMs");
             await cdp("HeapProfiler.collectGarbage");
             const retained = await cdp("Runtime.getHeapUsage");
+            // The sweep ends at an already measured tail. Also stop at an unmeasured middle
+            // destination: smooth frames must not conceal Markdown that never catches up.
+            const midpointReadyMs = await evaluate(`new Promise((resolve, reject) => {
+              const t = document.querySelector('[data-slot="transcript"]');
+              const start = performance.now();
+              t.scrollTop = t.scrollHeight / 2;
+              let frames = 0;
+              function check() {
+                const box = t.getBoundingClientRect();
+                const visible = [...t.querySelectorAll('article')].some(a => {
+                  const r = a.getBoundingClientRect(); return r.bottom > box.top && r.top < box.bottom;
+                });
+                if (++frames > 2 && !t.hasAttribute('data-window-pending') && visible)
+                  requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now() - start)));
+                else if (performance.now() - start > 10000) reject(new Error('middle destination did not render'));
+                else requestAnimationFrame(check);
+              }
+              requestAnimationFrame(check);
+            })`);
             const sorted = [...scroll.frames].sort((a, b) => a - b);
             const result = {
               shape,
@@ -199,6 +244,11 @@ for (let repeat = 0; repeat < repeats; repeat++)
               retainedAfterAppendMiB: retained.usedSize / 2 ** 20,
               scroll: {
                 height: scroll.height,
+                peakArticles: scroll.peakArticles,
+                placeholderFrames: scroll.placeholderFrames,
+                blankFrames: scroll.blankFrames,
+                settleMs,
+                midpointReadyMs,
                 frames: scroll.frames.length,
                 p95Ms: sorted[Math.ceil(sorted.length * 0.95) - 1],
                 maxMs: sorted.at(-1),

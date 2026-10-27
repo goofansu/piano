@@ -216,6 +216,7 @@ export function SessionView({ state, send }: Props) {
                 <LocalFileContext value={(path) => openFile(path, "agent")}>
                   <SessionDestinationContext value={destination}>
                     <MessageList
+                      key={t ? sessionKey(t) : draftKey}
                       showTools={!messagesOnly}
                       messages={t?.messages ?? []}
                       pending={t?.pending ?? null}

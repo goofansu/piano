@@ -32,6 +32,9 @@ export interface ViewportElement {
   scrollTo: (options: { top: number }) => void;
   /** A message's top edge relative to the container's top edge; `undefined` when it is not rendered. */
   anchorTop: (messageId: string) => number | undefined;
+  /** Windowed transcripts locate an index, then refine the jump as its rows are measured. */
+  jumpToMessage?: (messageId: string) => boolean;
+  jumpToEdge?: (edge: "top" | "bottom") => void;
 }
 
 export interface TranscriptViewport {
@@ -42,6 +45,8 @@ export interface TranscriptViewport {
    * short of the end unpins, so small steps up from the bottom are not undone by new output.
    */
   scrolled: () => void;
+  /** Geometry compensation is not reader intent; acknowledge it before its scroll event. */
+  corrected: () => void;
   /**
    * A wheel turned elsewhere in the area, handed to the transcript: moves the reader by the
    * wheel's `deltaY` in its `deltaMode` units (pixels, lines, or pages of the container) and
@@ -140,6 +145,11 @@ export function createTranscriptViewport(): TranscriptViewport {
       setBottom(true);
     },
     scrolled,
+    corrected: () => {
+      if (!element) return;
+      lastTop = element.scrollTop;
+      setBottom(near(element));
+    },
     wheel: (deltaY, deltaMode) => {
       if (!element) return;
       const unit =
@@ -164,14 +174,27 @@ export function createTranscriptViewport(): TranscriptViewport {
       const el = element;
       if (!el) return false;
       if (entry.kind === "top" || entry.kind === "bottom") {
-        if (entry.kind === "bottom") stick = true;
-        el.scrollTo({ top: entry.kind === "top" ? 0 : el.scrollHeight });
+        stick = entry.kind === "bottom";
+        if (el.jumpToEdge) el.jumpToEdge(entry.kind);
+        else el.scrollTo({ top: entry.kind === "top" ? 0 : el.scrollHeight });
+        lastTop = el.scrollTop;
+        setBottom(near(el));
         return true;
       }
       const id = entry.messageId;
+      if (el.jumpToMessage) {
+        const previous = stick;
+        stick = false; // Mounting the destination must not follow the end in the meantime.
+        const found = el.jumpToMessage(id);
+        if (!found) stick = previous;
+        return found;
+      }
       const top = el.anchorTop(id);
       if (top === undefined) return false;
+      stick = false;
       el.scrollTo({ top: top + el.scrollTop - JUMP_MARGIN });
+      lastTop = el.scrollTop;
+      setBottom(near(el));
       return true;
     },
     current: (entries) => {

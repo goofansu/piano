@@ -15,7 +15,9 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  memo,
   useContext,
+  useDeferredValue,
   useEffect,
   useId,
   useLayoutEffect,
@@ -36,6 +38,7 @@ import { StatusBadge as Badge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevHome, clamp, stripAnsi, toolArgsText } from "@/lib/format";
 import type { MessageError } from "@/lib/messageError";
 import { routePath } from "@/lib/routes";
@@ -53,9 +56,14 @@ import {
   type TranscriptRow,
   transcriptRows,
 } from "@/lib/transcript";
-import { domViewportElement } from "@/lib/transcriptViewport";
 import { NavigationContext } from "@/lib/useNavigation";
+import {
+  TranscriptDisclosures,
+  TranscriptRowKey,
+  useTranscriptDisclosure,
+} from "@/lib/useTranscriptDisclosure";
 import { useNewTranscriptViewport, useTranscriptViewport } from "@/lib/useTranscriptViewport";
+import { useVirtualTranscript } from "@/lib/useVirtualTranscript";
 
 /**
  * Where a session the transcript names opens, from the session catalog (`sessionDestination`):
@@ -107,7 +115,8 @@ export function MessageList({
   dispatchedFrom,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const content = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const [disclosures] = useState(() => new Map<string, boolean>());
   const [promptMeasurements] = useState(() => new Set<() => void>());
   useLayoutEffect(() => {
     for (const measure of promptMeasurements) measure();
@@ -116,46 +125,34 @@ export function MessageList({
   const own = useNewTranscriptViewport();
   const viewport = useTranscriptViewport() ?? own;
   const atBottom = useSyncExternalStore(viewport.subscribe, viewport.atBottom, () => true);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    viewport.attach(domViewportElement(el));
-    return () => viewport.attach(null);
-  }, [viewport]);
-  // Keep the view pinned to the bottom unless the reader scrolled up.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: these inputs change rendered transcript height; reading the DOM after each change preserves scroll pinning.
-  useEffect(() => {
-    viewport.rendered();
-  }, [viewport, messages, pending, submittedInput, tools, activity, showTools, working]);
-  // Content can grow without a scroll event (a prompt opens, output expands), and the container
-  // can shrink (a banner appears below, the composer grows); the viewport decides who follows.
-  useEffect(() => {
-    const el = ref.current;
-    const inner = content.current;
-    if (!el || !inner) return;
-    const ro = new ResizeObserver((entries) =>
-      viewport.resized({ container: entries.some((entry) => entry.target === el) }),
-    );
-    ro.observe(inner);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [viewport]);
-
   const rows = useMemo(
     () => transcriptRows(messages, { pending, tools, showTools, working }),
     [messages, pending, tools, showTools, working],
   );
+  const { virtual, jumping } = useVirtualTranscript(rows, ref, list, viewport);
+  const window = virtual.getVirtualItems();
+  // Geometry stays urgent; mounting fresh Markdown can yield between rows. During a fast
+  // thumb drag, height-preserving placeholders cover the new window rather than blank space.
+  const deferredWindow = useDeferredValue(window);
+  const readyKeys = new Set(deferredWindow.map((item) => item.key));
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
       <div
         ref={ref}
-        onScroll={viewport.scrolled}
+        // Read intent before the virtualizer's native scroll listener can synchronously render.
+        onScrollCapture={viewport.scrolled}
         data-slot="transcript"
+        data-message-count={messages.length}
+        data-window-pending={
+          virtual.isScrolling && !jumping && window.some((item) => !readyKeys.has(item.key))
+            ? ""
+            : undefined
+        }
         // The scroller spans the area, so its scrollbar keeps the pane's edge beside the rail.
-        className="h-full overflow-y-auto pl-(--gutter) pr-[calc(var(--gutter)+var(--rail-inset))]"
+        className="h-full overflow-y-auto pl-(--gutter) pr-[calc(var(--gutter)+var(--rail-inset))] [overflow-anchor:none]"
       >
-        <div ref={content} className="mx-auto w-full max-w-3xl py-6 md:py-8">
+        <div className="mx-auto w-full max-w-3xl py-6 md:py-8">
           {placeholder && (
             <Empty className="py-16">
               <EmptyHeader>
@@ -163,16 +160,61 @@ export function MessageList({
               </EmptyHeader>
             </Empty>
           )}
-          {/* Adjacent tool rows keep one gap, even when the previous message also had text. */}
-          <div className="flex flex-col gap-6 [&>[data-ends-with-tools]+[data-tools-only]]:-mt-3">
+          <div className="flex flex-col gap-6">
             {dispatchedFrom && <DispatchedFrom parent={dispatchedFrom} />}
             <PromptMeasurementsContext value={promptMeasurements}>
               {submittedInput && (
                 <UserMessage text={submittedInput.text} attachments={submittedInput.attachments} />
               )}
-              {rows.map((row) => (
-                <TranscriptRowView key={row.key} row={row} />
-              ))}
+              <TranscriptDisclosures value={disclosures}>
+                {/* Custom geometry hosts: shadcn has no variable-height virtual transcript. */}
+                <div ref={list} className="relative" style={{ height: virtual.getTotalSize() }}>
+                  {window.map((item) => {
+                    const row = rows[item.index];
+                    const next = rows[item.index + 1];
+                    const adjacentTools =
+                      row.kind === "reply" &&
+                      row.tools.length > 0 &&
+                      next?.kind === "reply" &&
+                      !next.text &&
+                      next.tools.length > 0;
+                    const ready = jumping || !virtual.isScrolling || readyKeys.has(item.key);
+                    const gap = next ? (adjacentTools ? 12 : 24) : 0;
+                    return (
+                      <div
+                        key={item.key}
+                        ref={ready ? virtual.measureElement : undefined}
+                        data-index={item.index}
+                        className="absolute left-0 top-0 flex w-full flex-col gap-6"
+                        style={{
+                          transform: `translateY(${item.start - virtual.options.scrollMargin}px)`,
+                          paddingBottom: gap,
+                        }}
+                      >
+                        {ready ? (
+                          <TranscriptRowKey value={row.key}>
+                            <TranscriptRowView row={row} />
+                          </TranscriptRowKey>
+                        ) : (
+                          <div
+                            data-slot="transcript-placeholder"
+                            aria-hidden
+                            style={{ height: Math.max(0, item.size - gap), overflow: "hidden" }}
+                          >
+                            <Row glyph={<Skeleton className="size-1.5 rounded-full" />}>
+                              <div className="flex flex-col gap-3">
+                                <Skeleton className="h-4 w-[88%]" />
+                                <Skeleton className="h-4 w-[72%]" />
+                                <Skeleton className="h-4 w-[44%]" />
+                              </div>
+                            </Row>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </TranscriptDisclosures>
             </PromptMeasurementsContext>
             {activity && (
               <Row glyph={<Keys playing className="text-brand" />}>
@@ -230,7 +272,12 @@ function Row({
   );
 }
 
-function TranscriptRowView({ row }: { row: TranscriptRow }) {
+const TranscriptRowView = memo(function TranscriptRowView({ row }: { row: TranscriptRow }) {
+  // Saved replies parse once rather than mounting a parser per streaming block. A live reply
+  // retains its streaming block identities when it completes, until this window unmounts it.
+  const [mode] = useState<"streaming" | "static">(() =>
+    row.kind === "reply" && row.streaming ? "streaming" : "static",
+  );
   if (row.kind === "context") return <ContextCard msg={row.msg} />;
   if (row.kind === "user")
     return (
@@ -268,6 +315,7 @@ function TranscriptRowView({ row }: { row: TranscriptRow }) {
               <Markdown
                 text={text}
                 streaming={streaming}
+                mode={mode}
                 className={cn("prose-chat", streaming && "streaming-caret")}
               />
               {row.jump && <CopyResponse text={text} />}
@@ -290,7 +338,7 @@ function TranscriptRowView({ row }: { row: TranscriptRow }) {
       )}
     </>
   );
-}
+});
 
 const CONTEXT_ICON: Record<ContextFacts["kind"], typeof HistoryIcon> = {
   compaction: HistoryIcon,
@@ -307,6 +355,7 @@ const CONTEXT_ICON: Record<ContextFacts["kind"], typeof HistoryIcon> = {
  * row's content (a skill in its prompt bubble), so neither header nor body takes a gutter.
  */
 function FoldRow({
+  stateKey,
   glyph,
   header,
   label,
@@ -320,6 +369,7 @@ function FoldRow({
   action,
   children,
 }: {
+  stateKey?: string;
   glyph?: React.ReactNode;
   /** What the row is: its title, a quiet note, a badge. The chevron follows it. */
   header: React.ReactNode;
@@ -339,7 +389,7 @@ function FoldRow({
   action?: React.ReactNode;
   children?: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useTranscriptDisclosure(stateKey ?? label, defaultOpen);
   // A horizontal drag that starts on a header still opens the mobile sidebar; a tap folds.
   const trigger = (
     <CollapsibleTrigger asChild disabled={!canOpen}>
@@ -422,7 +472,7 @@ function ContextCard({ msg }: { msg: RenderMsg }) {
 }
 
 function ErrorMessage({ error, id }: { error: MessageError; id?: string }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useTranscriptDisclosure("error");
   return (
     // A transcript error is a standalone row, not a boxed callout inside an assistant message.
     <div id={id}>
@@ -498,7 +548,7 @@ function UserMessage({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const textId = useId();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useTranscriptDisclosure("prompt");
   const [overflows, setOverflows] = useState(false);
   const measurements = useContext(PromptMeasurementsContext);
   // A read here would interleave with adjacent Markdown layout effects' writes, forcing a
@@ -555,7 +605,7 @@ function UserMessage({
             )}
             style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
           >
-            <Markdown text={text} className="prose-chat" />
+            <Markdown text={text} mode="static" className="prose-chat" />
           </div>
         )}
         {long && (
@@ -610,7 +660,15 @@ function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
 
 /** A session a dispatch tool started or waited on: the call's arguments, what the parent observed, and a way
  * to open it beside the header, so reaching the session never needs the row unfolded. */
-function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: ToolOutcome }) {
+function DispatchRow({
+  session,
+  outcome,
+  stateKey,
+}: {
+  session: DispatchFacts;
+  outcome: ToolOutcome;
+  stateKey: string;
+}) {
   const { sessionId, title, branch, status, badge, params, answer, detail } = session;
   const destinationOf = useContext(SessionDestinationContext);
   const destination = sessionId ? destinationOf(sessionId) : "unlisted";
@@ -625,6 +683,7 @@ function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: To
         </>
       }
       label={`Dispatched session: ${title}`}
+      stateKey={stateKey}
       canOpen={!!(params || answer || detail)}
       bodyClassName="flex flex-col gap-3"
       data={{ "data-slot": "dispatch-row", "data-session-id": sessionId ?? undefined }}
@@ -636,7 +695,7 @@ function DispatchRow({ session, outcome }: { session: DispatchFacts; outcome: To
           {clamp(params, 8000)}
         </pre>
       )}
-      {answer && <FoldedOutput text={answer} markdown failed={false} />}
+      {answer && <FoldedOutput stateKey={stateKey} text={answer} markdown failed={false} />}
     </FoldRow>
   );
 }
@@ -701,17 +760,19 @@ const PREVIEW_LINES = 5;
 /** Output folded to its first lines, with the rest on demand: a tool's text as it came, or a
  * session's answer as Markdown. */
 function FoldedOutput({
+  stateKey,
   text,
   markdown,
   failed,
   className,
 }: {
+  stateKey: string;
   text: string;
   markdown: boolean;
   failed: boolean;
   className?: string;
 }) {
-  const [all, setAll] = useState(false);
+  const [all, setAll] = useTranscriptDisclosure(`${stateKey}:output`);
   const lines = text.split("\n");
   const shown = all ? lines : lines.slice(0, PREVIEW_LINES);
   const hidden = lines.length - shown.length;
@@ -777,7 +838,12 @@ function Tool({
 }: ToolRow) {
   if (dispatch)
     return dispatch.map((session, i) => (
-      <DispatchRow key={session.sessionId ?? i} session={session} outcome={outcome} />
+      <DispatchRow
+        key={session.sessionId ?? i}
+        stateKey={`${call.id}:${session.sessionId ?? i}`}
+        session={session}
+        outcome={outcome}
+      />
     ));
   const failed = outcome === "failed";
   const details = toolArgsText(call.args);
@@ -800,6 +866,7 @@ function Tool({
         </>
       }
       label={`${call.name} tool call`}
+      stateKey={call.id}
       ruled={false}
     >
       {details && (
@@ -810,6 +877,7 @@ function Tool({
       {output && (
         <div data-slot="tool-output" className={cn(details && "mt-1")}>
           <FoldedOutput
+            stateKey={call.id}
             text={output}
             markdown={false}
             failed={failed}

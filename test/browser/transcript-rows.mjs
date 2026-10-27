@@ -137,6 +137,9 @@ await run(
     };
   },
   async (page) => {
+    // Alignment measures every fixture together; a tall viewport keeps them all in the window.
+    // Bounded mounting and offscreen remounting are covered by open-session and session-perf.
+    await page.ab("set", "viewport", "1280", "4000");
     await page.open("/");
     await page.click("button", "Every row kind");
     await page.see("Done: every row kind is above.");

@@ -148,6 +148,41 @@ test("a jump to a message lands it 16px under the top edge", () => {
   );
 });
 
+test("index jumps unpin before asynchronous mounting and refinement", () => {
+  const { viewport, el } = setup();
+  const virtual: ViewportElement = el;
+  virtual.jumpToMessage = (id) => id === "offscreen";
+  assert.equal(
+    viewport.jump({ kind: "user", id: "offscreen", messageId: "offscreen", label: "Earlier" }),
+    true,
+  );
+  el.scrollHeight = 3000;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 1500, "rendering the destination must not follow the end");
+  el.scrollTop = 800;
+  viewport.corrected();
+  viewport.scrolled();
+  viewport.rendered();
+  assert.equal(el.scrollTop, 800);
+});
+
+test("measurement compensation preserves follow intent in both directions", () => {
+  const { viewport, el } = setup();
+  el.scrollTop = 1400;
+  viewport.corrected();
+  viewport.scrolled();
+  el.scrollHeight = 3000;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2500, "a corrected pinned view still follows");
+  scroll(el, viewport, 1800);
+  el.scrollTop = 2500;
+  viewport.corrected();
+  viewport.scrolled();
+  el.scrollHeight = 3500;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 2500, "correction near the end must not re-pin a reader");
+});
+
 test("a viewport without a transcript goes nowhere and reports the bottom", () => {
   const viewport = createTranscriptViewport();
   assert.equal(viewport.jump(BOTTOM_ENTRY), false);
