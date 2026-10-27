@@ -72,7 +72,7 @@ jobs:
       - name: Install agent-browser 0.38.1 and its browser
         run: |
           npm install --global agent-browser@0.38.1
-          agent-browser install --with-deps
+          agent-browser install
       # A scratch Piano with a fake Pi: no model credentials, no paid calls.
       - name: Browser journeys
         run: npm run test:browser
