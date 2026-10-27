@@ -9,7 +9,10 @@ import { childEnvironment } from "./ChildEnvironment.ts";
 export const GitCommand = Context.Reference<string>("piano/GitCommand", {
   defaultValue: () => "git",
 });
-export const GhCommand = Context.Reference<string>("piano/GhCommand", { defaultValue: () => "gh" });
+/** `PIANO_GH_CLI` points a scratch instance at a stand-in forge, as `PIANO_PI_CLI` does for Pi. */
+export const GhCommand = Context.Reference<string>("piano/GhCommand", {
+  defaultValue: () => process.env.PIANO_GH_CLI || "gh",
+});
 
 export interface RunOptions {
   readonly command: string;

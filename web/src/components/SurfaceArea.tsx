@@ -70,7 +70,9 @@ export function SurfaceFrame({
       {toolbar && (
         // Plain status and view controls have no dedicated shadcn layout.
         <div className="flex min-h-10 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
-          <div className="flex min-w-0 items-center truncate">{status}</div>
+          {/* Several status items (a comparison, then a count) take a second line on a narrow
+           * toolbar rather than clipping; each item truncates on its own. */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 py-1">{status}</div>
           <div className="flex shrink-0 items-center">
             {actions}
             {single && (

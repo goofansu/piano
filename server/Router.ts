@@ -21,6 +21,7 @@ import { PiSettings } from "./PiSettings.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { RadiusSetup } from "./RadiusSetup.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
+import { SessionChanges } from "./SessionChanges.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
 import { SessionSharing } from "./SessionSharing.ts";
@@ -260,11 +261,29 @@ export const AppRouter = HttpRouter.use((router) =>
           },
         }),
     );
+    // The workspace routes keep their meaning for tabs built before the session routes: uncommitted.
     yield* serve(Endpoints.workspaceChanges, ({ workspace }) =>
-      Effect.flatMap(WorkspaceChanges, (changes) => changes.preview(workspace)),
+      Effect.flatMap(WorkspaceChanges, (changes) =>
+        changes.preview(workspace, { scope: "uncommitted" }),
+      ),
     );
     yield* serve(Endpoints.workspaceChangedFile, ({ workspace, body }) =>
-      Effect.flatMap(WorkspaceChanges, (changes) => changes.preview(workspace, body.path)),
+      Effect.flatMap(WorkspaceChanges, (changes) =>
+        changes.preview(workspace, { scope: "uncommitted", path: body.path }),
+      ),
+    );
+    yield* serve(Endpoints.sessionChanges, ({ workspace, session, body }) =>
+      Effect.flatMap(SessionChanges, (changes) =>
+        changes.read(workspace, session, { scope: body.scope }),
+      ),
+    );
+    yield* serve(Endpoints.sessionChangedFile, ({ workspace, session, body }) =>
+      Effect.flatMap(SessionChanges, (changes) =>
+        changes.read(workspace, session, { scope: body.scope, path: body.path }),
+      ),
+    );
+    yield* serve(Endpoints.setSessionChangesScope, ({ workspace, session, body }) =>
+      Effect.flatMap(SessionChanges, (changes) => changes.setScope(workspace, session, body.scope)),
     );
     yield* serve(Endpoints.workspaceWrittenFiles, ({ workspace, body }) =>
       Effect.flatMap(WorkspaceChanges, (changes) => changes.written(workspace, body.paths)),

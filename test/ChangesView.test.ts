@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { ChangeFile, WorkspaceChanges } from "../shared/wire.ts";
 import {
   askText,
+  CHANGES_MOVED,
   type ChangesSheetView,
   changedFile,
   changesSheet,
@@ -40,6 +41,12 @@ const changes = (
     status: "ready",
     head: "abc",
     branch: "main",
+    comparison: { scope: "uncommitted", base: "abc" },
+    scopes: [
+      { scope: "branch", available: false, reason: "main is the base branch." },
+      { scope: "uncommitted", available: true },
+    ],
+    local: { commitsNotPushed: null, uncommitted: files.length > 0 },
     files: files.map(([p, n]) => meta(p, n)),
     diff,
     truncated,
@@ -303,4 +310,70 @@ test("asking about a file quotes its diff and says whether the patch is partial"
   );
   assert.ok(text.includes(`\`\`\`diff\n${patch("a.ts", 1)}\`\`\`\n`));
   assert.match(askText({ ...loaded, truncated: true }), /partial patch, not the complete file/);
+});
+
+test("the comparison menu names the scope on screen and why the other cannot be picked", () => {
+  const view = sheet(changes([["a", 1]]));
+  assert.deepEqual(view.scope, {
+    current: "uncommitted",
+    label: "Uncommitted",
+    options: [
+      { scope: "branch", name: "Branch", detail: "main is the base branch.", available: false },
+      { scope: "uncommitted", name: "Uncommitted", detail: "Against HEAD", available: true },
+    ],
+  });
+  const branch = changes([["a", 1]]);
+  const target = { name: "main", ref: "refs/heads/main", commit: "def", from: "assumed" } as const;
+  const onBranch = sheet({
+    ...branch,
+    result: {
+      ...(branch.result as Extract<WorkspaceChanges["result"], { status: "ready" }>),
+      comparison: { scope: "branch", base: "def", target },
+      scopes: [
+        { scope: "branch", available: true, target },
+        { scope: "uncommitted", available: true },
+      ],
+    },
+  });
+  assert.equal(onBranch.scope?.label, "Branch · main (assumed)");
+  assert.equal(onBranch.scope?.options[0].detail, "Compared with main, assumed");
+});
+
+test("an unavailable scope is the body's reason, with the menu still offering the others", () => {
+  const view = sheet({
+    ...changes([]),
+    result: {
+      status: "unavailable",
+      head: "abc",
+      branch: "main",
+      scope: "branch",
+      detail: "main is the base branch.",
+      scopes: [
+        { scope: "branch", available: false, reason: "main is the base branch." },
+        { scope: "uncommitted", available: true },
+      ],
+    },
+  });
+  assert.equal(view.status, "");
+  assert.deepEqual(view.body, {
+    kind: "failed",
+    title: "Branch unavailable",
+    detail: "main is the base branch.",
+  });
+  assert.equal(view.scope?.current, "branch");
+  assert.equal(view.scope?.options[1].available, true);
+});
+
+test("a file read under another comparison never mixes into the list it was asked for", () => {
+  const value = changes([["a", 1]]);
+  assert.equal(
+    changedFile(workspace, value, "a", { scope: "uncommitted", base: "abc" }).file.path,
+    "a",
+  );
+  assert.throws(() => changedFile(workspace, value, "a", { scope: "branch", base: "abc" }), {
+    message: CHANGES_MOVED,
+  });
+  assert.throws(() => changedFile(workspace, value, "a", { scope: "uncommitted", base: "moved" }), {
+    message: CHANGES_MOVED,
+  });
 });

@@ -9,25 +9,41 @@ import {
   CHANGES_FILE_PATCH_BYTES,
   CHANGES_INITIAL_PATCH_BYTES,
   type ChangeFile,
+  type ChangesScope,
   type WorkspaceChanges as Observation,
   type Workspace,
   type WrittenFile,
   type WorkspaceWrittenFiles as WrittenObservation,
 } from "../shared/wire.ts";
+import { commitsNotPushed, resolveComparisons, type TargetHints } from "./ComparisonBase.ts";
 import { type Checkout, type CheckoutObservation, observeCheckout } from "./GitCheckout.ts";
 import { place } from "./WorkspaceFiles.ts";
 
 type Ready = Extract<Observation["result"], { readonly status: "ready" }>;
+type Unavailable = Extract<Observation["result"], { readonly status: "unavailable" }>;
 type Summary = Omit<Ready, "diff" | "truncated">;
 /** A preview's facts without its patch: what a status read carries. */
-export type ChangesSummary = CheckoutObservation<Summary>;
+export type ChangesSummary = CheckoutObservation<Summary | Unavailable>;
+
+/** What to compare, and for which file. Without `scope`, the automatic one: `branch` when the
+ * checkout's target can be read, else `uncommitted`. */
+export interface PreviewOptions {
+  readonly scope?: ChangesScope;
+  readonly hints?: TargetHints;
+}
 
 export class WorkspaceChanges extends Context.Service<
   WorkspaceChanges,
   {
-    readonly preview: (workspace: Workspace, path?: string) => Effect.Effect<Observation>;
+    readonly preview: (
+      workspace: Workspace,
+      options?: PreviewOptions & { readonly path?: string },
+    ) => Effect.Effect<Observation>;
     /** The branch and changed files `preview` would show, read without rendering any patch. */
-    readonly summary: (workspace: Workspace) => Effect.Effect<ChangesSummary>;
+    readonly summary: (
+      workspace: Workspace,
+      options?: PreviewOptions,
+    ) => Effect.Effect<ChangesSummary>;
     /** Where each of `paths` (as a session's tool calls named them: relative to the workspace, or
      * absolute) stands: outside the workspace, ignored by Git, no longer existing, or listed. A
      * tracked file is never ignored. */
@@ -38,24 +54,34 @@ export class WorkspaceChanges extends Context.Service<
   }
 >()("piano/WorkspaceChanges") {}
 
-/** The checkout's changes against HEAD, with the patch only when asked for. */
-function preview(checkout: Checkout, path: string | undefined, patch: true): Promise<Ready>;
-function preview(checkout: Checkout, path: string | undefined, patch: false): Promise<Summary>;
+/** The checkout's changes against the scope's base, with the patch only when asked for. */
+function preview(
+  checkout: Checkout,
+  options: PreviewOptions,
+  path: string | undefined,
+  patch: true,
+): Promise<Ready | Unavailable>;
+function preview(
+  checkout: Checkout,
+  options: PreviewOptions,
+  path: string | undefined,
+  patch: false,
+): Promise<Summary | Unavailable>;
 async function preview(
   checkout: Checkout,
+  options: PreviewOptions,
   path: string | undefined,
   patch: boolean,
-): Promise<Ready | Summary> {
+): Promise<Ready | Summary | Unavailable> {
   if (path !== undefined) checkout.safePath(path);
-  const head = await checkout.head();
-  const branch = await checkout.branch();
-  const base =
-    head ??
-    (
-      await checkout.text(["hash-object", "-w", "-t", "tree", "--stdin"], {
-        input: Buffer.alloc(0),
-      })
-    ).trim();
+  const comparisons = await resolveComparisons(checkout, options.hints);
+  const { head, branch, scopes } = comparisons;
+  const scope = options.scope ?? comparisons.automatic;
+  const resolved = comparisons.of(scope);
+  if ("unavailable" in resolved)
+    return { status: "unavailable", head, branch, scope, detail: resolved.unavailable, scopes };
+  const { comparison } = resolved;
+  const base = comparison.base;
   const temp = await mkdtemp(join(tmpdir(), "piano-changes-"));
   try {
     const index = (
@@ -108,7 +134,20 @@ async function preview(
         deletions: Number(match[2]) || 0,
       };
     });
-    if (!patch) return { status: "ready", head, branch, files };
+    // What is still only here, whatever the scope: edits HEAD lacks (through the same private
+    // index, so untracked files count) and commits the remote-tracking ref lacks.
+    const uncommitted =
+      untracked.length > 0 ||
+      (
+        await git.run(
+          [...diffArgs, "--quiet", comparisons.of("uncommitted").comparison.base, "--"],
+          {
+            okCodes: [0, 1],
+          },
+        )
+      ).code === 1;
+    const local = { commitsNotPushed: await commitsNotPushed(checkout, head, branch), uncommitted };
+    if (!patch) return { status: "ready", head, branch, comparison, scopes, local, files };
     const excerpt = await git.excerpt(
       [...diffArgs, "--patch", base, "--", ...pathArgs],
       path === undefined ? CHANGES_INITIAL_PATCH_BYTES : CHANGES_FILE_PATCH_BYTES,
@@ -117,6 +156,9 @@ async function preview(
       status: "ready",
       head,
       branch,
+      comparison,
+      scopes,
+      local,
       files,
       diff: excerpt.text,
       truncated: excerpt.truncated,
@@ -187,10 +229,14 @@ export const WorkspaceChangesLive = Layer.effect(
       },
     } as const;
     return WorkspaceChanges.of({
-      preview: (workspace, path) =>
-        observeCheckout(workspace, changes, (checkout) => preview(checkout, path, true)),
-      summary: (workspace) =>
-        observeCheckout(workspace, changes, (checkout) => preview(checkout, undefined, false)),
+      preview: (workspace, options = {}) =>
+        observeCheckout(workspace, changes, (checkout) =>
+          preview(checkout, options, options.path, true),
+        ),
+      summary: (workspace, options = {}) =>
+        observeCheckout(workspace, changes, (checkout) =>
+          preview(checkout, options, undefined, false),
+        ),
       written: (workspace, paths) =>
         observeCheckout(
           workspace,

@@ -19,7 +19,6 @@ import {
 import { AddToChat } from "@/components/Quotes";
 import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPanel, SurfaceTabTrigger } from "@/components/SessionPanel";
-import { SessionPullRequestControl } from "@/components/SessionPullRequest";
 import { SessionRail } from "@/components/SessionRail";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -112,6 +111,8 @@ export function SessionView({ state, send }: Props) {
     : undefined;
   // The registry's workspace for the directory, like Changes: it outlives a closed folder. Its
   // reference says whether the session is linked, so an unlinked one asks GitHub nothing.
+  // The pull request row shows in Changes: its details are on screen while Changes is.
+  const changesVisible = !settings && navigation.layout.surface && surface?.active === "changes";
   const pullRequest = useSessionPullRequest(
     workspace?.id,
     t?.sessionId,
@@ -120,8 +121,8 @@ export function SessionView({ state, send }: Props) {
       : undefined,
     !!t && isWorking(t.state),
     {
-      open: pullRequestOpen,
-      onOpenChange: onPullRequestOpenChange,
+      visible: changesVisible,
+      dialog: { open: pullRequestOpen, onOpenChange: onPullRequestOpenChange },
     },
   );
   const { status, replyActivity } = sessionActivity(state, messagesOnly);
@@ -138,19 +139,7 @@ export function SessionView({ state, send }: Props) {
 
   return (
     <TranscriptViewportContext value={viewport}>
-      <SessionHeader
-        state={state}
-        status={status}
-        pullRequest={(menuTrigger) =>
-          t?.sessionId && (
-            <SessionPullRequestControl
-              key={sessionKey(t)}
-              pr={pullRequest}
-              menuTrigger={menuTrigger}
-            />
-          )
-        }
-      />
+      <SessionHeader state={state} status={status} pullRequest={pullRequest} />
       {areaTabs && <AreaTabs />}
       <div
         ref={areas}
@@ -280,6 +269,7 @@ export function SessionView({ state, send }: Props) {
         <SessionPanel
           state={state}
           onAsk={onAsk}
+          pullRequest={pullRequest}
           id={AREA_ID.surface}
           labelledBy={areaTabs && surface ? tabId(surface.active) : undefined}
         />

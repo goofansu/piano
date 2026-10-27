@@ -19,6 +19,7 @@ import {
 import type { McpSetupRequest } from "../../../shared/mcp.ts";
 import type { RadiusSetupAction } from "../../../shared/radius.ts";
 import {
+  type ChangesScope,
   type SessionPullRequestAction,
   sameWorkspace,
   type ThinkingLevel,
@@ -175,6 +176,39 @@ export const workspaceChanges = (workspaceId: string, options?: RequestOptions) 
 
 export const workspaceChangedFile = (workspaceId: string, path: string, options?: RequestOptions) =>
   call(Endpoints.workspaceChangedFile, { query: { workspaceId }, body: { path } }, options);
+
+/** A session's Changes under its saved scope, or `scope` for this read. */
+export const sessionChanges = (
+  workspaceId: string,
+  sessionId: string,
+  scope: ChangesScope | undefined,
+  options?: RequestOptions,
+) =>
+  call(
+    Endpoints.sessionChanges,
+    { query: { workspaceId, sessionId }, body: scope ? { scope } : {} },
+    options,
+  );
+
+export const sessionChangedFile = (
+  workspaceId: string,
+  sessionId: string,
+  body: { path: string; scope: ChangesScope },
+  options?: RequestOptions,
+) => call(Endpoints.sessionChangedFile, { query: { workspaceId, sessionId }, body }, options);
+
+/** Save the session's scope (`null` for the automatic one); answers with a fresh read. */
+export const setSessionChangesScope = (
+  workspaceId: string,
+  sessionId: string,
+  scope: ChangesScope | null,
+  options?: RequestOptions,
+) =>
+  call(
+    Endpoints.setSessionChangesScope,
+    { query: { workspaceId, sessionId }, body: { scope } },
+    options,
+  );
 
 /**
  * Where each of `paths` stands in `workspace` (one `WrittenFile` per path, in order): one

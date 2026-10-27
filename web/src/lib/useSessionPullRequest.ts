@@ -7,18 +7,27 @@ import { createSessionPullRequest, pullRequestKey } from "@/lib/sessionPullReque
 /**
  * Only the selected session is observed, and only while the registry links it (`link` is the
  * catalog's). The module owns freshness, focus/work refreshes and polling of visible active PR
- * details; this hook passes the session snapshot and panel visibility without deciding that policy.
- * Navigation owns whether the panel is open; the link decides what it shows and may close it.
+ * details; this hook passes the session snapshot and what is on screen without deciding that
+ * policy. The details are the row under the Changes toolbar, so they show while Changes does
+ * (`visible`); navigation owns whether the link dialog is open, and the link may close it.
  */
 export function useSessionPullRequest(
   workspaceId: string | undefined,
   sessionId: string | null | undefined,
   link: SessionPullRequestLink | null | undefined,
   working: boolean,
-  panel: { open: boolean; onOpenChange: (open: boolean) => void },
+  {
+    visible,
+    dialog,
+  }: {
+    /** Changes is on screen for this session, where the pull request row shows. */
+    visible: boolean;
+    /** The link dialog: linking one, or changing the saved link. */
+    dialog: { open: boolean; onOpenChange: (open: boolean) => void };
+  },
 ) {
-  const latest = useRef(panel);
-  latest.current = panel;
+  const latest = useRef(dialog);
+  latest.current = dialog;
   const [pr] = useState(() =>
     createSessionPullRequest({
       api: sessionPullRequest,
@@ -42,22 +51,34 @@ export function useSessionPullRequest(
     () => pr.observe(workspaceId, sessionId, registered, working),
     [pr, workspaceId, sessionId, registered, working],
   );
-  useEffect(() => (panel.open ? pr.open() : pr.close()), [pr, panel.open]);
   const state = useSyncExternalStore(pr.subscribe, pr.getState);
+  const linked = state.linked;
+  // The dialog wins: linking, or changing the saved link. Otherwise the row shows while Changes
+  // does, and a never-searched session is searched once when it first shows.
+  useEffect(() => {
+    if (dialog.open) {
+      pr.open();
+      if (linked) pr.edit();
+    } else if (visible) pr.reveal();
+    else pr.close();
+  }, [pr, dialog.open, visible, linked]);
   // Only the current session's value, even in the render in which the session changes (INV-07).
   const current = state.key === pullRequestKey(workspaceId, sessionId);
   return {
     value: current ? state.value : undefined,
-    linked: current && state.linked,
+    linked: current && linked,
     registered: current ? state.link : undefined,
     loading: current && state.loading,
     busy: current && state.busy,
     finding: current && state.finding,
-    surface: current && panel.open ? state.surface : "closed",
-    open: () => panel.onOpenChange(true),
-    close: () => panel.onOpenChange(false),
-    edit: pr.edit,
-    cancel: pr.cancel,
+    surface: current ? state.surface : "closed",
+    /** Opens the link dialog: to link one, or to change the saved link. */
+    open: () => dialog.onOpenChange(true),
+    /** Leaves the dialog; a changed link stays as it was. */
+    cancel: () => {
+      pr.cancel();
+      dialog.onOpenChange(false);
+    },
     link: pr.link,
     discover: pr.discover,
     remove: pr.remove,

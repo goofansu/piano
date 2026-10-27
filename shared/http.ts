@@ -15,6 +15,7 @@ import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
 import { Webhook, WebhookDelivery, WebhookSave } from "./webhooks.ts";
 import {
+  ChangesScope,
   DirListing,
   FolderView,
   OAuthProvider,
@@ -225,6 +226,39 @@ export const Endpoints = {
     invalid: "File path is required in the request body.",
     response: WorkspaceChanges,
     fallback: (status) => `File request failed (${status}).`,
+  }),
+  /** The session's Changes: its saved scope, or the one in the body for this read. */
+  sessionChanges: endpoint({
+    method: "POST",
+    path: "/api/session/changes",
+    query: ["workspaceId", "sessionId"],
+    body: Schema.Struct({ scope: Schema.optional(ChangesScope) }),
+    invalid: "Invalid changes request.",
+    response: WorkspaceChanges,
+    fallback: (status) =>
+      `Changes request failed (${status}). Refresh folders or inspect the server.`,
+  }),
+  /** One file's fresh patch under the scope the list was read with; the browser checks the base. */
+  sessionChangedFile: endpoint({
+    method: "POST",
+    path: "/api/session/changes/file",
+    query: ["workspaceId", "sessionId"],
+    body: Schema.Struct({ path: Schema.String, scope: ChangesScope }),
+    invalid: "File path and scope are required in the request body.",
+    response: WorkspaceChanges,
+    fallback: (status) => `File request failed (${status}).`,
+  }),
+  /** Save the session's scope (`null` for the automatic one) and answer with a fresh read. */
+  setSessionChangesScope: endpoint({
+    method: "PUT",
+    path: "/api/session/changes",
+    query: ["workspaceId", "sessionId"],
+    body: Schema.Struct({ scope: Schema.NullOr(ChangesScope) }),
+    invalid: "Invalid changes scope.",
+    response: WorkspaceChanges,
+    noStore: true,
+    refused: 409,
+    fallback: "Could not save the comparison.",
   }),
 
   workspaceWrittenFiles: endpoint({

@@ -12,6 +12,7 @@ import { cutText } from "../shared/cutText.ts";
 import { RadiusShareLink } from "../shared/share.ts";
 import type { WebhookEvent } from "../shared/webhooks.ts";
 import {
+  ChangesScope,
   Project,
   SESSION_TITLE_MAX,
   SessionPullRequestLink,
@@ -47,6 +48,9 @@ const WorktreeEntry = Schema.Struct({
   folder: Schema.String,
   path: Schema.String,
   branch: Schema.String,
+  /** The base branch Worktrunk reported when Piano created the worktree; absent for a worktree
+   * Piano only discovered. Changes compares the branch with it. */
+  baseBranch: Schema.optional(Schema.String),
 });
 export type WorktreeEntry = typeof WorktreeEntry.Type;
 
@@ -73,18 +77,22 @@ const SessionEntry = Schema.Struct({
   archived: Schema.Boolean,
   /** Sidebar preference; absent means unpinned. */
   pinned: Schema.optional(Schema.Boolean),
+  /** Changes preference: the comparison the user chose; absent means the automatic one. */
+  changesScope: Schema.optional(ChangesScope),
   /** Replaceable last-known Pi accounting, not session history. */
   stats: Schema.optional(SessionStats),
 });
 export type SessionEntry = typeof SessionEntry.Type;
 
-/** What a session reference shows: cached statistics and the Radius share never reach the sidebar.
- * The pull request link does, so a browser reads GitHub facts only for a session that has one. */
+/** What a session reference shows: cached statistics, the Radius share and the Changes scope
+ * never reach the sidebar. The pull request link does, so a browser reads GitHub facts only for a
+ * session that has one. */
 export const shownReference = ({
   stats: _stats,
   radiusShare: _radiusShare,
+  changesScope: _changesScope,
   ...shown
-}: SessionEntry): Omit<SessionEntry, "stats" | "radiusShare"> => shown;
+}: SessionEntry): Omit<SessionEntry, "stats" | "radiusShare" | "changesScope"> => shown;
 
 /**
  * `entry` is still the reference `expected` was read as: not recreated (same creation time), not
@@ -358,6 +366,12 @@ export class Registry extends Context.Service<
       cwd: string,
       sessionId: string,
       pinned: boolean,
+    ) => Effect.Effect<void, RegistryError>;
+    /** Save the comparison Changes opens the session on; `undefined` returns it to the automatic one. */
+    readonly setSessionChangesScope: (
+      cwd: string,
+      sessionId: string,
+      scope: ChangesScope | undefined,
     ) => Effect.Effect<void, RegistryError>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
     readonly removeSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
@@ -692,6 +706,22 @@ export const RegistryLive = Layer.effect(
           };
         });
       }),
+      setSessionChangesScope: Effect.fn("Registry.setSessionChangesScope")(
+        function* (cwd, sessionId, scope) {
+          yield* update((d) => {
+            const entry = d.sessions.find(isSession(cwd, sessionId));
+            if (!entry || entry.archived)
+              throw new RegistryError({
+                detail: "Session reference is unavailable. Refresh and try again.",
+              });
+            if (entry.changesScope === scope) return d;
+            return {
+              ...d,
+              sessions: d.sessions.map((s) => (s === entry ? { ...s, changesScope: scope } : s)),
+            };
+          });
+        },
+      ),
       archiveSession: (cwd, sessionId) =>
         update((d) => ({
           ...d,

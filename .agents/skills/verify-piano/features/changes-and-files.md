@@ -13,11 +13,29 @@ The palette (Mod+K) searches neither outputs nor links.
 
 - `changes-open`: the header's last control, the "Changes" toggle, opens the Surface area and is
   pressed while Changes shows, then named "Hide changes", which hides it; the palette's "Changes"
-  focuses Changes without rereading, collapsing or hiding it. Below 849px of session width the
-  toggle goes and the palette opens Changes; the "Agent" tab bar shows only while something is open
-  (`Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar closes it.
+  focuses Changes without rereading, collapsing or hiding it. The toggle shows on every layout;
+  below 849px of session width it shows the Changes area (the "Agent" tab bar shows only while
+  something is open: `Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar
+  closes it. The header's end holds only "Show session rail" / "Hide session rail" and this
+  toggle (plus the preview control while an app runs); the pull request is read in Changes.
+- `changes-scope`: the toolbar starts with the comparison menu ("Comparison: Branch · main" or
+  "Comparison: Uncommitted"): Branch compares with the branch's target (the pull request's base,
+  the base Worktrunk reported at creation, the remote's default branch, or a local main/master
+  "(assumed)"), Uncommitted with HEAD; an unavailable scope is disabled with its reason ("main is
+  the base branch."). The choice is saved for the session. The toolbar's actions are Collapse all
+  / Expand all, Wrap (pressed while on) and Refresh changes; a failed refresh keeps the previous
+  list with "Refresh failed. Showing previous changes." and the reason.
+- `pull-request-row`: region "Pull request" under the toolbar, only while the session has a
+  linked pull request: `#<n> <title>` (a link to GitHub), the state badge, "Checks …",
+  "Review …", "<n> commits not pushed", "Edits not committed", and `head → base` only when the
+  head is not the inspected branch; "Status unavailable" when GitHub cannot be read. Its
+  "Pull request actions" menu: Open pull request, Change link…, Find from branch, Remove link
+  (toasts "Pull request linked" / "Pull request link removed"). The session menu's and palette's
+  "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
+  field, Link, Find from branch; "No open PR found for this branch." when none).
 - `changes-list`: list "Changed files" with one collapsible row per file
-  (`<path>, <n> added, <n> removed: collapse`), "New file" for untracked files, and the diff.
+  (`<path>, <n> added, <n> removed: collapse`), the kind beside the size on the name line
+  ("New" for untracked files, "Deleted", "Binary"), and the diff.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
 - `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to the header's "Changes" icon;
   reopening shows the same scroll and expanded files.
@@ -53,7 +71,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Result: heading "Changes"; buttons `new.txt, 1 added, 0 removed: collapse` and
     `src/answer.ts, 1 added, 1 removed: collapse`; cells `− export const answer = 4;` and
     `+ export const answer = 5;`. `ab eval "document.querySelector('[aria-label=\"Changed files\"]').innerText"`
-    shows `New file` under `new.txt`. Capture `01-changes`.
+    shows `New` beside `new.txt`. Capture `01-changes`.
   - Side effect (same answer over HTTP): take the root workspace ID from
     `curl -s "$API_URL/api/folders"` (`folders[0].worktrees[0].workspace.id`), then
     `curl -s -X POST -H "Origin: $ORIGIN" "$API_URL/api/workspace/changes?workspaceId=<id>"`

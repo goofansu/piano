@@ -1,10 +1,12 @@
-import type { ChangeFile, Workspace, WorkspaceChanges } from "@shared/wire";
+import type { ChangeFile, ChangesScope, Comparison, Workspace } from "@shared/wire";
 import { cn } from "cn";
 import { FileDiffIcon, MessageSquarePlusIcon } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
-import { ChangesActions, ChangesStaleNote } from "@/components/ChangesHeader";
+import { toast } from "sonner";
+import { ChangesActions, ChangesScopeMenu, ChangesStaleNote } from "@/components/ChangesHeader";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { IconButton } from "@/components/IconButton";
+import { type PullRequestControl, PullRequestRow } from "@/components/SessionPullRequest";
 import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
-import { workspaceChangedFile, workspaceChanges } from "@/lib/api";
+import { sessionChangedFile, sessionChanges, setSessionChangesScope } from "@/lib/api";
 import {
   askText,
   changedFile,
@@ -32,6 +34,7 @@ import {
   type LoadedFile,
   refreshKey,
   type SheetBody,
+  type ShownChanges,
   toggleEvery,
   toggleFile,
 } from "@/lib/changesView";
@@ -41,24 +44,61 @@ import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useObservation } from "@/lib/useObservation";
 import type { SessionView } from "@/store";
 
-/** Live while shown: on showing, focus and edits (a quiet 600 ms after the checkout may have moved); a response for another workspace never shows. */
-function useWorkspaceChanges(
+/** One file's fresh patch under the comparison its list was read with. */
+type ReadFile = (path: string, signal: AbortSignal) => Promise<LoadedFile>;
+
+/**
+ * The session's Changes, live while shown: on showing, focus and edits (a quiet 600 ms after the
+ * checkout may have moved); a response for another workspace never shows. Reads use the
+ * session's saved scope; choosing one saves it and the answer replaces the view.
+ */
+function useSessionChanges(
   workspace: Workspace | undefined,
+  sessionId: string | null | undefined,
   active: boolean,
   refreshKey: string,
 ) {
-  const key = workspace ? JSON.stringify([workspace.id, workspace.path]) : null;
-  const { value, failure, loading, refresh } = useObservation<WorkspaceChanges>(
+  const key =
+    workspace && sessionId ? JSON.stringify([workspace.id, workspace.path, sessionId]) : null;
+  const { value, failure, loading, mutating, refresh, mutate } = useObservation<ShownChanges>(
     key,
     async (signal) =>
-      checkWorkspaceResponse(workspace!, await workspaceChanges(workspace!.id, { signal })),
+      checkWorkspaceResponse(
+        workspace!,
+        await sessionChanges(workspace!.id, sessionId!, undefined, { signal }),
+      ),
     { enabled: active, focus: true, trigger: refreshKey, debounce: 600 },
   );
+  const setScope = (scope: ChangesScope) =>
+    mutate(async (signal) =>
+      checkWorkspaceResponse(
+        workspace!,
+        await setSessionChangesScope(workspace!.id, sessionId!, scope, { signal }),
+      ),
+    ).catch((error: unknown) => {
+      toast.error(error instanceof Error ? error.message : "Could not save the comparison.");
+    });
+  const readFile =
+    (comparison: Comparison): ReadFile =>
+    async (path, signal) =>
+      changedFile(
+        workspace!,
+        await sessionChangedFile(
+          workspace!.id,
+          sessionId!,
+          { path, scope: comparison.scope },
+          { signal },
+        ),
+        path,
+        comparison,
+      );
   return {
     observation: value ?? null,
     error: failure,
-    busy: loading,
+    busy: loading || mutating,
     refresh: () => void refresh(),
+    setScope,
+    readFile,
   };
 }
 
@@ -68,6 +108,7 @@ export function ChangesPanel({
   session,
   active,
   onAsk,
+  pullRequest,
 }: {
   workspace: Workspace | undefined;
   /** Why Changes cannot open; it then shows that alone and reads nothing until it can. */
@@ -78,9 +119,12 @@ export function ChangesPanel({
   /** Receives review text for the composer draft; the caller decides how to confirm. Omitted
    * while the draft takes no additions, which hides Ask. */
   onAsk: ((text: string) => void) | undefined;
+  /** The session's pull request: a row under the toolbar while one is linked. */
+  pullRequest: PullRequestControl;
 }) {
-  const { observation, error, busy, refresh } = useWorkspaceChanges(
+  const { observation, error, busy, refresh, setScope, readFile } = useSessionChanges(
     unavailable ? undefined : workspace,
+    session?.sessionId,
     active && !unavailable,
     refreshKey(session),
   );
@@ -93,9 +137,16 @@ export function ChangesPanel({
     <SurfaceFrame
       tab="changes"
       status={
-        <span role="status" className="truncate">
-          {unavailable ? "" : sheet.status}
-        </span>
+        // The comparison first, then the size of the change it shows.
+        <>
+          {!unavailable && sheet.scope && (
+            <ChangesScopeMenu scope={sheet.scope} disabled={busy} onScope={setScope} />
+          )}
+          {/* Shrinks with an ellipsis after the comparison, so a narrow toolbar never clips it whole. */}
+          <span role="status" className="min-w-0 truncate">
+            {unavailable ? "" : sheet.status}
+          </span>
+        </>
       }
       actions={
         <ChangesActions
@@ -105,11 +156,23 @@ export function ChangesPanel({
           toggleEvery={() => setDisclosure(toggleEvery(disclosure, sheet))}
         />
       }
-      below={<ChangesStaleNote sheet={sheet} />}
+      below={
+        <>
+          {!unavailable && (
+            <PullRequestRow
+              pr={pullRequest}
+              branch={sheet.branch}
+              local={sheet.changes?.result.local}
+            />
+          )}
+          <ChangesStaleNote sheet={sheet} />
+        </>
+      }
     >
       <div className="flex flex-col">
         <SheetBodyView
           body={unavailable ? { kind: "unavailable", reason: unavailable } : body}
+          readFile={readFile}
           onOpenChange={(path, next) => setDisclosure((d) => toggleFile(d, path, next))}
           onAsk={ask}
         />
@@ -120,10 +183,12 @@ export function ChangesPanel({
 
 function SheetBodyView({
   body,
+  readFile,
   onOpenChange,
   onAsk,
 }: {
   body: SheetBody | { kind: "unavailable"; reason: string };
+  readFile: (comparison: Comparison) => ReadFile;
   onOpenChange: (path: string, open: boolean) => void;
   onAsk: ((loaded: LoadedFile) => void) | undefined;
 }) {
@@ -139,7 +204,7 @@ function SheetBodyView({
     case "failed":
       return (
         <Alert variant="destructive" className="m-4 w-auto">
-          <AlertTitle>Changes unavailable</AlertTitle>
+          <AlertTitle>{body.title ?? "Changes unavailable"}</AlertTitle>
           <AlertDescription>{body.detail}</AlertDescription>
         </Alert>
       );
@@ -167,7 +232,9 @@ function SheetBodyView({
       );
     case "files":
       return (
-        <ItemGroup className="gap-0" aria-label="Changed files">
+        // Rows abut on their hairlines: the group's own gap for small items would open 10px above
+        // each row, so the same variant sets it to nothing.
+        <ItemGroup className="gap-0 has-data-[size=sm]:gap-0" aria-label="Changed files">
           {body.files.map(({ metadata, initial, open }) => (
             <LiveFile
               key={`${body.changes.workspace.id}:${body.changes.observedAt}:${metadata.path}`}
@@ -175,6 +242,7 @@ function SheetBodyView({
               initial={initial}
               workspace={body.changes.workspace}
               observedAt={body.changes.observedAt}
+              readFile={readFile(body.changes.result.comparison)}
               open={open}
               onOpenChange={(next) => onOpenChange(metadata.path, next)}
               onAsk={onAsk}
@@ -190,6 +258,7 @@ function LiveFile({
   initial,
   workspace,
   observedAt,
+  readFile,
   open,
   onOpenChange,
   onAsk,
@@ -198,6 +267,7 @@ function LiveFile({
   initial?: DiffFile;
   workspace: Workspace;
   observedAt: string;
+  readFile: ReadFile;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAsk: ((loaded: LoadedFile) => void) | undefined;
@@ -212,12 +282,7 @@ function LiveFile({
   const [kept, setKept] = useState(false);
   const fetched = useObservation(
     JSON.stringify([workspace.id, workspace.path, metadata.path]),
-    async (signal) =>
-      changedFile(
-        workspace,
-        await workspaceChangedFile(workspace.id, metadata.path, { signal }),
-        metadata.path,
-      ),
+    (signal) => readFile(metadata.path, signal),
     { enabled: !seeded && (open || kept) },
   );
   useEffect(() => {
@@ -268,9 +333,15 @@ function FileSection({
   const directory = file.path.slice(0, slash + 1);
   const filename = file.path.slice(slash + 1);
   const large = isLarge(file);
+  // The file's kind sits on the name line beside its size; notes that need a sentence go beneath.
+  const kind =
+    [
+      file.status === "added" ? "New" : file.status === "deleted" ? "Deleted" : undefined,
+      file.binary ? "Binary" : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ") || undefined;
   const description = [
-    file.status === "added" ? "New file" : file.status === "deleted" ? "Deleted" : undefined,
-    file.binary ? "Binary; contents not shown" : undefined,
     ...file.notes,
     large && !open ? `Large change (${lineCount(file)} lines); expand to read it` : undefined,
   ]
@@ -287,13 +358,16 @@ function FileSection({
        * the file name stays in view while its hunks scroll. */}
       <Item
         size="sm"
-        className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-0 rounded-none bg-conversation px-2 py-1"
+        // One pixel less beneath than above: the row's hairline below is the rest of that space.
+        className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-0 rounded-none bg-conversation px-2 pt-1 pb-[3px]"
       >
         <CollapsibleTrigger asChild>
           <Button
             variant="ghost"
             size="sm"
-            className="h-auto min-h-9 min-w-0 justify-start gap-2 whitespace-normal px-2 py-2 text-left font-normal aria-expanded:bg-transparent pointer-coarse:min-h-11"
+            // The name's 16px line plus even padding makes the 36px (44px on touch) row, so the
+            // name sits centred and the chevron and Ask centre on its first line as it wraps.
+            className="h-auto min-w-0 justify-start gap-2 whitespace-normal px-2 py-2.5 text-left font-normal leading-4 aria-expanded:bg-transparent pointer-coarse:py-3.5"
             aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
           >
             {/* One filename line tall, so the chevron centres on the first line however the name wraps. */}
@@ -305,17 +379,20 @@ function FileSection({
                 {filename}
               </ItemTitle>
             </ItemContent>
-            {!file.binary && (
-              <span className="ml-auto shrink-0 self-start font-mono text-xs tabular-nums">
-                <span className="text-ok">+{file.additions}</span>{" "}
-                <span className="text-err">−{file.deletions}</span>
-              </span>
-            )}
+            <span className="ml-auto flex shrink-0 items-center gap-2 self-start text-xs">
+              {kind && <span className="text-ink-3">{kind}</span>}
+              {!file.binary && (
+                <span className="font-mono tabular-nums">
+                  <span className="text-ok">+{file.additions}</span>{" "}
+                  <span className="text-err">−{file.deletions}</span>
+                </span>
+              )}
+            </span>
           </Button>
         </CollapsibleTrigger>
         {canAsk && (
-          // The name's button has a 1px border before its padding; Ask drops by the same.
-          <ItemActions className="mt-px">
+          // Ask (32px) centres on the name's 36px line: 3px down, the button's border included.
+          <ItemActions className="mt-[3px]">
             <IconButton
               size="list"
               label={`Ask about ${file.path}`}
@@ -328,26 +405,17 @@ function FileSection({
           </ItemActions>
         )}
         {directory && (
-          <Collapsible className="col-span-full min-w-0">
-            <div className="flex min-w-0 items-center pr-2 pl-7">
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto min-h-6 min-w-0 flex-1 justify-start px-0 text-ink-3 aria-expanded:bg-transparent pointer-coarse:min-h-11"
-                  aria-label={`Full path for ${file.path}`}
-                >
-                  <span className="truncate font-mono text-xs font-normal">{directory}</span>
-                </Button>
-              </CollapsibleTrigger>
-            </div>
-            <CollapsibleContent className="disclosure-content px-2 py-2 font-mono text-xs text-ink-2 [overflow-wrap:anywhere]">
-              {file.path}
-            </CollapsibleContent>
-          </Collapsible>
+          // The directory beneath the name completes the path; together they are the whole of it.
+          // Its bottom space matches the name's top space, so a row reads as one centred block.
+          <span
+            className="col-span-full truncate pr-2 pb-[11px] pl-7 font-mono text-xs leading-4 text-ink-3"
+            title={file.path}
+          >
+            {directory}
+          </span>
         )}
         {description && (
-          <ItemDescription className="col-span-full line-clamp-none px-2 pb-1 text-xs [overflow-wrap:anywhere]">
+          <ItemDescription className="col-span-full line-clamp-none pr-2 pb-2.5 pl-7 text-xs [overflow-wrap:anywhere]">
             {description}
           </ItemDescription>
         )}

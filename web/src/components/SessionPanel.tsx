@@ -9,6 +9,7 @@ import {
   PianoStripTabTrigger,
   Tabs,
 } from "@/components/PianoTabs";
+import type { PullRequestControl } from "@/components/SessionPullRequest";
 import { SurfaceColumn, surfaceTabNames } from "@/components/SurfaceArea";
 import { FileTabIcon, WorkspaceFile } from "@/components/WorkspaceFile";
 import { activeTab, isView, type SurfaceTab, tabKey } from "@/lib/navigation";
@@ -63,6 +64,7 @@ export function SurfaceTabTrigger({
 export function SessionPanel({
   state,
   onAsk,
+  pullRequest,
   id,
   labelledBy,
 }: {
@@ -72,6 +74,8 @@ export function SessionPanel({
   labelledBy: string | undefined;
   /** Adds review text to the draft; omitted while the draft takes no additions. */
   onAsk: ((text: string) => void) | undefined;
+  /** The selected session's pull request, shown as a row in Changes. */
+  pullRequest: PullRequestControl;
 }) {
   const navigation = useNavigation();
   const { settings, surface, surfaceRequest, single, selectTab, closeTab } = navigation;
@@ -196,6 +200,7 @@ export function SessionPanel({
               session={t}
               active={shown && active === "changes" && !settings}
               onAsk={onAsk}
+              pullRequest={pullRequest}
             />,
           )}
         {files.map((file) =>

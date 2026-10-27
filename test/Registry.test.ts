@@ -98,7 +98,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 10);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 11);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -242,12 +242,16 @@ test("INV-01: a worktree's observed branch replaces its last-known one in one wr
 
 test("INV-01: a session with every optional field set, linked without an API host, survives restart", async (t) => {
   const f = fixture(t),
-    folder = join(f.root, "folder");
+    folder = join(f.root, "folder"),
+    worktree = join(f.root, "folder.feature");
   const original: RegistryData = {
     version: 2,
     folders: [folder],
-    worktrees: [],
-    workspaces: [{ id: "folder-id", folder, path: folder }],
+    worktrees: [{ folder, path: worktree, branch: "feature", baseBranch: "main" }],
+    workspaces: [
+      { id: "folder-id", folder, path: folder },
+      { id: "worktree-id", folder, path: worktree },
+    ],
     projects: [{ id: "project-1", name: "Launch" }],
     sessions: [
       {
@@ -259,9 +263,15 @@ test("INV-01: a session with every optional field set, linked without an API hos
         updatedAt: "now",
         archived: true,
         pinned: true,
+        changesScope: "branch",
         stats: { cost: 1, statsUpdatedAt: 2 },
         radiusShare: { organizationId: "org", artifactId: "art", url: "https://radius.test/a" },
-        pullRequest: { url: "https://github.com/example/repo/pull/2", source: "manual" },
+        pullRequest: {
+          url: "https://github.com/example/repo/pull/2",
+          source: "manual",
+          head: "feature",
+          base: "main",
+        },
       },
     ],
   };
@@ -431,7 +441,7 @@ for (const version of [4, 5, 6]) {
     assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 10);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 11);
       assert.deepEqual(
         stored
           .prepare(

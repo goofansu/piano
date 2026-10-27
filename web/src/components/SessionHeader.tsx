@@ -24,6 +24,7 @@ import {
 import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
 import { SessionPreviewControl } from "@/components/SessionPreview";
+import { type PullRequestControl, PullRequestLinkDialog } from "@/components/SessionPullRequest";
 import { surfaceTabNames } from "@/components/SurfaceArea";
 import {
   Breadcrumb,
@@ -52,8 +53,8 @@ export function SessionHeader({
 }: {
   state: AppState;
   status: string;
-  /** Renders the PR control, given the session menu it returns focus to while no PR is linked. */
-  pullRequest: (menuTrigger: React.RefObject<HTMLButtonElement | null>) => React.ReactNode;
+  /** The session's pull request: the review control's face, and the link dialog the menu opens. */
+  pullRequest: PullRequestControl;
 }) {
   const mobile = useIsMobile();
   const menuTrigger = useRef<HTMLButtonElement>(null);
@@ -220,12 +221,12 @@ export function SessionHeader({
         {/* Ghost controls: the group pulls out so the last one's content ends on the gutter. */}
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           <SessionPreviewControl />
-          {pullRequest(menuTrigger)}
           {sideBySide && <SessionRailToggle />}
-          {sideBySide && <ChangesToggle />}
+          <ChangesToggle />
           {mobile && sessionMenu}
         </div>
       </PaneHeader>
+      <PullRequestLinkDialog pr={pullRequest} menuTrigger={menuTrigger} />
     </>
   );
 }
@@ -254,24 +255,27 @@ function SessionRailToggle() {
 }
 
 /**
- * Changes' toggle, at the header's end right of the session rail's: the Changes command, which
- * shows Changes in the Surface area, or, while Changes shows, its tab's Close ("Hide changes"),
- * filled then, as the rail's toggle is. Left out while Changes cannot open; the palette's Changes
- * row says why.
+ * Changes' toggle, always last at the header's end, on every layout: the Changes command, which
+ * shows Changes in the Surface area, or, while Changes shows beside the Agent area, its tab's
+ * Close ("Hide changes"), filled then, as the rail's toggle is. One area at a time it shows the
+ * Changes area, and the tabs say which area shows. Left out while Changes cannot open; the
+ * palette's Changes row says why.
  */
 function ChangesToggle() {
   const { commands, run } = useSessionCommands();
   const navigation = useNavigation();
+  const { single } = navigation.layout;
   const shown = navigation.layout.surface && navigation.surface?.active === "changes";
   const command = commands.find((c) => c.id === "changes");
   if (!command?.enabled) return null;
+  const closes = shown && !single;
   return (
     <IconButton
       data-changes-trigger
       size="header"
-      label={shown ? surfaceTabNames("changes").close : command.label}
-      aria-pressed={shown}
-      onClick={() => (shown ? navigation.closeTab("changes") : run(command))}
+      label={closes ? surfaceTabNames("changes").close : command.label}
+      aria-pressed={single ? undefined : shown}
+      onClick={() => (closes ? navigation.closeTab("changes") : run(command))}
       className="aria-pressed:bg-muted"
     >
       <CommandIcon icon={command.icon} />

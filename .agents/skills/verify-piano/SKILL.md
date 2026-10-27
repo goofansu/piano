@@ -24,6 +24,7 @@ put `~/node/bin` and `~/.local/bin` (Node 24, `wt`) on `PATH` themselves. The fe
 .agents/skills/verify-piano/scripts/launch.sh                      # seeded: folder repo, 2 projects, 2 saved sessions
 .agents/skills/verify-piano/scripts/launch.sh --empty              # empty database: nothing registered
 .agents/skills/verify-piano/scripts/launch.sh --fake-pi dialogs    # test/fake-pi.mjs: "ask ..." opens a dialog, "crash ..." exits
+VERIFY_GH_CLI=<path> .agents/skills/verify-piano/scripts/launch.sh  # a stand-in gh (PIANO_GH_CLI), e.g. a wrapper over test/fixtures/fake-gh.mjs
 ```
 
 It needs `node_modules` (runs `npm ci` when missing) and nothing else. It creates

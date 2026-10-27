@@ -91,6 +91,12 @@ export interface SessionPullRequestLink {
    * lands, refreshing only if stale and no read is in flight; else the link form.
    */
   open: () => void;
+  /**
+   * The place the details show (the Changes row) is on screen: a linked session shows its
+   * details as `open` would; a session never searched for a pull request is searched once in the
+   * background, as its work stopping does; nothing else opens.
+   */
+  reveal: () => void;
   /** Hides the surface without reporting it through `closed`. */
   close: () => void;
   edit: () => void;
@@ -216,13 +222,38 @@ export function createSessionPullRequest({
 
   observation.subscribe(() => {
     state = derive();
-    // The surface moves only when the registry's link itself appeared or disappeared.
+    // The surface moves only when the registry's link itself appeared or disappeared: a link
+    // found closes the form; a link removed elsewhere takes its details (or edit) with it.
     if (!changing) {
       if (surface === "link-form" && linked()) return closeItself();
-      if ((surface === "details" || surface === "editing") && !linked()) surface = "link-form";
+      if ((surface === "details" || surface === "editing") && !linked()) surface = "closed";
     }
     publish();
   });
+
+  /** One background search for a never-searched session; its answer reaches the registry. */
+  const startSearch = () => {
+    const key = observation.getState().key;
+    if (key === null) return;
+    endSearch();
+    const controller = new AbortController();
+    search = controller;
+    api(...target(key), undefined, { signal: controller.signal })
+      .catch(() => undefined)
+      .finally(() => {
+        if (search === controller) search = undefined;
+      });
+  };
+
+  const open = () => {
+    if (surface !== "closed") return;
+    show(linked() ? "details" : "link-form");
+    const { loading, mutating } = observation.getState();
+    // A first, focus or work read may already be running or just finished when the user clicks the PR.
+    if (linked() && !loading && !mutating && (readAt === undefined || now() - readAt >= POLL_MS)) {
+      void observation.refresh();
+    }
+  };
 
   const change = async (action: SessionPullRequestAction): Promise<PullRequestOutcome> => {
     const key = observation.getState().key;
@@ -302,30 +333,14 @@ export function createSessionPullRequest({
       if (next && !alreadyReading && (associationChanged || edge)) observation.refreshSoon(0);
       publish();
       if (!edge || key === null) return;
-      if (link) return;
       if (link !== undefined || working) return;
-      endSearch();
-      const controller = new AbortController();
-      search = controller;
-      api(...target(key), undefined, { signal: controller.signal })
-        .catch(() => undefined)
-        .finally(() => {
-          if (search === controller) search = undefined;
-        });
+      startSearch();
     },
-    open: () => {
-      if (surface !== "closed") return;
-      show(linked() ? "details" : "link-form");
-      const { loading, mutating } = observation.getState();
-      // A first, focus or work read may already be running or just finished when the user clicks the PR.
-      if (
-        linked() &&
-        !loading &&
-        !mutating &&
-        (readAt === undefined || now() - readAt >= POLL_MS)
-      ) {
-        void observation.refresh();
-      }
+    open,
+    reveal: () => {
+      if (linked()) return open();
+      // Only a never-searched session at rest is searched; a removed link stays removed.
+      if (link === undefined && !working && !search) startSearch();
     },
     close: () => show("closed"),
     edit: () => {

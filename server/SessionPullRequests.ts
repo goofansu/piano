@@ -3,6 +3,7 @@
  */
 import { Context, Effect, Layer } from "effect";
 import type {
+  PullRequest,
   SessionPullRequest,
   SessionPullRequestAction,
   SessionPullRequestLink,
@@ -63,6 +64,24 @@ export const SessionPullRequestsLive = Layer.effect(
         );
       return saved;
     });
+    /** The pull request's branch names, when GitHub reported them: identity the link records. */
+    const branchesOf = (pr: PullRequest): Pick<SessionPullRequestLink, "head" | "base"> =>
+      pr.head && pr.base ? { head: pr.head, base: pr.base } : {};
+    /**
+     * Keep the saved link's branch names as GitHub last reported them (a retarget moves the base
+     * Changes compares with). A refused compare-and-set keeps the link as it was.
+     */
+    const recordBranches = Effect.fn("SessionPullRequests.recordBranches")(function* (
+      s: SessionEntry,
+      pr: PullRequest,
+    ): Effect.fn.Return<SessionPullRequestLink, RegistryError> {
+      const link = s.pullRequest!;
+      const branches = branchesOf(pr);
+      if (!branches.head || (link.head === branches.head && link.base === branches.base))
+        return link;
+      const saved = yield* registry.setSessionLink(s, "pullRequest", { ...link, ...branches });
+      return saved?.pullRequest ?? link;
+    });
     const result: (
       s: SessionEntry,
       forceDiscovery?: boolean,
@@ -73,13 +92,12 @@ export const SessionPullRequestsLive = Layer.effect(
       if (!forceDiscovery && s.pullRequest) {
         const pullRequest = yield* github.view(s.pullRequest, s.cwd).pipe(Effect.result);
         // A failed lookup retains the association, not stale success/checks.
-        return pullRequest._tag === "Success"
-          ? { link: s.pullRequest, pullRequest: pullRequest.success }
-          : {
-              link: s.pullRequest,
-              pullRequest: null,
-              error: pullRequest.failure.detail,
-            };
+        if (pullRequest._tag === "Failure")
+          return { link: s.pullRequest, pullRequest: null, error: pullRequest.failure.detail };
+        return {
+          link: yield* recordBranches(s, pullRequest.success),
+          pullRequest: pullRequest.success,
+        };
       }
       const discover = Effect.gen(function* () {
         const before = yield* checkout(s.cwd);
@@ -116,7 +134,11 @@ export const SessionPullRequestsLive = Layer.effect(
         if (forceDiscovery) yield* save(s, undefined);
         return { link: null, pullRequest: null };
       }
-      const link: SessionPullRequestLink = { ...found.success.link, source: "branch" };
+      const link: SessionPullRequestLink = {
+        ...found.success.link,
+        source: "branch",
+        ...branchesOf(found.success.pullRequest),
+      };
       yield* save(s, link);
       return { link, pullRequest: found.success.pullRequest };
     });

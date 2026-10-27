@@ -682,3 +682,33 @@ test("only a session whose own work stopped is searched, and only once", async (
   pr.observe("w1", "s4", null, false);
   assert.equal(pi.requests.length, 1, "a session whose link was removed is never searched");
 });
+
+test("the row's place coming on screen shows a linked session's details, searches a never-searched one once, and leaves a removed link alone", async () => {
+  const { pi, pr } = setup(undefined);
+  pr.reveal();
+  assert.equal(pi.requests.length, 1, "Changes opening on a never-searched session searches once");
+  assert.equal(pi.last().action, undefined);
+  assert.equal(pr.getState().surface, "closed", "nothing opens for an unlinked session");
+  pr.reveal();
+  assert.equal(pi.requests.length, 1, "while that search runs, nothing is asked again");
+  pi.last().resolve(unlinked);
+  await settle();
+  pr.observe("w1", "s1", undefined, true);
+  pr.reveal();
+  assert.equal(pi.requests.length, 1, "a working session is not searched");
+
+  pr.observe("w1", "s2", null, false);
+  pr.reveal();
+  assert.equal(pi.requests.length, 1, "a removed link stays removed");
+
+  pr.observe("w1", "s3", registered, false);
+  assert.equal(pi.requests.length, 2, "a linked session reads on selection");
+  pr.reveal();
+  assert.equal(pr.getState().surface, "details", "and shows its details in the row");
+  pr.close();
+  assert.equal(pr.getState().surface, "closed", "hiding Changes hides them");
+  pr.reveal();
+  pr.observe("w1", "s3", null, false);
+  await settle();
+  assert.equal(pr.getState().surface, "closed", "a link removed elsewhere takes the row with it");
+});
