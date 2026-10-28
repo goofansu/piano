@@ -512,3 +512,40 @@ test("a branch started from a remote branch compares and counts by its own name 
     ["refs/remotes/origin/release", "pull-request"],
   );
 });
+
+test("a branch pushed to a fork compares with the base on the remote it started from", async (t) => {
+  const { repo, git, read } = fixture(t);
+  git("switch", "-qc", "main");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  // The fork is `origin` and the repository it came from is `upstream`, one commit ahead.
+  git("remote", "add", "origin", "https://github.com/me/repo.git");
+  git("update-ref", "refs/remotes/origin/main", "HEAD");
+  git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  writeFileSync(join(repo, "u"), "upstream\n");
+  git("add", "u");
+  git("commit", "-qm", "upstream");
+  git("remote", "add", "upstream", "https://github.com/owner/repo.git");
+  git("update-ref", "refs/remotes/upstream/main", "HEAD");
+  git("symbolic-ref", "refs/remotes/upstream/HEAD", "refs/remotes/upstream/main");
+  git("config", "remote.pushDefault", "origin");
+  // `git switch -c feat upstream/main`: the work goes to the fork.
+  git("switch", "-qc", "feat", "--track", "upstream/main");
+  writeFileSync(join(repo, "f"), "feat\n");
+  git("add", "f");
+  git("commit", "-qm", "feat");
+  for (const [hints, from] of [
+    [{ worktreeBase: "main" }, "worktree"],
+    [{}, "remote-default"],
+  ] as const) {
+    const branch = ready(await read({ scope: "branch", hints }));
+    assert.deepEqual(
+      [branch.comparison.target?.ref, branch.comparison.target?.from],
+      ["refs/remotes/upstream/main", from],
+    );
+    assert.deepEqual(
+      branch.files.map((f) => f.path),
+      ["f"],
+      "upstream's commits are not this branch's work",
+    );
+  }
+});

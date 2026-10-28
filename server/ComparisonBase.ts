@@ -120,16 +120,17 @@ async function resolveTarget(
   head: BranchHead | null,
   hints: TargetHints,
 ): Promise<ComparisonTarget | null> {
-  const { remote } = upstream;
+  // The base lives where the branch started, which a fork's branch does not push to.
+  const { tracked } = upstream;
   if (head && hints.pullRequest) {
     const target = await pullRequestTarget(checkout, upstream, head, hints.pullRequest);
     if (target) return target;
   }
   if (hints.worktreeBase) {
-    const target = await namedTarget(checkout, remote, hints.worktreeBase, "worktree");
+    const target = await namedTarget(checkout, tracked, hints.worktreeBase, "worktree");
     if (target) return target;
   }
-  const fallback = await remoteDefault(checkout, remote);
+  const fallback = await remoteDefault(checkout, tracked);
   if (fallback) return fallback;
   for (const name of ["main", "master"]) {
     const commit = await commitOf(checkout, `refs/heads/${name}`);
