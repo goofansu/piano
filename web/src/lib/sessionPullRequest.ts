@@ -59,7 +59,12 @@ export interface SessionPullRequestOptions {
     action: SessionPullRequestAction | undefined,
     options: { signal: AbortSignal },
   ) => Promise<SessionPullRequest>;
-  notify: { error: (message: string) => void; info: (message: string) => void };
+  /** Each action's answer, once: a saved change, an absence, or the error that stopped it. */
+  notify: {
+    error: (message: string) => void;
+    info: (message: string) => void;
+    success: (message: string) => void;
+  };
   /** Called when the surface closes itself, so whoever owns "open" can follow. */
   closed?: () => void;
   environment?: ObservationEnvironment;
@@ -99,6 +104,8 @@ const sameLink = (a: RegistryLink | null | undefined, b: RegistryLink | null | u
 
 const POLL_MS = 60_000;
 const NOT_FOUND = "No open PR found for this branch.";
+const LINKED = "Pull request linked";
+const REMOVED = "Pull request link removed";
 const failure = (error: unknown) =>
   error instanceof Error ? error.message : "Could not load the pull request.";
 /** An unreadable pull request keeps the session's saved link, with the reason. */
@@ -345,7 +352,10 @@ export function createSessionPullRequest({
     link: async (url) => {
       if (!canLink(url, observation.getState().mutating)) return { _tag: "refused" };
       const outcome = await change({ action: "link", url });
-      if (outcome._tag === "saved") closeItself();
+      if (outcome._tag === "saved") {
+        notify.success(LINKED);
+        closeItself();
+      }
       return outcome;
     },
     discover: async () => {
@@ -358,6 +368,7 @@ export function createSessionPullRequest({
         // The change already reported the error, so callers must not announce success too.
         if (outcome.value.error) return { _tag: "failed", reason: outcome.value.error };
         if (outcome.value.link) {
+          notify.success(LINKED);
           closeItself();
           return outcome;
         }
@@ -371,7 +382,10 @@ export function createSessionPullRequest({
     },
     remove: async () => {
       const outcome = await change({ action: "remove" });
-      if (outcome._tag === "saved") closeItself();
+      if (outcome._tag === "saved") {
+        notify.success(REMOVED);
+        closeItself();
+      }
       return outcome;
     },
   };

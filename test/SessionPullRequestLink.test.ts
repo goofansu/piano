@@ -80,11 +80,19 @@ function reader(options: Parameters<typeof createSessionPullRequest>[0]) {
 /** Observes session s1 with the registry link the catalog reports for it. */
 function setup(link: SessionPullRequestLink | null | undefined, env = environment, now = Date.now) {
   const pi = server();
-  const notes: { error: string[]; info: string[] } = { error: [], info: [] };
+  const notes: { error: string[]; info: string[]; success: string[] } = {
+    error: [],
+    info: [],
+    success: [],
+  };
   let closes = 0;
   const pr = reader({
     api: pi.api,
-    notify: { error: (m) => notes.error.push(m), info: (m) => notes.info.push(m) },
+    notify: {
+      error: (m) => notes.error.push(m),
+      info: (m) => notes.info.push(m),
+      success: (m) => notes.success.push(m),
+    },
     closed: () => closes++,
     environment: env,
     now,
@@ -174,7 +182,7 @@ test("selection and becoming linked each start only one read, even with a work e
 for (const action of ["link", "discover", "remove"] as const) {
   for (const conflicting of [false, true]) {
     test(`${action} survives an early registry ${conflicting ? "conflict and reconciles" : "acknowledgement"}`, async () => {
-      const { pi, pr, stop } = setup(action === "discover" ? undefined : registered);
+      const { pi, pr, notes, stop } = setup(action === "discover" ? undefined : registered);
       if (action !== "discover") {
         pi.last().resolve(linked);
         await settle();
@@ -190,6 +198,11 @@ for (const action of ["link", "discover", "remove"] as const) {
       assert.equal(pi.requests.length, sent, "registry and work edge do not interrupt a change");
       mutation.resolve(result);
       assert.equal((await saving)._tag, "saved");
+      assert.deepEqual(
+        notes.success,
+        [action === "remove" ? "Pull request link removed" : "Pull request linked"],
+        "a saved change answers once",
+      );
       assert.equal(pi.requests.length, sent + (conflicting ? 1 : 0));
       if (conflicting) {
         assert.equal(pr.getState().value, undefined, "the conflicting mutation is not current");
@@ -447,7 +460,7 @@ test("selection and visibility are one snapshot, so hidden destinations never st
   const pi = server();
   const pr = createSessionPullRequest({
     api: pi.api,
-    notify: { error: assert.fail, info: assert.fail },
+    notify: { error: assert.fail, info: assert.fail, success: assert.fail },
     environment,
   });
   const stop = pr.start();
@@ -473,7 +486,7 @@ test("visible PR details recover from a successful error-body poll without user 
   let calls = 0;
   const pr = reader({
     api: async () => (++calls === 2 ? unavailable : facts("open")),
-    notify: { error: assert.fail, info: assert.fail },
+    notify: { error: assert.fail, info: assert.fail, success: assert.fail },
     environment: time.env,
     now: time.now,
   });
@@ -705,6 +718,7 @@ test("Find from branch with nothing found reports it exactly once", async () => 
   await settle();
   assert.deepEqual(notes.info, ["No open PR found for this branch."]);
   assert.deepEqual(notes.error, []);
+  assert.deepEqual(notes.success, []);
   assert.equal(pr.getState().surface, "link-form", "the form stays for a manual link");
   assert.equal(pr.getState().finding, false);
 });
@@ -727,6 +741,7 @@ for (const existing of [registered, undefined]) {
       assert.deepEqual(await finding, { _tag: "failed", reason: error });
       assert.deepEqual(notes.error, [error]);
       assert.deepEqual(notes.info, []);
+      assert.deepEqual(notes.success, [], "a retained link is not announced as found");
       assert.deepEqual(pr.getState().link, existing, "does not replace the association");
       if (existing) assert.deepEqual(pr.getState().value, response);
       assert.equal(pr.getState().surface, existing ? "editing" : "link-form");
@@ -747,6 +762,7 @@ test("a manual association is saved even when its GitHub status is unavailable",
     pi.last().resolve(unavailable);
     assert.deepEqual(await saving, { _tag: "saved", value: unavailable });
     assert.deepEqual(notes.error, [unavailable.error]);
+    assert.deepEqual(notes.success, ["Pull request linked"], "the association itself saved");
     assert.equal(closes(), 1);
   } finally {
     stop();
@@ -768,6 +784,7 @@ test("a failed change keeps the saved link with the reason and the edit open", a
   assert.equal(surface, "editing");
   assert.equal(busy, false);
   assert.deepEqual(notes.error, ["GitHub is unreachable"]);
+  assert.deepEqual(notes.success, []);
   assert.equal(closes(), 0);
 });
 
