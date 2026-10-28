@@ -148,26 +148,25 @@ const isDateKey = (key: string) => key.startsWith("date:");
 const localMidnight = (date: Date, days = 0) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 
-/** The section holding a session: Pinned for a pinned one, else its folder, project or date group. */
-function ownerKey(
-  state: AppState,
-  session: { cwd: string; sessionId: string | null },
-  view: SidebarView,
-  today: Date,
-): string | undefined {
-  const member = session.sessionId
-    ? sessionReference(state, { cwd: session.cwd, sessionId: session.sessionId })
-    : undefined;
-  if (member?.pinned) return PINNED;
+/** The section listing the selected session, the one `list` built: Pinned for a pinned one. */
+function selectedKey(list: SidebarList): string | undefined {
+  if (list.pinned?.sessions.some((s) => s.selected)) return PINNED;
+  if (list.body?.kind !== "sections") return undefined;
+  const section = list.body.sections.find((s) => s.sessions.some((row) => row.selected));
+  // No grouping has nothing to open.
+  return section && section.kind !== "list" ? section.key : undefined;
+}
+
+/**
+ * The section a session without a reference yet (one being started) will list under: its folder,
+ * or Today. Its project arrives with its reference, so until then no project group opens.
+ */
+function startingKey(state: AppState, cwd: string, view: SidebarView, today: Date) {
   switch (view.groupBy) {
     case "folder":
-      return folderFor(state, session.cwd)?.path;
-    case "project":
-      // A session being started from a project's home learns its project with its reference.
-      return member && projectKey(member.projectId ?? "");
+      return folderFor(state, cwd)?.path;
     case "date":
-      // A new session has no reference yet; it lists under Today once it does.
-      return dateKey(dateLabel(member ? member.updatedAt : today.toISOString(), today));
+      return dateKey(dateLabel(today.toISOString(), today));
     default:
       return undefined;
   }
@@ -331,48 +330,55 @@ export function createSidebarList({
     notify();
   };
 
+  const list: SidebarListModel["list"] = (state, view) => {
+    const pinnedOpen = preferences.pinnedOpen.get();
+    // These are buildList/sessionCatalog's inputs. The reducer replaces session snapshots on
+    // every streaming event, but only the current identity contributes to sidebar rows.
+    const current = state.session ?? state.selecting;
+    const { registryLoaded, folders, sessionReferences, projects, hosts, done } = state;
+    if (
+      cache?.facts.registryLoaded === registryLoaded &&
+      cache.facts.folders === folders &&
+      cache.facts.sessionReferences === sessionReferences &&
+      cache.facts.projects === projects &&
+      cache.facts.hosts === hosts &&
+      cache.facts.done === done &&
+      cache.cwd === current?.cwd &&
+      cache.sessionId === current?.sessionId &&
+      cache.view === view &&
+      cache.open === open &&
+      cache.closed === closed &&
+      cache.pinnedOpen === pinnedOpen &&
+      cache.today === today
+    )
+      return cache.list;
+    const built = buildList(state, view, today, (key) => isOpen(key, pinnedOpen));
+    cache = {
+      facts: { registryLoaded, folders, sessionReferences, projects, hosts, done },
+      cwd: current?.cwd,
+      sessionId: current?.sessionId,
+      view,
+      open,
+      closed,
+      pinnedOpen,
+      today,
+      list: built,
+    };
+    return built;
+  };
+
   return {
-    list: (state, view) => {
-      const pinnedOpen = preferences.pinnedOpen.get();
-      // These are buildList/sessionCatalog's inputs. The reducer replaces session snapshots on
-      // every streaming event, but only the current identity contributes to sidebar rows.
-      const current = state.session ?? state.selecting;
-      const { registryLoaded, folders, sessionReferences, projects, hosts, done } = state;
-      if (
-        cache?.facts.registryLoaded === registryLoaded &&
-        cache.facts.folders === folders &&
-        cache.facts.sessionReferences === sessionReferences &&
-        cache.facts.projects === projects &&
-        cache.facts.hosts === hosts &&
-        cache.facts.done === done &&
-        cache.cwd === current?.cwd &&
-        cache.sessionId === current?.sessionId &&
-        cache.view === view &&
-        cache.open === open &&
-        cache.closed === closed &&
-        cache.pinnedOpen === pinnedOpen &&
-        cache.today === today
-      )
-        return cache.list;
-      const list = buildList(state, view, today, (key) => isOpen(key, pinnedOpen));
-      cache = {
-        facts: { registryLoaded, folders, sessionReferences, projects, hosts, done },
-        cwd: current?.cwd,
-        sessionId: current?.sessionId,
-        view,
-        open,
-        closed,
-        pinnedOpen,
-        today,
-        list,
-      };
-      return list;
-    },
+    list,
     sync: (state, view) => {
       const current = state.session ?? state.selecting;
       if (current) {
         const sessionId = current.sessionId ?? null;
-        const key = ownerKey(state, { cwd: current.cwd, sessionId }, view, today);
+        const referenced =
+          sessionId && sessionReference(state, { cwd: current.cwd, sessionId }) !== undefined;
+        // A listed session opens the section that lists it, so an archived or unlisted one opens none.
+        const key = referenced
+          ? selectedKey(list(state, view))
+          : startingKey(state, current.cwd, view, today);
         if (key) {
           const target = JSON.stringify([current.cwd, sessionId, view.groupBy, key]);
           if (target !== revealed) {
