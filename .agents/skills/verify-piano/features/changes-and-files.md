@@ -37,6 +37,11 @@ The palette (Mod+K) searches neither outputs nor links.
   (toasts "Pull request linked" / "Pull request link removed"). PR linking is absent from both
   session menus. The palette's "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
   field, Link, Find from branch; "No open PR found for this branch." when none).
+- `local-work-row`: without a linked pull request, the same place under the toolbar holds region
+  "Local work" with only "<n> commits not pushed" and "Edits not committed", each while nonzero,
+  and no row at all when both are; so after a commit the Uncommitted view says "No changes" above
+  nothing while the row still says "1 commit not pushed". Commits are counted against the
+  branch's remote-tracking ref, so a repo without one never shows that fact.
 - `changes-list`: list "Changed files" with one collapsible row per file
   (`<path>, <n> added, <n> removed: collapse`), the kind beside the size on the name line
   ("New" for untracked files, "Deleted", "Binary"), and the diff.

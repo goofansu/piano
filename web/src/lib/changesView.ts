@@ -7,6 +7,7 @@ import type {
   ChangesScope,
   Comparison,
   ComparisonTarget,
+  LocalWork,
   RenderMsg,
   ScopeAvailability,
   Workspace,
@@ -97,6 +98,19 @@ export function refreshKey(
       return `${m.id}|${streaming}`;
   }
   return `none|${streaming}`;
+}
+
+/**
+ * What of the checkout's work is still only here, whatever the scope on screen, each fact only
+ * when there is any: commits the remote-tracking ref lacks, edits HEAD lacks. Shown under the
+ * toolbar with or without a pull request, so a committed branch never reads as "No changes" alone.
+ */
+export function localWorkFacts(local: LocalWork | undefined): string[] {
+  const commits = local?.commitsNotPushed ?? 0;
+  return [
+    ...(commits > 0 ? [`${commits} ${commits === 1 ? "commit" : "commits"} not pushed`] : []),
+    ...(local?.uncommitted ? ["Edits not committed"] : []),
+  ];
 }
 
 /** A response for another workspace, or a failed read, never shows (INV-07). */
