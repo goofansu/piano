@@ -91,6 +91,34 @@ export interface BranchHead {
   readonly repo: string;
 }
 
+/** Where a branch's work goes, as GitHub sees it: no remote, a remote not on GitHub, or a GitHub
+ * repository read through its API route, with the branch there unless detached. Discovery, the
+ * API route of a link and the pull request Changes compares with all read a branch this way. */
+export type BranchRemote =
+  | { readonly on: "none" }
+  | { readonly on: "other" }
+  | { readonly on: "github"; readonly apiHost: GitHubHost; readonly head: BranchHead | null };
+
+/** Git's answer for a branch (its name on the remote it pushes to, null when detached, and that
+ * remote's URL, null without one) as GitHub sees it. */
+export function branchRemote(name: string | null, url: string | null): BranchRemote {
+  if (!url) return { on: "none" };
+  const github = githubRemote(url);
+  if (!github) return { on: "other" };
+  return { on: "github", apiHost: github.apiHost, head: name ? { name, repo: github.repo } : null };
+}
+
+/** `cwd`'s branch as GitHub sees it, through GitCheckout's hardened observation (INV-06):
+ * inherited GIT_* state cannot redirect it. Null outside Git; fails when Git cannot answer. */
+export const observeBranchRemote = Effect.fn("GitHubPullRequests.observeBranchRemote")(function* (
+  cwd: string,
+): Effect.fn.Return<BranchRemote | null, PullRequestError> {
+  const observed = yield* observeGit(cwd, { remote: true });
+  if (observed.status === "broken") return yield* failure(observed.detail);
+  if (observed.status === "non-git") return null;
+  return branchRemote(observed.remoteBranch ?? null, observed.remote ?? null);
+});
+
 /** Whether a pull request was opened from `branch`: its head names the same branch in the same
  * repository. Discovery and Changes both ask this; a same-named branch of a fork is another. */
 export const isFromBranch = (
@@ -203,13 +231,11 @@ const parse = (url: string) => {
 };
 
 /** The API route `cwd`'s GitHub remote implies; github.com when it names none or is unreadable. */
-const checkoutHost = Effect.fn("GitHubPullRequests.checkoutHost")(function* (
-  cwd: string,
-): Effect.fn.Return<GitHubHost> {
-  const observed = yield* observeGit(cwd, { remote: true });
-  const remote = observed.status === "checkout" ? observed.remote : null;
-  return (remote && githubRemote(remote)?.apiHost) || "github.com";
-});
+const checkoutHost = (cwd: string): Effect.Effect<GitHubHost> =>
+  observeBranchRemote(cwd).pipe(
+    Effect.map((remote) => (remote?.on === "github" ? remote.apiHost : "github.com")),
+    Effect.orElseSucceed(() => "github.com" as const),
+  );
 
 export class GitHubPullRequests extends Context.Service<
   GitHubPullRequests,

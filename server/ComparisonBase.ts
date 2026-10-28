@@ -12,7 +12,7 @@ import type {
   ScopeAvailability,
 } from "../shared/wire.ts";
 import type { Checkout, Upstream } from "./GitCheckout.ts";
-import { type BranchHead, githubRemote, isFromBranch } from "./GitHubPullRequests.ts";
+import { type BranchHead, branchRemote, githubRemote, isFromBranch } from "./GitHubPullRequests.ts";
 
 /** Identities Piano holds that name a branch's target, in the order they are tried. */
 export interface TargetHints {
@@ -63,9 +63,9 @@ async function fromBranch(
   { remote, name }: Upstream,
   pr: NonNullable<TargetHints["pullRequest"]>,
 ): Promise<BranchHead | null> {
-  const url = await checkout.remoteUrl(remote);
-  const repo = url ? githubRemote(url)?.repo : undefined;
-  return repo && isFromBranch(pr, { name, repo }) ? { name, repo } : null;
+  const pushed = branchRemote(name, await checkout.remoteUrl(remote));
+  const head = pushed.on === "github" ? pushed.head : null;
+  return head && isFromBranch(pr, head) ? head : null;
 }
 
 /** The base of a PR opened from this branch, held under a remote naming the base repository,
