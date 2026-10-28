@@ -34,7 +34,11 @@ const registry: AppState = {
   projects: [{ id: "p1", name: "Launch" }],
   sessionReferences: [sessionReference("/work/repo.feature", "s1", { projectId: "p1" })],
 };
-const view = (groupBy: GroupBy): SidebarView => ({ groupBy, sortBy: "name" });
+const view = (groupBy: GroupBy): SidebarView => ({
+  groupBy,
+  sortBy: "name",
+  folderAndBranch: false,
+});
 const GROUPINGS: GroupBy[] = ["folder", "project", "date", "none"];
 const titles = (items: ReadonlyArray<{ title?: string }>) => items.map((s) => s.title);
 const selecting = (state: AppState, cwd: string, sessionId: string | null): AppState => ({
@@ -320,7 +324,10 @@ test("sidebar list: view and open preferences invalidate an otherwise unchanged 
     return list.body?.kind === "sections" ? titles(list.body.sections[0]!.sessions) : [];
   };
   assert.deepEqual(names(byName), ["Alpha", "Beta"]);
-  assert.deepEqual(names({ ...byName, sortBy: "recent" }), ["Beta", "Alpha"]);
+  assert.deepEqual(names({ ...byName, sortBy: "recent", folderAndBranch: false }), [
+    "Beta",
+    "Alpha",
+  ]);
   const byFolder = view("folder");
   assert.equal(isOpen(model.list(state, byFolder), "/repo"), false);
   model.toggle("/repo", true);

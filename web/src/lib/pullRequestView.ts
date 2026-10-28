@@ -4,6 +4,7 @@
  * submit rule. Pure, so the popover, its trigger and the form only render.
  */
 import type { LocalWork, PullRequest, SessionPullRequest } from "@shared/wire";
+import { localWorkFacts } from "./changesView.ts";
 import { timeAgo } from "./format.ts";
 import { canLink } from "./sessionPullRequest.ts";
 
@@ -107,7 +108,6 @@ export function pullRequestRow(
   }: { branch: string | undefined; local: LocalWork | undefined; loading?: boolean },
 ): PullRequestRow {
   const { number, status } = view;
-  const commits = local?.commitsNotPushed ?? 0;
   return {
     name: number ? `#${number}` : "PR",
     title: view.title,
@@ -115,10 +115,7 @@ export function pullRequestRow(
     status: status ?? (loading ? undefined : { state: undefined, label: STATUS_UNAVAILABLE }),
     signals: view.signals,
     branches: view.branches && view.branches.head !== branch ? view.branches : undefined,
-    local: [
-      ...(commits > 0 ? [`${commits} ${commits === 1 ? "commit" : "commits"} not pushed`] : []),
-      ...(local?.uncommitted ? ["Edits not committed"] : []),
-    ],
+    local: localWorkFacts(local),
   };
 }
 

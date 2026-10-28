@@ -5,6 +5,7 @@ import {
   ClockIcon,
   ExternalLinkIcon,
   GitBranchIcon,
+  GitCommitHorizontalIcon,
   GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
@@ -29,6 +30,7 @@ import { StatusBadge as Badge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { localWorkFacts } from "@/lib/changesView";
 import { returnFocusForKeyboard } from "@/lib/pointerClose";
 import {
   type PullRequestView,
@@ -66,9 +68,10 @@ export function pullRequestViewOf(pr: PullRequestControl): PullRequestView | und
 }
 
 /**
- * The pull request row under the Changes toolbar, only while the registry links one: the number
- * and title (the link to GitHub), its state, checks and review, what is still only local, and its
- * branches when its head is not the branch Changes inspects. Its menu holds the link's actions.
+ * The row under the Changes toolbar. While the registry links a pull request: the number and
+ * title (the link to GitHub), its state, checks and review, what is still only local, and its
+ * branches when its head is not the branch Changes inspects, with the link's actions in its menu.
+ * Without one, the same row holds what is still only local, and nothing when nothing is.
  * Hand-written: a one-line fact row with an actions menu has no shadcn component.
  */
 export function PullRequestRow({
@@ -82,8 +85,27 @@ export function PullRequestRow({
   local: LocalWork | undefined;
 }) {
   const view = pullRequestViewOf(pr);
-  if (!pr.linked || !view) return null;
+  if (!pr.linked || !view) return <LocalWorkRow local={local} />;
   return <LinkedPullRequestRow key={view.url} pr={pr} view={view} branch={branch} local={local} />;
+}
+
+/** The linked row's shape (icon, then facts, at the same height) without a link to carry. */
+function LocalWorkRow({ local }: { local: LocalWork | undefined }) {
+  const facts = localWorkFacts(local);
+  if (facts.length === 0) return null;
+  return (
+    <section
+      aria-label="Local work"
+      className="flex min-h-10 min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-1 pr-2 pl-4 text-xs text-muted-foreground pointer-coarse:min-h-13"
+    >
+      <GitCommitHorizontalIcon className="size-3.5 shrink-0" aria-hidden />
+      {facts.map((fact) => (
+        <span key={fact} className="whitespace-nowrap">
+          {fact}
+        </span>
+      ))}
+    </section>
+  );
 }
 
 function LinkedPullRequestRow({

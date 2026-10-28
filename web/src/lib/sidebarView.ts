@@ -6,8 +6,14 @@ export type SortBy = "name" | "recent";
 export interface SidebarView {
   groupBy: GroupBy;
   sortBy: SortBy;
+  /** Each session row adds a line with its branch, and its folder unless its group names it. */
+  folderAndBranch: boolean;
 }
-export const DEFAULT_SIDEBAR_VIEW: SidebarView = { groupBy: "date", sortBy: "recent" };
+export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
+  groupBy: "date",
+  sortBy: "recent",
+  folderAndBranch: false,
+};
 export const GROUP_BY: ReadonlyArray<{ value: GroupBy; label: string }> = [
   { value: "date", label: "Date" },
   { value: "folder", label: "Folder" },

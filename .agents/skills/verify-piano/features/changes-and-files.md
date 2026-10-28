@@ -41,10 +41,16 @@ The palette (Mod+K) searches neither outputs nor links.
   (toasts "Pull request linked" / "Pull request link removed"). PR linking is absent from both
   session menus. The palette's "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
   field, Link, Find from branch; "No open PR found for this branch." when none).
+- `local-work-row`: without a linked pull request, the same place under the toolbar holds region
+  "Local work" with only "<n> commits not pushed" and "Edits not committed", each while nonzero,
+  and no row at all when both are; so after a commit the Uncommitted view says "No changes" above
+  nothing while the row still says "1 commit not pushed". Commits are counted against the
+  branch's remote-tracking ref, so a repo without one never shows that fact.
 - `changes-list`: list "Changed files" with one collapsible row per file
-  (`<path>, <n> added, <n> removed: collapse`), the kind beside the size on the name line
-  ("New" for untracked files, "Deleted", "Binary"), an "Ask about <path>" button, and the diff,
-  region "Diff of <path>".
+  (`<path>[, new | , deleted], <n> added, <n> removed: collapse`), the path on one line (its
+  directory truncated first), the file name green when new (untracked) and red, struck through,
+  when deleted, "Binary" beside the size, an "Ask about <path>" button, and the diff, region
+  "Diff of <path>".
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
 - `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to the header's "Changes" icon;
   reopening shows the same scroll and expanded files.
@@ -85,10 +91,9 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     ab find role button click --name "Changes" --exact; ab wait --text "new.txt"`
   - Result: tab and region "Changes", the header toggle now "Hide changes"; "Comparison:
     Uncommitted"; region "Pull request" with link `#222`, `Status unavailable` and `Edits not
-    committed`; buttons `new.txt, 1 added, 0 removed: collapse` and
+    committed`; buttons `new.txt, new, 1 added, 0 removed: collapse` and
     `src/answer.ts, 1 added, 1 removed: collapse`; cells `− export const answer = 4;` and
-    `+ export const answer = 5;`. `ab eval "document.querySelector('[aria-label=\"Changed files\"]').innerText"`
-    shows `New` beside `new.txt`. Capture `01-changes`.
+    `+ export const answer = 5;`; the name `new.txt` is green. Capture `01-changes`.
   - Side effect (same answer over HTTP): take the root workspace ID from
     `curl -s "$API_URL/api/folders"` (`folders[0].worktrees[0].workspace.id`), then
     `curl -s -X POST -H "Origin: $ORIGIN" "$API_URL/api/workspace/changes?workspaceId=<id>"`

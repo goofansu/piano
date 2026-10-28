@@ -360,7 +360,7 @@ await run(
     await page.click("button", "Stop");
 
     // PIN-88: opening a project member keeps the branch shown on its home card, even after
-    // Git stops listing its worktree. The same header segments remain on a live worktree.
+    // Git stops listing its worktree. The header holds the project crumb and title, not the branch.
     await page.ab("set", "viewport", "1280", "900");
     for (const [id, title] of [
       ["live", "Live worktree"],
@@ -374,10 +374,9 @@ await run(
       await page.ab("click", `${card} [data-slot="item-title"] button`);
       await page.see("Answer 1.");
       const header = await page.evaluate("document.querySelector('header').textContent");
-      // One line: folder then branch; the worktree segment is gone (it repeats the branch).
-      assert.match(header, new RegExp(`Folder: apiGit branch: feat-${id}`));
-      assert.doesNotMatch(header, /Worktree:/);
+      // One line: the project crumb and the title; the sidebar row and rail say where it runs.
       assert.match(header, /Project: QA Project/);
+      assert.doesNotMatch(header, new RegExp(`feat-${id}`));
       console.log(`Session header (${id}): ${header}`);
       await page.capture(`9-header-${id}`);
     }

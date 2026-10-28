@@ -28,7 +28,7 @@ const onNewPage: AppState = {
 };
 const ctx: GlobalCommandContext = {
   settings: null,
-  view: { groupBy: "date", sortBy: "recent" },
+  view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
 };
 const labels = (state: AppState, c = ctx) =>
   globalCommands(state, c).map((command) => command.label);
@@ -103,7 +103,10 @@ test("exactly the current grouping and sort are checked", () => {
       .map((command) => command.label);
   assert.deepEqual(checked("group-by", ctx), ["Group by date"]);
   assert.deepEqual(checked("sort-by", ctx), ["Sort by activity"]);
-  const other = { ...ctx, view: { groupBy: "none", sortBy: "name" } } as const;
+  const other = {
+    ...ctx,
+    view: { groupBy: "none", sortBy: "name", folderAndBranch: false },
+  } as const;
   assert.deepEqual(checked("group-by", other), ["No grouping"]);
   assert.deepEqual(checked("sort-by", other), ["Sort by name"]);
 });
@@ -131,7 +134,11 @@ test("one list of appearances serves the palette and the View menu", () => {
 });
 
 test("each View-menu radio reports exactly one current choice, by its short label", () => {
-  const view = { ...ctx, view: { groupBy: "folder", sortBy: "name" }, theme: "light" } as const;
+  const view = {
+    ...ctx,
+    view: { groupBy: "folder", sortBy: "name", folderAndBranch: false },
+    theme: "light",
+  } as const;
   const commands = globalCommands(onNewPage, view);
   const report = (group: "group-by" | "sort-by" | "appearance") => {
     const { value, currentLabel, items } = radioChoice(commands, group);
@@ -215,4 +222,19 @@ test("on Settings › Webhooks the palette offers Add webhook, which opens the w
     false,
     "Settings covers the page beneath it, so its header actions are not offered",
   );
+});
+
+test("Show folder and branch is one command for the palette and the View menu, naming what it does", () => {
+  const command = (folderAndBranch: boolean) =>
+    globalCommands(onNewPage, { ...ctx, view: { ...ctx.view, folderAndBranch } }).find(
+      (c) => c.menuLabel === "Folder and branch",
+    );
+  const off = command(false);
+  assert.equal(off?.label, "Show folder and branch");
+  assert.equal(off?.pressed, false);
+  assert.deepEqual(off?.intent, { kind: "view", change: { folderAndBranch: true } });
+  const on = command(true);
+  assert.equal(on?.label, "Hide folder and branch");
+  assert.equal(on?.pressed, true);
+  assert.deepEqual(on?.intent, { kind: "view", change: { folderAndBranch: false } });
 });

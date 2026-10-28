@@ -51,7 +51,8 @@ export type GlobalCommandId =
   | "toggle-sidebar"
   | `appearance-${Appearance}`
   | `group-${GroupBy}`
-  | `sort-${SortBy}`;
+  | `sort-${SortBy}`
+  | "folder-and-branch";
 
 /** Sections a menu separates; the palette lists them in this order under Global commands. */
 export type GlobalCommandGroup =
@@ -60,7 +61,8 @@ export type GlobalCommandGroup =
   | "sidebar"
   | "appearance"
   | "group-by"
-  | "sort-by";
+  | "sort-by"
+  | "row-details";
 
 export type GlobalCommandIcon =
   | "home"
@@ -74,6 +76,7 @@ export type GlobalCommandIcon =
   | Appearance
   | "group"
   | "sort"
+  | "folder-git"
   | ProjectCommandIcon;
 
 export type GlobalCommandIntent =
@@ -303,5 +306,15 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
         intent: { kind: "view", change: { sortBy: s.value } },
       }),
     ),
+    {
+      id: "folder-and-branch",
+      label: ctx.view.folderAndBranch ? "Hide folder and branch" : "Show folder and branch",
+      menuLabel: "Folder and branch",
+      icon: "folder-git",
+      group: "row-details",
+      enabled: true,
+      pressed: ctx.view.folderAndBranch,
+      intent: { kind: "view", change: { folderAndBranch: !ctx.view.folderAndBranch } },
+    },
   ];
 }
