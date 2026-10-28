@@ -36,6 +36,7 @@ import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { Hint } from "@/components/Shortcut";
 import {
   sidebarRowClassName as row,
+  sidebarRowGapClassName as rowGap,
   type SessionRowDetails,
   SidebarSessionList,
 } from "@/components/SidebarSessionList";
@@ -325,7 +326,7 @@ function SidebarSkeleton() {
             <Skeleton className={cn("h-3.5", group ? "w-16" : "w-24")} />
           </div>
           {group === 0 && (
-            <ul className="flex flex-col gap-1 py-1">
+            <ul className={cn("flex flex-col py-1", rowGap)}>
               {[36, 44].map((w) => (
                 <li key={w} className={cn(row, "flex items-center gap-2 pl-(--glyph-pad)")}>
                   <span className="flex size-4 items-center justify-center">
