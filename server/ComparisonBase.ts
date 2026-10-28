@@ -154,7 +154,9 @@ async function branchScope(
 
 /**
  * What of the branch is still only here: commits its remote-tracking ref does not have, as Git
- * holds that ref locally (no fetch), or null when there is no such ref to compare with.
+ * holds that ref locally (no fetch), or null when there is no such ref to compare with. That ref is
+ * the branch's configured upstream; a branch without one on a remote is looked for under `origin`
+ * by its own name.
  */
 export async function commitsNotPushed(
   checkout: Checkout,
@@ -162,8 +164,10 @@ export async function commitsNotPushed(
   branch: string | null,
 ): Promise<number | null> {
   if (!head || !branch) return null;
-  const remote = await trackingRemote(checkout, branch);
-  const ref = `refs/remotes/${remote}/${branch}`;
+  const upstream = (
+    await checkout.text(["for-each-ref", "--format=%(upstream)", `refs/heads/${branch}`])
+  ).trim();
+  const ref = upstream.startsWith("refs/remotes/") ? upstream : `refs/remotes/origin/${branch}`;
   if (!(await commitOf(checkout, ref))) return null;
   const count = (await checkout.text(["rev-list", "--count", `${ref}..${head}`])).trim();
   return Number(count) || 0;

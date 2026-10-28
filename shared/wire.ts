@@ -490,7 +490,7 @@ export const ScopeAvailability = Schema.Struct({
 export type ScopeAvailability = typeof ScopeAvailability.Type;
 /** What of the checkout's work is still only local, whatever the scope on screen. */
 export const LocalWork = Schema.Struct({
-  /** Commits the branch's remote-tracking ref lacks, as Git holds it; null without such a ref. */
+  /** Commits the branch's upstream (else `origin/<branch>`) lacks, as Git holds it; null without that ref. */
   commitsNotPushed: Schema.NullOr(Schema.Number),
   /** The working tree differs from HEAD, untracked non-ignored files included. */
   uncommitted: Schema.Boolean,

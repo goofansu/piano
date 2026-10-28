@@ -376,3 +376,20 @@ test("branch scope: unavailable states are named, never another comparison", asy
     "Ambiguous merge base with main.",
   );
 });
+
+test("local work: commits not pushed count against the branch's upstream, not a same-named remote branch", async (t) => {
+  const { git, preview } = fixture(t);
+  git("switch", "-qc", "main");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  git("remote", "add", "origin", "https://github.com/example/repo.git");
+  git("switch", "-qc", "feat");
+  git("commit", "-q", "--allow-empty", "-m", "pushed");
+  git("update-ref", "refs/remotes/origin/james/feat", "HEAD");
+  // An unrelated `origin/feat` must not be what the branch is counted against.
+  git("update-ref", "refs/remotes/origin/feat", "main");
+  git("config", "branch.feat.remote", "origin");
+  git("config", "branch.feat.merge", "refs/heads/james/feat");
+  git("commit", "-q", "--allow-empty", "-m", "local 1");
+  git("commit", "-q", "--allow-empty", "-m", "local 2");
+  assert.equal(ready(await preview()).local.commitsNotPushed, 2);
+});
