@@ -328,14 +328,10 @@ function FileSection({
   const directory = file.path.slice(0, Math.max(slash, 0));
   const filename = file.path.slice(slash + 1);
   const large = isLarge(file);
-  // The file's kind sits on the name line beside its size; notes that need a sentence go beneath.
-  const kind =
-    [
-      file.status === "added" ? "New" : file.status === "deleted" ? "Deleted" : undefined,
-      file.binary ? "Binary" : undefined,
-    ]
-      .filter(Boolean)
-      .join(" · ") || undefined;
+  // A new or deleted file shows by its name's colour (and in its label); a binary file's kind sits
+  // beside the size; notes that need a sentence go beneath.
+  const status =
+    file.status === "added" ? "new" : file.status === "deleted" ? "deleted" : undefined;
   const description = [
     ...file.notes,
     large && !open ? `Large change (${lineCount(file)} lines); expand to read it` : undefined,
@@ -352,21 +348,31 @@ function FileSection({
           <CollapsibleTrigger
             // A 16px line with even padding is 36px (44px on touch).
             className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-2 rounded-md px-2 py-2.5 text-left text-xs leading-4 outline-none select-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:py-3.5"
-            aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
+            aria-label={`${file.path}${status ? `, ${status}` : ""}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
           >
             <span className="flex h-4 items-center">
               <DisclosureChevron open={open} />
             </span>
             {/* One line: the directory gives way first, so the file name stays whole. */}
-            <span className="flex min-w-0 font-mono" title={file.path}>
+            <span
+              className="flex min-w-0 font-mono"
+              title={status ? `${file.path} (${status})` : file.path}
+            >
               {directory && <span className="min-w-0 truncate text-ink-3">{directory}</span>}
               <span className="max-w-full shrink-0 truncate font-medium">
                 {directory && <span className="font-normal text-ink-3">/</span>}
-                {filename}
+                <span
+                  className={cn(
+                    status === "new" && "text-ok",
+                    status === "deleted" && "text-err line-through",
+                  )}
+                >
+                  {filename}
+                </span>
               </span>
             </span>
             <span className="flex items-center gap-2">
-              {kind && <span className="text-ink-3">{kind}</span>}
+              {file.binary && <span className="text-ink-3">Binary</span>}
               {!file.binary && (
                 <span className="whitespace-nowrap font-mono tabular-nums">
                   <span className="text-ok">+{file.additions}</span>{" "}

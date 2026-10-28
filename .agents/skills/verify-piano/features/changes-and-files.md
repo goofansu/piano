@@ -43,8 +43,9 @@ The palette (Mod+K) searches neither outputs nor links.
   nothing while the row still says "1 commit not pushed". Commits are counted against the
   branch's remote-tracking ref, so a repo without one never shows that fact.
 - `changes-list`: list "Changed files" with one collapsible row per file
-  (`<path>, <n> added, <n> removed: collapse`), the path on one line (its directory truncated first), the kind beside the size
-  ("New" for untracked files, "Deleted", "Binary"), and the diff.
+  (`<path>[, new | , deleted], <n> added, <n> removed: collapse`), the path on one line (its
+  directory truncated first), the file name green when new (untracked) and red, struck through,
+  when deleted, "Binary" beside the size, and the diff.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
 - `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to the header's "Changes" icon;
   reopening shows the same scroll and expanded files.
@@ -77,10 +78,9 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
 - `changes-open` and `changes-list`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
     ab find role button click --name "Changes" --exact; ab wait --text "new.txt"`
-  - Result: heading "Changes"; buttons `new.txt, 1 added, 0 removed: collapse` and
+  - Result: heading "Changes"; buttons `new.txt, new, 1 added, 0 removed: collapse` and
     `src/answer.ts, 1 added, 1 removed: collapse`; cells `− export const answer = 4;` and
-    `+ export const answer = 5;`. `ab eval "document.querySelector('[aria-label=\"Changed files\"]').innerText"`
-    shows `New` beside `new.txt`. Capture `01-changes`.
+    `+ export const answer = 5;`; the name `new.txt` is green. Capture `01-changes`.
   - Side effect (same answer over HTTP): take the root workspace ID from
     `curl -s "$API_URL/api/folders"` (`folders[0].worktrees[0].workspace.id`), then
     `curl -s -X POST -H "Origin: $ORIGIN" "$API_URL/api/workspace/changes?workspaceId=<id>"`
