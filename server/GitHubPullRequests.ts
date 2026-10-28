@@ -85,6 +85,19 @@ export function githubRemote(remote: string): { repo: string; apiHost: GitHubHos
   return { repo: match[1]!.toLowerCase(), apiHost: proxy ? EXE_GITHUB : "github.com" };
 }
 
+/** A branch as GitHub knows it: its name on its tracking remote, in that remote's repository. */
+export interface BranchHead {
+  readonly name: string;
+  readonly repo: string;
+}
+
+/** Whether a pull request was opened from `branch`: its head names the same branch in the same
+ * repository. Discovery and Changes both ask this; a same-named branch of a fork is another. */
+export const isFromBranch = (
+  pr: { readonly head?: string | undefined; readonly headRepo?: string | undefined },
+  branch: BranchHead,
+): boolean => pr.head === branch.name && pr.headRepo === branch.repo;
+
 /** One pull request as `gh pr view/list --json` returns it. */
 export const GitHubPullRequest = Schema.Struct({
   url: Schema.String,
@@ -305,11 +318,16 @@ export const GitHubPullRequestsLive = Layer.effect(
           try: () =>
             Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(GitHubPullRequest)))(
               output,
-            ).map((raw) => ({ branch: raw.headRefName, pullRequest: facts(raw) })),
+            ).map((raw) => ({ head: raw.headRefName, pullRequest: facts(raw) })),
           catch: () => failure("GitHub returned an invalid pull request response."),
         });
         return candidates
-          .filter((p) => p.branch === branch && p.pullRequest.headRepo === repo)
+          .filter((p) =>
+            isFromBranch(
+              { head: p.head, headRepo: p.pullRequest.headRepo },
+              { name: branch, repo },
+            ),
+          )
           .map(({ pullRequest }) => ({ link: linkFor(pullRequest.url, host), pullRequest }));
       }),
     });
