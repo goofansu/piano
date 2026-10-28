@@ -106,6 +106,8 @@ export const GitHubPullRequest = Schema.Struct({
   author: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
   headRefName: Schema.optional(Schema.String),
   baseRefName: Schema.optional(Schema.String),
+  headRepository: Schema.optional(Schema.NullOr(Schema.Struct({ name: Schema.String }))),
+  headRepositoryOwner: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
   additions: Schema.optional(Schema.Number),
   deletions: Schema.optional(Schema.Number),
   changedFiles: Schema.optional(Schema.Number),
@@ -113,14 +115,8 @@ export const GitHubPullRequest = Schema.Struct({
   closedAt: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type GitHubPullRequest = typeof GitHubPullRequest.Type;
-const Candidate = Schema.Struct({
-  ...GitHubPullRequest.fields,
-  headRefName: Schema.String,
-  headRepository: Schema.NullOr(Schema.Struct({ name: Schema.String })),
-  headRepositoryOwner: Schema.NullOr(Schema.Struct({ login: Schema.String })),
-});
 const fields =
-  "url,number,title,state,isDraft,reviewDecision,statusCheckRollup,author,headRefName,baseRefName,additions,deletions,changedFiles,updatedAt,closedAt";
+  "url,number,title,state,isDraft,reviewDecision,statusCheckRollup,author,headRefName,baseRefName,headRepository,headRepositoryOwner,additions,deletions,changedFiles,updatedAt,closedAt";
 
 /** Map GitHub's response into wire facts. Throws when the URL is not a pull request URL or
  * disagrees with the number. */
@@ -139,6 +135,12 @@ export function facts(raw: GitHubPullRequest): PullRequest {
   const key = pullRequestIdentity(raw.url);
   if (!key) throw new Error("Invalid pull request URL.");
   if (key.number !== raw.number) throw new Error("Mismatched pull request identity.");
+  const headRepo =
+    raw.headRepositoryOwner && raw.headRepository
+      ? githubRemote(
+          `https://github.com/${raw.headRepositoryOwner.login}/${raw.headRepository.name}`,
+        )?.repo
+      : undefined;
   return {
     url: key.url,
     repo: key.repo,
@@ -162,6 +164,8 @@ export function facts(raw: GitHubPullRequest): PullRequest {
             ? "review_required"
             : "none",
     ...(raw.author ? { author: raw.author.login } : {}),
+    ...(headRepo ? { headRepo } : {}),
+    baseRepo: key.repo,
     ...(raw.headRefName && raw.baseRefName ? { head: raw.headRefName, base: raw.baseRefName } : {}),
     ...(raw.additions !== undefined && raw.deletions !== undefined && raw.changedFiles !== undefined
       ? { additions: raw.additions, deletions: raw.deletions, changedFiles: raw.changedFiles }
@@ -292,29 +296,21 @@ export const GitHubPullRequestsLive = Layer.effect(
             "--limit",
             "100",
             "--json",
-            `${fields},headRepository,headRepositoryOwner`,
+            fields,
             ...(host === EXE_GITHUB ? ["--repo", `${EXE_GITHUB}/${repo}`] : []),
           ],
           host,
         );
         const candidates = yield* Effect.try({
           try: () =>
-            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Candidate)))(output),
+            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(GitHubPullRequest)))(
+              output,
+            ).map((raw) => ({ branch: raw.headRefName, pullRequest: facts(raw) })),
           catch: () => failure("GitHub returned an invalid pull request response."),
         });
-        const matches = candidates.filter(
-          (p) =>
-            p.headRefName === branch &&
-            `${p.headRepositoryOwner?.login}/${p.headRepository?.name}`.toLowerCase() === repo,
-        );
-        return yield* Effect.try({
-          try: () =>
-            matches.map((match) => {
-              const pullRequest = facts(match);
-              return { link: linkFor(pullRequest.url, host), pullRequest };
-            }),
-          catch: () => failure("GitHub returned an invalid pull request URL."),
-        });
+        return candidates
+          .filter((p) => p.branch === branch && p.pullRequest.headRepo === repo)
+          .map(({ pullRequest }) => ({ link: linkFor(pullRequest.url, host), pullRequest }));
       }),
     });
   }),

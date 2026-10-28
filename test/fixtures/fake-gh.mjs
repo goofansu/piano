@@ -28,12 +28,16 @@ if (fixture.malformed) {
   console.log("{}");
   process.exit(0);
 }
+// Like gh, return only requested fields so translation tests catch missing --json selections.
+const fields = args[args.indexOf("--json") + 1].split(",");
+const selected = (pr) =>
+  Object.fromEntries(Object.entries(pr).filter(([key]) => fields.includes(key)));
 if (list)
   console.log(
     JSON.stringify(
-      fixture.prs.filter(
-        (p) => p.headRefName === args[args.indexOf("--head") + 1] && p.state === "OPEN",
-      ),
+      fixture.prs
+        .filter((p) => p.headRefName === args[args.indexOf("--head") + 1] && p.state === "OPEN")
+        .map(selected),
     ),
   );
 else {
@@ -47,5 +51,5 @@ else {
     console.error("not found");
     process.exit(1);
   }
-  console.log(JSON.stringify(pr));
+  console.log(JSON.stringify(selected(pr)));
 }

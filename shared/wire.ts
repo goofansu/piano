@@ -585,10 +585,12 @@ export const SessionPullRequestLink = Schema.Struct({
   source: Schema.Literals(["branch", "manual"]),
   /** Authentication route, not the browser URL. Retained when the checkout disappears. */
   apiHost: Schema.optional(Schema.Literal("github.int.exe.xyz")),
-  /** The head and base branch names as GitHub last reported them: identity of the pull
-   * request's branches, so Changes can compare with the base without a GitHub call. */
+  /** Branch identities as GitHub last reported them. Legacy links without repository
+   * identities remain associations, but cannot choose a Changes target until refreshed. */
   head: Schema.optional(Schema.String),
   base: Schema.optional(Schema.String),
+  headRepo: Schema.optional(Schema.String),
+  baseRepo: Schema.optional(Schema.String),
 });
 export type SessionPullRequestLink = typeof SessionPullRequestLink.Type;
 /**
@@ -742,6 +744,9 @@ export const PullRequest = Schema.Struct({
   author: Schema.optional(Schema.String),
   head: Schema.optional(Schema.String),
   base: Schema.optional(Schema.String),
+  /** Lower-case GitHub "owner/name"; the head can belong to a fork of `baseRepo`. */
+  headRepo: Schema.optional(Schema.String),
+  baseRepo: Schema.optional(Schema.String),
   additions: Schema.optional(Schema.Number),
   deletions: Schema.optional(Schema.Number),
   changedFiles: Schema.optional(Schema.Number),

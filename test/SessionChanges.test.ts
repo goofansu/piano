@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve as resolvePath } from "node:path";
 import { type TestContext, test } from "node:test";
 import { Effect, Layer, ManagedRuntime } from "effect";
+import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionChanges, SessionChangesLive } from "../server/SessionChanges.ts";
+import { SessionPullRequests, SessionPullRequestsLive } from "../server/SessionPullRequests.ts";
+import { GhCommand } from "../server/Subprocess.ts";
 import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
 import type { WorkspaceChanges as Observation } from "../shared/wire.ts";
 
@@ -32,10 +35,46 @@ async function fixture(t: TestContext) {
   git(repo, "worktree", "add", "-q", "-b", "feature", worktree);
   writeFileSync(join(worktree, "a"), "edited\n");
   git(worktree, "commit", "-qam", "work");
-  const layer = SessionChangesLive.pipe(
-    Layer.provideMerge(WorkspaceChangesLive),
+  git(repo, "remote", "add", "origin", "https://github.com/example/repo.git");
+  const forge = join(root, "forge.json"),
+    gh = join(root, "gh");
+  writeFileSync(
+    gh,
+    `#!${process.execPath}\nprocess.env.PIANO_TEST_GH_FIXTURE=${JSON.stringify(forge)};\nawait import(${JSON.stringify(resolvePath("test/fixtures/fake-gh.mjs"))});\n`,
+    { mode: 0o755 },
+  );
+  const serve = (headRepo: string, baseRepo: string, base = "release") => {
+    const [login, name] = headRepo.split("/");
+    writeFileSync(
+      forge,
+      JSON.stringify({
+        prs: [
+          {
+            url: `https://github.com/${baseRepo}/pull/7`,
+            number: 7,
+            title: "Work",
+            state: "OPEN",
+            isDraft: false,
+            reviewDecision: null,
+            statusCheckRollup: null,
+            headRefName: "feature",
+            baseRefName: base,
+            headRepository: { name },
+            headRepositoryOwner: { login },
+          },
+        ],
+      }),
+    );
+  };
+  const layer = Layer.merge(
+    SessionChangesLive.pipe(Layer.provide(WorkspaceChangesLive)),
+    SessionPullRequestsLive.pipe(Layer.provide(GitHubPullRequestsLive)),
+  ).pipe(
     Layer.provideMerge(RegistryLive),
-    Layer.provide(Layer.succeed(RegistryDatabasePath, join(root, "registry.db"))),
+    Layer.provide([
+      Layer.succeed(RegistryDatabasePath, join(root, "registry.db")),
+      Layer.succeed(GhCommand, gh),
+    ]),
   );
   const runtime = ManagedRuntime.make(layer);
   const registry = await runtime.runPromise(Registry);
@@ -73,7 +112,17 @@ async function fixture(t: TestContext) {
         return yield* (yield* SessionChanges).setScope(workspace, session, scope);
       }),
     );
-  return { repo, worktree, git, runtime, registry, read, setScope, resolve };
+  const link = (baseRepo: string) =>
+    runtime.runPromise(
+      Effect.gen(function* () {
+        const { session } = yield* resolve(worktree, "one");
+        return yield* (yield* SessionPullRequests).change(session, {
+          action: "link",
+          url: `https://github.com/${baseRepo}/pull/7`,
+        });
+      }),
+    );
+  return { repo, worktree, git, runtime, registry, read, setScope, resolve, serve, link };
 }
 
 function ready(value: Observation) {
@@ -95,7 +144,8 @@ test("a session's Changes compare its worktree with the base Piano recorded, kee
     ["a"],
   );
   assert.deepEqual(ready(await f.read(f.worktree, "one", { scope: "uncommitted" })).files, []);
-  // The session's pull request names its base: used only once GitHub has reported the branches.
+  // A qualified same-repository PR can select its locally held remote base.
+  f.git(f.repo, "update-ref", "refs/remotes/origin/release", "release");
   await f.runtime.runPromise(
     Effect.gen(function* () {
       const { session } = yield* f.resolve(f.worktree, "one");
@@ -104,6 +154,8 @@ test("a session's Changes compare its worktree with the base Piano recorded, kee
         source: "branch",
         head: "feature",
         base: "release",
+        headRepo: "example/repo",
+        baseRepo: "example/repo",
       });
     }),
   );
@@ -116,6 +168,108 @@ test("a session's Changes compare its worktree with the base Piano recorded, kee
   assert.equal(ready(await f.read(f.repo, "root")).comparison.scope, "uncommitted");
   const refused = await f.read(f.repo, "root", { scope: "branch" });
   assert.equal(refused.result.status, "unavailable");
+});
+
+test("INV-01/07: a manual foreign PR with the same head name stays linked without hiding branch changes", async (t) => {
+  const f = await fixture(t);
+  f.git(f.repo, "branch", "-f", "release", "feature");
+  f.git(f.repo, "update-ref", "refs/remotes/origin/release", "feature");
+  const before = ready(await f.setScope(f.worktree, "one", "branch"));
+  assert.deepEqual(
+    before.files.map((file) => file.path),
+    ["a"],
+  );
+  f.serve("other/repo", "other/repo");
+  const linked = await f.link("other/repo");
+  assert.equal(linked.link?.source, "manual");
+  assert.equal(linked.pullRequest?.repo, "other/repo");
+  const after = ready(await f.read(f.worktree, "one"));
+  assert.deepEqual(
+    after.files.map((file) => file.path),
+    ["a"],
+  );
+  assert.deepEqual(after.comparison, before.comparison);
+});
+
+test("INV-01/07: a fork PR uses only its base repository's locally held remote ref", async (t) => {
+  const f = await fixture(t);
+  // Use the branch's tracking repository, not a hard-coded origin. Remote URL rewrites are
+  // Git's policy too; only this test's isolated HOME supplies them.
+  const home = mkdtempSync(join(tmpdir(), "piano-comparison-home-"));
+  const previous = { HOME: process.env.HOME, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME };
+  Object.assign(process.env, { HOME: home, XDG_CONFIG_HOME: join(home, "config") });
+  t.after(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(home, { recursive: true, force: true });
+  });
+  writeFileSync(
+    join(home, ".gitconfig"),
+    '[url "https://github.int.exe.xyz/"]\n\tinsteadOf = parent:\n',
+  );
+  f.git(f.repo, "remote", "rename", "origin", "fork");
+  f.git(f.repo, "remote", "add", "origin", "https://github.com/other/repo.git");
+  f.git(f.repo, "update-ref", "refs/remotes/fork/feature", "feature");
+  f.git(f.worktree, "branch", "--set-upstream-to=fork/feature");
+  // Colliding names in the fork/local checkout must never stand in for the upstream base.
+  f.git(f.repo, "branch", "-f", "release", "feature");
+  f.git(f.repo, "update-ref", "refs/remotes/fork/release", "feature");
+  f.serve("example/repo", "upstream/repo");
+  const linked = await f.link("upstream/repo");
+  assert.deepEqual(
+    [linked.link?.headRepo, linked.link?.baseRepo],
+    ["example/repo", "upstream/repo"],
+  );
+  const read = async () => ready(await f.read(f.worktree, "one", { scope: "branch" }));
+  assert.equal((await read()).comparison.target?.from, "worktree", "no matching base remote");
+  f.git(f.repo, "remote", "add", "parent", "parent:upstream/repo.git");
+  assert.equal(
+    (await read()).comparison.target?.from,
+    "worktree",
+    "matching remote but no held base ref",
+  );
+  f.git(f.repo, "update-ref", "refs/remotes/parent/release", "main");
+  const fork = await read();
+  assert.equal(fork.comparison.target?.ref, "refs/remotes/parent/release");
+  assert.equal(fork.comparison.target?.from, "pull-request");
+  assert.deepEqual(
+    fork.files.map((file) => file.path),
+    ["a"],
+  );
+});
+
+test("legacy links do not retarget until a successful refresh proves repository identities", async (t) => {
+  const f = await fixture(t);
+  f.git(f.repo, "update-ref", "refs/remotes/origin/release", "release");
+  await f.runtime.runPromise(
+    Effect.gen(function* () {
+      const { session } = yield* f.resolve(f.worktree, "one");
+      yield* f.registry.setSessionLink(session, "pullRequest", {
+        url: "https://github.com/example/repo/pull/7",
+        source: "manual",
+        head: "feature",
+        base: "release",
+      });
+    }),
+  );
+  const read = async () => ready(await f.read(f.worktree, "one", { scope: "branch" }));
+  assert.equal((await read()).comparison.target?.from, "worktree");
+  f.serve("example/repo", "example/repo");
+  await f.runtime.runPromise(
+    Effect.gen(function* () {
+      const { session } = yield* f.resolve(f.worktree, "one");
+      yield* (yield* SessionPullRequests).get(session);
+    }),
+  );
+  const refreshed = await read();
+  assert.equal(refreshed.comparison.target?.ref, "refs/remotes/origin/release");
+  assert.equal(refreshed.comparison.target?.from, "pull-request");
+  assert.deepEqual(
+    refreshed.files.map((file) => file.path),
+    ["a"],
+  );
 });
 
 test("Uncommitted is the default; a saved branch choice overrides it only for that session", async (t) => {

@@ -70,6 +70,20 @@ test("facts canonicalize the URL and reject a response whose URL and number disa
   assert.throws(() => facts(pr({ url: "https://github.com/example/repo/issues/42" })));
 });
 
+test("translation preserves a fork's head repository separately from the URL's base repository", () => {
+  const raw = pr({
+    headRefName: "feature",
+    baseRefName: "main",
+    headRepository: { name: "Repo" },
+    headRepositoryOwner: { login: "Fork" },
+  });
+  const translated = facts(raw);
+  assert.deepEqual([translated.headRepo, translated.baseRepo], ["fork/repo", "example/repo"]);
+  assert.deepEqual([translated.head, translated.base], ["feature", "main"]);
+  assert.equal(facts({ ...raw, headRepository: null }).headRepo, undefined);
+  assert.equal(facts({ ...raw, headRepositoryOwner: null }).headRepo, undefined);
+});
+
 test("pull request URLs name a github.com or exe.dev integration pull request, nothing else", () => {
   assert.deepEqual(pullRequestIdentity(" https://github.com/Owner/Repo.js/pull/7/files "), {
     repo: "owner/repo.js",
@@ -150,7 +164,7 @@ async function routing(t: TestContext, remote: string) {
       JSON.stringify({
         prs: [
           {
-            ...pr({ headRefName: "feature" }),
+            ...pr({ headRefName: "feature", baseRefName: "main" }),
             headRepository: { name: "repo" },
             headRepositoryOwner: { login: "example" },
           },
@@ -177,7 +191,9 @@ test("routing: an exe.dev URL overrides a github.com remote, and the link record
 test("routing: a saved apiHost wins over the checkout; without one the remote implies the route", async (t) => {
   const f = await routing(t, "git@github.com:example/repo.git");
   f.serve(exe);
-  assert.equal((await f.run(f.github.view({ url, apiHost: exe }, f.repo))).number, 42);
+  const viewed = await f.run(f.github.view({ url, apiHost: exe }, f.repo));
+  assert.equal(viewed.number, 42);
+  assert.deepEqual([viewed.headRepo, viewed.baseRepo], ["example/repo", "example/repo"]);
   await assert.rejects(f.run(f.github.view({ url }, f.repo)), /gh authentication/);
   const g = await routing(t, `https://${exe}/example/repo.git`);
   g.serve(exe);
@@ -185,6 +201,10 @@ test("routing: a saved apiHost wins over the checkout; without one the remote im
   assert.equal((await g.run(g.github.view({ url }, g.repo))).number, 42);
   const [found] = await g.run(g.github.openForHead(g.repo, "feature", "example/repo", exe));
   assert.deepEqual(found?.link, { url, apiHost: exe });
+  assert.deepEqual(
+    [found?.pullRequest.headRepo, found?.pullRequest.baseRepo],
+    ["example/repo", "example/repo"],
+  );
 });
 
 test("routing: github.com is the default when neither a checkout nor a GitHub remote names a route", async (t) => {

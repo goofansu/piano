@@ -32,6 +32,7 @@ const schema = `
     pull_request_state TEXT NOT NULL CHECK (pull_request_state IN ('discover', 'removed', 'linked')),
     pull_request_url TEXT, pull_request_source TEXT, pull_request_api_host TEXT CHECK (pull_request_api_host IS NULL OR pull_request_api_host = 'github.int.exe.xyz'), position INTEGER NOT NULL,
     pull_request_head TEXT, pull_request_base TEXT,
+    pull_request_head_repo TEXT, pull_request_base_repo TEXT,
     changes_scope TEXT CHECK (changes_scope IS NULL OR changes_scope IN ('branch', 'uncommitted')),
     PRIMARY KEY (cwd, session_id),
     CHECK ((pull_request_state = 'linked' AND pull_request_url IS NOT NULL AND pull_request_source IS NOT NULL AND pull_request_source IN ('branch', 'manual'))
@@ -132,6 +133,8 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       "position",
       "pull_request_head",
       "pull_request_base",
+      "pull_request_head_repo",
+      "pull_request_base_repo",
       "changes_scope",
     ],
     keys: 2,
@@ -154,6 +157,8 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       i,
       s.pullRequest?.head ?? null,
       s.pullRequest?.base ?? null,
+      s.pullRequest?.headRepo ?? null,
+      s.pullRequest?.baseRepo ?? null,
       s.changesScope ?? null,
     ],
     decode: (r) => ({
@@ -188,6 +193,12 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
                     ...(r.pull_request_base === null
                       ? {}
                       : { base: r.pull_request_base as string }),
+                    ...(r.pull_request_head_repo === null
+                      ? {}
+                      : { headRepo: r.pull_request_head_repo as string }),
+                    ...(r.pull_request_base_repo === null
+                      ? {}
+                      : { baseRepo: r.pull_request_base_repo as string }),
                   },
           }),
     }),
@@ -316,7 +327,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 8 &&
         version !== 9 &&
         version !== 10 &&
-        version !== 11
+        version !== 11 &&
+        version !== 12
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -368,6 +380,15 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
             "ALTER TABLE sessions ADD COLUMN changes_scope TEXT CHECK (changes_scope IS NULL OR changes_scope IN ('branch', 'uncommitted'));",
           );
         db.exec("PRAGMA user_version = 11;");
+      }
+      // Version 12 qualifies PR branches. Legacy links deliberately retain unknown repositories
+      // until GitHub refreshes them; a URL alone cannot prove a fork's head repository.
+      if (Number(version) < 12) {
+        for (const column of ["pull_request_head_repo", "pull_request_base_repo"]) {
+          if (!db.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = ?").get(column))
+            db.exec(`ALTER TABLE sessions ADD COLUMN ${column} TEXT;`);
+        }
+        db.exec("PRAGMA user_version = 12;");
       }
       db.exec("COMMIT");
     } catch (error) {

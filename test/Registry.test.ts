@@ -98,7 +98,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 11);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 12);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -271,12 +271,50 @@ test("INV-01: a session with every optional field set, linked without an API hos
           source: "manual",
           head: "feature",
           base: "main",
+          headRepo: "fork/repo",
+          baseRepo: "example/repo",
         },
       },
     ],
   };
   seedRegistry(f.dbPath, original);
   assert.deepEqual(await f.get(), original);
+});
+
+test("version-11 links migrate without inventing repository proof, then persist refreshed fork identity", async (t) => {
+  const f = fixture(t),
+    cwd = join(f.root, "repo");
+  const link = {
+    url: "https://github.com/upstream/repo/pull/7",
+    source: "manual" as const,
+    head: "feature",
+    base: "main",
+  };
+  await f.run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addSession(cwd, "one");
+      const session = (yield* registry.get).sessions[0]!;
+      yield* registry.setSessionLink(session, "pullRequest", link);
+    }),
+  );
+  const legacy = new DatabaseSync(f.dbPath);
+  try {
+    legacy.exec(
+      "ALTER TABLE sessions DROP COLUMN pull_request_head_repo; ALTER TABLE sessions DROP COLUMN pull_request_base_repo; PRAGMA user_version = 11;",
+    );
+  } finally {
+    legacy.close();
+  }
+  assert.deepEqual((await f.get()).sessions[0]?.pullRequest, link);
+  const qualified = { ...link, headRepo: "fork/repo", baseRepo: "upstream/repo" };
+  await f.run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.setSessionLink((yield* registry.get).sessions[0]!, "pullRequest", qualified);
+    }),
+  );
+  assert.deepEqual((await f.get()).sessions[0]?.pullRequest, qualified);
 });
 
 test("version-3 sharing migration preserves sessions; Radius destinations survive restart and reject stale replacements", async (t) => {
@@ -441,7 +479,7 @@ for (const version of [4, 5, 6]) {
     assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 11);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 12);
       assert.deepEqual(
         stored
           .prepare(

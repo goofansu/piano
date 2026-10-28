@@ -64,11 +64,15 @@ export const SessionPullRequestsLive = Layer.effect(
         );
       return saved;
     });
-    /** The pull request's branch names, when GitHub reported them: identity the link records. */
-    const branchesOf = (pr: PullRequest): Pick<SessionPullRequestLink, "head" | "base"> =>
-      pr.head && pr.base ? { head: pr.head, base: pr.base } : {};
+    /** Qualified branches, never inferred from a manual association or a bare branch name. */
+    const branchesOf = (
+      pr: PullRequest,
+    ): Pick<SessionPullRequestLink, "head" | "base" | "headRepo" | "baseRepo"> =>
+      pr.head && pr.base
+        ? { head: pr.head, base: pr.base, headRepo: pr.headRepo, baseRepo: pr.baseRepo }
+        : {};
     /**
-     * Keep the saved link's branch names as GitHub last reported them (a retarget moves the base
+     * Keep the saved link's qualified branches as GitHub last reported them (a retarget moves the base
      * Changes compares with). A refused compare-and-set keeps the link as it was.
      */
     const recordBranches = Effect.fn("SessionPullRequests.recordBranches")(function* (
@@ -77,9 +81,21 @@ export const SessionPullRequestsLive = Layer.effect(
     ): Effect.fn.Return<SessionPullRequestLink, RegistryError> {
       const link = s.pullRequest!;
       const branches = branchesOf(pr);
-      if (!branches.head || (link.head === branches.head && link.base === branches.base))
+      if (
+        link.head === branches.head &&
+        link.base === branches.base &&
+        link.headRepo === branches.headRepo &&
+        link.baseRepo === branches.baseRepo
+      )
         return link;
-      const saved = yield* registry.setSessionLink(s, "pullRequest", { ...link, ...branches });
+      // Explicit undefined clears identities no longer proven (e.g. a deleted head repository).
+      const saved = yield* registry.setSessionLink(s, "pullRequest", {
+        ...link,
+        head: branches.head,
+        base: branches.base,
+        headRepo: branches.headRepo,
+        baseRepo: branches.baseRepo,
+      });
       return saved?.pullRequest ?? link;
     });
     const result: (
