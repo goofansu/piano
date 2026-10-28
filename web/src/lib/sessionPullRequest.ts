@@ -8,10 +8,10 @@
  * selection of one mid-turn. When the work of a session never searched for a pull request
  * stops, it is searched once in the background; the registry keeps what that finds and the
  * catalog reports it. Reads are silent; only an explicit
- * change blocks the controls or reports. The surface follows the link: opening while unlinked
- * offers the link form, a link that appears (found in the background or saved here) closes it so
- * the header shows it, and background reads never reset an edit in progress. Nothing here depends
- * on React.
+ * change blocks the controls or reports. The caller supplies Changes visibility and link-dialog
+ * intent; this module owns the surface they imply, across selections and completed actions.
+ * A link that appears closes the link form, not the visible row's polling; background reads never
+ * reset an edit in progress. Nothing here depends on React.
  */
 import type {
   SessionPullRequestLink as RegistryLink,
@@ -74,34 +74,20 @@ export interface SessionPullRequestLink {
   start: () => () => void;
   /**
    * Follows a session, the registry's link for it as the catalog reports it (a link, null once
-   * removed, undefined when never searched) and whether its work is going. Only a linked session
-   * is read; a different session closes the surface and starts from nothing, and its `working`
-   * is recorded, not acted on. When the observed session's work starts or stops, a linked
-   * session's facts are read again, and the work of a session never searched for a pull request
-   * stopping searches it once in the background.
+   * removed, undefined when never searched), whether its work is going, and what is on screen.
+   * Only a linked session is read; a different session starts from nothing using its own view,
+   * and its `working` is recorded, not acted on. When the observed session's work starts or
+   * stops, a linked session's facts are read again. A never-searched session is searched once
+   * when its work stops or its Changes first shows.
    */
   observe: (
     workspaceId: string | undefined,
     sessionId: string | null | undefined,
     link: RegistryLink | null | undefined,
     working: boolean,
+    /** Visibility and dialog intent belong to this same selection, never the previous one. */
+    view: { visible: boolean; dialog: boolean },
   ) => void;
-  /**
-   * Shows the details of a session the registry links immediately, even before its first read
-   * lands, refreshing only if stale and no read is in flight; else the link form.
-   */
-  open: () => void;
-  /**
-   * The place the details show (the Changes row) is on screen: a linked session shows its
-   * details as `open` would; a session never searched for a pull request is searched once in the
-   * background, as its work stopping does; nothing else opens.
-   */
-  reveal: () => void;
-  /** Hides the surface without reporting it through `closed`. */
-  close: () => void;
-  edit: () => void;
-  /** Leaves an edit for the details; leaves the link form altogether. */
-  cancel: () => void;
   /** Sends nothing, answering `refused`, unless `canLink` allows it. */
   link: (url: string) => Promise<PullRequestOutcome>;
   discover: () => Promise<PullRequestOutcome>;
@@ -175,6 +161,8 @@ export function createSessionPullRequest({
   const linked = () => !!link;
   /** Whether the observed session's work is going, so the next `observe` can tell an edge. */
   let working = false;
+  let visible = false,
+    dialog = false;
   let surface: PullRequestSurface = "closed",
     finding = false,
     /** One of this module's changes is in flight; it decides the surface when it settles. */
@@ -211,8 +199,19 @@ export function createSessionPullRequest({
     observation.reschedule();
     publish();
   };
+  const reconcileSurface = () => {
+    const next = dialog
+      ? linked()
+        ? "editing"
+        : "link-form"
+      : visible && linked()
+        ? "details"
+        : "closed";
+    show(next);
+  };
   const closeItself = () => {
-    show("closed");
+    dialog = false;
+    reconcileSurface();
     closed?.();
   };
   const endSearch = () => {
@@ -226,8 +225,9 @@ export function createSessionPullRequest({
     // found closes the form; a link removed elsewhere takes its details (or edit) with it.
     if (!changing) {
       if (surface === "link-form" && linked()) return closeItself();
-      if ((surface === "details" || surface === "editing") && !linked()) surface = "closed";
+      if (surface === "editing" && !linked()) return closeItself();
     }
+    reconcileSurface();
     publish();
   });
 
@@ -243,16 +243,6 @@ export function createSessionPullRequest({
       .finally(() => {
         if (search === controller) search = undefined;
       });
-  };
-
-  const open = () => {
-    if (surface !== "closed") return;
-    show(linked() ? "details" : "link-form");
-    const { loading, mutating } = observation.getState();
-    // A first, focus or work read may already be running or just finished when the user clicks the PR.
-    if (linked() && !loading && !mutating && (readAt === undefined || now() - readAt >= POLL_MS)) {
-      void observation.refresh();
-    }
   };
 
   const change = async (action: SessionPullRequestAction): Promise<PullRequestOutcome> => {
@@ -309,9 +299,13 @@ export function createSessionPullRequest({
         stop();
       };
     },
-    observe: (workspaceId, sessionId, next, nextWorking) => {
+    observe: (workspaceId, sessionId, next, nextWorking, view) => {
       const key = pullRequestKey(workspaceId, sessionId);
       const { key: previous } = observation.getState();
+      const revealed = view.visible && !visible;
+      const previousSurface = surface;
+      visible = view.visible;
+      dialog = view.dialog;
       const previousLink = link;
       const associationChanged = !sameLink(previousLink, next);
       if (key !== previous || associationChanged) associationRevision++;
@@ -331,24 +325,22 @@ export function createSessionPullRequest({
       observation.observe(key, !!next);
       const alreadyReading = key !== previous || !previousLink;
       if (next && !alreadyReading && (associationChanged || edge)) observation.refreshSoon(0);
+      reconcileSurface();
       publish();
-      if (!edge || key === null) return;
-      if (link !== undefined || working) return;
-      startSearch();
-    },
-    open,
-    reveal: () => {
-      if (linked()) return open();
+      const { loading, mutating } = observation.getState();
+      // Reuse a recent read and never replace one in flight just because the row appeared.
+      if (
+        surface === "details" &&
+        previousSurface !== "details" &&
+        !loading &&
+        !mutating &&
+        (readAt === undefined || now() - readAt >= POLL_MS)
+      ) {
+        void observation.refresh();
+      }
       // Only a never-searched session at rest is searched; a removed link stays removed.
-      if (link === undefined && !working && !search) startSearch();
-    },
-    close: () => show("closed"),
-    edit: () => {
-      if (surface === "details") show("editing");
-    },
-    cancel: () => {
-      if (surface === "editing") show("details");
-      else if (surface === "link-form") closeItself();
+      if (key === null || link !== undefined || working || search) return;
+      if (edge || revealed || (key !== previous && visible)) startSearch();
     },
     link: async (url) => {
       if (!canLink(url, observation.getState().mutating)) return { _tag: "refused" };
