@@ -18,14 +18,19 @@ const sidebarView = createPreference<SidebarView>({
     return {
       groupBy: choose(GROUP_BY, fields.groupBy, DEFAULT_SIDEBAR_VIEW.groupBy),
       sortBy: choose(SORT_BY, fields.sortBy, DEFAULT_SIDEBAR_VIEW.sortBy),
+      folderAndBranch:
+        typeof fields.folderAndBranch === "boolean"
+          ? fields.folderAndBranch
+          : DEFAULT_SIDEBAR_VIEW.folderAndBranch,
     };
   },
-  encode: ({ groupBy, sortBy }) => JSON.stringify({ groupBy, sortBy }),
+  encode: ({ groupBy, sortBy, folderAndBranch }) =>
+    JSON.stringify({ groupBy, sortBy, folderAndBranch }),
 });
 const setView = (change: Partial<SidebarView>) =>
   sidebarView.set({ ...sidebarView.get(), ...change });
 
-/** The sidebar's grouping and sort, shared by every sidebar instance and the command palette. */
+/** The sidebar's grouping, sort and row details, shared by every sidebar instance and the command palette. */
 export function useSidebarView() {
   const [view] = usePreference(sidebarView);
   return { view, setView };

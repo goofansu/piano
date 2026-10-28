@@ -97,7 +97,7 @@ test("enabled commands reach the effect their intent names", () => {
       byId(
         globalCommands(online, {
           settings: null,
-          view: { groupBy: "date", sortBy: "recent" },
+          view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
         }),
         "new-session",
       ),
@@ -113,7 +113,7 @@ test("enabled commands reach the effect their intent names", () => {
       byId(
         globalCommands(
           { ...online, view: { kind: "project", projectId: "p1" } },
-          { settings: null, view: { groupBy: "date", sortBy: "recent" } },
+          { settings: null, view: { groupBy: "date", sortBy: "recent", folderAndBranch: false } },
         ),
         "project-settings",
       ),

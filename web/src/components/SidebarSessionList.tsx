@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import { MoreHorizontalIcon } from "lucide-react";
 import { Fragment, memo } from "react";
+import { BranchLabel } from "@/components/BranchLabel";
 import { SessionCommandMenuItem, useCommands, useSessionCommands } from "@/components/CommandHost";
 import { PianoButton as Button } from "@/components/PianoButton";
 import {
@@ -22,6 +23,14 @@ import { sessionKey } from "@/store";
 
 /** Shared rhythm for session rows, group headers and skeletons: pointer, touch desktop, phone. */
 export const sidebarRowClassName = "h-9 pointer-coarse:h-11 max-md:h-12";
+/** A session row with its folder and branch line beneath the title: the same steps, one line taller. */
+const detailedRowClassName = "h-12 pointer-coarse:h-14 max-md:h-15";
+
+/**
+ * The line beneath each title when View options shows folder and branch: the branch, and the
+ * folder too unless the row's group already names it.
+ */
+export type SessionRowDetails = "branch" | "folder-and-branch";
 
 /**
  * One session list in the sidebar's shared ScrollArea/nav. Owns row identity, responsive
@@ -32,12 +41,15 @@ export const sidebarRowClassName = "h-9 pointer-coarse:h-11 max-md:h-12";
 export function SidebarSessionList({
   sessions,
   grouped = false,
+  details,
   select,
 }: Pick<Navigation, "select"> & {
   sessions: readonly SessionEntry[];
   grouped?: boolean;
+  details?: SessionRowDetails;
 }) {
   const window = useSidebarWindow(sessions);
+  const rowClassName = details ? detailedRowClassName : sidebarRowClassName;
   return (
     <ul
       ref={window.list}
@@ -47,15 +59,13 @@ export function SidebarSessionList({
       onBlurCapture={window.onBlurCapture}
     >
       {/* A non-interactive CSS ruler, not a session: measure responsive row height without mounting content. */}
-      <li
-        ref={window.measure}
-        aria-hidden
-        className={cn(sidebarRowClassName, "invisible absolute")}
-      />
+      <li ref={window.measure} aria-hidden className={cn(rowClassName, "invisible absolute")} />
       {window.indices.map((index) => (
         <SessionRow
           key={sessionKey(sessions[index])}
           t={sessions[index]}
+          details={details}
+          rowClassName={rowClassName}
           select={select}
           top={window.top(index)}
           index={index}
@@ -67,10 +77,15 @@ export function SidebarSessionList({
   );
 }
 
-/** One line per session: the title alone. Location and project live in the session header and the groupings. */
+/**
+ * One session: its title, and its folder and branch beneath when View options shows them. The
+ * project lives in the groupings.
+ */
 const SessionRow = memo(
   function SessionRow({
     t,
+    details,
+    rowClassName,
     select,
     top,
     index,
@@ -78,6 +93,8 @@ const SessionRow = memo(
     onMenuChange,
   }: {
     t: SessionEntry;
+    details: SessionRowDetails | undefined;
+    rowClassName: string;
     top: number;
     index: number;
     count: number;
@@ -95,7 +112,7 @@ const SessionRow = memo(
         aria-setsize={count}
         style={{ position: "absolute", top, left: 0, right: 0 }}
         className={cn(
-          sidebarRowClassName,
+          rowClassName,
           // The menu shows from md up; the phone opens a session's sheet instead.
           "group relative flex items-center rounded-lg pr-1 hover:bg-fill-hover md:[--row-actions:1.75rem]",
           selected && "bg-(--selected) hover:bg-(--selected)",
@@ -107,9 +124,10 @@ const SessionRow = memo(
           aria-current={selected ? "page" : undefined}
           disabled={disabled}
           onClick={() => select(t.cwd, t.sessionId)}
-          className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-(--glyph-pad) text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:text-ink-3"
+          // A grid, so the glyph centres on the title's line whether or not a details line follows.
+          className="grid h-full min-w-0 flex-1 grid-cols-[1rem_minmax(0,1fr)] content-center items-center gap-x-2 rounded-md pl-(--glyph-pad) text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:text-ink-3"
         >
-          <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
+          <span className="flex size-4 items-center justify-center" aria-hidden>
             {activity === "working" ? (
               <Keys playing className="text-brand" />
             ) : (
@@ -126,6 +144,25 @@ const SessionRow = memo(
           >
             {t.label}
           </span>
+          {details && (
+            <span
+              data-motion="yield"
+              className="col-start-2 flex min-w-0 items-center gap-2 text-xs text-ink-3"
+            >
+              {details === "folder-and-branch" && (
+                <span className="max-w-1/2 shrink-0 truncate">
+                  <span className="sr-only">Folder: </span>
+                  {t.folder}
+                </span>
+              )}
+              {t.branch && (
+                <>
+                  <span className="sr-only">Git branch: </span>
+                  <BranchLabel branch={t.branch} className="min-w-0" />
+                </>
+              )}
+            </span>
+          )}
           {activity === "working" ? (
             <span className="sr-only">working</span>
           ) : activity === "done" ? (
@@ -158,6 +195,8 @@ const SessionRow = memo(
   },
   (previous, next) =>
     previous.select === next.select &&
+    previous.details === next.details &&
+    previous.rowClassName === next.rowClassName &&
     previous.top === next.top &&
     previous.index === next.index &&
     previous.count === next.count &&

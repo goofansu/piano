@@ -18,6 +18,7 @@ import { IconButton } from "@/components/IconButton";
 import { PianoButton as Button } from "@/components/PianoButton";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -33,7 +34,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoToolt
 import { ProjectCommandIconView, ProjectCommandsMenu } from "@/components/Projects";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { Hint } from "@/components/Shortcut";
-import { sidebarRowClassName as row, SidebarSessionList } from "@/components/SidebarSessionList";
+import {
+  sidebarRowClassName as row,
+  type SessionRowDetails,
+  SidebarSessionList,
+} from "@/components/SidebarSessionList";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
@@ -72,7 +77,10 @@ export function Sidebar({ state }: Props) {
     toggle,
   } = useSidebarList(state, view);
 
-  const groupProps = { state, select };
+  const details: SessionRowDetails | undefined = view.folderAndBranch
+    ? "folder-and-branch"
+    : undefined;
+  const groupProps = { state, select, details };
   const section = (s: SidebarSection) => {
     const onOpenChange = (open: boolean) => toggle(s.key, open);
     switch (s.kind) {
@@ -85,6 +93,8 @@ export function Sidebar({ state }: Props) {
             open={s.open}
             onOpenChange={onOpenChange}
             {...groupProps}
+            // The group names the folder, so its rows add only the branch.
+            details={details && "branch"}
           />
         );
       case "project":
@@ -107,11 +117,14 @@ export function Sidebar({ state }: Props) {
             sessions={s.sessions}
             open={s.open}
             onOpenChange={onOpenChange}
+            details={details}
             select={select}
           />
         );
       case "list":
-        return <SidebarSessionList key={s.key} sessions={s.sessions} select={select} />;
+        return (
+          <SidebarSessionList key={s.key} sessions={s.sessions} details={details} select={select} />
+        );
     }
   };
   const list = () => {
@@ -176,6 +189,7 @@ export function Sidebar({ state }: Props) {
               sessions={pinned.sessions}
               open={pinned.open}
               onOpenChange={(open) => toggle(pinned.key, open)}
+              details={details}
               select={select}
               className="mb-1"
             />
@@ -193,12 +207,13 @@ export function Sidebar({ state }: Props) {
   );
 }
 
-/** One menu for grouping and sorting the list; appearance lives here too. Each choice is a global command, as the palette offers it. */
+/** One menu for grouping, sorting and what each row shows; appearance lives here too. Each choice is a global command, as the palette offers it. */
 function ViewMenu() {
   const { commands, run } = useGlobalCommands();
   const groupBy = radioChoice(commands, "group-by");
   const sortBy = radioChoice(commands, "sort-by");
   const appearance = radioChoice(commands, "appearance");
+  const folderAndBranch = commands.find((c) => c.id === "folder-and-branch");
   // The label takes the slack so the current value sits beside the trigger's own chevron.
   const choice = (label: string, { currentLabel }: RadioChoice<GlobalCommand>) => (
     <>
@@ -255,6 +270,19 @@ function ViewMenu() {
             ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        {folderAndBranch && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>Show</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuCheckboxItem
+                checked={!!folderAndBranch.pressed}
+                onCheckedChange={() => run(folderAndBranch)}
+              >
+                <GlobalCommandIcon icon={folderAndBranch.icon} /> {folderAndBranch.menuLabel}
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>{choice("Appearance", appearance)}</DropdownMenuSubTrigger>
@@ -317,6 +345,7 @@ function SidebarSkeleton() {
 interface GroupProps extends Pick<Props, "state">, Pick<Navigation, "select"> {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  details: SessionRowDetails | undefined;
 }
 
 const Chevron = ({ open }: { open: boolean }) => (
@@ -339,6 +368,7 @@ function SidebarGroup({
   sessions,
   open,
   onOpenChange,
+  details,
   select,
 }: Omit<GroupProps, "state"> & {
   label: string;
@@ -390,7 +420,7 @@ function SidebarGroup({
         {sessions.length === 0 ? (
           <ListEmpty>No sessions yet</ListEmpty>
         ) : (
-          <SidebarSessionList grouped sessions={sessions} select={select} />
+          <SidebarSessionList grouped sessions={sessions} details={details} select={select} />
         )}
       </CollapsibleContent>
     </Collapsible>
@@ -403,6 +433,7 @@ function ProjectGroup({
   sessions,
   open,
   onOpenChange,
+  details,
   state,
   select,
 }: GroupProps & { project: Project | null; sessions: readonly SessionEntry[] }) {
@@ -417,6 +448,7 @@ function ProjectGroup({
       sessions={sessions}
       open={open}
       onOpenChange={onOpenChange}
+      details={details}
       select={select}
       actions={[
         create?.enabled && (
@@ -449,6 +481,7 @@ function FolderGroup({
   sessions,
   open,
   onOpenChange,
+  details,
   state,
   select,
 }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
@@ -462,6 +495,7 @@ function FolderGroup({
       sessions={sessions}
       open={open}
       onOpenChange={onOpenChange}
+      details={details}
       select={select}
       actions={[
         <IconButton

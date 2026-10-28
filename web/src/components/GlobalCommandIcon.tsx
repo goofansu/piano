@@ -1,5 +1,6 @@
 import {
   ArrowUpDownIcon,
+  FolderGit2Icon,
   HomeIcon,
   LayoutListIcon,
   type LucideIcon,
@@ -29,6 +30,7 @@ const ICONS: Record<Exclude<IconId, SettingsSectionIconName | ProjectCommandIcon
   system: MonitorIcon,
   group: LayoutListIcon,
   sort: ArrowUpDownIcon,
+  "folder-git": FolderGit2Icon,
 };
 
 /**

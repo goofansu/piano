@@ -64,7 +64,7 @@ const selected: SessionView = {
 const inSession: AppState = { ...home, view: { kind: "session" }, session: selected };
 const ctx: GlobalCommandContext = {
   settings: null,
-  view: { groupBy: "date", sortBy: "recent" },
+  view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
   theme: "dark",
 };
 /** The palette as the host feeds it: global commands from the shared context, the selected session's commands. */

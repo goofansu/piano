@@ -1,7 +1,6 @@
 import { cn } from "cn";
 import { ListIcon, MoreHorizontalIcon } from "lucide-react";
 import { useRef } from "react";
-import { BranchLabel } from "@/components/BranchLabel";
 import {
   CommandIcon,
   SessionCommandMenuItem,
@@ -40,11 +39,8 @@ import { sessionContext } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
-/** The title (with its menu on desktop): the row's first item, so it shrinks last and never drops. */
-const titleGroup = "flex min-w-0 max-w-max shrink grow basis-52 items-center gap-0.5";
-
-/** A fact about where the session runs: about 6rem on a tight row, else its own width. */
-const fact = "flex min-w-0 max-w-max shrink grow basis-24 items-center text-xs text-ink-3";
+/** The title (with its menu on desktop), shrinking to fit before the controls. */
+const titleGroup = "flex min-w-0 items-center gap-0.5";
 
 export function SessionHeader({
   state,
@@ -59,14 +55,7 @@ export function SessionHeader({
   const mobile = useIsMobile();
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
-  const {
-    title,
-    branch,
-    sessionId,
-    cwd,
-    folderName: folder,
-    worktreeName: worktree,
-  } = sessionContext(state);
+  const { title, sessionId, cwd } = sessionContext(state);
   const { commands, run } = useSessionCommands();
   const menu = sessionHeaderMenu(commands);
   // The session rail's switch is offered only side by side, where the Agent area has a right side.
@@ -152,15 +141,12 @@ export function SessionHeader({
   return (
     <>
       {/* Outside the transcript scroller: stays visible without an overlay or scroll listener.
-       * One line: the project crumb and the title with its menu, then where the session runs,
-       * then its controls at the end. */}
+       * One line: the project crumb and the title with its menu, then its controls at the end.
+       * Where the session runs is in the session rail and, when shown, the sidebar row. */}
       <PaneHeader>
         {cwd ? (
-          // Plain workspace metadata has no dedicated UI primitive. The row is one line tall and
-          // wraps: an item that no longer fits moves to a second row the box hides, so each fact
-          // drops out whole from the end, branch first, and only the title group shrinks.
           // Match header buttons by pointer capability: a landscape phone is wide but still touch.
-          <div className="flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-3 overflow-hidden pointer-coarse:h-11">
+          <div className="flex h-8 min-w-0 flex-1 items-center pointer-coarse:h-11">
             {openProject && projectMenu?.current ? (
               <Breadcrumb className={cn(titleGroup, mobile && "h-full")}>
                 <BreadcrumbList className="min-w-0 flex-nowrap gap-1.5 sm:gap-1.5">
@@ -191,16 +177,6 @@ export function SessionHeader({
                 {heading}
                 {!mobile && sessionMenu}
               </div>
-            )}
-            <p className={fact}>
-              <span className="sr-only">{worktree ? "Folder: " : "Working directory: "}</span>
-              <span className="truncate">{folder}</span>
-            </p>
-            {branch && (
-              <p className={cn(fact, "gap-1")}>
-                <span className="sr-only">Git branch: </span>
-                <BranchLabel branch={branch} className="min-w-0" />
-              </p>
             )}
           </div>
         ) : (
