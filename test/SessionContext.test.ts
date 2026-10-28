@@ -77,19 +77,12 @@ const base: AppState = {
   ],
 };
 
-test("a worktree session reads its folder, worktree, branch and workspace from one place", () => {
+test("a worktree session reads its branch and workspace from one place", () => {
   const ctx = sessionContext({ ...base, session: session("/work/repo.feature") });
-  assert.equal(ctx.folderName, "repo");
-  assert.equal(ctx.worktreeName, "feature");
   assert.equal(ctx.branch, "feature");
   assert.equal(ctx.workspace?.id, "ws:/work/repo.feature");
   assert.equal(ctx.canOpenChanges, true);
   assert.equal(ctx.title, "Registry title", "an unnamed Pi session shows its registry title");
-  assert.equal(
-    sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).worktreeName,
-    undefined,
-    "the root checkout must not display a synthetic main branch label",
-  );
   assert.equal(
     sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).title,
     "Named",
@@ -132,8 +125,6 @@ const closed: AppState = {
 test("a session whose folder was closed keeps its registry workspace for Changes and its pull request", () => {
   const ctx = sessionContext({ ...closed, session: session("/closed") });
   assert.equal(ctx.folder, undefined);
-  assert.equal(ctx.folderName, "closed");
-  assert.equal(ctx.worktreeName, undefined);
   assert.equal(ctx.branch, "saved-branch", "the header shows the reference's saved branch");
   assert.equal(ctx.workspace?.id, "ws:/closed");
   assert.equal(ctx.changesWorkspace?.id, "ws:/closed");
@@ -180,7 +171,7 @@ test("a removed checkout keeps its workspace identity but cannot open Changes; a
   assert.equal(nonGit.title, "Plain", "the context read this session's reference");
 });
 
-test("the header and the session's catalog row agree on where it runs", () => {
+test("the session's context and its catalog row agree on its branch, project and title", () => {
   const plain: FolderView = {
     ...folder,
     worktrees: [worktree("/repo", null, { status: "non-git" })],
@@ -202,15 +193,11 @@ test("the header and the session's catalog row agree on where it runs", () => {
     assert.ok(row, name);
     assert.deepEqual(
       {
-        folder: ctx.folderName,
-        inWorktree: ctx.worktreeName !== undefined,
         branch: ctx.branch ?? "",
         project: sessionProjectMenu(selected, { cwd, sessionId: "s1" }).current,
         title: ctx.title,
       },
       {
-        folder: row.folder,
-        inWorktree: row.inWorktree,
         branch: row.branch,
         project: row.project,
         title: row.title || "Untitled",

@@ -200,10 +200,6 @@ export interface SessionContext {
   /** The selected session's directory, or the one a first message is starting in. */
   cwd: string | undefined;
   folder: FolderView | undefined;
-  /** Folder name, else the directory's last segment; Zed's `folder ⇄ worktree / ⑂ branch`. */
-  folderName: string;
-  /** Linked worktree's directory name; omitted for the folder's own checkout. */
-  worktreeName: string | undefined;
   /** The server's session branch: Git's when listed (none when detached or non-Git), otherwise the
    * last branch Git reported for the worktree. */
   branch: string | undefined;
@@ -234,8 +230,7 @@ export function sessionContext(state: AppState): SessionContext {
   const cwd = session?.cwd ?? state.pendingCreate?.cwd;
   const ref = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId } : undefined;
   const reference = ref && sessionReference(state, ref);
-  const directory = sessionDirectories(state)(cwd);
-  const { folder, checkout } = directory;
+  const { folder, checkout } = sessionDirectories(state)(cwd);
   const workspace = workspaceFor(state, session?.cwd);
   const checkoutMissing = !!session && checkoutMissingAt(state, session.cwd);
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;
@@ -243,8 +238,6 @@ export function sessionContext(state: AppState): SessionContext {
   return {
     cwd,
     folder,
-    folderName: directory.folderName,
-    worktreeName: directory.worktreeName,
     branch: reference?.branch ?? undefined,
     detachedHead:
       checkout?.status === "current" && checkout.facts?.detached ? checkout.facts.head : undefined,
