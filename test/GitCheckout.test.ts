@@ -50,10 +50,12 @@ test("INV-06: the Git observation tells non-Git paths from broken metadata and n
     toplevel: repo,
     branch: "main",
     remote: null,
+    remoteBranch: null,
   });
   git(repo, "remote", "add", "origin", "git@github.com:example/repo.git");
   const tracked = await observe(repo, { remote: true });
   assert.ok(tracked.status === "checkout" && tracked.remote === "git@github.com:example/repo.git");
+  assert.equal(tracked.remoteBranch, "main");
 
   const notes = join(root, "notes");
   mkdirSync(notes);

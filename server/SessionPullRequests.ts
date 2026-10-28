@@ -22,7 +22,8 @@ const checkout = Effect.fn("SessionPullRequests.checkout")(function* (cwd: strin
   const observed = yield* observeGit(cwd, { remote: true });
   if (observed.status === "broken") return yield* failure(observed.detail);
   if (observed.status === "non-git") return null;
-  const branch = observed.branch ?? "",
+  // GitHub knows the branch by its name on the remote, which may differ from the local name.
+  const branch = observed.remoteBranch ?? "",
     remote = observed.remote ?? "";
   if (!remote) return null;
   const github = githubRemote(remote);

@@ -106,6 +106,9 @@ const BRANCH = ["branch", "--show-current"];
 export interface Upstream {
   /** The remote the branch tracks, else `origin`. */
   readonly remote: string;
+  /** The branch's name on that remote (what GitHub calls a pull request's head): its
+   * upstream's, else its own. */
+  readonly name: string;
   /** The remote-tracking ref Git would hold for it: its configured upstream when that is on a
    * remote, else `refs/remotes/origin/<branch>`. Git may not hold it. */
   readonly ref: string;
@@ -113,15 +116,20 @@ export interface Upstream {
 
 const upstreamRead = (branch: string) => [
   "for-each-ref",
-  "--format=%(upstream:remotename)%00%(upstream)",
+  "--format=%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)",
   `refs/heads/${branch}`,
 ];
 
 /** `branch`'s upstream from `upstreamRead`'s answer; a local upstream (remote `.`) counts as none. */
 function upstreamOf(branch: string, answer: string): Upstream {
-  const [remote = "", ref = ""] = answer.trim().split("\0");
+  const [remote = "", remoteRef = "", ref = ""] = answer.trim().split("\0");
+  const tracked = remote && remote !== ".";
   return {
-    remote: remote && remote !== "." ? remote : "origin",
+    remote: tracked ? remote : "origin",
+    name:
+      tracked && remoteRef.startsWith("refs/heads/")
+        ? remoteRef.slice("refs/heads/".length)
+        : branch,
     ref: ref.startsWith("refs/remotes/") ? ref : `refs/remotes/origin/${branch}`,
   };
 }
@@ -139,6 +147,8 @@ export type GitObservation =
       /** With `remote`: the URL Git would contact for the branch's tracking remote (else
        * `origin`), after the user's `url.<base>.insteadOf` rewrites; null without that remote. */
       readonly remote?: string | null;
+      /** With `remote`: the branch's name on that remote; null when detached or without it. */
+      readonly remoteBranch?: string | null;
     }
   | { readonly status: "broken"; readonly detail: string };
 
@@ -200,19 +210,17 @@ export const observeGit = Effect.fn("GitCheckout.observeGit")(function* (
     if (!options.branch && !options.remote) return checkout;
     const branch = (yield* read(BRANCH)).trim() || null;
     if (!options.remote) return { ...checkout, branch };
-    const tracking = branch
-      ? upstreamOf(branch, yield* read(upstreamRead(branch))).remote
-      : "origin";
+    const upstream = branch ? upstreamOf(branch, yield* read(upstreamRead(branch))) : null;
     // The one read whose answer the user's Git config defines (e.g. an exe.dev integration
     // proxy configured globally), so it keeps user config.
-    const remote = yield* read(["remote", "get-url", tracking], true).pipe(
+    const remote = yield* read(["remote", "get-url", upstream?.remote ?? "origin"], true).pipe(
       Effect.map((out) => out.trim() || null),
       Effect.catchIf(
         (e) => e.detail.includes("No such remote"),
         () => Effect.succeed(null),
       ),
     );
-    return { ...checkout, branch, remote };
+    return { ...checkout, branch, remote, remoteBranch: remote && (upstream?.name ?? null) };
   }).pipe(
     Effect.catchTag("GitReadError", (e) =>
       Effect.succeed({ status: "broken", detail: e.detail } as const),

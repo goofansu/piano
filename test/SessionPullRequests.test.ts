@@ -330,6 +330,17 @@ test("INV-06: inherited GIT_* state cannot redirect discovery; the user's url.<b
   assert.deepEqual(discovered.link, { url: candidate(42).url, source: "branch", apiHost: host });
 });
 
+test("discovery asks GitHub for the branch's name on its remote, not its local name", async (t) => {
+  const f = await fixture(t);
+  f.git("switch", "-qc", "feat");
+  f.git("update-ref", "refs/remotes/origin/james/feat", "HEAD");
+  f.git("config", "branch.feat.remote", "origin");
+  f.git("config", "branch.feat.merge", "refs/heads/james/feat");
+  // A same-named branch on GitHub is someone else's work, not this branch's.
+  f.control({ prs: [candidate(42, "james/feat"), candidate(7, "feat")] });
+  assert.equal((await f.get()).pullRequest?.number, 42);
+});
+
 test("a link records the pull request's head and base as GitHub last reported them, so Changes can compare without a GitHub call", async (t) => {
   const f = await fixture(t);
   f.control({ prs: [{ ...candidate(42), baseRefName: "main" }] });

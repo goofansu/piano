@@ -315,6 +315,31 @@ test("branch scope: the target is the pull request's base for its own head, else
   assert.equal(missing.comparison.target?.from, "remote-default");
 });
 
+test("branch scope: a pull request applies to the branch by its name on its remote", async (t) => {
+  const { git, read } = fixture(t);
+  git("switch", "-qc", "main");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  git("branch", "-q", "release");
+  git("switch", "-qc", "feat");
+  git("commit", "-q", "--allow-empty", "-m", "work");
+  git("remote", "add", "origin", "https://github.com/example/repo.git");
+  git("update-ref", "refs/remotes/origin/release", "release");
+  git("update-ref", "refs/remotes/origin/james/feat", "HEAD");
+  git("config", "branch.feat.remote", "origin");
+  git("config", "branch.feat.merge", "refs/heads/james/feat");
+  const pullRequest = { base: "release", headRepo: "example/repo", baseRepo: "example/repo" };
+  const target = async (head: string) =>
+    ready(
+      await read({
+        scope: "branch",
+        hints: { pullRequest: { ...pullRequest, head }, worktreeBase: "main" },
+      }),
+    ).comparison.target?.from;
+  assert.equal(await target("james/feat"), "pull-request");
+  // The local name is not what GitHub knows this branch as.
+  assert.equal(await target("feat"), "worktree");
+});
+
 test("branch scope: unavailable states are named, never another comparison", async (t) => {
   const unborn = fixture(t);
   assert.equal(unavailable(await unborn.read({ scope: "branch" })).detail, "No commits yet.");
