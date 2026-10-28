@@ -41,7 +41,7 @@ const audit = (record) => {
   if (process.env.PIANO_TEST_AUDIT)
     appendFileSync(process.env.PIANO_TEST_AUDIT, `${JSON.stringify(record)}\n`);
 };
-audit({ command: "start", args, sessionId });
+audit({ command: "start", args, sessionId, cwd: process.cwd() });
 const cost = () => messages.reduce((sum, m) => sum + (m.usage?.cost?.total ?? 0), 0);
 
 function reply(text) {

@@ -14,8 +14,12 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 - `project-menu`: the group's "Project menu for <name>" holds "Project settings", then a red
   "Delete project", as the home's header menu does.
 - `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
-- `member-cards`: one `button[data-slot=item]` row per member session in the Sessions group's
-  hairline list; clicking opens `/s/<id>`.
+- `member-cards`: one `[data-slot=item]` row (`role=listitem`) per non-archived member session in
+  the Sessions group's hairline list; its title button opens `/s/<id>`.
+- `row-actions`: each row's "Session menu for <title>", revealed while pointed at, holds "Archive"
+  and a red "Delete", the sidebar row's menu ([`open-session.md`](./open-session.md)
+  `archive-delete`). Archive toasts "Session archived" and the row leaves, the count dropping;
+  Delete asks "Delete session?" and toasts "Session deleted". The page stays.
 - `new-in-project`: the composer above the cards ("First message") starts in the folder of the
   most recently active member, at the folder's own checkout;
   sending opens the new session, which joins the project.
@@ -27,8 +31,8 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 - `empty`: a project with no sessions shows its header, the composer on "Choose a folder", the
   heading "Sessions" with no count, and the line "No sessions yet".
 - `settings`: "Project settings" (the header menu, the sidebar's project menu, Mod+K on the home) opens a
-  dialog in place: Name and Instructions fields with a live count under Instructions ("14 / 20,000",
-  red past the limit with Save off), Save off until a field changes; saving closes it
+  dialog in place: Name and Instructions fields with a live count under Instructions ("0 / 20,000"
+  on the seed, red past the limit with Save off), Save off until a field changes; saving closes it
   and toasts "Project saved". Scope selectors to `[role=dialog]`: the page's composer is a
   `textarea` too. What reaches Pi needs the real Pi: fake Pi ignores the extension, so check the
   model's request with a scripted loopback model, as `test/fixtures/RealPiDispatch.ts` does.
@@ -64,9 +68,9 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   - Result: `ab get url` ends in `/projects` and `ab get title` is `Projects - Piano`. Capture
     `02b-index`.
 - `member-cards`
-  - Action: read the cards, then open the only one.
-    `ab eval "[...document.querySelectorAll('main button[data-slot=item]')].map(b => b.innerText.replace(/\n+/g, ' | '))"`;
-    `ab click 'main button[data-slot=item]'; ab wait --url "**/s/verify-plan"`
+  - Action: read the rows, then open the only one.
+    `ab eval "[...document.querySelectorAll('main [data-slot=item]')].map(b => b.innerText.replace(/\n+/g, ' | '))"`;
+    `ab click 'main [data-slot=item-title] button'; ab wait --url "**/s/verify-plan"`
   - Result: exactly one row, `Plan the verification | repo | main | #222 | 1 hour ago`; "Loose
     session" (no project) is absent; the click lands on `/s/verify-plan`. Capture `03-card-opened`.
 - `open-from-sidebar`
@@ -87,14 +91,33 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     ab wait "[cmdk-input]"; ab fill "[cmdk-input]" "open project";
     ab find role option click --name "Open project: Verify Project" --exact;
     ab wait --url "**/projects/verify"`
-  - Result: `/projects/verify`. On `/s/verify-loose` (no project) the same query offers no "Open
-    project" row, only "Add to project: ..." rows.
+  - Result: `/projects/verify`; beside it, "Move to project: New project". On `/s/verify-loose`
+    (no project) the query `project` offers no "Open project" row, only "Add to project: ..."
+    rows (New project, Empty Project, Verify Project).
+- `settings`
+  - Action: on `/projects/verify`, `ab find role button click --name "Project menu for Verify Project" --exact;
+    ab find role menuitem click --name "Project settings" --exact; ab wait "[role=dialog]";
+    ab find role textbox fill --name "Instructions" --exact "Reply tersely.";
+    ab find role button click --name "Save" --exact`
+  - Result: the dialog read `Project settings` / `Name` / `Instructions` / `0 / 20,000` /
+    `Cancel` / `Save` before filling and `14 / 20,000` after; Save closes it and toasts `Project
+    saved`. Capture `05-settings`. Saving changes the database.
 - `new-in-project`
   - Action: on `/projects/verify`, `ab fill '[aria-label="First message"]' "from project home";
     ab click '[aria-label="Send"]'; ab wait --text "echo: from project home"`
   - Result: combobox "Directory" read `repo` before sending, and no "Project" button; the send
     lands on `/s/<new id>`, and back on `/projects/verify` the heading reads `Sessions` / `2`
     with the new row first. Capture `05-new-in-project`. Sending changes the database; relaunch afterwards.
+- `row-actions` (after `new-in-project`, on that new session, so the seed's row stays for
+  `delete`)
+  - Action: `ab find role button click --name "Session menu for from project home" --exact;
+    ab find role menuitem click --name "Archive" --exact`; then send `to delete` from the home's
+    composer, come back, and `ab find role button click --name "Session menu for to delete" --exact;
+    ab find role menuitem click --name "Delete" --exact; ab wait --text "Delete session?"`,
+    capture `08-delete-session`, `ab find role button click --name "Delete" --exact`
+  - Result: toast `Session archived`, the row gone and the heading back to `Sessions` / `1`;
+    the dialog reads `"to delete" and its transcript are removed from Pi's session store. This
+    cannot be undone.`; toast `Session deleted`; still on `/projects/verify`.
 - `delete`
   - Action: with Group by Project, on `/projects/verify`,
     `ab find role button click --name "Project menu for Verify Project" --exact;
@@ -110,7 +133,7 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   - Action: `ab open "$WEB_URL/projects/nope"; ab wait --text "Project not found"`
   - Result: `ab eval "document.querySelector('[role=alert]')?.innerText"` is
     `Project not found` / `This project is not in Piano's database.` Capture `07-missing`.
-- Side effects: a project home starts no Pi session. `rg -c '"command":"prompt"' "$AUDIT"` finds
+- Side effects: a project home starts no Pi session. Before `new-in-project`, `rg -c '"command":"prompt"' "$AUDIT"` finds
   nothing (prints nothing, exit 1) and `rg -vc '"sessionId":"probe"' "$AUDIT"` likewise: the audit
   holds only the `probe` entries from the session pages visited.
 

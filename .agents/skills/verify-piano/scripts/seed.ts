@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Seeds launch.sh's empty scratch database with the throwaway repo, three projects and two saved
+// Seeds launch.sh's empty scratch database with the throwaway repo, two projects and two saved
 // sessions that have Pi history ("Plan the verification" includes one successful write of
 // src/answer.ts). Run by launch.sh before the backend starts (one backend per database).
 // Usage: node seed.ts <database> <repo> <pi-session-dir>

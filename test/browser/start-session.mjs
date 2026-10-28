@@ -34,9 +34,9 @@ await run(
     const flag = (name) => start.args[start.args.indexOf(name) + 1];
     assert.equal(flag("--model"), "fake/gamma", "Pi starts with the chosen model");
     assert.equal(flag("--thinking"), "high", "Pi starts with the chosen effort");
+    assert.match(start.cwd, /\/web$/, "Pi runs in the chosen folder");
     const header = await page.evaluate(`document.querySelector('main header').innerText`);
     assert.match(header, /Launch/, "the session belongs to the chosen project");
-    assert.match(header, /web/, "the session runs in the chosen folder");
 
     await page.ab("reload");
     await page.see("echo: Plan the launch");
