@@ -11,7 +11,8 @@ the session without sending the message again; a message that cannot be sent kee
   once a folder is chosen. With exactly one registered folder it is chosen already.
 - `model-effort`: the "Model: <model>; effort: <level>" button picks a model and effort, passed to
   Pi as `--model` and `--thinking`.
-- `project`: the "Project" button files the new session in a project ("None" clears it).
+- `project`: the "Project" button lists "New project…" and the projects, filing the new session
+  in the one chosen ("None" clears a choice).
 - `first-message`: combobox "First message" plus Enter or "Send" starts the session and lands on it.
 - `reload`: reloading `/s/<id>` shows the same transcript and sends no second prompt.
 - `not-sent`: when the socket is down, "Message not sent. Your draft is kept; retry when the

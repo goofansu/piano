@@ -24,8 +24,8 @@ The palette (Mod+K) searches neither outputs nor links.
   default (visible text `Uncommitted`), or "Comparison: <target>" (`main`, `origin/main`):
   Uncommitted compares with HEAD, the branch option with the branch's target (the pull request's
   base, the base Worktrunk reported at creation, the remote's default branch, or a local
-  main/master). An unavailable option is disabled and shows only its name (on `main` the branch
-  option, since main is the base branch). The choice is saved for the session. The toolbar's actions are Collapse all
+  main/master). An unavailable option is disabled and shows only its name (on `main`, the
+  menuitemradio `main`, since main is the base branch). The choice is saved for the session. The toolbar's actions are Collapse all
   / Expand all, Wrap (pressed while on) and Refresh changes; a failed refresh keeps the previous
   list with "Refresh failed. Showing previous changes." and the reason.
 - `pull-request-link`: with no PR linked, the toolbar starts its actions with a ghost icon button,
@@ -54,9 +54,11 @@ The palette (Mod+K) searches neither outputs nor links.
   closes; turned on over open tabs, it hides them until the rail goes off. It is offered even
   without Git. Narrow, neither the "Changes" icon nor the rail nor its
   toggle shows; widening again brings the rail back if it was on.
-- `environment`: the rail's "Environment" rows are menus: "Copy branch name" (or repository name
-  or commit SHA), "Copy working directory", and "Open … on GitHub" when the repository is known.
-  The working directory is copied from there; the rail shows no row for it.
+- `environment`: the rail's "Environment" rows are menu buttons named `Folder: repo`, `Branch:
+  main`: the Folder row's menu has "Copy working directory" (a Repository row's also "Copy
+  repository name"), the Branch row's "Copy branch name" (a detached commit's "Copy commit SHA"), each with
+  "Open … on GitHub" once the repository is known. The rail shows no row for the working
+  directory itself.
 - `files-list`: The rail's "Outputs" lists files written in the session by name only, and its
   "Links" (heading "Links <n>") lists the conversation's first five web links, each with "Jump to
   message", and "Show all" past five. Either section appears only once it has a row.
@@ -105,7 +107,9 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Result: `ab eval "document.querySelector('[data-slot=session-rail]:not([inert])').innerText"`
     is `Environment` / `Folder:` / `repo` / `Branch:` / `main` / `Outputs` / `answer.ts` (no
     Links yet): bordered lists of icon rows, the field names read only by screen readers; each
-    heading folds its section, and folds are remembered across reloads. Capture `03-rail`. Then
+    heading folds its section, and folds are remembered across reloads. Capture `03-rail`.
+    `ab find role button click --name "Branch: main" --exact` opens a menu of `Copy branch name`
+    and "Folder: repo" one of `Copy working directory` (Escape each). Then
     `ab find role button click --name "answer.ts" --exact; ab wait '[aria-label="Close answer.ts"]'`
     opens a tab `answer.ts` with toolbar `src/answer.ts`, the file's current contents and "Close
     answer.ts" on the tab, and the rail hides; `ab find role button click --name "Close answer.ts" --exact`

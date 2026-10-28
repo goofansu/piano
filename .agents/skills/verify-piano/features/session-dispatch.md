@@ -56,9 +56,11 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
   - Result: one line for `verify-plan` with `"projectId":"verify"`, `"lastAnswer":"Answer 4."`
     (from the baseline; a later prompt to it replaces that), and `pullRequest.number` 222.
 - `follow-up`
-  - Command: `echo "one more" > "$RUN/more.txt"; node scripts/dispatch-session.ts follow-up <sessionId from start.json> "$RUN/more.txt"; echo $?`
-  - Result: exit 0 with `submission` and `link`; the audit gains `prompt` `one more` for that ID,
-    and `status <id>` then reports `"lastAnswer": "echo: one more"`.
+  - Command: `printf "one more" > "$RUN/more.txt"; node scripts/dispatch-session.ts follow-up <sessionId from start.json> "$RUN/more.txt"; echo $?`
+  - Result: exit 0 with `"delivery": "follow-up"`, `"submission": "started"` and `link`; the
+    audit gains `{"command":"prompt","text":"one more",...}` for that ID, and `status <id>` then
+    reports `"lastAnswer": "echo: one more"`. A follow-up sends the file verbatim, so `echo`'s
+    trailing newline would reach Pi (`"one more\n"`); the first message of a start arrives trimmed.
 - `refusals`
   - Command: `node scripts/dispatch-session.ts "$RUN/prompt.txt" "$RUN/missing"; echo $?`
   - Result: `ENOENT: no such file or directory, stat '<path>'` and exit 2; the audit gains no
