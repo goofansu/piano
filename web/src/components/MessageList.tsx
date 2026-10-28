@@ -170,10 +170,12 @@ export function MessageList({
                 {/* Custom geometry hosts: shadcn has no variable-height virtual transcript.
                     A row taller than its estimate is clipped until measured: its overflow would
                     grow the scroll height, a pinned view would follow it, and the scroll would
-                    unmount the row again, a loop Firefox never leaves. */}
+                    unmount the row again, a loop Firefox never leaves. The margin keeps focus
+                    rings and the jump highlight (6px) whole; Chromium honours it only when both
+                    axes clip. */}
                 <div
                   ref={list}
-                  className="relative overflow-y-clip"
+                  className="relative overflow-clip [overflow-clip-margin:6px]"
                   style={{ height: virtual.getTotalSize() }}
                 >
                   {window.map((item) => {
