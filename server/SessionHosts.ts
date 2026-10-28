@@ -8,7 +8,6 @@
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { Context, Data, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
-import { workUnderWay } from "../shared/sessionStatus.ts";
 import {
   type HostInfo,
   type SessionClosure,
@@ -24,7 +23,13 @@ import { FolderWorktrees, FolderWorktreesLive } from "./FolderWorktrees.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, RegistryError } from "./Registry.ts";
-import { type CloseHow, makeSessionHost, mirrorSession, type SessionHost } from "./SessionHost.ts";
+import {
+  type CloseHow,
+  listedFacts,
+  makeSessionHost,
+  mirrorSession,
+  type SessionHost,
+} from "./SessionHost.ts";
 import {
   checkoutMissing,
   type SessionLocation,
@@ -211,8 +216,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           out.push({
             cwd: h.session.spec.cwd,
             sessionId: h.session.spec.sessionId,
-            working: workUnderWay(state),
-            ...(state.preview && { preview: true }),
+            ...listedFacts(state),
           });
         }
         return out;
