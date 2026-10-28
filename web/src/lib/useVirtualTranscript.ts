@@ -96,15 +96,10 @@ export function useVirtualTranscript(
     setMargin(inner.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop);
     viewport.rendered();
     if (target && !virtual.isScrolling) {
-      const top = domViewportElement(el).anchorTop(target.id);
-      if (
-        top !== undefined &&
-        (Math.abs(top - TRANSCRIPT_JUMP_MARGIN) < 1 ||
-          el.scrollHeight - el.scrollTop - el.clientHeight < 1)
-      ) {
-        const content = el.ownerDocument
-          .getElementById(messageAnchorId(target.id))
-          ?.querySelector<HTMLElement>('[data-slot="row-content"]');
+      // Only a mounted row can land: the windowed anchorTop would otherwise answer from estimates.
+      const anchor = el.ownerDocument.getElementById(messageAnchorId(target.id));
+      if (anchor && viewport.landed(target.id)) {
+        const content = anchor.querySelector<HTMLElement>('[data-slot="row-content"]');
         // A reply's Markdown excludes its trailing Copy response control. Other row kinds
         // retain their full content (including prompt attachments and tool details).
         const body = content?.querySelector<HTMLElement>(":scope > .prose-chat") ?? content;
