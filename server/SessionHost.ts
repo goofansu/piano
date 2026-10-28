@@ -5,7 +5,8 @@
  */
 import { Clock, Deferred, Effect, Exit, Fiber, Scope, Semaphore, Stream } from "effect";
 import { applySessionEvent } from "../shared/sessionProjection.ts";
-import type { SessionClosure, Snapshot } from "../shared/wire.ts";
+import { workUnderWay } from "../shared/sessionStatus.ts";
+import type { HostInfo, SessionClosure, SessionState, Snapshot } from "../shared/wire.ts";
 import {
   type PiSession,
   PiSessionError,
@@ -45,6 +46,13 @@ export interface CloseHow {
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 const stopped = () => rejected("Pi is closing or has stopped. Refresh before sending new input.");
 
+/** What the hosts list says of a running session. The host announces a change whenever these
+ * facts differ from those it last announced, whichever event changed them. */
+export const listedFacts = (state: SessionState): Pick<HostInfo, "working" | "preview"> => ({
+  working: workUnderWay(state),
+  ...(state.preview && { preview: true }),
+});
+
 /** Pi owns the session name and statistics; the registry only mirrors them for the sidebar. */
 export const mirrorSession = (
   registry: Registry["Service"],
@@ -69,7 +77,7 @@ export const mirrorSession = (
 export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options: {
   readonly spec: PiSessionSpec;
   readonly lock: Semaphore.Semaphore;
-  /** Running state changed; announce it. */
+  /** The facts the hosts list shows of this session changed; announce them. */
   readonly onChange: Effect.Effect<void>;
   /** The child exited by itself; retire this host. Runs from the observer, outside the lock. */
   readonly onExit: (closure: SessionClosure) => Effect.Effect<void>;
@@ -196,6 +204,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   const ready = yield* Deferred.make<void>();
   // The session's live view, folded from its events for Webhooks, which decides what it sends.
   let observed: Snapshot | undefined;
+  let announced: ReturnType<typeof listedFacts> | undefined;
   yield* session.events.pipe(
     Stream.runForEach((event) =>
       Effect.gen(function* () {
@@ -225,7 +234,12 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
               ? event.snapshot.state.closure
               : undefined;
         if (closure) yield* options.onExit(closure);
-        else if (event._tag === "state" || event._tag === "snapshot") yield* options.onChange;
+        else if (observed) {
+          const facts = listedFacts(observed.state);
+          if (facts.working === announced?.working && facts.preview === announced.preview) return;
+          announced = facts;
+          yield* options.onChange;
+        }
       }),
     ),
     // The observer also recaptures after overflow; it must never lose exit ownership just

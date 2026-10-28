@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Option, type Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { PreviewAdapter, type PreviewOwnerIdentity } from "../scripts/PreviewAdapter.ts";
 import { ownerRequest } from "../scripts/PreviewClient.ts";
@@ -807,6 +807,35 @@ test("the hosts list calls a session working while it holds queued work Pi is no
       yield* quiescent(s);
       assert.equal(yield* working, false);
       yield* hosts.release(cwd, "listed-queue");
+    }),
+  );
+});
+
+test("the browser hears a session's working state change when only its queue changes", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const s = yield* registered("pushed-queue");
+      yield* quiescent(s);
+      // Skip the list as it stood on subscribing: only pushes reach a connected browser.
+      let seen = false;
+      const pushed = yield* (yield* hosts.subscribe).pipe(
+        Stream.drop(1),
+        Stream.map((list) => list.find((h) => h.sessionId === "pushed-queue")?.working),
+        Stream.takeUntil((working) => {
+          seen ||= working === true;
+          return seen && working === false;
+        }),
+        Stream.runCollect,
+        Effect.timeoutOption("3 seconds"),
+        Effect.forkChild,
+      );
+      // Pi answers Restore with a queue update alone, no state change: the sidebar must hear it.
+      yield* prompt(s, "/queue");
+      yield* s.act({ _tag: "restore_queue" });
+      const working = Option.getOrUndefined(yield* Fiber.join(pushed));
+      assert.equal(working?.at(-1), false, `pushed: ${JSON.stringify(working)}`);
+      yield* hosts.release(cwd, "pushed-queue");
     }),
   );
 });
