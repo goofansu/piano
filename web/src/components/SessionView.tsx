@@ -52,12 +52,11 @@ const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" }
 const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
 export function SessionView({ state, send }: Props) {
-  // The selected session's PR popover; hidden while Settings covers the view. Its Changes and
-  // open file live in the Surface area (SessionPanel).
+  // The selected session's PR dialog; navigation closes it when Settings covers the view. Its
+  // Changes and open file live in the Surface area (SessionPanel).
   const navigation = useNavigation();
   const {
-    settings,
-    pullRequest: pullRequestOpened,
+    pullRequest: pullRequestOpen,
     openPullRequest,
     closePullRequest,
     openFile,
@@ -66,7 +65,6 @@ export function SessionView({ state, send }: Props) {
     surface,
     showAgent,
   } = navigation;
-  const pullRequestOpen = !settings && pullRequestOpened;
   const onPullRequestOpenChange = (open: boolean) =>
     open ? openPullRequest() : closePullRequest();
   // The width left after navigation and insets decides the layout, not the viewport alone. A
