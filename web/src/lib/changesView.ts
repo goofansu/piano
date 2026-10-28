@@ -15,7 +15,7 @@ import type {
   Workspace,
   WorkspaceChanges,
 } from "@shared/wire";
-import { pullRequestBranches } from "../../../shared/pullRequestBranches.ts";
+import { pullRequestBranchesKey } from "../../../shared/pullRequestBranches.ts";
 import { CHANGES_FILE_PATCH_BYTES } from "../../../shared/wire.ts";
 import { type DiffFile, lineCount, parseUnifiedDiff } from "./diff.ts";
 
@@ -108,7 +108,7 @@ export function refreshKey(
  * so Changes reads its target and whether the pull request is this branch's again.
  */
 export function pullRequestTrigger(link: SessionPullRequestLink | null | undefined): string {
-  return link ? JSON.stringify(pullRequestBranches(link)) : "";
+  return link ? pullRequestBranchesKey(link) : "";
 }
 
 /**
