@@ -192,16 +192,14 @@ function SessionMenu({
       <DropdownMenuGroup>
         <ProjectMenu menu={sessionProjectMenu(state, target)} run={run} />
       </DropdownMenuGroup>
-      {destructive.length > 0 && (
-        <>
+      {destructive.map((c) => (
+        <Fragment key={c.id}>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            {destructive.map((c) => (
-              <SessionCommandMenuItem key={c.id} command={c} run={run} />
-            ))}
+            <SessionCommandMenuItem command={c} run={run} />
           </DropdownMenuGroup>
-        </>
-      )}
+        </Fragment>
+      ))}
     </>
   );
 }
