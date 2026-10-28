@@ -258,6 +258,23 @@ test("opening while unlinked offers the link form; a link found when work stops 
   assert.equal(pr.getState().surface, "details", "reopening shows the link");
 });
 
+test("the dialog closes when its session can no longer be addressed, rather than offer a Link that sends nothing", async () => {
+  for (const link of [undefined, registered]) {
+    const { pi, pr, notes, closes } = setup(link);
+    pr.present({ visible: true, dialog: true });
+    assert.equal(pr.getState().surface, link ? "editing" : "link-form");
+    const asked = pi.requests.length;
+
+    // The checkout is removed: Changes cannot open, so the session has no workspace to address.
+    pr.observe(undefined, "s1", link, false);
+    assert.equal(pr.getState().surface, "closed");
+    assert.equal(closes(), 1, "whoever owns the dialog learns it closed");
+    assert.equal((await pr.link(URL))._tag, "superseded");
+    assert.equal(pi.requests.length, asked, "nothing is sent for a session it cannot address");
+    assert.deepEqual(notes, { error: [], info: [], success: [] });
+  }
+});
+
 test("opening a linked session before its first read lands shows its details throughout", async () => {
   const { pi, pr, closes } = setup(registered);
   assert.equal(pi.requests.length, 1, "selection starts the first read");

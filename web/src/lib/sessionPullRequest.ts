@@ -207,13 +207,17 @@ export function createSessionPullRequest({
     publish();
   };
   const reconcileSurface = () => {
-    const next = dialog
-      ? linked()
-        ? "editing"
-        : "link-form"
-      : visible && linked()
-        ? "details"
-        : "closed";
+    // Without a session to address there is nothing to show or send.
+    const next =
+      observation.getState().key === null
+        ? "closed"
+        : dialog
+          ? linked()
+            ? "editing"
+            : "link-form"
+          : visible && linked()
+            ? "details"
+            : "closed";
     show(next);
   };
   const closeItself = () => {
@@ -332,7 +336,10 @@ export function createSessionPullRequest({
       observation.observe(key, !!next);
       const alreadyReading = key !== previous || !previousLink;
       if (next && !alreadyReading && (associationChanged || edge)) observation.refreshSoon(0);
-      reconcileSurface();
+      // A dialog left open when the session can no longer be addressed (its checkout removed)
+      // closes itself rather than offer a Link that cannot be sent.
+      if (key === null && dialog) closeItself();
+      else reconcileSurface();
       publish();
       const { loading, mutating } = observation.getState();
       // Reuse a recent read and never replace one in flight just because the row appeared.
