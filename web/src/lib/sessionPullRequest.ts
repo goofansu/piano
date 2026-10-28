@@ -354,14 +354,16 @@ export function createSessionPullRequest({
       try {
         const outcome = await change({ action: "discover" });
         if (outcome._tag !== "saved") return outcome;
+        // Failed discovery can retain an existing link; that is not a newly found match.
+        // The change already reported the error, so callers must not announce success too.
+        if (outcome.value.error) return { _tag: "failed", reason: outcome.value.error };
         if (outcome.value.link) {
           closeItself();
           return outcome;
         }
-        // Only the explicit search reports absence; polling stays silent. An unreadable
-        // GitHub was already reported as itself.
-        if (!outcome.value.error) notify.info(NOT_FOUND);
-        return outcome.value.error ? outcome : { _tag: "not-found" };
+        // Only the explicit search reports absence; polling stays silent.
+        notify.info(NOT_FOUND);
+        return { _tag: "not-found" };
       } finally {
         finding = false;
         publish();

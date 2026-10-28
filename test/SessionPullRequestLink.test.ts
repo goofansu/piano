@@ -709,6 +709,50 @@ test("Find from branch with nothing found reports it exactly once", async () => 
   assert.equal(pr.getState().finding, false);
 });
 
+for (const existing of [registered, undefined]) {
+  test(`failed discovery ${existing ? "with" : "without"} an existing link reports failure once`, async () => {
+    const { pi, pr, notes, closes, stop } = setup(existing);
+    try {
+      if (existing) {
+        pi.last().resolve(linked);
+        await settle();
+      }
+      pr.present({ visible: true, dialog: true });
+      const finding = pr.discover();
+      const error = existing
+        ? "No matching open pull request for the current branch."
+        : "GitHub is unreachable";
+      const response = { link: existing ?? null, pullRequest: null, error };
+      pi.last().resolve(response);
+      assert.deepEqual(await finding, { _tag: "failed", reason: error });
+      assert.deepEqual(notes.error, [error]);
+      assert.deepEqual(notes.info, []);
+      assert.deepEqual(pr.getState().link, existing, "does not replace the association");
+      if (existing) assert.deepEqual(pr.getState().value, response);
+      assert.equal(pr.getState().surface, existing ? "editing" : "link-form");
+      assert.equal(pr.getState().finding, false);
+      assert.equal(pr.getState().busy, false);
+      assert.equal(closes(), 0, "unsuccessful discovery does not close the dialog");
+    } finally {
+      stop();
+    }
+  });
+}
+
+test("a manual association is saved even when its GitHub status is unavailable", async () => {
+  const { pi, pr, notes, closes, stop } = setup(undefined);
+  try {
+    pr.present({ visible: false, dialog: true });
+    const saving = pr.link(URL);
+    pi.last().resolve(unavailable);
+    assert.deepEqual(await saving, { _tag: "saved", value: unavailable });
+    assert.deepEqual(notes.error, [unavailable.error]);
+    assert.equal(closes(), 1);
+  } finally {
+    stop();
+  }
+});
+
 test("a failed change keeps the saved link with the reason and the edit open", async () => {
   const { pi, pr, notes, closes } = setup(registered);
   pi.last().resolve(linked);
