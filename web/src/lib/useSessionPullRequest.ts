@@ -31,7 +31,11 @@ export function useSessionPullRequest(
   const [pr] = useState(() =>
     createSessionPullRequest({
       api: sessionPullRequest,
-      notify: { error: (message) => toast.error(message), info: (message) => toast(message) },
+      notify: {
+        error: (message) => toast.error(message),
+        info: (message) => toast(message),
+        success: (message) => toast.success(message),
+      },
       closed: () => {
         if (latest.current.open) latest.current.onOpenChange(false);
       },

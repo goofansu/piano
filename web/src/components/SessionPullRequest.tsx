@@ -16,7 +16,6 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { IconButton } from "@/components/IconButton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/PianoDialog";
 import {
@@ -207,26 +206,9 @@ function LinkedPullRequestRow({
             </a>
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={pr.open}>Change link…</DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
-              void pr.discover().then((outcome) => {
-                if (outcome._tag === "saved" && outcome.value.link)
-                  toast.success("Pull request linked");
-              });
-            }}
-          >
-            Find from branch
-          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void pr.discover()}>Find from branch</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={() => {
-              void pr.remove().then((outcome) => {
-                if (outcome._tag === "saved") toast.success("Pull request link removed");
-              });
-            }}
-          >
-            Remove link
-          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void pr.remove()}>Remove link</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </section>
@@ -289,8 +271,7 @@ function PullRequestForm({ pr, editing }: { pr: PullRequestControl; editing: boo
       onSubmit={async (event) => {
         event.preventDefault();
         if (!form.canSubmit) return;
-        const outcome = await pr.link(url);
-        if (outcome._tag === "saved") toast.success("Pull request linked");
+        await pr.link(url);
       }}
       className="flex flex-col gap-4"
     >
@@ -321,12 +302,7 @@ function PullRequestForm({ pr, editing }: { pr: PullRequestControl; editing: boo
             type="button"
             variant="outline"
             disabled={secondary.disabled}
-            onClick={() => {
-              void pr.discover().then((outcome) => {
-                if (outcome._tag === "saved" && outcome.value.link)
-                  toast.success("Pull request linked");
-              });
-            }}
+            onClick={() => void pr.discover()}
           >
             <GitBranchIcon data-icon="inline-start" />
             {secondary.label}
