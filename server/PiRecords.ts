@@ -71,13 +71,14 @@ export interface RawMessage {
   details?: unknown;
 }
 const argsOf = (args: unknown) => (args === undefined ? "" : JSON.stringify(args, null, 2));
-function textOf(content: string | RawContent[] | undefined): string {
+function textOf(content: string | RawContent[] | undefined, separator = ""): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
     .filter((c) => c.type === "text")
     .map((c) => c.text ?? "")
-    .join("");
+    .filter((text) => text.length > 0)
+    .join(separator);
 }
 const usageOf = (usage?: RawUsage): Usage | undefined =>
   usage
@@ -174,7 +175,8 @@ export function serializeMessage(
     result = {
       id,
       role: "assistant",
-      text: textOf(msg.content),
+      // Text blocks are distinct passages, not streaming chunks of one passage.
+      text: textOf(msg.content, "\n\n"),
       toolCalls: toolCalls.length ? toolCalls : undefined,
       model: msg.provider && msg.model ? `${msg.provider}/${msg.model}` : msg.model,
       thinkingLevel: msg.thinkingLevel,
@@ -1047,13 +1049,7 @@ export class PiProjector {
     const redaction = compileRedaction();
     this.partial = redaction.wire({
       ...this.partial,
-      text: redaction.text(
-        blocks
-          .filter((b) => b.type === "text")
-          .map((b) => b.text)
-          .join(""),
-        true,
-      ),
+      text: redaction.text(textOf(blocks, "\n\n"), true),
       toolCalls: blocks.flatMap((b) =>
         b.type === "tool"
           ? [

@@ -61,7 +61,7 @@ test("content-indexed endings replace drafts and cumulative usage is not added",
       const events = yield* observe(session, "/partial");
       const updates = events.filter((e) => e._tag === "message_update");
       const last = updates.at(-1)!;
-      assert.equal(last.message.text, "first corrected second corrected");
+      assert.equal(last.message.text, "first corrected \n\nsecond corrected");
       assert.deepEqual(
         last.message.toolCalls?.map((c) => [c.id, c.args]),
         [
@@ -77,6 +77,29 @@ test("content-indexed endings replace drafts and cumulative usage is not added",
         "low",
         "read back a clamp even without an event",
       );
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+});
+
+test("assistant text blocks stay separate through streaming, completion and readback", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "text-blocks",
+      });
+      const events = yield* observe(session, "/text-blocks");
+      const partial = events.findLast((e) => e._tag === "message_update");
+      assert.ok(partial?._tag === "message_update");
+      assert.equal(
+        partial.message.text,
+        "home unchanged.\n\nThe key invariant",
+        "separate blocks, not deltas; empty and thinking blocks add no spacing",
+      );
+      const final = events.find((e) => e._tag === "message_end");
+      assert.ok(final?._tag === "message_end");
+      assert.equal(final.message.text, "home unchanged.\n\nThe key invariant");
+      assert.equal((yield* snapshot(session)).messages[0].text, final.message.text);
     }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
   );
 });

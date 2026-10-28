@@ -121,6 +121,24 @@ function handle(c) {
         });
         delta("text_end", 0, { content: "first corrected " }, 3);
         delta("text_end", 2, { content: "second corrected" }, 3);
+      } else if (c.message === "/text-blocks") {
+        streaming = true;
+        out({ type: "agent_start" });
+        const content = [
+          { type: "text", text: "" },
+          { type: "text", text: "home unchanged." },
+          { type: "thinking", thinking: "hidden" },
+          { type: "text", text: "" },
+        ];
+        out({ type: "message_start", message: assistant(content) });
+        delta("text_start", 3);
+        delta("text_delta", 3, { delta: "The key" });
+        delta("text_delta", 3, { delta: " invariant" });
+        delta("text_end", 1, { content: "home unchanged." });
+        delta("text_start", 4);
+        end(assistant([...content.slice(0, 3), { type: "text", text: "The key invariant" }]));
+        streaming = false;
+        out({ type: "agent_settled" });
       } else if (c.message === "/secret") {
         delta("text_delta", 4, { delta: " " + canary.slice(0, 12) });
       } else if (c.message === "/finish") {

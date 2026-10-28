@@ -89,6 +89,35 @@ test("INV-01: history recorded under another checkout spelling is found where Pi
   assert.equal(readFileSync(file, "utf8"), before, "reading never moves or rewrites history");
 });
 
+test("INV-01: saved assistant text blocks render as paragraphs without rewriting history", async () => {
+  const file = seed(cwd, "text-blocks", "separate paragraphs");
+  appendFileSync(
+    file,
+    `${JSON.stringify({
+      type: "message",
+      id: "reply",
+      parentId: "saved",
+      timestamp: "2026-10-05T00:00:02Z",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "home unchanged." },
+          { type: "thinking", thinking: "hidden" },
+          { type: "text", text: "The key invariant" },
+          { type: "text", text: "" },
+        ],
+        stopReason: "stop",
+        timestamp: 2,
+      },
+    })}\n`,
+  );
+  const before = readFileSync(file, "utf8");
+  const snapshot = await run(history.peek("text-blocks", file));
+  assert.equal(snapshot.messages[1].text, "home unchanged.\n\nThe key invariant");
+  assert.equal(readFileSync(file, "utf8"), before);
+});
+
 test("INV-01/12: peeking legacy v2 history reads the conversation without migrating its file", async () => {
   const file = seed(cwd, "v2", "legacy conversation");
   const original = readFileSync(file, "utf8").replace('"version":3', '"version":2');
