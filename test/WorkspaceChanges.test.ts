@@ -479,3 +479,32 @@ test("local work: commits not pushed count against the branch's upstream, not a 
   git("commit", "-q", "--allow-empty", "-m", "local 2");
   assert.equal(ready(await preview()).local.commitsNotPushed, 2);
 });
+
+test("a branch started from the remote's default branch compares and counts by its own name on that remote", async (t) => {
+  const { git, read, preview } = fixture(t);
+  git("switch", "-qc", "main");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  git("branch", "-q", "release");
+  git("remote", "add", "origin", "https://github.com/example/repo.git");
+  git("update-ref", "refs/remotes/origin/main", "main");
+  git("update-ref", "refs/remotes/origin/release", "release");
+  git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  // `git switch -c feat origin/main`, then `git push origin feat` without `-u`.
+  git("switch", "-qc", "feat", "--track", "origin/main");
+  git("commit", "-q", "--allow-empty", "-m", "pushed");
+  git("update-ref", "refs/remotes/origin/feat", "HEAD");
+  git("commit", "-q", "--allow-empty", "-m", "local");
+  assert.equal(ready(await preview()).local.commitsNotPushed, 1);
+  const pullRequest = {
+    head: "feat",
+    base: "release",
+    headRepo: "example/repo",
+    baseRepo: "example/repo",
+  };
+  const branch = ready(await read({ scope: "branch", hints: { pullRequest } }));
+  assert.equal(branch.pullRequestFromBranch, true);
+  assert.deepEqual(
+    [branch.comparison.target?.ref, branch.comparison.target?.from],
+    ["refs/remotes/origin/release", "pull-request"],
+  );
+});

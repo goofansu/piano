@@ -110,28 +110,42 @@ export interface Upstream {
    * upstream's, else its own. */
   readonly name: string;
   /** The remote-tracking ref Git would hold for it: its configured upstream when that is on a
-   * remote, else `refs/remotes/origin/<branch>`. Git may not hold it. */
+   * remote, else `refs/remotes/<remote>/<branch>`. Git may not hold it. */
   readonly ref: string;
 }
 
+/** The branch's upstream, and each remote's default branch to tell a start point from a home. */
 const upstreamRead = (branch: string) => [
   "for-each-ref",
-  "--format=%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)",
+  "--format=%(refname)%00%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)%00%(symref)",
   `refs/heads/${branch}`,
+  "refs/remotes/*/HEAD",
 ];
 
-/** `branch`'s upstream from `upstreamRead`'s answer; a local upstream (remote `.`) counts as none. */
+/**
+ * `branch`'s upstream from `upstreamRead`'s answer. A local upstream (remote `.`) counts as none,
+ * and so does the remote's default branch under another name (`git switch -c feat origin/main`):
+ * that is where the branch started, so its work goes to its own name on that remote.
+ */
 function upstreamOf(branch: string, answer: string): Upstream {
-  const [remote = "", remoteRef = "", ref = ""] = answer.trim().split("\0");
-  const tracked = remote && remote !== ".";
-  return {
-    remote: tracked ? remote : "origin",
-    name:
-      tracked && remoteRef.startsWith("refs/heads/")
-        ? remoteRef.slice("refs/heads/".length)
-        : branch,
-    ref: ref.startsWith("refs/remotes/") ? ref : `refs/remotes/origin/${branch}`,
-  };
+  const refs = answer
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.split("\0"));
+  const [, remote = "", remoteRef = "", ref = ""] =
+    refs.find(([name]) => name === `refs/heads/${branch}`) ?? [];
+  const tracked = remote && remote !== "." ? remote : null;
+  const name = remoteRef.startsWith("refs/heads/") ? remoteRef.slice("refs/heads/".length) : null;
+  const startedFrom =
+    name !== branch &&
+    refs.some(([head, , , , target]) => head === `refs/remotes/${tracked}/HEAD` && target === ref);
+  return tracked && name && ref.startsWith("refs/remotes/") && !startedFrom
+    ? { remote: tracked, name, ref }
+    : {
+        remote: tracked ?? "origin",
+        name: branch,
+        ref: `refs/remotes/${tracked ?? "origin"}/${branch}`,
+      };
 }
 
 /** What Git says about a path: outside any repository, inside a working checkout, or `broken`:
