@@ -83,19 +83,21 @@ async function preview(
   const { head, branch, pullRequestFromBranch, scopes } = comparisons;
   const scope = options.scope ?? "uncommitted";
   const resolved = comparisons.of(scope);
-  if ("unavailable" in resolved) {
-    const local = await localWork(checkout, comparisons);
-    return {
-      status: "unavailable",
-      head,
-      branch,
-      pullRequestFromBranch,
-      scope,
-      detail: resolved.unavailable,
-      scopes,
-      local,
-    };
-  }
+  const unavailable = async (detail: string): Promise<Unavailable> => ({
+    status: "unavailable",
+    head,
+    branch,
+    pullRequestFromBranch,
+    scope,
+    detail,
+    scopes,
+    local: await localWork(checkout, comparisons),
+  });
+  if ("unavailable" in resolved) return unavailable(resolved.unavailable);
+  const pathArgs = path === undefined ? [] : [`:(top,literal)${path}`];
+  // A merge in progress leaves no single diff to browse, yet the scopes and local work still hold.
+  if ((await checkout.run(["ls-files", "--unmerged", "-z", "--", ...pathArgs])).stdout.length)
+    return unavailable("Unresolved merge conflicts; resolve them before browsing this diff.");
   const { comparison } = resolved;
   const base = comparison.base;
   const temp = await mkdtemp(join(tmpdir(), "piano-changes-"));
@@ -110,10 +112,6 @@ async function preview(
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     const git = checkout.with({ env: { GIT_INDEX_FILE: temporaryIndex } });
-    const pathArgs = path === undefined ? [] : [`:(top,literal)${path}`];
-    if ((await git.run(["ls-files", "--unmerged", "-z", "--", ...pathArgs])).stdout.length) {
-      throw new Error("Unresolved merge conflicts; resolve them before browsing this diff.");
-    }
     const untracked = (
       await git.records(["ls-files", "--others", "--exclude-standard", "-z", "--", ...pathArgs])
     ).map(git.safePath);
