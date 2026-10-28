@@ -27,18 +27,25 @@ import {
 /** The Pinned section's key, the same under every grouping. */
 export const PINNED = "pinned";
 
+/**
+ * The line beneath each title when View options shows folder and branch: the branch, and the
+ * folder too unless the row's group already names it.
+ */
+export type SessionRowDetails = "branch" | "folder-and-branch";
+
 export interface PinnedSection {
   key: typeof PINNED;
   open: boolean;
   /** Pinned sessions in the chosen order, wherever their folder is. */
   sessions: SessionEntry[];
+  details: SessionRowDetails | undefined;
 }
 
 /**
  * One section of the grouping. Folder, project and date groups open and close; their keys stay the
  * same whichever grouping is chosen, so switching away and back keeps them as the user left them.
  */
-export type SidebarSection =
+export type SidebarSection = { details: SessionRowDetails | undefined } & (
   | { kind: "folder"; key: string; open: boolean; folder: FolderView; sessions: SessionEntry[] }
   /** Active projects in order, then always the No project group (`project: null`). */
   | {
@@ -51,7 +58,8 @@ export type SidebarSection =
   /** Date groups start open; the rest start closed. */
   | { kind: "date"; key: string; open: boolean; label: string; sessions: SessionEntry[] }
   /** No grouping: every listed session in one section. */
-  | { kind: "list"; key: string; sessions: SessionEntry[] };
+  | { kind: "list"; key: string; sessions: SessionEntry[] }
+);
 
 export type SidebarBody =
   | { kind: "loading" }
@@ -165,6 +173,21 @@ function ownerKey(
 }
 
 /**
+ * What a section's rows show beneath their titles. A folder group names the folder, so its rows
+ * add only the branch, and none at all when no row has one (a non-Git folder): an empty line
+ * would only make every row taller.
+ */
+function rowDetails(
+  view: SidebarView,
+  sessions: readonly SessionEntry[],
+  folderNamed = false,
+): SessionRowDetails | undefined {
+  if (!view.folderAndBranch) return undefined;
+  if (!folderNamed) return "folder-and-branch";
+  return sessions.some((s) => s.branch) ? "branch" : undefined;
+}
+
+/**
  * One catalog for every grouping, so switching the grouping never changes which sessions are
  * listed. A pinned session shows only under Pinned; the groupings take the listed rest.
  */
@@ -182,7 +205,12 @@ function buildList(
   );
   const pinned: PinnedSection | null =
     pinnedSessions.length > 0
-      ? { key: PINNED, open: isOpen(PINNED), sessions: pinnedSessions }
+      ? {
+          key: PINNED,
+          open: isOpen(PINNED),
+          sessions: pinnedSessions,
+          details: rowDetails(view, pinnedSessions),
+        }
       : null;
   const listed = catalog.filter(inSidebarGroups);
   const empty = (text: string): SidebarList => ({
@@ -204,6 +232,7 @@ function buildList(
           open: isOpen(folder.path),
           folder,
           sessions,
+          details: rowDetails(view, sessions, true),
         })),
       );
     case "project": {
@@ -213,7 +242,8 @@ function buildList(
       return sections(
         groups.map(({ project, sessions }) => {
           const key = projectKey(project?.id ?? "");
-          return { kind: "project", key, open: isOpen(key), project, sessions };
+          const details = rowDetails(view, sessions);
+          return { kind: "project", key, open: isOpen(key), project, sessions, details };
         }),
       );
     }
@@ -223,7 +253,8 @@ function buildList(
       return sections(
         groups.map(({ label, sessions }) => {
           const key = dateKey(label);
-          return { kind: "date", key, open: isOpen(key), label, sessions };
+          const details = rowDetails(view, sessions);
+          return { kind: "date", key, open: isOpen(key), label, sessions, details };
         }),
       );
     }
@@ -231,7 +262,8 @@ function buildList(
       // No grouping; a stored view is not validated, so an unknown grouping lists the same way.
       const sessions = sortSessions(listed, view.sortBy);
       if (sessions.length === 0) return empty(NO_SESSIONS);
-      return sections([{ kind: "list", key: "list", sessions }]);
+      const details = rowDetails(view, sessions);
+      return sections([{ kind: "list", key: "list", sessions, details }]);
     }
   }
 }

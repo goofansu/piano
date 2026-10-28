@@ -411,6 +411,48 @@ test("sidebar list: a pinned session shows only under Pinned, even when its fold
   assert.deepEqual(rows("date").sections, [["date:Yesterday", ["Unfiled"]]]);
 });
 
+test("sidebar list: folder and branch adds a line only where a row has something to show", () => {
+  const { model } = sidebar();
+  const plain: FolderView = {
+    ...folder("/notes"),
+    worktrees: [{ ...folder("/notes").worktrees[0]!, branch: null, status: "non-git" }],
+    discovery: { status: "non-git", observedAt: "" },
+  };
+  const state: AppState = {
+    ...loaded,
+    folders: [folder("/repo"), plain],
+    sessionReferences: [
+      sessionReference("/repo", "git", { title: "Git", branch: "main" }),
+      sessionReference("/notes", "plain", { title: "Plain", branch: null }),
+      sessionReference("/notes", "pinned", { title: "Pinned", branch: null, pinned: true }),
+    ],
+  };
+  const details = (groupBy: GroupBy, folderAndBranch = true) => {
+    const list = model.list(state, { ...view(groupBy), folderAndBranch });
+    return {
+      pinned: list.pinned?.details,
+      sections:
+        list.body?.kind === "sections" ? list.body.sections.map((s) => [s.key, s.details]) : [],
+    };
+  };
+  // A folder group names its folder; a non-Git folder's rows have no branch, so no line at all.
+  assert.deepEqual(details("folder"), {
+    pinned: "folder-and-branch",
+    sections: [
+      ["/notes", undefined],
+      ["/repo", "branch"],
+    ],
+  });
+  assert.deepEqual(details("none").sections, [["list", "folder-and-branch"]]);
+  assert.deepEqual(details("folder", false), {
+    pinned: undefined,
+    sections: [
+      ["/notes", undefined],
+      ["/repo", undefined],
+    ],
+  });
+});
+
 test("sidebar list: a project without members is listed with the No project group, not the empty state", () => {
   const { model } = sidebar();
   const state: AppState = { ...loaded, projects: [{ id: "launch", name: "Launch" }] };
