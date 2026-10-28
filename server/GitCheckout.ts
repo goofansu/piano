@@ -6,7 +6,8 @@
  * (a remote URL after `url.<base>.insteadOf`) opts back into global and system config with
  * `userConfig`; inherited GIT_* state stays cleared. Output is bounded, UTF-8 checked and NUL lists
  * must be complete; repository paths must be relative and stay out of embedded repositories.
- * `observeGit` is the one answer to "is this path a Git checkout, and of what branch".
+ * `observeGit` is the one answer to "is this path a Git checkout, and of what branch", and
+ * `Upstream` to "where does that branch's work go".
  */
 import { lstat, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
@@ -100,6 +101,31 @@ export const gitText = Effect.fn("GitCheckout.gitText")(function* (
 /** The checked-out branch, empty when detached (an unborn branch still has its name). */
 const BRANCH = ["branch", "--show-current"];
 
+/** Where a branch's work goes and is counted: the one answer for discovery, comparison targets
+ * and commits not pushed. */
+export interface Upstream {
+  /** The remote the branch tracks, else `origin`. */
+  readonly remote: string;
+  /** The remote-tracking ref Git would hold for it: its configured upstream when that is on a
+   * remote, else `refs/remotes/origin/<branch>`. Git may not hold it. */
+  readonly ref: string;
+}
+
+const upstreamRead = (branch: string) => [
+  "for-each-ref",
+  "--format=%(upstream:remotename)%00%(upstream)",
+  `refs/heads/${branch}`,
+];
+
+/** `branch`'s upstream from `upstreamRead`'s answer; a local upstream (remote `.`) counts as none. */
+function upstreamOf(branch: string, answer: string): Upstream {
+  const [remote = "", ref = ""] = answer.trim().split("\0");
+  return {
+    remote: remote && remote !== "." ? remote : "origin",
+    ref: ref.startsWith("refs/remotes/") ? ref : `refs/remotes/origin/${branch}`,
+  };
+}
+
 /** What Git says about a path: outside any repository, inside a working checkout, or `broken`:
  * metadata Git cannot read, a bare repository, a missing directory, a failed or timed-out read. */
 export type GitObservation =
@@ -175,18 +201,11 @@ export const observeGit = Effect.fn("GitCheckout.observeGit")(function* (
     const branch = (yield* read(BRANCH)).trim() || null;
     if (!options.remote) return { ...checkout, branch };
     const tracking = branch
-      ? (yield* read([
-          "for-each-ref",
-          "--format=%(upstream:remotename)",
-          `refs/heads/${branch}`,
-        ])).trim()
-      : "";
+      ? upstreamOf(branch, yield* read(upstreamRead(branch))).remote
+      : "origin";
     // The one read whose answer the user's Git config defines (e.g. an exe.dev integration
     // proxy configured globally), so it keeps user config.
-    const remote = yield* read(
-      ["remote", "get-url", tracking && tracking !== "." ? tracking : "origin"],
-      true,
-    ).pipe(
+    const remote = yield* read(["remote", "get-url", tracking], true).pipe(
       Effect.map((out) => out.trim() || null),
       Effect.catchIf(
         (e) => e.detail.includes("No such remote"),
@@ -253,6 +272,8 @@ export interface Checkout {
   readonly head: () => Promise<string | null>;
   /** The checked-out branch, or null when detached. */
   readonly branch: () => Promise<string | null>;
+  /** Where `branch`'s work goes and is counted. */
+  readonly upstream: (branch: string) => Promise<Upstream>;
   /** The URL Git would contact, including user-config rewrites; null without that remote. */
   readonly remoteUrl: (name: string) => Promise<string | null>;
   /** The same checkout with added `-c` config or environment (a disposable GIT_INDEX_FILE). */
@@ -321,6 +342,8 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
           : path,
       head: () => optional(["rev-parse", "--verify", "--quiet", "HEAD"]),
       branch: async () => decode((await run(BRANCH)).stdout).trim() || null,
+      upstream: async (branch) =>
+        upstreamOf(branch, decode((await run(upstreamRead(branch))).stdout)),
       remoteUrl: async (name) => {
         try {
           return (
