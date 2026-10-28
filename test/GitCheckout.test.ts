@@ -58,11 +58,15 @@ test("INV-06: the Git observation tells non-Git paths from broken metadata and n
   const notes = join(root, "notes");
   mkdirSync(notes);
   assert.deepEqual(await observe(notes), { status: "non-git" });
-  // Git also says "not a git repository" here; the `.git` entry makes it broken, not non-Git.
+  // Older Git says "not a git repository"; Git 2.56 names the invalid gitfile. Either way,
+  // the `.git` entry makes this broken, not non-Git, and its diagnostic must survive.
   writeFileSync(join(notes, ".git"), "gitdir: /not/a/repository\n");
   const brokenFile = await observe(notes);
   assert.equal(brokenFile.status, "broken");
-  assert.match(brokenFile.status === "broken" ? brokenFile.detail : "", /not a git repository/);
+  assert.match(
+    brokenFile.status === "broken" ? brokenFile.detail : "",
+    /not a git repository|gitfile does not point to a valid repository/,
+  );
   assert.equal((await observe(join(root, "missing"))).status, "broken");
   const bare = join(root, "bare.git");
   mkdirSync(bare);
