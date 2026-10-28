@@ -244,9 +244,11 @@ test("branch scope: a commit or push keeps the branch's patch; advancing only th
   const advanced = ready(await read({ scope: "branch", hints }));
   assert.equal(advanced.diff, before.diff);
   assert.equal(advanced.comparison.base, before.comparison.base);
-  // Without a scope the automatic one is Branch; with no hint and no remote, a local main is assumed.
-  assert.equal(ready(await read({ hints })).comparison.scope, "branch");
-  const assumed = ready(await read({}));
+  // Without a scope, Uncommitted stays the default even when Branch can be read.
+  assert.equal(ready(await read({ hints })).comparison.scope, "uncommitted");
+  assert.deepEqual(ready(await read({})).files, []);
+  // Explicit Branch still resolves a local main when there is no hint or remote.
+  const assumed = ready(await read({ scope: "branch" }));
   assert.equal(assumed.comparison.target?.from, "assumed");
   assert.equal(assumed.comparison.target?.ref, "refs/heads/main");
   // A per-file read names the same comparison, so the browser can refuse one that moved.

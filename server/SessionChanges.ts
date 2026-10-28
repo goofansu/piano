@@ -1,6 +1,6 @@
 /**
  * The selected session's Changes: the checkout it inspects (its own), the comparison it reads
- * (the session's saved scope, else the automatic one) and the identities that name a branch's
+ * (the session's saved scope, else Uncommitted) and the identities that name a branch's
  * target: the session's pull request branches as GitHub last reported them, and the base branch
  * Worktrunk reported when Piano created the worktree. Git owns the facts through
  * WorkspaceChanges; the registry holds only the session's choice (INV-01).
@@ -12,7 +12,7 @@ import { Registry, type RegistryError, type SessionEntry } from "./Registry.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 
 export interface SessionChangesOptions {
-  /** The comparison for this read; without it, the session's saved scope, else the automatic one. */
+  /** The comparison for this read; without it, the session's saved scope, else Uncommitted. */
   readonly scope?: ChangesScope;
   /** One file's fresh patch instead of the whole change. */
   readonly path?: string;
@@ -27,7 +27,7 @@ export class SessionChanges extends Context.Service<
       session: SessionEntry,
       options?: SessionChangesOptions,
     ) => Effect.Effect<Observation>;
-    /** Save the session's scope (`null` returns it to the automatic one) and read with it. */
+    /** Save the session's scope (`null` restores the Uncommitted default) and read with it. */
     readonly setScope: (
       workspace: Workspace,
       session: SessionEntry,

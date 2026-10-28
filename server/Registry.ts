@@ -77,7 +77,7 @@ const SessionEntry = Schema.Struct({
   archived: Schema.Boolean,
   /** Sidebar preference; absent means unpinned. */
   pinned: Schema.optional(Schema.Boolean),
-  /** Changes preference: the comparison the user chose; absent means the automatic one. */
+  /** Changes preference: the comparison the user chose; absent means Uncommitted. */
   changesScope: Schema.optional(ChangesScope),
   /** Replaceable last-known Pi accounting, not session history. */
   stats: Schema.optional(SessionStats),
@@ -367,7 +367,7 @@ export class Registry extends Context.Service<
       sessionId: string,
       pinned: boolean,
     ) => Effect.Effect<void, RegistryError>;
-    /** Save the comparison Changes opens the session on; `undefined` returns it to the automatic one. */
+    /** Save the comparison Changes opens the session on; `undefined` restores the Uncommitted default. */
     readonly setSessionChangesScope: (
       cwd: string,
       sessionId: string,

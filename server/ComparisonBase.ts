@@ -29,8 +29,6 @@ export interface Comparisons {
   /** The comparison for `scope`, or the reason it is unavailable; `uncommitted` always has one. */
   readonly of: ((scope: "uncommitted") => { comparison: Comparison }) &
     ((scope: ChangesScope) => { comparison: Comparison } | { unavailable: string });
-  /** The scope Changes opens on when none was chosen: `branch` when it can be read. */
-  readonly automatic: ChangesScope;
 }
 
 /** The commit `ref` names, or null when Git holds no such ref. */
@@ -179,6 +177,5 @@ export async function resolveComparisons(
     branch,
     scopes,
     of: of as Comparisons["of"],
-    automatic: "comparison" in forBranch ? "branch" : "uncommitted",
   };
 }

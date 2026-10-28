@@ -44,6 +44,7 @@ async function fixture(t: TestContext) {
     registry.addWorktree({ folder: repo, path: worktree, branch: "feature", baseBranch: "main" }),
   );
   await runtime.runPromise(registry.addSession(worktree, "one"));
+  await runtime.runPromise(registry.addSession(worktree, "two"));
   await runtime.runPromise(registry.addSession(repo, "root"));
   t.after(async () => {
     await runtime.dispose();
@@ -83,14 +84,14 @@ function ready(value: Observation) {
 
 test("a session's Changes compare its worktree with the base Piano recorded, keep committed work, and follow a linked pull request's base", async (t) => {
   const f = await fixture(t);
-  const auto = ready(await f.read(f.worktree, "one"));
-  assert.equal(auto.comparison.scope, "branch");
+  const branch = ready(await f.setScope(f.worktree, "one", "branch"));
+  assert.equal(branch.comparison.scope, "branch");
   assert.deepEqual(
-    [auto.comparison.target?.name, auto.comparison.target?.from],
+    [branch.comparison.target?.name, branch.comparison.target?.from],
     ["main", "worktree"],
   );
   assert.deepEqual(
-    auto.files.map((file) => file.path),
+    branch.files.map((file) => file.path),
     ["a"],
   );
   assert.deepEqual(ready(await f.read(f.worktree, "one", { scope: "uncommitted" })).files, []);
@@ -111,29 +112,32 @@ test("a session's Changes compare its worktree with the base Piano recorded, kee
     [fromPr.comparison.target?.name, fromPr.comparison.target?.from],
     ["release", "pull-request"],
   );
-  // On the folder's root, main is the target itself: automatic is Uncommitted; Branch says why.
+  // On the folder's root, main is the target itself: explicit Branch still says why.
   assert.equal(ready(await f.read(f.repo, "root")).comparison.scope, "uncommitted");
   const refused = await f.read(f.repo, "root", { scope: "branch" });
   assert.equal(refused.result.status, "unavailable");
 });
 
-test("the chosen scope is saved for the session and read with until returned to automatic", async (t) => {
+test("Uncommitted is the default; a saved branch choice overrides it only for that session", async (t) => {
   const f = await fixture(t);
-  assert.equal(
-    ready(await f.setScope(f.worktree, "one", "uncommitted")).comparison.scope,
-    "uncommitted",
-  );
-  assert.equal(ready(await f.read(f.worktree, "one")).comparison.scope, "uncommitted");
+  const initial = ready(await f.read(f.worktree, "one"));
+  assert.equal(initial.comparison.scope, "uncommitted");
+  assert.deepEqual(initial.files, []);
+  assert.equal(initial.scopes.find((scope) => scope.scope === "branch")?.available, true);
+  assert.equal(ready(await f.setScope(f.worktree, "one", "branch")).comparison.scope, "branch");
+  assert.equal(ready(await f.read(f.worktree, "one")).comparison.scope, "branch");
+  assert.equal(ready(await f.read(f.worktree, "two")).comparison.scope, "uncommitted");
   const saved = (await f.runtime.runPromise(f.registry.get)).sessions.find(
     (s) => s.sessionId === "one",
   );
-  assert.equal(saved?.changesScope, "uncommitted");
+  assert.equal(saved?.changesScope, "branch");
   // A read may still ask for another scope without changing the saved one.
   assert.equal(
-    ready(await f.read(f.worktree, "one", { scope: "branch" })).comparison.scope,
-    "branch",
+    ready(await f.read(f.worktree, "one", { scope: "uncommitted" })).comparison.scope,
+    "uncommitted",
   );
-  assert.equal(ready(await f.setScope(f.worktree, "one", null)).comparison.scope, "branch");
+  assert.equal(ready(await f.read(f.worktree, "one")).comparison.scope, "branch");
+  assert.equal(ready(await f.setScope(f.worktree, "one", null)).comparison.scope, "uncommitted");
   const cleared = (await f.runtime.runPromise(f.registry.get)).sessions.find(
     (s) => s.sessionId === "one",
   );

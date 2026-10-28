@@ -25,8 +25,7 @@ type Summary = Omit<Ready, "diff" | "truncated">;
 /** A preview's facts without its patch: what a status read carries. */
 export type ChangesSummary = CheckoutObservation<Summary | Unavailable>;
 
-/** What to compare, and for which file. Without `scope`, the automatic one: `branch` when the
- * checkout's target can be read, else `uncommitted`. */
+/** What to compare, and for which file. Without `scope`, use `uncommitted`. */
 export interface PreviewOptions {
   readonly scope?: ChangesScope;
   readonly hints?: TargetHints;
@@ -76,7 +75,7 @@ async function preview(
   if (path !== undefined) checkout.safePath(path);
   const comparisons = await resolveComparisons(checkout, options.hints);
   const { head, branch, scopes } = comparisons;
-  const scope = options.scope ?? comparisons.automatic;
+  const scope = options.scope ?? "uncommitted";
   const resolved = comparisons.of(scope);
   if ("unavailable" in resolved)
     return { status: "unavailable", head, branch, scope, detail: resolved.unavailable, scopes };

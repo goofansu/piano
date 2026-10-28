@@ -248,7 +248,7 @@ export const Endpoints = {
     response: WorkspaceChanges,
     fallback: (status) => `File request failed (${status}).`,
   }),
-  /** Save the session's scope (`null` for the automatic one) and answer with a fresh read. */
+  /** Save the session's scope (`null` for the Uncommitted default) and answer with a fresh read. */
   setSessionChangesScope: endpoint({
     method: "PUT",
     path: "/api/session/changes",
