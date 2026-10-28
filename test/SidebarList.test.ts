@@ -536,6 +536,29 @@ test("sidebar list: a session being started opens its project's group once its r
   assert.doesNotMatch(items.get("piano.openProjects") ?? "", /"project:"/, "nor on the next load");
 });
 
+test("sidebar list: selecting an archived session opens no section, since none lists it", () => {
+  const { model, items } = sidebar();
+  const archived = selecting(
+    {
+      ...registry,
+      sessionReferences: [
+        sessionReference("/work/repo.feature", "s1", { projectId: "p1", archived: true }),
+      ],
+    },
+    "/work/repo.feature",
+    "s1",
+  );
+  for (const groupBy of GROUPINGS) {
+    model.sync(archived, view(groupBy));
+    assert.deepEqual(
+      openness(model.list(archived, view(groupBy))).filter(([, open]) => open === true),
+      [],
+      groupBy,
+    );
+  }
+  assert.equal(items.get("piano.openProjects"), undefined, "nor on the next load");
+});
+
 test("sidebar list: a registry refresh never reopens a section the user collapsed; a new selection, grouping or owner does", () => {
   const { model, changes } = sidebar();
   const selected = selecting(registry, "/work/repo.feature", "s1");
