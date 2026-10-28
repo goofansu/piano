@@ -96,7 +96,7 @@ export function SessionView({ state, send }: Props) {
     [t?.tools],
   );
   const input = state.pendingCreate;
-  const { workspace, draftKey, pullRequest: link } = sessionContext(state);
+  const { pullRequestWorkspace, draftKey, pullRequest: link } = sessionContext(state);
   const { commands } = useSessionCommands();
   // The area tabs show where the Agent command is offered; only then is each area their panel.
   const areaTabs = !!commands.find((c) => c.id === "agent")?.enabled;
@@ -109,13 +109,13 @@ export function SessionView({ state, send }: Props) {
         requestAnimationFrame(() => agent.current?.querySelector("textarea")?.focus());
       }
     : undefined;
-  // The registry's workspace for the directory, like Changes: it outlives a closed folder. Its
-  // reference says whether the session is linked, so an unlinked one asks GitHub nothing.
-  // The pull request row shows in Changes: its details are on screen while Changes is. Its
-  // refreshes follow the session's one working rule, the sidebar's.
+  // The pull request lives in Changes: it is followed only where Changes can open, and its
+  // details are on screen while Changes is. Its reference says whether the session is linked,
+  // so an unlinked one asks GitHub nothing. Its refreshes follow the session's one working
+  // rule, the sidebar's.
   const changesVisible = navigation.shownTab === "changes";
   const pullRequest = useSessionPullRequest(
-    workspace?.id,
+    pullRequestWorkspace?.id,
     t?.sessionId,
     link,
     !!t?.sessionId && sessionWorking(state, { cwd: t.cwd, sessionId: t.sessionId }),
