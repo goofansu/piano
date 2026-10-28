@@ -520,6 +520,7 @@ export const WorkspaceChanges = Schema.Struct({
       scope: ChangesScope,
       detail: Schema.String,
       scopes: Schema.Array(ScopeAvailability),
+      local: LocalWork,
     }),
     Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
   ]),
