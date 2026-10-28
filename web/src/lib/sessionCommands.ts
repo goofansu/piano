@@ -260,7 +260,7 @@ export function sessionCommands(
     const messagesOnly = options.messagesOnly ?? false;
     const { single, agentTab, rail } = options.layout ?? AGENT_ONLY;
     const sessionPath = session.state.sessionFile;
-    const linked = !!(ref && sessionReference(state, ref)?.pullRequest);
+    const linked = !!ctx.pullRequest;
     commands.push(
       {
         id: "copy-working-directory",

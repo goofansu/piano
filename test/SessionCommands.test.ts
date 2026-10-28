@@ -145,6 +145,7 @@ test("session command availability: settled, disconnected, resyncing, missing ch
   const noWorkspace = enabled({ ...base, workspaces: [] });
   assert.equal(noWorkspace.changes, false);
   assert.equal(noWorkspace["pull-request"], true);
+  assert.equal(changesOf({ ...base, workspaces: [] }), "Changes unavailable");
 
   // Starting a session: no Pi session ID yet, so nothing names it.
   const unnamed = enabled({
