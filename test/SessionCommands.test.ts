@@ -455,3 +455,32 @@ test("view commands follow the session's layout: the session rail side by side, 
     { changes: true, "session-rail": false, agent: false },
   );
 });
+
+test("a linked pull request opens only where Changes can, and says why not", () => {
+  const pullRequest = { url: "https://github.com/acme/repo/pull/1", source: "manual" } as const;
+  const at = (extra: Parameters<typeof sessionReference>[2]) => {
+    const state: AppState = {
+      ...base,
+      sessionReferences: [
+        sessionReference("/work/repo.feature", "s1", { branch: "feature", ...extra }),
+      ],
+    };
+    const command = sessionCommands(state).find((c) => c.id === "pull-request")!;
+    const changes = sessionCommands(state).find((c) => c.id === "changes")!;
+    return { command, changes };
+  };
+
+  const present = at({ pullRequest });
+  assert.equal(present.command.enabled, true);
+  assert.deepEqual(present.command.intent, { kind: "pull-request", linked: true });
+
+  const removed = at({ pullRequest, unavailable: "checkout" });
+  assert.equal(removed.changes.enabled, false);
+  assert.equal(removed.command.enabled, false);
+  assert.equal(removed.command.detail, removed.changes.detail);
+
+  // Unlinked, the command opens the dialog that links one, which needs no checkout.
+  const unlinked = at({ unavailable: "checkout" });
+  assert.equal(unlinked.command.enabled, true);
+  assert.deepEqual(unlinked.command.intent, { kind: "pull-request", linked: false });
+});

@@ -57,6 +57,7 @@ export interface CommandEffects {
   openChanges: () => void;
   toggleRail: () => void;
   showAgent: () => void;
+  /** The dialog that links a pull request to the selected session. */
   openPullRequest: () => void;
   toggleSidebar: () => void;
   setAppearance: (appearance: Appearance) => void;
@@ -133,7 +134,8 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       effects.showAgent();
       break;
     case "pull-request":
-      effects.openPullRequest();
+      if (intent.linked) effects.openChanges();
+      else effects.openPullRequest();
       break;
     case "open-url":
       effects.openUrl(intent.url);

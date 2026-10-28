@@ -56,6 +56,23 @@ const selected: AppState = {
   },
 };
 
+/** `selected`, linked to a pull request: it is read in Changes. */
+const linked: AppState = {
+  ...selected,
+  sessionReferences: [
+    {
+      cwd: "/repo",
+      sessionId: "s1",
+      workspaceId: "ws:/repo",
+      branch: "main",
+      archived: false,
+      createdAt: "2026-10-01T00:00:00Z",
+      updatedAt: "2026-10-01T00:00:00Z",
+      pullRequest: { url: "https://github.com/acme/repo/pull/1", source: "manual" },
+    },
+  ],
+};
+
 /** Runs `command` against effects that record each call by name. */
 function effectsOf(command: Command) {
   const calls: unknown[][] = [];
@@ -143,6 +160,8 @@ test("enabled commands reach the effect their intent names", () => {
     ],
     [byId(sessionCommands(selected), "changes"), ["openChanges"]],
     [byId(sessionCommands(selected), "session-rail"), ["toggleRail"]],
+    [byId(sessionCommands(selected), "pull-request"), ["openPullRequest"]],
+    [byId(sessionCommands(linked), "pull-request"), ["openChanges"]],
   ];
   for (const [command, call] of cases)
     assert.deepEqual(effectsOf(command), { ran: true, calls: [call] }, command.label);

@@ -81,7 +81,8 @@ export type SessionCommandIntent =
   /** Show the Agent area in a single-view layout. */
   | { kind: "agent" }
   | { kind: "wrap-changes"; on: boolean }
-  | { kind: "pull-request" }
+  /** Read a linked pull request in Changes, or link one in its dialog. */
+  | { kind: "pull-request"; linked: boolean }
   /** Open the app in a new tab. */
   | { kind: "open-url"; url: string }
   | { kind: "preview-details" }
@@ -208,7 +209,8 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  *   rail".
  * - agent: the session is laid out one area at a time and the Agent tab shows, beside an open
  *   Surface tab.
- * - pull request, copy session ID: the selected session has a Pi session ID.
+ * - pull request, copy session ID: the selected session has a Pi session ID; a linked pull
+ *   request is read in Changes, so it also follows Changes' rule and says why not.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
  *   an app; open needs its link, stop needs the attachment (`sessionReady`).
  * - new session here: the checkout is present.
@@ -237,6 +239,7 @@ export function sessionCommands(
     const messagesOnly = options.messagesOnly ?? false;
     const { single, agentTab, rail } = options.layout ?? AGENT_ONLY;
     const sessionPath = session.state.sessionFile;
+    const linked = !!(ref && sessionReference(state, ref)?.pullRequest);
     commands.push(
       {
         id: "copy-working-directory",
@@ -314,9 +317,11 @@ export function sessionCommands(
         id: "pull-request",
         label: "Pull request",
         icon: "pull-request",
-        enabled: !!session.sessionId,
+        // A linked pull request is read in Changes, so it opens only where Changes can.
+        enabled: !!session.sessionId && (!linked || ctx.canOpenChanges),
+        detail: linked ? ctx.changesUnavailable : undefined,
         keywords: ["pr"],
-        intent: { kind: "pull-request" },
+        intent: { kind: "pull-request", linked },
       },
       ...previewCommands(state),
       {
