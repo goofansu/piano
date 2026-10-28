@@ -1,4 +1,5 @@
 import { cn } from "cn";
+import { TargetIcon } from "lucide-react";
 import { useCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { PaneBody, PaneHeader, PaneHeading } from "@/components/Pane";
@@ -6,7 +7,7 @@ import { ProjectCommandsMenu } from "@/components/Projects";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { SettingsList, settingsRow } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
@@ -43,7 +44,7 @@ export function ProjectsIndex({ state }: { state: AppState }) {
         </PaneHeading>
       </PaneHeader>
       <PaneBody>
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6">
           {index.kind === "loading" ? (
             <div aria-hidden className="late-enter flex flex-col gap-2">
               <Skeleton className="h-14 w-full rounded-lg" />
@@ -52,7 +53,10 @@ export function ProjectsIndex({ state }: { state: AppState }) {
           ) : index.rows.length === 0 ? (
             <Empty className="py-8">
               <EmptyHeader>
-                <EmptyDescription>No projects yet</EmptyDescription>
+                <EmptyMedia variant="icon">
+                  <TargetIcon aria-hidden />
+                </EmptyMedia>
+                <EmptyTitle>No projects yet</EmptyTitle>
               </EmptyHeader>
             </Empty>
           ) : (

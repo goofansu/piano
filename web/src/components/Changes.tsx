@@ -166,7 +166,7 @@ export function ChangesPanel({
         </>
       }
     >
-      <div className="flex flex-col">
+      <div className="flex min-h-full flex-col">
         <SheetBodyView
           body={unavailable ? { kind: "unavailable", reason: unavailable } : body}
           readFile={readFile}
