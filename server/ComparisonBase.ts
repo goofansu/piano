@@ -26,6 +26,8 @@ export interface TargetHints {
 export interface Comparisons {
   readonly head: string | null;
   readonly branch: string | null;
+  /** The hinted pull request was opened from this branch: its head, on the branch's remote. */
+  readonly pullRequestFromBranch: boolean;
   readonly scopes: ScopeAvailability[];
   /** The comparison for `scope`, or the reason it is unavailable; `uncommitted` always has one. */
   readonly of: ((scope: "uncommitted") => { comparison: Comparison }) &
@@ -54,14 +56,16 @@ async function namedTarget(
   return null;
 }
 
-/** The branch as GitHub would know it, or null when its remote is not on GitHub. */
-async function branchHead(
+/** The branch as GitHub knows it when `pr` was opened from it, else null: no PR came from a
+ * branch whose remote is not on GitHub. */
+async function fromBranch(
   checkout: Checkout,
   { remote, name }: Upstream,
+  pr: NonNullable<TargetHints["pullRequest"]>,
 ): Promise<BranchHead | null> {
   const url = await checkout.remoteUrl(remote);
   const repo = url ? githubRemote(url)?.repo : undefined;
-  return repo ? { name, repo } : null;
+  return repo && isFromBranch(pr, { name, repo }) ? { name, repo } : null;
 }
 
 /** The base of a PR opened from this branch, held under a remote naming the base repository,
@@ -112,15 +116,13 @@ async function remoteDefault(checkout: Checkout, remote: string): Promise<Compar
  */
 async function resolveTarget(
   checkout: Checkout,
-  branch: string,
+  upstream: Upstream,
+  head: BranchHead | null,
   hints: TargetHints,
 ): Promise<ComparisonTarget | null> {
-  const upstream = await checkout.upstream(branch);
   const { remote } = upstream;
-  const pr = hints.pullRequest;
-  const head = pr ? await branchHead(checkout, upstream) : null;
-  if (pr && head && isFromBranch(pr, head)) {
-    const target = await pullRequestTarget(checkout, upstream, head, pr);
+  if (head && hints.pullRequest) {
+    const target = await pullRequestTarget(checkout, upstream, head, hints.pullRequest);
     if (target) return target;
   }
   if (hints.worktreeBase) {
@@ -136,18 +138,21 @@ async function resolveTarget(
   return null;
 }
 
-/** The `branch` scope for a checkout on `branch` at `head`: its comparison, or why there is none. */
+/** The `branch` scope for a checkout on `branch` at `head`: its comparison, or why there is none.
+ * `pullRequestHead` is the branch as GitHub knows it when the hinted PR was opened from it. */
 async function branchScope(
   checkout: Checkout,
   head: string | null,
-  branch: string | null,
+  branch: { readonly name: string; readonly upstream: Upstream } | null,
+  pullRequestHead: BranchHead | null,
   hints: TargetHints,
 ): Promise<{ comparison: Comparison } | { unavailable: string; target?: ComparisonTarget }> {
   if (!head) return { unavailable: "No commits yet." };
   if (!branch) return { unavailable: "Detached HEAD." };
-  const target = await resolveTarget(checkout, branch, hints);
+  const target = await resolveTarget(checkout, branch.upstream, pullRequestHead, hints);
   if (!target) return { unavailable: "No base branch known." };
-  if (target.name === branch) return { unavailable: `${branch} is the base branch.`, target };
+  if (target.name === branch.name)
+    return { unavailable: `${branch.name} is the base branch.`, target };
   const bases = await checkout.run(["merge-base", "--all", target.commit, head], {
     okCodes: [0, 1],
   });
@@ -191,7 +196,16 @@ export async function resolveComparisons(
         })
       ).trim(),
   };
-  const forBranch = await branchScope(checkout, head, branch, hints);
+  const upstream = branch ? await checkout.upstream(branch) : null;
+  const pullRequestHead =
+    upstream && hints.pullRequest ? await fromBranch(checkout, upstream, hints.pullRequest) : null;
+  const forBranch = await branchScope(
+    checkout,
+    head,
+    branch && upstream ? { name: branch, upstream } : null,
+    pullRequestHead,
+    hints,
+  );
   const scopes: ScopeAvailability[] = [
     "comparison" in forBranch
       ? { scope: "branch", available: true, target: forBranch.comparison.target }
@@ -208,6 +222,7 @@ export async function resolveComparisons(
   return {
     head,
     branch,
+    pullRequestFromBranch: pullRequestHead !== null,
     scopes,
     of: of as Comparisons["of"],
   };

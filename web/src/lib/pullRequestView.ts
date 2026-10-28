@@ -93,7 +93,7 @@ export interface PullRequestRow {
   /** No badge during the first read; an unreadable status still has one. */
   status: { state: PullRequest["state"] | undefined; label: string } | undefined;
   signals: PullRequestView["signals"];
-  /** The pull request's branches, only when its head is not the branch Changes inspects. */
+  /** The pull request's branches, only when it was not opened from the branch Changes inspects. */
   branches: PullRequestView["branches"];
   /** Values, each shown only when nonzero: commits not pushed, edits not committed. */
   local: string[];
@@ -102,10 +102,10 @@ export interface PullRequestRow {
 export function pullRequestRow(
   view: PullRequestView,
   {
-    branch,
+    fromBranch,
     local,
     loading = false,
-  }: { branch: string | undefined; local: LocalWork | undefined; loading?: boolean },
+  }: { fromBranch: boolean | undefined; local: LocalWork | undefined; loading?: boolean },
 ): PullRequestRow {
   const { number, status } = view;
   return {
@@ -114,7 +114,7 @@ export function pullRequestRow(
     url: view.url,
     status: status ?? (loading ? undefined : { state: undefined, label: STATUS_UNAVAILABLE }),
     signals: view.signals,
-    branches: view.branches && view.branches.head !== branch ? view.branches : undefined,
+    branches: fromBranch ? undefined : view.branches,
     local: localWorkFacts(local),
   };
 }

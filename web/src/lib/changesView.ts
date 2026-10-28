@@ -15,7 +15,6 @@ import type {
 } from "@shared/wire";
 import { CHANGES_FILE_PATCH_BYTES } from "../../../shared/wire.ts";
 import { type DiffFile, lineCount, parseUnifiedDiff } from "./diff.ts";
-import { DETACHED_HEAD } from "./format.ts";
 
 export type ReadyResult = Extract<WorkspaceChanges["result"], { status: "ready" }>;
 export type UnavailableResult = Extract<WorkspaceChanges["result"], { status: "unavailable" }>;
@@ -213,7 +212,8 @@ export interface ChangesSheetView {
   changes?: ReadyChanges;
   /** The comparison on screen and the menu's choices, from the last answer, ready or not. */
   scope?: ScopeView;
-  branch?: string;
+  /** The session's linked pull request was opened from the branch Changes inspects. */
+  pullRequestFromBranch?: boolean;
   /** What is still only local, from the last answer, ready or not: shown whatever the scope. */
   local?: LocalWork;
   /** A re-read is in flight while a read is on screen. */
@@ -256,7 +256,7 @@ export function changesSheet({
     return {
       changes,
       scope: scopeView(result),
-      branch: result.branch ?? DETACHED_HEAD,
+      pullRequestFromBranch: result.pullRequestFromBranch,
       local: result.local,
       refreshing: busy,
       staleNote: error
@@ -270,7 +270,7 @@ export function changesSheet({
     // The scope asked for cannot be read here; the menu offers the others, never a quiet swap.
     return {
       scope: scopeView(result),
-      branch: result.branch ?? DETACHED_HEAD,
+      pullRequestFromBranch: result.pullRequestFromBranch,
       local: result.local,
       refreshing: busy,
       staleNote: error

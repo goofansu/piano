@@ -41,6 +41,7 @@ const changes = (
     status: "ready",
     head: "abc",
     branch: "main",
+    pullRequestFromBranch: false,
     comparison: { scope: "uncommitted", base: "abc" },
     scopes: [
       { scope: "branch", available: false, reason: "main is the base branch." },
@@ -237,7 +238,7 @@ test("a refresh keeps a collapsed file collapsed and an opened large file open",
 test("a failed refresh keeps the previous files with a stale note", () => {
   const view = sheet(changes([["a.ts", 2]]), { error: "network down" });
   assert.equal(view.body.kind, "files");
-  assert.equal(view.branch, "main");
+  assert.equal(view.pullRequestFromBranch, false);
   assert.deepEqual(view.staleNote, {
     text: "Refresh failed. Showing previous changes.",
     detail: "network down",
@@ -250,7 +251,7 @@ test("a first read that fails shows one unavailable body and nothing of a read",
   const view = sheet(null, { error: "not a git repository" });
   assert.deepEqual(view.body, { kind: "failed", detail: "not a git repository" });
   assert.equal(view.staleNote, undefined);
-  assert.equal(view.branch, undefined);
+  assert.equal(view.pullRequestFromBranch, undefined);
   assert.equal(view.changes, undefined);
   assert.deepEqual(toggleEvery(initialDisclosure, view), initialDisclosure);
 });
@@ -342,6 +343,7 @@ test("an unavailable scope is the body's reason, with the menu still offering th
       status: "unavailable",
       head: "abc",
       branch: "main",
+      pullRequestFromBranch: false,
       scope: "branch",
       detail: "main is the base branch.",
       scopes: [

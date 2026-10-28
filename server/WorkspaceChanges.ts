@@ -80,7 +80,7 @@ async function preview(
 ): Promise<Ready | Summary | Unavailable> {
   if (path !== undefined) checkout.safePath(path);
   const comparisons = await resolveComparisons(checkout, options.hints);
-  const { head, branch, scopes } = comparisons;
+  const { head, branch, pullRequestFromBranch, scopes } = comparisons;
   const scope = options.scope ?? "uncommitted";
   const resolved = comparisons.of(scope);
   if ("unavailable" in resolved) {
@@ -89,6 +89,7 @@ async function preview(
       status: "unavailable",
       head,
       branch,
+      pullRequestFromBranch,
       scope,
       detail: resolved.unavailable,
       scopes,
@@ -150,7 +151,17 @@ async function preview(
       };
     });
     const local = await localWork(checkout, comparisons);
-    if (!patch) return { status: "ready", head, branch, comparison, scopes, local, files };
+    if (!patch)
+      return {
+        status: "ready",
+        head,
+        branch,
+        pullRequestFromBranch,
+        comparison,
+        scopes,
+        local,
+        files,
+      };
     const excerpt = await git.excerpt(
       [...diffArgs, "--patch", base, "--", ...pathArgs],
       path === undefined ? CHANGES_INITIAL_PATCH_BYTES : CHANGES_FILE_PATCH_BYTES,
@@ -159,6 +170,7 @@ async function preview(
       status: "ready",
       head,
       branch,
+      pullRequestFromBranch,
       comparison,
       scopes,
       local,

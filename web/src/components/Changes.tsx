@@ -118,7 +118,8 @@ export function ChangesPanel({
     unavailable ? undefined : workspace,
     session?.sessionId,
     active && !unavailable,
-    refreshKey(session),
+    // Linking or changing the pull request can change the target and whether it is this branch's.
+    `${refreshKey(session)}|${pullRequest.registered?.url ?? ""}`,
   );
   const [disclosure, setDisclosure] = useState<Disclosure>(initialDisclosure);
   const sheet = changesSheet({ observation, error, busy, disclosure });
@@ -156,7 +157,11 @@ export function ChangesPanel({
       below={
         <>
           {!unavailable && (
-            <PullRequestRow pr={pullRequest} branch={sheet.branch} local={sheet.local} />
+            <PullRequestRow
+              pr={pullRequest}
+              fromBranch={sheet.pullRequestFromBranch}
+              local={sheet.local}
+            />
           )}
           <ChangesStaleNote sheet={sheet} />
         </>

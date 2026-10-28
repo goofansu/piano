@@ -69,23 +69,31 @@ export function pullRequestViewOf(pr: PullRequestControl): PullRequestView | und
 /**
  * The row under the Changes toolbar. While the registry links a pull request: the number and
  * title (the link to GitHub), its state, checks and review, what is still only local, and its
- * branches when its head is not the branch Changes inspects, with the link's actions in its menu.
+ * branches when it was not opened from the branch Changes inspects, with the link's actions in its menu.
  * Without one, the same row holds what is still only local, and nothing when nothing is.
  * Hand-written: a one-line fact row with an actions menu has no shadcn component.
  */
 export function PullRequestRow({
   pr,
-  branch,
+  fromBranch,
   local,
 }: {
   pr: PullRequestControl;
-  /** The branch Changes inspects. */
-  branch: string | undefined;
+  /** The server's answer: the pull request was opened from the branch Changes inspects. */
+  fromBranch: boolean | undefined;
   local: LocalWork | undefined;
 }) {
   const view = pullRequestViewOf(pr);
   if (!pr.linked || !view) return <LocalWorkRow local={local} />;
-  return <LinkedPullRequestRow key={view.url} pr={pr} view={view} branch={branch} local={local} />;
+  return (
+    <LinkedPullRequestRow
+      key={view.url}
+      pr={pr}
+      view={view}
+      fromBranch={fromBranch}
+      local={local}
+    />
+  );
 }
 
 /** The linked row's shape (icon, then facts, at the same height) without a link to carry. */
@@ -110,19 +118,19 @@ function LocalWorkRow({ local }: { local: LocalWork | undefined }) {
 function LinkedPullRequestRow({
   pr,
   view,
-  branch,
+  fromBranch,
   local,
 }: {
   pr: PullRequestControl;
   view: PullRequestView;
-  branch: string | undefined;
+  fromBranch: boolean | undefined;
   local: LocalWork | undefined;
 }) {
   // Only facts arriving after the row was shown fade. Already-read facts appear at once.
   // The group stays mounted across refreshes, including unavailable status and its recovery.
   const [fadeFacts, setFadeFacts] = useState(() => !pr.value);
   const loading = pr.loading && !pr.value;
-  const row = pullRequestRow(view, { branch, local, loading });
+  const row = pullRequestRow(view, { fromBranch, local, loading });
   const state = row.status?.state && pullRequestStates[row.status.state];
   const Icon = state?.Icon ?? GitPullRequestIcon;
   return (

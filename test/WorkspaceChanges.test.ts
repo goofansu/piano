@@ -340,6 +340,36 @@ test("branch scope: a pull request applies to the branch by its name on its remo
   assert.equal(await target("feat"), "worktree");
 });
 
+test("Changes says whether the linked pull request is from this branch, by its name on its remote, in any scope", async (t) => {
+  const { git, read } = fixture(t);
+  git("switch", "-qc", "main");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  git("switch", "-qc", "feat");
+  git("commit", "-q", "--allow-empty", "-m", "work");
+  git("remote", "add", "origin", "https://github.com/example/repo.git");
+  git("config", "branch.feat.remote", "origin");
+  git("config", "branch.feat.merge", "refs/heads/james/feat");
+  // Git holds no ref for the base: the PR cannot be the target, yet it is still this branch's.
+  const pullRequest = { base: "release", headRepo: "example/repo", baseRepo: "example/repo" };
+  const fromBranch = async (hint: object, scope: "uncommitted" | "branch" = "uncommitted") => {
+    const { result } = await read({
+      scope,
+      hints: { pullRequest: { ...pullRequest, ...hint } },
+    });
+    assert.notEqual(result.status, "error");
+    return result.status === "error" ? undefined : result.pullRequestFromBranch;
+  };
+  assert.equal(await fromBranch({ head: "james/feat" }), true);
+  assert.equal(await fromBranch({ head: "feat" }), false, "the local name is not GitHub's");
+  assert.equal(
+    await fromBranch({ head: "james/feat", headRepo: "fork/repo" }),
+    false,
+    "a fork's same-named branch is another",
+  );
+  assert.equal(await fromBranch({ head: "james/feat" }, "branch"), true);
+  assert.equal(ready(await read({ scope: "uncommitted" })).pullRequestFromBranch, false);
+});
+
 test("branch scope: unavailable states are named, never another comparison", async (t) => {
   const unborn = fixture(t);
   assert.equal(unavailable(await unborn.read({ scope: "branch" })).detail, "No commits yet.");

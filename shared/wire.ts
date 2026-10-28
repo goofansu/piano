@@ -504,6 +504,9 @@ export const WorkspaceChanges = Schema.Struct({
       status: Schema.Literal("ready"),
       head: Schema.NullOr(Schema.String),
       branch: Schema.NullOr(Schema.String),
+      /** The session's linked pull request was opened from this branch: its head names the
+       * branch, by its name on its remote, in that remote's repository. */
+      pullRequestFromBranch: Schema.Boolean,
       comparison: Comparison,
       scopes: Schema.Array(ScopeAvailability),
       local: LocalWork,
@@ -517,6 +520,7 @@ export const WorkspaceChanges = Schema.Struct({
       status: Schema.Literal("unavailable"),
       head: Schema.NullOr(Schema.String),
       branch: Schema.NullOr(Schema.String),
+      pullRequestFromBranch: Schema.Boolean,
       scope: ChangesScope,
       detail: Schema.String,
       scopes: Schema.Array(ScopeAvailability),
