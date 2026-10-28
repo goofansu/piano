@@ -9,14 +9,15 @@ import type {
   Comparison,
   ComparisonTarget,
   ScopeAvailability,
+  SessionPullRequestLink,
 } from "../shared/wire.ts";
 import type { Checkout } from "./GitCheckout.ts";
+import { githubRemote } from "./GitHubPullRequests.ts";
 
 /** Identities Piano holds that name a branch's target, in the order they are tried. */
 export interface TargetHints {
-  /** The pull request's branches as GitHub last reported them; used only when `head` is the
-   * checked-out branch, so a link to another branch's pull request never retargets Changes. */
-  readonly pullRequest?: { readonly head: string; readonly base: string };
+  /** GitHub's qualified branches. Unqualified legacy hints are accepted but cannot retarget. */
+  readonly pullRequest?: Pick<SessionPullRequestLink, "head" | "base" | "headRepo" | "baseRepo">;
   /** The base branch Worktrunk reported when Piano created this worktree. */
   readonly worktreeBase?: string;
 }
@@ -61,6 +62,35 @@ async function namedTarget(
   return null;
 }
 
+/** A PR applies only to this branch in the checkout's repository. Its base must be held
+ * under a remote naming the base repository, not a same-named local branch or fork ref.
+ * Missing proof falls through to the existing target order; nothing is fetched. */
+async function pullRequestTarget(
+  checkout: Checkout,
+  branch: string,
+  remote: string,
+  pr: TargetHints["pullRequest"],
+): Promise<ComparisonTarget | null> {
+  if (!pr || pr.head !== branch || !pr.headRepo || !pr.baseRepo || !pr.base) return null;
+  const url = await checkout.remoteUrl(remote);
+  if (!url || githubRemote(url)?.repo !== pr.headRepo) return null;
+  // Hints can come from older/untrusted callers. A branch name must not become a rev expression.
+  if (
+    (await checkout.run(["check-ref-format", `refs/heads/${pr.base}`], { okCodes: [0, 1] }))
+      .code !== 0
+  )
+    return null;
+  const remotes = (await checkout.text(["remote"])).trim().split("\n").filter(Boolean);
+  for (const name of new Set([remote, ...remotes])) {
+    const baseUrl = name === remote ? url : await checkout.remoteUrl(name);
+    if (!baseUrl || githubRemote(baseUrl)?.repo !== pr.baseRepo) continue;
+    const ref = `refs/remotes/${name}/${pr.base}`;
+    const commit = await commitOf(checkout, ref);
+    if (commit) return { name: pr.base, ref, commit, from: "pull-request" };
+  }
+  return null;
+}
+
 /** The remote's default branch as Git holds it locally (`refs/remotes/<remote>/HEAD`). */
 async function remoteDefault(checkout: Checkout, remote: string): Promise<ComparisonTarget | null> {
   const result = await checkout.run(["symbolic-ref", "--quiet", `refs/remotes/${remote}/HEAD`], {
@@ -76,7 +106,7 @@ async function remoteDefault(checkout: Checkout, remote: string): Promise<Compar
 
 /**
  * The target a branch is compared with, the first of these that Git holds: the pull request's
- * base when the pull request's head is this branch; the worktree's base at creation; the
+ * repository-qualified base when its head is this checkout's branch; the worktree's base at creation; the
  * remote's default branch; a local `main` or `master`, assumed.
  */
 async function resolveTarget(
@@ -85,10 +115,8 @@ async function resolveTarget(
   hints: TargetHints,
 ): Promise<ComparisonTarget | null> {
   const remote = await trackingRemote(checkout, branch);
-  if (hints.pullRequest && hints.pullRequest.head === branch) {
-    const target = await namedTarget(checkout, remote, hints.pullRequest.base, "pull-request");
-    if (target) return target;
-  }
+  const pullRequest = await pullRequestTarget(checkout, branch, remote, hints.pullRequest);
+  if (pullRequest) return pullRequest;
   if (hints.worktreeBase) {
     const target = await namedTarget(checkout, remote, hints.worktreeBase, "worktree");
     if (target) return target;

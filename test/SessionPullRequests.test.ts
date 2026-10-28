@@ -345,7 +345,16 @@ test("a link records the pull request's head and base as GitHub last reported th
     source: "branch",
     head: "feature",
     base: "release",
+    headRepo: "example/repo",
+    baseRepo: "example/repo",
   });
+  // A deleted head repository removes stale proof, even when branch names are unchanged.
+  f.control({ prs: [{ ...candidate(42), baseRefName: "release", headRepository: null }] });
+  assert.equal((await f.get()).link?.headRepo, undefined);
+  assert.equal(
+    (await f.runtime.runPromise(f.registry.get)).sessions[0].pullRequest?.headRepo,
+    undefined,
+  );
   // A manual link learns its branches from the first successful read.
   f.control({ prs: [{ ...candidate(7, "topic"), baseRefName: "main" }] });
   const manual = await f.change({ action: "link", url: "https://github.com/example/repo/pull/7" });

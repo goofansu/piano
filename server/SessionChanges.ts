@@ -48,7 +48,7 @@ export const SessionChangesLive = Layer.effect(
       const worktree = data.worktrees.find((w) => w.path === session.cwd);
       const link = session.pullRequest;
       const hints: TargetHints = {
-        ...(link?.head && link.base ? { pullRequest: { head: link.head, base: link.base } } : {}),
+        ...(link?.head && link.base ? { pullRequest: link } : {}),
         ...(worktree?.baseBranch ? { worktreeBase: worktree.baseBranch } : {}),
       };
       return hints;

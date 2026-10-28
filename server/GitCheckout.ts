@@ -253,6 +253,8 @@ export interface Checkout {
   readonly head: () => Promise<string | null>;
   /** The checked-out branch, or null when detached. */
   readonly branch: () => Promise<string | null>;
+  /** The URL Git would contact, including user-config rewrites; null without that remote. */
+  readonly remoteUrl: (name: string) => Promise<string | null>;
   /** The same checkout with added `-c` config or environment (a disposable GIT_INDEX_FILE). */
   readonly with: (extra: {
     readonly config?: readonly string[];
@@ -275,7 +277,7 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
   const make = (config: readonly string[], env: Record<string, string>): Checkout => {
     const run = async (
       args: readonly string[],
-      read: ReadOptions & { truncate?: boolean } = {},
+      read: ReadOptions & { truncate?: boolean; userConfig?: boolean } = {},
     ) => {
       const { limit = options.limit, ...rest } = read;
       try {
@@ -319,6 +321,17 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
           : path,
       head: () => optional(["rev-parse", "--verify", "--quiet", "HEAD"]),
       branch: async () => decode((await run(BRANCH)).stdout).trim() || null,
+      remoteUrl: async (name) => {
+        try {
+          return (
+            decode((await run(["remote", "get-url", name], { userConfig: true })).stdout).trim() ||
+            null
+          );
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("No such remote")) return null;
+          throw error;
+        }
+      },
       with: (extra) => make([...config, ...(extra.config ?? [])], { ...env, ...extra.env }),
     };
   };

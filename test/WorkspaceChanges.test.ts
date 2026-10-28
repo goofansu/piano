@@ -264,7 +264,14 @@ test("branch scope: the target is the pull request's base for its own head, else
   git("branch", "-q", "release");
   git("switch", "-qc", "feature");
   git("commit", "-q", "--allow-empty", "-m", "work");
-  const pullRequest = { head: "feature", base: "release" };
+  git("remote", "add", "origin", "https://github.com/example/repo.git");
+  git("update-ref", "refs/remotes/origin/release", "release");
+  const pullRequest = {
+    head: "feature",
+    base: "release",
+    headRepo: "example/repo",
+    baseRepo: "example/repo",
+  };
   const fromPr = ready(
     await read({ scope: "branch", hints: { pullRequest, worktreeBase: "main" } }),
   );
@@ -276,13 +283,24 @@ test("branch scope: the target is the pull request's base for its own head, else
   const other = ready(
     await read({
       scope: "branch",
-      hints: { pullRequest: { head: "other", base: "release" }, worktreeBase: "main" },
+      hints: { pullRequest: { ...pullRequest, head: "other" }, worktreeBase: "main" },
     }),
   );
   assert.deepEqual(
     [other.comparison.target?.name, other.comparison.target?.from],
     ["main", "worktree"],
   );
+  // Older callers' bare hints and untrusted rev expressions do not acquire repository authority.
+  for (const hint of [
+    { head: "feature", base: "release" },
+    { ...pullRequest, base: "release~0" },
+    { ...pullRequest, baseRepo: "unrelated/repo" },
+  ]) {
+    const ignored = ready(
+      await read({ scope: "branch", hints: { pullRequest: hint, worktreeBase: "main" } }),
+    );
+    assert.equal(ignored.comparison.target?.from, "worktree");
+  }
   // The remote's default branch as Git holds it locally, never fetched.
   const main = git("rev-parse", "main").trim();
   git("update-ref", "refs/remotes/origin/main", main);
