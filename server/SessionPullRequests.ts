@@ -2,7 +2,11 @@
  * through the GitHubPullRequests adapter. This module keeps the link policy. Transcript contents never participate. Registry retains only identity and user preference.
  */
 import { Context, Effect, Layer } from "effect";
-import type { PullRequestBranches } from "../shared/pullRequestBranches.ts";
+import {
+  type PullRequestBranches,
+  pullRequestBranches,
+  pullRequestBranchesKey,
+} from "../shared/pullRequestBranches.ts";
 import type {
   PullRequest,
   SessionPullRequest,
@@ -80,22 +84,11 @@ export const SessionPullRequestsLive = Layer.effect(
       pr: PullRequest,
     ): Effect.fn.Return<SessionPullRequestLink, RegistryError> {
       const link = s.pullRequest!;
-      const branches = branchesOf(pr);
-      if (
-        link.head === branches.head &&
-        link.base === branches.base &&
-        link.headRepo === branches.headRepo &&
-        link.baseRepo === branches.baseRepo
-      )
-        return link;
-      // Explicit undefined clears identities no longer proven (e.g. a deleted head repository).
-      const saved = yield* registry.setSessionLink(s, "pullRequest", {
-        ...link,
-        head: branches.head,
-        base: branches.base,
-        headRepo: branches.headRepo,
-        baseRepo: branches.baseRepo,
-      });
+      // Every fact named, so an explicit undefined clears one no longer proven (e.g. a deleted
+      // head repository).
+      const branches = pullRequestBranches(branchesOf(pr));
+      if (pullRequestBranchesKey(link) === pullRequestBranchesKey(branches)) return link;
+      const saved = yield* registry.setSessionLink(s, "pullRequest", { ...link, ...branches });
       return saved?.pullRequest ?? link;
     });
     const result: (
