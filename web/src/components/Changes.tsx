@@ -119,7 +119,7 @@ export function ChangesPanel({
     session?.sessionId,
     active && !unavailable,
     // Linking or changing the pull request can change the target and whether it is this branch's.
-    `${refreshKey(session)}|${pullRequest.registered?.url ?? ""}`,
+    `${refreshKey(session)}|${pullRequest.changesTrigger}`,
   );
   const [disclosure, setDisclosure] = useState<Disclosure>(initialDisclosure);
   const sheet = changesSheet({ observation, error, busy, disclosure });
