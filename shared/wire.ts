@@ -628,11 +628,13 @@ export const sameSession = (
   b: { readonly cwd: string; readonly sessionId: string },
 ) => a.cwd === b.cwd && a.sessionId === b.sessionId;
 
-/** What picking a worktree needs, from Git; not exact revisions or verification evidence. */
+/** Checkout facts from Git discovery; not verification evidence. */
 export const WorktreeFacts = Schema.Struct({
   path: Schema.String,
   branch: Schema.NullOr(Schema.String),
   detached: Schema.Boolean,
+  /** Checked-out commit, absent for an unborn HEAD. */
+  head: Schema.optional(Schema.String),
   /** Git can prune it: the checkout directory is gone. */
   prunable: Schema.Boolean,
 });

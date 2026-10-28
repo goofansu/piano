@@ -87,7 +87,9 @@ test("INV-06: discovery reads Git worktrees without Worktrunk and reports failur
       { path: join(root, "detached"), branch: null, detached: true, prunable: false },
       { path: join(root, "feature"), branch: "feature", detached: false, prunable: false },
       { path: join(root, "gone"), branch: "gone", detached: false, prunable: true },
-    ].sort((x, y) => (x.path === repo ? -1 : y.path === repo ? 1 : x.path.localeCompare(y.path))),
+    ]
+      .map((w) => ({ ...w, head: git(repo, "rev-parse", "HEAD") }))
+      .sort((x, y) => (x.path === repo ? -1 : y.path === repo ? 1 : x.path.localeCompare(y.path))),
   );
   mkdirSync(join(repo, "subdirectory"));
   const subdir = await observe(join(repo, "subdirectory"));

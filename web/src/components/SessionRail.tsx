@@ -6,6 +6,7 @@ import {
   ExternalLinkIcon,
   FolderOpenIcon,
   GitBranchIcon,
+  GitCommitHorizontalIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -174,7 +175,7 @@ function RailSections({
   showAllRef: React.Ref<HTMLButtonElement>;
 }) {
   const session = state.session;
-  const { cwd, folder, branch } = sessionContext(state);
+  const { cwd, folder, branch, detachedHead } = sessionContext(state);
   const githubRepo = folder?.discovery.status === "ready" ? folder.discovery.githubRepo : undefined;
   const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;
   const files = useSessionFiles();
@@ -209,7 +210,19 @@ function RailSections({
               {cwd.split("/").filter(Boolean).at(-1) || cwd}
             </EnvironmentRow>
           ) : null}
-          {branch && (
+          {detachedHead ? (
+            <EnvironmentRow
+              name="Git"
+              menu="commit"
+              icon={<GitCommitHorizontalIcon />}
+              mono
+              copyValue={detachedHead}
+              description="A commit is checked out directly; no branch is active."
+              href={repositoryUrl ? `${repositoryUrl}/commit/${detachedHead}` : undefined}
+            >
+              {`${detachedHead.slice(0, 10)} (detached)`}
+            </EnvironmentRow>
+          ) : branch ? (
             <EnvironmentRow
               name="Branch"
               menu="branch"
@@ -221,7 +234,7 @@ function RailSections({
             >
               {branch}
             </EnvironmentRow>
-          )}
+          ) : null}
         </RailList>
       </RailSection>
       {files.length > 0 && (
@@ -257,14 +270,18 @@ function EnvironmentRow({
   href,
   menu,
   cwd,
+  copyValue,
+  description,
   children,
 }: {
   name: string;
   icon: ReactNode;
   mono?: boolean;
   href?: string;
-  menu: "folder" | "repository" | "branch";
+  menu: "folder" | "repository" | "branch" | "commit";
   cwd?: string;
+  copyValue?: string;
+  description?: string;
   children: string;
 }) {
   const content = (
@@ -299,7 +316,7 @@ function EnvironmentRow({
             railRow,
             "cursor-pointer text-left hover:bg-fill-hover data-[state=open]:bg-fill-hover",
           )}
-          title={cwd ?? name}
+          title={description ?? cwd ?? name}
           asChild
         >
           <button type="button">
@@ -315,11 +332,18 @@ function EnvironmentRow({
           {menu !== "folder" && (
             <DropdownMenuItem
               onSelect={() =>
-                void copy(children, menu === "repository" ? "Repository name" : "Branch name")
+                void copy(
+                  copyValue ?? children,
+                  menu === "commit"
+                    ? "Commit SHA"
+                    : menu === "repository"
+                      ? "Repository name"
+                      : "Branch name",
+                )
               }
             >
               <CopyIcon aria-hidden />
-              Copy {menu} name
+              Copy {menu === "commit" ? "commit SHA" : `${menu} name`}
             </DropdownMenuItem>
           )}
           {cwd && (

@@ -96,6 +96,30 @@ test("a worktree session reads its folder, worktree, branch and workspace from o
   );
 });
 
+test("the rail uses the detached commit, not a stale branch, and omits Git for non-Git folders", () => {
+  const path = "/work/repo.feature";
+  const head = "d4449bb7183bb577791acab4f6fc4f52f78d02b0";
+  const selected = (checkout: WorktreeView) =>
+    sessionContext({
+      ...base,
+      session: session(path),
+      folders: [{ ...folder, worktrees: [checkout] }],
+    });
+  const detached = selected(
+    worktree(path, null, {
+      facts: { path, branch: null, detached: true, prunable: false, head },
+    }),
+  );
+  assert.equal(detached.detachedHead, head);
+  assert.equal(detached.branch, undefined);
+  const attached = selected(worktree(path, "feature"));
+  assert.equal(attached.branch, "feature");
+  assert.equal(attached.detachedHead, undefined);
+  const nonGit = selected(worktree(path, null, { status: "non-git" }));
+  assert.equal(nonGit.branch, undefined);
+  assert.equal(nonGit.detachedHead, undefined);
+});
+
 // A closed folder lists no checkout, so only the reference knows the branch it was registered on.
 const closed: AppState = {
   ...base,

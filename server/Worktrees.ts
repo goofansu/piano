@@ -110,7 +110,14 @@ const json = <T, E>(schema: Schema.Codec<T, E>, text: string) =>
 function parseWorktrees(out: string): WorktreeFacts[] | undefined {
   const worktrees: WorktreeFacts[] = [];
   let current:
-    | { path?: string; branch: string | null; detached: boolean; bare: boolean; prunable: boolean }
+    | {
+        path?: string;
+        head?: string;
+        branch: string | null;
+        detached: boolean;
+        bare: boolean;
+        prunable: boolean;
+      }
     | undefined;
   const finish = () => {
     if (!current) return true;
@@ -124,7 +131,13 @@ function parseWorktrees(out: string): WorktreeFacts[] | undefined {
       (w.branch === null) !== w.detached
     )
       return false;
-    worktrees.push({ path: w.path, branch: w.branch, detached: w.detached, prunable: w.prunable });
+    worktrees.push({
+      path: w.path,
+      branch: w.branch,
+      detached: w.detached,
+      prunable: w.prunable,
+      ...(w.head ? { head: w.head } : {}),
+    });
     return true;
   };
   for (const field of out.split("\0")) {
@@ -141,6 +154,8 @@ function parseWorktrees(out: string): WorktreeFacts[] | undefined {
     }
     if (!current) return undefined;
     if (key === "branch") current.branch = value.replace(/^refs\/heads\//, "");
+    else if (key === "HEAD" && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value) && !/^0+$/.test(value))
+      current.head = value;
     else if (key === "detached") current.detached = true;
     else if (key === "bare") current.bare = true;
     else if (key === "prunable") current.prunable = true;
