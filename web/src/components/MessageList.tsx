@@ -167,8 +167,15 @@ export function MessageList({
                 <UserMessage text={submittedInput.text} attachments={submittedInput.attachments} />
               )}
               <TranscriptDisclosures value={disclosures}>
-                {/* Custom geometry hosts: shadcn has no variable-height virtual transcript. */}
-                <div ref={list} className="relative" style={{ height: virtual.getTotalSize() }}>
+                {/* Custom geometry hosts: shadcn has no variable-height virtual transcript.
+                    A row taller than its estimate is clipped until measured: its overflow would
+                    grow the scroll height, a pinned view would follow it, and the scroll would
+                    unmount the row again, a loop Firefox never leaves. */}
+                <div
+                  ref={list}
+                  className="relative overflow-y-clip"
+                  style={{ height: virtual.getTotalSize() }}
+                >
                   {window.map((item) => {
                     const row = rows[item.index];
                     const next = rows[item.index + 1];
