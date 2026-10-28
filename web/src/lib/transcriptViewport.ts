@@ -131,6 +131,9 @@ export function createTranscriptViewport(): TranscriptViewport {
     for (const listener of listeners) listener();
   };
   const follow = (el: ViewportElement) => {
+    // Rendering or resize can precede a native scroll's event. Read that movement before
+    // following output overwrites it; growth alone leaves scrollTop unchanged.
+    if (el.scrollTop !== lastTop) scrolled();
     if (!stick) return;
     el.scrollTop = el.scrollHeight;
     lastTop = el.scrollTop;
