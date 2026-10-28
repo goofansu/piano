@@ -3,18 +3,19 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { toast } from "sonner";
 import { sessionPullRequest } from "@/lib/api";
 import { pullRequestTrigger } from "@/lib/changesView";
+import type { PullRequestTarget } from "@/lib/sessionContext";
 import { createSessionPullRequest, pullRequestKey } from "@/lib/sessionPullRequest";
 
 /**
- * Only the selected session is observed, and only while the registry links it (`link` is the
- * catalog's). The module owns freshness, focus/work refreshes and polling of visible active PR
- * details; this hook passes the session snapshot and what is on screen without deciding that
- * policy. The details are the row under the Changes toolbar, so they show while Changes does
- * (`visible`); navigation owns whether the link dialog is open, and the link may close it.
+ * Only the selected session's `target` is observed (none where its pull request cannot be
+ * addressed), and only while the registry links it (`link` is the catalog's). The module owns
+ * freshness, focus/work refreshes and polling of visible active PR details; this hook passes the
+ * session snapshot and what is on screen without deciding that policy. The details are the row
+ * under the Changes toolbar, so they show while Changes does (`visible`); navigation owns whether
+ * the link dialog is open, and the link may close it.
  */
 export function useSessionPullRequest(
-  workspaceId: string | undefined,
-  sessionId: string | null | undefined,
+  target: PullRequestTarget | undefined,
   link: SessionPullRequestLink | null | undefined,
   working: boolean,
   {
@@ -52,6 +53,8 @@ export function useSessionPullRequest(
     [url, source, apiHost, removed],
   );
   useEffect(() => pr.start(), [pr]);
+  const workspaceId = target?.workspaceId,
+    sessionId = target?.sessionId;
   useEffect(
     () => pr.observe(workspaceId, sessionId, registered, working, { visible, dialog: dialog.open }),
     [pr, workspaceId, sessionId, registered, working, visible, dialog.open],
@@ -60,6 +63,8 @@ export function useSessionPullRequest(
   // Only the current session's value, even in the render in which the session changes (INV-07).
   const current = state.key === pullRequestKey(workspaceId, sessionId);
   return {
+    /** The session can be addressed: its pull request can be linked here. */
+    addressable: !!target,
     value: current ? state.value : undefined,
     linked: current && state.linked,
     registered: current ? state.link : undefined,

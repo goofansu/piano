@@ -362,8 +362,7 @@ export function sessionCommands(
         id: "pull-request",
         label: "Pull request",
         icon: "pull-request",
-        // A pull request is linked, read and unlinked in Changes, so it opens only where Changes can.
-        enabled: !!session.sessionId && ctx.canOpenChanges,
+        enabled: !!ctx.pullRequestTarget,
         detail: ctx.changesUnavailable,
         keywords: ["pr"],
         intent: { kind: "pull-request", linked },

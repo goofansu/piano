@@ -129,7 +129,14 @@ test("a session whose folder was closed keeps its registry workspace for Changes
   assert.equal(ctx.workspace?.id, "ws:/closed");
   assert.equal(ctx.changesWorkspace?.id, "ws:/closed");
   assert.equal(ctx.canOpenChanges, true);
-  assert.equal(ctx.pullRequestWorkspace?.id, "ws:/closed");
+  assert.deepEqual(ctx.pullRequestTarget, { workspaceId: "ws:/closed", sessionId: "s1" });
+  // A session still starting has no ID yet, so its pull request cannot be addressed.
+  const starting = sessionContext({
+    ...closed,
+    session: { ...session("/closed"), sessionId: null },
+  });
+  assert.equal(starting.canOpenChanges, true);
+  assert.equal(starting.pullRequestTarget, undefined);
 });
 
 test("only a session whose composer accepts input has a writable draft", () => {
@@ -153,7 +160,7 @@ test("a removed checkout keeps its workspace identity but cannot open Changes or
   assert.equal(missing.canOpenChanges, false);
   assert.equal(missing.changesUnavailable, "Checkout removed");
   // Its pull request lives in Changes, so nothing reads or polls it from GitHub.
-  assert.equal(missing.pullRequestWorkspace, undefined);
+  assert.equal(missing.pullRequestTarget, undefined);
   const plain: FolderView = {
     ...folder,
     worktrees: [worktree("/repo", null, { status: "non-git" })],
@@ -170,7 +177,7 @@ test("a removed checkout keeps its workspace identity but cannot open Changes or
   assert.equal(nonGit.changesWorkspace, undefined);
   assert.equal(nonGit.canOpenChanges, false);
   assert.equal(nonGit.changesUnavailable, "Not a Git repository");
-  assert.equal(nonGit.pullRequestWorkspace, undefined);
+  assert.equal(nonGit.pullRequestTarget, undefined);
   assert.equal(nonGit.branch, undefined);
   assert.equal(nonGit.title, "Plain", "the context read this session's reference");
 });
