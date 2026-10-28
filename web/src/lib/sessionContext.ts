@@ -217,7 +217,7 @@ export interface SessionContext {
   githubRepo: string | undefined;
   title: string;
   sessionId: string | undefined;
-  /** Registry identity of the selected session's directory: addresses its pull request. */
+  /** Registry identity of the selected session's directory. */
   workspace: Workspace | undefined;
   /** The workspace Changes previews: none for a non-Git folder. */
   changesWorkspace: Workspace | undefined;
@@ -229,6 +229,12 @@ export interface SessionContext {
    * only that Changes is unavailable.
    */
   changesUnavailable: string | undefined;
+  /**
+   * The workspace that addresses the session's pull request: Changes', only while it can open,
+   * since the pull request is linked, read and unlinked in Changes. Where Changes cannot open,
+   * nothing asks GitHub about it.
+   */
+  pullRequestWorkspace: Workspace | undefined;
   /**
    * The registry's pull request link for the selected session: `null` once it was removed,
    * `undefined` while nothing is linked or the session is not in the registry yet.
@@ -275,6 +281,7 @@ export function sessionContext(state: AppState): SessionContext {
           : workspace && !changesWorkspace
             ? "Not a Git repository"
             : "Changes unavailable",
+    pullRequestWorkspace: canOpenChanges ? changesWorkspace : undefined,
     pullRequest: reference?.pullRequest,
     checkoutMissing,
     draftKey: session && !checkoutMissing ? sessionDraftKey(session) : null,

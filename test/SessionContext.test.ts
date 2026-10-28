@@ -129,6 +129,7 @@ test("a session whose folder was closed keeps its registry workspace for Changes
   assert.equal(ctx.workspace?.id, "ws:/closed");
   assert.equal(ctx.changesWorkspace?.id, "ws:/closed");
   assert.equal(ctx.canOpenChanges, true);
+  assert.equal(ctx.pullRequestWorkspace?.id, "ws:/closed");
 });
 
 test("only a session whose composer accepts input has a writable draft", () => {
@@ -142,7 +143,7 @@ test("only a session whose composer accepts input has a writable draft", () => {
   assert.equal(sessionContext({ ...base, session: null }).draftKey, null);
 });
 
-test("a removed checkout keeps its workspace identity but cannot open Changes; a non-Git folder has no Changes workspace", () => {
+test("a removed checkout keeps its workspace identity but cannot open Changes or its pull request; a non-Git folder has neither", () => {
   const missing = sessionContext({
     ...base,
     session: session("/work/repo.feature", { checkoutMissing: true }),
@@ -151,6 +152,8 @@ test("a removed checkout keeps its workspace identity but cannot open Changes; a
   assert.equal(missing.workspace?.id, "ws:/work/repo.feature");
   assert.equal(missing.canOpenChanges, false);
   assert.equal(missing.changesUnavailable, "Checkout removed");
+  // Its pull request lives in Changes, so nothing reads or polls it from GitHub.
+  assert.equal(missing.pullRequestWorkspace, undefined);
   const plain: FolderView = {
     ...folder,
     worktrees: [worktree("/repo", null, { status: "non-git" })],
@@ -167,6 +170,7 @@ test("a removed checkout keeps its workspace identity but cannot open Changes; a
   assert.equal(nonGit.changesWorkspace, undefined);
   assert.equal(nonGit.canOpenChanges, false);
   assert.equal(nonGit.changesUnavailable, "Not a Git repository");
+  assert.equal(nonGit.pullRequestWorkspace, undefined);
   assert.equal(nonGit.branch, undefined);
   assert.equal(nonGit.title, "Plain", "the context read this session's reference");
 });
