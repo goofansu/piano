@@ -44,7 +44,8 @@ The palette (Mod+K) searches neither outputs nor links.
 - `local-work-row`: without a linked pull request, the same place under the toolbar holds region
   "Local work" with only "<n> commits not pushed" and "Edits not committed", each while nonzero,
   and no row at all when both are; so after a commit the Uncommitted view says "No changes" above
-  nothing while the row still says "1 commit not pushed". Commits are counted against the
+  nothing while the row still says "1 commit not pushed". Both rows keep these facts under a
+  comparison that cannot be read (a saved "main" once the checkout is on main). Commits are counted against the
   branch's remote-tracking ref, so a repo without one never shows that fact.
 - `changes-list`: list "Changed files" with one collapsible row per file
   (`<path>[, new | , deleted], <n> added, <n> removed: collapse`), the path on one line (its

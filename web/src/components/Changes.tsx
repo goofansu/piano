@@ -156,11 +156,7 @@ export function ChangesPanel({
       below={
         <>
           {!unavailable && (
-            <PullRequestRow
-              pr={pullRequest}
-              branch={sheet.branch}
-              local={sheet.changes?.result.local}
-            />
+            <PullRequestRow pr={pullRequest} branch={sheet.branch} local={sheet.local} />
           )}
           <ChangesStaleNote sheet={sheet} />
         </>

@@ -214,6 +214,8 @@ export interface ChangesSheetView {
   /** The comparison on screen and the menu's choices, from the last answer, ready or not. */
   scope?: ScopeView;
   branch?: string;
+  /** What is still only local, from the last answer, ready or not: shown whatever the scope. */
+  local?: LocalWork;
   /** A re-read is in flight while a read is on screen. */
   refreshing: boolean;
   /** The latest re-read failed; the previous read stays on screen. */
@@ -255,6 +257,7 @@ export function changesSheet({
       changes,
       scope: scopeView(result),
       branch: result.branch ?? DETACHED_HEAD,
+      local: result.local,
       refreshing: busy,
       staleNote: error
         ? { text: "Refresh failed. Showing previous changes.", detail: error }
@@ -268,6 +271,7 @@ export function changesSheet({
     return {
       scope: scopeView(result),
       branch: result.branch ?? DETACHED_HEAD,
+      local: result.local,
       refreshing: busy,
       staleNote: error
         ? { text: "Refresh failed. Showing previous changes.", detail: error }

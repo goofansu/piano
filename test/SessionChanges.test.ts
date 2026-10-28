@@ -302,3 +302,21 @@ test("Uncommitted is the default; a saved branch choice overrides it only for th
     .then((value) => assert.equal(value.result.status, "unavailable"));
   assert.equal((await f.read(f.repo, "root")).result.status, "unavailable");
 });
+
+test("local work shows whatever the scope, even one the checkout cannot read", async (t) => {
+  const f = await fixture(t);
+  const unavailable = (value: Observation) => {
+    assert.equal(value.result.status, "unavailable", JSON.stringify(value.result));
+    if (value.result.status !== "unavailable") throw new Error("Read was not refused");
+    return value.result;
+  };
+  // On the base branch itself, the branch scope has nothing to compare with.
+  assert.deepEqual(unavailable(await f.read(f.repo, "root", { scope: "branch" })).local, {
+    commitsNotPushed: null,
+    uncommitted: false,
+  });
+  writeFileSync(join(f.repo, "new"), "untracked\n");
+  const local = unavailable(await f.read(f.repo, "root", { scope: "branch" })).local;
+  assert.equal(local.uncommitted, true, "an untracked file is an edit not committed");
+  assert.deepEqual(ready(await f.read(f.repo, "root")).local, local);
+});

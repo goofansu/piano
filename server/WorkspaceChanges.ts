@@ -10,12 +10,18 @@ import {
   CHANGES_INITIAL_PATCH_BYTES,
   type ChangeFile,
   type ChangesScope,
+  type LocalWork,
   type WorkspaceChanges as Observation,
   type Workspace,
   type WrittenFile,
   type WorkspaceWrittenFiles as WrittenObservation,
 } from "../shared/wire.ts";
-import { commitsNotPushed, resolveComparisons, type TargetHints } from "./ComparisonBase.ts";
+import {
+  type Comparisons,
+  commitsNotPushed,
+  resolveComparisons,
+  type TargetHints,
+} from "./ComparisonBase.ts";
 import { type Checkout, type CheckoutObservation, observeCheckout } from "./GitCheckout.ts";
 import { place } from "./WorkspaceFiles.ts";
 
@@ -77,8 +83,18 @@ async function preview(
   const { head, branch, scopes } = comparisons;
   const scope = options.scope ?? "uncommitted";
   const resolved = comparisons.of(scope);
-  if ("unavailable" in resolved)
-    return { status: "unavailable", head, branch, scope, detail: resolved.unavailable, scopes };
+  if ("unavailable" in resolved) {
+    const local = await localWork(checkout, comparisons);
+    return {
+      status: "unavailable",
+      head,
+      branch,
+      scope,
+      detail: resolved.unavailable,
+      scopes,
+      local,
+    };
+  }
   const { comparison } = resolved;
   const base = comparison.base;
   const temp = await mkdtemp(join(tmpdir(), "piano-changes-"));
@@ -133,19 +149,7 @@ async function preview(
         deletions: Number(match[2]) || 0,
       };
     });
-    // What is still only here, whatever the scope: edits HEAD lacks (through the same private
-    // index, so untracked files count) and commits the remote-tracking ref lacks.
-    const uncommitted =
-      untracked.length > 0 ||
-      (
-        await git.run(
-          [...diffArgs, "--quiet", comparisons.of("uncommitted").comparison.base, "--"],
-          {
-            okCodes: [0, 1],
-          },
-        )
-      ).code === 1;
-    const local = { commitsNotPushed: await commitsNotPushed(checkout, head, branch), uncommitted };
+    const local = await localWork(checkout, comparisons);
     if (!patch) return { status: "ready", head, branch, comparison, scopes, local, files };
     const excerpt = await git.excerpt(
       [...diffArgs, "--patch", base, "--", ...pathArgs],
@@ -165,6 +169,30 @@ async function preview(
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
+}
+
+/** What is still only here, whatever the scope and whether it can be read: edits HEAD lacks
+ * (untracked, non-ignored files included) and commits the remote-tracking ref lacks. */
+async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<LocalWork> {
+  const { head, branch } = comparisons;
+  const untracked = await checkout.records(["ls-files", "--others", "--exclude-standard", "-z"]);
+  const uncommitted =
+    untracked.length > 0 ||
+    (
+      await checkout.run(
+        [
+          "diff",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--ignore-submodules=none",
+          "--quiet",
+          comparisons.of("uncommitted").comparison.base,
+          "--",
+        ],
+        { okCodes: [0, 1] },
+      )
+    ).code === 1;
+  return { commitsNotPushed: await commitsNotPushed(checkout, head, branch), uncommitted };
 }
 
 /** Whether `path` (relative to the workspace, or absolute) names something on disk; a dangling

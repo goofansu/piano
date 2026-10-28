@@ -335,7 +335,7 @@ test("the comparison menu puts Uncommitted first and names the actual target ref
   });
 });
 
-test("an unavailable scope is the body's reason, with the menu still offering the others", () => {
+test("an unavailable scope is the body's reason, with the menu still offering the others and local work still shown", () => {
   const view = sheet({
     ...changes([]),
     result: {
@@ -353,8 +353,10 @@ test("an unavailable scope is the body's reason, with the menu still offering th
         },
         { scope: "uncommitted", available: true },
       ],
+      local: { commitsNotPushed: null, uncommitted: true },
     },
   });
+  assert.deepEqual(view.local, { commitsNotPushed: null, uncommitted: true }, "local work stays");
   assert.deepEqual(view.body, {
     kind: "failed",
     title: "Base branch unavailable",
