@@ -279,6 +279,22 @@ test("status precedence: startup, delivery, reconnecting, read-only, exited, the
     "Compacting · Retrying",
   );
   assert.equal(status({ ...base, session: session("/repo", { isStreaming: true }) }), "Working");
+  // Working by the sidebar's rule (`workUnderWay`), not only while Pi streams.
+  for (const working of [
+    { submission: { id: 1, outcome: "submitting" as const } },
+    { queuedMessages: [{ kind: "follow-up" as const, text: "next" }] },
+    { isStopping: true },
+    {
+      dialogResolution: {
+        id: "d1",
+        generation: "g",
+        reason: "answered" as const,
+        delivery: "pending" as const,
+        detail: "",
+      },
+    },
+  ])
+    assert.equal(status({ ...base, session: session("/repo", working) }), "Working");
   assert.equal(status({ ...base, session: session("/repo") }), "Ready");
   assert.equal(
     status({ ...base, session: session("/repo", {}, { hosted: false }) }),
