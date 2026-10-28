@@ -80,6 +80,8 @@ function textOf(content: string | RawContent[] | undefined, separator = ""): str
     .filter((text) => text.length > 0)
     .join(separator);
 }
+/** Text blocks are distinct passages, not streaming chunks of one passage. */
+const assistantText = (content: Parameters<typeof textOf>[0]) => textOf(content, "\n\n");
 const usageOf = (usage?: RawUsage): Usage | undefined =>
   usage
     ? {
@@ -175,8 +177,7 @@ export function serializeMessage(
     result = {
       id,
       role: "assistant",
-      // Text blocks are distinct passages, not streaming chunks of one passage.
-      text: textOf(msg.content, "\n\n"),
+      text: assistantText(msg.content),
       toolCalls: toolCalls.length ? toolCalls : undefined,
       model: msg.provider && msg.model ? `${msg.provider}/${msg.model}` : msg.model,
       thinkingLevel: msg.thinkingLevel,
@@ -1049,7 +1050,7 @@ export class PiProjector {
     const redaction = compileRedaction();
     this.partial = redaction.wire({
       ...this.partial,
-      text: redaction.text(textOf(blocks, "\n\n"), true),
+      text: redaction.text(assistantText(blocks), true),
       toolCalls: blocks.flatMap((b) =>
         b.type === "tool"
           ? [
