@@ -215,6 +215,44 @@ test("a project's address opens its home; its New page has an address of its own
   assert.deepEqual(fresh.client.getState().view, { kind: "new", projectId: "p1" });
 });
 
+test("archiving or deleting a previously viewed session keeps the project home and its draft directory", () => {
+  for (const action of ["archive_session", "delete_session"] as const) {
+    const p = page("/s/a");
+    p.registry();
+    p.selected("a");
+    const selectionId = p.client.getState().selectionId!;
+    p.navigation.openProject("p1");
+    p.client.dispatch({ type: "new_directory", cwd: "/scratch" });
+    p.client.send({ _tag: action, cwd: "/scratch", sessionId: "a" });
+    p.server({
+      _tag: "registry",
+      folders: [],
+      projects: [{ id: "p1", name: "Launch" }],
+      sessionReferences:
+        action === "archive_session"
+          ? [sessionReference("/scratch", "a", { projectId: "p1", archived: true })]
+          : [],
+    });
+    // The server may still hold the old selection after the browser leaves the session.
+    p.server({
+      _tag: "selected",
+      selectionId,
+      cwd: "/scratch",
+      sessionId: null,
+      hosted: false,
+      cursor: null,
+      snapshot: { state: { sessionId: "", isStreaming: false }, messages: [], dialogs: [] },
+    });
+    assert.deepEqual(p.client.getState().view, {
+      kind: "project",
+      projectId: "p1",
+      cwd: "/scratch",
+    });
+    assert.equal(p.path(), "/projects/p1");
+    assert.equal(p.title(), "Launch - Piano");
+  }
+});
+
 test("the Projects index has its own address and title, and a row's move to a home is one entry", () => {
   const p = page("/projects");
   assert.deepEqual(p.client.getState().view, { kind: "projects" });

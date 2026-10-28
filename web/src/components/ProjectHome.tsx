@@ -1,10 +1,20 @@
 import { cn } from "cn";
+import { MoreHorizontalIcon } from "lucide-react";
 import { type ComponentProps, useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
-import { useCommands } from "@/components/CommandHost";
+import { SessionCommandMenuItem, useCommands, useSessionCommands } from "@/components/CommandHost";
 import { NewSessionComposer } from "@/components/NewSession";
 import { PaneBody, PaneHeader, PaneNotFound } from "@/components/Pane";
+import { PianoButton } from "@/components/PianoButton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/PianoDropdownMenu";
 import { ProjectCommandsMenu } from "@/components/Projects";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { SettingsGroup, SettingsList, settingsRow } from "@/components/SettingsSectionFrame";
 import {
   Breadcrumb,
@@ -19,8 +29,33 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { projectCommands } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
+import type { SessionTarget } from "@/lib/sessionCommands";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
+
+/** Use the same commands and confirmations as the sidebar and palette, without selecting the row. */
+function SessionActions({ target }: { target: SessionTarget }) {
+  const { commands, run } = useSessionCommands(target);
+  return (
+    <>
+      <DropdownMenuGroup>
+        {commands
+          .filter((c) => c.id === "archive")
+          .map((c) => (
+            <SessionCommandMenuItem key={c.id} command={c} run={run} />
+          ))}
+      </DropdownMenuGroup>
+      <DropdownMenuSeparator />
+      <DropdownMenuGroup>
+        {commands
+          .filter((c) => c.id === "delete")
+          .map((c) => (
+            <SessionCommandMenuItem key={c.id} command={c} run={run} />
+          ))}
+      </DropdownMenuGroup>
+    </>
+  );
+}
 
 /** Rows keep their place while the page is open: a new key appends, a gone one drops. */
 function useStableOrder(keys: readonly string[]): string[] {
@@ -149,31 +184,55 @@ export function ProjectHome({
                 {sessions.map((s) => (
                   <Item
                     key={sessionKey(s)}
-                    asChild
+                    data-row
                     role="listitem"
-                    className={cn(settingsRow, "text-left hover:bg-fill-hover")}
+                    className={cn(
+                      settingsRow,
+                      rowActionsWidth.list[1],
+                      "relative hover:bg-fill-hover",
+                    )}
                   >
-                    <button
-                      type="button"
-                      disabled={s.disabled}
-                      title={s.hint}
-                      onClick={() => select(s.cwd, s.sessionId)}
-                    >
-                      <ItemContent className="min-w-0 gap-0.5">
-                        <ItemTitle className="w-full min-w-0">
-                          <span className="min-w-0 flex-1 truncate">{s.label}</span>
-                        </ItemTitle>
-                        <ItemDescription className="flex min-w-0 items-center gap-1.5 text-xs">
-                          {/* The folder keeps its name (up to half the line); a long branch truncates first. */}
-                          <span className="max-w-1/2 shrink-0 truncate">{s.folder}</span>
-                          {s.branch && <BranchLabel branch={s.branch} />}
-                          {s.pullRequest && <span className="shrink-0">#{s.pullRequest}</span>}
-                        </ItemDescription>
-                      </ItemContent>
-                      <ItemActions className="self-start text-xs text-ink-3">
-                        <time dateTime={s.updatedAt}>{timeAgo(s.updatedAt, now)}</time>
-                      </ItemActions>
-                    </button>
+                    <ItemContent className="min-w-0 gap-0.5">
+                      <ItemTitle className="w-full min-w-0">
+                        {/* As on Projects, stretch the name's button over the row beside its menu. */}
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 truncate text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+                          disabled={s.disabled}
+                          title={s.hint}
+                          onClick={() => select(s.cwd, s.sessionId)}
+                        >
+                          {s.label}
+                        </button>
+                      </ItemTitle>
+                      <ItemDescription className="flex min-w-0 items-center gap-1.5 text-xs">
+                        {/* The folder keeps its name (up to half the line); a long branch truncates first. */}
+                        <span className="max-w-1/2 shrink-0 truncate">{s.folder}</span>
+                        {s.branch && <BranchLabel branch={s.branch} />}
+                        {s.pullRequest && <span className="shrink-0">#{s.pullRequest}</span>}
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions className="text-xs text-ink-3">
+                      <time data-motion="aside" dateTime={s.updatedAt}>
+                        {timeAgo(s.updatedAt, now)}
+                      </time>
+                      <RowActions className="top-1/2 right-4 -translate-y-1/2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <PianoButton
+                              variant="ghost"
+                              size="list"
+                              aria-label={`Session menu for ${s.label}`}
+                            >
+                              <MoreHorizontalIcon />
+                            </PianoButton>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <SessionActions target={s} />
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </RowActions>
+                    </ItemActions>
                   </Item>
                 ))}
               </SettingsList>
