@@ -41,10 +41,12 @@ relevant risk is covered.
 ### Scratch instance
 
 The user's own Piano (local on 7070; on exe.dev the systemd units on 8000/8001) uses the real
-registry. Leave it, its backend and its registry alone, and verify in scratch processes:
+registry. Leave it, its backend and its registry alone, and verify in scratch processes. Their
+files and your evidence (databases, throwaway repos, logs, screenshots) go under `.scratch/` in the
+worktree, which Git ignores:
 
 ```bash
-HOST=127.0.0.1 PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172 PIANO_DB_PATH=<scratchpad>/piano.db PORT=7171 node server/main.ts &
+HOST=127.0.0.1 PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172 PIANO_DB_PATH=.scratch/piano.db PORT=7171 node server/main.ts &
 PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort &
 ```
 
@@ -52,7 +54,7 @@ Drive the scratch UI on 7172. A scratch Vite started detached stops picking up e
 still shows old markup, compare a module with and without a cache-busting query, for example
 `curl http://127.0.0.1:7172/src/components/X.tsx` against the same URL with `?t=1`. If they
 differ, restart that Vite process; a fresh browser session does not help. A new scratch database
-starts empty; register only a throwaway git repo in the scratchpad. Record each pid with `$!` as
+starts empty; register only a throwaway git repo under `.scratch/`. Record each pid with `$!` as
 you start it and stop only those pids; do not look pids up with `pgrep -f` or `ps`, which on macOS
 can print other processes' environment variables, secrets included. When a check creates
 worktrees or pi session files, remove them afterwards: `git worktree remove --force` plus

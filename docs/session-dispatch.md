@@ -16,25 +16,26 @@ modules; there is no global CLI or extra dependency to install.
 # From your Piano checkout; both bash and zsh work.
 export PIANO_SESSION_WS_URL=ws://127.0.0.1:7070/ws
 export PIANO_SESSION_ORIGIN=http://127.0.0.1:7070
-printf '%s\n' 'Reply with exactly: READY' > /tmp/piano-brief.txt
+mkdir -p .scratch
+printf '%s\n' 'Reply with exactly: READY' > .scratch/piano-brief.txt
 
 # Print the complete start JSON (including handle and link) to stdout.
-node scripts/dispatch-session.ts /tmp/piano-brief.txt "$HOME/work/my-repo"
+node scripts/dispatch-session.ts .scratch/piano-brief.txt /path/to/my-repo
 
 # Alternatively, save the JSON as well. Use a fresh output path for each dispatch.
-node scripts/dispatch-session.ts /tmp/piano-brief.txt "$HOME/work/my-worktree" /tmp/piano-start.json \
+node scripts/dispatch-session.ts .scratch/piano-brief.txt /path/to/my-worktree .scratch/piano-start.json \
   --model provider/model-id --thinkingLevel medium
 
 # Or start it in a new worktree on the new branch task-a, created from my-repo's repository.
-node scripts/dispatch-session.ts /tmp/piano-brief.txt "$HOME/work/my-repo" --worktree task-a
+node scripts/dispatch-session.ts .scratch/piano-brief.txt /path/to/my-repo --worktree task-a
 
 # Read a session's status by its ID, or the status of every active session in a project.
 node scripts/dispatch-session.ts status 0b6f…-session-id
 node scripts/dispatch-session.ts list --project my-project-id
 
 # Send a session a follow-up, or steer its current run.
-node scripts/dispatch-session.ts follow-up 0b6f…-session-id /tmp/piano-change.txt
-node scripts/dispatch-session.ts follow-up 0b6f…-session-id /tmp/piano-change.txt --steer
+node scripts/dispatch-session.ts follow-up 0b6f…-session-id .scratch/piano-change.txt
+node scripts/dispatch-session.ts follow-up 0b6f…-session-id .scratch/piano-change.txt --steer
 ```
 
 The two examples are alternatives: running both starts two sessions. The prompt argument is a
@@ -201,7 +202,7 @@ never starts Pi and stores nothing.
 ```json
 {
   "sessionId": "0b6f…",
-  "cwd": "/home/me/work/my-repo.task-a",
+  "cwd": "/path/to/my-repo.task-a",
   "projectId": null,
   "disposition": "needs_input",
   "since": "2026-10-21T06:12:03.000Z",

@@ -171,9 +171,9 @@ aligned.
 stalls against a scratch backend:
 
 ```sh
-node test/performance-folder-registry.mjs <scratchpad>/piano-performance.json
+node test/performance-folder-registry.mjs .scratch/piano-performance.json
 # Short controlled slow-folder reproduction (adds 1 ms to each filesystem metadata operation):
-PIANO_BENCH_SLOW_ONLY=1 node test/performance-folder-registry.mjs <scratchpad>/piano-performance-slow.json
+PIANO_BENCH_SLOW_ONLY=1 node test/performance-folder-registry.mjs .scratch/piano-performance-slow.json
 ```
 
 Run it uncontended, apart from the test suite and browser checks. It requires Node 24, Git and Linux
