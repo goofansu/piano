@@ -112,7 +112,7 @@ export function SessionView({ state, send }: Props) {
   // The registry's workspace for the directory, like Changes: it outlives a closed folder. Its
   // reference says whether the session is linked, so an unlinked one asks GitHub nothing.
   // The pull request row shows in Changes: its details are on screen while Changes is.
-  const changesVisible = !settings && navigation.layout.surface && surface?.active === "changes";
+  const changesVisible = navigation.shownTab === "changes";
   const pullRequest = useSessionPullRequest(
     workspace?.id,
     t?.sessionId,
