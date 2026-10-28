@@ -160,8 +160,9 @@ export type GitObservation =
       readonly toplevel: string;
       /** With `branch` or `remote`: null when detached. Discovery does not pay for it. */
       readonly branch?: string | null;
-      /** With `remote`: the URL Git would contact for the branch's tracking remote (else
-       * `origin`), after the user's `url.<base>.insteadOf` rewrites; null without that remote. */
+      /** With `remote`: the URL Git would contact for the remote the branch pushes to
+       * (`Upstream.remote`), after the user's `url.<base>.insteadOf` rewrites; null without
+       * that remote. */
       readonly remote?: string | null;
       /** With `remote`: the branch's name on that remote; null when detached or without it. */
       readonly remoteBranch?: string | null;

@@ -22,7 +22,8 @@ export { PullRequestError };
 const failure = (detail: string) => new PullRequestError({ detail });
 
 /** Observe both branch and head repository through GitCheckout's observation (INV-06):
- * inherited GIT_* state cannot redirect discovery; the remote is the tracking remote's URL. */
+ * inherited GIT_* state cannot redirect discovery; the remote is the URL of the one the branch
+ * pushes to. */
 const checkout = Effect.fn("SessionPullRequests.checkout")(function* (cwd: string) {
   const observed = yield* observeGit(cwd, { remote: true });
   if (observed.status === "broken") return yield* failure(observed.detail);

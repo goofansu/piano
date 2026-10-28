@@ -85,7 +85,7 @@ export function githubRemote(remote: string): { repo: string; apiHost: GitHubHos
   return { repo: match[1]!.toLowerCase(), apiHost: proxy ? EXE_GITHUB : "github.com" };
 }
 
-/** A branch as GitHub knows it: its name on its tracking remote, in that remote's repository. */
+/** A branch as GitHub knows it: its name on the remote it pushes to, in that remote's repository. */
 export interface BranchHead {
   readonly name: string;
   readonly repo: string;
