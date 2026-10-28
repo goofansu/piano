@@ -38,7 +38,9 @@ It needs `node_modules` (runs `npm ci` when missing) and nothing else. It create
 - `pi-agent/`, `pi-sessions/`, `home/`: `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR` and
   `HOME` for the backend, so `~/.pi`, Worktrunk's user config and the user's credentials are never
   read or written.
-- `audit.jsonl`: every command the fake Pi received (`PIANO_TEST_AUDIT`).
+- `audit.jsonl`: every command the fake Pi received (`PIANO_TEST_AUDIT`). Only the default
+  `test/browser/fake-pi.mjs` writes it; on `--fake-pi dialogs` there is no audit, so prove what Pi
+  received from its replies instead.
 - `logs/`, `pids`, `run.env`.
 
 The backend runs `node server/main.ts` with `HOST=127.0.0.1`, `PIANO_PI_CLI=test/browser/fake-pi.mjs`
@@ -72,12 +74,13 @@ successful Pi `write` of `src/answer.ts` (hand-written, since fake Pi makes no t
 
 ### A deployed instance
 
-`https://<vm>.exe.xyz` (for example `https://pi-piano.exe.xyz`) is the owner's real Piano behind
-exe.dev private access: it has no login of its own, and the origin check is its only write guard.
-Target it read-only:
+`https://<vm>.exe.xyz` is the owner's real Piano behind exe.dev private access: it has no login of
+its own, and the origin check is its only write guard. The Piano VMs are the ones `ssh exe.dev ls
+--json` tags `goofansu-piano` (for example `eng-1`). Target them read-only:
 
-- From outside the VM: `.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth pi-piano` expects `307` to
-  `https://pi-piano.exe.xyz/__exe.dev/login`. A headless `agent-browser` has no exe.dev login, so it
+- From outside the VM: `.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth eng-1` expects `307` to
+  `https://eng-1.exe.xyz/__exe.dev/login`; `answered '000 '` means the name does not resolve (no
+  such VM). A headless `agent-browser` has no exe.dev login, so it
   cannot open that UI; UI observation there needs the owner's signed-in browser.
 - On the VM, from any checkout there (the script sources its `lib.sh`, so it cannot be piped over
   SSH): `.agents/skills/verify-piano/scripts/doctor.sh --deployed`.
@@ -142,8 +145,9 @@ after `web/dist` was built (then the running backend or UI predates the checkout
 
    Stable handles, in order of preference: role plus accessible name (`find role <role> click
    --name <name> --exact`), `aria-label` selectors (`[aria-label="First message"]`,
-   `[aria-label="Message"]`, `[aria-label="Send"]`), `data-slot` (`[data-slot=item]` cards,
-   `[data-slot="gutter"]` transcript glyphs), `[cmdk-input]` (Mod+K palette), and routes (`/new`,
+   `[aria-label="Message"]`, `[aria-label="Send"]`), `data-slot` (`[data-slot=item]` list rows,
+   whose title button is `[data-slot=item-title] button`; `[data-slot="gutter"]` transcript
+   glyphs), `[cmdk-input]` (Mod+K palette), and routes (`/new`,
    `/s/<sessionId>`, `/projects/<id>`, `/projects/<id>/new`). Snapshot refs (`@e9`) change on every
    render; never reuse them across pages. Read the session header with
    `ab.sh "$RUN" eval "document.querySelector('main header').innerText"`.
@@ -223,7 +227,10 @@ harness journeys clean up their own instance and browser.
 - Times in the UI follow the browser's time zone (UTC on the VM), not the user's.
 - On exe.dev, `piano.service` may carry an environment drop-in such as `PIANO_API_SOCKET` that this
   SHA does not read; launch unsets it so a scratch backend never shares a live socket path.
-- Proved on the exe.dev VM `pi-piano` (Linux, Node 24, Worktrunk 0.80) and on macOS (Node 24).
+- A name that is only an `aria-label` (an icon button's, such as "Close answer.ts") is not page
+  text: `wait --text` never sees it; wait on `'[aria-label="..."]'` instead.
+- Proved on an exe.dev VM (Linux, Node 24, Worktrunk 0.80), on macOS (Node 24) and on a Linux
+  cloud VM (Node 24.22).
   A stock Mac has no `timeout`, so `ab.sh` and the browser close in `cleanup.sh` run unbounded
   there; `VERIFY_AB_TIMEOUT` applies only where coreutils is installed.
 

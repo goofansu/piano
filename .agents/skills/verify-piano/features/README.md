@@ -54,13 +54,15 @@ Keep implementation details out; name user paths, handles, required state, comma
 - [Start a session](./start-session.md): the New page, its directory, model, effort and project
   choices, the first message and reply, reload without resending, a kept draft when not sent.
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
-  home; read history and cost; follow up; stop a running reply.
+  home; read history and cost; follow up; stop a running reply; archive and delete from the row's
+  menu.
 - [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
-  per project with folders, count and last activity; New project in the header; empty and phone.
+  per project with folders, count, last activity and the project menu; New project in the header;
+  empty and phone.
 - [Project home](./project-home.md): `/projects/<id>` from the sidebar, palette and session
-  header; member cards, order, PR number, live append, empty, deleted and missing projects, the
-  no-request cost rule, 390px layout.
+  header; member rows and their Archive / Delete, order, PR number, new session in the project,
+  settings, empty, deleted and missing projects.
 - [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
-  `status` and `list --project`, and its refusals.
-- [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and the
-  Files list of what a session wrote.
+  `follow-up`, `status` and `list --project`, its refusals, and a dialog that needs input.
+- [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and its
+  pull request, and the session rail's Environment, Outputs and Links.

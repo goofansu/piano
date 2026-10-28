@@ -12,10 +12,16 @@ link a person can open.
 - `worktree`: `--worktree BRANCH` has Piano create `<repo>.<BRANCH>` first and start there.
 - `status`: `status <sessionId>` prints `disposition`, `needs`, `lastAnswer`, `changes`, `link`.
 - `list`: `list --project <id>` prints one JSON line per active member session.
+- `follow-up`: `follow-up <sessionId> <prompt-file> [--steer]` sends one more message to the
+  session and prints `submission` and `link`.
+- `options`: `--model provider/id` and `--thinkingLevel LEVEL` (otherwise Piano's defaults, printed
+  as `"model": null`, `"thinkingLevel": null`), `--hooks` with `--worktree`, and an optional
+  out-file (exit 3 when it exists).
 - `refusals`: a missing cwd fails locally with exit 2; a refused creation prints
   `"creation":"refused"` and `"submission":"not_sent"`.
 - `needs-input`: on `--fake-pi dialogs`, a prompt starting `ask` leaves the session waiting on a
-  dialog ("Enter a value") that the web UI answers.
+  dialog ("Enter a value") that the web UI answers; `status` meanwhile reports
+  `"disposition": "needs_input"`.
 
 ## How to get to it (user POV)
 
@@ -28,8 +34,8 @@ link a person can open.
 
 ## Driving it with agent-browser
 
-Preconditions: a seeded launch, `. "$RUN/run.env"` (exports `PIANO_SESSION_WS_URL=ws://127.0.0.1:$WEB_PORT/ws`
-and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatch hello" > "$RUN/prompt.txt"`;
+Preconditions: a seeded launch, `. "$RUN/run.env"` (exports `PIANO_SESSION_WS_URL=ws://127.0.0.1:$PORT/ws`,
+the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatch hello" > "$RUN/prompt.txt"`;
 `mkdir -p "$EVIDENCE/session-dispatch"`; `ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`.
 
 - `start`
@@ -47,8 +53,12 @@ and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatch hello" > "$
     `"changes": {"branch": "verify-wt", "files": 0, "pullRequest": null}`.
 - `list`
   - Command: `node scripts/dispatch-session.ts list --project verify`
-  - Result: one line for `verify-plan` with `"projectId":"verify"`, `"lastAnswer":"Answer 4."`,
-    and `pullRequest.number` 222.
+  - Result: one line for `verify-plan` with `"projectId":"verify"`, `"lastAnswer":"Answer 4."`
+    (from the baseline; a later prompt to it replaces that), and `pullRequest.number` 222.
+- `follow-up`
+  - Command: `echo "one more" > "$RUN/more.txt"; node scripts/dispatch-session.ts follow-up <sessionId from start.json> "$RUN/more.txt"; echo $?`
+  - Result: exit 0 with `submission` and `link`; the audit gains `prompt` `one more` for that ID,
+    and `status <id>` then reports `"lastAnswer": "echo: one more"`.
 - `refusals`
   - Command: `node scripts/dispatch-session.ts "$RUN/prompt.txt" "$RUN/missing"; echo $?`
   - Result: `ENOENT: no such file or directory, stat '<path>'` and exit 2; the audit gains no
@@ -58,18 +68,22 @@ and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatch hello" > "$
 - `needs-input` (relaunch with `.agents/skills/verify-piano/scripts/launch.sh --fake-pi dialogs`)
   - Command: `echo "ask for a value" > "$RUN/ask.txt"; node scripts/dispatch-session.ts "$RUN/ask.txt" "$REPO"`,
     then `status <id>`.
-  - Result: `ab open <link>` shows the dialog "Enter a value"; `ab snapshot -i` gives the ref of
-    its textbox "type" (`ab fill @<ref> 42`), then
-    `ab find role button click --name "Send answer" --exact` answers it and the session goes on.
+  - Result: `status` reports `"disposition": "needs_input"` and `"needs": {"title": "Enter a
+    value", "kind": "input", "link": "<link>"}`. `ab open <link>` shows the dialog "Enter a value"
+    with textbox "type", "Cancel" and "Send answer"; `ab find role textbox fill --name "type" --exact 42;
+    ab find role button click --name "Send answer" --exact` answers it: the dialog closes, the
+    transcript shows `you said 42`, and `status` reports `"disposition": "settled"`. Capture
+    `02-needs-input` and `03-answered`.
 
 ## Gotchas
 
-- `PIANO_SESSION_WS_URL` must be loopback. `run.env` points it at the UI port's `/ws`, and the
-  printed links use that port.
+- `PIANO_SESSION_WS_URL` must be loopback. `run.env` points it at the backend's `/ws` (`$PORT`);
+  the printed links come from `PIANO_SESSION_ORIGIN`, so they open the UI (`$WEB_URL`).
+- `status`'s `changes.files` counts uncommitted files whatever comparison the Changes pane shows.
 - Run it with the checkout's Node 24 (`node scripts/dispatch-session.ts`), not `npx tsx`.
 - `test/fake-pi.mjs` gives every dialog the ID `d1`; a second dialog in the same session may not
   render. Start a new session per dialog check.
-- `needs-input` was checked in earlier QA of this SHA, not in the skill's first proof run; its
-  `status` `needs` field is not pinned here yet.
+- `test/fake-pi.mjs` writes no audit, so on `--fake-pi dialogs` the reply (`you said 42`) is the
+  proof of what Pi received. Its `status` `lastAnswer` stays `null` after the answer.
 - Worktrees from `--worktree` live beside `$REPO` inside the run dir and go with Cleanup; never
   dispatch against a real checkout.
