@@ -171,6 +171,14 @@ test("a removed checkout keeps its workspace identity but cannot open Changes; a
   assert.equal(nonGit.title, "Plain", "the context read this session's reference");
 });
 
+test("a session whose directory has no registry workspace says why Changes cannot open", () => {
+  const ctx = sessionContext({ ...base, workspaces: [], session: session("/work/repo.feature") });
+  assert.equal(ctx.workspace, undefined);
+  assert.equal(ctx.canOpenChanges, false);
+  assert.equal(ctx.changesUnavailable, "Changes unavailable");
+  assert.equal(sessionContext({ ...base, session: null }).changesUnavailable, undefined);
+});
+
 test("the session's context and its catalog row agree on its branch, project and title", () => {
   const plain: FolderView = {
     ...folder,

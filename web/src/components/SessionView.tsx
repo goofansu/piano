@@ -33,7 +33,6 @@ import {
   sessionActivity,
   sessionContext,
   sessionPane,
-  sessionReference,
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
@@ -96,7 +95,7 @@ export function SessionView({ state, send }: Props) {
     [t?.tools],
   );
   const input = state.pendingCreate;
-  const { workspace, draftKey } = sessionContext(state);
+  const { workspace, draftKey, pullRequest: link } = sessionContext(state);
   const { commands } = useSessionCommands();
   // The area tabs show where the Agent command is offered; only then is each area their panel.
   const areaTabs = !!commands.find((c) => c.id === "agent")?.enabled;
@@ -116,9 +115,7 @@ export function SessionView({ state, send }: Props) {
   const pullRequest = useSessionPullRequest(
     workspace?.id,
     t?.sessionId,
-    t?.sessionId
-      ? sessionReference(state, { cwd: t.cwd, sessionId: t.sessionId })?.pullRequest
-      : undefined,
+    link,
     !!t && isWorking(t.state),
     {
       visible: changesVisible,

@@ -3,7 +3,14 @@
  * project and readiness. Header, palette, sidebar and session view read these instead of each
  * looking the session up in the folder list themselves.
  */
-import type { FolderView, HostInfo, Project, SessionReference, Workspace } from "@shared/wire";
+import type {
+  FolderView,
+  HostInfo,
+  Project,
+  SessionPullRequestLink,
+  SessionReference,
+  Workspace,
+} from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { isWorking } from "../../../shared/sessionProjection.ts";
 import { sameSession } from "../../../shared/wire.ts";
@@ -215,8 +222,17 @@ export interface SessionContext {
   changesWorkspace: Workspace | undefined;
   /** Changes can open: a Git workspace whose checkout is still there. */
   canOpenChanges: boolean;
-  /** Why Changes cannot open, when the session's facts say: a removed checkout, or no Git. */
+  /**
+   * Why Changes cannot open: set exactly when a session is selected and `canOpenChanges` is false.
+   * A removed checkout or no Git says so; a directory the registry has no workspace for yet says
+   * only that Changes is unavailable.
+   */
   changesUnavailable: string | undefined;
+  /**
+   * The registry's pull request link for the selected session: `null` once it was removed,
+   * `undefined` while nothing is linked or the session is not in the registry yet.
+   */
+  pullRequest: SessionPullRequestLink | null | undefined;
   checkoutMissing: boolean;
   /**
    * The selected session's draft while its composer takes input; `null` once it is read-only, so
@@ -250,13 +266,15 @@ export function sessionContext(state: AppState): SessionContext {
     workspace,
     changesWorkspace,
     canOpenChanges,
-    changesUnavailable: canOpenChanges
-      ? undefined
-      : checkoutMissing
-        ? "Checkout removed"
-        : workspace && !changesWorkspace
-          ? "Not a Git repository"
-          : undefined,
+    changesUnavailable:
+      !session || canOpenChanges
+        ? undefined
+        : checkoutMissing
+          ? "Checkout removed"
+          : workspace && !changesWorkspace
+            ? "Not a Git repository"
+            : "Changes unavailable",
+    pullRequest: reference?.pullRequest,
     checkoutMissing,
     draftKey: session && !checkoutMissing ? sessionDraftKey(session) : null,
   };

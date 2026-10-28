@@ -141,7 +141,7 @@ export function SessionPanel({
   });
 
   if (!t) return null;
-  const { workspace, changesWorkspace, canOpenChanges, changesUnavailable, checkoutMissing } =
+  const { workspace, changesWorkspace, changesUnavailable, checkoutMissing } =
     sessionContext(state);
   const files = tabs.filter((tab): tab is Exclude<SurfaceTab, string> => !isView(tab));
   const view = (k: string, children: React.ReactNode) => (
@@ -194,9 +194,7 @@ export function SessionPanel({
               workspace={changesWorkspace}
               // An open tab follows the rule the Changes command does: a reload can bring one
               // back, and a checkout can go while it is open.
-              unavailable={
-                canOpenChanges ? undefined : (changesUnavailable ?? "Changes unavailable")
-              }
+              unavailable={changesUnavailable}
               session={t}
               active={navigation.shownTab === "changes"}
               onAsk={onAsk}
