@@ -101,8 +101,8 @@ export const gitText = Effect.fn("GitCheckout.gitText")(function* (
 /** The checked-out branch, empty when detached (an unborn branch still has its name). */
 const BRANCH = ["branch", "--show-current"];
 
-/** Where a branch's work goes and is counted: the one answer for discovery, comparison targets
- * and commits not pushed. */
+/** Where a branch's work goes and is counted, and where it started: the one answer for discovery,
+ * comparison targets and commits not pushed. */
 export interface Upstream {
   /** The remote Git would push the branch to: its push remote, else the one it tracks, else
    * `origin`. */
@@ -113,6 +113,10 @@ export interface Upstream {
   /** The remote-tracking ref that push would update, else `refs/remotes/<remote>/<branch>`. Git
    * may not hold it. */
   readonly ref: string;
+  /** The remote the branch tracks, else `origin`: where it started, so where its base branch
+   * lives. A fork's branch started from `upstream/main` pushes to the fork but compares with
+   * `upstream`. */
+  readonly tracked: string;
 }
 
 /** The branch's upstream and where Git would push it. `push.default` and `remote.pushDefault`
@@ -134,15 +138,16 @@ function upstreamOf(branch: string, answer: string): Upstream {
     .trim()
     .split("\0");
   const onRemote = (name: string) => (name && name !== "." ? name : null);
+  const tracked = onRemote(remote) ?? "origin";
   const target = onRemote(pushRemote) ?? onRemote(remote) ?? "origin";
   if (!push.startsWith("refs/remotes/"))
-    return { remote: target, name: branch, ref: `refs/remotes/${target}/${branch}` };
+    return { remote: target, name: branch, ref: `refs/remotes/${target}/${branch}`, tracked };
   // Pushing to its upstream (`push.default=upstream`, or the same name) keeps the upstream's name.
   const name =
     push === upstream && remoteRef.startsWith("refs/heads/")
       ? remoteRef.slice("refs/heads/".length)
       : branch;
-  return { remote: target, name, ref: push };
+  return { remote: target, name, ref: push, tracked };
 }
 
 /** What Git says about a path: outside any repository, inside a working checkout, or `broken`:
