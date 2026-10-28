@@ -71,6 +71,11 @@ export interface TranscriptViewport {
    * composer sitting high.
    */
   jump: (entry: JumpEntry, options?: { animate: boolean }) => boolean;
+  /**
+   * A jump to this message has come to rest: its top sits at the jump margin, or the transcript
+   * ended before the message could reach it. `false` while it is not rendered.
+   */
+  landed: (messageId: string) => boolean;
   /** The entry the reader is looking at: bottom when there, top near the top, else the message under the top edge. */
   current: (entries: ReadonlyArray<JumpEntry>) => string;
 }
@@ -125,6 +130,7 @@ export function createTranscriptViewport(): TranscriptViewport {
 
   const near = (el: ViewportElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
+  const atEnd = (el: ViewportElement) => el.scrollHeight - el.scrollTop - el.clientHeight < AT_END;
   const setBottom = (value: boolean) => {
     if (bottom === value) return;
     bottom = value;
@@ -146,8 +152,7 @@ export function createTranscriptViewport(): TranscriptViewport {
     if (!element) return;
     const top = element.scrollTop;
     if (top !== lastTop) {
-      const end = element.scrollHeight - top - element.clientHeight < AT_END;
-      stick = end || (near(element) && top >= lastTop);
+      stick = atEnd(element) || (near(element) && top >= lastTop);
       lastTop = top;
     }
     setBottom(near(element));
@@ -205,6 +210,11 @@ export function createTranscriptViewport(): TranscriptViewport {
       lastTop = el.scrollTop;
       setBottom(near(el));
       return found;
+    },
+    landed: (messageId) => {
+      if (!element) return false;
+      const top = element.anchorTop(messageId);
+      return top !== undefined && (Math.abs(top - TRANSCRIPT_JUMP_MARGIN) < 1 || atEnd(element));
     },
     current: (entries) => {
       const el = element;

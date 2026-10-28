@@ -170,6 +170,22 @@ test("a jump to a message lands it 16px under the top edge", () => {
   );
 });
 
+test("a message jump has landed at the margin, or at the end when the message cannot reach it", () => {
+  const { viewport, el } = setup();
+  el.anchors.set("u2", 900);
+  el.anchors.set("last", 1900);
+  scroll(el, viewport, 0);
+  assert.equal(viewport.landed("u2"), false, "a message still below has not landed");
+  el.scrollTop = 600; // Mid-flight, short of the margin.
+  assert.equal(viewport.landed("u2"), false);
+  viewport.jump({ kind: "user", id: "u2", label: "Second", messageId: "u2" });
+  assert.equal(viewport.landed("u2"), true);
+  viewport.jump({ kind: "user", id: "last", label: "Last", messageId: "last" });
+  assert.equal(el.scrollTop, 1500, "the last message stops short of the margin at the end");
+  assert.equal(viewport.landed("last"), true, "the end is as far as it can go");
+  assert.equal(viewport.landed("gone"), false, "a message that is not rendered has not landed");
+});
+
 test("index jumps unpin before asynchronous mounting and refinement", () => {
   const { viewport, el } = setup();
   const virtual: ViewportElement = el;
