@@ -2,6 +2,7 @@
  * and files show and which start open, and the text the sheet shows or drafts. Pure; the sheet
  * keeps reads and markup.
  */
+
 import type {
   ChangeFile,
   ChangesScope,
@@ -10,9 +11,11 @@ import type {
   LocalWork,
   RenderMsg,
   ScopeAvailability,
+  SessionPullRequestLink,
   Workspace,
   WorkspaceChanges,
 } from "@shared/wire";
+import { pullRequestBranches } from "../../../shared/pullRequestBranches.ts";
 import { CHANGES_FILE_PATCH_BYTES } from "../../../shared/wire.ts";
 import { type DiffFile, lineCount, parseUnifiedDiff } from "./diff.ts";
 
@@ -97,6 +100,15 @@ export function refreshKey(
       return `${m.id}|${streaming}`;
   }
   return `none|${streaming}`;
+}
+
+/**
+ * The session's pull request as Changes compares by it: linking, removing, or a read that records
+ * the branches GitHub reports (a retarget, or a link saved while GitHub was unreadable) moves it,
+ * so Changes reads its target and whether the pull request is this branch's again.
+ */
+export function pullRequestTrigger(link: SessionPullRequestLink | null | undefined): string {
+  return link ? JSON.stringify(pullRequestBranches(link)) : "";
 }
 
 /**

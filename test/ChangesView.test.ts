@@ -11,6 +11,7 @@ import {
   type Disclosure,
   fileMessage,
   initialDisclosure,
+  pullRequestTrigger,
   refreshKey,
   toggleEvery,
   toggleFile,
@@ -91,6 +92,34 @@ test("only a new checkout-changing tool result or a streaming change asks for a 
     base,
   );
   assert.notEqual(refreshKey(session([msg("1", "tool_result", "edit")], true)), base);
+});
+
+// The server compares by the link's recorded branches (SessionChanges hints); a read rewrites them
+// without changing the URL, after a retarget or once GitHub answers for a link saved without them.
+test("Changes reads again when the pull request's recorded branches move, not only its URL", () => {
+  const url = "https://github.com/o/r/pull/7";
+  const saved = { url, source: "manual" as const };
+  const recorded = {
+    ...saved,
+    head: "feat",
+    headRepo: "o/r",
+    base: "main",
+    baseRepo: "o/r",
+  };
+  const unlinked = pullRequestTrigger(undefined);
+  assert.equal(pullRequestTrigger(null), unlinked, "removed reads like never linked");
+  assert.notEqual(pullRequestTrigger(saved), unlinked, "linking reads again");
+  assert.notEqual(pullRequestTrigger(recorded), pullRequestTrigger(saved), "branches recorded");
+  assert.notEqual(
+    pullRequestTrigger({ ...recorded, base: "release" }),
+    pullRequestTrigger(recorded),
+    "retargeted",
+  );
+  assert.equal(
+    pullRequestTrigger({ ...recorded, source: "branch" }),
+    pullRequestTrigger(recorded),
+    "how the link was made does not change what Changes compares with",
+  );
 });
 
 test("a response for another workspace, or a failed read, is rejected", () => {

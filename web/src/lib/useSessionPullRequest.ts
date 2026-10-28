@@ -2,6 +2,7 @@ import type { SessionPullRequestLink } from "@shared/wire";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { sessionPullRequest } from "@/lib/api";
+import { pullRequestTrigger } from "@/lib/changesView";
 import { createSessionPullRequest, pullRequestKey } from "@/lib/sessionPullRequest";
 
 /**
@@ -62,6 +63,8 @@ export function useSessionPullRequest(
     value: current ? state.value : undefined,
     linked: current && state.linked,
     registered: current ? state.link : undefined,
+    /** Changes reads again when this moves: the registry's link as Changes compares by it. */
+    changesTrigger: pullRequestTrigger(link),
     loading: current && state.loading,
     busy: current && state.busy,
     finding: current && state.finding,

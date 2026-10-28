@@ -6,6 +6,7 @@
  * WorkspaceChanges; the registry holds only the session's choice (INV-01).
  */
 import { Context, Effect, Layer } from "effect";
+import { pullRequestBranches } from "../shared/pullRequestBranches.ts";
 import type { ChangesScope, WorkspaceChanges as Observation, Workspace } from "../shared/wire.ts";
 import type { TargetHints } from "./ComparisonBase.ts";
 import { Registry, type RegistryError, type SessionEntry } from "./Registry.ts";
@@ -48,7 +49,7 @@ export const SessionChangesLive = Layer.effect(
       const worktree = data.worktrees.find((w) => w.path === session.cwd);
       const link = session.pullRequest;
       const hints: TargetHints = {
-        ...(link ? { pullRequest: link } : {}),
+        ...(link ? { pullRequest: pullRequestBranches(link) } : {}),
         ...(worktree?.baseBranch ? { worktreeBase: worktree.baseBranch } : {}),
       };
       return hints;

@@ -4,12 +4,12 @@
  * Piano created the worktree. Nothing is fetched: a target is whatever Git holds locally, and a
  * scope Git cannot answer for is unavailable with its reason, never another comparison (INV-06).
  */
+import type { PullRequestBranches } from "../shared/pullRequestBranches.ts";
 import type {
   ChangesScope,
   Comparison,
   ComparisonTarget,
   ScopeAvailability,
-  SessionPullRequestLink,
 } from "../shared/wire.ts";
 import type { Checkout, Upstream } from "./GitCheckout.ts";
 import { type BranchHead, githubRemote, isFromBranch } from "./GitHubPullRequests.ts";
@@ -17,7 +17,7 @@ import { type BranchHead, githubRemote, isFromBranch } from "./GitHubPullRequest
 /** Identities Piano holds that name a branch's target, in the order they are tried. */
 export interface TargetHints {
   /** GitHub's qualified branches. Unqualified legacy hints are accepted but cannot retarget. */
-  readonly pullRequest?: Pick<SessionPullRequestLink, "head" | "base" | "headRepo" | "baseRepo">;
+  readonly pullRequest?: PullRequestBranches;
   /** The base branch Worktrunk reported when Piano created this worktree. */
   readonly worktreeBase?: string;
 }

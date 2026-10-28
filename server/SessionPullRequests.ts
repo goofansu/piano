@@ -2,6 +2,7 @@
  * through the GitHubPullRequests adapter. This module keeps the link policy. Transcript contents never participate. Registry retains only identity and user preference.
  */
 import { Context, Effect, Layer } from "effect";
+import type { PullRequestBranches } from "../shared/pullRequestBranches.ts";
 import type {
   PullRequest,
   SessionPullRequest,
@@ -66,9 +67,7 @@ export const SessionPullRequestsLive = Layer.effect(
       return saved;
     });
     /** Qualified branches, never inferred from a manual association or a bare branch name. */
-    const branchesOf = (
-      pr: PullRequest,
-    ): Pick<SessionPullRequestLink, "head" | "base" | "headRepo" | "baseRepo"> =>
+    const branchesOf = (pr: PullRequest): PullRequestBranches =>
       pr.head && pr.base
         ? { head: pr.head, base: pr.base, headRepo: pr.headRepo, baseRepo: pr.baseRepo }
         : {};
