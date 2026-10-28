@@ -9,11 +9,14 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 
 - `open-from-sidebar`: click the session's row in navigation "Sessions".
 - `history`: the saved user message and reply render; "Jump to message" lists them.
-- `header`: one line: the project crumb ("Project: <name>", only for a member session), the title
-  with "Session information and actions" beside it, then folder and branch; at its end "Show
-  session rail" and "Changes". The pull request is read in Changes, not here. The session's state
-  is the sidebar row's; the header only carries it as screen-reader `role=status` text ("Ready",
-  "Not running").
+- `header`: one line: the project crumb ("Project: <name>", only for a member session) and the
+  title with "Session information and actions" beside it; at its end "Show session rail" and
+  "Changes". Where the session runs is in the session rail and, when shown, the sidebar row; the
+  pull request is read in Changes. The session's state is the sidebar row's; the header only
+  carries it as screen-reader `role=status` text ("Ready", "Not running").
+- `row-details`: View options → Show → "Folder and branch" (off by default, remembered per
+  browser; the palette's "Show folder and branch" / "Hide folder and branch") adds a line under
+  each sidebar row with its folder and branch (only the branch where the group names the folder).
 - `cost`: "Context usage" opens "Token and cost breakdown" with the reply's tokens and cost.
 - `follow-up`: "Message" plus Enter sends to the same Pi session.
 - `stop`: "Stop" aborts a running reply.
@@ -41,7 +44,15 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/"; ab wait --text "Loose session";
     ab find role button click --name "Loose session" --exact; ab wait --url "**/s/verify-loose";
     ab wait --text "Answer 4."`
-  - Result: `What is 2 + 2? (Loose session)` and `Answer 4.` visible. Capture `01-opened`.
+  - Result: `What is 2 + 2? (Loose session)` and `Answer 4.` visible; the header text reads
+    `Loose session` / `Not running`. Capture `01-opened`.
+- `row-details`
+  - Action: `ab find role button click --name "View options" --exact;
+    ab find role menuitem click --name "Show" --exact;
+    ab find role menuitemcheckbox click --name "Folder and branch" --exact;
+    ab wait --fn "!document.querySelector('[data-radix-popper-content-wrapper]')"`
+  - Result: `ab eval "document.querySelector('nav[aria-label=Sessions]').innerText"` gives each row
+    `Folder:` / `repo` / `Git branch:` / `main` under its title. Capture `05-folder-and-branch`.
 - `cost`
   - Action: `ab find role button click --name "Context usage" --exact;
     ab wait '[aria-label="Token and cost breakdown"]'`

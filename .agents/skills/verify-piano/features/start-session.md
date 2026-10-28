@@ -44,10 +44,10 @@ project and reload on its own scratch instance, with its own folders and models 
 - `first-message`
   - Action: `ab fill '[aria-label="First message"]' "hello verify"; ab press Enter;
     ab wait --text "echo: hello verify"`
-  - Result: the URL becomes `/s/<uuid>`; the header text reads `hello verify` / `Working
-    directory:` / `repo` / `Git branch:` / `main` / `Ready`. Capture `02-reply`.
+  - Result: the URL becomes `/s/<uuid>`; the header text reads `hello verify` / `Ready`.
+    Capture `02-reply`.
   - Side effect: the audit has one `start` for that session ID with `--session-id <uuid>`,
-    `--model fake/alpha`, `--thinking medium`, then one
+    `--model fake/alpha`, `--thinking medium` and `"cwd": "$REPO"` (the chosen folder), then one
     `{"command":"prompt","text":"hello verify","sessionId":"<uuid>"}`:
     `rg '"command":"(start|prompt)"' "$AUDIT" | rg -v '"probe"'`.
 - `reload`

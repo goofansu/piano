@@ -130,8 +130,6 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
 
 - Fake Pi makes no tool calls, so Outputs is only reachable through the seeded, hand-written
   history; report it as such. A real Pi write is not exercised.
-- The header carries `Working directory:` as screen-reader text, so `wait --text "Working
-  directory"` passes on any session page; it proves nothing about the rail.
 - The Files list hides paths ignored by the workspace's `.gitignore` (the throwaway repo ignores
   `ignored/`).
 - The Surface area is `[data-slot=surface-area]`; hidden, it stays mounted but `inert` (so its
