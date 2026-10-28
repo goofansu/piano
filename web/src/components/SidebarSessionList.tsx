@@ -160,7 +160,8 @@ const SessionRow = memo(
               {t.branch && (
                 <>
                   <span className="sr-only">Git branch: </span>
-                  <BranchLabel branch={t.branch} className="min-w-0" />
+                  {/* Sans, not mono: under every title, the branch stays a quiet label. */}
+                  <BranchLabel branch={t.branch} className="min-w-0 font-sans" />
                 </>
               )}
             </span>
