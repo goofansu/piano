@@ -18,6 +18,7 @@ import type { Navigation } from "@/lib/navigation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import { sessionRowMenu } from "@/lib/sessionCommands";
+import type { SessionRowDetails } from "@/lib/sidebarList";
 import { useSidebarWindow } from "@/lib/useSidebarWindow";
 import { sessionKey } from "@/store";
 
@@ -27,12 +28,6 @@ export const sidebarRowClassName = "h-8 pointer-coarse:h-11 max-md:h-12";
 const detailedRowClassName = "h-11 pointer-coarse:h-14 max-md:h-15";
 /** Space between session rows: tight on desktop, roomier for fingers on phones. */
 export const sidebarRowGapClassName = "gap-1 md:gap-0.5";
-
-/**
- * The line beneath each title when View options shows folder and branch: the branch, and the
- * folder too unless the row's group already names it.
- */
-export type SessionRowDetails = "branch" | "folder-and-branch";
 
 /**
  * One session list in the sidebar's shared ScrollArea/nav. Owns row identity, responsive

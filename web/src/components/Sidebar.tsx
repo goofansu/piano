@@ -37,7 +37,6 @@ import { Hint } from "@/components/Shortcut";
 import {
   sidebarRowClassName as row,
   sidebarRowGapClassName as rowGap,
-  type SessionRowDetails,
   SidebarSessionList,
 } from "@/components/SidebarSessionList";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +50,7 @@ import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
 import { projectCommands } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
-import type { SidebarSection } from "@/lib/sidebarList";
+import type { SessionRowDetails, SidebarSection } from "@/lib/sidebarList";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarList } from "@/lib/useSidebarList";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -78,10 +77,7 @@ export function Sidebar({ state }: Props) {
     toggle,
   } = useSidebarList(state, view);
 
-  const details: SessionRowDetails | undefined = view.folderAndBranch
-    ? "folder-and-branch"
-    : undefined;
-  const groupProps = { state, select, details };
+  const groupProps = { state, select };
   const section = (s: SidebarSection) => {
     const onOpenChange = (open: boolean) => toggle(s.key, open);
     switch (s.kind) {
@@ -93,9 +89,8 @@ export function Sidebar({ state }: Props) {
             sessions={s.sessions}
             open={s.open}
             onOpenChange={onOpenChange}
+            details={s.details}
             {...groupProps}
-            // The group names the folder, so its rows add only the branch.
-            details={details && "branch"}
           />
         );
       case "project":
@@ -106,6 +101,7 @@ export function Sidebar({ state }: Props) {
             sessions={s.sessions}
             open={s.open}
             onOpenChange={onOpenChange}
+            details={s.details}
             {...groupProps}
           />
         );
@@ -118,13 +114,18 @@ export function Sidebar({ state }: Props) {
             sessions={s.sessions}
             open={s.open}
             onOpenChange={onOpenChange}
-            details={details}
+            details={s.details}
             select={select}
           />
         );
       case "list":
         return (
-          <SidebarSessionList key={s.key} sessions={s.sessions} details={details} select={select} />
+          <SidebarSessionList
+            key={s.key}
+            sessions={s.sessions}
+            details={s.details}
+            select={select}
+          />
         );
     }
   };
@@ -190,7 +191,7 @@ export function Sidebar({ state }: Props) {
               sessions={pinned.sessions}
               open={pinned.open}
               onOpenChange={(open) => toggle(pinned.key, open)}
-              details={details}
+              details={pinned.details}
               select={select}
               className="mb-1"
             />
