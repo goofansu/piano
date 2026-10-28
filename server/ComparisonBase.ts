@@ -40,14 +40,6 @@ const commitOf = async (checkout: Checkout, ref: string): Promise<string | null>
   return result.code === 0 ? result.stdout.toString("utf8").trim() || null : null;
 };
 
-/** The remote the branch tracks, else `origin`. */
-async function trackingRemote(checkout: Checkout, branch: string): Promise<string> {
-  const remote = (
-    await checkout.text(["for-each-ref", "--format=%(upstream:remotename)", `refs/heads/${branch}`])
-  ).trim();
-  return remote && remote !== "." ? remote : "origin";
-}
-
 /** The first of the named branch's refs Git holds: its remote-tracking ref, else the local one. */
 async function namedTarget(
   checkout: Checkout,
@@ -114,7 +106,7 @@ async function resolveTarget(
   branch: string,
   hints: TargetHints,
 ): Promise<ComparisonTarget | null> {
-  const remote = await trackingRemote(checkout, branch);
+  const { remote } = await checkout.upstream(branch);
   const pullRequest = await pullRequestTarget(checkout, branch, remote, hints.pullRequest);
   if (pullRequest) return pullRequest;
   if (hints.worktreeBase) {
@@ -154,9 +146,7 @@ async function branchScope(
 
 /**
  * What of the branch is still only here: commits its remote-tracking ref does not have, as Git
- * holds that ref locally (no fetch), or null when there is no such ref to compare with. That ref is
- * the branch's configured upstream; a branch without one on a remote is looked for under `origin`
- * by its own name.
+ * holds that ref locally (no fetch), or null when there is no such ref to compare with.
  */
 export async function commitsNotPushed(
   checkout: Checkout,
@@ -164,10 +154,7 @@ export async function commitsNotPushed(
   branch: string | null,
 ): Promise<number | null> {
   if (!head || !branch) return null;
-  const upstream = (
-    await checkout.text(["for-each-ref", "--format=%(upstream)", `refs/heads/${branch}`])
-  ).trim();
-  const ref = upstream.startsWith("refs/remotes/") ? upstream : `refs/remotes/origin/${branch}`;
+  const { ref } = await checkout.upstream(branch);
   if (!(await commitOf(checkout, ref))) return null;
   const count = (await checkout.text(["rev-list", "--count", `${ref}..${head}`])).trim();
   return Number(count) || 0;
