@@ -43,7 +43,7 @@ The palette (Mod+K) searches neither outputs nor links.
   nothing while the row still says "1 commit not pushed". Commits are counted against the
   branch's remote-tracking ref, so a repo without one never shows that fact.
 - `changes-list`: list "Changed files" with one collapsible row per file
-  (`<path>, <n> added, <n> removed: collapse`), the kind beside the size on the name line
+  (`<path>, <n> added, <n> removed: collapse`), the path on one line (its directory truncated first), the kind beside the size
   ("New" for untracked files, "Deleted", "Binary"), and the diff.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
 - `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to the header's "Changes" icon;

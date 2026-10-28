@@ -325,7 +325,7 @@ function FileSection({
   retry?: () => void;
 }) {
   const slash = file.path.lastIndexOf("/");
-  const directory = file.path.slice(0, slash + 1);
+  const directory = file.path.slice(0, Math.max(slash, 0));
   const filename = file.path.slice(slash + 1);
   const large = isLarge(file);
   // The file's kind sits on the name line beside its size; notes that need a sentence go beneath.
@@ -350,15 +350,20 @@ function FileSection({
          * Sticky within the sheet so the file name stays in view while its hunks scroll. */}
         <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 bg-conversation px-2 py-1">
           <CollapsibleTrigger
-            // A 16px line with even padding is 36px (44px on touch); longer names grow downward.
+            // A 16px line with even padding is 36px (44px on touch).
             className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-2 rounded-md px-2 py-2.5 text-left text-xs leading-4 outline-none select-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:py-3.5"
             aria-label={`${file.path}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
           >
             <span className="flex h-4 items-center">
               <DisclosureChevron open={open} />
             </span>
-            <span className="min-w-0 font-mono font-medium [overflow-wrap:anywhere]">
-              {filename}
+            {/* One line: the directory gives way first, so the file name stays whole. */}
+            <span className="flex min-w-0 font-mono" title={file.path}>
+              {directory && <span className="min-w-0 truncate text-ink-3">{directory}</span>}
+              <span className="max-w-full shrink-0 truncate font-medium">
+                {directory && <span className="font-normal text-ink-3">/</span>}
+                {filename}
+              </span>
             </span>
             <span className="flex items-center gap-2">
               {kind && <span className="text-ink-3">{kind}</span>}
@@ -371,7 +376,7 @@ function FileSection({
             </span>
           </CollapsibleTrigger>
           {canAsk && (
-            // Centre Ask on the first line even when the filename wraps.
+            // Centre Ask on the name line.
             <div className="flex h-9 items-center pointer-coarse:h-11">
               <IconButton
                 size="list"
@@ -383,14 +388,6 @@ function FileSection({
                 <MessageSquarePlusIcon />
               </IconButton>
             </div>
-          )}
-          {directory && (
-            <span
-              className="col-span-full truncate pr-2 pb-3 pl-8 font-mono text-xs leading-4 text-ink-3"
-              title={file.path}
-            >
-              {directory}
-            </span>
           )}
           {description && (
             <p className="col-span-full pr-2 pb-2.5 pl-8 text-xs leading-normal text-muted-foreground [overflow-wrap:anywhere]">
