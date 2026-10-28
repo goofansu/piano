@@ -96,7 +96,9 @@ test("a worktree session reads its folder, worktree, branch and workspace from o
   );
 });
 
-test("the rail uses the detached commit, not a stale branch, and omits Git for non-Git folders", () => {
+// The server decides a session's branch (SidebarView's branchOf): none for a worktree Git lists as
+// detached or for a non-Git folder. Each fixture pairs the checkout with the reference it sends.
+test("the rail shows the detached commit and the server's branch, and omits Git for non-Git folders", () => {
   const path = "/work/repo.feature";
   const head = "d4449bb7183bb577791acab4f6fc4f52f78d02b0";
   const selected = (checkout: WorktreeView) =>
@@ -104,6 +106,7 @@ test("the rail uses the detached commit, not a stale branch, and omits Git for n
       ...base,
       session: session(path),
       folders: [{ ...folder, worktrees: [checkout] }],
+      sessionReferences: [sessionReference(path, "s1", { branch: checkout.branch })],
     });
   const detached = selected(
     worktree(path, null, {

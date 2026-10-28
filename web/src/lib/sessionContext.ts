@@ -204,7 +204,8 @@ export interface SessionContext {
   folderName: string;
   /** Linked worktree's directory name; omitted for the folder's own checkout. */
   worktreeName: string | undefined;
-  /** The shared session branch: Git's when listed, otherwise the last branch Git reported for the worktree. */
+  /** The server's session branch: Git's when listed (none when detached or non-Git), otherwise the
+   * last branch Git reported for the worktree. */
   branch: string | undefined;
   /** Current detached commit from Git, never a cached branch or directory name. */
   detachedHead: string | undefined;
@@ -244,10 +245,7 @@ export function sessionContext(state: AppState): SessionContext {
     folder,
     folderName: directory.folderName,
     worktreeName: directory.worktreeName,
-    branch:
-      checkout?.facts?.detached || checkout?.status === "non-git"
-        ? undefined
-        : (reference?.branch ?? undefined),
+    branch: reference?.branch ?? undefined,
     detachedHead:
       checkout?.status === "current" && checkout.facts?.detached ? checkout.facts.head : undefined,
     // Pi's live name outranks the registry's saved title.
