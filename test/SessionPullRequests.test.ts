@@ -341,6 +341,16 @@ test("discovery asks GitHub for the branch's name on its remote, not its local n
   assert.equal((await f.get()).pullRequest?.number, 42);
 });
 
+test("discovery asks GitHub for a branch started from the remote's default branch by its own name", async (t) => {
+  const f = await fixture(t);
+  f.git("update-ref", "refs/remotes/origin/main", "HEAD");
+  f.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  // `git switch -c feat origin/main`, later pushed without `-u`.
+  f.git("switch", "-qc", "feat", "--track", "origin/main");
+  f.control({ prs: [candidate(42, "feat"), candidate(7, "main")] });
+  assert.equal((await f.get()).pullRequest?.number, 42);
+});
+
 test("a link records the pull request's head and base as GitHub last reported them, so Changes can compare without a GitHub call", async (t) => {
   const f = await fixture(t);
   f.control({ prs: [{ ...candidate(42), baseRefName: "main" }] });
