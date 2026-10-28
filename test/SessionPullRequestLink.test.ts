@@ -47,12 +47,42 @@ function server() {
   };
 }
 
+/** A caller's snapshot, like the hook's props: selection and presentation travel together. */
+function reader(options: Parameters<typeof createSessionPullRequest>[0]) {
+  type Snapshot = Parameters<ReturnType<typeof createSessionPullRequest>["observe"]>;
+  let snapshot: Snapshot = [
+    undefined,
+    undefined,
+    undefined,
+    false,
+    { visible: false, dialog: false },
+  ];
+  const pr = createSessionPullRequest({
+    ...options,
+    closed: () => {
+      snapshot[4] = { ...snapshot[4], dialog: false };
+      options.closed?.();
+    },
+  });
+  return {
+    ...pr,
+    observe: (...selection: [Snapshot[0], Snapshot[1], Snapshot[2], Snapshot[3]]) => {
+      snapshot = [...selection, snapshot[4]];
+      pr.observe(...snapshot);
+    },
+    present: (view: Snapshot[4]) => {
+      snapshot[4] = view;
+      pr.observe(...snapshot);
+    },
+  };
+}
+
 /** Observes session s1 with the registry link the catalog reports for it. */
 function setup(link: SessionPullRequestLink | null | undefined, env = environment, now = Date.now) {
   const pi = server();
   const notes: { error: string[]; info: string[] } = { error: [], info: [] };
   let closes = 0;
-  const pr = createSessionPullRequest({
+  const pr = reader({
     api: pi.api,
     notify: { error: (m) => notes.error.push(m), info: (m) => notes.info.push(m) },
     closed: () => closes++,
@@ -117,7 +147,7 @@ test("pending association changes supersede reads and fence late success and fai
   await settle();
   assert.deepEqual(pr.getState().value, { link: c, pullRequest: null });
   assert.deepEqual(notes.error, []);
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pr.getState().surface, "details");
   stop();
 });
@@ -176,8 +206,8 @@ test("a changed association keeps an edit and a failed refresh uses the new link
   const { pi, pr, stop } = setup(registered);
   pi.last().resolve(linked);
   await settle();
-  pr.open();
-  pr.edit();
+  pr.present({ visible: true, dialog: false });
+  pr.present({ visible: true, dialog: true });
   const b: SessionPullRequestLink = { ...registered, apiHost: "github.int.exe.xyz" };
   pr.observe("w1", "s1", b, false);
   assert.equal(pr.getState().value, undefined, "old host facts are not current");
@@ -191,7 +221,7 @@ test("a changed association keeps an edit and a failed refresh uses the new link
 
 test("opening while unlinked offers the link form; a link found when work stops closes it", async () => {
   const { pi, pr, closes } = setup(undefined);
-  pr.open();
+  pr.present({ visible: false, dialog: true });
   assert.equal(pr.getState().surface, "link-form");
 
   // The session's turn ends: the background search asks the server, which saves what it finds.
@@ -211,14 +241,14 @@ test("opening while unlinked offers the link form; a link found when work stops 
   await settle();
   assert.equal(pr.getState().surface, "closed");
   assert.equal(closes(), 1, "whoever owns the panel learns it closed");
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pr.getState().surface, "details", "reopening shows the link");
 });
 
 test("opening a linked session before its first read lands shows its details throughout", async () => {
   const { pi, pr, closes } = setup(registered);
   assert.equal(pi.requests.length, 1, "selection starts the first read");
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   assert.equal(
     pr.getState().surface,
     "details",
@@ -262,18 +292,18 @@ test("opening details reuses the loaded facts without replacing a background rea
   const { pi, pr } = setup(registered);
   pi.last().resolve(linked);
   await settle();
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pr.getState().surface, "details");
   assert.deepEqual(pr.getState().value, linked);
   assert.equal(pi.requests.length, 1, "opening uses the header's facts");
-  pr.close();
-  pr.open();
+  pr.present({ visible: false, dialog: false });
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 1, "reopening does not read again either");
 
-  pr.close();
+  pr.present({ visible: false, dialog: false });
   pr.observe("w1", "s1", registered, true);
   assert.equal(pi.requests.length, 2, "work starting still refreshes the facts");
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 2, "opening leaves an in-flight refresh alone");
   const unavailable = { ...linked, error: "GitHub is unreachable" };
   pi.last().resolve(unavailable);
@@ -348,10 +378,100 @@ const unavailable: SessionPullRequest = {
   error: "HTTP 503: Service Unavailable (https://api.github.com/repos/example/repo/pulls/42)",
 };
 
+test("Find from branch keeps the visible row polling after its action settles", async () => {
+  const time = clock();
+  const { pi, pr, stop } = setup(registered, time.env, time.now);
+  try {
+    pi.last().resolve(facts("open"));
+    await settle();
+    pr.present({ visible: true, dialog: false });
+    const finding = pr.discover();
+    pi.last().resolve(facts("open"));
+    assert.equal((await finding)._tag, "saved");
+    const sent = pi.requests.length;
+    await time.advance(60_000);
+    assert.equal(
+      pi.requests.length,
+      sent + 1,
+      "the visible row still reads without focus or reopening",
+    );
+    pi.last().resolve(facts("merged"));
+    await settle();
+    assert.equal(pr.getState().value?.pullRequest?.state, "merged");
+  } finally {
+    stop();
+  }
+});
+
+test("visible Changes follows the selected session without another presentation command", async () => {
+  const time = clock();
+  const { pi, pr, stop } = setup(registered, time.env, time.now);
+  try {
+    pi.last().resolve(facts("open"));
+    await settle();
+    pr.present({ visible: true, dialog: false });
+    pr.observe("w2", "s2", registered, false);
+    pi.last().resolve(facts("draft"));
+    await settle();
+    const sent = pi.requests.length;
+    await time.advance(60_000);
+    assert.equal(pi.requests.length, sent + 1, "the newly selected row polls too");
+    pi.last().resolve(facts("open"));
+    await settle();
+    pr.present({ visible: false, dialog: false });
+    await time.advance(120_000);
+    assert.equal(pi.requests.length, sent + 1, "hiding Changes stops polling");
+
+    pr.present({ visible: true, dialog: false });
+    const beforeSelection = pi.requests.length;
+    pr.observe("w3", "s3", undefined, false);
+    assert.equal(
+      pi.requests.length,
+      beforeSelection + 1,
+      "a visible never-searched session is searched",
+    );
+    const search = pi.last();
+    assert.equal(search.signal.aborted, false);
+    search.resolve(unlinked);
+    await settle();
+    assert.equal(pr.getState().value, undefined, "the previous session's facts are gone");
+    const searched = pi.requests.length;
+    pr.observe("w3", "s3", undefined, false);
+    assert.equal(pi.requests.length, searched, "repeated snapshots do not search again");
+  } finally {
+    stop();
+  }
+});
+
+test("selection and visibility are one snapshot, so hidden destinations never start discovery", async () => {
+  const pi = server();
+  const pr = createSessionPullRequest({
+    api: pi.api,
+    notify: { error: assert.fail, info: assert.fail },
+    environment,
+  });
+  const stop = pr.start();
+  try {
+    pr.observe("w1", "s1", registered, false, { visible: true, dialog: false });
+    pi.last().resolve(facts("open"));
+    await settle();
+    pr.observe("w2", "s2", undefined, false, { visible: false, dialog: false });
+    assert.equal(
+      pi.requests.length,
+      1,
+      "the previous selection's visibility cannot search this one",
+    );
+    assert.equal(pr.getState().surface, "closed");
+    assert.equal(pr.getState().value, undefined);
+  } finally {
+    stop();
+  }
+});
+
 test("visible PR details recover from a successful error-body poll without user interaction", async () => {
   const time = clock();
   let calls = 0;
-  const pr = createSessionPullRequest({
+  const pr = reader({
     api: async () => (++calls === 2 ? unavailable : facts("open")),
     notify: { error: assert.fail, info: assert.fail },
     environment: time.env,
@@ -361,7 +481,7 @@ test("visible PR details recover from a successful error-body poll without user 
   try {
     pr.observe("w1", "s1", registered, false);
     await settle();
-    pr.open();
+    pr.present({ visible: true, dialog: false });
     await time.advance(60_000);
     assert.equal(calls, 2);
     assert.deepEqual(pr.getState().value, unavailable, "old check results are not current");
@@ -382,7 +502,7 @@ for (const initial of [unavailable, linked]) {
     try {
       pi.last().resolve(initial);
       await settle();
-      pr.open();
+      pr.present({ visible: true, dialog: false });
       assert.equal(time.pending(), 1);
       await time.advance(30_000);
       pr.observe("w1", "s1", { ...registered }, false);
@@ -411,21 +531,21 @@ test("unavailable details pause recovery while hidden, editing or closed", async
   try {
     pi.last().resolve(unavailable);
     await settle();
-    pr.open();
+    pr.present({ visible: true, dialog: false });
     time.hide(true);
     await time.advance(120_000);
     assert.equal(pi.requests.length, 1);
     time.hide(false);
-    pr.edit();
+    pr.present({ visible: true, dialog: true });
     assert.equal(time.pending(), 0);
     await time.advance(120_000);
     assert.equal(pi.requests.length, 1);
-    pr.cancel();
+    pr.present({ visible: true, dialog: false });
     await time.advance(60_000);
     assert.equal(pi.requests.length, 2);
     pi.last().resolve(unavailable);
     await settle();
-    pr.close();
+    pr.present({ visible: false, dialog: false });
     assert.equal(time.pending(), 0);
     await time.advance(120_000);
     assert.equal(pi.requests.length, 2);
@@ -441,7 +561,7 @@ for (const end of ["remove", "change", "select", "stop"] as const) {
     try {
       pi.last().resolve(unavailable);
       await settle();
-      pr.open();
+      pr.present({ visible: true, dialog: false });
       await time.advance(60_000);
       assert.equal(pi.requests.length, 2);
       const retry = pi.last();
@@ -479,18 +599,18 @@ test("closed details do not poll; opening reuses a fresh or in-flight focus resu
 
   time.focus();
   assert.equal(pi.requests.length, 2);
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 2, "opening joins the in-flight focus read");
   pi.last().resolve(facts("draft"));
   await settle();
   assert.equal(pr.getState().value?.pullRequest?.state, "draft");
-  pr.close();
+  pr.present({ visible: false, dialog: false });
   await time.advance(59_999);
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 2, "opening uses the recent focus result");
-  pr.close();
+  pr.present({ visible: false, dialog: false });
   await time.advance(1);
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 3, "a minute-old result refreshes on open");
   assert.equal(
     pr.getState().value?.pullRequest?.state,
@@ -507,7 +627,7 @@ test("only visible, active PR details poll; closing, editing, terminal states an
   const { pi, pr, stop } = setup(registered, time.env, time.now);
   pi.last().resolve(facts("open"));
   await settle();
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   await time.advance(60_000);
   assert.equal(pi.requests.length, 2, "open PR details poll");
   pi.last().resolve(facts("draft"));
@@ -520,10 +640,10 @@ test("only visible, active PR details poll; closing, editing, terminal states an
   assert.equal(pi.requests.length, 3, "draft details poll once visible");
   pi.last().resolve(facts("open"));
   await settle();
-  pr.edit();
+  pr.present({ visible: true, dialog: true });
   await time.advance(60_000);
   assert.equal(pi.requests.length, 3, "editing does not poll");
-  pr.cancel();
+  pr.present({ visible: true, dialog: false });
   await time.advance(60_000);
   assert.equal(pi.requests.length, 4, "returning to details resumes polling");
   pi.last().resolve(facts("merged"));
@@ -540,10 +660,10 @@ test("only visible, active PR details poll; closing, editing, terminal states an
   time.focus();
   pi.last().resolve(facts("open"));
   await settle();
-  pr.close();
+  pr.present({ visible: false, dialog: false });
   await time.advance(60_000);
   assert.equal(pi.requests.length, 6, "closing cancels the pending poll");
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   pi.last().resolve(facts("open"));
   await settle();
   const sent = pi.requests.length;
@@ -563,7 +683,7 @@ test("a late response from another session cannot make current facts fresh", asy
   await time.advance(60_000);
   old.resolve(facts("merged"));
   await settle();
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pr.getState().value?.pullRequest?.state, "draft");
   assert.equal(pi.requests.length, 3, "the other session's late response did not reset freshness");
   stop();
@@ -571,7 +691,7 @@ test("a late response from another session cannot make current facts fresh", asy
 
 test("Find from branch with nothing found reports it exactly once", async () => {
   const { pi, pr, notes } = setup(undefined);
-  pr.open();
+  pr.present({ visible: false, dialog: true });
   const finding = pr.discover();
   assert.equal(pr.getState().finding, true);
   assert.equal(pr.getState().busy, true);
@@ -593,8 +713,8 @@ test("a failed change keeps the saved link with the reason and the edit open", a
   const { pi, pr, notes, closes } = setup(registered);
   pi.last().resolve(linked);
   await settle();
-  pr.open();
-  pr.edit();
+  pr.present({ visible: true, dialog: false });
+  pr.present({ visible: true, dialog: true });
   const saving = pr.link("https://github.com/example/repo/pull/7");
   pi.last().reject(new Error("GitHub is unreachable"));
   assert.deepEqual(await saving, { _tag: "failed", reason: "GitHub is unreachable" });
@@ -611,8 +731,8 @@ test("background reads never reset an edit in progress", async () => {
   const { pi, pr } = setup(registered);
   pi.last().resolve(linked);
   await settle();
-  pr.open();
-  pr.edit();
+  pr.present({ visible: true, dialog: false });
+  pr.present({ visible: true, dialog: true });
   pr.observe("w1", "s1", registered, true);
   pi.last().resolve(linked);
   await settle();
@@ -621,7 +741,7 @@ test("background reads never reset an edit in progress", async () => {
   await settle();
   assert.equal(pr.getState().surface, "editing");
   assert.equal(pr.getState().value?.link?.url, URL, "an unreadable PR keeps the saved link");
-  pr.cancel();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pr.getState().surface, "details");
 });
 
@@ -631,16 +751,16 @@ test("an unreadable first read still shows the registry's link", async () => {
   await settle();
   assert.equal(pr.getState().value?.link?.url, URL);
   assert.equal(pr.getState().value?.pullRequest, null);
-  pr.open();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 2, "opening retries when no read has succeeded");
-  pr.close();
-  pr.open();
+  pr.present({ visible: false, dialog: false });
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 2, "reopening does not replace the retry in flight");
 });
 
 test("a blank URL, or one sent while another change is in flight, sends nothing", async () => {
   const { pi, pr } = setup(undefined);
-  pr.open();
+  pr.present({ visible: false, dialog: true });
   const sent = pi.requests.length;
   assert.deepEqual(await pr.link(""), { _tag: "refused" });
   assert.deepEqual(await pr.link("   "), { _tag: "refused" });
@@ -685,29 +805,29 @@ test("only a session whose own work stopped is searched, and only once", async (
 
 test("the row's place coming on screen shows a linked session's details, searches a never-searched one once, and leaves a removed link alone", async () => {
   const { pi, pr } = setup(undefined);
-  pr.reveal();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 1, "Changes opening on a never-searched session searches once");
   assert.equal(pi.last().action, undefined);
   assert.equal(pr.getState().surface, "closed", "nothing opens for an unlinked session");
-  pr.reveal();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 1, "while that search runs, nothing is asked again");
   pi.last().resolve(unlinked);
   await settle();
   pr.observe("w1", "s1", undefined, true);
-  pr.reveal();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 1, "a working session is not searched");
 
   pr.observe("w1", "s2", null, false);
-  pr.reveal();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 1, "a removed link stays removed");
 
   pr.observe("w1", "s3", registered, false);
   assert.equal(pi.requests.length, 2, "a linked session reads on selection");
-  pr.reveal();
+  pr.present({ visible: true, dialog: false });
   assert.equal(pr.getState().surface, "details", "and shows its details in the row");
-  pr.close();
+  pr.present({ visible: false, dialog: false });
   assert.equal(pr.getState().surface, "closed", "hiding Changes hides them");
-  pr.reveal();
+  pr.present({ visible: true, dialog: false });
   pr.observe("w1", "s3", null, false);
   await settle();
   assert.equal(pr.getState().surface, "closed", "a link removed elsewhere takes the row with it");

@@ -48,25 +48,15 @@ export function useSessionPullRequest(
   );
   useEffect(() => pr.start(), [pr]);
   useEffect(
-    () => pr.observe(workspaceId, sessionId, registered, working),
-    [pr, workspaceId, sessionId, registered, working],
+    () => pr.observe(workspaceId, sessionId, registered, working, { visible, dialog: dialog.open }),
+    [pr, workspaceId, sessionId, registered, working, visible, dialog.open],
   );
   const state = useSyncExternalStore(pr.subscribe, pr.getState);
-  const linked = state.linked;
-  // The dialog wins: linking, or changing the saved link. Otherwise the row shows while Changes
-  // does, and a never-searched session is searched once when it first shows.
-  useEffect(() => {
-    if (dialog.open) {
-      pr.open();
-      if (linked) pr.edit();
-    } else if (visible) pr.reveal();
-    else pr.close();
-  }, [pr, dialog.open, visible, linked]);
   // Only the current session's value, even in the render in which the session changes (INV-07).
   const current = state.key === pullRequestKey(workspaceId, sessionId);
   return {
     value: current ? state.value : undefined,
-    linked: current && linked,
+    linked: current && state.linked,
     registered: current ? state.link : undefined,
     loading: current && state.loading,
     busy: current && state.busy,
@@ -75,10 +65,7 @@ export function useSessionPullRequest(
     /** Opens the link dialog: to link one, or to change the saved link. */
     open: () => dialog.onOpenChange(true),
     /** Leaves the dialog; a changed link stays as it was. */
-    cancel: () => {
-      pr.cancel();
-      dialog.onOpenChange(false);
-    },
+    cancel: () => dialog.onOpenChange(false),
     link: pr.link,
     discover: pr.discover,
     remove: pr.remove,
