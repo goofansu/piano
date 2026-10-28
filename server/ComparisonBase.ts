@@ -11,7 +11,7 @@ import type {
   ScopeAvailability,
   SessionPullRequestLink,
 } from "../shared/wire.ts";
-import type { Checkout } from "./GitCheckout.ts";
+import type { Checkout, Upstream } from "./GitCheckout.ts";
 import { githubRemote } from "./GitHubPullRequests.ts";
 
 /** Identities Piano holds that name a branch's target, in the order they are tried. */
@@ -54,16 +54,15 @@ async function namedTarget(
   return null;
 }
 
-/** A PR applies only to this branch in the checkout's repository. Its base must be held
- * under a remote naming the base repository, not a same-named local branch or fork ref.
- * Missing proof falls through to the existing target order; nothing is fetched. */
+/** A PR applies only to this branch, by its name on its remote, in the checkout's repository.
+ * Its base must be held under a remote naming the base repository, not a same-named local branch
+ * or fork ref. Missing proof falls through to the existing target order; nothing is fetched. */
 async function pullRequestTarget(
   checkout: Checkout,
-  branch: string,
-  remote: string,
+  { remote, name: head }: Upstream,
   pr: TargetHints["pullRequest"],
 ): Promise<ComparisonTarget | null> {
-  if (!pr || pr.head !== branch || !pr.headRepo || !pr.baseRepo || !pr.base) return null;
+  if (!pr || pr.head !== head || !pr.headRepo || !pr.baseRepo || !pr.base) return null;
   const url = await checkout.remoteUrl(remote);
   if (!url || githubRemote(url)?.repo !== pr.headRepo) return null;
   // Hints can come from older/untrusted callers. A branch name must not become a rev expression.
@@ -98,7 +97,7 @@ async function remoteDefault(checkout: Checkout, remote: string): Promise<Compar
 
 /**
  * The target a branch is compared with, the first of these that Git holds: the pull request's
- * repository-qualified base when its head is this checkout's branch; the worktree's base at creation; the
+ * repository-qualified base when its head is this checkout's branch on its remote; the worktree's base at creation; the
  * remote's default branch; a local `main` or `master`, assumed.
  */
 async function resolveTarget(
@@ -106,8 +105,9 @@ async function resolveTarget(
   branch: string,
   hints: TargetHints,
 ): Promise<ComparisonTarget | null> {
-  const { remote } = await checkout.upstream(branch);
-  const pullRequest = await pullRequestTarget(checkout, branch, remote, hints.pullRequest);
+  const upstream = await checkout.upstream(branch);
+  const { remote } = upstream;
+  const pullRequest = await pullRequestTarget(checkout, upstream, hints.pullRequest);
   if (pullRequest) return pullRequest;
   if (hints.worktreeBase) {
     const target = await namedTarget(checkout, remote, hints.worktreeBase, "worktree");
