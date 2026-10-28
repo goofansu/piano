@@ -33,6 +33,7 @@ import {
   sessionActivity,
   sessionContext,
   sessionPane,
+  sessionWorking,
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
@@ -110,13 +111,14 @@ export function SessionView({ state, send }: Props) {
     : undefined;
   // The registry's workspace for the directory, like Changes: it outlives a closed folder. Its
   // reference says whether the session is linked, so an unlinked one asks GitHub nothing.
-  // The pull request row shows in Changes: its details are on screen while Changes is.
+  // The pull request row shows in Changes: its details are on screen while Changes is. Its
+  // refreshes follow the session's one working rule, the sidebar's.
   const changesVisible = navigation.shownTab === "changes";
   const pullRequest = useSessionPullRequest(
     workspace?.id,
     t?.sessionId,
     link,
-    !!t && isWorking(t.state),
+    !!t?.sessionId && sessionWorking(state, { cwd: t.cwd, sessionId: t.sessionId }),
     {
       visible: changesVisible,
       dialog: { open: pullRequestOpen, onOpenChange: onPullRequestOpenChange },
