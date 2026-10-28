@@ -340,6 +340,37 @@ test("branch scope: a pull request applies to the branch by its name on its remo
   assert.equal(await target("feat"), "worktree");
 });
 
+test("branch scope: a fork's pull request into a same-named base compares with that base, not this branch", async (t) => {
+  const { git, read } = fixture(t);
+  git("switch", "-qc", "main");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  git("remote", "add", "upstream", "https://github.com/owner/repo.git");
+  git("update-ref", "refs/remotes/upstream/main", "HEAD");
+  git("commit", "-q", "--allow-empty", "-m", "work");
+  git("remote", "add", "origin", "https://github.com/me/repo.git");
+  git("update-ref", "refs/remotes/origin/main", "HEAD");
+  git("config", "branch.main.remote", "origin");
+  git("config", "branch.main.merge", "refs/heads/main");
+  const pullRequest = { head: "main", headRepo: "me/repo", base: "main", baseRepo: "owner/repo" };
+  const fork = ready(await read({ scope: "branch", hints: { pullRequest } }));
+  assert.deepEqual(
+    [fork.comparison.target?.ref, fork.comparison.target?.from],
+    ["refs/remotes/upstream/main", "pull-request"],
+  );
+  assert.equal(fork.pullRequestFromBranch, true);
+  // Its own remote-tracking ref is still this branch.
+  git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  assert.equal(unavailable(await read({ scope: "branch" })).detail, "main is the base branch.");
+  // A branch started from its remote's default tracks it under another name: that is its target.
+  git("switch", "-qc", "feat", "--track", "origin/main");
+  git("commit", "-q", "--allow-empty", "-m", "feat");
+  const started = ready(await read({ scope: "branch" }));
+  assert.deepEqual(
+    [started.comparison.target?.ref, started.comparison.target?.from],
+    ["refs/remotes/origin/main", "remote-default"],
+  );
+});
+
 test("Changes says whether the linked pull request is from this branch, by its name on its remote, in any scope", async (t) => {
   const { git, read } = fixture(t);
   git("switch", "-qc", "main");
