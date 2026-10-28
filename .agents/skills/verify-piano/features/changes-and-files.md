@@ -40,7 +40,8 @@ The palette (Mod+K) searches neither outputs nor links.
   "Pull request actions" menu: Open pull request, Change link…, Find from branch, Remove link
   (toasts "Pull request linked" / "Pull request link removed"). PR linking is absent from both
   session menus. The palette's "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
-  field, Link, Find from branch; "No open PR found for this branch." when none).
+  field, Link, Find from branch; "No open PR found for this branch." when none); like Changes, it
+  is disabled with Changes' reason where Changes cannot open.
 - `local-work-row`: without a linked pull request, the same place under the toolbar holds region
   "Local work" with only "<n> commits not pushed" and "Edits not committed", each while nonzero,
   and no row at all when both are; so after a commit the Uncommitted view says "No changes" above

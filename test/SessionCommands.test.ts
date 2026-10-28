@@ -144,7 +144,7 @@ test("session command availability: settled, disconnected, resyncing, missing ch
 
   const noWorkspace = enabled({ ...base, workspaces: [] });
   assert.equal(noWorkspace.changes, false);
-  assert.equal(noWorkspace["pull-request"], true);
+  assert.equal(noWorkspace["pull-request"], false);
   assert.equal(changesOf({ ...base, workspaces: [] }), "Changes unavailable");
 
   // Starting a session: no Pi session ID yet, so nothing names it.
@@ -458,7 +458,7 @@ test("view commands follow the session's layout: the session rail side by side, 
   );
 });
 
-test("a linked pull request opens only where Changes can, and says why not", () => {
+test("a pull request, linked or not, opens only where Changes can, and says why not", () => {
   const pullRequest = { url: "https://github.com/acme/repo/pull/1", source: "manual" } as const;
   const at = (extra: Parameters<typeof sessionReference>[2]) => {
     const state: AppState = {
@@ -481,9 +481,10 @@ test("a linked pull request opens only where Changes can, and says why not", () 
   assert.equal(removed.command.enabled, false);
   assert.equal(removed.command.detail, removed.changes.detail);
 
-  // Unlinked, the command opens the dialog that links one, which needs no checkout.
+  // A link made where Changes cannot open would show nowhere it can be changed or removed.
   const unlinked = at({ unavailable: "checkout" });
-  assert.equal(unlinked.command.enabled, true);
+  assert.equal(unlinked.command.enabled, false);
+  assert.equal(unlinked.command.detail, unlinked.changes.detail);
   assert.deepEqual(unlinked.command.intent, { kind: "pull-request", linked: false });
 });
 

@@ -229,8 +229,8 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  *   rail".
  * - agent: the session is laid out one area at a time and the Agent tab shows, beside an open
  *   Surface tab.
- * - pull request, copy session ID: the selected session has a Pi session ID; a linked pull
- *   request is read in Changes, so it also follows Changes' rule and says why not.
+ * - pull request, copy session ID: the selected session has a Pi session ID; a pull request is
+ *   linked, read and unlinked in Changes, so it also follows Changes' rule and says why not.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
  *   an app; open needs its link, stop needs the attachment (`sessionReady`).
  * - new session here: the checkout is present.
@@ -362,9 +362,9 @@ export function sessionCommands(
         id: "pull-request",
         label: "Pull request",
         icon: "pull-request",
-        // A linked pull request is read in Changes, so it opens only where Changes can.
-        enabled: !!session.sessionId && (!linked || ctx.canOpenChanges),
-        detail: linked ? ctx.changesUnavailable : undefined,
+        // A pull request is linked, read and unlinked in Changes, so it opens only where Changes can.
+        enabled: !!session.sessionId && ctx.canOpenChanges,
+        detail: ctx.changesUnavailable,
         keywords: ["pr"],
         intent: { kind: "pull-request", linked },
       },
