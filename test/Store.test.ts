@@ -157,7 +157,7 @@ test("INV-02/05: reconnect retains the view until a fresh attachment snapshot, e
 });
 
 test("a disappearing host is not a completed turn; an actual idle transition is", () => {
-  const host = { cwd: "/scratch/a", sessionId: "a", streaming: true };
+  const host = { cwd: "/scratch/a", sessionId: "a", working: true };
   const running = reduce(initialState, {
     type: "server",
     message: { _tag: "hosts", hosts: [host] },
@@ -166,7 +166,7 @@ test("a disappearing host is not a completed turn; an actual idle transition is"
   assert.deepEqual(exited.done, []);
   const settled = reduce(running, {
     type: "server",
-    message: { _tag: "hosts", hosts: [{ ...host, streaming: false }] },
+    message: { _tag: "hosts", hosts: [{ ...host, working: false }] },
   });
   assert.deepEqual(settled.done, [sessionKey(host)]);
 });

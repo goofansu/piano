@@ -8,7 +8,7 @@ import { cutText } from "./cutText.ts";
 import { type Disposition, LAST_ANSWER_CHARS } from "./dispatch.ts";
 import { isWorking } from "./sessionProjection.ts";
 import { turnEnding } from "./turnEnding.ts";
-import type { Dialog, SessionClosure, Snapshot } from "./wire.ts";
+import type { Dialog, SessionClosure, SessionState, Snapshot } from "./wire.ts";
 
 /**
  * What a live session is doing, from its retained state alone: waiting on a dialog, holding work
@@ -33,18 +33,22 @@ export const closureNeedsAttention = (
   closure._tag !== "stopped" &&
   !(closure._tag === "exited" && closure.code === 0);
 
+/**
+ * Work Pi or Piano is still carrying out for the session: a run, a compaction or a retry, a stop,
+ * an input or dialog answer on its way, or queued messages. The one rule for a session's working
+ * state: the sidebar's, whether Archive and Delete stop work, and `liveActivityOf`'s `running`.
+ */
+export const workUnderWay = (state: SessionState): boolean =>
+  isWorking(state) ||
+  !!state.isStopping ||
+  state.submission?.outcome === "submitting" ||
+  (state.queuedMessages?.length ?? 0) > 0 ||
+  state.dialogResolution?.delivery === "pending";
+
 export function liveActivityOf({ state, dialogs }: Snapshot): LiveActivity {
   const dialog = dialogs[0];
   if (dialog) return { _tag: "needs_input", dialog };
-  // A retry, a compaction, a queued message or an answer being written is work under way.
-  if (
-    isWorking(state) ||
-    state.isStopping ||
-    state.submission?.outcome === "submitting" ||
-    (state.queuedMessages?.length ?? 0) > 0 ||
-    state.dialogResolution?.delivery === "pending"
-  )
-    return { _tag: "running" };
+  if (workUnderWay(state)) return { _tag: "running" };
   if (state.submission?.outcome === "uncertain")
     return {
       _tag: "uncertain",

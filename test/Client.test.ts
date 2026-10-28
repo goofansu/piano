@@ -134,7 +134,7 @@ test("live state is current before paint, while local actions and disconnect not
     if (update === "live") paint = render;
     else render();
   });
-  h.server({ _tag: "hosts", hosts: [{ cwd: "/scratch", sessionId: "a", streaming: true }] });
+  h.server({ _tag: "hosts", hosts: [{ cwd: "/scratch", sessionId: "a", working: true }] });
   assert.equal(rendered.hosts.length, 0, "rendering a live update may wait for a paint");
   assert.equal(h.client.getState().hosts.length, 1, "projection never waits for a paint");
   h.client.dispatch({ type: "new_directory", cwd: "/scratch" });

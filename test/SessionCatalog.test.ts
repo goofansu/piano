@@ -141,9 +141,9 @@ test("activity follows the live host broadcast, and the selection marks one entr
   const live: AppState = {
     ...state,
     hosts: [
-      { cwd: "/repo", sessionId: "open-unfiled", streaming: true },
-      { cwd: "/work/repo.feature", sessionId: "open-member", streaming: false },
-      { cwd: "/closed/app", sessionId: "closed-member", streaming: false },
+      { cwd: "/repo", sessionId: "open-unfiled", working: true },
+      { cwd: "/work/repo.feature", sessionId: "open-member", working: false },
+      { cwd: "/closed/app", sessionId: "closed-member", working: false },
     ],
     done: [sessionKey({ cwd: "/closed/app", sessionId: "closed-member" })],
     selecting: { cwd: "/work/repo.feature", sessionId: "open-member" },
