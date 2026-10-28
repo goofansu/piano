@@ -481,11 +481,8 @@
   background: var(--selected);
 }
 
-/* Session navigation has its own reading scale; menus portaled outside it keep theirs. */
-[data-slot="session-sidebar"] {
-  --type-label: 0.9375rem;
-  --type-caption: 0.8125rem;
-}
+/* On phones, session navigation reads at its own scale; on desktop it keeps the app's density.
+ * Menus portaled outside it keep theirs. */
 @media (width < 48rem) {
   [data-slot="session-sidebar"] {
     --type-label: 1.0625rem;
