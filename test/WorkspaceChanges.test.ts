@@ -465,6 +465,34 @@ test("branch scope: unavailable states are named, never another comparison", asy
   );
 });
 
+test("a merge conflict leaves the scope unavailable, keeping the scopes and local work", async (t) => {
+  const { repo, git, read, preview } = fixture(t);
+  git("switch", "-qc", "main");
+  writeFileSync(join(repo, "a"), "base\n");
+  writeFileSync(join(repo, "b"), "base\n");
+  git("add", ".");
+  git("commit", "-qm", "base");
+  git("switch", "-qc", "feature");
+  writeFileSync(join(repo, "a"), "feature\n");
+  git("commit", "-qam", "feature");
+  git("switch", "-q", "main");
+  writeFileSync(join(repo, "a"), "main\n");
+  git("commit", "-qam", "main");
+  git("switch", "-q", "feature");
+  assert.throws(() => git("merge", "-q", "--no-edit", "main"));
+  const conflicted = unavailable(await read({}));
+  assert.equal(conflicted.scope, "uncommitted");
+  assert.equal(
+    conflicted.detail,
+    "Unresolved merge conflicts; resolve them before browsing this diff.",
+  );
+  assert.equal(conflicted.branch, "feature");
+  assert.deepEqual(conflicted.local, { commitsNotPushed: null, uncommitted: true });
+  assert.ok(conflicted.scopes.some((s) => s.scope === "uncommitted"));
+  // A file outside the conflict still reads.
+  assert.equal(ready(await preview("b")).files.length, 0);
+});
+
 test("local work: commits not pushed count against the branch's upstream, not a same-named remote branch", async (t) => {
   const { git, preview } = fixture(t);
   git("switch", "-qc", "main");

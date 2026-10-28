@@ -66,8 +66,9 @@ export const SessionStatusLive = Layer.effect(
       );
 
     /**
-     * The Git view, within the read's shared budget: a session whose checkout Git or GitHub did
-     * not answer for by `deadline` (a clock time) carries null, and its other facts still arrive.
+     * The Git view, within the read's shared budget: a session whose checkout has no ready
+     * uncommitted read by `deadline` (a clock time; unregistered, unreadable or mid-merge) carries
+     * null, and its other facts still arrive.
      * The patch Changes would render is never generated for a status.
      */
     const changesOf = Effect.fn("SessionStatus.changesOf")(function* (
