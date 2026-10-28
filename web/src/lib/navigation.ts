@@ -143,6 +143,7 @@ export interface NavigationState {
   layout: SessionLayout;
   /** The key (`tabKey`) of the Surface tab on screen, derived once per move; `null` for none. */
   shownTab: string | null;
+  /** The pull request dialog is open; never while Settings is shown. */
   pullRequest: boolean;
   palette: boolean;
 }
@@ -458,6 +459,8 @@ export function createNavigation({
     const keys = Object.keys(patch) as (keyof typeof patch)[];
     if (keys.every((key) => Object.is(state[key], patch[key]))) return;
     const next = { ...state, ...patch };
+    // Settings covers the session, and with it the pull request dialog, which does not come back.
+    if (next.settings) next.pullRequest = false;
     const derived = sessionLayout(next);
     const layout = sameLayout(derived, state.layout) ? state.layout : derived;
     state = { ...next, layout, shownTab: shownTab(next, layout) };

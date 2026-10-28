@@ -462,6 +462,27 @@ test("a session's surfaces close when another session is selected, and opening o
   assert.equal(p.navigation.getState().pullRequest, false);
 });
 
+test("Settings closes the pull request dialog, however it is reached", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openSettings();
+  p.navigation.openPullRequest();
+  assert.equal(p.navigation.getState().settings, null, "the dialog opens over the session");
+  assert.equal(p.navigation.getState().pullRequest, true);
+  p.back();
+  assert.equal(p.navigation.getState().settings, "providers");
+  assert.equal(
+    p.navigation.getState().pullRequest,
+    false,
+    "leaving Settings does not bring back a dialog it covered",
+  );
+  p.navigation.openPullRequest();
+  p.navigation.openSettings();
+  assert.equal(p.navigation.getState().pullRequest, false);
+});
+
 test("choosing Changes again shows its one tab in place: no toggle, no duplicate, no history entry", () => {
   const p = page("/new");
   p.registry();
