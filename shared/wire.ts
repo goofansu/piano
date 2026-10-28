@@ -484,7 +484,7 @@ export const ScopeAvailability = Schema.Struct({
   scope: ChangesScope,
   available: Schema.Boolean,
   reason: Schema.optional(Schema.String),
-  /** The target `branch` would compare with, when available. */
+  /** The resolved target, even when the comparison is unavailable (for example, on the base itself). */
   target: Schema.optional(ComparisonTarget),
 });
 export type ScopeAvailability = typeof ScopeAvailability.Type;

@@ -242,7 +242,6 @@ test("a failed refresh keeps the previous files with a stale note", () => {
     text: "Refresh failed. Showing previous changes.",
     detail: "network down",
   });
-  assert.equal(view.status, "1 file · +2 −0");
   assert.equal(sheet(changes([]), { error: "network down" }).body.kind, "empty");
   assert.equal(sheet(changes([["a.ts", 2]])).staleNote, undefined);
 });
@@ -250,7 +249,6 @@ test("a failed refresh keeps the previous files with a stale note", () => {
 test("a first read that fails shows one unavailable body and nothing of a read", () => {
   const view = sheet(null, { error: "not a git repository" });
   assert.deepEqual(view.body, { kind: "failed", detail: "not a git repository" });
-  assert.equal(view.status, "Changes unavailable");
   assert.equal(view.staleNote, undefined);
   assert.equal(view.branch, undefined);
   assert.equal(view.changes, undefined);
@@ -273,24 +271,13 @@ test("a server error result and a transport error never both show", () => {
 test("before a read settles the sheet reads, or waits; a re-read keeps the files", () => {
   assert.deepEqual(sheet(null, { busy: true }).body, { kind: "reading" });
   assert.deepEqual(sheet(null).body, { kind: "idle" });
-  assert.equal(sheet(null).status, "Loading…");
   assert.equal(sheet(null, { busy: true }).refreshing, false);
   const refreshing = sheet(changes([["a.ts", 1]]), { busy: true });
   assert.equal(refreshing.body.kind, "files");
   assert.equal(refreshing.refreshing, true);
 });
 
-test("summary and file messages", () => {
-  assert.equal(sheet(changes([])).status, "no changes");
-  assert.equal(
-    sheet(
-      changes([
-        ["a.ts", 2],
-        ["b.ts", 1],
-      ]),
-    ).status,
-    "2 files · +3 −0",
-  );
+test("file messages", () => {
   assert.equal(fileMessage({ error: "boom", busy: false, loaded: { truncated: false } }), "boom");
   assert.equal(fileMessage({ busy: true }), "Loading fresh patch…");
   assert.equal(fileMessage({ busy: false }), "Expand to load patch");
@@ -312,18 +299,23 @@ test("asking about a file quotes its diff and says whether the patch is partial"
   assert.match(askText({ ...loaded, truncated: true }), /partial patch, not the complete file/);
 });
 
-test("the comparison menu names the scope on screen and why the other cannot be picked", () => {
+test("the comparison menu puts Uncommitted first and names the actual target ref", () => {
   const view = sheet(changes([["a", 1]]));
   assert.deepEqual(view.scope, {
     current: "uncommitted",
     label: "Uncommitted",
     options: [
-      { scope: "branch", name: "Branch", detail: "main is the base branch.", available: false },
-      { scope: "uncommitted", name: "Uncommitted", detail: "Against HEAD", available: true },
+      { scope: "uncommitted", name: "Uncommitted", available: true },
+      { scope: "branch", name: "Base branch", available: false },
     ],
   });
   const branch = changes([["a", 1]]);
-  const target = { name: "main", ref: "refs/heads/main", commit: "def", from: "assumed" } as const;
+  const target = {
+    name: "main",
+    ref: "refs/remotes/origin/main",
+    commit: "def",
+    from: "remote-default",
+  } as const;
   const onBranch = sheet({
     ...branch,
     result: {
@@ -335,8 +327,12 @@ test("the comparison menu names the scope on screen and why the other cannot be 
       ],
     },
   });
-  assert.equal(onBranch.scope?.label, "Branch · main (assumed)");
-  assert.equal(onBranch.scope?.options[0].detail, "Compared with main, assumed");
+  assert.equal(onBranch.scope?.label, "origin/main");
+  assert.deepEqual(onBranch.scope?.options[1], {
+    scope: "branch",
+    name: "origin/main",
+    available: true,
+  });
 });
 
 test("an unavailable scope is the body's reason, with the menu still offering the others", () => {
@@ -349,19 +345,25 @@ test("an unavailable scope is the body's reason, with the menu still offering th
       scope: "branch",
       detail: "main is the base branch.",
       scopes: [
-        { scope: "branch", available: false, reason: "main is the base branch." },
+        {
+          scope: "branch",
+          available: false,
+          reason: "main is the base branch.",
+          target: { name: "main", ref: "refs/heads/main", commit: "abc", from: "assumed" },
+        },
         { scope: "uncommitted", available: true },
       ],
     },
   });
-  assert.equal(view.status, "");
   assert.deepEqual(view.body, {
     kind: "failed",
-    title: "Branch unavailable",
+    title: "Base branch unavailable",
     detail: "main is the base branch.",
   });
   assert.equal(view.scope?.current, "branch");
-  assert.equal(view.scope?.options[1].available, true);
+  assert.equal(view.scope?.label, "main");
+  assert.deepEqual(view.scope?.options[1], { scope: "branch", name: "main", available: false });
+  assert.equal(view.scope?.options[0].available, true);
 });
 
 test("a file read under another comparison never mixes into the list it was asked for", () => {

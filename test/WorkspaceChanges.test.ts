@@ -306,7 +306,17 @@ test("branch scope: unavailable states are named, never another comparison", asy
   const onMain = unavailable(await read({ scope: "branch" }));
   assert.equal(onMain.detail, "main is the base branch.");
   assert.deepEqual(onMain.scopes, [
-    { scope: "branch", available: false, reason: "main is the base branch." },
+    {
+      scope: "branch",
+      available: false,
+      reason: "main is the base branch.",
+      target: {
+        name: "main",
+        ref: "refs/heads/main",
+        commit: git("rev-parse", "HEAD").trim(),
+        from: "assumed",
+      },
+    },
     { scope: "uncommitted", available: true },
   ]);
   assert.equal(ready(await read({})).comparison.scope, "uncommitted");

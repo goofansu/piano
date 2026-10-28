@@ -110,19 +110,19 @@ async function branchScope(
   head: string | null,
   branch: string | null,
   hints: TargetHints,
-): Promise<{ comparison: Comparison } | { unavailable: string }> {
+): Promise<{ comparison: Comparison } | { unavailable: string; target?: ComparisonTarget }> {
   if (!head) return { unavailable: "No commits yet." };
   if (!branch) return { unavailable: "Detached HEAD." };
   const target = await resolveTarget(checkout, branch, hints);
   if (!target) return { unavailable: "No base branch known." };
-  if (target.name === branch) return { unavailable: `${branch} is the base branch.` };
+  if (target.name === branch) return { unavailable: `${branch} is the base branch.`, target };
   const bases = await checkout.run(["merge-base", "--all", target.commit, head], {
     okCodes: [0, 1],
   });
   const found = bases.stdout.toString("utf8").trim().split("\n").filter(Boolean);
   if (bases.code !== 0 || found.length === 0)
-    return { unavailable: `No common history with ${target.name}.` };
-  if (found.length > 1) return { unavailable: `Ambiguous merge base with ${target.name}.` };
+    return { unavailable: `No common history with ${target.name}.`, target };
+  if (found.length > 1) return { unavailable: `Ambiguous merge base with ${target.name}.`, target };
   return { comparison: { scope: "branch", base: found[0]!, target } };
 }
 
@@ -164,7 +164,12 @@ export async function resolveComparisons(
   const scopes: ScopeAvailability[] = [
     "comparison" in forBranch
       ? { scope: "branch", available: true, target: forBranch.comparison.target }
-      : { scope: "branch", available: false, reason: forBranch.unavailable },
+      : {
+          scope: "branch",
+          available: false,
+          reason: forBranch.unavailable,
+          ...(forBranch.target ? { target: forBranch.target } : {}),
+        },
     { scope: "uncommitted", available: true },
   ];
   const of = (scope: ChangesScope) =>

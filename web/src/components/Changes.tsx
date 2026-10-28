@@ -129,16 +129,8 @@ export function ChangesPanel({
     <SurfaceFrame
       tab="changes"
       status={
-        // The comparison first, then the size of the change it shows.
-        <>
-          {!unavailable && sheet.scope && (
-            <ChangesScopeMenu scope={sheet.scope} disabled={busy} onScope={setScope} />
-          )}
-          {/* Shrinks with an ellipsis after the comparison, so a narrow toolbar never clips it whole. */}
-          <span role="status" className="min-w-0 truncate">
-            {unavailable ? "" : sheet.status}
-          </span>
-        </>
+        !unavailable &&
+        sheet.scope && <ChangesScopeMenu scope={sheet.scope} disabled={busy} onScope={setScope} />
       }
       actions={
         <>

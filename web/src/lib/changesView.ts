@@ -22,35 +22,23 @@ export type ReadyChanges = WorkspaceChanges & { result: ReadyResult };
 /** An answer the sheet shows: the files, or why the asked-for scope has none to show. */
 export type ShownChanges = WorkspaceChanges & { result: ReadyResult | UnavailableResult };
 
-/** Each scope as the menu names it, by the question it answers. */
-export const SCOPE_NAMES: Record<ChangesScope, string> = {
-  branch: "Branch",
+/** Fallback names when no comparison target has been resolved. */
+const SCOPE_NAMES: Record<ChangesScope, string> = {
+  branch: "Base branch",
   uncommitted: "Uncommitted",
 };
-const SCOPE_ORDER: ChangesScope[] = ["branch", "uncommitted"];
+const SCOPE_ORDER: ChangesScope[] = ["uncommitted", "branch"];
 
-/** Where a Branch target came from, as Details and the menu say it. */
-export const targetProvenance = (from: ComparisonTarget["from"]): string =>
-  from === "pull-request"
-    ? "the pull request's base"
-    : from === "worktree"
-      ? "the worktree's base"
-      : from === "remote-default"
-        ? "the default branch"
-        : "assumed";
-
-/** The menu button's face: the scope, and for Branch its target (marked when assumed). */
-export function scopeLabel(comparison: Pick<Comparison, "scope" | "target">): string {
-  if (comparison.scope !== "branch" || !comparison.target) return SCOPE_NAMES[comparison.scope];
-  const { name, from } = comparison.target;
-  return `Branch · ${name}${from === "assumed" ? " (assumed)" : ""}`;
+/** Name the actual ref, preserving the remote rather than implying a local branch. */
+function scopeLabel({ scope, target }: { scope: ChangesScope; target?: ComparisonTarget }): string {
+  if (scope !== "branch" || !target) return SCOPE_NAMES[scope];
+  return target.ref.replace(/^refs\/(heads|remotes)\//, "");
 }
 
-/** One scope as the menu lists it: its name, what it compares with or why it cannot, and whether it can be picked. */
+/** One scope's name and whether it can be picked. */
 export interface ScopeOption {
   scope: ChangesScope;
   name: string;
-  detail: string;
   available: boolean;
 }
 
@@ -63,13 +51,7 @@ export interface ScopeView {
 
 function scopeOption(availability: ScopeAvailability): ScopeOption {
   const { scope, available } = availability;
-  const detail =
-    scope === "uncommitted"
-      ? "Against HEAD"
-      : available && availability.target
-        ? `Compared with ${availability.target.name}, ${targetProvenance(availability.target.from)}`
-        : (availability.reason ?? "Unavailable");
-  return { scope, name: SCOPE_NAMES[scope], detail, available };
+  return { scope, name: scopeLabel(availability), available };
 }
 
 function scopeView(result: ReadyResult | UnavailableResult): ScopeView {
@@ -85,7 +67,10 @@ function scopeView(result: ReadyResult | UnavailableResult): ScopeView {
   );
   return {
     current,
-    label: result.status === "ready" ? scopeLabel(result.comparison) : SCOPE_NAMES[current],
+    label:
+      result.status === "ready"
+        ? scopeLabel(result.comparison)
+        : options.find((option) => option.scope === current)!.name,
     options,
   };
 }
@@ -210,8 +195,6 @@ export type SheetBody =
   | { kind: "files"; changes: ReadyChanges; files: SheetFile[] };
 
 export interface ChangesSheetView {
-  /** The header status: counts for a ready read, otherwise loading or unavailable. */
-  status: string;
   /** The read on screen, for file reads and details. */
   changes?: ReadyChanges;
   /** The comparison on screen and the menu's choices, from the last answer, ready or not. */
@@ -232,17 +215,6 @@ const isOpen = (state: Disclosure, path: string, seed: ReadonlyMap<string, DiffF
   return (seeded !== undefined && !isLarge(seeded)) || state.opened.has(path);
 };
 
-function summary(result: WorkspaceChanges["result"] | undefined, failed: boolean): string {
-  // An unavailable scope's reason is the body; the menu already names the scope.
-  if (result?.status === "unavailable") return "";
-  if (result?.status !== "ready") return failed || result ? "Changes unavailable" : "Loading…";
-  const { files } = result;
-  if (files.length === 0) return "no changes";
-  const additions = files.reduce((n, f) => n + f.additions, 0),
-    deletions = files.reduce((n, f) => n + f.deletions, 0);
-  return `${files.length} ${files.length === 1 ? "file" : "files"} · +${additions} −${deletions}`;
-}
-
 /** What the Changes sheet shows for the observation's state and the reader's disclosure. */
 export function changesSheet({
   observation,
@@ -257,7 +229,6 @@ export function changesSheet({
   disclosure: Disclosure;
 }): ChangesSheetView {
   const result = observation?.result;
-  const status = summary(result, !!error);
   if (observation && result?.status === "ready") {
     const seed = seedFiles(result);
     const files = result.files.map((metadata) => ({
@@ -267,7 +238,6 @@ export function changesSheet({
     }));
     const changes = observation as ReadyChanges;
     return {
-      status,
       changes,
       scope: scopeView(result),
       branch: result.branch ?? DETACHED_HEAD,
@@ -282,7 +252,6 @@ export function changesSheet({
   if (observation && result?.status === "unavailable") {
     // The scope asked for cannot be read here; the menu offers the others, never a quiet swap.
     return {
-      status,
       scope: scopeView(result),
       branch: result.branch ?? DETACHED_HEAD,
       refreshing: busy,
@@ -305,7 +274,7 @@ export function changesSheet({
       : busy
         ? { kind: "reading" }
         : { kind: "idle" };
-  return { status, refreshing: false, body, everyCollapsed: false };
+  return { refreshing: false, body, everyCollapsed: false };
 }
 
 /** Opens or folds one file; the choice survives refreshes. */

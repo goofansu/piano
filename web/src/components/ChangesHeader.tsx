@@ -15,13 +15,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { Button } from "@/components/ui/button";
-import { type ChangesSheetView, SCOPE_NAMES, type ScopeView } from "@/lib/changesView";
+import type { ChangesSheetView, ScopeView } from "@/lib/changesView";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 
 /**
- * The comparison, at the toolbar's start: its face names the scope on screen (and Branch's target),
- * its menu the scopes the checkout can be read with, each saying what it compares with or why it
- * cannot. A choice is saved for the session; the list answers by changing.
+ * The comparison, at the toolbar's start: Uncommitted or the actual target ref, with the same
+ * names in its menu. A choice is saved for the session; the list answers by changing.
  */
 export function ChangesScopeMenu({
   scope,
@@ -42,19 +41,7 @@ export function ChangesScopeMenu({
           aria-label={`Comparison: ${scope.label}`}
           className="-ml-2 min-w-0 text-ink pointer-coarse:min-h-11"
         >
-          {/* A phone-width toolbar keeps the scope's name; the target waits in the menu. */}
-          <span className="truncate">
-            {scope.current === "branch" && scope.label !== SCOPE_NAMES.branch ? (
-              <>
-                {SCOPE_NAMES.branch}
-                <span className="max-sm:hidden">
-                  {scope.label.slice(SCOPE_NAMES.branch.length)}
-                </span>
-              </>
-            ) : (
-              scope.label
-            )}
-          </span>
+          <span className="truncate">{scope.label}</span>
           <ChevronDownIcon className="shrink-0 text-ink-3" aria-hidden />
         </Button>
       </DropdownMenuTrigger>
@@ -70,12 +57,8 @@ export function ChangesScopeMenu({
               key={option.scope}
               value={option.scope}
               disabled={!option.available}
-              className="items-start"
             >
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span>{option.name}</span>
-                <span className="text-xs text-ink-3">{option.detail}</span>
-              </span>
+              <span className="min-w-0 break-all">{option.name}</span>
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
@@ -85,9 +68,8 @@ export function ChangesScopeMenu({
 }
 
 /**
- * Changes' toolbar actions: the view controls, then Refresh and Details. The comparison and the
- * size of the change sit at the toolbar's start and the tab names the view (`SurfaceFrame`); the
- * session header already names the branch, and what is compared and when lives in Details.
+ * Changes' toolbar actions: the view controls, then Refresh. The comparison sits at the toolbar's
+ * start and the tab names the view (`SurfaceFrame`).
  */
 export function ChangesActions({
   sheet,
