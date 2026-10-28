@@ -107,8 +107,8 @@ export interface Upstream {
   /** The remote Git would push the branch to: its push remote, else the one it tracks, else
    * `origin`. */
   readonly remote: string;
-  /** The branch's name on that remote (what GitHub calls a pull request's head): its upstream's
-   * when Git pushes there, else its own. */
+  /** The branch's name on that remote (what GitHub calls a pull request's head): the one a push
+   * refspec names, else its upstream's when Git pushes there, else its own. */
   readonly name: string;
   /** The remote-tracking ref that push would update, else `refs/remotes/<remote>/<branch>`. Git
    * may not hold it. */
@@ -123,7 +123,7 @@ export interface Upstream {
  * usually live in the user's config, so the read keeps it (`userConfig`). */
 const upstreamRead = (branch: string) => [
   "for-each-ref",
-  "--format=%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)%00%(push:remotename)%00%(push)",
+  "--format=%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)%00%(push:remotename)%00%(push)%00%(push:remoteref)",
   `refs/heads/${branch}`,
 ];
 
@@ -131,22 +131,27 @@ const upstreamRead = (branch: string) => [
  * `branch`'s upstream from `upstreamRead`'s answer, as Git would push it. Git names the
  * remote-tracking ref a push updates; when it names none (under `push.default=simple`, a branch
  * tracking another name, as after `git switch -c feat origin/main`), the work goes to the
- * branch's own name on its push remote. A local remote (`.`) counts as none.
+ * branch's own name on its push remote. A local remote (`.`) counts as none. Git names the
+ * remote ref (`%(push:remoteref)`) only for a push refspec, which then names the branch.
  */
 function upstreamOf(branch: string, answer: string): Upstream {
-  const [remote = "", remoteRef = "", upstream = "", pushRemote = "", push = ""] = answer
-    .trim()
-    .split("\0");
+  const [remote = "", remoteRef = "", upstream = "", pushRemote = "", push = "", pushRef = ""] =
+    answer.trim().split("\0");
   const onRemote = (name: string) => (name && name !== "." ? name : null);
+  const heads = (ref: string) =>
+    ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : null;
   const tracked = onRemote(remote) ?? "origin";
   const target = onRemote(pushRemote) ?? onRemote(remote) ?? "origin";
+  const named = heads(pushRef);
   if (!push.startsWith("refs/remotes/"))
-    return { remote: target, name: branch, ref: `refs/remotes/${target}/${branch}`, tracked };
+    return {
+      remote: target,
+      name: named ?? branch,
+      ref: `refs/remotes/${target}/${named ?? branch}`,
+      tracked,
+    };
   // Pushing to its upstream (`push.default=upstream`, or the same name) keeps the upstream's name.
-  const name =
-    push === upstream && remoteRef.startsWith("refs/heads/")
-      ? remoteRef.slice("refs/heads/".length)
-      : branch;
+  const name = named ?? ((push === upstream && heads(remoteRef)) || branch);
   return { remote: target, name, ref: push, tracked };
 }
 

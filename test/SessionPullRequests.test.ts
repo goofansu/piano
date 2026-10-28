@@ -343,6 +343,14 @@ test("discovery asks GitHub for the branch's name on its remote, not its local n
   assert.equal((await f.get()).pullRequest?.number, 42);
 });
 
+test("discovery asks GitHub for the name a push refspec gives the branch", async (t) => {
+  const f = await fixture(t);
+  f.git("switch", "-qc", "feat");
+  f.git("config", "remote.origin.push", "refs/heads/feat:refs/heads/review/feat");
+  f.control({ prs: [candidate(42, "review/feat"), candidate(7, "feat")] });
+  assert.equal((await f.get()).pullRequest?.number, 42);
+});
+
 test("discovery asks GitHub for a branch started from another remote branch by its own name", async (t) => {
   const f = await fixture(t);
   // Without `refs/remotes/origin/HEAD`, as `git remote add` and `git fetch` leave it.
