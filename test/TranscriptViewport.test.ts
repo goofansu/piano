@@ -67,6 +67,28 @@ test("a reader who scrolled up is never moved by new output", () => {
   assert.equal(viewport.atBottom(), false);
 });
 
+for (const update of ["render", "resize"] as const) {
+  test(`${update} cannot overwrite a reader scroll whose event is still queued`, () => {
+    for (const distance of [40, 300]) {
+      const { viewport, el } = setup();
+      const readingTop = el.scrollTop - distance;
+      el.scrollTop = readingTop; // Native movement is immediate; its scroll event is deferred.
+      el.scrollHeight += 600;
+      if (update === "render") viewport.rendered();
+      else {
+        el.clientHeight = 300;
+        viewport.resized({ container: true });
+      }
+      assert.equal(el.scrollTop, readingTop, "following must consume the pending move up");
+      viewport.scrolled(); // The delayed event must not undo the decision either.
+      el.scrollHeight += 600;
+      viewport.rendered();
+      assert.equal(el.scrollTop, readingTop, "later output leaves the reader in place");
+      assert.equal(viewport.atBottom(), false);
+    }
+  });
+}
+
 test("a small step up from the bottom unpins the view, so new output does not undo it", () => {
   const { viewport, el } = setup();
   scroll(el, viewport, 1460);
