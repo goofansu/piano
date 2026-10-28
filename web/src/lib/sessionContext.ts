@@ -230,11 +230,11 @@ export interface SessionContext {
    */
   changesUnavailable: string | undefined;
   /**
-   * The workspace that addresses the session's pull request: Changes', only while it can open,
-   * since the pull request is linked, read and unlinked in Changes. Where Changes cannot open,
-   * nothing asks GitHub about it.
+   * Where the selected session's pull request is addressed: set exactly when Changes can open and
+   * the session has an ID, since the pull request is linked, read and unlinked in Changes. Without
+   * it, nothing offers the pull request or asks GitHub about it.
    */
-  pullRequestWorkspace: Workspace | undefined;
+  pullRequestTarget: PullRequestTarget | undefined;
   /**
    * The registry's pull request link for the selected session: `null` once it was removed,
    * `undefined` while nothing is linked or the session is not in the registry yet.
@@ -246,6 +246,12 @@ export interface SessionContext {
    * quoting, Ask and extensions cannot add to a draft nobody can see or send.
    */
   draftKey: DraftKey | null;
+}
+
+/** The Changes workspace and session ID a session's pull request is linked, read and unlinked by. */
+export interface PullRequestTarget {
+  workspaceId: string;
+  sessionId: string;
 }
 
 /** Everything the header, palette and session view show about the selected session's location. */
@@ -281,7 +287,10 @@ export function sessionContext(state: AppState): SessionContext {
           : workspace && !changesWorkspace
             ? "Not a Git repository"
             : "Changes unavailable",
-    pullRequestWorkspace: canOpenChanges ? changesWorkspace : undefined,
+    pullRequestTarget:
+      canOpenChanges && changesWorkspace && session?.sessionId
+        ? { workspaceId: changesWorkspace.id, sessionId: session.sessionId }
+        : undefined,
     pullRequest: reference?.pullRequest,
     checkoutMissing,
     draftKey: session && !checkoutMissing ? sessionDraftKey(session) : null,
