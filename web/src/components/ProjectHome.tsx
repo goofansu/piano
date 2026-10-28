@@ -10,7 +10,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { ProjectCommandsMenu } from "@/components/Projects";
@@ -29,7 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { projectCommands } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
-import type { SessionTarget } from "@/lib/sessionCommands";
+import { type SessionTarget, sessionRowMenu } from "@/lib/sessionCommands";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
 
@@ -37,23 +36,11 @@ import { type AppState, sessionKey } from "@/store";
 function SessionActions({ target }: { target: SessionTarget }) {
   const { commands, run } = useSessionCommands(target);
   return (
-    <>
-      <DropdownMenuGroup>
-        {commands
-          .filter((c) => c.id === "archive")
-          .map((c) => (
-            <SessionCommandMenuItem key={c.id} command={c} run={run} />
-          ))}
-      </DropdownMenuGroup>
-      <DropdownMenuSeparator />
-      <DropdownMenuGroup>
-        {commands
-          .filter((c) => c.id === "delete")
-          .map((c) => (
-            <SessionCommandMenuItem key={c.id} command={c} run={run} />
-          ))}
-      </DropdownMenuGroup>
-    </>
+    <DropdownMenuGroup>
+      {sessionRowMenu(commands).destructive.map((c) => (
+        <SessionCommandMenuItem key={c.id} command={c} run={run} />
+      ))}
+    </DropdownMenuGroup>
   );
 }
 
