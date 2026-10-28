@@ -367,13 +367,11 @@ await run(
       ["gone", "Gone worktree"],
     ]) {
       await page.open("/projects/qa");
-      await page.see(`feat-${id}`);
-      const card = `button[role="listitem"]:nth-child(${id === "live" ? 1 : 2})`;
-      assert.match(
-        await page.evaluate(`document.querySelector(${JSON.stringify(card)}).textContent`),
-        new RegExp(`${title}api.*feat-${id}`),
-      );
-      await page.ab("click", card);
+      // The named menu identifies the row independently of its element type or list position.
+      const card = `[role="listitem"]:has([aria-label=${JSON.stringify(`Session menu for ${title}`)}])`;
+      await page.ab("wait", card);
+      assert.match(await page.ab("get", "text", card), new RegExp(`${title}\\s*api\\s*feat-${id}`));
+      await page.ab("click", `${card} [data-slot="item-title"] button`);
       await page.see("Answer 1.");
       const header = await page.evaluate("document.querySelector('header').textContent");
       // One line: folder then branch; the worktree segment is gone (it repeats the branch).
