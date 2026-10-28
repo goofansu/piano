@@ -96,16 +96,16 @@ test("a just-updated PR reads as just now", () => {
   assert.equal(view?.timeLabel, "updated just now");
 });
 
-test("the row names the PR, its state and what is still only local; branches only when the head is another branch", () => {
+test("the row names the PR, its state and what is still only local; branches only when the PR is not from the inspected branch", () => {
   const view = pullRequestView(linked(pr()), now)!;
   const row = pullRequestRow(view, {
-    branch: "feature",
+    fromBranch: true,
     local: { commitsNotPushed: 2, uncommitted: true },
   });
   assert.equal(row.name, "#42");
   assert.equal(row.title, "The session deliverable");
   assert.deepEqual(
-    pullRequestRow(view, { branch: "feature", local: undefined, loading: true }).status,
+    pullRequestRow(view, { fromBranch: true, local: undefined, loading: true }).status,
     { state: "open", label: "Open" },
     "refreshing keeps the known status",
   );
@@ -115,9 +115,9 @@ test("the row names the PR, its state and what is still only local; branches onl
     ["Checks failed", "Approved"],
   );
   assert.deepEqual(row.local, ["2 commits not pushed", "Edits not committed"]);
-  assert.equal(row.branches, undefined, "the PR's head is the inspected branch");
+  assert.equal(row.branches, undefined, "the PR was opened from the inspected branch");
   assert.deepEqual(
-    pullRequestRow(view, { branch: "main", local: { commitsNotPushed: 1, uncommitted: false } }),
+    pullRequestRow(view, { fromBranch: false, local: { commitsNotPushed: 1, uncommitted: false } }),
     {
       ...row,
       branches: { head: "feature", base: "main" },
@@ -126,7 +126,7 @@ test("the row names the PR, its state and what is still only local; branches onl
   );
   assert.deepEqual(
     pullRequestRow(view, {
-      branch: "feature",
+      fromBranch: true,
       local: { commitsNotPushed: null, uncommitted: false },
     }).local,
     [],
@@ -134,7 +134,7 @@ test("the row names the PR, its state and what is still only local; branches onl
   );
   // An unreadable status keeps its badge; a first read keeps only the link, without a badge.
   assert.deepEqual(
-    pullRequestRow(pullRequestView(linked(null), now)!, { branch: "feature", local: undefined })
+    pullRequestRow(pullRequestView(linked(null), now)!, { fromBranch: true, local: undefined })
       .status,
     {
       state: undefined,
@@ -143,7 +143,7 @@ test("the row names the PR, its state and what is still only local; branches onl
   );
   assert.equal(
     pullRequestRow(pullRequestView(linked(null), now)!, {
-      branch: "feature",
+      fromBranch: true,
       local: undefined,
       loading: true,
     }).status,
