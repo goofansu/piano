@@ -205,3 +205,21 @@ authentication: it stays on loopback behind exe.dev private access (INV-11).
 Prefix GitHub CLI commands with `GH_HOST=github.int.exe.xyz`. Pass `--repo goofansu/piano` where
 supported; `gh repo view` takes `goofansu/piano` as a positional argument. Setup and permission
 failures: [exe.dev GitHub integration](https://exe.dev/docs/integrations-github.md).
+
+## Cursor Cloud specific instructions
+
+Cloud Agent images put Node 22 ahead of `/usr/local/bin` (`/exec-daemon/node`, and nvm). The
+environment installs Node.js 24.22.1 under `/usr/local` and prepends that directory for login
+shells. Worktrunk is the latest release, checksum-checked, at `/usr/local/bin/wt`. `agent-browser`
+0.38.1 is installed globally. `npm run dev` serves the API on 127.0.0.1:7070 and the UI at
+http://localhost:5173/ when those ports are free. Vite binds localhost on IPv6, so check the UI
+with `http://localhost:5173/`, not `http://127.0.0.1:5173/`.
+
+Cursor's managed GitHub auth sets `url.<credential>@github.com/.insteadOf` for `github.com`
+remotes. Piano reads `git remote get-url` with that config and rejects URLs that contain
+credentials, so nine tests fail here and pass in GitHub CI: the Git checkout observation in
+`test/GitCheckout.test.ts`, the worktree comparison and legacy-link tests in
+`test/SessionChanges.test.ts`, branch discovery, late discovery, and link head/base in
+`test/SessionPullRequests.test.ts`, branch scope in `test/WorkspaceChanges.test.ts`, and GitHub
+repository identity in `test/Worktrees.test.ts`. Leave the rewrite in place. It is how git
+authenticates.
