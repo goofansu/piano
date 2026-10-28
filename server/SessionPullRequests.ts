@@ -13,31 +13,23 @@ import type {
   SessionPullRequestAction,
   SessionPullRequestLink,
 } from "../shared/wire.ts";
-import { observeGit } from "./GitCheckout.ts";
-import { GitHubPullRequests, githubRemote, PullRequestError } from "./GitHubPullRequests.ts";
+import { GitHubPullRequests, observeBranchRemote, PullRequestError } from "./GitHubPullRequests.ts";
 import { Registry, type RegistryError, type SessionEntry } from "./Registry.ts";
 
 export { PullRequestError };
 
 const failure = (detail: string) => new PullRequestError({ detail });
 
-/** Observe both branch and head repository through GitCheckout's observation (INV-06):
- * inherited GIT_* state cannot redirect discovery; the remote is the URL of the one the branch
- * pushes to. */
+/** The checkout's branch on GitHub, or null outside Git, without a remote or when detached.
+ * Discovery needs a GitHub remote. */
 const checkout = Effect.fn("SessionPullRequests.checkout")(function* (cwd: string) {
-  const observed = yield* observeGit(cwd, { remote: true });
-  if (observed.status === "broken") return yield* failure(observed.detail);
-  if (observed.status === "non-git") return null;
-  // GitHub knows the branch by its name on the remote, which may differ from the local name.
-  const branch = observed.remoteBranch ?? "",
-    remote = observed.remote ?? "";
-  if (!remote) return null;
-  const github = githubRemote(remote);
-  if (!github)
+  const remote = yield* observeBranchRemote(cwd);
+  if (!remote || remote.on === "none") return null;
+  if (remote.on === "other")
     return yield* failure(
       "Branch discovery needs a GitHub or exe.dev GitHub integration remote. Link a pull request explicitly for this checkout.",
     );
-  return { branch, remote, ...github };
+  return remote.head && { ...remote.head, apiHost: remote.apiHost };
 });
 
 /** Callers pass the session entry they resolved by ID; this module never looks a session up by path. */
@@ -111,13 +103,8 @@ export const SessionPullRequestsLive = Layer.effect(
       }
       const discover = Effect.gen(function* () {
         const before = yield* checkout(s.cwd);
-        if (!before?.branch) return null;
-        const matches = yield* github.openForHead(
-          s.cwd,
-          before.branch,
-          before.repo,
-          before.apiHost,
-        );
+        if (!before) return null;
+        const matches = yield* github.openForHead(s.cwd, before.name, before.repo, before.apiHost);
         if (matches.length > 1)
           return yield* failure(
             "Several pull requests match this branch. Link the intended pull request explicitly.",
