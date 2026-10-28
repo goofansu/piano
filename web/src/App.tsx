@@ -67,7 +67,7 @@ export default function App() {
     (cwd: string) => dispatch({ type: "new_directory", cwd }),
     [dispatch],
   );
-  const anyWorking = state.hosts.some((h) => h.streaming);
+  const anyWorking = state.hosts.some((h) => h.working);
 
   return (
     <SidebarLayoutContext.Provider value={layout}>

@@ -13,6 +13,7 @@ import type {
 } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { isWorking } from "../../../shared/sessionProjection.ts";
+import { workUnderWay } from "../../../shared/sessionStatus.ts";
 import { sameSession } from "../../../shared/wire.ts";
 import { type AppState, isSession } from "../store.ts";
 import { directoryTrust } from "./directoryTrust.ts";
@@ -182,17 +183,17 @@ export function sessionMutable(state: AppState, target: SessionRef): boolean {
   return state.connected && (!isSelectedSession(state, target) || sessionReady(state));
 }
 
-/** The background host entry for a session, where its streaming and preview flags are read. */
+/** The background host entry for a session, where its working and preview flags are read. */
 export function hostOf(state: AppState, target: SessionRef): HostInfo | undefined {
   return state.hosts.find((host) => sameSession(host, target));
 }
 
-/** Activity for either the selected session or a background session in the sidebar. */
+/** Whether a session is working (`workUnderWay`), the selected one by its own state and any other
+ * by its host's: the same rule either way, so where it is shown changes nothing. */
 export function sessionWorking(state: AppState, target: SessionRef): boolean {
   const session = state.session;
-  if (session && isSession(session, target))
-    return isWorking(session.state) || session.state.submission?.outcome === "submitting";
-  return !!hostOf(state, target)?.streaming;
+  if (session && isSession(session, target)) return workUnderWay(session.state);
+  return !!hostOf(state, target)?.working;
 }
 
 /** Pi cannot run where the checkout or history is gone, and renaming starts Pi. */

@@ -560,8 +560,8 @@ test("a session is selected, working and previewing by cwd and ID together", () 
     ...base,
     session: session("/repo", { preview: undefined }),
     hosts: [
-      { cwd: "/repo", sessionId: "s2", streaming: true, preview: true },
-      { cwd: "/elsewhere", sessionId: "s1", streaming: false },
+      { cwd: "/repo", sessionId: "s2", working: true, preview: true },
+      { cwd: "/elsewhere", sessionId: "s1", working: false },
     ],
   };
   // The selected session reads its own state; a same-cwd session with another ID reads its host.
@@ -569,12 +569,12 @@ test("a session is selected, working and previewing by cwd and ID together", () 
   assert.equal(sessionWorking(state, other), true);
   assert.equal(sessionHasPreview(state, other), true);
   assert.equal(sessionHasPreview(state, { cwd: "/repo", sessionId: "s1" }), false);
-  assert.equal(hostOf(state, other)?.streaming, true);
+  assert.equal(hostOf(state, other)?.working, true);
   assert.equal(hostOf(state, { cwd: "/repo", sessionId: "s3" }), undefined);
   assert.equal(isSelectedSession(state, { cwd: "/repo", sessionId: "s1" }), true);
   assert.equal(isSelectedSession(state, other), false);
   // The selected session's own state wins over a stale host entry for it.
-  const busyHost = { ...state, hosts: [{ cwd: "/repo", sessionId: "s1", streaming: true }] };
+  const busyHost = { ...state, hosts: [{ cwd: "/repo", sessionId: "s1", working: true }] };
   assert.equal(sessionWorking(busyHost, { cwd: "/repo", sessionId: "s1" }), false);
   assert.equal(
     sessionWorking({ ...busyHost, session: null }, { cwd: "/repo", sessionId: "s1" }),

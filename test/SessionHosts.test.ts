@@ -790,6 +790,27 @@ test("INV-02/03/04: idle deadline respects queue, retry, compaction, dialogs and
   );
 });
 
+test("the hosts list calls a session working while it holds queued work Pi is not running yet", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const s = yield* registered("listed-queue");
+      const working = Effect.map(
+        hosts.list,
+        (list) => list.find((h) => h.sessionId === "listed-queue")?.working,
+      );
+      // Pi is not streaming, but a follow-up waits: Archive must ask, and the sidebar shows work.
+      yield* prompt(s, "/queue");
+      assert.equal((yield* s.state).isStreaming, false);
+      assert.equal(yield* working, true);
+      yield* prompt(s, "/settle");
+      yield* quiescent(s);
+      assert.equal(yield* working, false);
+      yield* hosts.release(cwd, "listed-queue");
+    }),
+  );
+});
+
 test("INV-02: one host's failing idle check does not keep the next idle host from release", {
   timeout: 15000,
 }, async () => {

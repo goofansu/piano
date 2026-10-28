@@ -234,7 +234,7 @@ test("sidebar list: cached rows still follow every catalog fact", () => {
     },
     {
       name: "host activity",
-      patch: { hosts: [{ cwd: a.cwd, sessionId: a.sessionId, streaming: true }] },
+      patch: { hosts: [{ cwd: a.cwd, sessionId: a.sessionId, working: true }] },
       check: (list) => assert.equal(rows(list)[0]?.activity, "working"),
     },
     {

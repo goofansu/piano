@@ -243,10 +243,10 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           : null;
       const done = new Set(s.done);
       for (const prev of s.hosts) {
-        if (!prev.streaming) continue;
+        if (!prev.working) continue;
         const now = m.hosts.find((h) => sameSession(h, prev));
         const k = sessionKey(prev);
-        if (now && !now.streaming && k !== viewing) done.add(k);
+        if (now && !now.working && k !== viewing) done.add(k);
       }
       return { ...s, hosts: [...m.hosts], done: [...done] };
     }

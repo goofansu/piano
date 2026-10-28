@@ -328,10 +328,10 @@ test("Share is Radius-sign-in only and targets the row, independent of selected 
   assert.equal(share({ ...base, connected: false }).enabled, false);
   assert.equal(share({ ...base, workspaces: [] }).enabled, false);
   assert.equal(share({ ...base, sessionReferences: [] }).enabled, false);
-  assert.equal(share({ ...base, hosts: [{ ...other, streaming: true }] }).enabled, false);
+  assert.equal(share({ ...base, hosts: [{ ...other, working: true }] }).enabled, false);
   // The selected session is busy while its prompt is submitting, before its host streams.
   const selected = { cwd: "/work/repo.feature", sessionId: "s1", title: "Selected" };
-  const selectedHost = [{ ...selected, streaming: false }];
+  const selectedHost = [{ ...selected, working: false }];
   assert.equal(share({ ...base, hosts: selectedHost }, selected).enabled, true);
   const submitting = {
     ...base,
@@ -424,7 +424,7 @@ test("archiving a session that owns an app asks first, from the header or its si
   assert.equal((archive(base) as { confirm: boolean }).confirm, false);
   const running = { ...base, session: session("/work/repo.feature", { preview: app() }) };
   assert.equal((archive(running) as { confirm: boolean }).confirm, true);
-  const background = { ...base, hosts: [{ ...other, streaming: false, preview: true }] };
+  const background = { ...base, hosts: [{ ...other, working: false, preview: true }] };
   assert.equal((archive(background, other) as { confirm: boolean }).confirm, true);
 });
 

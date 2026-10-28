@@ -130,7 +130,7 @@ function harness(onDisconnect?: () => void) {
 
 const hosts = (n: number): ServerMessage => ({
   _tag: "hosts",
-  hosts: [{ cwd: `/scratch/${n}`, sessionId: `s${n}`, streaming: false }],
+  hosts: [{ cwd: `/scratch/${n}`, sessionId: `s${n}`, working: false }],
 });
 
 test("INV-05: frames are acked and delivered in deliveryId order on the environment's URL", () => {

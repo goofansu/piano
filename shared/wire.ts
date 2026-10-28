@@ -778,7 +778,8 @@ export type SessionPullRequestAction = typeof SessionPullRequestAction.Type;
 export const HostInfo = Schema.Struct({
   cwd: Schema.String,
   sessionId: Schema.String,
-  streaming: Schema.Boolean,
+  /** `workUnderWay` of the host's state: the session is working. */
+  working: Schema.Boolean,
   /** This generation owns an app that may still be running; ending Pi stops it. */
   preview: Schema.optional(Schema.Boolean),
 });

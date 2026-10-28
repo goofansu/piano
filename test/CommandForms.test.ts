@@ -150,7 +150,7 @@ test("archive, delete and close folder send their registry change", () => {
 });
 
 test("deleting a working session says it stops the work; an idle one just deletes", () => {
-  const working: AppState = { ...online, hosts: [{ ...other, streaming: true }] };
+  const working: AppState = { ...online, hosts: [{ ...other, working: true }] };
   assert.deepEqual(confirmation(working, del()), {
     title: "Delete session?",
     description:
@@ -629,7 +629,7 @@ test("a failed share reports the failure and does not publish again", async () =
 });
 
 test("archive and delete say they stop the app a session started", () => {
-  const owning: AppState = { ...online, hosts: [{ ...other, streaming: false, preview: true }] };
+  const owning: AppState = { ...online, hosts: [{ ...other, working: false, preview: true }] };
   assert.deepEqual(confirmation(owning, archive()), {
     title: "Stop and archive this session?",
     description:
@@ -644,7 +644,7 @@ test("archive and delete say they stop the app a session started", () => {
     confirmLabel: "Stop and delete",
     destructive: true,
   });
-  const both: AppState = { ...online, hosts: [{ ...other, streaming: true, preview: true }] };
+  const both: AppState = { ...online, hosts: [{ ...other, working: true, preview: true }] };
   assert.match(
     confirmation(both, archive())?.description ?? "",
     /^This will stop any work still running in "Other" and the app it started and remove the session from the sidebar\./,

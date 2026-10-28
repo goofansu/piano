@@ -146,7 +146,7 @@ function entries(state: AppState): SessionEntry[] {
       archived: ref.archived,
       pinned: !!ref.pinned,
       listed: !ref.archived && (!!folder || !!project),
-      activity: host?.streaming ? "working" : done.has(key) ? "done" : host ? "idle" : "off",
+      activity: host?.working ? "working" : done.has(key) ? "done" : host ? "idle" : "off",
       selected: isSession(current, ref),
       unavailable: ref.unavailable,
       hint: ref.unavailable && HINTS[ref.unavailable],

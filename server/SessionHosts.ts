@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { Context, Data, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
-import { isWorking } from "../shared/sessionProjection.ts";
+import { workUnderWay } from "../shared/sessionStatus.ts";
 import {
   type HostInfo,
   type SessionClosure,
@@ -211,7 +211,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           out.push({
             cwd: h.session.spec.cwd,
             sessionId: h.session.spec.sessionId,
-            streaming: isWorking(state),
+            working: workUnderWay(state),
             ...(state.preview && { preview: true }),
           });
         }

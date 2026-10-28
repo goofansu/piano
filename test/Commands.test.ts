@@ -170,7 +170,7 @@ test("enabled commands reach the effect their intent names", () => {
 test("archiving a working background session asks before sending a destructive command", () => {
   const working: AppState = {
     ...online,
-    hosts: [{ cwd: other.cwd, sessionId: other.sessionId, streaming: true }],
+    hosts: [{ cwd: other.cwd, sessionId: other.sessionId, working: true }],
   };
   const archive = sessionCommands(working, other).find((c) => c.id === "archive")!;
   assert.equal(archive.enabled, true);
