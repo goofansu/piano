@@ -235,6 +235,8 @@ export function MessageList({
           size="icon-lg"
           aria-label="Scroll to bottom"
           data-motion="enter"
+          // Keep editing focus: collapsing an empty composer would move this target mid-click.
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => viewport.jump(BOTTOM_ENTRY)}
           className="absolute left-0 right-(--rail-inset) bottom-4 mx-auto rounded-full shadow-2 [&_svg:not([class*='size-'])]:size-5"
         >

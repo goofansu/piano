@@ -78,6 +78,8 @@ interface Props {
   /** The tallest the textarea grows, in pixels. */
   maxHeight: number;
   autoFocus?: boolean;
+  /** Session-only resting layout; first-message composers keep their full-size editor. */
+  compact?: boolean;
   model: ModelProps;
   /** The send key was pressed; `alt` with Alt held. The page decides whether and how it sends. */
   onSend: (alt: boolean) => void;
@@ -100,6 +102,7 @@ export function DraftEditor({
   className,
   maxHeight,
   autoFocus,
+  compact = false,
   model,
   onSend,
   onKeyDown,
@@ -125,51 +128,67 @@ export function DraftEditor({
   return (
     <div
       data-motion="ring"
+      data-compact={compact || undefined}
+      data-empty={
+        !text.length &&
+        !attachments.items.length &&
+        !attachments.busy &&
+        !attachments.error &&
+        !quotes.items.length
+      }
       className={cn(composerCard, className)}
       {...attachmentEvents(attachments, attachmentsDisabled)}
     >
       <AttachmentDraftView draft={attachments} disabled={attachmentsDisabled} />
       <QuoteChips draft={quotes} disabled={disabled} />
       {above}
-      <SlashTextarea
-        ref={ref}
-        completion={completion}
-        autoFocus={autoFocus}
-        value={text}
-        disabled={disabled}
-        rows={1}
-        aria-label={label}
-        className={inputClassName}
-        onValueChange={editor.setText}
-        onKeyDown={(e) => {
-          if (isModelPickerKey(e) && pickerAvailable) {
-            e.preventDefault();
-            setModelOpen(true);
-          } else if (isSendKey(e)) {
-            e.preventDefault();
-            onSend(e.altKey);
-          } else if (e.key === "Backspace" && !text && quotes.items.length) {
-            // An empty draft's Backspace takes back the last quote, as in a token field.
-            e.preventDefault();
-            quotes.remove(quotes.items.length - 1);
-          } else onKeyDown?.(e);
-        }}
-      />
-      <div className={composerToolbar}>
-        <AttachButton draft={attachments} disabled={attachmentsDisabled} />
-        <ModelSelect
-          open={modelOpen}
-          onOpenChange={setModelOpen}
-          returnFocusRef={ref}
-          models={model.models}
-          value={model.value}
-          onChange={model.onChange}
-          effort={model.effort}
-          onEffortChange={model.onEffortChange}
+      {/* No standard component owns this focus-driven layout; all controls stay mounted. */}
+      <div className="composer-entry">
+        <SlashTextarea
+          ref={ref}
+          completion={completion}
+          autoFocus={autoFocus}
+          value={text}
           disabled={disabled}
-          noDirectory={model.noDirectory}
+          rows={1}
+          aria-label={label}
+          placeholder={compact ? label : undefined}
+          className={inputClassName}
+          onValueChange={editor.setText}
+          onKeyDown={(e) => {
+            if (isModelPickerKey(e) && pickerAvailable) {
+              e.preventDefault();
+              setModelOpen(true);
+            } else if (isSendKey(e)) {
+              e.preventDefault();
+              onSend(e.altKey);
+            } else if (e.key === "Backspace" && !text && quotes.items.length) {
+              // An empty draft's Backspace takes back the last quote, as in a token field.
+              e.preventDefault();
+              quotes.remove(quotes.items.length - 1);
+            } else onKeyDown?.(e);
+          }}
         />
-        {actions}
+        <div className={cn(composerToolbar, "composer-toolbar")}>
+          <div className="composer-attach contents">
+            <AttachButton draft={attachments} disabled={attachmentsDisabled} />
+          </div>
+          <div className="composer-settings contents">
+            <ModelSelect
+              open={modelOpen}
+              onOpenChange={setModelOpen}
+              returnFocusRef={ref}
+              models={model.models}
+              value={model.value}
+              onChange={model.onChange}
+              effort={model.effort}
+              onEffortChange={model.onEffortChange}
+              disabled={disabled}
+              noDirectory={model.noDirectory}
+            />
+          </div>
+          <div className="composer-actions contents">{actions}</div>
+        </div>
       </div>
     </div>
   );

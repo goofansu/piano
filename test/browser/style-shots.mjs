@@ -114,6 +114,8 @@ await run(
         `[...document.querySelectorAll('[role="group"][aria-label="bash tool call"]')].at(-1).scrollIntoView({ block: "start" })`,
       );
       await page.capture(`03b-failed-tool-${scheme}`);
+      // Session settings appear when composing; first-message editors remain expanded.
+      await page.ab("click", "[aria-label='Message']");
       await page.ab("click", "[aria-label^='Model:']");
       await page.ab(
         "wait",

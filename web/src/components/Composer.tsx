@@ -137,6 +137,7 @@ export function Composer({
         completion={completion}
         disabled={disabled}
         label="Message"
+        compact
         className="mx-auto w-full max-w-3xl"
         inputClassName={composerInput}
         maxHeight={192}
@@ -170,6 +171,8 @@ export function Composer({
                   aria-label={queue.editAriaLabel}
                   title="Move queued messages back to the draft without stopping Pi (Esc)"
                   disabled={!control.canRestoreQueue}
+                  // Restore first, then focus the draft; expansion must not move Edit mid-click.
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     sendCommand(RESTORE_QUEUE);
                     editor.ref.current?.focus();
@@ -207,7 +210,7 @@ export function Composer({
                     data-motion="fade"
                     variant="ghost"
                     size="sm"
-                    className={cn(footerPicker, "shrink-0")}
+                    className={cn(footerPicker, "composer-delivery shrink-0")}
                     aria-label={`Delivery: ${DELIVERY[queueMode].label}`}
                     disabled={disabled}
                   >

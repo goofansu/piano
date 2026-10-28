@@ -711,6 +711,60 @@
   background: var(--surface-1);
   box-shadow: var(--shadow-1);
 }
+/* Only session composers opt in. The native focus tree and existing Radix trigger state own
+ * expansion, including portalled pickers; draft content never collapses on blur. The queue and
+ * attachments live outside this grid, so compacting the empty editor cannot hide them. */
+.composer-card[data-compact] {
+  .composer-entry {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "input input input" "attach settings actions";
+    align-items: center;
+    column-gap: 0.25rem;
+    padding: 0 0.625rem 0.625rem;
+  }
+  .composer-toolbar {
+    display: contents;
+  }
+  .slash-textarea {
+    grid-area: input;
+    min-width: 0;
+    margin-inline: -0.625rem;
+  }
+  .composer-attach {
+    display: flex;
+    grid-area: attach;
+  }
+  .composer-settings {
+    display: flex;
+    grid-area: settings;
+    min-width: 0;
+  }
+  .composer-actions {
+    display: flex;
+    grid-area: actions;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  &:where([data-empty="true"]):not(:focus-within):not(:has([aria-haspopup][data-state="open"])) {
+    .composer-entry {
+      grid-template-areas: "attach input actions";
+      padding-top: 0.625rem;
+    }
+    .slash-textarea {
+      margin-inline: 0;
+    }
+    .slash-textarea > textarea {
+      min-height: 0;
+      max-height: 2.25rem;
+      padding: 0.375rem 0.25rem;
+    }
+    .composer-settings,
+    .composer-delivery {
+      display: none;
+    }
+  }
+}
 .composer-card[data-dragging="true"] {
   border-color: var(--brand);
   box-shadow:
