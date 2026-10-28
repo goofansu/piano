@@ -2,14 +2,13 @@ import { isWorking } from "@shared/sessionProjection";
 import { cn } from "cn";
 import {
   ChevronDownIcon,
-  CopyIcon,
   ExternalLinkIcon,
   FolderOpenIcon,
   GitBranchIcon,
   GitCommitHorizontalIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
 import {
   DropdownMenu,
@@ -25,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { createPreference, parseJson } from "@/lib/preference";
+import { type EnvironmentRowKind, environmentRowMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { type SessionLink, sessionLinks } from "@/lib/sessionLinks";
 import type { TranscriptViewport } from "@/lib/transcriptViewport";
@@ -175,8 +175,7 @@ function RailSections({
   showAllRef: React.Ref<HTMLButtonElement>;
 }) {
   const session = state.session;
-  const { cwd, folder, branch, detachedHead } = sessionContext(state);
-  const githubRepo = folder?.discovery.status === "ready" ? folder.discovery.githubRepo : undefined;
+  const { cwd, branch, detachedHead, githubRepo } = sessionContext(state);
   const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;
   const files = useSessionFiles();
   const messages = session?.messages ?? [];
@@ -216,7 +215,6 @@ function RailSections({
               menu="commit"
               icon={<GitCommitHorizontalIcon />}
               mono
-              copyValue={detachedHead}
               description="A commit is checked out directly; no branch is active."
               href={repositoryUrl ? `${repositoryUrl}/commit/${detachedHead}` : undefined}
             >
@@ -262,7 +260,10 @@ function RailSections({
   );
 }
 
-/** One fact about where the session runs: its icon, then its value; the name is read, not shown, as in the header. */
+/**
+ * One fact about where the session runs: its icon, then its value; the name is read, not shown, as
+ * in the header. Its menu holds the session's copy commands for that fact, then its GitHub page.
+ */
 function EnvironmentRow({
   name,
   icon,
@@ -270,7 +271,6 @@ function EnvironmentRow({
   href,
   menu,
   cwd,
-  copyValue,
   description,
   children,
 }: {
@@ -278,12 +278,13 @@ function EnvironmentRow({
   icon: ReactNode;
   mono?: boolean;
   href?: string;
-  menu: "folder" | "repository" | "branch" | "commit";
+  menu: EnvironmentRowKind;
+  /** The directory the row stands for, as its tooltip. */
   cwd?: string;
-  copyValue?: string;
   description?: string;
   children: string;
 }) {
+  const { commands, run } = useSessionCommands();
   const content = (
     <>
       <ItemMedia variant="icon" className="text-ink-3">
@@ -297,14 +298,6 @@ function EnvironmentRow({
       </ItemContent>
     </>
   );
-  const copy = async (value: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success(`${label} copied`);
-    } catch {
-      toast.error(`Couldn’t copy the ${label.toLowerCase()}.`);
-    }
-  };
   return (
     // Keep rail clicks on their controls: modal pointer blocking lets repeated clicks select
     // the transcript beneath the rail through the document root.
@@ -329,29 +322,9 @@ function EnvironmentRow({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
-          {menu !== "folder" && (
-            <DropdownMenuItem
-              onSelect={() =>
-                void copy(
-                  copyValue ?? children,
-                  menu === "commit"
-                    ? "Commit SHA"
-                    : menu === "repository"
-                      ? "Repository name"
-                      : "Branch name",
-                )
-              }
-            >
-              <CopyIcon aria-hidden />
-              Copy {menu === "commit" ? "commit SHA" : `${menu} name`}
-            </DropdownMenuItem>
-          )}
-          {cwd && (
-            <DropdownMenuItem onSelect={() => void copy(cwd, "Working directory")}>
-              <CopyIcon aria-hidden />
-              Copy working directory
-            </DropdownMenuItem>
-          )}
+          {environmentRowMenu(commands, menu).map((c) => (
+            <SessionCommandMenuItem key={c.id} command={c} run={run} />
+          ))}
           {href && (
             <DropdownMenuItem asChild>
               <a href={href} target="_blank" rel="noreferrer">

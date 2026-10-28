@@ -205,6 +205,8 @@ export interface SessionContext {
   branch: string | undefined;
   /** Current detached commit from Git, never a cached branch or directory name. */
   detachedHead: string | undefined;
+  /** The folder's GitHub repository (`owner/name`), when discovery found one. */
+  githubRepo: string | undefined;
   title: string;
   sessionId: string | undefined;
   /** Registry identity of the selected session's directory: addresses its pull request. */
@@ -241,6 +243,7 @@ export function sessionContext(state: AppState): SessionContext {
     branch: reference?.branch ?? undefined,
     detachedHead:
       checkout?.status === "current" && checkout.facts?.detached ? checkout.facts.head : undefined,
+    githubRepo: folder?.discovery.status === "ready" ? folder.discovery.githubRepo : undefined,
     // Pi's live name outranks the registry's saved title.
     title: sessionLabel(session?.state.sessionName || reference?.title),
     sessionId: session?.sessionId ?? undefined,
