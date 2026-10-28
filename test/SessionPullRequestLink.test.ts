@@ -258,6 +258,34 @@ test("opening while unlinked offers the link form; a link found when work stops 
   assert.equal(pr.getState().surface, "details", "reopening shows the link");
 });
 
+test("a link removed or added elsewhere closes the open dialog, with or without a read in flight", async () => {
+  // Removed elsewhere: the edit goes with the link rather than turn into the link form.
+  {
+    const { pi, pr, closes } = setup(registered);
+    pi.last().resolve(linked);
+    await settle();
+    pr.present({ visible: true, dialog: true });
+    assert.equal(pr.getState().surface, "editing");
+    const asked = pi.requests.length;
+    pr.observe("w1", "s1", null, false);
+    assert.equal(pr.getState().surface, "closed");
+    assert.equal(closes(), 1, "whoever owns the dialog learns it closed");
+    assert.equal(pi.requests.length, asked, "an unlinked session is not read");
+  }
+  // Added elsewhere: the link form closes on the link itself, before the read it starts lands.
+  {
+    const { pi, pr, closes } = setup(null);
+    pr.present({ visible: true, dialog: true });
+    assert.equal(pr.getState().surface, "link-form");
+    pr.observe("w1", "s1", registered, false);
+    assert.equal(pr.getState().surface, "details");
+    assert.equal(closes(), 1, "whoever owns the dialog learns it closed");
+    pi.last().resolve(linked);
+    await settle();
+    assert.equal(closes(), 1, "the read's answer closes nothing again");
+  }
+});
+
 test("the dialog closes when its session can no longer be addressed, rather than offer a Link that sends nothing", async () => {
   for (const link of [undefined, registered]) {
     const { pi, pr, notes, closes } = setup(link);

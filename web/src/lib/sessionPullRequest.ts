@@ -232,12 +232,6 @@ export function createSessionPullRequest({
 
   observation.subscribe(() => {
     state = derive();
-    // The surface moves only when the registry's link itself appeared or disappeared: a link
-    // found closes the form; a link removed elsewhere takes its details (or edit) with it.
-    if (!changing) {
-      if (surface === "link-form" && linked()) return closeItself();
-      if (surface === "editing" && !linked()) return closeItself();
-    }
     reconcileSurface();
     publish();
   });
@@ -319,6 +313,13 @@ export function createSessionPullRequest({
       dialog = view.dialog;
       const previousLink = link;
       const associationChanged = !sameLink(previousLink, next);
+      // The dialog closes itself when the registry's link appears or disappears under it (a link
+      // found closes the form; a link removed elsewhere takes its edit with it), or when its
+      // session can no longer be addressed (its checkout removed) rather than offer a Link that
+      // cannot be sent. A change of this module's own closes it when it settles.
+      const closing =
+        dialog && (key === null || (key === previous && !changing && linked() !== !!next));
+      if (closing) dialog = false;
       if (key !== previous || associationChanged) associationRevision++;
       // Work starting or stopping is an edge only within one session: a selection arriving
       // mid-turn is not a start, so it is read once, by the observation, not twice.
@@ -336,11 +337,9 @@ export function createSessionPullRequest({
       observation.observe(key, !!next);
       const alreadyReading = key !== previous || !previousLink;
       if (next && !alreadyReading && (associationChanged || edge)) observation.refreshSoon(0);
-      // A dialog left open when the session can no longer be addressed (its checkout removed)
-      // closes itself rather than offer a Link that cannot be sent.
-      if (key === null && dialog) closeItself();
-      else reconcileSurface();
+      reconcileSurface();
       publish();
+      if (closing) closed?.();
       const { loading, mutating } = observation.getState();
       // Reuse a recent read and never replace one in flight just because the row appeared.
       if (
