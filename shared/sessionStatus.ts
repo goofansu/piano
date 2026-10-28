@@ -36,7 +36,8 @@ export const closureNeedsAttention = (
 /**
  * Work Pi or Piano is still carrying out for the session: a run, a compaction or a retry, a stop,
  * an input or dialog answer on its way, or queued messages. The one rule for a session's working
- * state: the sidebar's, whether Archive and Delete stop work, and `liveActivityOf`'s `running`.
+ * state: the sidebar's, the session's announced status, whether Archive and Delete stop work, and
+ * `liveActivityOf`'s `running`.
  */
 export const workUnderWay = (state: SessionState): boolean =>
   isWorking(state) ||

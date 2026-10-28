@@ -301,7 +301,9 @@ export interface SessionActivity {
 export function sessionActivity(state: AppState, messagesOnly: boolean): SessionActivity {
   const t = state.session;
   const receipt = submissionReceipt(state);
+  // Pi streaming drives the reply keys; the status says Working by the sidebar's rule.
   const streaming = !!t && isWorking(t.state);
+  const working = !!t && workUnderWay(t.state);
   const activity = [
     t?.dialogs.length ? "Waiting for input" : null,
     t?.state.isCompacting ? "Compacting" : null,
@@ -332,7 +334,7 @@ export function sessionActivity(state: AppState, messagesOnly: boolean): Session
               ? "Read-only"
               : t.state.closure
                 ? "Exited"
-                : activity || (streaming ? "Working" : t.hosted ? "Ready" : "Not running");
+                : activity || (working ? "Working" : t.hosted ? "Ready" : "Not running");
   return { status, replyActivity };
 }
 
