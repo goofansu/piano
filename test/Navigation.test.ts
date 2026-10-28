@@ -878,6 +878,30 @@ test("the layout and Settings leave the session's tabs as they were", () => {
   );
 });
 
+test("a Surface tab is on screen only while nothing covers it", () => {
+  const p = page("/new", undefined, railPreference(railStorage()));
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  const shownTab = () => p.navigation.getState().shownTab;
+  assert.equal(shownTab(), null, "no tabs");
+  p.navigation.openChanges();
+  assert.equal(shownTab(), "changes");
+  p.navigation.openSettings();
+  assert.equal(shownTab(), null, "Settings covers the session");
+  p.navigation.closeSettings();
+  assert.equal(shownTab(), "changes");
+  p.navigation.toggleRail();
+  assert.equal(shownTab(), null, "the rail, turned on last, covers the Surface area");
+  p.navigation.toggleRail();
+  p.navigation.setSingle(true);
+  assert.equal(shownTab(), "changes", "one area at a time, Changes just opened");
+  p.navigation.showAgent();
+  assert.equal(shownTab(), null, "one area at a time, the Agent area shows instead");
+  p.navigation.openFile("README.md");
+  assert.equal(shownTab(), "file:README.md");
+});
+
 test("each request to open Settings is counted, so a repeat reveals its section again", () => {
   const p = page("/new");
   p.registry();

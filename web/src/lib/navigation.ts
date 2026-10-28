@@ -91,6 +91,18 @@ function sessionLayout(
   return { single: false, agent: true, surface, rail: state.rail && !surface, agentTab: false };
 }
 
+/**
+ * The one derivation of the Surface tab on screen: none under Settings, while the rail covers the
+ * Surface area or while the Agent area shows one area at a time. What reads or polls for a tab
+ * (Changes reads Git, its pull request row asks GitHub) does so while it is on screen.
+ */
+function shownTab(
+  state: Pick<NavigationState, "settings" | "surface">,
+  layout: SessionLayout,
+): string | null {
+  return !state.settings && layout.surface && state.surface ? state.surface.active : null;
+}
+
 const sameLayout = (a: SessionLayout, b: SessionLayout) =>
   a.single === b.single &&
   a.agent === b.agent &&
@@ -129,6 +141,8 @@ export interface NavigationState {
   single: boolean;
   /** What the fields above show, derived once per move; the same object while it is unchanged. */
   layout: SessionLayout;
+  /** The key (`tabKey`) of the Surface tab on screen, derived once per move; `null` for none. */
+  shownTab: string | null;
   pullRequest: boolean;
   palette: boolean;
 }
@@ -380,6 +394,8 @@ export function createNavigation({
     settingsRequest: 0,
     ...fields,
     layout: sessionLayout(fields),
+    // No tabs yet, so none on screen.
+    shownTab: null,
     surfaceRequest: 0,
     pullRequest: false,
     palette: false,
@@ -438,12 +454,13 @@ export function createNavigation({
    * identity, so nobody is notified. The session reports its layout on every resize, mostly
    * unchanged.
    */
-  const set = (patch: Partial<Omit<NavigationState, "layout">>) => {
+  const set = (patch: Partial<Omit<NavigationState, "layout" | "shownTab">>) => {
     const keys = Object.keys(patch) as (keyof typeof patch)[];
     if (keys.every((key) => Object.is(state[key], patch[key]))) return;
     const next = { ...state, ...patch };
-    const layout = sessionLayout(next);
-    state = sameLayout(layout, state.layout) ? next : { ...next, layout };
+    const derived = sessionLayout(next);
+    const layout = sameLayout(derived, state.layout) ? state.layout : derived;
+    state = { ...next, layout, shownTab: shownTab(next, layout) };
   };
 
   /**

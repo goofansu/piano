@@ -235,7 +235,7 @@ function ChangesToggle() {
   const { commands, run } = useSessionCommands();
   const navigation = useNavigation();
   const { single } = navigation.layout;
-  const shown = navigation.layout.surface && navigation.surface?.active === "changes";
+  const shown = navigation.shownTab === "changes";
   const command = commands.find((c) => c.id === "changes");
   if (!command?.enabled) return null;
   const closes = shown && !single;

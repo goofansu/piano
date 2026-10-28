@@ -78,7 +78,7 @@ export function SessionPanel({
   pullRequest: PullRequestControl;
 }) {
   const navigation = useNavigation();
-  const { settings, surface, surfaceRequest, single, selectTab, closeTab } = navigation;
+  const { surface, surfaceRequest, single, selectTab, closeTab } = navigation;
   const t = state.session;
   const key = t ? sessionKey(t) : null;
   const tabs = surface?.tabs ?? [];
@@ -198,7 +198,7 @@ export function SessionPanel({
                 canOpenChanges ? undefined : (changesUnavailable ?? "Changes unavailable")
               }
               session={t}
-              active={shown && active === "changes" && !settings}
+              active={navigation.shownTab === "changes"}
               onAsk={onAsk}
               pullRequest={pullRequest}
             />,
