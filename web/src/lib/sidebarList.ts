@@ -163,7 +163,8 @@ function ownerKey(
     case "folder":
       return folderFor(state, session.cwd)?.path;
     case "project":
-      return projectKey(member?.projectId ?? "");
+      // A session being started from a project's home learns its project with its reference.
+      return member && projectKey(member.projectId ?? "");
     case "date":
       // A new session has no reference yet; it lists under Today once it does.
       return dateKey(dateLabel(member ? member.updatedAt : today.toISOString(), today));

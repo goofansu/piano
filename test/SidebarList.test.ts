@@ -475,6 +475,7 @@ test("sidebar list: selecting a session opens the section holding it: its folder
     sessionReferences: [
       ...registry.sessionReferences,
       sessionReference("/other", "s2", { title: "Pinned plan", pinned: true }),
+      sessionReference("/other", "unfiled"),
     ],
   };
   const { model, items } = sidebar({ "piano.pinnedOpen": "false" });
@@ -484,12 +485,10 @@ test("sidebar list: selecting a session opens the section holding it: its folder
   model.sync(feature, view("project"));
   assert.equal(isOpen(model.list(feature, view("project")), "project:p1"), true);
 
-  // A new session, or one never filed, belongs to No project.
-  for (const sessionId of ["unfiled", null]) {
-    const other = selecting(pinned, "/other", sessionId);
-    model.sync(other, view("project"));
-    assert.equal(isOpen(model.list(other, view("project")), "project:"), true, `${sessionId}`);
-  }
+  // A session never filed belongs to No project.
+  const unfiled = selecting(pinned, "/other", "unfiled");
+  model.sync(unfiled, view("project"));
+  assert.equal(isOpen(model.list(unfiled, view("project")), "project:"), true);
 
   // A pinned session lives only in Pinned, so Pinned opens, not its folder or project.
   const before = openness(model.list(pinned, view("folder")));
@@ -509,6 +508,32 @@ test("sidebar list: selecting a session opens the section holding it: its folder
   model.toggle(PINNED, false);
   model.sync(pinnedSelected, view("date"));
   assert.equal(model.list(pinnedSelected, view("date")).pinned?.open, true);
+});
+
+test("sidebar list: a session being started opens its project's group once its reference names it, not No project", () => {
+  const { model, items } = sidebar();
+  // Started from a project's home: the project reaches the sidebar with the session's reference.
+  for (const sessionId of [null, "new"]) {
+    const starting = selecting(registry, "/repo", sessionId);
+    model.sync(starting, view("project"));
+    assert.equal(isOpen(model.list(starting, view("project")), "project:"), false, `${sessionId}`);
+  }
+  const filed = selecting(
+    {
+      ...registry,
+      sessionReferences: [
+        ...registry.sessionReferences,
+        sessionReference("/repo", "new", { projectId: "p1" }),
+      ],
+    },
+    "/repo",
+    "new",
+  );
+  model.sync(filed, view("project"));
+  const list = model.list(filed, view("project"));
+  assert.equal(isOpen(list, "project:p1"), true);
+  assert.equal(isOpen(list, "project:"), false);
+  assert.doesNotMatch(items.get("piano.openProjects") ?? "", /"project:"/, "nor on the next load");
 });
 
 test("sidebar list: a registry refresh never reopens a section the user collapsed; a new selection, grouping or owner does", () => {
@@ -549,7 +574,7 @@ test("sidebar list: a registry refresh never reopens a section the user collapse
   const filedElsewhere: AppState = {
     ...selected,
     projects: [...registry.projects, { id: "p2", name: "Other" }],
-    sessionReferences: [sessionReference("/work/repo.feature", "s1", { projectId: "p2" })],
+    sessionReferences: [sessionReference("/work/repo.feature", "s1", { projectId: "p1" })],
   };
   model.sync(filedElsewhere, view("project"));
   const moved = model.list(filedElsewhere, view("project"));
