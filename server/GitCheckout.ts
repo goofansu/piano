@@ -104,48 +104,45 @@ const BRANCH = ["branch", "--show-current"];
 /** Where a branch's work goes and is counted: the one answer for discovery, comparison targets
  * and commits not pushed. */
 export interface Upstream {
-  /** The remote the branch tracks, else `origin`. */
+  /** The remote Git would push the branch to: its push remote, else the one it tracks, else
+   * `origin`. */
   readonly remote: string;
-  /** The branch's name on that remote (what GitHub calls a pull request's head): its
-   * upstream's, else its own. */
+  /** The branch's name on that remote (what GitHub calls a pull request's head): its upstream's
+   * when Git pushes there, else its own. */
   readonly name: string;
-  /** The remote-tracking ref Git would hold for it: its configured upstream when that is on a
-   * remote, else `refs/remotes/<remote>/<branch>`. Git may not hold it. */
+  /** The remote-tracking ref that push would update, else `refs/remotes/<remote>/<branch>`. Git
+   * may not hold it. */
   readonly ref: string;
 }
 
-/** The branch's upstream, and each remote's default branch to tell a start point from a home. */
+/** The branch's upstream and where Git would push it. `push.default` and `remote.pushDefault`
+ * usually live in the user's config, so the read keeps it (`userConfig`). */
 const upstreamRead = (branch: string) => [
   "for-each-ref",
-  "--format=%(refname)%00%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)%00%(symref)",
+  "--format=%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)%00%(push:remotename)%00%(push)",
   `refs/heads/${branch}`,
-  "refs/remotes/*/HEAD",
 ];
 
 /**
- * `branch`'s upstream from `upstreamRead`'s answer. A local upstream (remote `.`) counts as none,
- * and so does the remote's default branch under another name (`git switch -c feat origin/main`):
- * that is where the branch started, so its work goes to its own name on that remote.
+ * `branch`'s upstream from `upstreamRead`'s answer, as Git would push it. Git names the
+ * remote-tracking ref a push updates; when it names none (under `push.default=simple`, a branch
+ * tracking another name, as after `git switch -c feat origin/main`), the work goes to the
+ * branch's own name on its push remote. A local remote (`.`) counts as none.
  */
 function upstreamOf(branch: string, answer: string): Upstream {
-  const refs = answer
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => line.split("\0"));
-  const [, remote = "", remoteRef = "", ref = ""] =
-    refs.find(([name]) => name === `refs/heads/${branch}`) ?? [];
-  const tracked = remote && remote !== "." ? remote : null;
-  const name = remoteRef.startsWith("refs/heads/") ? remoteRef.slice("refs/heads/".length) : null;
-  const startedFrom =
-    name !== branch &&
-    refs.some(([head, , , , target]) => head === `refs/remotes/${tracked}/HEAD` && target === ref);
-  return tracked && name && ref.startsWith("refs/remotes/") && !startedFrom
-    ? { remote: tracked, name, ref }
-    : {
-        remote: tracked ?? "origin",
-        name: branch,
-        ref: `refs/remotes/${tracked ?? "origin"}/${branch}`,
-      };
+  const [remote = "", remoteRef = "", upstream = "", pushRemote = "", push = ""] = answer
+    .trim()
+    .split("\0");
+  const onRemote = (name: string) => (name && name !== "." ? name : null);
+  const target = onRemote(pushRemote) ?? onRemote(remote) ?? "origin";
+  if (!push.startsWith("refs/remotes/"))
+    return { remote: target, name: branch, ref: `refs/remotes/${target}/${branch}` };
+  // Pushing to its upstream (`push.default=upstream`, or the same name) keeps the upstream's name.
+  const name =
+    push === upstream && remoteRef.startsWith("refs/heads/")
+      ? remoteRef.slice("refs/heads/".length)
+      : branch;
+  return { remote: target, name, ref: push };
 }
 
 /** What Git says about a path: outside any repository, inside a working checkout, or `broken`:
@@ -224,7 +221,7 @@ export const observeGit = Effect.fn("GitCheckout.observeGit")(function* (
     if (!options.branch && !options.remote) return checkout;
     const branch = (yield* read(BRANCH)).trim() || null;
     if (!options.remote) return { ...checkout, branch };
-    const upstream = branch ? upstreamOf(branch, yield* read(upstreamRead(branch))) : null;
+    const upstream = branch ? upstreamOf(branch, yield* read(upstreamRead(branch), true)) : null;
     // The one read whose answer the user's Git config defines (e.g. an exe.dev integration
     // proxy configured globally), so it keeps user config.
     const remote = yield* read(["remote", "get-url", upstream?.remote ?? "origin"], true).pipe(
@@ -365,7 +362,7 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
       head: () => optional(["rev-parse", "--verify", "--quiet", "HEAD"]),
       branch: async () => decode((await run(BRANCH)).stdout).trim() || null,
       upstream: async (branch) =>
-        upstreamOf(branch, decode((await run(upstreamRead(branch))).stdout)),
+        upstreamOf(branch, decode((await run(upstreamRead(branch), { userConfig: true })).stdout)),
       remoteUrl: async (name) => {
         try {
           return (

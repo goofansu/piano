@@ -327,6 +327,7 @@ test("branch scope: a pull request applies to the branch by its name on its remo
   git("update-ref", "refs/remotes/origin/james/feat", "HEAD");
   git("config", "branch.feat.remote", "origin");
   git("config", "branch.feat.merge", "refs/heads/james/feat");
+  git("config", "push.default", "upstream");
   const pullRequest = { base: "release", headRepo: "example/repo", baseRepo: "example/repo" };
   const target = async (head: string) =>
     ready(
@@ -380,6 +381,7 @@ test("Changes says whether the linked pull request is from this branch, by its n
   git("remote", "add", "origin", "https://github.com/example/repo.git");
   git("config", "branch.feat.remote", "origin");
   git("config", "branch.feat.merge", "refs/heads/james/feat");
+  git("config", "push.default", "upstream");
   // Git holds no ref for the base: the PR cannot be the target, yet it is still this branch's.
   const pullRequest = { base: "release", headRepo: "example/repo", baseRepo: "example/repo" };
   const fromBranch = async (hint: object, scope: "uncommitted" | "branch" = "uncommitted") => {
@@ -475,20 +477,22 @@ test("local work: commits not pushed count against the branch's upstream, not a 
   git("update-ref", "refs/remotes/origin/feat", "main");
   git("config", "branch.feat.remote", "origin");
   git("config", "branch.feat.merge", "refs/heads/james/feat");
+  git("config", "push.default", "upstream");
   git("commit", "-q", "--allow-empty", "-m", "local 1");
   git("commit", "-q", "--allow-empty", "-m", "local 2");
   assert.equal(ready(await preview()).local.commitsNotPushed, 2);
 });
 
-test("a branch started from the remote's default branch compares and counts by its own name on that remote", async (t) => {
+test("a branch started from a remote branch compares and counts by its own name on that remote", async (t) => {
   const { git, read, preview } = fixture(t);
   git("switch", "-qc", "main");
   git("commit", "-q", "--allow-empty", "-m", "base");
   git("branch", "-q", "release");
+  // Without `refs/remotes/origin/HEAD`, as `git remote add` and `git fetch` leave it.
   git("remote", "add", "origin", "https://github.com/example/repo.git");
   git("update-ref", "refs/remotes/origin/main", "main");
   git("update-ref", "refs/remotes/origin/release", "release");
-  git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  git("config", "push.default", "simple");
   // `git switch -c feat origin/main`, then `git push origin feat` without `-u`.
   git("switch", "-qc", "feat", "--track", "origin/main");
   git("commit", "-q", "--allow-empty", "-m", "pushed");

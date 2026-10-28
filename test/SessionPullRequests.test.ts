@@ -336,19 +336,25 @@ test("discovery asks GitHub for the branch's name on its remote, not its local n
   f.git("update-ref", "refs/remotes/origin/james/feat", "HEAD");
   f.git("config", "branch.feat.remote", "origin");
   f.git("config", "branch.feat.merge", "refs/heads/james/feat");
+  // Git pushes the branch to its upstream (else it would push to `feat`).
+  f.git("config", "push.default", "upstream");
   // A same-named branch on GitHub is someone else's work, not this branch's.
   f.control({ prs: [candidate(42, "james/feat"), candidate(7, "feat")] });
   assert.equal((await f.get()).pullRequest?.number, 42);
 });
 
-test("discovery asks GitHub for a branch started from the remote's default branch by its own name", async (t) => {
+test("discovery asks GitHub for a branch started from another remote branch by its own name", async (t) => {
   const f = await fixture(t);
+  // Without `refs/remotes/origin/HEAD`, as `git remote add` and `git fetch` leave it.
   f.git("update-ref", "refs/remotes/origin/main", "HEAD");
-  f.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
-  // `git switch -c feat origin/main`, later pushed without `-u`.
-  f.git("switch", "-qc", "feat", "--track", "origin/main");
-  f.control({ prs: [candidate(42, "feat"), candidate(7, "main")] });
-  assert.equal((await f.get()).pullRequest?.number, 42);
+  f.git("update-ref", "refs/remotes/origin/release", "HEAD");
+  f.git("config", "push.default", "simple");
+  for (const start of ["origin/main", "origin/release"]) {
+    // `git switch -c feat <start>`, later pushed without `-u`.
+    f.git("switch", "-qC", "feat", "--track", start);
+    f.control({ prs: [candidate(42, "feat"), candidate(7, "main"), candidate(9, "release")] });
+    assert.equal((await f.get()).pullRequest?.number, 42, start);
+  }
 });
 
 test("a link records the pull request's head and base as GitHub last reported them, so Changes can compare without a GitHub call", async (t) => {

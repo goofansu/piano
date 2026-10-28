@@ -151,8 +151,8 @@ async function branchScope(
   if (!branch) return { unavailable: "Detached HEAD." };
   const target = await resolveTarget(checkout, branch.upstream, pullRequestHead, hints);
   if (!target) return { unavailable: "No base branch known." };
-  // This branch by ref, not name: a fork's PR into a same-named base is another branch, and an
-  // upstream under another name (a branch started from `origin/main`) is its target.
+  // This branch by ref, not name: a fork's PR into a same-named base is another branch, and a
+  // branch that pushes to its target under another name (`push.default=upstream`) is not it.
   const { upstream } = branch;
   if (
     target.ref === `refs/heads/${branch.name}` ||
