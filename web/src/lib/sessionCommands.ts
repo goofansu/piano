@@ -33,6 +33,8 @@ const AGENT_ONLY: SessionLayout = {
 export type SessionCommandId =
   | "copy-working-directory"
   | "copy-branch"
+  | "copy-commit"
+  | "copy-repository"
   | "copy-session-id"
   | "copy-session-path"
   | "changes"
@@ -138,6 +140,24 @@ export interface SessionHeaderMenu {
   destructive: SessionCommand[];
 }
 
+/** The session rail's Environment rows, each with the copy commands its menu offers. */
+export type EnvironmentRowKind = "repository" | "folder" | "commit" | "branch";
+const ENVIRONMENT_ROWS = {
+  repository: ["copy-repository", "copy-working-directory"],
+  folder: ["copy-working-directory"],
+  commit: ["copy-commit"],
+  branch: ["copy-branch"],
+} as const satisfies Record<EnvironmentRowKind, readonly SessionCommandId[]>;
+
+/** The session rail's Environment row menu, from `sessionCommands`' descriptors: the row's own
+ * fact first. */
+export function environmentRowMenu(
+  commands: readonly SessionCommand[],
+  row: EnvironmentRowKind,
+): SessionCommand[] {
+  return ENVIRONMENT_ROWS[row].flatMap((id) => commands.filter((c) => c.id === id));
+}
+
 const ROW_SECTIONS = [["rename", "pin"], ["share"]] as const;
 /** Archive sits beside delete, though only delete is destructive: both end the session's life. */
 const DESTRUCTIVE = ["archive", "delete"] as const;
@@ -215,6 +235,7 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  *   an app; open needs its link, stop needs the attachment (`sessionReady`).
  * - new session here: the checkout is present.
  * - copy session path: saved history has supplied its file path; no live Pi needed.
+ * - copy git branch, commit SHA, repository name: listed only while the session has one.
  * - other copy commands and Messages only: always (session ID requires an ID).
  */
 export function sessionCommands(
@@ -257,6 +278,30 @@ export function sessionCommands(
               icon: "copy",
               enabled: true,
               intent: { kind: "copy", value: ctx.branch, label: "Git branch" },
+            } as const,
+          ]
+        : []),
+      ...(ctx.detachedHead
+        ? [
+            {
+              id: "copy-commit",
+              label: "Copy commit SHA",
+              icon: "copy",
+              enabled: true,
+              keywords: ["detached", "head"],
+              intent: { kind: "copy", value: ctx.detachedHead, label: "Commit SHA" },
+            } as const,
+          ]
+        : []),
+      ...(ctx.githubRepo
+        ? [
+            {
+              id: "copy-repository",
+              label: "Copy repository name",
+              icon: "copy",
+              enabled: true,
+              keywords: ["github"],
+              intent: { kind: "copy", value: ctx.githubRepo, label: "Repository name" },
             } as const,
           ]
         : []),

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { FolderView, SessionPreview, SessionState, WorktreeView } from "../shared/wire.ts";
 import type { SessionLayout } from "../web/src/lib/navigation.ts";
 import {
+  environmentRowMenu,
   type SessionCommandId,
   type SessionHeaderMenu,
   type SessionRowMenu,
@@ -483,4 +484,48 @@ test("a linked pull request opens only where Changes can, and says why not", () 
   const unlinked = at({ unavailable: "checkout" });
   assert.equal(unlinked.command.enabled, true);
   assert.deepEqual(unlinked.command.intent, { kind: "pull-request", linked: false });
+});
+
+test("the rail's Environment rows offer the session's copy commands for their fact", () => {
+  const path = "/work/repo.feature";
+  const head = "d4449bb7183bb577791acab4f6fc4f52f78d02b0";
+  const at = (checkout: WorktreeView, branch: string | null) =>
+    sessionCommands({
+      ...base,
+      folders: [
+        {
+          ...folder,
+          worktrees: [checkout],
+          discovery: { ...folder.discovery, githubRepo: "acme/repo" } as FolderView["discovery"],
+        },
+      ],
+      sessionReferences: [sessionReference(path, "s1", { branch })],
+    });
+  const menu = (commands: ReturnType<typeof at>, row: Parameters<typeof environmentRowMenu>[1]) =>
+    environmentRowMenu(commands, row).map((c) => [c.label, c.intent]);
+
+  const onBranch = at(worktree(path, "feature"), "feature");
+  assert.deepEqual(menu(onBranch, "branch"), [
+    ["Copy git branch", { kind: "copy", value: "feature", label: "Git branch" }],
+  ]);
+  assert.deepEqual(menu(onBranch, "commit"), []);
+  assert.deepEqual(menu(onBranch, "repository"), [
+    ["Copy repository name", { kind: "copy", value: "acme/repo", label: "Repository name" }],
+    ["Copy working directory", { kind: "copy", value: path, label: "Working directory" }],
+  ]);
+  assert.deepEqual(menu(onBranch, "folder"), [
+    ["Copy working directory", { kind: "copy", value: path, label: "Working directory" }],
+  ]);
+
+  const detached = at(
+    {
+      ...worktree(path, null),
+      facts: { path, branch: null, detached: true, prunable: false, head },
+    } as WorktreeView,
+    null,
+  );
+  assert.deepEqual(menu(detached, "commit"), [
+    ["Copy commit SHA", { kind: "copy", value: head, label: "Commit SHA" }],
+  ]);
+  assert.deepEqual(menu(detached, "branch"), []);
 });
