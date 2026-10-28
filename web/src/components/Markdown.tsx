@@ -36,6 +36,7 @@ function CopyCode({ text }: { text: string }) {
   return (
     <IconButton
       label={copied ? "Code copied" : "Copy code"}
+      variant="outline-solid"
       size="inline"
       className="absolute top-4 right-2"
       onClick={async () => {
