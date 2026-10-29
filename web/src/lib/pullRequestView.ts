@@ -3,7 +3,9 @@
  * open it, and how long ago it last moved; the trigger's face and the link form's wording and
  * submit rule. Pure, so the popover, its trigger and the form only render.
  */
+
 import type { LocalWork, PullRequest, SessionPullRequest } from "@shared/wire";
+import { pullRequestIdentity } from "../../../shared/pullRequestIdentity.ts";
 import { localWorkFacts } from "./changesView.ts";
 import { timeAgo } from "./format.ts";
 import { canLink } from "./sessionPullRequest.ts";
@@ -12,10 +14,10 @@ export type SignalOutcome = Exclude<PullRequest["checks"] | PullRequest["review"
 
 export interface PullRequestView {
   url: string;
-  /** GitHub's number, else the link's last path segment; absent when neither names one. */
-  number: string | undefined;
-  /** "owner/name", from GitHub or the link's path. */
-  repo: string;
+  /** What every surface calls it: its number ("42"), else "PR" when the link names none. */
+  name: string;
+  /** "owner/name#42", for copying; absent when the link names no pull request. */
+  reference: string | undefined;
   /** Live GitHub facts; absent while the status is unavailable. */
   title: string | undefined;
   status: { state: PullRequest["state"]; label: string } | undefined;
@@ -40,14 +42,6 @@ const SIGNAL_LABELS: Record<SignalOutcome, string> = {
   review_required: "Review required",
 };
 
-function repoFromUrl(url: string) {
-  try {
-    return new URL(url).pathname.split("/").slice(1, 3).join("/");
-  } catch {
-    return "";
-  }
-}
-
 /** The view of a linked pull request; undefined while the session has no link. */
 export function pullRequestView(
   value: SessionPullRequest | undefined,
@@ -63,10 +57,12 @@ export function pullRequestView(
       )
     : [];
   const at = pr?.at && timeAgo(pr.at, now);
+  // GitHub's facts name it once read; until then the link names it, as the server parses links.
+  const identity = pr ?? pullRequestIdentity(link.url);
   return {
     url: link.url,
-    number: pr ? String(pr.number) : link.url.split("/").pop() || undefined,
-    repo: pr?.repo ?? repoFromUrl(link.url),
+    name: identity ? String(identity.number) : "PR",
+    reference: identity ? `${identity.repo}#${identity.number}` : undefined,
     title: pr?.title,
     status: pr && { state: pr.state, label: STATE_LABELS[pr.state] },
     active,
@@ -86,7 +82,7 @@ export const STATUS_UNAVAILABLE = "Status unavailable";
 
 /** The row under the Changes toolbar: the pull request, its state and what is still only local. */
 export interface PullRequestRow {
-  /** "#42", else "PR". */
+  /** The view's name. */
   name: string;
   title: string | undefined;
   url: string;
@@ -107,9 +103,9 @@ export function pullRequestRow(
     loading = false,
   }: { fromBranch: boolean | undefined; local: LocalWork | undefined; loading?: boolean },
 ): PullRequestRow {
-  const { number, status } = view;
+  const { status } = view;
   return {
-    name: number ? `#${number}` : "PR",
+    name: view.name,
     title: view.title,
     url: view.url,
     status: status ?? (loading ? undefined : { state: undefined, label: STATUS_UNAVAILABLE }),

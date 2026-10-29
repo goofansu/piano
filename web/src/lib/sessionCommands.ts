@@ -309,7 +309,7 @@ export function sessionCommands(
             } as const,
           ]
         : []),
-      ...(pullRequest?.number && pullRequest.repo
+      ...(pullRequest?.reference
         ? [
             {
               id: "copy-pull-request-reference",
@@ -318,7 +318,7 @@ export function sessionCommands(
               enabled: true,
               intent: {
                 kind: "copy",
-                value: `${pullRequest.repo}#${pullRequest.number}`,
+                value: pullRequest.reference,
                 label: "Pull request reference",
               },
             } as const,

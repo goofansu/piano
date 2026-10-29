@@ -33,11 +33,12 @@ The palette (Mod+K) searches neither outputs nor links.
   Find from branch). Once linked, the button gives way to the PR row below. Removing the link
   brings the button back. Keyboard dismissal returns focus to the visible PR control.
 - `pull-request-row`: region "Pull request" under the toolbar, only while the session has a
-  linked pull request: `#<n> <title>` (a link to GitHub), the state badge, "Checks
-  running|passed|failed", "Approved" / "Changes requested" / "Review required", "<n> commits not
-  pushed", "Edits not committed", and `head → base` only when the head is not the inspected
-  branch; "Status unavailable" when GitHub cannot be read (the seed's `#222` without a `gh`). Its
-  "Pull request actions" menu: Open pull request, Change link…, Find from branch, Remove link
+  linked pull request: `<n> <title>` (a link to GitHub; the number without a hash, as the
+  session rail and project home show it), the state badge, "Checks running|passed|failed",
+  "Approved" / "Changes requested" / "Review required", "<n> commits not pushed", "Edits not
+  committed", and `head → base` only when the head is not the inspected branch; "Status
+  unavailable" when GitHub cannot be read (the seed's `#222` without a `gh`). Its "Pull request
+  actions" menu: Open pull request, Change link…, Find from branch, Remove link
   (toasts "Pull request linked" / "Pull request link removed"). PR linking is absent from both
   session menus. The palette's "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
   field, Link, Find from branch; "No open PR found for this branch." when none); like Changes, it
@@ -92,7 +93,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
     ab find role button click --name "Changes" --exact; ab wait --text "new.txt"`
   - Result: tab and region "Changes", the header toggle now "Hide changes"; "Comparison:
-    Uncommitted"; region "Pull request" with link `#222`, `Status unavailable` and `Edits not
+    Uncommitted"; region "Pull request" with link `222`, `Status unavailable` and `Edits not
     committed`; buttons `new.txt, new, 1 added, 0 removed: collapse` and
     `src/answer.ts, 1 added, 1 removed: collapse`; cells `− export const answer = 4;` and
     `+ export const answer = 5;`; the name `new.txt` is green. Capture `01-changes`.

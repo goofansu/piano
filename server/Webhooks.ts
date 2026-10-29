@@ -4,6 +4,7 @@ import { basename } from "node:path";
 import { Clock, Context, Data, Deferred, Effect, Layer, Queue, Schema, Semaphore } from "effect";
 import { cutText } from "../shared/cutText.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
+import { pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
 import { closureNeedsAttention, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import {
   type Webhook,
@@ -15,7 +16,6 @@ import {
 } from "../shared/webhooks.ts";
 import { type SessionEvent, type Snapshot, sameSession } from "../shared/wire.ts";
 import { KNOWN_SECRET_MIN, projectDisplay } from "./DisplayProjection.ts";
-import { pullRequestIdentity } from "./GitHubPullRequests.ts";
 import { SessionLinkOrigin } from "./OriginPolicy.ts";
 import { Registry, type StoredWebhook } from "./Registry.ts";
 import {

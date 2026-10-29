@@ -7,9 +7,10 @@
  */
 import { Clock, Context, Data, Effect, Layer, Option, Stream } from "effect";
 import { STATUS_CHANGES_MS } from "../shared/dispatch.ts";
+import { pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
 import { dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import type { SessionStatusFacts, Snapshot } from "../shared/wire.ts";
-import { GitHubPullRequests, pullRequestIdentity } from "./GitHubPullRequests.ts";
+import { GitHubPullRequests } from "./GitHubPullRequests.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
