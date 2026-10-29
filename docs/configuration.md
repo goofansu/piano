@@ -58,6 +58,41 @@ Piano limits incoming WebSocket messages, RPC lines and pending work, and keeps 
 and cancellation. It rejects overload instead of queueing it for retry. See
 [runtime input limits](runtime-input-limits.md).
 
+## User questions
+
+Every Pi child also loads `extensions/piano-ask-user/index.ts` from the Piano installation.
+It registers the model-callable `ask_user` tool, not a slash command. The model supplies a
+non-empty `questions` array, including for a single question. Each item has a unique `id`, a
+`question` containing essential context, and optionally an `options` array for a single choice;
+without options, the user can write a multiline answer. Batch independent questions; ask dependent
+questions only after reading the earlier answers.
+
+```json
+{
+  "questions": [
+    { "id": "database", "question": "Which database?", "options": ["PostgreSQL", "SQLite"] },
+    { "id": "requirements", "question": "What should change?" }
+  ]
+}
+```
+
+Piano displays one question at a time above the composer without replacing its draft. Batches
+have numbered titles such as “1 of 2: Which database?”. **Send answer** saves that answer and
+advances to the next question, with no model turn between questions. After the last answer, the
+tool returns `{ status: "answered", answers: { database: "SQLite", requirements: "Keep the API" } }`.
+
+**Cancel** ends the whole batch and returns `{ status: "cancelled", answers: { database: "SQLite" } }`
+if only the first answer was submitted. Unanswered IDs are absent, not empty strings or inferred
+answers. Empty text is a submitted answer, distinct from cancellation. There is no Back/Edit step.
+Stop/Abort cancels the pending question and run, without opening remaining questions or starting
+model continuation. Questions without a reply are also subject to the host's existing dialog
+recovery deadline; cancellation is never approval and must not be retried automatically.
+
+Pi owns the tool call and result in session history. The extension sends no synthetic user
+message, starts no separate turn, and makes no extraction model call. It requires an interactive
+UI (Piano's RPC dialogs or Pi's terminal); headless use fails explicitly. This preserves the
+existing [dialog lifecycle](runtime-ownership.md) and INV-01/04/12.
+
 ## Browser origins
 
 Piano is a single-user tool for loopback use or access through a private authenticated proxy. It has
