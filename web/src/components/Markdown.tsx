@@ -38,6 +38,8 @@ function CopyCode({ text }: { text: string }) {
       label={copied ? "Code copied" : "Copy code"}
       variant="outline-solid"
       size="inline"
+      data-motion="reveal"
+      data-copied={copied ? "" : undefined}
       className="absolute top-4 right-2"
       onClick={async () => {
         try {

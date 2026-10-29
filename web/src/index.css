@@ -921,7 +921,8 @@
   transition-duration: 0ms;
 }
 @media (pointer: coarse) {
-  [data-row] [data-motion="reveal"] {
+  [data-row] [data-motion="reveal"],
+  .markdown-code-block [data-motion="reveal"] {
     opacity: 1;
   }
   [data-row] [data-motion="aside"] {
@@ -930,6 +931,17 @@
   [data-row] [data-motion="yield"] {
     mask-image: none;
   }
+}
+/* A code block's copy control stays off the code until the block is hovered, holds keyboard
+ * focus, or is confirming the copy. A touch screen keeps it visible: nothing there hovers. */
+.markdown-code-block:where(:hover, :has(:focus-visible)) [data-motion="reveal"],
+.markdown-code-block [data-motion="reveal"][data-copied] {
+  opacity: 1;
+  transition-duration: 150ms;
+  transition-timing-function: var(--ease-out);
+}
+.markdown-code-block:has(:focus-visible) [data-motion="reveal"] {
+  transition-duration: 0ms;
 }
 /* biome-ignore-start lint/complexity/noImportantStyles: the reset must beat every component's own motion. */
 :not(
