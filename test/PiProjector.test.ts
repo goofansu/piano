@@ -110,3 +110,43 @@ test("a dialog request is constructed once per id with Pi's timeout and receipt 
   );
   assert.equal(unusable.dialog?.timeoutMs, undefined, "an unusable Pi timeout is no timeout");
 });
+
+test("INV-11: structured tool args and JSON results are redacted per value and stay valid JSON", () => {
+  const args = { command: 'export API_KEY="hunter2longvalue"' };
+  const result = JSON.stringify({ status: "answered", answers: { q: 'use token: "abc123"' } });
+  const shown = (text: string) => {
+    assert.ok(!/hunter2longvalue|abc123/.test(text), text);
+    return JSON.parse(text) as unknown;
+  };
+  const end = projector().record(
+    {
+      type: "tool_execution_end",
+      toolCallId: "a",
+      toolName: "bash",
+      args,
+      result: { content: [{ type: "text", text: result }] },
+    },
+    0,
+  ).events[0];
+  assert.equal(end?._tag, "tool_update");
+  const tool = (end as Extract<typeof end, { _tag: "tool_update" }>).tool;
+  assert.deepEqual(shown(tool.args), { command: 'export API_KEY="[REDACTED]"' });
+  assert.deepEqual(shown(tool.text), {
+    status: "answered",
+    answers: { q: 'use token: "[REDACTED]"' },
+  });
+  const [call, saved] = projector().history([
+    { role: "assistant", content: [{ type: "toolCall", id: "a", name: "bash", arguments: args }] },
+    {
+      role: "toolResult",
+      toolCallId: "a",
+      toolName: "bash",
+      content: [{ type: "text", text: result }],
+    },
+  ]);
+  assert.deepEqual(shown(call.toolCalls![0].args), { command: 'export API_KEY="[REDACTED]"' });
+  assert.deepEqual(shown(saved.text), {
+    status: "answered",
+    answers: { q: 'use token: "[REDACTED]"' },
+  });
+});
