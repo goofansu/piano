@@ -43,9 +43,10 @@ and resource policy. Input above 262,144 characters or the nesting/structure bud
 readable source. Link and image discovery use the same remark grammar as rendering.
 
 Assistant replies and Markdown previews load at most eight distinct local images per prose
-surface, sequentially, retaining at most 20 MiB of image bytes. Images appear in place, within
-the content width and capped at 384px high; clicking one opens its file-preview tab. Unavailable,
-undecodable and over-budget images remain clickable local links; remote images never load.
+surface, sequentially, retaining at most 20 MiB of image bytes. Images appear in place as thumbnails
+within the content width and a 192 × 192px maximum, without cropping or upscaling; clicking one
+opens its full file-preview tab. Unavailable, undecodable and over-budget images remain clickable
+local links; remote images never load.
 Markdown diagrams remain escaped code in file previews.
 
 PDF displays only one page at a time, with 50–200% zoom, a 1,600-pixel maximum canvas width,
