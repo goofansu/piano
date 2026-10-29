@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { Effect } from "effect";
 import { downloadWorkspaceFile, place, readWorkspaceFile } from "../server/WorkspaceFiles.ts";
+import { previewKindByName, previewKindsByExtension } from "../shared/files.ts";
 
 test("file reads accept explicit external paths, stay bounded and never guess another workspace", async () => {
   const root = await mkdtemp(join(tmpdir(), "piano-files-"));
@@ -224,6 +225,71 @@ test("formats the previews promise are accepted under the detector's MIME varian
         content,
       });
     }
+  } finally {
+    await rm(a, { recursive: true, force: true });
+  }
+});
+
+test("every name that claims a preview kind previews as that kind, so its icon matches", async () => {
+  const a = await mkdtemp(join(tmpdir(), "piano-claims-"));
+  try {
+    const workspace = { id: "a", folder: a, path: a };
+    const read = (path: string) =>
+      Effect.runPromise(
+        readWorkspaceFile(workspace, path).pipe(
+          Effect.mapError((error) => new Error(error.detail)),
+        ),
+      );
+    const riff = (form: string) =>
+      Buffer.concat([Buffer.from("RIFF"), Buffer.from([0x24, 0, 0, 0]), Buffer.from(form)]);
+    const ftyp = (brand: string) =>
+      Buffer.concat([
+        Buffer.from([0, 0, 0, 0x18]),
+        Buffer.from(`ftyp${brand}\0\0\0\0${brand}isom`),
+      ]);
+    const ogg = (packet: string) =>
+      Buffer.concat([
+        Buffer.from("OggS"),
+        Buffer.alloc(22),
+        Buffer.from([1, packet.length]),
+        Buffer.from(packet),
+      ]);
+    // The smallest header the detector recognizes for each format a name may claim.
+    const samples: Record<string, Buffer> = {
+      md: Buffer.from("# Notes\n"),
+      markdown: Buffer.from("# Notes\n"),
+      svg: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+      png: Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"),
+      jpg: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+      jpeg: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+      gif: Buffer.from("GIF89a\x01\0\x01\0\0\0", "latin1"),
+      webp: riff("WEBPVP8 "),
+      mp3: Buffer.from([...Buffer.from("ID3"), 4, 0, 0, 0, 0, 0, 0, 0xff, 0xfb, 0x90, 0x64]),
+      wav: riff("WAVEfmt "),
+      ogg: ogg("\x01vorbis"),
+      oga: ogg("\x01vorbis"),
+      opus: ogg("OpusHead"),
+      flac: Buffer.from("fLaC\0\0\0\x22", "latin1"),
+      m4a: ftyp("M4A "),
+      mp4: ftyp("isom"),
+      webm: Buffer.from("1a45dfa39f4282847765626d", "hex"),
+      pdf: Buffer.from("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n", "latin1"),
+    };
+    assert.deepEqual(Object.keys(samples).sort(), Object.keys(previewKindsByExtension).sort());
+    for (const [extension, bytes] of Object.entries(samples)) {
+      const binary = !["md", "markdown", "svg"].includes(extension);
+      for (const name of [`sample.${extension}`, `SAMPLE.${extension.toUpperCase()}`]) {
+        await writeFile(join(a, name), binary ? Buffer.concat([bytes, Buffer.alloc(64)]) : bytes);
+        assert.equal((await read(name)).kind, previewKindByName(name), name);
+      }
+    }
+    // QuickTime is not a preview format, so its name claims nothing and its bytes are refused.
+    await writeFile(join(a, "clip.mov"), Buffer.concat([ftyp("qt  "), Buffer.alloc(64)]));
+    assert.equal(previewKindByName("clip.mov"), undefined);
+    await assert.rejects(read("clip.mov"), /not supported/);
+    // Neither a dotfile's name nor an inherited property claims a kind.
+    for (const name of [".md", "notes.constructor", "Makefile", "a.b/README"])
+      assert.equal(previewKindByName(name), undefined, name);
   } finally {
     await rm(a, { recursive: true, force: true });
   }

@@ -1,3 +1,4 @@
+import { previewKindByName } from "@shared/files";
 import {
   CopyIcon,
   DownloadIcon,
@@ -43,28 +44,9 @@ const KIND_ICON: Record<Preview["kind"], typeof FileIcon> = {
   pdf: FileIcon,
 };
 
-const EXTENSION_KIND: Record<string, Preview["kind"]> = {
-  md: "markdown",
-  markdown: "markdown",
-  png: "image",
-  jpg: "image",
-  jpeg: "image",
-  gif: "image",
-  webp: "image",
-  svg: "image",
-  pdf: "pdf",
-  mp3: "audio",
-  wav: "audio",
-  ogg: "audio",
-  mp4: "video",
-  webm: "video",
-  mov: "video",
-};
-
 /** A file tab's icon, by the kind its extension suggests before the file is read. */
 export function FileTabIcon({ path, className }: { path: string; className?: string }) {
-  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-  const Icon = KIND_ICON[EXTENSION_KIND[extension] ?? "text"] ?? FileIcon;
+  const Icon = KIND_ICON[previewKindByName(path) ?? "text"];
   return <Icon className={className} aria-hidden />;
 }
 

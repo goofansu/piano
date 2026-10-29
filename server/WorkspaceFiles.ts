@@ -3,7 +3,7 @@ import { access, open, realpath } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Data, Effect } from "effect";
 import { fileTypeFromBuffer } from "file-type";
-import type { FileDownload, FilePreview } from "../shared/files.ts";
+import { type FileDownload, type FilePreview, previewKindByName } from "../shared/files.ts";
 import type { Workspace } from "../shared/wire.ts";
 
 class FileRefusal extends Data.TaggedError("FileRefusal")<{ readonly detail: string }> {}
@@ -18,42 +18,29 @@ interface BinaryFormat {
   mime: string;
   /** Other MIME bases the detector reports for this format. */
   aliases?: string[];
-  /** Names that claim this format; their bytes must then be it. */
-  extensions: string[];
 }
-/** The one list of binary formats Piano previews; docs/file-previews.md describes it. */
+/** The one list of binary formats Piano previews; docs/file-previews.md describes it. Which
+ * names claim them is `previewKindsByExtension` in shared/files.ts. */
 const binaryFormats: BinaryFormat[] = [
-  {
-    kind: "image",
-    limit: 10 * MiB,
-    mime: "image/png",
-    aliases: ["image/apng"],
-    extensions: ["png"],
-  },
-  { kind: "image", limit: 10 * MiB, mime: "image/jpeg", extensions: ["jpg", "jpeg"] },
-  { kind: "image", limit: 10 * MiB, mime: "image/gif", extensions: ["gif"] },
-  { kind: "image", limit: 10 * MiB, mime: "image/webp", extensions: ["webp"] },
-  { kind: "audio", limit: 20 * MiB, mime: "audio/mpeg", extensions: ["mp3"] },
-  { kind: "audio", limit: 20 * MiB, mime: "audio/wav", extensions: ["wav"] },
-  { kind: "audio", limit: 20 * MiB, mime: "audio/ogg", extensions: ["ogg", "oga", "opus"] },
-  { kind: "audio", limit: 20 * MiB, mime: "audio/flac", extensions: ["flac"] },
-  {
-    kind: "audio",
-    limit: 20 * MiB,
-    mime: "audio/mp4",
-    aliases: ["audio/x-m4a"],
-    extensions: ["m4a"],
-  },
-  { kind: "video", limit: 32 * MiB, mime: "video/mp4", extensions: ["mp4"] },
-  { kind: "video", limit: 32 * MiB, mime: "video/webm", extensions: ["webm"] },
-  { kind: "pdf", limit: 20 * MiB, mime: "application/pdf", extensions: ["pdf"] },
+  { kind: "image", limit: 10 * MiB, mime: "image/png", aliases: ["image/apng"] },
+  { kind: "image", limit: 10 * MiB, mime: "image/jpeg" },
+  { kind: "image", limit: 10 * MiB, mime: "image/gif" },
+  { kind: "image", limit: 10 * MiB, mime: "image/webp" },
+  { kind: "audio", limit: 20 * MiB, mime: "audio/mpeg" },
+  { kind: "audio", limit: 20 * MiB, mime: "audio/wav" },
+  { kind: "audio", limit: 20 * MiB, mime: "audio/ogg" },
+  { kind: "audio", limit: 20 * MiB, mime: "audio/flac" },
+  { kind: "audio", limit: 20 * MiB, mime: "audio/mp4", aliases: ["audio/x-m4a"] },
+  { kind: "video", limit: 32 * MiB, mime: "video/mp4" },
+  { kind: "video", limit: 32 * MiB, mime: "video/webm" },
+  { kind: "pdf", limit: 20 * MiB, mime: "application/pdf" },
 ];
 const binaryTypes = new Map(
   binaryFormats.flatMap((format) =>
     [format.mime, ...(format.aliases ?? [])].map((mime) => [mime, format] as const),
   ),
 );
-const binaryExtensions = new Set(binaryFormats.flatMap((format) => format.extensions));
+const binaryKinds = new Set<string>(binaryFormats.map((format) => format.kind));
 /** Detected types that are text: they go through the UTF-8 check like undetected files. */
 const isTextType = (mime: string) =>
   mime.startsWith("text/") ||
@@ -184,7 +171,8 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
     const header = Buffer.alloc(8192);
     const initial = await file.read(header, 0, header.length, 0);
     const head = header.subarray(0, initial.bytesRead);
-    const binaryName = binaryExtensions.has(extname(requested).slice(1).toLowerCase());
+    const claimed = previewKindByName(requested);
+    const binaryName = claimed !== undefined && binaryKinds.has(claimed);
     // Short signatures such as `BM`, `MZ`, `ID3` and `%PDF` also start ordinary prose, so
     // UTF-8 text under a name that does not claim a binary format is text whatever they suggest.
     const detected =
@@ -239,12 +227,11 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
     } catch {
       return refuse("This file is not supported. Choose a UTF-8 text file.");
     }
-    const markdown = /\.(md|markdown)$/i.test(extname(requested));
-    const svg = extname(requested).toLowerCase() === ".svg";
+    const markdown = claimed === "markdown";
     return {
       preview: {
         ...identity,
-        kind: markdown ? ("markdown" as const) : svg ? ("svg" as const) : ("text" as const),
+        kind: claimed === "markdown" || claimed === "svg" ? claimed : ("text" as const),
         language:
           specialLanguages[basename(requested).toLowerCase()] ??
           languages[extname(requested).slice(1).toLowerCase()] ??

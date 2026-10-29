@@ -20,7 +20,7 @@ Click the original link again to reread; **Preview / Source** only changes prese
 | UTF-8 source, JSON, YAML, logs, unknown text | Shiki highlighting when recognized; otherwise plain text | 1 MiB |
 | UTF-8 SVG (`.svg`) | Native image on a light background, with Source toggle | 1 MiB |
 | PNG, JPEG, GIF, WebP | Native image | 10 MiB |
-| MP3, WAV, Ogg audio, FLAC, M4A | Native audio controls | 20 MiB |
+| MP3, WAV, Ogg audio (`.ogg`, `.oga`, `.opus`), FLAC, M4A | Native audio controls | 20 MiB |
 | MP4, WebM | Native video controls | 32 MiB |
 | PDF | React-PDF / PDF.js, selectable text, Previous/Next page and zoom | 20 MiB |
 
@@ -70,7 +70,10 @@ attachment. A file that cannot be previewed cannot be downloaded.
 
 `WorkspaceFiles` owns path resolution (including symlinks), regular-file checks,
 content-signature classification, filename language inference and bounded reads. Unknown binary
-and executable formats are refused; extensions alone never authorize binary rendering. A file
+and executable formats are refused; extensions alone never authorize binary rendering. Which
+extensions claim which format is one list, `previewKindsByExtension` in `shared/files.ts`: the
+server reads it to classify a file, and the browser to pick a tab's or output's icon before reading
+it, so the two cannot disagree. Other names show the text icon until read. A file
 whose first 8 KiB are NUL-free UTF-8 is text unless its extension names a binary format, so prose
 that happens to start like a signature (`BM25…`, `ID3…`, `%PDF…`) previews as text. A file
 that changes length during acquisition must be reread. The initial sample only selects a candidate
