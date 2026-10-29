@@ -247,7 +247,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
       async execute(_id, params, signal) {
         return invoke(signal, async (readSignal) => {
           const reply = await readStatus({ sessionId: params.sessionId }, environment, readSignal);
-          if (reply.status === "error") throw new Error(reply.detail);
+          if (reply.status !== "ready") throw new Error(reply.detail);
           const [facts] = reply.sessions;
           if (!facts) throw new Error(`Piano lists no session ${params.sessionId}.`);
           const output: SessionStatus = withLinks(facts, link);
