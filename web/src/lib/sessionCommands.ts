@@ -6,6 +6,7 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { SessionLayout } from "./navigation.ts";
+import { pullRequestView } from "./pullRequestView.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
@@ -35,6 +36,7 @@ export type SessionCommandId =
   | "copy-branch"
   | "copy-commit"
   | "copy-repository"
+  | "copy-pull-request-number"
   | "copy-session-id"
   | "copy-session-path"
   | "changes"
@@ -141,12 +143,13 @@ export interface SessionHeaderMenu {
 }
 
 /** The session rail's Environment rows, each with the copy commands its menu offers. */
-export type EnvironmentRowKind = "repository" | "folder" | "commit" | "branch";
+export type EnvironmentRowKind = "repository" | "folder" | "commit" | "branch" | "pull request";
 const ENVIRONMENT_ROWS = {
   repository: ["copy-repository", "copy-working-directory"],
   folder: ["copy-working-directory"],
   commit: ["copy-commit"],
   branch: ["copy-branch"],
+  "pull request": ["copy-pull-request-number"],
 } as const satisfies Record<EnvironmentRowKind, readonly SessionCommandId[]>;
 
 /** The session rail's Environment row menu, from `sessionCommands`' descriptors: the row's own
@@ -261,6 +264,7 @@ export function sessionCommands(
     const { single, agentTab, rail } = options.layout ?? AGENT_ONLY;
     const sessionPath = session.state.sessionFile;
     const linked = !!ctx.pullRequest;
+    const pullRequest = pullRequestView({ link: ctx.pullRequest ?? null, pullRequest: null });
     commands.push(
       {
         id: "copy-working-directory",
@@ -302,6 +306,17 @@ export function sessionCommands(
               enabled: true,
               keywords: ["github"],
               intent: { kind: "copy", value: ctx.githubRepo, label: "Repository name" },
+            } as const,
+          ]
+        : []),
+      ...(pullRequest?.number
+        ? [
+            {
+              id: "copy-pull-request-number",
+              label: "Copy pull request number",
+              icon: "copy",
+              enabled: true,
+              intent: { kind: "copy", value: pullRequest.number, label: "Pull request number" },
             } as const,
           ]
         : []),

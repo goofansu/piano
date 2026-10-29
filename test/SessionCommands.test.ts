@@ -491,7 +491,11 @@ test("a pull request, linked or not, opens only where Changes can, and says why 
 test("the rail's Environment rows offer the session's copy commands for their fact", () => {
   const path = "/work/repo.feature";
   const head = "d4449bb7183bb577791acab4f6fc4f52f78d02b0";
-  const at = (checkout: WorktreeView, branch: string | null) =>
+  const at = (
+    checkout: WorktreeView,
+    branch: string | null,
+    extra: Parameters<typeof sessionReference>[2] = {},
+  ) =>
     sessionCommands({
       ...base,
       folders: [
@@ -501,7 +505,7 @@ test("the rail's Environment rows offer the session's copy commands for their fa
           discovery: { ...folder.discovery, githubRepo: "acme/repo" } as FolderView["discovery"],
         },
       ],
-      sessionReferences: [sessionReference(path, "s1", { branch })],
+      sessionReferences: [sessionReference(path, "s1", { branch, ...extra })],
     });
   const menu = (commands: ReturnType<typeof at>, row: Parameters<typeof environmentRowMenu>[1]) =>
     environmentRowMenu(commands, row).map((c) => [c.label, c.intent]);
@@ -530,4 +534,15 @@ test("the rail's Environment rows offer the session's copy commands for their fa
     ["Copy commit SHA", { kind: "copy", value: head, label: "Commit SHA" }],
   ]);
   assert.deepEqual(menu(detached, "branch"), []);
+
+  assert.deepEqual(menu(onBranch, "pull request"), []);
+  // A saved association needs neither a matching repository nor a present checkout/GitHub read.
+  const linked = at(worktree(path, "feature"), "feature", {
+    pullRequest: { url: "https://github.com/other/repo/pull/222", source: "manual" },
+    unavailable: "checkout",
+  });
+  assert.deepEqual(menu(linked, "pull request"), [
+    ["Copy pull request number", { kind: "copy", value: "222", label: "Pull request number" }],
+  ]);
+  assert.equal(linked.find((c) => c.id === "copy-pull-request-number")?.enabled, true);
 });
