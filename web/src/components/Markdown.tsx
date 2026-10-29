@@ -188,7 +188,7 @@ function MarkdownImage({ src, alt }: ComponentProps<"img"> & ExtraProps) {
             src={url}
             alt={alt || "Image"}
             loading="lazy"
-            className="max-h-96 max-w-full object-contain"
+            className="max-h-48 max-w-[min(100%,12rem)] object-contain"
             onError={() => setFailed(url)}
           />
         ) : (
