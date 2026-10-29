@@ -16,7 +16,7 @@ import {
 } from "../extensions/piano-dispatch/SessionDispatch.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
-import { dispositionOf } from "../shared/sessionStatus.ts";
+import { dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import {
   type ClientMessage,
   encodeServerMessage,
@@ -220,6 +220,8 @@ const message = (
   ...(role === "user"
     ? { inputFingerprint: text === "do the thing" ? defaultProof : "different-input" }
     : {}),
+  // Pi records every finished reply with the reason its turn stopped.
+  ...(role === "assistant" ? { stopReason: "stop" } : {}),
   ...over,
 });
 
@@ -692,6 +694,27 @@ test("an interrupted reply is cancelled, whatever error it also carries", bounde
   assert.equal(observation!.status, "cancelled");
 });
 
+for (const ending of [
+  { status: "cancelled", fields: { stopReason: "aborted" } },
+  { status: "failed", fields: { stopReason: "error", isError: true, errorMessage: "overloaded" } },
+] as const)
+  test(
+    `text a ${ending.status} reply streamed is not its answer, as the status read agrees`,
+    bounded,
+    async () => {
+      const h = world();
+      const wait = waitSessions([await handleOf()], undefined, h.env);
+      h.last().accept();
+      const socket = h.last();
+      const messages = answered("Half of the migration is", ending.fields);
+      socket.frame(socketSnapshot(socket, idle(messages)));
+      const [observation] = await wait;
+      assert.equal(observation!.status, ending.status);
+      assert.equal(observation!.answer, null);
+      assert.equal(lastAnswerOf(snapshotOf({}, messages)), null);
+    },
+  );
+
 test(
   "a reply cut off at the token limit ended its turn: settled, as the server announces it",
   bounded,
@@ -760,10 +783,12 @@ for (const exit of [
       h.last().accept();
       const socket = h.last();
       const selection = socket.selection();
+      // Mid-turn, a step toward a tool call: only response_completed can prove the turn ended.
+      const reply = answered("the thing is", { stopReason: "toolUse" });
       socket.frame(
         selected(
           selection,
-          snapshotOf({ isStreaming: true, submission: { id: 1, outcome: "started" } }, answered()),
+          snapshotOf({ isStreaming: true, submission: { id: 1, outcome: "started" } }, reply),
         ),
       );
       let sequence = 1;
