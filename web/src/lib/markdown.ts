@@ -40,7 +40,7 @@ export function isLinearLink(href: string): boolean {
 }
 
 /** A Markdown destination is either a web URL or a local path, never an executable scheme.
- * Decode once here; the server resolves the resulting path within the session's workspace. */
+ * Decode once here; the server resolves relative paths against the session's workspace. */
 export function localFilePath(destination: string): string | undefined {
   let path = destination.trim();
   if (!path || path.startsWith("//") || path.startsWith("#") || path.startsWith("?")) return;

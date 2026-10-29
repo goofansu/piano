@@ -6,8 +6,10 @@ resizable from its left edge and remembers its width; where the areas take turns
 Each file opens in a tab of its own, added at the end; a file already open is read again in its
 tab. Closing a tab shows its neighbour; one area at a time, closing a file opened from the
 conversation returns there. Links in the conversation use the session's working directory;
-links and images in a Markdown preview use that document's directory, in the same workspace.
-Absolute paths must still be inside that workspace. There is no directory browser or path entry.
+links and images in a Markdown preview use that document's directory. Paths may leave the
+workspace: `../sibling-worktree/evidence.md` and absolute paths such as `/tmp/abc.md` open the
+specified file, including through symlinks. Piano does not search other worktrees for a missing
+file. There is no directory browser or path entry.
 Click the original link again to reread; **Preview / Source** only changes presentation.
 
 ## Formats and limits
@@ -58,12 +60,12 @@ copy saved locally. Oversized files are refused before their bodies are read.
 The viewer's **Download** control saves the open file as it is on disk, byte for byte: Markdown
 comes down as its source, text without the display redaction, media and PDFs as the original.
 `POST /api/workspace/file/download?workspaceId=…` takes the same body path, applies the same
-containment, format and size rules as the preview, and answers with an uncached, unsniffed
+path resolution, format and size rules as the preview, and answers with an uncached, unsniffed
 attachment. A file that cannot be previewed cannot be downloaded.
 
 ## Ownership and privacy
 
-`WorkspaceFiles` owns canonical workspace containment (including symlinks), regular-file checks,
+`WorkspaceFiles` owns path resolution (including symlinks), regular-file checks,
 content-signature classification, filename language inference and bounded reads. Unknown binary
 and executable formats are refused; extensions alone never authorize binary rendering. A file
 whose first 8 KiB are NUL-free UTF-8 is text unless its extension names a binary format, so prose
@@ -79,6 +81,12 @@ Text responses use JSON and the existing display-redaction policy. Binary respon
 multipart body containing metadata and original bytes, not base64 JSON or a public file URL.
 Both use `Cache-Control: no-store`, registered workspace resolution and the normal origin checks.
 There is no streaming/range interface or persistent file cache in Piano's database (INV-01).
+
+File access is not restricted to a repository or to files a session created: any supported regular
+file readable by Piano's server process can be opened, including sensitive files outside the
+checkout. The workspace ID supplies the session context, not a filesystem sandbox. Piano must
+remain behind private authenticated access (INV-11). Git's Changes and written-file tracking
+remain scoped to the workspace; opening an external file does not add it to those lists.
 
 **Arbitrary image, audio, video and PDF bytes are not secret-redacted.** Only open files appropriate
 for your private browser session. Existing text redaction is heuristic, not containment. Rendered
@@ -100,7 +108,7 @@ separate lazy chunks. Generated `web/public/pdfjs/` assets are ignored, copied f
 included in builds. When upgrading React-PDF, verify `npm ls react-pdf pdfjs-dist`, the emitted
 worker and asset versions, and a scratch-browser PDF render.
 
-Module checks cover file classification/limits/containment, text redaction, binary transport and
+Module checks cover file classification/limits/path resolution, text redaction, binary transport and
 safe Markdown placeholders. Browser evidence for PIN-32 covers the four format groups, nested
 links/images, toggle without reread, repeat clicks, late completion, an actual background workspace
 refresh, session/workspace changes, media disposal/codec failure, PDF errors and mobile/keyboard use.

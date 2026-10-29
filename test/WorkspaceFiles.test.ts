@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { Effect } from "effect";
 import { downloadWorkspaceFile, place, readWorkspaceFile } from "../server/WorkspaceFiles.ts";
 
-test("workspace file reads are bounded and never fall back to a neighboring workspace", async () => {
+test("file reads accept explicit external paths, stay bounded and never guess another workspace", async () => {
   const root = await mkdtemp(join(tmpdir(), "piano-files-"));
   try {
     const a = join(root, "a"),
@@ -41,8 +41,25 @@ test("workspace file reads are bounded and never fall back to a neighboring work
     );
     assert.equal(((await read("inside")) as { content: string }).content, "workspace A\n");
     assert.equal(((await read("empty")) as { content: string }).content, "");
-    for (const path of ["../b/readme.txt", join(b, "readme.txt"), "outside"])
-      await assert.rejects(read(path), /inside this workspace/);
+    for (const [path, name] of [
+      ["../b/readme.txt", join(b, "readme.txt")],
+      [join(b, "readme.txt"), join(b, "readme.txt")],
+      ["outside", "outside"],
+    ]) {
+      assert.deepEqual(await read(path), {
+        workspaceId: "a",
+        path: name,
+        kind: "text",
+        language: "",
+        content: "workspace B\n",
+      });
+      const download = await Effect.runPromise(downloadWorkspaceFile(workspace, path));
+      assert.equal(new TextDecoder().decode(download.bytes), "workspace B\n");
+    }
+    for (const path of ["", "  ", "bad\0path"])
+      await assert.rejects(read(path), /Choose a file path/);
+    await writeFile(join(b, "only-in-b.txt"), "do not guess\n");
+    await assert.rejects(read("only-in-b.txt"), /Check the path and read permissions/);
     for (const path of ["binary", "invalid-utf8"]) await assert.rejects(read(path), /UTF-8 text/);
     await assert.rejects(read("large"), /too large/);
     await assert.rejects(read("."), /regular file/);
@@ -84,7 +101,7 @@ test("workspace file reads are bounded and never fall back to a neighboring work
     assert.equal(image.mime, "image/png");
     assert.deepEqual(image.bytes, png);
     await symlink(join(b, "readme.txt"), join(a, "escaped.png"));
-    await assert.rejects(read("escaped.png"), /inside this workspace/);
+    await assert.rejects(read("escaped.png"), /malformed/);
     await truncate(join(a, "image.txt"), 10 * 1024 * 1024 + 1);
     await assert.rejects(read("image.txt"), /image file up to 10 MiB/);
     await writeFile(join(a, "large.pdf"), "%PDF-1.7\n");
@@ -142,8 +159,15 @@ test("placement resolves directory aliases but preserves leaf symlinks and bound
       );
     assert.deepEqual(await read("alias/a.ts"), await read("src/a.ts"));
     assert.equal((await read("alias/leaf.ts")).path, "src/leaf.ts");
-    for (const path of ["external/secret", "alias/external-leaf"])
-      await assert.rejects(read(path), /inside this workspace/);
+    for (const [path, name] of [
+      ["external/secret", join(workspacePath, "external/secret")],
+      ["alias/external-leaf", "src/external-leaf"],
+    ]) {
+      const preview = await read(path);
+      assert.equal(preview.path, name);
+      assert.ok("content" in preview);
+      assert.equal(preview.content, "not workspace content\n");
+    }
     await assert.rejects(read("alias/dangling-leaf"), /Check the path and read permissions/);
     await assert.rejects(read("alias/not-yet/deleted.ts"), /Check the path and read permissions/);
     await assert.rejects(read("alias"), /regular file/);

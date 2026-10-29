@@ -143,7 +143,7 @@ async function physical(target: string): Promise<string> {
  * in the workspace: its name relative to the workspace's real root, or `undefined` outside it.
  * Resolve directory aliases (including the workspace root) before naming the file. Preserve the
  * leaf: Git tracks a leaf symlink itself, not its target. Missing descendants retain their names.
- * Placement is identity, not permission to read: acquisition checks the leaf's real target too.
+ * Placement is Git identity, not permission to read: previews may also open files outside it.
  */
 export async function place(workspace: Workspace, path: string): Promise<string | undefined> {
   const logical = resolve(workspace.path);
@@ -163,22 +163,19 @@ interface Acquired {
 }
 
 /**
- * Explicit workspace-only reads; no directory traversal, listing, or fallback to another cwd.
+ * Explicit local reads, relative to the workspace or absolute; no listing or fallback search.
  * Preview and download share this, so a file downloads exactly when it previews.
  */
 async function acquire(workspace: Workspace, path: string, signal: AbortSignal): Promise<Acquired> {
-  if (!path.trim() || path.includes("\0")) refuse("Choose a file inside this workspace.");
+  if (!path.trim() || path.includes("\0")) refuse("Choose a file path.");
   // The checkout's own absence is the cause, named as the session's other views name it.
   await access(workspace.path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") refuse("Checkout removed");
   });
-  const name = await place(workspace, path);
-  if (name === undefined) return refuse("Choose a file inside this workspace.");
-  const root = await realpath(workspace.path);
   const requested = resolve(workspace.path, path);
+  // Keep workspace names stable; external files need their full path for nested links.
+  const name = (await place(workspace, path)) ?? requested;
   const target = await realpath(requested);
-  if (!within(root, target))
-    refuse("Choose a file inside this workspace; this link points outside it.");
   // Nonblocking prevents special files (notably FIFOs) from hanging the request.
   const file = await open(target, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
   try {
@@ -270,8 +267,7 @@ const attempt = <A>(read: (signal: AbortSignal) => Promise<A>) =>
       error instanceof FileRefusal
         ? error
         : new FileRefusal({
-            detail:
-              "Could not read this file. Check the path and read permissions in this workspace.",
+            detail: "Could not read this file. Check the path and read permissions.",
           }),
   });
 
