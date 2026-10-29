@@ -782,3 +782,55 @@ test("a dispatch into a new worktree names its branch, and a status read reports
     "an unknown session stays an ordinary tool call",
   );
 });
+
+test("a session saved when start and wait said waiting_for_input still shows Needs input", () => {
+  const handle: SessionHandle = {
+    cwd: "/repo",
+    sessionId: "child-a",
+    generation: "g1",
+    submissionId: 1,
+    baselineMessages: 0,
+    baselineFingerprint: "b",
+    inputFingerprint: "i",
+    anchorMessageId: null,
+  };
+  const messages = (submission: string, status: string): RenderMsg[] => [
+    {
+      id: "s",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "s", name: "piano_start_session", args: '{"prompt":"Fix it."}' }],
+    },
+    {
+      id: "s-result",
+      role: "tool_result",
+      toolCallId: "s",
+      text: JSON.stringify({ cwd: "/repo", creation: "created", submission, handle }),
+    },
+    {
+      id: "w",
+      role: "assistant",
+      text: "",
+      toolCalls: [
+        { id: "w", name: "piano_wait_sessions", args: JSON.stringify({ sessions: [handle] }) },
+      ],
+    },
+    {
+      id: "w-result",
+      role: "tool_result",
+      toolCallId: "w",
+      text: JSON.stringify({ results: [{ handle, status, ending: "observed", answer: null }] }),
+    },
+  ];
+  const shown = (rows: RenderMsg[]) =>
+    ["s", "w"].map((id) => {
+      const row = reply(transcriptRows(rows), id).tools[0]?.dispatch?.[0];
+      return [row?.status, row?.badge];
+    });
+  const needsInput = [
+    ["Needs input", "warning"],
+    ["Needs input", "warning"],
+  ];
+  assert.deepEqual(shown(messages("needs_input", "needs_input")), needsInput);
+  assert.deepEqual(shown(messages("waiting_for_input", "waiting_for_input")), needsInput);
+});

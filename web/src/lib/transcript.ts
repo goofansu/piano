@@ -210,7 +210,7 @@ const SUBMISSION: Record<SessionSubmission, [status: string, badge: Badge]> = {
   queued: ["Queued", "secondary"],
   handled: ["Handled", "secondary"],
   rejected: ["Rejected", "destructive"],
-  waiting_for_input: ["Needs input", "warning"],
+  needs_input: ["Needs input", "warning"],
   not_sent: ["Not sent", "warning"],
   uncertain: ["Uncertain", "warning"],
 };
@@ -220,7 +220,7 @@ const OBSERVED: Record<WaitStatus, [status: string, badge: Badge]> = {
   settled: ["Finished", "secondary"],
   failed: ["Failed", "destructive"],
   cancelled: ["Cancelled", "secondary"],
-  waiting_for_input: ["Needs input", "warning"],
+  needs_input: ["Needs input", "warning"],
   unknown: ["Unknown", "warning"],
 };
 
@@ -248,6 +248,8 @@ type Recovered<T> = {
 };
 const oneOf = <T extends string>(names: Record<T, unknown>, value: unknown): T | undefined =>
   typeof value === "string" && Object.hasOwn(names, value) ? (value as T) : undefined;
+/** Sessions saved before the start and wait tools said `needs_input` carry its earlier name. */
+const renamed = (value: unknown) => (value === "waiting_for_input" ? "needs_input" : value);
 const creationOf = (value: unknown): SessionCreation | undefined =>
   value === "created" || value === "refused" || value === "uncertain" ? value : undefined;
 const handleOf = (value: unknown): Recovered<SessionHandle> => ({
@@ -268,7 +270,7 @@ const startResultOf = (text: string | undefined): Recovered<StartToolResult> | u
   return (
     r && {
       creation: creationOf(r.creation),
-      submission: oneOf(SUBMISSION, r.submission),
+      submission: oneOf(SUBMISSION, renamed(r.submission)),
       handle: handleOf(r.handle),
       worktree: worktreeOf(r.worktree),
       detail: stringOf(r.detail),
@@ -303,7 +305,7 @@ const waitResultOf = (text: string | undefined): Recovered<WaitToolResult> | und
           const observation = recordOf(value);
           return {
             handle: handleOf(observation?.handle),
-            status: oneOf(OBSERVED, observation?.status),
+            status: oneOf(OBSERVED, renamed(observation?.status)),
             answer: stringOf(observation?.answer),
             detail: stringOf(observation?.detail),
           };

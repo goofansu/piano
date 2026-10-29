@@ -21,7 +21,7 @@ export type SessionSubmission =
   | "handled"
   | "rejected"
   | "uncertain"
-  | "waiting_for_input"
+  | "needs_input"
   | "not_sent";
 
 /** What the session was doing when observation stopped; never a judgement of the work's quality.
@@ -31,7 +31,7 @@ export const WAIT_STATUSES = [
   "settled",
   "failed",
   "cancelled",
-  "waiting_for_input",
+  "needs_input",
   "unknown",
 ] as const;
 export type WaitStatus = (typeof WAIT_STATUSES)[number];
@@ -159,7 +159,7 @@ export type FollowUpDelivery = "follow-up" | "steer";
 export interface FollowUpResult {
   readonly sessionId: string;
   readonly delivery: FollowUpDelivery;
-  readonly submission: Exclude<SessionSubmission, "waiting_for_input">;
+  readonly submission: Exclude<SessionSubmission, "needs_input">;
   readonly detail?: string;
 }
 

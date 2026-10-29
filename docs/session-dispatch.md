@@ -164,7 +164,7 @@ link. Resolve supported dialogs in the child's ordinary Piano UI.
 
 Pass the returned handle unchanged to wait. A wait lasts 30 seconds by default, configurable from
 1 to 60 seconds, and returns partial results. It distinguishes running, settled, failed, cancelled,
-waiting for input and unknown outcomes, and reads a live session as [status](#status-by-session-id)
+needs input and unknown outcomes, and reads a live session as [status](#status-by-session-id)
 does: an idle session whose last input or dialog answer Piano could not confirm delivering is
 unknown, with the reason in `detail`. A wait deadline is not a child failure. Cancelling a wait
 or closing the parent only stops observation; it does not stop the child or its siblings.

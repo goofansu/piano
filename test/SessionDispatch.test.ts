@@ -445,7 +445,7 @@ test("a dialog on the first prompt returns the handle at once", bounded, async (
   socket.frame(selected(socket.selection(), snapshotOf()));
   socket.frame(frameOf(socket.selection(), { _tag: "dialog", dialog: dialog() }));
   const result = await start;
-  assert.equal(result.submission, "waiting_for_input");
+  assert.equal(result.submission, "needs_input");
   assert.equal(result.handle?.sessionId, sessionId, "the session exists and can be waited on");
   assert.match(result.detail ?? "", /Run the migration\?/);
   assert.equal(h.pendingTimers(), 0, "it does not sit on the start deadline");
@@ -648,7 +648,7 @@ test(
       ),
     );
     const [observation] = await wait;
-    assert.equal(observation!.status, "waiting_for_input");
+    assert.equal(observation!.status, "needs_input");
     assert.equal(observation!.answer, null);
     assert.match(observation!.detail ?? "", /Run the migration\?/);
   },
@@ -1431,7 +1431,7 @@ test(
     const results = await wait;
     assert.deepEqual(
       results.map((r) => r.status),
-      ["waiting_for_input", "running"],
+      ["needs_input", "running"],
     );
     assert.ok(results.every((r) => r.ending === "observed"));
     assert.equal(h.sentOf("act").length, 0);

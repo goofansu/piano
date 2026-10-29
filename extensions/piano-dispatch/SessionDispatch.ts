@@ -275,7 +275,7 @@ export function startSession(
         settle(
           result(
             "created",
-            "waiting_for_input",
+            "needs_input",
             dialog.message ?? dialog.title ?? `Pi is waiting for a ${dialog.method} answer.`,
           ),
         );
@@ -634,7 +634,7 @@ function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): R
     case "needs_input": {
       const { dialog } = activity;
       return {
-        status: "waiting_for_input",
+        status: "needs_input",
         terminal: true,
         detail: dialog.message ?? dialog.title ?? `Pi is waiting for a ${dialog.method} answer.`,
       };
@@ -920,7 +920,7 @@ export function waitSessions(
       // observed outcome can require attention and shorten the other handles' observations.
       if (
         result.ending === "observed" &&
-        (result.status === "waiting_for_input" ||
+        (result.status === "needs_input" ||
           result.status === "unknown" ||
           result.status === "failed" ||
           result.status === "cancelled")
