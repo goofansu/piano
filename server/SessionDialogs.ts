@@ -51,6 +51,7 @@ export const makeSessionDialogs = ({
     dialog: Dialog,
     reason: DialogResolution["reason"],
     answer?: PiCommand,
+    receipt?: DialogResolution["answer"],
   ) {
     const resolution = yield* publication.transaction((transaction) =>
       Effect.gen(function* () {
@@ -76,6 +77,7 @@ export const makeSessionDialogs = ({
           reason,
           delivery: send ? "pending" : "not-sent",
           detail,
+          ...(reason === "answered" && receipt ? { answer: receipt } : {}),
         };
         const signal = closed.get(dialog.id);
         if (signal) yield* Deferred.succeed(signal, undefined);
@@ -175,6 +177,7 @@ export const makeSessionDialogs = ({
         dialog,
         action.cancelled ? "cancelled" : "answered",
         translation.command,
+        translation.answer,
       );
       if (!resolution || resolution.reason === "expired" || resolution.reason === "recovery")
         return yield* new PiSessionError({

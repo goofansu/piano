@@ -208,6 +208,7 @@ test("INV-04: a dialog answer reaches Pi as its original value, and cancel as a 
   // The browser saw only redacted labels; a unique one still selects the original option.
   assert.deepEqual(answer("Use token=[REDACTED]"), {
     command: { type: "extension_ui_response", id: "d1", value: "Use token=abc12345" },
+    answer: { title: undefined, value: "Use token=abc12345" },
   });
   // Two options share "Use [REDACTED]": refuse instead of guessing.
   assert.deepEqual(answer("Use [REDACTED]"), {
@@ -221,7 +222,10 @@ test("INV-04: a dialog answer reaches Pi as its original value, and cancel as a 
       { _tag: "answer", id: "d1", generation: "g", confirmed: false },
       { ...dialog, method: "confirm", options: undefined },
     ),
-    { command: { type: "extension_ui_response", id: "d1", confirmed: false } },
+    {
+      command: { type: "extension_ui_response", id: "d1", confirmed: false },
+      answer: { title: undefined, value: false },
+    },
   );
 });
 
@@ -254,11 +258,35 @@ test("INV-11: a select option shown through the published dialog answers with it
       "Bold plain",
     ]);
     labels.forEach((value, i) => {
-      assert.deepEqual(
-        dialogAnswerFor({ _tag: "answer", id: "d2", generation: "g", value }, dialog),
-        {
-          command: { type: "extension_ui_response", id: "d2", value: dialog.options![i] },
+      const translation = dialogAnswerFor(
+        { _tag: "answer", id: "d2", generation: "g", value },
+        dialog,
+      );
+      assert.deepEqual(translation, {
+        command: { type: "extension_ui_response", id: "d2", value: dialog.options![i] },
+        answer: { title: undefined, value: dialog.options![i] },
+      });
+      assert.ok("answer" in translation);
+      const receipt = projectSessionEvent({
+        _tag: "state",
+        state: {
+          sessionId: "s",
+          isStreaming: false,
+          dialogResolution: {
+            id: "d2",
+            generation: "g",
+            reason: "answered",
+            delivery: "written",
+            detail: "Sent",
+            answer: translation.answer,
+          },
         },
+      });
+      assert.ok(receipt._tag === "state");
+      assert.equal(
+        receipt.state.dialogResolution?.answer?.value,
+        value,
+        "receipt uses the same safe display label as the question",
       );
     });
   } finally {

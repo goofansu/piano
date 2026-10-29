@@ -128,15 +128,18 @@ export function sessionNotices(state: AppState, _messagesOnly: boolean): Session
   }
 
   const resolution = t?.state.dialogResolution;
-  if (resolution)
+  // The answer card owns its receipt and delivery details; never repeat them as a status line.
+  if (resolution && !resolution.answer) {
+    const cancelled = resolution.reason === "cancelled" && resolution.delivery === "written";
     notices.push(
       notice(
         "dialog-resolution",
         "status",
-        "quiet",
-        `Dialog ${resolution.reason}: ${resolution.detail}`,
+        cancelled ? "warning" : "quiet",
+        cancelled ? "Question cancelled" : `Dialog ${resolution.reason}: ${resolution.detail}`,
       ),
     );
+  }
   if (receipt?.text)
     notices.push(notice("submission", "status", receipt.tone, receipt.text, [receipt.detail]));
   const extension = t?.state.extension;

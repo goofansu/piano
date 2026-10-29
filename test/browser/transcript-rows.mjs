@@ -215,5 +215,22 @@ await run(
     await page.until(
       `!document.querySelector('${tool} [data-slot="collapsible-content"]').textContent`,
     );
+
+    // The live cancellation notice uses the same first-line gutter as transcript errors.
+    await page.ab("fill", '[aria-label="Message"]', "question");
+    await page.press("Enter");
+    await page.see("Which checks?");
+    await page.click("button", "Cancel");
+    await page.see("Question cancelled");
+    await page.capture("3-cancelled-question");
+    const cancelled = (await page.evaluate(measure)).find(
+      (row) => row.text === "Question cancelled",
+    );
+    assert.ok(cancelled, "cancellation has a gutter glyph");
+    assert.ok(Math.abs(cancelled.offset) <= 1, `cancellation glyph offset: ${cancelled.offset}px`);
+    writeFileSync(
+      join(process.argv[2] ?? ".scratch/browser/transcript-rows", "offsets-cancelled.json"),
+      JSON.stringify(cancelled, null, 2),
+    );
   },
 );

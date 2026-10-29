@@ -130,6 +130,48 @@ test("banners come before status lines, in a fixed order", () => {
   assert.equal(find(s, "dialog-resolution")?.title, "Dialog expired: no answer in time");
 });
 
+test("a delivered cancellation is a compact warning, without hiding pending or uncertain delivery", () => {
+  for (const delivery of ["pending", "written", "uncertain", "not-sent"] as const) {
+    const line = find(
+      at({
+        dialogResolution: {
+          id: "d1",
+          generation: "g",
+          reason: "cancelled",
+          delivery,
+          detail: "Transport outcome",
+        },
+      }),
+      "dialog-resolution",
+    );
+    assert.equal(line?.placement, "status");
+    if (delivery === "written") {
+      assert.equal(line?.tone, "warning");
+      assert.equal(line?.title, "Question cancelled");
+      assert.deepEqual(line?.details, []);
+    } else {
+      assert.match(line?.title ?? "", /Transport outcome/);
+      assert.notEqual(line?.title, "Question cancelled");
+    }
+  }
+});
+
+test("an answer card owns its delivery feedback without a duplicate status line", () => {
+  for (const delivery of ["pending", "written", "uncertain"] as const) {
+    const s = at({
+      dialogResolution: {
+        id: "d1",
+        generation: "g",
+        reason: "answered",
+        delivery,
+        detail: "transport detail",
+        answer: { title: "Which checks?", value: "Full suite" },
+      },
+    });
+    assert.equal(find(s, "dialog-resolution"), undefined);
+  }
+});
+
 test("an uncertain first message explains with the browser's own detail before Pi's", () => {
   const input: PendingCreate = {
     selectionId: "create",
