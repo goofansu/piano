@@ -132,6 +132,49 @@ test("raw HTML stays inert and images never fetch untrusted resource URLs", () =
   assert.ok(!renderMarkdown("![Local](a.png)").includes("data-local-image"));
 });
 
+test("loaded local images are inline preview actions with a file action as their fallback", () => {
+  const path = ".scratch/inline-questions/pr-journey/01-input.png";
+  const source = `Before ![Input](${path}) after. [Source](docs/guide.md)`;
+  const html = renderMarkdown(source, new Map([[path, "blob:workspace-image"]]));
+  assert.match(
+    html,
+    /Before <span[^>]*><button[^>]*data-local-file="[^"]+"[^>]*><img[^>]*src="blob:workspace-image"[^>]*alt="Input"[^>]*\/><\/button><\/span> after\./,
+  );
+  assert.ok(html.includes('data-local-file="docs/guide.md"'));
+  assert.ok(!html.includes("href="), "images and ordinary file links stay inside Piano");
+  for (const destination of ["docs/guide.md", "https://example.test/other"]) {
+    const linked = renderMarkdown(
+      `[![Input](${path})](${destination})`,
+      new Map([[path, "blob:workspace-image"]]),
+    );
+    assert.equal((linked.match(/<button/g) ?? []).length, 1, "no nested image/link controls");
+    assert.ok(linked.includes(`data-local-file="${path}"`));
+    assert.ok(!linked.includes("href="), "a linked image still opens its own file preview");
+  }
+  const fallback = renderMarkdown(source, true);
+  assert.ok(fallback.includes(`data-local-file="${path}"`));
+  assert.match(fallback, />Input<\/button>/);
+  assert.ok(!fallback.includes("<img"));
+  const remote = renderMarkdown(
+    "![Remote](https://example.test/x.png)",
+    new Map([["https://example.test/x.png", "blob:must-not-render"]]),
+  );
+  assert.ok(!remote.includes("<img"));
+  assert.ok(!remote.includes("<a "));
+  const linkedRemote = renderMarkdown(
+    "[![Remote](https://example.test/x.png)](docs/guide.md)",
+    true,
+  );
+  assert.ok(linkedRemote.includes('data-local-file="docs/guide.md"'));
+  assert.ok(!linkedRemote.includes("<img"));
+  assert.ok(
+    renderMarkdown(`[![Input](${path})](docs/guide.md)`).includes(
+      'data-local-file="docs/guide.md"',
+    ),
+    "prose without image loading keeps its original link",
+  );
+});
+
 test("code excludes links and images for nested lists, quotes, tilde and long fences", () => {
   const body = "[hidden](https://hidden.test) ![image](hidden.png)";
   for (const source of [

@@ -100,6 +100,20 @@ export function Markdown(props: MarkdownProps) {
 function MarkdownLink({ href = "", children, node }: ComponentProps<"a"> & ExtraProps) {
   const openFile = useContext(LocalFileContext);
   const path = localFilePath(href);
+  const images = useContext(ImagesContext);
+  // An enabled local image owns its preview action, not the enclosing link's destination.
+  // Avoid nested controls (or an outer web link opening a tab after the image click).
+  if (
+    images &&
+    node?.children.some(
+      (child) =>
+        child.type === "element" &&
+        child.tagName === "img" &&
+        typeof child.properties.src === "string" &&
+        localFilePath(child.properties.src),
+    )
+  )
+    return <>{children}</>;
   if (path) {
     // Custom inline action: no shadcn primitive represents a Markdown local-file link.
     return (
@@ -159,19 +173,27 @@ function MarkdownImage({ src, alt }: ComponentProps<"img"> & ExtraProps) {
   const url = path && images?.get(path);
   const [failed, setFailed] = useState<string>();
   if (!path || !images) return <>{alt}</>;
-  // Images can only use blob URLs supplied by WorkspaceFile, never a Markdown resource URL.
+  // Only workspace-checked blobs, never Markdown resource URLs. Like local-file links, this
+  // inline prose action has no shadcn equivalent; the image itself is the control, not a card.
   return (
     <span data-local-image={path}>
-      {url && url !== failed && (
-        <img src={url} alt={alt ?? "Image"} className="max-w-full" onError={() => setFailed(url)} />
-      )}
       <button
         type="button"
-        className="local-file-link"
+        className="local-file-link max-w-full align-middle"
         data-local-file={path}
         onClick={() => openFile(path)}
       >
-        {alt || "Image"}
+        {url && url !== failed ? (
+          <img
+            src={url}
+            alt={alt || "Image"}
+            loading="lazy"
+            className="max-h-96 max-w-full object-contain"
+            onError={() => setFailed(url)}
+          />
+        ) : (
+          alt || "Image"
+        )}
       </button>
     </span>
   );

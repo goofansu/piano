@@ -97,7 +97,7 @@ export function SessionView({ state, send }: Props) {
     [t?.tools],
   );
   const input = state.pendingCreate;
-  const { pullRequestTarget, draftKey, pullRequest: link } = sessionContext(state);
+  const { workspace, pullRequestTarget, draftKey, pullRequest: link } = sessionContext(state);
   const { commands } = useSessionCommands();
   // The area tabs show where the Agent command is offered; only then is each area their panel.
   const areaTabs = !!commands.find((c) => c.id === "agent")?.enabled;
@@ -209,6 +209,7 @@ export function SessionView({ state, send }: Props) {
                   <SessionDestinationContext value={destination}>
                     <MessageList
                       key={t ? sessionKey(t) : draftKey}
+                      workspaceId={workspace?.id}
                       showTools={!messagesOnly}
                       messages={t?.messages ?? []}
                       pending={t?.pending ?? null}
