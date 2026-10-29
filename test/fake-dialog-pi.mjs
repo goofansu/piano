@@ -11,6 +11,25 @@ const args = process.argv.slice(2);
 const sessionId = args[args.indexOf("--session-id") + 1];
 const pending = new Map();
 const responses = [];
+// Piano's ask_user tool as Pi's native records show it: a running call raises its question and
+// ends with the batch result it stores. `mode` scripts what the fixture does with the reply.
+const questions = new Map();
+const held = new Set();
+const toolEnd = (call, answers, status = answers.length ? "answered" : "cancelled") => {
+  const result = { status, answers: Object.fromEntries(answers.map((a, i) => [`q${i + 1}`, a])) };
+  out({
+    type: "tool_execution_end",
+    toolCallId: call.id,
+    toolName: "ask_user",
+    result: { content: [{ type: "text", text: JSON.stringify(result) }], details: result },
+    isError: false,
+  });
+};
+const ask = (call) => {
+  const id = `d${++serial}`;
+  questions.set(id, call);
+  out({ type: "extension_ui_request", id, method: "editor", title: `Question ${id}` });
+};
 let serial = 0,
   streaming = false,
   abortHeld,
@@ -37,6 +56,8 @@ function handle(cmd) {
         model: { provider: "fake", id: model },
         thinkingLevel: "off",
       });
+    case "get_commands":
+      return reply(cmd, { commands: [] });
     case "get_messages":
       return reply(cmd, { messages: [] });
     case "get_session_stats":
@@ -49,6 +70,16 @@ function handle(cmd) {
       });
     case "extension_ui_response":
       responses.push(cmd);
+      if (questions.has(cmd.id)) {
+        const call = questions.get(cmd.id);
+        questions.delete(cmd.id);
+        if (!cmd.cancelled && call.mode !== "drop") call.answers.push(cmd.value);
+        if (call.mode === "hold") held.add(call);
+        else if (cmd.cancelled || call.mode === "drop" || call.answers.length >= call.count)
+          toolEnd(call, call.answers);
+        else ask(call);
+        return;
+      }
       if (!cmd.cancelled) model = "beta"; // An extension command changes model after its dialog returns.
       if (pending.has(cmd.id)) {
         if (pending.get(cmd.id)) reply(pending.get(cmd.id), { disposition: "handled" });
@@ -65,6 +96,26 @@ function handle(cmd) {
       out({ type: "agent_settled" });
       return reply(cmd);
     case "prompt": {
+      // `/ask [mode] [count]`: ask_user starts and raises its first question. Modes: `hold`
+      // keeps the call running after the reply until `/end-held`; `drop` ends it without storing
+      // the reply (Pi aborted it first).
+      if (cmd.message.startsWith("/ask")) {
+        const [, mode = "store", count = "1"] = cmd.message.split(" ");
+        const call = { id: `call${++serial}`, mode, count: Number(count), answers: [] };
+        out({ type: "tool_execution_start", toolCallId: call.id, toolName: "ask_user", args: {} });
+        ask(call);
+        return reply(cmd, { disposition: "handled" });
+      }
+      if (cmd.message === "/end-held") {
+        for (const call of held) toolEnd(call, call.answers);
+        held.clear();
+      }
+      if (cmd.message === "/close-ask") {
+        for (const [id, call] of questions) {
+          questions.delete(id);
+          toolEnd(call, call.answers);
+        }
+      }
       if (cmd.message.startsWith("/dialog")) {
         const [, method, timeout] = cmd.message.split(" ");
         return dialog(cmd, method, Number(timeout)); // originating command acknowledgement is blocked

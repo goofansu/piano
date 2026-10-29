@@ -145,7 +145,7 @@ test("INV-04: estimated timeout survives attachment, rejects expired answers, an
       const first = yield* openDialog(session, "/dialog input 1000");
       assert.equal(first.dialog.timeoutMs, 1000);
       assert.equal(first.dialog.deadlineKind, "pi-timeout", "Pi's timeout precedes host recovery");
-      assert.equal(first.dialog.deadlineAt - first.dialog.receivedAt, 1000);
+      assert.equal(first.dialog.deadlineAt! - first.dialog.receivedAt, 1000);
       yield* TestClock.adjust(400);
       assert.equal(
         (yield* snapshot(session)).dialogs[0].deadlineAt,
@@ -192,7 +192,7 @@ test("INV-04: invisible extension cancellation is bounded by an explicit host re
       for (const text of ["/dialog input", "/dialog input 120000"]) {
         const { dialog, prompt } = yield* openDialog(session, text);
         assert.equal(dialog.deadlineKind, "host-recovery");
-        assert.equal(dialog.deadlineAt - dialog.receivedAt, 2000);
+        assert.equal(dialog.deadlineAt! - dialog.receivedAt, 2000);
         const resolved = yield* watch(
           session,
           (e) =>
@@ -346,5 +346,124 @@ test("INV-04: broken stdin is delivery-uncertain, never silently reopened or ret
       Effect.timeout("8 seconds"),
       Effect.scoped,
     ),
+  );
+});
+
+const receipt = (id: string, delivery: string) => (event: SessionEvent) =>
+  event._tag === "state" &&
+  event.state.dialogResolution?.id === id &&
+  event.state.dialogResolution.delivery === delivery;
+
+test("a question its tool call owns survives the recovery limit and reconnect; competing tabs send once; only the stored result accepts", {
+  timeout: 15_000,
+}, async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "owned-race",
+      });
+      const { dialog, prompt } = yield* openDialog(session, "/ask hold");
+      yield* Fiber.join(prompt);
+      assert.equal(dialog.toolCallId, "call1", "the running ask_user call owns the question");
+      assert.equal(dialog.deadlineAt, null);
+      assert.equal(dialog.deadlineKind, "tool-end");
+      yield* TestClock.adjust(20 * 60_000);
+      assert.deepEqual(
+        (yield* snapshot(session)).dialogs,
+        [dialog],
+        "reattachment after twenty minutes still offers the same question",
+      );
+      const written = yield* watch(session, receipt(dialog.id, "written"));
+      const outcomes = yield* Effect.all(
+        [
+          session.act(answer(dialog)).pipe(Effect.result),
+          session.act({ ...answer(dialog), value: "B" }).pipe(Effect.result),
+        ],
+        { concurrency: "unbounded" },
+      );
+      assert.equal(outcomes.filter((outcome) => outcome._tag === "Success").length, 1);
+      const sent = yield* audit(session);
+      assert.equal(sent.length, 1);
+      yield* Fiber.join(written);
+      const pending = (yield* snapshot(session)).state.dialogResolution;
+      assert.equal(pending?.delivery, "written", "a successful write is not acceptance");
+      assert.equal(pending?.answer?.value, sent[0].value, "the written answer stays visible");
+      const accepted = yield* watch(session, receipt(dialog.id, "accepted"));
+      yield* session.act({ _tag: "prompt", text: "/end-held" });
+      yield* Fiber.join(accepted);
+      assert.equal((yield* audit(session)).length, 1, "the tool's end confirms; nothing is resent");
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+  );
+});
+
+test("the next question of a batch accepts the previous answer; the batch result accepts the last", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "owned-batch",
+      });
+      const first = yield* openDialog(session, "/ask store 2");
+      const next = yield* watch(session, (event) => event._tag === "dialog");
+      const firstAccepted = yield* watch(session, receipt(first.dialog.id, "accepted"));
+      yield* session.act(answer(first.dialog));
+      const second = (yield* Fiber.join(next)).find((event) => event._tag === "dialog");
+      assert.ok(second?._tag === "dialog");
+      assert.equal(second.dialog.toolCallId, first.dialog.toolCallId);
+      yield* Fiber.join(firstAccepted);
+      const secondAccepted = yield* watch(session, receipt(second.dialog.id, "accepted"));
+      yield* session.act({ ...answer(second.dialog), value: "B" });
+      yield* Fiber.join(secondAccepted);
+      assert.deepEqual(
+        (yield* audit(session)).map((response) => response.value),
+        ["A", "B"],
+      );
+    }).pipe(Effect.timeout("8 seconds"), Effect.scoped),
+  );
+});
+
+test("a tool's end removes a stale form; an unstored or late answer is kept as rejected, an unconfirmed one as uncertain on exit", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "owned-close",
+      });
+      const first = yield* openDialog(session, "/ask");
+      const closed = yield* watch(session, (event) => event._tag === "dialog_resolved");
+      yield* session.act({ _tag: "prompt", text: "/close-ask" });
+      yield* Fiber.join(closed);
+      assert.deepEqual((yield* snapshot(session)).dialogs, []);
+      assert.equal((yield* session.act(answer(first.dialog)).pipe(Effect.result))._tag, "Failure");
+      assert.deepEqual(yield* audit(session), []);
+      const late = (yield* snapshot(session)).state.dialogResolution;
+      assert.equal(late?.id, first.dialog.id);
+      assert.equal(late?.delivery, "rejected");
+      assert.equal(late?.answer?.value, "A", "an answer rejected after closure is retained");
+
+      const second = yield* openDialog(session, "/ask drop");
+      const rejected = yield* watch(session, receipt(second.dialog.id, "rejected"));
+      yield* session.act({ ...answer(second.dialog), value: "B" });
+      yield* Fiber.join(rejected);
+      const dropped = (yield* snapshot(session)).state.dialogResolution;
+      assert.equal(dropped?.answer?.value, "B");
+      assert.equal(
+        dropped?.delivery,
+        "rejected",
+        "a result without the answer rejects it; write completion cannot overwrite that",
+      );
+
+      const third = yield* openDialog(session, "/ask hold");
+      const written = yield* watch(session, receipt(third.dialog.id, "written"));
+      yield* session.act(answer(third.dialog));
+      yield* Fiber.join(written);
+      const exited = yield* watch(session, (event) => event._tag === "closed");
+      yield* session.act({ _tag: "prompt", text: "/exit" }).pipe(Effect.ignore);
+      yield* Fiber.join(exited);
+      const lost = (yield* snapshot(session)).state.dialogResolution;
+      assert.equal(lost?.delivery, "uncertain");
+      assert.equal(lost?.answer?.value, "A");
+    }).pipe(Effect.timeout("8 seconds"), Effect.scoped),
   );
 });

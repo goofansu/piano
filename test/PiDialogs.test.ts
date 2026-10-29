@@ -41,6 +41,17 @@ test("an answer at or after the deadline sends nothing", () => {
   assert.equal(dialogAnswer.view(DEADLINE, true).submitted, false);
 });
 
+test("a question its tool call owns has no answer deadline but still requires a connection", () => {
+  const { dialogAnswer } = answering(
+    dialog("owned", { toolCallId: "call-1", deadlineAt: null, deadlineKind: "tool-end" }),
+  );
+  const later = 24 * 60 * 60_000;
+  assert.equal(dialogAnswer.view(later, true).remainingSeconds, null);
+  assert.equal(dialogAnswer.view(later, true).disabled, false);
+  assert.equal(dialogAnswer.answer({ value: "kept" }, later, false), false);
+  assert.equal(dialogAnswer.answer({ value: "kept" }, later, true), true);
+});
+
 test("a disconnected answer sends nothing and leaves the dialog answerable", () => {
   const { sent, dialogAnswer } = answering();
   assert.equal(dialogAnswer.answer({ confirmed: true }, 1_000, false), false);
@@ -136,7 +147,10 @@ test("a written answer leaves the composer after the last question; delivery pro
     undefined,
     "a new question must not resurrect an old receipt",
   );
-  for (const delivery of ["pending", "uncertain", "not-sent"] as const) {
+  assert.equal(answeredQuestion(view({ ...resolution, delivery: "accepted" })), undefined);
+  const owned = { ...resolution, delivery: "written" as const, toolCallId: "call-1" };
+  assert.equal(answeredQuestion(view(owned)), owned, "an owned answer waits for its tool's end");
+  for (const delivery of ["pending", "uncertain", "not-sent", "rejected"] as const) {
     const receipt = { ...resolution, delivery };
     assert.equal(answeredQuestion(view(receipt)), receipt);
   }

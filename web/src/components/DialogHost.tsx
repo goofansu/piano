@@ -67,9 +67,11 @@ function DialogView({
               ? "Estimated Pi timeout"
               : "Host recovery cancellation"}
             : {remainingSeconds}s remaining.{" "}
-            <time dateTime={new Date(d.deadlineAt).toISOString()}>
-              {new Date(d.deadlineAt).toLocaleTimeString()}
-            </time>
+            {d.deadlineAt !== null && (
+              <time dateTime={new Date(d.deadlineAt).toISOString()}>
+                {new Date(d.deadlineAt).toLocaleTimeString()}
+              </time>
+            )}
             . Pi may have already closed this dialog; it sends no closure acknowledgement.
           </DialogDescription>
           {more > 0 && (

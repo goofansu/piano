@@ -10,6 +10,7 @@
  */
 import { createHmac, randomBytes } from "node:crypto";
 import { Option, Schema } from "effect";
+import { ASK_USER_TOOL } from "../shared/askUser.ts";
 import { imageType } from "../shared/attachments.ts";
 import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../shared/dispatch.ts";
 import { turnEnding } from "../shared/turnEnding.ts";
@@ -704,10 +705,14 @@ export interface RecordProjection {
   /** A dialog Pi just requested, not among `events`: the caller sets its deadline, publishes it
    * and owns its resolution. */
   readonly dialog?: DialogRequest;
+  /** A tool call ended, with the result Pi stores: the caller closes the dialogs it owned and
+   * confirms or rejects the answer written for them. */
+  readonly toolEnded?: { readonly toolCallId: string; readonly result: unknown };
 }
 
 /** Pi's facts about a requested dialog: a wire `Dialog` before Piano sets its deadline.
- * `timeoutMs` is Pi's advertised timeout, if it gave a usable one. */
+ * `timeoutMs` is Pi's advertised timeout, if it gave a usable one. `toolCallId` is the running
+ * call that raised it, when Piano can tell. */
 export type DialogRequest = Omit<Dialog, "deadlineAt" | "deadlineKind">;
 
 const DIALOG_METHODS = new Set(["select", "confirm", "input", "editor"]);
@@ -838,6 +843,11 @@ export class PiProjector {
         return project([notice("error", `Extension error: ${raw.error}`)]);
       case "extension_ui_request":
         return this.extensionUi(raw, receivedAt);
+      case "tool_execution_end":
+        return {
+          ...project(this.stream(raw)),
+          toolEnded: { toolCallId: String(raw.toolCallId ?? ""), result: raw.result },
+        };
       default:
         return project(this.stream(raw));
     }
@@ -896,10 +906,12 @@ export class PiProjector {
     const id = String(raw.id);
     if (!DIALOG_METHODS.has(method) || this.seenDialogs.has(id)) return project();
     this.seenDialogs.add(id);
+    const owner = this.askingTool();
     const dialog: DialogRequest = {
       id,
       generation: this.options.generation,
       receivedAt,
+      ...(owner ? { toolCallId: owner } : {}),
       timeoutMs:
         typeof raw.timeout === "number" && Number.isFinite(raw.timeout) && raw.timeout > 0
           ? raw.timeout
@@ -912,6 +924,16 @@ export class PiProjector {
       prefill: raw.prefill as string | undefined,
     };
     return { events: [], refresh: [], dialog };
+  }
+
+  /** Piano's own question tool when it alone is running: records on Pi's one stdout stream put
+   * a tool's dialog requests between its start and end, and `ask_user` runs sequentially. Any
+   * other situation (several tools, another extension, a codemode nest) gets no owner and keeps
+   * the estimated deadline. */
+  private askingTool(): string | undefined {
+    if (this.tools.size !== 1) return;
+    const [tool] = this.tools.values();
+    return tool.name === ASK_USER_TOOL && tool.status === "running" ? tool.id : undefined;
   }
 
   /** Streaming output: the partial reply, final messages and tool executions. */

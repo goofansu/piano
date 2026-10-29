@@ -1,6 +1,7 @@
 /** Model-initiated questions through Pi's supported dialogs; Piano owns the answer surface. */
 import { type Static, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { ASK_USER_TOOL } from "../../shared/askUser.ts";
 
 const Parameters = Type.Object({
   questions: Type.Array(
@@ -32,7 +33,7 @@ const Output = Type.Object({
 export default function pianoAskUser(pi: ExtensionAPI) {
   pi.registerTool(
     defineTool({
-      name: "ask_user",
+      name: ASK_USER_TOOL,
       label: "Ask user",
       promptSnippet: "Ask the user questions and wait for their answers",
       promptGuidelines: [

@@ -31,14 +31,17 @@ export function pendingDialogs(state: AppState): PendingDialogs {
   };
 }
 
-/** A receipt reports delivery, not history: dismiss it once written, without claiming Pi consumed it.
+/** A receipt reports delivery, not history: an answer a tool call owns leaves once its stored
+ * result confirms it; an ordinary reply leaves once written, without claiming Pi consumed it.
  * Pending/failed/uncertain writes remain visible even without a pending question (INV-04). */
 export function answeredQuestion(state: AppState): DialogResolution | undefined {
   if (state.resync) return;
   const session = state.session;
   const resolution = session?.state.dialogResolution;
   if (!session || !resolution?.answer) return;
-  return resolution.delivery !== "written" ? resolution : undefined;
+  if (resolution.delivery === "accepted") return;
+  if (resolution.delivery === "written" && resolution.toolCallId === undefined) return;
+  return resolution;
 }
 
 /** One reply to a dialog; which field is set depends on its method. */
@@ -52,7 +55,7 @@ export interface DialogAnswerView {
   /** Abort is disabled: already submitted or disconnected. It ignores the deadline. */
   abortDisabled: boolean;
   /** Whole seconds until the deadline, rounded up and never negative. */
-  remainingSeconds: number;
+  remainingSeconds: number | null;
 }
 
 export interface DialogAnswer {
@@ -90,12 +93,15 @@ export function createDialogAnswer({
     return true;
   };
   const view = (now: number, connected: boolean): DialogAnswerView => {
-    const expired = now >= dialog.deadlineAt;
+    const expired = dialog.deadlineAt !== null && now >= dialog.deadlineAt;
     return {
       submitted,
       disabled: submitted || !connected || expired,
       abortDisabled: submitted || !connected || (!ABORT_IGNORES_DEADLINE && expired),
-      remainingSeconds: Math.max(0, Math.ceil((dialog.deadlineAt - now) / 1000)),
+      remainingSeconds:
+        dialog.deadlineAt === null
+          ? null
+          : Math.max(0, Math.ceil((dialog.deadlineAt - now) / 1000)),
     };
   };
   const answer = (reply: DialogReply, now: number, connected: boolean) =>

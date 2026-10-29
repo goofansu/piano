@@ -13,7 +13,7 @@ second session implementation or a new registry store.
 | --- | --- |
 | `PiTransport` (internal) | One scoped process, bounded stdin/record queues and byte framing, request IDs/deferreds, capacity leases, pending/uncertain delivery, stdout/stderr/exit readers. `fail` settles callers and ends records before killing Pi. Scope cleanup closes stdin then kills after its deadline. |
 | `PiSessions` publication (`SessionPublication`) | One generation per open, created by PiSessions. `SessionPublication` owns the snapshot, its one lock (held for projector correlation, snapshot fold, sequence assignment and subscriber attachment), sequence numbers, the cursor, subscribers, state merges and the closure announcement. State changes reach SessionReadbacks through its `onStateChange` listener. Publish never waits on a browser. A subscriber receives an atomic snapshot/cursor and then contiguous frames (INV-05). |
-| `PiSessions` dialog lifecycle (`SessionDialogs`) | Open dialogs live in the snapshot. `SessionDialogs` sets each dialog's deadline (Pi's advertised timeout, or the earlier host recovery bound `PiDialogRecoveryMs`), publishes it and owns its deadline wakeup. Answer/cancel/abort/deadline/exit compete under the publication lock. Claim and publish before transport yields; no late acknowledgement or uncertain write reopens a claim (INV-04). |
+| `PiSessions` dialog lifecycle (`SessionDialogs`) | Open dialogs live in the snapshot. An ordinary extension dialog has a deadline (Pi's advertised timeout, or the earlier host recovery bound `PiDialogRecoveryMs`). A dialog its tool call owns (Piano's `ask_user`) has none: that call's end closes it and its stored result confirms the answer. Answer/cancel/abort/deadline/tool end/exit compete under the publication lock. Claim and publish before transport yields; no late acknowledgement or uncertain write reopens a claim (INV-04). |
 | `PiSessions` actions/readbacks | Session scope owns admitted work, independent of the browser join. Operation/fact/output versions prevent old readbacks and abort acknowledgements from overwriting newer work. Abort does not clear queue; Stop restores queue first (INV-02/03). |
 | `PreviewOwner` behind PiSessions (PIN-99) | One generation-local socket and serialized launch/idle/release admission. It fixes trusted workspace/session context and holds each supervisor runner’s connection. Transport exit disconnects immediately; Piano crash closes connections in the kernel. `prepareRelease(true)` reserves idle release only after confirmed absence, never on observation failure; explicit release cleans retained exact ownership or fails. See [ADR 0003](adr/0003-pi-owned-preview-lifetime.md). |
 | `PiSessions` shutdown | Transport termination settles callers; record consumer completion signals `recordsDrained`. Only then announce closure once, resolving remaining dialog/submission uncertainty. The consumer finalizer signals completion but never waits on a later child finalizer. Scope release judges retained state and transport uncertainty, not already-interrupted action fibers. |
@@ -57,6 +57,23 @@ Lock-only call-site audit:
 Existing `DialogLifecycle`, `SessionDelivery` and `SessionReadbacks` tests protect INV-04/05
 claim-before-transport, atomic attachment/sequence and stale-readback contracts. The compile-only
 `test/SessionPublication.types.ts` additionally rejects direct mutation and unguarded dialog opening.
+
+## Questions owned by a tool call
+
+Piano's `ask_user` extension asks through Pi's ordinary dialogs and returns the batch as its tool
+result; it has no Piano-specific protocol. The server reads two native facts from Pi's one stdout
+stream: a dialog requested while Piano's `ask_user` call is the only running tool belongs to that
+call (`Dialog.toolCallId`), and the call's `tool_execution_end` record carries the result Pi
+stores. `shared/askUser.ts` is the only place that interprets that result.
+
+An owned dialog has no deadline. A successful write is **written**, not accepted: the next question
+of the batch, or the call's end with the answer in its stored result, makes it **accepted**; an end
+without it makes it **rejected** with the answer kept in the live receipt. The call's end also
+closes a question nobody answered, and an answer arriving after that closure is kept as rejected
+without being sent. Pi's exit leaves a written answer uncertain. Nothing is retried or resent. This
+is not durable draft storage across a Piano restart; Pi still owns persisted tool results. When
+several tools run at once, a dialog gets no owner and keeps the recovery policy, as third-party
+dialogs always do.
 
 ## Transport failure policy (PIN-10)
 

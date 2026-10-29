@@ -128,41 +128,45 @@ function Question({
           </FieldGroup>
         </FieldSet>
         <div className="flex flex-wrap items-center gap-2">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button type="button" variant="ghost" size="sm">
-                Details
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start">
-              <PopoverHeader>
-                <PopoverTitle>Question details</PopoverTitle>
-                <PopoverDescription>
-                  {d.deadlineKind === "pi-timeout"
-                    ? "Estimated Pi timeout"
-                    : "Host recovery cancellation"}
-                  : {remainingSeconds}s remaining. Pi may have already closed this question; it
-                  sends no closure acknowledgement.
-                </PopoverDescription>
-              </PopoverHeader>
-              {d.placeholder && (
-                <p className="whitespace-pre-wrap break-words text-sm">{d.placeholder}</p>
-              )}
-              <p className="text-sm text-ink-2">
-                Abort cancels waiting questions and requests native abort. Pending queued input is
-                not cleared.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={abortDisabled}
-                onClick={abort}
-              >
-                Abort current
-              </Button>
-            </PopoverContent>
-          </Popover>
+          {/* A question its tool call owns has no deadline to report, and the composer's Stop is
+              its escape; only an estimated deadline is a fact worth a popover. */}
+          {d.deadlineAt !== null && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="ghost" size="sm">
+                  Details
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start">
+                <PopoverHeader>
+                  <PopoverTitle>Question details</PopoverTitle>
+                  <PopoverDescription>
+                    {d.deadlineKind === "pi-timeout"
+                      ? "Estimated Pi timeout"
+                      : "Host recovery cancellation"}
+                    : {remainingSeconds}s remaining. Pi may have already closed this question; it
+                    sends no closure acknowledgement.
+                  </PopoverDescription>
+                </PopoverHeader>
+                {d.placeholder && (
+                  <p className="whitespace-pre-wrap break-words text-sm">{d.placeholder}</p>
+                )}
+                <p className="text-sm text-ink-2">
+                  Abort current stops Pi’s current work and cancels waiting questions. Queued
+                  messages are kept.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={abortDisabled}
+                  onClick={abort}
+                >
+                  Abort current
+                </Button>
+              </PopoverContent>
+            </Popover>
+          )}
           {more > 0 && (
             <span className="text-xs text-ink-2">
               {more} more {more === 1 ? "question" : "questions"}
@@ -179,7 +183,7 @@ function Question({
         </div>
         {submitted && (
           <p role="status" className="text-sm text-ink-2">
-            Waiting for the host’s resolution.
+            {d.deadlineKind === "tool-end" ? "Waiting for Pi to confirm…" : "Sending response…"}
           </p>
         )}
       </form>
