@@ -16,7 +16,7 @@ import { IconButton } from "@/components/IconButton";
 import {
   githubLabel,
   isLinearLink,
-  localFilePath,
+  LOCAL_PATH,
   markdownPlugins,
   markdownWithinBudget,
 } from "@/lib/markdown";
@@ -97,20 +97,22 @@ export function Markdown(props: MarkdownProps) {
   );
 }
 
+/** remarkPiano names each image and link's local file once, from its Markdown URL. */
+function localPath(properties: Record<string, unknown> | undefined): string | undefined {
+  const path = properties?.[LOCAL_PATH];
+  return typeof path === "string" ? path : undefined;
+}
+
 function MarkdownLink({ href = "", children, node }: ComponentProps<"a"> & ExtraProps) {
   const openFile = useContext(LocalFileContext);
-  const path = localFilePath(href);
+  const path = localPath(node?.properties);
   const images = useContext(ImagesContext);
   // An enabled local image owns its preview action, not the enclosing link's destination.
   // Avoid nested controls (or an outer web link opening a tab after the image click).
   if (
     images &&
     node?.children.some(
-      (child) =>
-        child.type === "element" &&
-        child.tagName === "img" &&
-        typeof child.properties.src === "string" &&
-        localFilePath(child.properties.src),
+      (child) => child.type === "element" && child.tagName === "img" && localPath(child.properties),
     )
   )
     return <>{children}</>;
@@ -166,10 +168,10 @@ function MarkdownLink({ href = "", children, node }: ComponentProps<"a"> & Extra
   );
 }
 
-function MarkdownImage({ src, alt }: ComponentProps<"img"> & ExtraProps) {
+function MarkdownImage({ alt, node }: ComponentProps<"img"> & ExtraProps) {
   const images = useContext(ImagesContext);
   const openFile = useContext(LocalFileContext);
-  const path = typeof src === "string" ? localFilePath(src) : undefined;
+  const path = localPath(node?.properties);
   const url = path && images?.get(path);
   const [failed, setFailed] = useState<string>();
   if (!path || !images) return <>{alt}</>;
