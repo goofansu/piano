@@ -92,10 +92,18 @@ test("file previews preserve binary bytes over scoped POST and still redact text
   assert.ok("bytes" in binary);
   assert.deepEqual(binary.bytes, new Uint8Array(pdf));
   await assert.rejects(workspaceFile("unknown", "sample.pdf"), /Workspace is not registered/);
-  await assert.rejects(workspaceFile(workspaceId, "../outside.pdf"), /inside this workspace/);
+  await writeFile(join(root, "outside.pdf"), pdf);
+  const external = await workspaceFile(workspaceId, "../outside.pdf");
+  assert.equal(external.path, join(root, "outside.pdf"));
+  assert.ok("bytes" in external);
+  assert.deepEqual(external.bytes, new Uint8Array(pdf));
+  await writeFile(join(root, "outside.md"), "token=example-secret");
+  const externalText = await workspaceFile(workspaceId, join(root, "outside.md"));
+  assert.ok("content" in externalText);
+  assert.equal(externalText.content, "token=[REDACTED]");
 });
 
-test("downloads are the file's exact bytes: text unredacted, binary intact, same containment and refusals", async () => {
+test("downloads are the file's exact bytes: text unredacted, binary intact, same path and format rules", async () => {
   await writeFile(join(repo, "secret.txt"), "token=example-secret");
   const text = await workspaceFileDownload(workspaceId, "secret.txt");
   assert.deepEqual(
@@ -110,10 +118,10 @@ test("downloads are the file's exact bytes: text unredacted, binary intact, same
   // A ZIP cannot be previewed, so it cannot be downloaded either.
   await writeFile(join(repo, "archive.zip"), Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]));
   await assert.rejects(workspaceFileDownload(workspaceId, "archive.zip"), /not supported/);
-  await assert.rejects(
-    workspaceFileDownload(workspaceId, "../outside.pdf"),
-    /inside this workspace/,
-  );
+  await writeFile(join(root, "outside.pdf"), pdf);
+  const external = await workspaceFileDownload(workspaceId, "../outside.pdf");
+  assert.equal(external.name, "outside.pdf");
+  assert.deepEqual(external.bytes, new Uint8Array(pdf));
 });
 
 test("a response outside the contract is rejected with the endpoint's message, not trusted", async () => {
