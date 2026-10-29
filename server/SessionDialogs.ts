@@ -39,6 +39,15 @@ export interface SessionDialogsOptions {
 const lapsed = (dialog: Dialog) =>
   dialog.deadlineKind === "pi-timeout" ? ("expired" as const) : ("recovery" as const);
 
+/** What can happen to the live receipt after its dialog closed: the next question of its tool call
+ * opened, the call ended with the result Pi stored, an answer arrived after the closure, or Pi
+ * exited. */
+type ReceiptEvent =
+  | { readonly _tag: "question-opened"; readonly toolCallId: string }
+  | { readonly _tag: "tool-ended"; readonly toolCallId: string; readonly result: unknown }
+  | { readonly _tag: "late-answer"; readonly id: string; readonly value: string }
+  | { readonly _tag: "exited" };
+
 export const makeSessionDialogs = ({
   generation,
   recoveryMs,
@@ -55,6 +64,98 @@ export const makeSessionDialogs = ({
     resolution?.generation === generation &&
     resolution.toolCallId !== undefined &&
     (toolCallId === undefined || resolution.toolCallId === toolCallId);
+
+  /** Every closure of a dialog, built from the dialog: it keeps the dialog's tool call, question
+   * and title, which a later receipt transition and an answer kept after closure read. */
+  const closure = (
+    dialog: Dialog,
+    reason: DialogResolution["reason"],
+    delivery: DialogResolution["delivery"],
+    detail: string,
+    answer?: DialogResolution["answer"],
+  ): DialogResolution => ({
+    id: dialog.id,
+    generation,
+    reason,
+    ...(dialog.toolCallId !== undefined ? { toolCallId: dialog.toolCallId } : {}),
+    ...(dialog.questionId !== undefined ? { questionId: dialog.questionId } : {}),
+    ...(dialog.title !== undefined ? { title: dialog.title } : {}),
+    delivery,
+    detail,
+    ...(answer ? { answer } : {}),
+  });
+
+  /**
+   * The one transition of the live receipt after its dialog closed; undefined leaves it as it is.
+   * A response written for a dialog a tool call owns waits on that call: its next question accepts
+   * an answer (the tool asks only after storing it), its end accepts a cancellation and accepts or
+   * rejects an answer by the result Pi stored, and Pi's exit leaves it uncertain, as it does any
+   * response still being delivered. An answer arriving after an owned question closed unanswered
+   * is kept, rejected, in that question's receipt.
+   */
+  const nextReceipt = (
+    current: DialogResolution | undefined,
+    event: ReceiptEvent,
+  ): DialogResolution | undefined => {
+    if (!current) return;
+    const waiting = current.delivery === "pending" || current.delivery === "written";
+    switch (event._tag) {
+      case "question-opened":
+        return waiting && current.reason === "answered" && ownedReceipt(current, event.toolCallId)
+          ? { ...current, delivery: "accepted", detail: "Pi stored your answer." }
+          : undefined;
+      case "tool-ended": {
+        if (!waiting || !ownedReceipt(current, event.toolCallId)) return;
+        if (current.reason !== "answered")
+          return { ...current, delivery: "accepted", detail: "Question cancelled." };
+        const stored =
+          typeof current.answer?.value === "string" &&
+          current.questionId !== undefined &&
+          answerStored(event.result, current.questionId, current.answer.value);
+        return {
+          ...current,
+          delivery: stored ? "accepted" : "rejected",
+          detail: stored
+            ? "Pi stored your answer."
+            : "The question closed before Pi stored your answer. It was not resent and is kept here.",
+        };
+      }
+      case "late-answer":
+        return current.id === event.id && ownedReceipt(current) && !current.answer
+          ? {
+              ...current,
+              delivery: "rejected",
+              answer: {
+                ...(current.title !== undefined ? { title: current.title } : {}),
+                value: event.value,
+              },
+              detail:
+                "The question closed before your answer arrived. Your answer was not sent and is kept here.",
+            }
+          : undefined;
+      case "exited":
+        // An owned dialog's written reply was still awaiting its tool's end; an ordinary one was final.
+        return current.delivery === "pending" ||
+          (current.delivery === "written" && ownedReceipt(current))
+          ? {
+              ...current,
+              delivery: "uncertain",
+              detail: current.answer
+                ? "Pi stopped before confirming this answer. It is kept here; do not resend it."
+                : "Pi stopped during response delivery. Do not resend this dialog response.",
+            }
+          : undefined;
+    }
+  };
+
+  /** Apply `nextReceipt` to the live receipt, under the caller's lock. */
+  const advance = Effect.fnUntraced(function* (
+    transaction: PublicationTransaction,
+    event: ReceiptEvent,
+  ) {
+    const next = nextReceipt((yield* publication.state).dialogResolution, event);
+    if (next) yield* transaction.mergeState({ dialogResolution: next });
+  });
 
   /** Settle one dialog's claim under the lock: remove it, wake its watcher, publish. */
   const settle = Effect.fnUntraced(function* (
@@ -100,17 +201,13 @@ export const makeSessionDialogs = ({
                 : reason === "aborted"
                   ? "Abort current: cancelling this dialog. Pending queue is not cleared."
                   : "Response claimed locally; waiting for transport delivery.";
-        const resolution: DialogResolution = {
-          id: dialog.id,
-          generation,
+        const resolution = closure(
+          dialog,
           reason,
-          ...(dialog.toolCallId !== undefined ? { toolCallId: dialog.toolCallId } : {}),
-          ...(dialog.questionId !== undefined ? { questionId: dialog.questionId } : {}),
-          ...(dialog.title !== undefined ? { title: dialog.title } : {}),
-          delivery: send ? "pending" : "not-sent",
+          send ? "pending" : "not-sent",
           detail,
-          ...(reason === "answered" && receipt ? { answer: receipt } : {}),
-        };
+          reason === "answered" ? receipt : undefined,
+        );
         yield* settle(transaction, resolution);
         return resolution;
       }),
@@ -175,17 +272,8 @@ export const makeSessionDialogs = ({
             deadlineKind: piTimeout ? "pi-timeout" : "host-recovery",
           }
         : { ...request, deadlineAt: null, deadlineKind: "tool-end" };
-    if (toolCallId !== undefined) {
-      const previous = (yield* publication.state).dialogResolution;
-      if (
-        previous?.reason === "answered" &&
-        (previous.delivery === "pending" || previous.delivery === "written") &&
-        ownedReceipt(previous, toolCallId)
-      )
-        yield* transaction.mergeState({
-          dialogResolution: { ...previous, delivery: "accepted", detail: "Pi stored your answer." },
-        });
-    }
+    if (toolCallId !== undefined)
+      yield* advance(transaction, { _tag: "question-opened", toolCallId });
     closed.set(dialog.id, yield* Deferred.make<void>());
     yield* transaction.publish({ _tag: "dialog", dialog });
     return dialog;
@@ -210,9 +298,8 @@ export const makeSessionDialogs = ({
 
   /**
    * A tool call ended (Pi's native record, consumed under the same lock as local claims). Its
-   * dialogs still open closed with it: nothing is written, Pi no longer reads a reply. The answer
-   * written for it is accepted when the result Pi stored holds it for its question, otherwise
-   * rejected and kept; a written cancellation is confirmed by the end alone.
+   * dialogs still open closed with it: nothing is written, Pi no longer reads a reply. The
+   * response written for it then takes its verdict from `nextReceipt`.
    */
   const toolEnded = Effect.fnUntraced(function* (
     transaction: PublicationTransaction,
@@ -220,40 +307,12 @@ export const makeSessionDialogs = ({
   ) {
     for (const dialog of yield* publication.dialogs) {
       if (dialog.toolCallId !== toolCallId) continue;
-      yield* settle(transaction, {
-        id: dialog.id,
-        generation,
-        reason: "cancelled",
-        toolCallId,
-        ...(dialog.title !== undefined ? { title: dialog.title } : {}),
-        delivery: "not-sent",
-        detail: "Pi closed this question before it was answered.",
-      });
+      yield* settle(
+        transaction,
+        closure(dialog, "cancelled", "not-sent", "Pi closed this question before it was answered."),
+      );
     }
-    const current = (yield* publication.state).dialogResolution;
-    if (
-      !current ||
-      (current.delivery !== "pending" && current.delivery !== "written") ||
-      !ownedReceipt(current, toolCallId)
-    )
-      return;
-    if (current.reason !== "answered")
-      return yield* transaction.mergeState({
-        dialogResolution: { ...current, delivery: "accepted", detail: "Question cancelled." },
-      });
-    const stored =
-      typeof current.answer?.value === "string" &&
-      current.questionId !== undefined &&
-      answerStored(result, current.questionId, current.answer.value);
-    yield* transaction.mergeState({
-      dialogResolution: {
-        ...current,
-        delivery: stored ? "accepted" : "rejected",
-        detail: stored
-          ? "Pi stored your answer."
-          : "The question closed before Pi stored your answer. It was not resent and is kept here.",
-      },
-    });
+    yield* advance(transaction, { _tag: "tool-ended", toolCallId, result });
   });
 
   /** A browser's answer or cancellation, accepted only for a dialog still open in this generation. */
@@ -297,22 +356,8 @@ export const makeSessionDialogs = ({
    */
   const retain = Effect.fnUntraced(function* (action: Extract<SessionAction, { _tag: "answer" }>) {
     if (action.cancelled || action.generation !== generation || action.value === undefined) return;
-    const value = action.value;
-    yield* publication.transaction((transaction) =>
-      Effect.gen(function* () {
-        const current = (yield* publication.state).dialogResolution;
-        if (current?.id !== action.id || !ownedReceipt(current) || current.answer) return;
-        yield* transaction.mergeState({
-          dialogResolution: {
-            ...current,
-            delivery: "rejected",
-            answer: { ...(current.title !== undefined ? { title: current.title } : {}), value },
-            detail:
-              "The question closed before your answer arrived. Your answer was not sent and is kept here.",
-          },
-        });
-      }),
-    );
+    const late = { _tag: "late-answer" as const, id: action.id, value: action.value };
+    yield* publication.transaction((transaction) => advance(transaction, late));
   });
 
   /**
@@ -327,25 +372,7 @@ export const makeSessionDialogs = ({
     for (const dialog of dialogs ?? (yield* publication.dialogs))
       yield* resolve(dialog, reason).pipe(Effect.ignore);
     if (reason !== "exited") return;
-    yield* publication.transaction((transaction) =>
-      Effect.gen(function* () {
-        const resolution = (yield* publication.state).dialogResolution;
-        // An owned dialog's written reply was still awaiting its tool's end; an ordinary one was final.
-        if (
-          resolution?.delivery === "pending" ||
-          (resolution?.delivery === "written" && ownedReceipt(resolution))
-        )
-          yield* transaction.mergeState({
-            dialogResolution: {
-              ...resolution,
-              delivery: "uncertain",
-              detail: resolution.answer
-                ? "Pi stopped before confirming this answer. It is kept here; do not resend it."
-                : "Pi stopped during response delivery. Do not resend this dialog response.",
-            },
-          });
-      }),
-    );
+    yield* publication.transaction((transaction) => advance(transaction, { _tag: "exited" }));
   });
 
   return { opened, watch, answer, toolEnded, resolveAll };
