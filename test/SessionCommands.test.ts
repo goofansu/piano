@@ -542,7 +542,10 @@ test("the rail's Environment rows offer the session's copy commands for their fa
     unavailable: "checkout",
   });
   assert.deepEqual(menu(linked, "pull request"), [
-    ["Copy pull request number", { kind: "copy", value: "222", label: "Pull request number" }],
+    [
+      "Copy pull request reference",
+      { kind: "copy", value: "other/repo#222", label: "Pull request reference" },
+    ],
   ]);
-  assert.equal(linked.find((c) => c.id === "copy-pull-request-number")?.enabled, true);
+  assert.equal(linked.find((c) => c.id === "copy-pull-request-reference")?.enabled, true);
 });

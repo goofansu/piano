@@ -36,7 +36,7 @@ export type SessionCommandId =
   | "copy-branch"
   | "copy-commit"
   | "copy-repository"
-  | "copy-pull-request-number"
+  | "copy-pull-request-reference"
   | "copy-session-id"
   | "copy-session-path"
   | "changes"
@@ -149,7 +149,7 @@ const ENVIRONMENT_ROWS = {
   folder: ["copy-working-directory"],
   commit: ["copy-commit"],
   branch: ["copy-branch"],
-  "pull request": ["copy-pull-request-number"],
+  "pull request": ["copy-pull-request-reference"],
 } as const satisfies Record<EnvironmentRowKind, readonly SessionCommandId[]>;
 
 /** The session rail's Environment row menu, from `sessionCommands`' descriptors: the row's own
@@ -309,14 +309,18 @@ export function sessionCommands(
             } as const,
           ]
         : []),
-      ...(pullRequest?.number
+      ...(pullRequest?.number && pullRequest.repo
         ? [
             {
-              id: "copy-pull-request-number",
-              label: "Copy pull request number",
+              id: "copy-pull-request-reference",
+              label: "Copy pull request reference",
               icon: "copy",
               enabled: true,
-              intent: { kind: "copy", value: pullRequest.number, label: "Pull request number" },
+              intent: {
+                kind: "copy",
+                value: `${pullRequest.repo}#${pullRequest.number}`,
+                label: "Pull request reference",
+              },
             } as const,
           ]
         : []),
