@@ -8,6 +8,7 @@
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import type { ClientCommand, ExtensionState } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
+import { answerReceipt } from "./piDialogs.ts";
 import { sessionContext } from "./sessionContext.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
@@ -129,19 +130,9 @@ export function sessionNotices(state: AppState, _messagesOnly: boolean): Session
 
   const resolution = t?.state.dialogResolution;
   // The answer card owns its receipt and delivery details; never repeat them as a status line.
-  if (resolution && !resolution.answer) {
-    const cancelled =
-      resolution.reason === "cancelled" &&
-      (resolution.delivery === "written" || resolution.delivery === "accepted");
-    notices.push(
-      notice(
-        "dialog-resolution",
-        "status",
-        cancelled ? "warning" : "quiet",
-        cancelled ? "Question cancelled" : `Dialog ${resolution.reason}: ${resolution.detail}`,
-      ),
-    );
-  }
+  const answerNotice = resolution && answerReceipt(resolution).notice;
+  if (answerNotice)
+    notices.push(notice("dialog-resolution", "status", answerNotice.tone, answerNotice.title));
   if (receipt?.text)
     notices.push(notice("submission", "status", receipt.tone, receipt.text, [receipt.detail]));
   const extension = t?.state.extension;

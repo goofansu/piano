@@ -11,6 +11,7 @@ import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
+import { answerReceipt } from "./piDialogs.ts";
 import { projectStartDirectory } from "./projectHome.ts";
 import { focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
@@ -234,8 +235,8 @@ export function createClient({
       notifySession &&
       m._tag === "session" &&
       m.event._tag === "state" &&
-      m.event.state.dialogResolution?.delivery === "accepted" &&
-      m.event.state.dialogResolution.answer &&
+      m.event.state.dialogResolution &&
+      answerReceipt(m.event.state.dialogResolution).accepted &&
       (previousAnswer?.id !== m.event.state.dialogResolution.id ||
         previousAnswer.delivery !== "accepted")
     )

@@ -31,16 +31,67 @@ export function pendingDialogs(state: AppState): PendingDialogs {
   };
 }
 
+/** A status dot's tone; the subset of `StatusTone` an answer receipt uses. */
+export type AnswerTone = "busy" | "warn" | "err" | "muted";
+
+/** How a dialog resolution is reported, decided once for the answer card, notices and toasts. */
+export interface AnswerReceipt {
+  /** The last answer stays above the composer. */
+  card: boolean;
+  /** The card's delivery line; null when delivery needs no word. */
+  status: { label: string; tone: AnswerTone; pulse: boolean } | null;
+  /** The card offers the delivery detail behind a Details popover. */
+  details: boolean;
+  /** The status line for a resolution without an answer; null when it has one. */
+  notice: { tone: "warning" | "quiet"; title: string } | null;
+  /** The answer was confirmed; announced once per resolution. */
+  accepted: boolean;
+}
+
+const deliveryStatus: Record<
+  DialogResolution["delivery"],
+  { label: string; tone: AnswerTone } | null
+> = {
+  pending: { label: "Sending answer…", tone: "busy" },
+  written: null,
+  accepted: null,
+  rejected: { label: "Answer not accepted", tone: "err" },
+  uncertain: { label: "Delivery uncertain", tone: "warn" },
+  "not-sent": { label: "Not sent", tone: "muted" },
+};
+
 /** A receipt reports delivery, not history: an answer a tool call owns leaves once its stored
  * result confirms it; an ordinary reply leaves once written, without claiming Pi consumed it.
  * Pending/failed/uncertain writes remain visible even without a pending question (INV-04). */
+export function answerReceipt(resolution: DialogResolution): AnswerReceipt {
+  const { delivery, answer } = resolution;
+  const owned = resolution.toolCallId !== undefined;
+  // A written answer to one of Piano's own questions still awaits Pi's confirmation.
+  const status =
+    delivery === "written" && owned
+      ? { label: "Sent, waiting for Pi…", tone: "busy" as const }
+      : deliveryStatus[delivery];
+  // Cancelling a question Pi already received is worth a warning; other endings stay quiet.
+  const cancelled =
+    resolution.reason === "cancelled" && (delivery === "written" || delivery === "accepted");
+  return {
+    card: !!answer && delivery !== "accepted" && !(delivery === "written" && !owned),
+    status: status && { ...status, pulse: delivery === "pending" },
+    details: delivery === "uncertain" || delivery === "not-sent" || delivery === "rejected",
+    notice: answer
+      ? null
+      : cancelled
+        ? { tone: "warning", title: "Question cancelled" }
+        : { tone: "quiet", title: `Dialog ${resolution.reason}: ${resolution.detail}` },
+    accepted: delivery === "accepted" && !!answer,
+  };
+}
+
+/** The selected session's last answer while its receipt still has something to say. */
 export function answeredQuestion(state: AppState): DialogResolution | undefined {
   if (state.resync) return;
-  const session = state.session;
-  const resolution = session?.state.dialogResolution;
-  if (!session || !resolution?.answer) return;
-  if (resolution.delivery === "accepted") return;
-  if (resolution.delivery === "written" && resolution.toolCallId === undefined) return;
+  const resolution = state.session?.state.dialogResolution;
+  if (!resolution || !answerReceipt(resolution).card) return;
   return resolution;
 }
 
