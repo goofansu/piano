@@ -1,13 +1,21 @@
-/** Piano's ask_user tool as Piano reads it from Pi's records: its name, the questions a call asks
- * and the batch result Pi stores. The extension owns the tool; this is the one reader of its
- * arguments and result, for the server's answer receipts and the browser's transcript alike. */
+/** Piano's ask_user tool as Piano reads it from Pi's records: its name, the questions a call asks,
+ * the dialog it raises for each and the batch result Pi stores. The extension owns the tool and
+ * asks through `askUserPrompt`; this is the one reader of its arguments, dialogs and result, for
+ * the server's answer receipts and the browser's transcript alike. */
 
 export const ASK_USER_TOOL = "ask_user";
 
 export interface AskUserQuestion {
   readonly id: string;
   readonly question: string;
+  /** Choices for a single selection; absent for a free-text answer. */
+  readonly options?: readonly string[];
 }
+
+/** The dialog the tool raises for one question: Pi's `select` with its choices, else `editor`. */
+export type AskUserPrompt =
+  | { readonly method: "select"; readonly title: string; readonly options: readonly string[] }
+  | { readonly method: "editor"; readonly title: string };
 
 /** The batch result the tool returns: every answer is keyed by its question ID. */
 export interface AskUserResult {
@@ -38,7 +46,9 @@ const asText = (value: unknown): string | undefined =>
         : undefined;
 
 /** A call's questions, from its raw or converted arguments; undefined unless every ID and question
- * is non-blank and every ID unique, the rule the tool checks before asking anything. */
+ * is non-blank and every ID unique, the rule the tool checks before asking anything. Choices are
+ * read as Pi converts them too: `null` drops them (an omitted optional field) and a lone choice
+ * becomes a list of one. */
 export function askUserQuestions(args: unknown): AskUserQuestion[] | undefined {
   const questions = recordOf(args)?.questions;
   if (!Array.isArray(questions) || !questions.length) return;
@@ -51,10 +61,32 @@ export function askUserQuestions(args: unknown): AskUserQuestion[] | undefined {
     const question = asText(fields.question);
     if (id === undefined || question === undefined) return;
     if (!id.trim() || !question.trim() || ids.has(id)) return;
+    let options: string[] | undefined;
+    if (fields.options !== undefined && fields.options !== null) {
+      options = [];
+      for (const option of Array.isArray(fields.options) ? fields.options : [fields.options]) {
+        const text = asText(option);
+        if (text === undefined) return;
+        options.push(text);
+      }
+    }
     ids.add(id);
-    items.push({ id, question });
+    items.push(options ? { id, question, options } : { id, question });
   }
   return items;
+}
+
+/** The dialog the tool raises for `questions[index]`: numbered `1 of 3: …` in a batch, the bare
+ * question when it asks one. The extension asks through this, so the server can tell the call's
+ * own question from another dialog opened while it runs. */
+export function askUserPrompt(
+  questions: ReadonlyArray<AskUserQuestion>,
+  index: number,
+): AskUserPrompt {
+  const { question, options } = questions[index];
+  const title =
+    questions.length > 1 ? `${index + 1} of ${questions.length}: ${question}` : question;
+  return options ? { method: "select", title, options } : { method: "editor", title };
 }
 
 /** The tool's result object; undefined unless it has a known status and only string answers. */

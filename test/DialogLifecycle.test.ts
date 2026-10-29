@@ -423,6 +423,58 @@ test("the next question of a batch accepts the previous answer; the batch result
   );
 });
 
+test("another extension's dialog opened while a batch asks is not the batch's question: it keeps the host deadline and outlives the call", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "owned-foreign",
+      });
+      const first = yield* openDialog(session, "/ask store 2");
+      assert.equal(first.dialog.title, "1 of 2: Question 1");
+      assert.equal(first.dialog.questionId, "q1");
+      // A command from the composer (Pi's `/rpc-input`) or a tool hook asks while the call runs.
+      const foreign = yield* openDialog(session, "/dialog input");
+      assert.equal(
+        foreign.dialog.toolCallId,
+        undefined,
+        "only the call's own prompt is its question",
+      );
+      assert.equal(foreign.dialog.questionId, undefined);
+      assert.equal(foreign.dialog.deadlineKind, "host-recovery");
+      assert.notEqual(foreign.dialog.deadlineAt, null);
+
+      const next = yield* watch(session, (event) => event._tag === "dialog");
+      const firstAccepted = yield* watch(session, receipt(first.dialog.id, "accepted"));
+      yield* session.act(answer(first.dialog));
+      const second = (yield* Fiber.join(next)).find((event) => event._tag === "dialog");
+      assert.ok(second?._tag === "dialog");
+      assert.equal(second.dialog.toolCallId, first.dialog.toolCallId);
+      assert.equal(second.dialog.questionId, "q2", "the foreign dialog took no question's place");
+      yield* Fiber.join(firstAccepted);
+      const secondAccepted = yield* watch(session, receipt(second.dialog.id, "accepted"));
+      yield* session.act({ ...answer(second.dialog), value: "B" });
+      yield* Fiber.join(secondAccepted);
+
+      assert.deepEqual(
+        (yield* snapshot(session)).dialogs.map((dialog) => dialog.id),
+        [foreign.dialog.id],
+        "Pi still waits on it: the call's end does not close it",
+      );
+      yield* session.act(answer(foreign.dialog));
+      yield* Fiber.join(foreign.prompt);
+      assert.deepEqual(
+        (yield* audit(session)).map(({ id, value }) => [id, value]),
+        [
+          [first.dialog.id, "A"],
+          [second.dialog.id, "B"],
+          [foreign.dialog.id, "A"],
+        ],
+      );
+    }).pipe(Effect.timeout("8 seconds"), Effect.scoped),
+  );
+});
+
 test("Stop during a question its tool call owns is confirmed by the tool's end, not left waiting until exit", async () => {
   await run(
     Effect.gen(function* () {

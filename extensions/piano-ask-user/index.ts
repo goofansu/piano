@@ -1,7 +1,7 @@
 /** Model-initiated questions through Pi's supported dialogs; Piano owns the answer surface. */
 import { type Static, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { ASK_USER_TOOL, askUserQuestions } from "../../shared/askUser.ts";
+import { ASK_USER_TOOL, askUserPrompt, askUserQuestions } from "../../shared/askUser.ts";
 
 const Parameters = Type.Object({
   questions: Type.Array(
@@ -54,13 +54,14 @@ export default function pianoAskUser(pi: ExtensionAPI) {
           throw new Error("Choices must not be blank.");
         if (!ctx.hasUI) throw new Error("ask_user requires an interactive UI.");
         const answers: Array<[string, string]> = [];
-        for (const [index, { id, question, options }] of questions.entries()) {
+        for (const [index, { id }] of questions.entries()) {
           if (signal?.aborted) break;
-          const title =
-            questions.length > 1 ? `${index + 1} of ${questions.length}: ${question}` : question;
-          const answer = options
-            ? await ctx.ui.select(title, options, { signal })
-            : await ctx.ui.editor(title);
+          // Piano tells this call's own question from any other dialog by this prompt.
+          const prompt = askUserPrompt(questions, index);
+          const answer =
+            prompt.method === "select"
+              ? await ctx.ui.select(prompt.title, [...prompt.options], { signal })
+              : await ctx.ui.editor(prompt.title);
           // editor has no signal option. Piano's Stop/Abort cancels pending dialogs (INV-04);
           // never accept a reply racing abort or open the remaining questions after cancellation.
           if (signal?.aborted || answer === undefined) break;
