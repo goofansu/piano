@@ -6,6 +6,10 @@ and `piano_session_status` to read any session's status by its ID.
 The child is an ordinary session: it appears in the sidebar, has an **Open session** link, and can
 be opened and continued without taking the parent away from its conversation.
 
+User and repository instructions decide when to dispatch; the tools describe how to start and
+observe sessions. Repository instructions can require dispatch without a separate user request
+(INV-13). Piano's own contributor workflow lives in [AGENTS.md](../AGENTS.md#branches).
+
 ## From a terminal (Linux and macOS)
 
 With Node.js 24, dependencies installed (`npm ci`) and Piano running **on the same machine**, run
