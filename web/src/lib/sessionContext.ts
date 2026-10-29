@@ -215,6 +215,8 @@ export interface SessionContext {
   detachedHead: string | undefined;
   /** The folder's GitHub repository (`owner/name`), when discovery found one. */
   githubRepo: string | undefined;
+  /** `branch` on GitHub, where it pushes and by its name there; undefined until it is pushed. */
+  branchUrl: string | undefined;
   title: string;
   sessionId: string | undefined;
   /** Registry identity of the selected session's directory. */
@@ -266,13 +268,19 @@ export function sessionContext(state: AppState): SessionContext {
   const checkoutMissing = !!session && checkoutMissingAt(state, session.cwd);
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;
   const canOpenChanges = !!changesWorkspace && !checkoutMissing;
+  const branch = reference?.branch ?? undefined;
+  // Only the branch shown: the facts describe the checkout's branch as Git last listed it.
+  const github = checkout?.facts?.branch === branch ? checkout?.facts?.github : undefined;
   return {
     cwd,
     folder,
-    branch: reference?.branch ?? undefined,
+    branch,
     detachedHead:
       checkout?.status === "current" && checkout.facts?.detached ? checkout.facts.head : undefined,
     githubRepo: folder?.discovery.status === "ready" ? folder.discovery.githubRepo : undefined,
+    branchUrl: github
+      ? `https://github.com/${github.repo}/tree/${github.branch.split("/").map(encodeURIComponent).join("/")}`
+      : undefined,
     // Pi's live name outranks the registry's saved title.
     title: sessionLabel(session?.state.sessionName || reference?.title),
     sessionId: session?.sessionId ?? undefined,

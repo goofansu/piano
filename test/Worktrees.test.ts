@@ -126,6 +126,49 @@ test("discovery exposes only GitHub repository identity from origin, including l
   assert.equal(await repository(repo), undefined);
 });
 
+// A branch's home on GitHub follows Git's push, as pull request discovery and Changes read it
+// (GitCheckout's Upstream); "pushed" is Git holding the ref that push updates.
+test("discovery names each worktree's branch where it was pushed on GitHub, and nothing before", async (t) => {
+  const { root, repo } = fixture(t);
+  git(repo, "remote", "add", "origin", "git@github.com:Example/Repo.git");
+  git(repo, "remote", "add", "fork", "https://github.com/me/repo.git");
+  git(repo, "update-ref", "refs/remotes/origin/feature/x", "HEAD");
+  git(repo, "config", "push.default", "upstream");
+  const add = (name: string, branch: string, ...start: string[]) =>
+    git(repo, "worktree", "add", "--quiet", "-b", branch, join(root, name), ...start);
+  add("draft", "draft");
+  add("plain", "plain");
+  git(repo, "update-ref", "refs/remotes/origin/plain", "HEAD");
+  add("forked", "forked");
+  git(repo, "config", "branch.forked.pushRemote", "fork");
+  git(repo, "update-ref", "refs/remotes/fork/forked", "HEAD");
+  // Its old origin copy is not where it goes now.
+  git(repo, "update-ref", "refs/remotes/origin/forked", "HEAD");
+  add("renamed", "local-fix", "--track", "origin/feature/x");
+  git(repo, "update-ref", "refs/remotes/origin/local-fix", "HEAD");
+  const homes = async () => {
+    const result = await Effect.runPromise(listWorktrees(repo));
+    assert.equal(result.status, "ready");
+    return Object.fromEntries(
+      (result.status === "ready" ? result.worktrees : []).map((w) => [w.branch, w.github]),
+    );
+  };
+  assert.deepEqual(await homes(), {
+    main: undefined,
+    draft: undefined,
+    plain: { repo: "example/repo", branch: "plain" },
+    forked: { repo: "me/repo", branch: "forked" },
+    "local-fix": { repo: "example/repo", branch: "feature/x" },
+  });
+  // Every branch without an upstream now pushes to the fork, where only `forked` was pushed.
+  git(repo, "config", "remote.pushDefault", "fork");
+  git(repo, "config", "--unset", "branch.forked.pushRemote");
+  const forked = await homes();
+  assert.deepEqual(forked.forked, { repo: "me/repo", branch: "forked" });
+  assert.equal(forked.plain, undefined);
+  assert.equal(forked.draft, undefined);
+});
+
 test("INV-06: inherited GIT_* state cannot redirect discovery or directory hints", async (t) => {
   const { root, repo } = fixture(t);
   git(repo, "worktree", "add", "--quiet", "-b", "feature", join(root, "feature"));

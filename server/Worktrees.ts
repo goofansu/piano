@@ -11,9 +11,9 @@ import {
   type WorktreeDiscovery,
   type WorktreeFacts,
 } from "../shared/wire.ts";
-import { gitText, observeGit } from "./GitCheckout.ts";
+import { gitText, observeGit, type PushedBranch, pushedBranches } from "./GitCheckout.ts";
 import { gitEnvironment } from "./GitEnvironment.ts";
-import { githubRemote } from "./GitHubPullRequests.ts";
+import { branchRemote, githubRemote } from "./GitHubPullRequests.ts";
 import { run as runProcess } from "./Subprocess.ts";
 
 export class WorktreeError extends Data.TaggedError("WorktreeError")<{
@@ -189,7 +189,26 @@ export const listWorktrees = Effect.fn("Worktrees.listWorktrees")(function* (
       userConfig: true,
     }).pipe(Effect.orElseSucceed(() => ""));
     const githubRepo = githubRemote(remote.trim())?.repo;
-    return { status: "ready" as const, observedAt, currentPath, worktrees, githubRepo };
+    // Where each branch lives on GitHub, by the rule pull request discovery and Changes use; an
+    // unreadable answer only leaves the branches unlinked.
+    const pushed = yield* pushedBranches(
+      folder,
+      worktrees.flatMap((w) => (w.branch ? [w.branch] : [])),
+    ).pipe(Effect.orElseSucceed(() => new Map<string, PushedBranch>()));
+    const located = worktrees.map((w) => {
+      const at = w.branch ? pushed.get(w.branch) : undefined;
+      const home = at && branchRemote(at.name, at.url);
+      return home?.on === "github" && home.head
+        ? { ...w, github: { repo: home.head.repo, branch: home.head.name } }
+        : w;
+    });
+    return {
+      status: "ready" as const,
+      observedAt,
+      currentPath,
+      worktrees: located,
+      githubRepo,
+    };
   }).pipe(
     Effect.catchTag("WorktreeError", (e) =>
       Effect.succeed({

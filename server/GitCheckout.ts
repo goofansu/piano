@@ -121,9 +121,11 @@ export interface Upstream {
 
 /** The branch's upstream and where Git would push it. `push.default` and `remote.pushDefault`
  * usually live in the user's config, so the read keeps it (`userConfig`). */
+const UPSTREAM_FORMAT =
+  "%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)%00%(push:remotename)%00%(push)%00%(push:remoteref)";
 const upstreamRead = (branch: string) => [
   "for-each-ref",
-  "--format=%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)%00%(push:remotename)%00%(push)%00%(push:remoteref)",
+  `--format=${UPSTREAM_FORMAT}`,
   `refs/heads/${branch}`,
 ];
 
@@ -154,6 +156,66 @@ function upstreamOf(branch: string, answer: string): Upstream {
   const name = named ?? ((push === upstream && heads(remoteRef)) || branch);
   return { remote: target, name, ref: push, tracked };
 }
+
+/** A branch where Git would push it, once pushed: its name there (`Upstream.name`) and the URL
+ * Git would contact for that remote, after the user's `url.<base>.insteadOf` rewrites. */
+export interface PushedBranch {
+  readonly name: string;
+  readonly url: string;
+}
+
+/**
+ * Which of `branches` Git holds the push ref for (`Upstream.ref`: they were pushed, or fetched
+ * from where they push), each with where it went; a branch never pushed, or whose push remote is
+ * gone, is absent. Refs and remotes are shared by a repository's worktrees, so one call answers
+ * for all of them: one read of the branches' upstreams, one of the refs a push would update, and
+ * one URL read per remote. Keeps user config, which defines both answers (INV-06).
+ */
+export const pushedBranches = Effect.fn("GitCheckout.pushedBranches")(function* (
+  cwd: string,
+  branches: readonly string[],
+): Effect.fn.Return<ReadonlyMap<string, PushedBranch>, GitReadError> {
+  const pushed = new Map<string, PushedBranch>();
+  if (branches.length === 0) return pushed;
+  const read = (args: readonly string[]) => gitText(cwd, args, { userConfig: true });
+  const wanted = new Set(branches);
+  // A pattern also matches refs beneath it (`feature` matches `feature/x`): keep exact names.
+  const upstreams = new Map<string, Upstream>();
+  const answer = yield* read([
+    "for-each-ref",
+    `--format=%(refname)%00${UPSTREAM_FORMAT}`,
+    ...[...wanted].map((b) => `refs/heads/${b}`),
+  ]);
+  for (const line of answer.split("\n")) {
+    const [ref = "", ...rest] = line.split("\0");
+    const branch = ref.slice("refs/heads/".length);
+    if (ref.startsWith("refs/heads/") && wanted.has(branch))
+      upstreams.set(branch, upstreamOf(branch, rest.join("\0")));
+  }
+  if (upstreams.size === 0) return pushed;
+  const refs = [...new Set([...upstreams.values()].map((u) => u.ref))];
+  const held = new Set(
+    (yield* read(["for-each-ref", "--format=%(refname)", ...refs])).split("\n").filter(Boolean),
+  );
+  const urls = new Map<string, string | null>();
+  for (const [branch, upstream] of upstreams) {
+    if (!held.has(upstream.ref)) continue;
+    if (!urls.has(upstream.remote))
+      urls.set(
+        upstream.remote,
+        yield* read(["remote", "get-url", upstream.remote]).pipe(
+          Effect.map((out) => out.trim() || null),
+          Effect.catchIf(
+            (e) => e.detail.includes("No such remote"),
+            () => Effect.succeed(null),
+          ),
+        ),
+      );
+    const url = urls.get(upstream.remote);
+    if (url) pushed.set(branch, { name: upstream.name, url });
+  }
+  return pushed;
+});
 
 /** What Git says about a path: outside any repository, inside a working checkout, or `broken`:
  * metadata Git cannot read, a bare repository, a missing directory, a failed or timed-out read. */

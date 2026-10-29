@@ -669,6 +669,9 @@ export const WorktreeFacts = Schema.Struct({
   head: Schema.optional(Schema.String),
   /** Git can prune it: the checkout directory is gone. */
   prunable: Schema.Boolean,
+  /** The branch as GitHub knows it: the repository it pushes to and its name there. Present only
+   * once Git holds the ref that push updates, on a GitHub remote; never a raw remote URL. */
+  github: Schema.optional(Schema.Struct({ repo: Schema.String, branch: Schema.String })),
 });
 export type WorktreeFacts = typeof WorktreeFacts.Type;
 export const WorktreeDiscovery = Schema.Union([

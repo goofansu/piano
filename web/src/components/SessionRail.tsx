@@ -177,7 +177,7 @@ function RailSections({
   showAllRef: React.Ref<HTMLButtonElement>;
 }) {
   const session = state.session;
-  const { cwd, branch, detachedHead, githubRepo, pullRequest } = sessionContext(state);
+  const { cwd, branch, detachedHead, githubRepo, branchUrl, pullRequest } = sessionContext(state);
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;
   const files = useSessionFiles();
@@ -229,9 +229,7 @@ function RailSections({
               menu="branch"
               icon={<GitBranchIcon />}
               mono
-              href={
-                repositoryUrl ? `${repositoryUrl}/tree/${encodeURIComponent(branch)}` : undefined
-              }
+              href={branchUrl}
             >
               {branch}
             </EnvironmentRow>
