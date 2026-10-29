@@ -185,8 +185,9 @@ Healthy execution has no wait deadline. An initial selection or recovery after c
 missed frames must produce a current snapshot within 30 seconds, otherwise wait returns `unknown`.
 Merely reopening the socket does not extend that recovery budget, nor its three attempts to attach;
 a current snapshot renews both, so a long wait survives any number of losses it recovered from. Existing bounded rechecks still
-refuse to call an idle-looking session settled without Piano confirming quiescence; if that cannot
-be confirmed, the result reports pending work rather than claiming completion.
+refuse to call an idle-looking session settled without Piano confirming quiescence; until it is
+confirmed the session is `running`, as its status reads, with the pending work in `detail`, whether
+the rechecks run out, the deadline passes or another session's attention ends the wait first.
 
 Settlement means execution stopped, **not that the task or its checks succeeded**. An input handled
 without a new assistant answer returns `null`. `answer` follows the rule `lastAnswer` reads by: the
