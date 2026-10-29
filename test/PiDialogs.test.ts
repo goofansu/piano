@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientCommand, Dialog, DialogResolution, SessionState } from "../shared/wire.ts";
-import { answeredQuestion, createDialogAnswer, pendingDialogs } from "../web/src/lib/piDialogs.ts";
+import {
+  type AnswerReceipt,
+  type AnswerTone,
+  answeredQuestion,
+  answerReceipt,
+  createDialogAnswer,
+  pendingDialogs,
+} from "../web/src/lib/piDialogs.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 
 const DEADLINE = 10_000;
@@ -121,6 +128,83 @@ const session = (dialogs: Dialog[]): SessionView => ({
 });
 const ready: AppState = { ...initialState, connected: true, selectionId: "sel" };
 
+test("a receipt is shown by delivery and ownership; an answer-less one is a status line", () => {
+  const answered: DialogResolution = {
+    id: "d1",
+    generation: "g1",
+    reason: "answered",
+    delivery: "written",
+    detail: "Written to Pi",
+    answer: { title: "Question", value: "Answer" },
+  };
+  const quiet: AnswerReceipt = {
+    card: false,
+    status: null,
+    details: false,
+    notice: null,
+    accepted: false,
+  };
+  const card = (
+    label: string,
+    tone: AnswerTone,
+    details = false,
+    pulse = false,
+  ): AnswerReceipt => ({
+    ...quiet,
+    card: true,
+    status: { label, tone, pulse },
+    details,
+  });
+  const cases: [string, Partial<DialogResolution>, AnswerReceipt][] = [
+    ["pending", { delivery: "pending" }, card("Sending answer…", "busy", false, true)],
+    ["written, not owned", {}, quiet],
+    [
+      "written, owned by a tool call",
+      { toolCallId: "call-1" },
+      card("Sent, waiting for Pi…", "busy"),
+    ],
+    ["accepted", { delivery: "accepted" }, { ...quiet, accepted: true }],
+    [
+      "accepted, owned",
+      { delivery: "accepted", toolCallId: "call-1" },
+      { ...quiet, accepted: true },
+    ],
+    [
+      "rejected",
+      { delivery: "rejected", toolCallId: "call-1" },
+      card("Answer not accepted", "err", true),
+    ],
+    ["uncertain", { delivery: "uncertain" }, card("Delivery uncertain", "warn", true)],
+    ["not sent", { delivery: "not-sent" }, card("Not sent", "muted", true)],
+  ];
+  for (const [name, change, expected] of cases)
+    assert.deepEqual(answerReceipt({ ...answered, ...change }), expected, name);
+
+  const ended = (reason: DialogResolution["reason"], delivery: DialogResolution["delivery"]) =>
+    answerReceipt({
+      ...answered,
+      reason,
+      delivery,
+      detail: "Transport outcome",
+      answer: undefined,
+    });
+  for (const delivery of ["written", "accepted"] as const) {
+    const receipt = ended("cancelled", delivery);
+    assert.deepEqual(receipt.notice, { tone: "warning", title: "Question cancelled" }, delivery);
+    assert.equal(receipt.card, false);
+    assert.equal(receipt.accepted, false, "only an answer is announced");
+  }
+  for (const delivery of ["pending", "uncertain", "not-sent"] as const)
+    assert.deepEqual(ended("cancelled", delivery).notice, {
+      tone: "quiet",
+      title: "Dialog cancelled: Transport outcome",
+    });
+  assert.deepEqual(ended("expired", "not-sent").notice, {
+    tone: "quiet",
+    title: "Dialog expired: Transport outcome",
+  });
+});
+
 test("a written answer leaves the composer after the last question; delivery problems remain visible", () => {
   const resolution: DialogResolution = {
     id: "d1",
@@ -147,14 +231,9 @@ test("a written answer leaves the composer after the last question; delivery pro
     undefined,
     "a new question must not resurrect an old receipt",
   );
-  assert.equal(answeredQuestion(view({ ...resolution, delivery: "accepted" })), undefined);
-  const owned = { ...resolution, delivery: "written" as const, toolCallId: "call-1" };
+  const owned = { ...resolution, toolCallId: "call-1" };
   assert.equal(answeredQuestion(view(owned)), owned, "an owned answer waits for its tool's end");
-  for (const delivery of ["pending", "uncertain", "not-sent", "rejected"] as const) {
-    const receipt = { ...resolution, delivery };
-    assert.equal(answeredQuestion(view(receipt)), receipt);
-  }
-  assert.equal(answeredQuestion({ ...view(), resync: true }), undefined);
+  assert.equal(answeredQuestion({ ...view(owned), resync: true }), undefined);
   assert.equal(answeredQuestion(ready), undefined);
 });
 

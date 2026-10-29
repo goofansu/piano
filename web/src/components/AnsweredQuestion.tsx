@@ -7,28 +7,16 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/PianoPopover";
-import { StatusDot, type StatusTone } from "@/components/StatusDot";
+import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Item, ItemContent, ItemHeader, ItemTitle } from "@/components/ui/item";
-
-const delivery: Record<DialogResolution["delivery"], { label: string; tone: StatusTone } | null> = {
-  pending: { label: "Sending answer…", tone: "busy" },
-  written: null,
-  accepted: null,
-  rejected: { label: "Answer not accepted", tone: "err" },
-  uncertain: { label: "Delivery uncertain", tone: "warn" },
-  "not-sent": { label: "Not sent", tone: "muted" },
-};
+import { answerReceipt } from "@/lib/piDialogs";
 
 /** The latest submitted reply and its delivery problem, never an addition to Pi’s history. */
 export function AnsweredQuestion({ resolution }: { resolution: DialogResolution }) {
   const { answer } = resolution;
   if (!answer) return null;
-  // A written answer to one of Piano's own questions still awaits Pi's confirmation.
-  const status =
-    resolution.delivery === "written" && resolution.toolCallId !== undefined
-      ? { label: "Sent, waiting for Pi…", tone: "busy" as const }
-      : delivery[resolution.delivery];
+  const { status, details } = answerReceipt(resolution);
   const value = typeof answer.value === "boolean" ? (answer.value ? "Yes" : "No") : answer.value;
   return (
     <section aria-label="Last answer" className="px-(--gutter) pt-3">
@@ -36,12 +24,10 @@ export function AnsweredQuestion({ resolution }: { resolution: DialogResolution 
         {status && (
           <ItemHeader>
             <span role="status" className="flex items-center gap-2 text-xs text-ink-2">
-              <StatusDot tone={status.tone} pulse={resolution.delivery === "pending"} />
+              <StatusDot tone={status.tone} pulse={status.pulse} />
               {status.label}
             </span>
-            {(resolution.delivery === "uncertain" ||
-              resolution.delivery === "not-sent" ||
-              resolution.delivery === "rejected") && (
+            {details && (
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="sm" aria-label="Answer details">
