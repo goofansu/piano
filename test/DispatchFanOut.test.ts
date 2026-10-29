@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import pianoSessions from "../extensions/piano-sessions/index.ts";
+import pianoDispatch from "../extensions/piano-dispatch/index.ts";
 import type { SessionStatus, StartToolResult } from "../shared/dispatch.ts";
 
 const script = fileURLToPath(new URL("../scripts/dispatch-session.ts", import.meta.url));
@@ -320,7 +320,7 @@ test("a shell fans out into fresh worktrees and reads each child's status, acros
       PIANO_SESSION_ORIGIN: env.PIANO_SESSION_ORIGIN,
     });
     try {
-      pianoSessions({
+      pianoDispatch({
         registerFlag: () => {},
         getFlag: () => undefined,
         on: () => {},

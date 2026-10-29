@@ -13,7 +13,7 @@ import {
   sendFollowUp,
   startSession,
   waitSessions,
-} from "../extensions/piano-sessions/SessionDispatch.ts";
+} from "../extensions/piano-dispatch/SessionDispatch.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import { dispositionOf } from "../shared/sessionStatus.ts";

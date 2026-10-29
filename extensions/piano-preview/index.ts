@@ -2,6 +2,11 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { ownerRequest } from "../../scripts/PreviewClient.ts";
 
+/** Bundled Pi extension: one managed app preview per workspace, run for this session. */
+export default function pianoPreview(pi: ExtensionAPI) {
+  registerPreview(pi);
+}
+
 /** A short-lived observation client; the trusted server endpoint fixes workspace and owner. */
 export function previewRequest(request: unknown, signal?: AbortSignal): Promise<string> {
   const endpoint = process.env.PIANO_PREVIEW_OWNER;

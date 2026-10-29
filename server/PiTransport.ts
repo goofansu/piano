@@ -109,8 +109,8 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       cli.cli,
       "--mode",
       "rpc",
-      // Before the session arguments, so a `-e` in PIANO_PI_ARGS adds to Piano's own extension
-      // rather than being shadowed by it.
+      // Before the session arguments, so a `-e` in PIANO_PI_ARGS adds to Piano's own extensions
+      // rather than being shadowed by them.
       ...(cli.extensions ?? []).flatMap((path) => ["--extension", path]),
       ...args,
       ...cli.extraArgs,

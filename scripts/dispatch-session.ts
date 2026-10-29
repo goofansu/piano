@@ -8,14 +8,14 @@ import { parseArgs } from "node:util";
 import {
   dispatchConfiguration,
   nodeSocketEnvironment,
-} from "../extensions/piano-sessions/NodeSocket.ts";
+} from "../extensions/piano-dispatch/NodeSocket.ts";
 import {
   readStatus,
   type StatusTarget,
   sendFollowUp,
   startSession,
   withLinks,
-} from "../extensions/piano-sessions/SessionDispatch.ts";
+} from "../extensions/piano-dispatch/SessionDispatch.ts";
 import { ThinkingLevel } from "../shared/wire.ts";
 
 const levels = ThinkingLevel.literals.join(", ");

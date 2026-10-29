@@ -78,11 +78,11 @@ export interface PiSessionSpec {
   readonly thinkingLevel?: string;
   /** Passed as --name for a session without history; Pi's saved name wins once `sessionFile` exists. */
   readonly name?: string;
-  /** The dispatching session, passed to Piano's extension to record in a new session's history. */
+  /** The dispatching session, passed to `piano-dispatch` to record in a new session's history. */
   readonly dispatchedFrom?: string;
   /** Seed only display statistics while Pi's authoritative readback is pending. */
   readonly lastKnownStats?: SessionStats;
-  /** The session's project instructions, which Piano's extension adds to Pi's system prompt. */
+  /** The session's project instructions, which `piano-project` adds to Pi's system prompt. */
   readonly projectInstructions?: string;
 }
 
@@ -458,7 +458,7 @@ const openSession = (spec: PiSessionSpec) =>
         if (aborting?.acknowledged && aborting.pendingPrompts.size === 0) aborting = undefined;
       });
 
-    // A hosted child never changes identity (INV-02, INV-07). Piano's extension cancels an
+    // A hosted child never changes identity (INV-02, INV-07). `piano-session` cancels an
     // extension's newSession/switchSession/fork; should Pi replace the session anyway, nothing it
     // reports may land under this ID or checkout, so the child is closed before the readback is
     // published. Both sessions' history stays where Pi saved it; reopening resumes this one.

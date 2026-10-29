@@ -336,7 +336,7 @@ export const stateFactsOf = (raw: RawState) => ({
   isStreaming: raw.isStreaming,
 });
 
-/** The session that dispatched this one: the first `piano.dispatch` entry Piano's extension
+/** The session that dispatched this one: the first `piano.dispatch` entry `piano-dispatch`
  * recorded, on any branch, since it describes the whole session. */
 export const dispatchedFromOf = (entries: ReadonlyArray<unknown>): string | undefined => {
   for (const entry of entries) {
@@ -546,7 +546,7 @@ export const sessionArgs = (spec: {
   ...(spec.thinkingLevel ? ["--thinking", spec.thinkingLevel] : []),
   // --name names a new session; existing history keeps the name Pi saved in it.
   ...(spec.name && !spec.sessionFile ? ["--name", spec.name] : []),
-  // Piano's extension records it once in a new session; saved history already holds it.
+  // `piano-dispatch` records it once in a new session; saved history already holds it.
   ...(spec.dispatchedFrom && !spec.sessionFile
     ? [`--${DISPATCHED_FROM_FLAG}`, spec.dispatchedFrom]
     : []),

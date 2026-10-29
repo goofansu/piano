@@ -28,18 +28,29 @@ startup.
 `npm run dev:server` sets `PIANO_ALLOWED_ORIGINS` to the three loopback origins on Vite's port 5173,
 unless you set it yourself.
 
-## The session extension
+## Piano's extensions
 
-Every Pi child Piano starts loads `extensions/piano-sessions/index.ts` through Pi's `--extension`, as an
-absolute path resolved from the Piano installation rather than from the session's directory, so a
-repository cannot supply or shadow it. The flag comes before the session arguments, so a `-e` in
+Every Pi child Piano starts loads Piano's extensions through Pi's `--extension`, as absolute paths
+resolved from the Piano installation rather than from the session's directory, so a repository
+cannot supply or shadow them. The flags come before the session arguments, so a `-e` in
 `PIANO_PI_ARGS` adds an extension instead of replacing Piano's.
 
-The extension follows Pi's multi-file layout: `index.ts` registers the tools, while `NodeSocket.ts`
-and `SessionDispatch.ts` sit beside it as supporting modules, not separately discovered extensions.
-It remains bundled with Piano and uses the application's existing dependencies and shared protocol.
+| Extension | Responsibility |
+| --- | --- |
+| `piano-session` | Keeps the session Piano started under its ID: Pi cancels an extension's switch, new session or fork. |
+| `piano-project` | Adds a Piano project's instructions to each run's system prompt. |
+| `piano-dispatch` | Dispatches work to sessions and observes them: `piano_start_session`, `piano_session_status` and `piano_wait_sessions`. |
+| `piano-preview` | Manages the workspace's app preview: [`piano_preview`](live-previews.md). |
+| `piano-ask-user` | Asks the user questions through Piano: [`ask_user`](#user-questions). |
 
-Piano sets two variables in that child's environment, from the running server instance
+Each follows Pi's multi-file layout under `extensions/<name>/`: `index.ts` is the extension, and a
+module beside it, such as `piano-dispatch/SessionDispatch.ts`, is a supporting module, not a
+separately discovered extension. They stay bundled with Piano and use the application's existing
+dependencies and shared protocol.
+
+## Session dispatch
+
+Piano sets two variables in each Pi child's environment, from the running server instance
 (`server/SessionEndpoint.ts`). They are set for the child only; Piano never reads them.
 
 | Variable | Value |
@@ -48,7 +59,7 @@ Piano sets two variables in that child's environment, from the running server in
 | `PIANO_SESSION_ORIGIN` | The [session link origin](#session-link-origin). It is also the base for a `/s/<sessionId>` link into Piano's UI, so there is no separate base-URL variable. |
 
 The origin is chosen from the configured set, never added to it, so starting a child cannot widen
-the [origin policy](#browser-origins). The extension sends it as the `Origin` header on the upgrade,
+the [origin policy](#browser-origins). `piano-dispatch` sends it as the `Origin` header on the upgrade,
 which Node's built-in `WebSocket` supports through Undici's `headers` option. Without a loopback
 endpoint and an allowed origin, dispatch is not advertised. Inherited endpoint variables are
 cleared before Piano supplies this instance's configuration. See [session dispatch](session-dispatch.md)
@@ -60,8 +71,7 @@ and cancellation. It rejects overload instead of queueing it for retry. See
 
 ## User questions
 
-Every Pi child also loads `extensions/piano-ask-user/index.ts` from the Piano installation.
-It registers the model-callable `ask_user` tool, not a slash command. The model supplies a
+`piano-ask-user` registers the model-callable `ask_user` tool, not a slash command. The model supplies a
 non-empty `questions` array, including for a single question. Each item has a unique `id`, a
 `question` containing essential context, and optionally an `options` array for a single choice;
 without options, the user can write a multiline answer. Batch independent questions; ask dependent

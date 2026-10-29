@@ -85,12 +85,12 @@ row for the brief or the answer.
 The child's transcript starts with **Dispatched from** and the parent's title, linked back to it.
 When the parent is no longer in the sidebar, the row reads "another session" without a link. The
 link is recorded in the child's own Pi history as a `piano.dispatch` custom entry, which never
-reaches the model. Piano's extension writes it when the child's session first starts, and Pi saves
+reaches the model. `piano-dispatch` writes it when the child's session first starts, and Pi saves
 it with the first reply, so a child whose first prompt failed before any reply may have no backlink.
 
 ## Setup and checkout choice
 
-Piano loads its bundled extension when it starts Pi, using Pi's normal `--extension` mechanism.
+Piano loads its bundled `piano-dispatch` extension when it starts Pi, using Pi's normal `--extension` mechanism.
 No separate installation, API service, token, skill or database migration is needed. Existing
 instructions, extensions, skills and model configuration still load normally. Already running Pi
 sessions acquire the tools when next started; dispatch is not advertised outside a configured

@@ -55,7 +55,7 @@ export function configuredOrigins(port: number, configured?: string): ReadonlySe
 /**
  * Whether a request's `Host` header names this server. A browser that DNS rebinding sent to Piano
  * still carries the attacker's hostname, so only the hosts of the allowed origins and the loopback
- * names pass (the loopback interface is how the proxy and Pi's session extension connect). The
+ * names pass (the loopback interface is how the proxy and Pi's dispatch extension connect). The
  * allowed origins decide, never a forwarded header (INV-11).
  */
 export function hostAllowed(origins: ReadonlySet<string>, host: string | undefined): boolean {
