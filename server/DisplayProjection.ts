@@ -77,13 +77,14 @@ export function compileRedaction(): DisplayRedaction {
   const known = new Set(secrets);
   const partials = [...secrets, ...prefixes, "Bearer ", "-----BEGIN "];
   const text = (input: string, streaming = false): string => {
-    let safe = stripVTControlCharacters(input);
+    let safe = structured(stripVTControlCharacters(input));
     for (const secret of secrets) safe = safe.split(secret).join(marker);
     safe = safe
       .replace(/\b(?:sk-|ghp_|github_pat_|xox[bp]-)[\w-]+/g, marker)
       .replace(/(\bBearer\s+)[A-Za-z0-9._~+/-]+=*/gi, "$1" + marker)
       .replace(
-        /((?:api[_-]?key|token|password|secret)\s*[=:]\s*["']?)([^\s"',;\]}]+)/gi,
+        // A quote may be JSON-escaped (`\"`): it opens the value, never becomes part of it.
+        /((?:api[_-]?key|token|password|secret)\s*[=:]\s*(?:\\?["'])?)((?:[^\s"',;\]}\\]|\\(?!["']))+)/gi,
         (_, lead: string, value: string) => lead + (value.startsWith("[REDACTED") ? value : marker),
       )
       .replace(
@@ -106,6 +107,35 @@ export function compileRedaction(): DisplayRedaction {
       }
     }
     return safe;
+  };
+  /** JSON object or array text (tool arguments, a tool's structured result) is redacted value by
+   * value and serialized again, so every rule above sees each string unescaped and the browser can
+   * still parse it. The text rules then run over the result too and find nothing left to cut. Text
+   * with nothing to redact, or that is not JSON (a streaming partial), stays byte for byte. */
+  const structured = (input: string): string => {
+    if (!/^\s*[[{]/.test(input)) return input;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(input);
+    } catch {
+      return input;
+    }
+    const before = JSON.stringify(parsed);
+    const redacted = leaves(parsed);
+    const after = JSON.stringify(redacted);
+    return after === before
+      ? input
+      : JSON.stringify(redacted, null, /^[[{]\n( +)/.exec(input)?.[1]);
+  };
+  const leaves = (item: unknown): unknown => {
+    if (typeof item === "string") return text(item);
+    if (typeof item === "number") return text(String(item)) === String(item) ? item : marker;
+    if (Array.isArray(item)) return item.map(leaves);
+    if (item && typeof item === "object")
+      return Object.fromEntries(
+        Object.entries(item).map(([key, field]) => [text(key), leaves(field)]),
+      );
+    return item;
   };
   const value = <T>(item: T): T => {
     if (typeof item === "string") return text(item) as T;
