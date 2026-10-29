@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { MoreHorizontalIcon } from "lucide-react";
+import { GitPullRequestIcon, MoreHorizontalIcon } from "lucide-react";
 import { type ComponentProps, useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { SessionCommandMenuItem, useCommands, useSessionCommands } from "@/components/CommandHost";
@@ -196,7 +196,13 @@ export function ProjectHome({
                         {/* The folder keeps its name (up to half the line); a long branch truncates first. */}
                         <span className="max-w-1/2 shrink-0 truncate">{s.folder}</span>
                         {s.branch && <BranchLabel branch={s.branch} />}
-                        {s.pullRequest && <span className="shrink-0">#{s.pullRequest}</span>}
+                        {s.pullRequest && (
+                          <span className="inline-flex shrink-0 items-center gap-1">
+                            <GitPullRequestIcon className="size-3 shrink-0" aria-hidden />
+                            <span className="sr-only">Pull request </span>
+                            {s.pullRequest}
+                          </span>
+                        )}
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions className="text-xs text-ink-3">

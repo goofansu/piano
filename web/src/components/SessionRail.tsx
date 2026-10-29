@@ -243,7 +243,7 @@ function RailSections({
               icon={<GitPullRequestIcon />}
               href={pr.url}
             >
-              {pr.number ? `#${pr.number}` : "PR"}
+              {pr.number ?? "PR"}
             </EnvironmentRow>
           )}
         </RailList>
