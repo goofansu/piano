@@ -1169,6 +1169,36 @@ test("a wait reconnects by selecting only, and never replays a mutation", bounde
   );
 });
 
+test(
+  "a long wait whose every reconnect recovered still retries a refused selection",
+  bounded,
+  async () => {
+    const h = world();
+    const wait = waitSessions([await handleOf()], undefined, h.env);
+    const running = snapshotOf({ isStreaming: true, submission: { id: 1, outcome: "started" } });
+    for (let drop = 0; drop < 3; drop++) {
+      if (drop > 0) {
+        h.last().serverClose(1006);
+        h.advance(2_000);
+      }
+      const socket = h.last();
+      socket.accept();
+      socket.frame(selected(socket.selection(), running));
+    }
+    const socket = h.last();
+    socket.frame({
+      _tag: "selection_rejected",
+      selectionId: socket.selection(),
+      message: "Client input capacity is full.",
+    });
+    h.advance(500);
+    socket.frame(socketSnapshot(socket, idle(answered())));
+    const [observation] = await wait;
+    assert.equal(observation!.status, "settled", observation!.detail ?? "settled");
+    assert.equal(observation!.answer, "the thing is done");
+  },
+);
+
 for (const ending of ["settled", "needs_input", "aborted"] as const) {
   test(`one default wait survives the old cap until ${ending}`, bounded, async () => {
     const h = world();

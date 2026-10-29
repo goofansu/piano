@@ -79,12 +79,14 @@ const START_DEADLINE_MS = 30_000;
 const QUIESCENCE_RECHECKS = 3;
 /** Milliseconds between those re-selects. */
 const RECHECK_DELAY_MS = 250;
-/** Attempts to attach before a wait reports that it could not observe the session. */
+/** Attaches in a row, without a current selection between them, before a wait reports that it
+ * could not observe the session. */
 const SELECT_ATTEMPTS = 3;
 /** Milliseconds before retrying a refused or failed attach. */
 const RETRY_DELAY_MS = 500;
 /** Bound missing snapshots and reconnects, not healthy execution. Reopening a socket alone
- * cannot reset this budget: only a current selection proves observation recovered. */
+ * cannot reset this budget, nor SELECT_ATTEMPTS: only a current selection proves observation
+ * recovered, and it renews both. */
 const READ_DEADLINE_MS = 30_000;
 /** How much of a session a wait is willing to hold in memory before it gives up on observing it. */
 const MAX_VIEW_MESSAGES = 5_000;
@@ -743,6 +745,12 @@ function observeHandle(
         );
       });
     };
+    /** A current selection: observation recovered, so a later loss starts a fresh budget. */
+    const recovered = () => {
+      link.cancel(readDeadline);
+      readDeadline = undefined;
+      attempts = 0;
+    };
     const select = () => {
       boundRead();
       selectionId = link.nonce();
@@ -850,8 +858,7 @@ function observeHandle(
         if (selectionId === null || selectionOf(message) !== selectionId) return;
         switch (message._tag) {
           case "selected":
-            link.cancel(readDeadline);
-            readDeadline = undefined;
+            recovered();
             snapshot = message.snapshot;
             hosted = message.hosted;
             generation = message.cursor?.generation ?? "";
