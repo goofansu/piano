@@ -35,9 +35,11 @@ import { Markdown } from "@/components/Markdown";
 import { PianoButton } from "@/components/PianoButton";
 import { Keys } from "@/components/PianoMark";
 import { StatusBadge as Badge } from "@/components/StatusBadge";
+import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Item, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevHome, clamp, stripAnsi, toolArgsText } from "@/lib/format";
 import type { MessageError } from "@/lib/messageError";
@@ -51,6 +53,7 @@ import {
   type DispatchFacts,
   messageAnchorId,
   nestedStatus,
+  type QuestionAnswers,
   type ToolOutcome,
   type ToolRow,
   type TranscriptRow,
@@ -835,6 +838,42 @@ const DOT: Record<ToolOutcome, string> = {
   pending: "bg-ink-3",
 };
 
+/** Human replies belong in the transcript, paired with their questions rather than raw tool JSON. */
+function QuestionAnswersRow({ answers, stateKey }: { answers: QuestionAnswers; stateKey: string }) {
+  return (
+    <FoldRow
+      glyph={<StatusDot tone={answers.status === "answered" ? "ok" : "muted"} />}
+      header={<span className="font-medium text-ink">Answers</span>}
+      label="Questions and answers"
+      stateKey={`${stateKey}:answers`}
+      defaultOpen
+      ruled={false}
+      data={{ "data-slot": "question-answers" }}
+    >
+      <ItemGroup>
+        {answers.items.map(({ id, question, answer }) => (
+          <Item key={id} role="listitem" className="p-0">
+            <ItemContent className="min-w-0">
+              <ItemTitle className="line-clamp-none whitespace-pre-wrap break-words">
+                {question}
+              </ItemTitle>
+              <p className="whitespace-pre-wrap break-words text-ink-2">
+                {answer === undefined ? (
+                  <span className="text-ink-3">Not answered</span>
+                ) : answer === "" ? (
+                  <span className="text-ink-3">Empty answer</span>
+                ) : (
+                  answer
+                )}
+              </p>
+            </ItemContent>
+          </Item>
+        ))}
+      </ItemGroup>
+    </FoldRow>
+  );
+}
+
 function Tool({
   call,
   outcome,
@@ -845,7 +884,9 @@ function Tool({
   knownTool,
   summary,
   dispatch,
+  answers,
 }: ToolRow) {
+  if (answers) return <QuestionAnswersRow answers={answers} stateKey={call.id} />;
   if (dispatch)
     return dispatch.map((session, i) => (
       <DispatchRow

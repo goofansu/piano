@@ -7,7 +7,7 @@
  * escape hatch: it is sent at most once and, by rule, still offered after the deadline. Nothing
  * here depends on React.
  */
-import type { ClientCommand, Dialog } from "@shared/wire";
+import type { ClientCommand, Dialog, DialogResolution } from "@shared/wire";
 import type { AppState } from "../store.ts";
 // Relative, not @/: module tests load this file directly in Node.
 import { sessionReady } from "./sessionContext.ts";
@@ -29,6 +29,16 @@ export function pendingDialogs(state: AppState): PendingDialogs {
     more: Math.max(0, dialogs.length - 1),
     connected: sessionReady(state),
   };
+}
+
+/** A receipt reports delivery, not history: dismiss it once written, without claiming Pi consumed it.
+ * Pending/failed/uncertain writes remain visible even without a pending question (INV-04). */
+export function answeredQuestion(state: AppState): DialogResolution | undefined {
+  if (state.resync) return;
+  const session = state.session;
+  const resolution = session?.state.dialogResolution;
+  if (!session || !resolution?.answer) return;
+  return resolution.delivery !== "written" ? resolution : undefined;
 }
 
 /** One reply to a dialog; which field is set depends on its method. */

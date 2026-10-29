@@ -28,6 +28,81 @@ const reply = (rows: TranscriptRow[], id: string) => {
   return row;
 };
 
+test("ask_user joins persisted answers to question text in order, including empty and unanswered items", () => {
+  const questions = [
+    { id: "database", question: "Which database?", options: ["PostgreSQL", "SQLite"] },
+    { id: "requirements", question: "What should change?" },
+    { id: "schedule", question: "When?" },
+  ];
+  const asked: RenderMsg = {
+    id: "asked",
+    role: "assistant",
+    text: "",
+    toolCalls: [{ id: "q", name: "ask_user", args: JSON.stringify({ questions }) }],
+  };
+  const result = (value: unknown): RenderMsg => ({
+    id: "answered",
+    role: "tool_result",
+    toolCallId: "q",
+    text: JSON.stringify(value),
+  });
+  const facts = (response?: RenderMsg) =>
+    reply(transcriptRows(response ? [asked, response] : [asked]), "asked").tools[0]?.answers;
+  assert.equal(facts(), undefined, "unanswered calls keep the generic running tool row");
+  assert.deepEqual(
+    facts(
+      result({
+        status: "answered",
+        answers: {
+          schedule: "",
+          requirements: "Keep the API\nChange the layout",
+          database: "SQLite",
+        },
+      }),
+    ),
+    {
+      status: "answered",
+      items: [
+        { id: "database", question: "Which database?", answer: "SQLite" },
+        {
+          id: "requirements",
+          question: "What should change?",
+          answer: "Keep the API\nChange the layout",
+        },
+        { id: "schedule", question: "When?", answer: "" },
+      ],
+    },
+  );
+  assert.deepEqual(facts(result({ status: "cancelled", answers: { database: "SQLite" } })), {
+    status: "cancelled",
+    items: [
+      { id: "database", question: "Which database?", answer: "SQLite" },
+      { id: "requirements", question: "What should change?" },
+      { id: "schedule", question: "When?" },
+    ],
+  });
+  for (const value of [
+    { status: "answered", answers: {} },
+    { status: "cancelled", answers: { database: true } },
+    { status: "cancelled", answers: { unknown: "Do not hide this output" } },
+  ])
+    assert.equal(
+      facts(result(value)),
+      undefined,
+      "malformed/unmatched results retain their raw output",
+    );
+  assert.equal(
+    facts({ ...result({ status: "cancelled", answers: {} }), isError: true }),
+    undefined,
+  );
+  const invalid = { ...asked, toolCalls: [{ ...asked.toolCalls![0]!, args: "{" }] };
+  assert.equal(
+    reply(transcriptRows([invalid, result({ status: "cancelled", answers: {} })]), "asked").tools[0]
+      ?.answers,
+    undefined,
+  );
+});
+
 const apiError =
   'exe-dev-openai API error (429): {"type":"usage_limit_reached","message":"The usage limit has been reached","retry_after":123}';
 const failure = (errorMessage = apiError): RenderMsg => ({

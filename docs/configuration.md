@@ -88,6 +88,12 @@ Stop/Abort cancels the pending question and run, without opening remaining quest
 model continuation. Questions without a reply are also subject to the host's existing dialog
 recovery deadline; cancellation is never approval and must not be retried automatically.
 
+After the batch ends, the transcript's **Answers** row pairs each question with its submitted
+answer, expanded by default. Partial batches show **Not answered** for missing replies and
+**Empty answer** for submitted empty text. The temporary delivery receipt above the composer
+disappears once written; pending or uncertain delivery stays visible. The transcript summary is
+rebuilt from Pi's saved tool call and result when the session is reopened, not from the last receipt.
+
 Pi owns the tool call and result in session history. The extension sends no synthetic user
 message, starts no separate turn, and makes no extraction model call. It requires an interactive
 UI (Piano's RPC dialogs or Pi's terminal); headless use fails explicitly. This preserves the
