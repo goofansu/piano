@@ -72,6 +72,9 @@ test("real Pi ask_user collects a batch without model turns between questions; c
             const first = (yield* Fiber.join(question)).find((event) => event._tag === "dialog");
             assert.ok(first?._tag === "dialog");
             let dialog = first.dialog;
+            assert.equal(dialog.deadlineAt, null, "an ask_user question has no automatic expiry");
+            assert.equal(dialog.deadlineKind, "tool-end");
+            assert.ok(dialog.toolCallId, "the running ask_user call owns its question");
             const settled = yield* watch(
               session,
               (event) => event._tag === "state" && !event.state.isStreaming,
@@ -108,13 +111,22 @@ test("real Pi ask_user collects a batch without model turns between questions; c
                 question = yield* watch(session, (event) => event._tag === "dialog");
               if (value === undefined && prompt.endsWith("STOP"))
                 yield* session.act({ _tag: "stop" });
-              else
+              else {
+                const accepted = yield* watch(
+                  session,
+                  (event) =>
+                    event._tag === "state" &&
+                    event.state.dialogResolution?.id === dialog.id &&
+                    event.state.dialogResolution?.delivery === "accepted",
+                );
                 yield* session.act({
                   _tag: "answer",
                   id: dialog.id,
                   generation: dialog.generation,
                   ...(value === undefined ? { cancelled: true } : { value }),
                 });
+                yield* Fiber.join(accepted);
+              }
               const late = yield* session
                 .act({
                   _tag: "answer",

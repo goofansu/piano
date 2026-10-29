@@ -124,9 +124,13 @@ export const Dialog = Schema.Struct({
   generation: Schema.String,
   receivedAt: Schema.Number,
   timeoutMs: Schema.optional(Schema.Number),
-  /** Host estimate only: Pi does not acknowledge timeout or extension-owned cancellation. */
-  deadlineAt: Schema.Number,
-  deadlineKind: Schema.Literals(["pi-timeout", "host-recovery"]),
+  /** The running tool call that raised this dialog, when Piano can tell (Piano's own `ask_user`):
+   * Pi's native end record for that call closes the dialog and its stored result confirms the
+   * answer, so no deadline is estimated. Other dialogs get a host estimate (`deadlineAt`). */
+  toolCallId: Schema.optional(Schema.String),
+  /** Null when a tool call owns the dialog: it closes with that call, never on a timer. */
+  deadlineAt: Schema.NullOr(Schema.Number),
+  deadlineKind: Schema.Literals(["pi-timeout", "host-recovery", "tool-end"]),
   method: Schema.Literals(["select", "confirm", "input", "editor"]),
   title: Schema.optional(Schema.String),
   message: Schema.optional(Schema.String),
@@ -136,14 +140,24 @@ export const Dialog = Schema.Struct({
 });
 export type Dialog = typeof Dialog.Type;
 
-/** Local terminal claim and transport observation, never proof Pi consumed the response. */
+/** A local claim plus delivery. `accepted` and `rejected` come only from the owning tool call's
+ * stored result; `written` is a completed stdin write, never proof Pi consumed the response. */
 export const DialogResolution = Schema.Struct({
   id: Schema.String,
   generation: Schema.String,
   reason: Schema.Literals(["answered", "cancelled", "expired", "aborted", "recovery", "exited"]),
-  delivery: Schema.Literals(["pending", "written", "uncertain", "not-sent"]),
+  /** The tool call that owned the dialog: its end will confirm or reject a written response. */
+  toolCallId: Schema.optional(Schema.String),
+  delivery: Schema.Literals([
+    "pending",
+    "written",
+    "accepted",
+    "rejected",
+    "uncertain",
+    "not-sent",
+  ]),
   detail: Schema.String,
-  /** The accepted reply, retained only with this live host resolution, not as Pi history. */
+  /** The submitted reply, retained only with this live receipt, not as Pi history. */
   answer: Schema.optional(
     Schema.Struct({
       title: Schema.optional(Schema.String),

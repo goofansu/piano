@@ -13,10 +13,10 @@ export function useDialogAnswer(
   useSyncExternalStore(controller.subscribe, controller.getState);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    if (!open) return;
+    if (!open || dialog.deadlineAt === null) return;
     const timer = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(timer);
-  }, [open]);
+  }, [open, dialog.deadlineAt]);
   return {
     ...controller.view(now, connected),
     answer: (reply: DialogReply) => controller.answer(reply, Date.now(), connected),

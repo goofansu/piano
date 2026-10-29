@@ -244,6 +244,41 @@ test("notifications: applied session notices notify; rejected frames do not", ()
   ]);
 });
 
+test("answer acceptance notifies once, only after confirmation; duplicate frames and snapshots stay quiet", () => {
+  const h = harness();
+  h.status(true);
+  h.client.select("/scratch", "a");
+  h.server(h.selected("a", 1));
+  const receipt = (delivery: "pending" | "written" | "accepted") => ({
+    _tag: "state" as const,
+    state: {
+      sessionId: "a",
+      isStreaming: true,
+      dialogResolution: {
+        id: "question",
+        generation: "g1",
+        reason: "answered" as const,
+        delivery,
+        detail: "receipt",
+        answer: { title: "Question", value: "Answer" },
+      },
+    },
+  });
+  h.server(h.event(2, receipt("pending")));
+  h.server(h.event(3, receipt("written")));
+  assert.deepEqual(h.notes, [], "a write alone never earns an acceptance toast");
+  h.server(h.event(4, receipt("accepted")));
+  h.server(h.event(4, receipt("accepted")));
+  h.server(h.event(5, receipt("accepted")));
+  h.server(
+    h.event(6, {
+      _tag: "snapshot",
+      snapshot: { state: receipt("accepted").state, messages: [], dialogs: [] },
+    }),
+  );
+  assert.deepEqual(h.notes, [["Answer accepted", "success"]]);
+});
+
 test("trust changes on screen notify once; initial results and other directories stay quiet", () => {
   const h = harness();
   const trust = (cwd: string, trusted: boolean) =>
