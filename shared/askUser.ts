@@ -1,29 +1,87 @@
-/** Piano's ask_user tool as the server sees it: its name, and the answers its persisted result holds.
- * The extension owns the tool; this is the one fact the server reads from Pi's native tool result. */
+/** Piano's ask_user tool as Piano reads it from Pi's records: its name, the questions a call asks
+ * and the batch result Pi stores. The extension owns the tool; this is the one reader of its
+ * arguments and result, for the server's answer receipts and the browser's transcript alike. */
 
 export const ASK_USER_TOOL = "ask_user";
 
-/** The batch result Pi stores for a finished `ask_user` call, from a `tool_execution_end` record:
- * `details` first, else the JSON text content. Undefined when the record is not that shape. */
-export function askUserAnswers(result: unknown): Record<string, string> | undefined {
-  if (!result || typeof result !== "object") return;
-  const { details, content } = result as { details?: unknown; content?: unknown };
-  const parsed = details ?? firstText(content);
-  if (!parsed || typeof parsed !== "object") return;
-  const { answers } = parsed as { answers?: unknown };
-  if (!answers || typeof answers !== "object") return;
-  return Object.fromEntries(
-    Object.entries(answers).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ),
+export interface AskUserQuestion {
+  readonly id: string;
+  readonly question: string;
+}
+
+/** The batch result the tool returns: every answer is keyed by its question ID. */
+export interface AskUserResult {
+  readonly status: "answered" | "cancelled";
+  readonly answers: Readonly<Record<string, string>>;
+}
+
+/** A finished call's questions in presentation order, each with its stored answer, if any. */
+export interface AskUserOutcome {
+  readonly status: AskUserResult["status"];
+  readonly items: ReadonlyArray<AskUserQuestion & { readonly answer?: string }>;
+}
+
+const recordOf = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+
+/** A call's questions, from its arguments; undefined unless every ID and question is non-blank and
+ * every ID unique, as the tool requires before asking anything. */
+export function askUserQuestions(args: unknown): AskUserQuestion[] | undefined {
+  const questions = recordOf(args)?.questions;
+  if (!Array.isArray(questions) || !questions.length) return;
+  const ids = new Set<string>();
+  const items: AskUserQuestion[] = [];
+  for (const value of questions) {
+    const { id, question } = recordOf(value) ?? {};
+    if (typeof id !== "string" || typeof question !== "string") return;
+    if (!id.trim() || !question.trim() || ids.has(id)) return;
+    ids.add(id);
+    items.push({ id, question });
+  }
+  return items;
+}
+
+/** The tool's result object; undefined unless it has a known status and only string answers. */
+export function askUserResult(value: unknown): AskUserResult | undefined {
+  const result = recordOf(value);
+  const answers = recordOf(result?.answers);
+  if (!answers || (result?.status !== "answered" && result?.status !== "cancelled")) return;
+  if (Object.values(answers).some((answer) => typeof answer !== "string")) return;
+  return { status: result.status, answers: answers as Record<string, string> };
+}
+
+/** The result Pi stores for a finished call, from a `tool_execution_end` record's `result`:
+ * `details` first, else the JSON text content. */
+export function storedAskUserResult(result: unknown): AskUserResult | undefined {
+  const { details, content } = recordOf(result) ?? {};
+  return askUserResult(details ?? firstText(content));
+}
+
+/** True when the stored result holds `value` as the answer to the question `questionId`. */
+export function answerStored(result: unknown, questionId: string, value: string): boolean {
+  const answers = storedAskUserResult(result)?.answers;
+  return (
+    answers !== undefined && Object.hasOwn(answers, questionId) && answers[questionId] === value
   );
 }
 
-/** True when the batch result holds `value`: the tool stores answers in presentation order and
- * cancellation ends the batch, so an answer present for any question proves every earlier one. */
-export function answerStored(result: unknown, value: string): boolean {
-  const answers = askUserAnswers(result);
-  return answers !== undefined && Object.values(answers).includes(value);
+/** Pairs a finished call's questions with its result. Undefined when they do not match: an answer
+ * for no question, or an `answered` batch missing one. */
+export function askUserOutcome(args: unknown, result: unknown): AskUserOutcome | undefined {
+  const questions = askUserQuestions(args);
+  const batch = askUserResult(result);
+  if (!questions || !batch) return;
+  const ids = new Set(questions.map(({ id }) => id));
+  if (Object.keys(batch.answers).some((id) => !ids.has(id))) return;
+  const items: AskUserOutcome["items"][number][] = [];
+  for (const { id, question } of questions) {
+    if (Object.hasOwn(batch.answers, id)) items.push({ id, question, answer: batch.answers[id] });
+    else if (batch.status === "answered") return;
+    else items.push({ id, question });
+  }
+  return { status: batch.status, items };
 }
 
 function firstText(content: unknown): unknown {

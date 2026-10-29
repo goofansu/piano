@@ -1,4 +1,5 @@
 import type { RenderMsg, ToolExecution } from "@shared/wire";
+import { ASK_USER_TOOL, type AskUserOutcome, askUserOutcome } from "../../../shared/askUser.ts";
 import { cutText } from "../../../shared/cutText.ts";
 import {
   type Disposition,
@@ -56,10 +57,7 @@ export interface ToolRow {
   answers?: QuestionAnswers;
 }
 
-export interface QuestionAnswers {
-  status: "answered" | "cancelled";
-  items: { id: string; question: string; answer?: string }[];
-}
+export type QuestionAnswers = AskUserOutcome;
 
 /** One session a dispatch tool started or waited on, as the parent observed it. */
 export interface DispatchFacts {
@@ -172,36 +170,8 @@ function questionAnswersOf(
   call: ToolCall,
   output: string | undefined,
 ): QuestionAnswers | undefined {
-  if (call.name !== "ask_user") return;
-  const questions = parsed(call.args)?.questions;
-  const result = parsed(output);
-  const answers = recordOf(result?.answers);
-  if (
-    !Array.isArray(questions) ||
-    !questions.length ||
-    !answers ||
-    (result?.status !== "answered" && result?.status !== "cancelled")
-  )
-    return;
-  const items: QuestionAnswers["items"] = [];
-  const ids = new Set<string>();
-  for (const value of questions) {
-    const item = recordOf(value);
-    const id = stringOf(item?.id);
-    const question = stringOf(item?.question);
-    if (!id?.trim() || !question?.trim() || ids.has(id)) return;
-    ids.add(id);
-    if (Object.hasOwn(answers, id)) {
-      const answer = stringOf(answers[id]);
-      if (answer === undefined) return;
-      items.push({ id, question, answer });
-    } else {
-      if (result.status === "answered") return;
-      items.push({ id, question });
-    }
-  }
-  if (Object.keys(answers).some((id) => !ids.has(id))) return;
-  return { status: result.status, items };
+  if (call.name !== ASK_USER_TOOL) return;
+  return askUserOutcome(parsed(call.args), parsed(output));
 }
 
 /** What became of a dispatch's first prompt, in the words the badge shows. */

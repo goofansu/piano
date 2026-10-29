@@ -64,12 +64,15 @@ Piano's `ask_user` extension asks through Pi's ordinary dialogs and returns the 
 result; it has no Piano-specific protocol. The server reads two native facts from Pi's one stdout
 stream: a dialog requested while Piano's `ask_user` call is the only running tool belongs to that
 call (`Dialog.toolCallId`), and the call's `tool_execution_end` record carries the result Pi
-stores. `shared/askUser.ts` is the only place that interprets that result.
+stores. The tool asks its questions one dialog at a time, so the call's Nth dialog asks its Nth
+question (`Dialog.questionId`). `shared/askUser.ts` is the only place that interprets the call's
+arguments and result, for the server's receipts and the browser's transcript.
 
 An owned dialog has no deadline. A successful write is **written**, not accepted: the next question
-of the batch, or the call's end with the answer in its stored result, makes it **accepted**; an end
-without it makes it **rejected** with the answer kept in the live receipt. The call's end also
-closes a question nobody answered, and an answer arriving after that closure is kept as rejected
+of the batch, or the call's end with the answer stored under its question's ID, makes it
+**accepted**; an end without it, even with the same text stored for another question, makes it
+**rejected** with the answer kept in the live receipt. The call's end also closes a question
+nobody answered, and an answer arriving after that closure is kept as rejected
 without being sent. Pi's exit leaves a written answer uncertain. Nothing is retried or resent. This
 is not durable draft storage across a Piano restart; Pi still owns persisted tool results. When
 several tools run at once, a dialog gets no owner and keeps the recovery policy, as third-party
