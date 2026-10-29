@@ -106,4 +106,5 @@ Read these next:
 - [Development checks and policy](docs/development.md): formatting, lint, CI and merging.
 - [Development direction](docs/README.md): architecture, invariants and roadmap.
 - [Evidence-based development and testing](docs/testing.md): what to test and how.
+- [Quiet UI](docs/quiet-ui.md): the rules every screen, string and control follows.
 - [AGENTS.md](AGENTS.md): the rules coding agents follow in this repository.
