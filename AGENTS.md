@@ -191,9 +191,10 @@ explanation in `docs/` and link to it from the guide that needs it.
 
 ## Branches
 
-Start each new branch in its own worktree. In Claude Code, run `/worktrunk:wt-switch-create`,
-which moves the session into the new worktree. Elsewhere, run `wt switch -c <branch>`
-(`wt switch -h` lists the options) and run every later command from that worktree's directory.
+Start each new branch in its own worktree. When `piano_start_session` is available, always use
+it to start a new session in a new worktree for development. Otherwise, in Claude Code run
+`/worktrunk:wt-switch-create`; elsewhere, run `wt switch -c <branch>` (`wt switch -h` lists the
+options). With either fallback, run every later command from that worktree's directory.
 
 ## Deploy
 
