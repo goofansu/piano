@@ -1,5 +1,5 @@
 /**
- * Piano's extension, loaded the way Pi loads it, puts a project's instructions into the system
+ * Piano's `piano-project` extension, loaded the way Pi loads it, puts a project's instructions into the system
  * prompt of each run, in their own section, leaving Pi's other sections (the directory's
  * APPEND_SYSTEM.md among them) as they were.
  */

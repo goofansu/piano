@@ -1,6 +1,6 @@
 /**
- * What a Pi child is launched with: Piano's own extension, resolved from this installation, and
- * the endpoint it needs to reach the Piano that spawned it. The second test runs the real
+ * What a Pi child is launched with: Piano's own extensions, resolved from this installation, and
+ * the endpoint they need to reach the Piano that spawned it. The second test runs the real
  * `server/main.ts`, because the launch is only correct if the configuration survives the service
  * graph and the handed origin actually passes the origin check (INV-11).
  */
@@ -106,7 +106,7 @@ test("a session link opens from the listener's own origin unless an HTTPS one is
   assert.equal(sessionLinkOrigin(proxied, { host: "::1", port: 7070 }), "https://piano.example");
 });
 
-test("a running Piano launches Pi with its extension and a usable endpoint", {
+test("a running Piano launches Pi with its extensions and a usable endpoint", {
   timeout: 60_000,
 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "piano-launch-"));
@@ -183,9 +183,14 @@ await import(${JSON.stringify(pathToFileURL(new URL("fake-pi.mjs", import.meta.u
       wsUrl: string | null;
       origin: string | null;
     };
+    const leading = [
+      "--mode",
+      "rpc",
+      ...defaultPiCli().extensions!.flatMap((path) => ["--extension", path]),
+    ];
     assert.deepEqual(
-      launch.argv.slice(0, 12),
-      ["--mode", "rpc", ...defaultPiCli().extensions!.flatMap((path) => ["--extension", path])],
+      launch.argv.slice(0, leading.length),
+      leading,
       "the extensions load before the session arguments",
     );
     assert.equal(launch.wsUrl, `ws://127.0.0.1:${port}/ws`);

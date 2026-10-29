@@ -1,7 +1,7 @@
 /**
  * Real locked CLI: a discovered extension's newSession, switchSession and fork must not replace a
- * hosted session behind its ID (INV-02, INV-07). With Piano's extension Pi cancels them; without
- * it, Piano closes the child rather than publish another session under this one's identity.
+ * hosted session behind its ID (INV-02, INV-07). With Piano's `piano-session` extension Pi cancels them;
+ * without it, Piano closes the child rather than publish another session under this one's identity.
  */
 import assert from "node:assert/strict";
 import { copyFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, type Scope, Stream } from "effect";
-import { PiCli, type PiCliConfig, sessionExtension } from "../server/PiCli.ts";
+import { PiCli, type PiCliConfig, pianoSessionExtension } from "../server/PiCli.ts";
 import { type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
@@ -106,13 +106,13 @@ const firstText = (session: PiSession) =>
   );
 
 test(
-  "Piano's extension cancels an extension's session replacement in a hosted child",
+  "Piano's session extension cancels an extension's session replacement in a hosted child",
   {
     timeout: 60_000,
   },
   () =>
     withHosts(
-      (fixture) => ({ ...fixture.cli(), extensions: [sessionExtension] }),
+      (fixture) => ({ ...fixture.cli(), extensions: [pianoSessionExtension] }),
       ({ fixture, a, b }) =>
         Effect.gen(function* () {
           const hosts = yield* SessionHosts;
@@ -179,7 +179,7 @@ test(
   },
   () =>
     withHosts(
-      // Without Piano's extension nothing cancels the replacement: the host is the last guard.
+      // Without `piano-session` nothing cancels the replacement: the host is the last guard.
       (fixture) => fixture.cli(),
       ({ fixture, a, b }) =>
         Effect.gen(function* () {

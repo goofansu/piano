@@ -294,7 +294,7 @@ function handle(cmd) {
       if (sessionId.startsWith("rejected-entries"))
         return respond(cmd, undefined, "entries unavailable");
       const entries = [
-        // Piano's extension records the dispatching session once, as it does for a new child.
+        // `piano-dispatch` records the dispatching session once, as it does for a new child.
         ...(dispatchedFrom
           ? [
               {

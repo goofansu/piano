@@ -1,6 +1,6 @@
 /**
  * Session dispatch against the real installed Pi: a parent Pi, launched by a scratch Piano, uses
- * Piano's bundled extension to start a child session from a self-contained brief and to read the
+ * Piano's bundled `piano-dispatch` extension to start a child session from a self-contained brief and to read the
  * child's answer back. Only the model is a local script; there are no credentials, no model credits
  * and no external traffic.
  *
@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { dispatchExtension } from "../server/PiCli.ts";
+import { pianoDispatchExtension } from "../server/PiCli.ts";
 import { startRealPiDispatch } from "./fixtures/RealPiDispatch.ts";
 
 test("a real Pi dispatches a brief and reads the child's answer back", {
@@ -115,7 +115,7 @@ test("a real Pi dispatches a brief and reads the child's answer back", {
       "low",
       "dispatch uses the configured default effort, not a supplied override",
     );
-    // The backlink lives in the child's own Pi history, written by Piano's extension.
+    // The backlink lives in the child's own Pi history, written by `piano-dispatch`.
     assert.equal(
       childView._tag === "selected" && childView.snapshot.state.dispatchedFrom,
       parentSessionId,
@@ -146,7 +146,7 @@ test("a real Pi dispatches a brief and reads the child's answer back", {
     );
     for (const spawned of sessions) {
       assert.ok(
-        spawned.extensions.includes(dispatchExtension),
+        spawned.extensions.includes(pianoDispatchExtension),
         `${spawned.sessionId} loaded Piano's dispatch extension`,
       );
       assert.deepEqual(

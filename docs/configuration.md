@@ -50,7 +50,7 @@ dependencies and shared protocol.
 
 ## Session dispatch
 
-Piano sets two variables in that child's environment, from the running server instance
+Piano sets two variables in each Pi child's environment, from the running server instance
 (`server/SessionEndpoint.ts`). They are set for the child only; Piano never reads them.
 
 | Variable | Value |
