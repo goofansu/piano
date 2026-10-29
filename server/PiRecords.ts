@@ -10,7 +10,12 @@
  */
 import { createHmac, randomBytes } from "node:crypto";
 import { Option, Schema } from "effect";
-import { ASK_USER_TOOL, askUserQuestions } from "../shared/askUser.ts";
+import {
+  ASK_USER_TOOL,
+  type AskUserQuestion,
+  askUserPrompt,
+  askUserQuestions,
+} from "../shared/askUser.ts";
 import { imageType } from "../shared/attachments.ts";
 import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../shared/dispatch.ts";
 import { turnEnding } from "../shared/turnEnding.ts";
@@ -740,9 +745,12 @@ export class PiProjector {
   private partial: RenderMsg | undefined;
   private blocks = new Map<number, Block>();
   private tools = new Map<string, ToolExecution>();
-  /** A running `ask_user` call's question IDs in presentation order, and how many it has asked:
-   * the tool asks them one dialog at a time, so its Nth dialog asks the Nth question. */
-  private asking = new Map<string, { readonly ids: readonly string[]; asked: number }>();
+  /** A running `ask_user` call's questions in presentation order, and how many it has asked: the
+   * tool asks them one dialog at a time, so its next dialog asks question `asked`. */
+  private asking = new Map<
+    string,
+    { readonly questions: readonly AskUserQuestion[]; asked: number }
+  >();
   /** Pi's message count as last read back plus the messages ended since: the next one's position. */
   private messages = 0;
   private turnRetry = false;
@@ -909,15 +917,12 @@ export class PiProjector {
     const id = String(raw.id);
     if (!DIALOG_METHODS.has(method) || this.seenDialogs.has(id)) return project();
     this.seenDialogs.add(id);
-    const owner = this.askingTool();
-    const asking = owner ? this.asking.get(owner) : undefined;
-    const questionId = asking?.ids[asking.asked++];
+    const owner = this.askingTool(raw);
     const dialog: DialogRequest = {
       id,
       generation: this.options.generation,
       receivedAt,
-      ...(owner ? { toolCallId: owner } : {}),
-      ...(questionId !== undefined ? { questionId } : {}),
+      ...(owner ? { toolCallId: owner.toolCallId, questionId: owner.questionId } : {}),
       timeoutMs:
         typeof raw.timeout === "number" && Number.isFinite(raw.timeout) && raw.timeout > 0
           ? raw.timeout
@@ -932,14 +937,29 @@ export class PiProjector {
     return { events: [], refresh: [], dialog };
   }
 
-  /** Piano's own question tool when it alone is running: records on Pi's one stdout stream put
-   * a tool's dialog requests between its start and end, and `ask_user` runs sequentially. Any
-   * other situation (several tools, another extension, a codemode nest) gets no owner and keeps
-   * the estimated deadline. */
-  private askingTool(): string | undefined {
+  /** The `ask_user` call and question a dialog request asks, claiming that question: records on
+   * Pi's one stdout stream put a tool's dialog requests between its start and end, `ask_user` runs
+   * sequentially and asks its questions in order. A request belongs to the call only while the
+   * call alone is running and the request is the call's next prompt (`askUserPrompt`: method,
+   * title and choices). Any other dialog (several tools, another extension's command or hook, a
+   * codemode nest) gets no owner and keeps the estimated deadline. */
+  private askingTool(raw: PiRecord): { toolCallId: string; questionId: string } | undefined {
     if (this.tools.size !== 1) return;
     const [tool] = this.tools.values();
-    return tool.name === ASK_USER_TOOL && tool.status === "running" ? tool.id : undefined;
+    if (tool.name !== ASK_USER_TOOL || tool.status !== "running") return;
+    const asking = this.asking.get(tool.id);
+    if (!asking || asking.asked >= asking.questions.length) return;
+    const prompt = askUserPrompt(asking.questions, asking.asked);
+    const expected = prompt.method === "select" ? prompt.options : undefined;
+    const options = raw.options;
+    const sameOptions =
+      expected === undefined
+        ? options === undefined
+        : Array.isArray(options) &&
+          options.length === expected.length &&
+          expected.every((option, i) => options[i] === option);
+    if (raw.method !== prompt.method || raw.title !== prompt.title || !sameOptions) return;
+    return { toolCallId: tool.id, questionId: asking.questions[asking.asked++].id };
   }
 
   /** Streaming output: the partial reply, final messages and tool executions. */
@@ -1053,10 +1073,7 @@ export class PiProjector {
         else this.tools.set(id, tool);
         if (ended) this.asking.delete(id);
         else if (event.type === "tool_execution_start" && tool.name === ASK_USER_TOOL)
-          this.asking.set(id, {
-            ids: askUserQuestions(event.args)?.map((question) => question.id) ?? [],
-            asked: 0,
-          });
+          this.asking.set(id, { questions: askUserQuestions(event.args) ?? [], asked: 0 });
         return [{ _tag: "tool_update", tool }];
       }
       default:

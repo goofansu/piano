@@ -6,6 +6,7 @@ import type {
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import pianoAskUser from "../extensions/piano-ask-user/index.ts";
+import { askUserPrompt, askUserQuestions } from "../shared/askUser.ts";
 
 function tool() {
   let registered: ToolDefinition | undefined;
@@ -119,6 +120,25 @@ test("ask_user never accepts a reply racing abort or opens a pre-aborted questio
     context(async () => assert.fail("A pre-aborted call must not open a dialog")),
   );
   assert.deepEqual(again.details, { status: "cancelled", answers: {} });
+});
+
+test("a choice question is asked as a select of its choices, read from raw arguments as Pi converts them", () => {
+  const questions = askUserQuestions({
+    questions: [
+      { id: 1, question: "Pick a port", options: [8080, "9090"] },
+      { id: "only", question: "Confirm?", options: "Yes" },
+      { ...question, options: null },
+    ],
+  });
+  assert.ok(questions);
+  assert.deepEqual(
+    questions.map((_, index) => askUserPrompt(questions, index)),
+    [
+      { method: "select", title: "1 of 3: Pick a port", options: ["8080", "9090"] },
+      { method: "select", title: "2 of 3: Confirm?", options: ["Yes"] },
+      { method: "editor", title: "3 of 3: What should change?" },
+    ],
+  );
 });
 
 test("ask_user validates the whole batch before opening a dialog and requires a UI", async () => {

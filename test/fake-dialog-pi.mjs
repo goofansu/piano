@@ -1,6 +1,7 @@
 // Deterministic dialog/abort barriers at the actual Pi JSONL process seam. No model calls.
 import { closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
+import { askUserPrompt, askUserQuestions } from "../shared/askUser.ts";
 
 const out = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 const reply = (cmd, data) =>
@@ -26,11 +27,12 @@ const toolEnd = (call, answers) => {
     isError: false,
   });
 };
+// Each question is asked as the extension asks it, from the arguments as Pi converts them.
 const ask = (call) => {
   const id = `d${++serial}`;
-  call.asked++;
+  const prompt = askUserPrompt(call.questions, call.asked++);
   questions.set(id, call);
-  out({ type: "extension_ui_request", id, method: "editor", title: `Question ${id}` });
+  out({ type: "extension_ui_request", id, ...prompt });
 };
 let serial = 0,
   streaming = false,
@@ -107,24 +109,22 @@ function handle(cmd) {
         const [, mode = "store", count = "1", ids] = cmd.message.split(" ");
         const numeric = ids === "numeric";
         const key = (i) => (numeric ? String(i + 1) : `q${i + 1}`);
+        const args = {
+          questions: Array.from({ length: Number(count) }, (_, i) => ({
+            id: numeric ? i + 1 : key(i),
+            question: `Question ${i + 1}`,
+          })),
+        };
         const call = {
           id: `call${++serial}`,
           mode,
           count: Number(count),
+          questions: askUserQuestions(args),
           asked: 0,
           answers: [],
           key,
         };
-        const questions = Array.from({ length: call.count }, (_, i) => ({
-          id: numeric ? i + 1 : key(i),
-          question: `Question ${i + 1}`,
-        }));
-        out({
-          type: "tool_execution_start",
-          toolCallId: call.id,
-          toolName: "ask_user",
-          args: { questions },
-        });
+        out({ type: "tool_execution_start", toolCallId: call.id, toolName: "ask_user", args });
         ask(call);
         return reply(cmd, { disposition: "handled" });
       }
@@ -138,6 +138,8 @@ function handle(cmd) {
           toolEnd(call, call.answers);
         }
       }
+      // Another extension's command dialog; also sent while an ask_user call is asking, as a
+      // command from the composer or a tool hook raises one in Pi.
       if (cmd.message.startsWith("/dialog")) {
         const [, method, timeout] = cmd.message.split(" ");
         return dialog(cmd, method, Number(timeout)); // originating command acknowledgement is blocked

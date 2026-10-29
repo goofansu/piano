@@ -62,11 +62,15 @@ claim-before-transport, atomic attachment/sequence and stale-readback contracts.
 
 Piano's `ask_user` extension asks through Pi's ordinary dialogs and returns the batch as its tool
 result; it has no Piano-specific protocol. The server reads two native facts from Pi's one stdout
-stream: a dialog requested while Piano's `ask_user` call is the only running tool belongs to that
-call (`Dialog.toolCallId`), and the call's `tool_execution_end` record carries the result Pi
-stores. The tool asks its questions one dialog at a time, so the call's Nth dialog asks its Nth
-question (`Dialog.questionId`). `shared/askUser.ts` is the only place that interprets the call's
-arguments and result, for the server's receipts and the browser's transcript.
+stream: a dialog requested while Piano's `ask_user` call is the only running tool, and matching
+the call's next question, belongs to that call (`Dialog.toolCallId`, `Dialog.questionId`), and the
+call's `tool_execution_end` record carries the result Pi stores. The tool asks its questions in
+order, one dialog at a time, each as `askUserPrompt` builds it: `select` with the question's
+choices, else `editor`, titled `2 of 3: …` in a batch. Any other dialog opened meanwhile, such as
+another extension's command sent from the composer or a tool hook's dialog, has no owner and does
+not move the call to its next question. `shared/askUser.ts` is the only place that interprets the
+call's arguments, dialogs and result, for the extension, the server's receipts and the browser's
+transcript.
 
 An owned dialog has no deadline. A successful write is **written**, not accepted: the next question
 of the batch, or the call's end with the answer stored under its question's ID, makes it
