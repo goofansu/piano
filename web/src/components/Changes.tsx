@@ -5,6 +5,7 @@ import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChangesActions, ChangesScopeMenu, ChangesStaleNote } from "@/components/ChangesHeader";
 import { DisclosureChevron } from "@/components/Disclosure";
+import { FilePath } from "@/components/FilePath";
 import { IconButton } from "@/components/IconButton";
 import { type PullRequestControl, PullRequestRow } from "@/components/SessionPullRequest";
 import { SurfaceFrame } from "@/components/SurfaceArea";
@@ -325,9 +326,6 @@ function FileSection({
   message?: string;
   retry?: () => void;
 }) {
-  const slash = file.path.lastIndexOf("/");
-  const directory = file.path.slice(0, Math.max(slash, 0));
-  const filename = file.path.slice(slash + 1);
   const large = isLarge(file);
   // A new or deleted file shows by its name's colour (and in its label); a binary file's kind sits
   // beside the size; notes that need a sentence go beneath.
@@ -354,24 +352,14 @@ function FileSection({
             <span className="flex h-4 items-center">
               <DisclosureChevron open={open} />
             </span>
-            {/* One line: the directory gives way first, so the file name stays whole. */}
-            <span
-              className="flex min-w-0 font-mono"
+            <FilePath
+              path={file.path}
               title={status ? `${file.path} (${status})` : file.path}
-            >
-              {directory && <span className="min-w-0 truncate text-ink-3">{directory}</span>}
-              <span className="max-w-full shrink-0 truncate font-medium">
-                {directory && <span className="font-normal text-ink-3">/</span>}
-                <span
-                  className={cn(
-                    status === "new" && "text-ok",
-                    status === "deleted" && "text-err line-through",
-                  )}
-                >
-                  {filename}
-                </span>
-              </span>
-            </span>
+              filenameClassName={cn(
+                status === "new" && "text-ok",
+                status === "deleted" && "text-err line-through",
+              )}
+            />
             <span className="flex items-center gap-2">
               {file.binary && <span className="text-ink-3">Binary</span>}
               {!file.binary && (

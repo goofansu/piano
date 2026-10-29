@@ -1,4 +1,5 @@
 import {
+  CopyIcon,
   DownloadIcon,
   FileAudioIcon,
   FileCodeIcon,
@@ -7,15 +8,18 @@ import {
   FileVideoIcon,
   ImageIcon,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { FileNotice as Notice } from "@/components/FileNotice";
+import { FilePath } from "@/components/FilePath";
 import { FileText } from "@/components/FileText";
 import { IconButton } from "@/components/IconButton";
 import { LocalFileContext, Markdown } from "@/components/Markdown";
 import { NativeFile } from "@/components/NativeFile";
 import { PianoViewToggle, PianoViewToggleItem } from "@/components/PianoViewToggle";
 import { SurfaceFrame } from "@/components/SurfaceArea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { workspaceFile, workspaceFileDownload } from "@/lib/api";
 import { markdownImages } from "@/lib/markdown";
 import type { SurfaceTab } from "@/lib/navigation";
@@ -78,6 +82,7 @@ export function WorkspaceFile({
   file: Extract<SurfaceTab, { kind: "file" }>;
 }) {
   const { openFile } = useNavigation();
+  const previewId = useId();
   const [result, setResult] = useState<Preview>();
   const [mode, setMode] = useState("preview");
   const [status, setStatus] = useState("Opening…");
@@ -187,18 +192,42 @@ export function WorkspaceFile({
     <SurfaceFrame
       tab={file}
       status={
-        <span className="min-w-0 truncate font-mono" title={path}>
-          {path}
-        </span>
+        <div className="flex min-w-0 items-center gap-1">
+          <FilePath path={path} />
+          <IconButton
+            size="header"
+            label="Copy path"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(path);
+                toast.success("Path copied");
+              } catch {
+                toast.error("Couldn’t copy path.");
+              }
+            }}
+          >
+            <CopyIcon />
+          </IconButton>
+        </div>
       }
       actions={
         <>
-          {(result?.kind === "markdown" || result?.kind === "svg") && (
+          {result?.kind === "markdown" && (
+            <div className="flex items-center gap-2 px-3">
+              <Label htmlFor={previewId}>Preview</Label>
+              <Switch
+                id={previewId}
+                checked={mode === "preview"}
+                onCheckedChange={(checked) => setMode(checked ? "preview" : "source")}
+              />
+            </div>
+          )}
+          {result?.kind === "svg" && (
             <PianoViewToggle
               type="single"
               value={mode}
               onValueChange={(value) => value && setMode(value)}
-              aria-label={result.kind === "svg" ? "SVG view" : "Markdown view"}
+              aria-label="SVG view"
             >
               <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
               <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
