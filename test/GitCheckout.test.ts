@@ -56,6 +56,10 @@ test("INV-06: the Git observation tells non-Git paths from broken metadata and n
   const tracked = await observe(repo, { remote: true });
   assert.ok(tracked.status === "checkout" && tracked.remote === "git@github.com:example/repo.git");
   assert.equal(tracked.remoteBranch, "main");
+  // The branch's remote is where it pushes, not where it fetches.
+  git(repo, "remote", "set-url", "--push", "origin", "git@github.com:me/fork.git");
+  const pushed = await observe(repo, { remote: true });
+  assert.ok(pushed.status === "checkout" && pushed.remote === "git@github.com:me/fork.git");
 
   const notes = join(root, "notes");
   mkdirSync(notes);

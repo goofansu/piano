@@ -401,6 +401,18 @@ test("Changes says whether the linked pull request is from this branch, by its n
   );
   assert.equal(await fromBranch({ head: "james/feat" }, "branch"), true);
   assert.equal(ready(await read({ scope: "uncommitted" })).pullRequestFromBranch, false);
+  // Its remote pushes to a fork: the fork's pull request is this branch's.
+  git("remote", "set-url", "--push", "origin", "https://github.com/fork/repo.git");
+  assert.equal(await fromBranch({ head: "james/feat", headRepo: "fork/repo" }), true);
+  assert.equal(await fromBranch({ head: "james/feat" }), false, "it fetches from, not pushes to");
+  // Its base is still proven by where Git fetched it from.
+  git("update-ref", "refs/remotes/origin/release", "main");
+  const hints = { pullRequest: { ...pullRequest, head: "james/feat", headRepo: "fork/repo" } };
+  const branch = ready(await read({ scope: "branch", hints }));
+  assert.deepEqual(
+    [branch.comparison.target?.ref, branch.comparison.target?.from],
+    ["refs/remotes/origin/release", "pull-request"],
+  );
 });
 
 test("branch scope: unavailable states are named, never another comparison", async (t) => {

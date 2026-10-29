@@ -167,6 +167,9 @@ test("discovery names each worktree's branch where it was pushed on GitHub, and 
   assert.deepEqual(forked.forked, { repo: "me/repo", branch: "forked" });
   assert.equal(forked.plain, undefined);
   assert.equal(forked.draft, undefined);
+  // A remote that pushes elsewhere than it fetches holds the branch where it pushes.
+  git(repo, "remote", "set-url", "--push", "fork", "git@github.com:me/pushed.git");
+  assert.deepEqual((await homes()).forked, { repo: "me/pushed", branch: "forked" });
 });
 
 test("INV-06: inherited GIT_* state cannot redirect discovery or directory hints", async (t) => {
