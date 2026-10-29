@@ -380,5 +380,30 @@ await run(
       console.log(`Session header (${id}): ${header}`);
       await page.capture(`9-header-${id}`);
     }
+
+    // An extension can pause the session for an inline answer. Form keys must not be stolen
+    // by the composer's type-anywhere shortcut, and selecting must not submit prematurely.
+    await page.open("/s/login-bug");
+    await page.ab("fill", '[aria-label="Message"]', "question");
+    await page.press("Enter");
+    await page.see("Which checks?");
+    assert.equal(await page.evaluate("!!document.querySelector('[role=dialog]')"), false);
+    const answers = () => page.received().filter((r) => r.command === "extension_ui_response");
+    await page.click("radio", "Quick checks");
+    await page.press("ArrowDown");
+    await page.press("Space");
+    assert.equal(
+      await page.evaluate("document.activeElement?.getAttribute('role')"),
+      "radio",
+      "Space belongs to the question, not the composer",
+    );
+    assert.equal(answers().length, 0, "selection is not submission");
+    await page.capture("14-inline-question");
+    await page.click("button", "Send answer");
+    await page.see("Answer: Full suite");
+    assert.equal(answers().length, 1);
+    assert.equal(answers()[0].answer.value, "Full suite");
+    await page.until("!document.querySelector('[aria-label=Question]')");
+    await page.capture("15-inline-answered");
   },
 );

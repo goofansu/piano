@@ -1,5 +1,4 @@
 import type { ClientCommand as ClientMessage, Dialog as PiDialog } from "@shared/wire";
-import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,12 +8,11 @@ import {
   DialogTitle,
 } from "@/components/PianoDialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { createDialogAnswer, type DialogReply, type PendingDialogs } from "@/lib/piDialogs";
+import type { PendingDialogs } from "@/lib/piDialogs";
+import { useDialogAnswer } from "@/lib/useDialogAnswer";
 import { useLastShown } from "@/lib/useLastShown";
 
-/** Extension dialogs (select / confirm / input / editor) raised by Pi; answered one at a time. */
+/** Only the queue head may open a modal, and only for a confirmation. */
 export function DialogHost({
   pending: { head, more, connected },
   send,
@@ -23,11 +21,12 @@ export function DialogHost({
   send: (m: ClientMessage) => void;
 }) {
   // The dialog animates closed after it leaves the queue, so it keeps the last question meanwhile.
-  const shown = useLastShown(head);
+  const confirmation = head?.method === "confirm" ? head : undefined;
+  const shown = useLastShown(confirmation);
   return shown ? (
     <DialogView
       key={`${shown.generation}/${shown.id}`}
-      open={!!head}
+      open={!!confirmation}
       d={shown}
       more={more}
       send={send}
@@ -49,26 +48,11 @@ function DialogView({
   send: (m: ClientMessage) => void;
   connected: boolean;
 }) {
-  const [value, setValue] = useState(d.prefill ?? "");
-  const [dialogAnswer] = useState(() => createDialogAnswer({ dialog: d, send }));
-  useSyncExternalStore(dialogAnswer.subscribe, dialogAnswer.getState);
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!open) return;
-    const timer = setInterval(() => setNow(Date.now()), 500);
-    return () => clearInterval(timer);
-  }, [open]);
-  const { submitted, disabled, abortDisabled, remainingSeconds } = dialogAnswer.view(
-    now,
-    connected,
-  );
-  const answer = (reply: DialogReply) => dialogAnswer.answer(reply, Date.now(), connected);
+  const { answer, cancel, abort, submitted, disabled, abortDisabled, remainingSeconds } =
+    useDialogAnswer(d, connected, send, open);
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(open) => !open && dialogAnswer.cancel(Date.now(), connected)}
-    >
+    <Dialog open={open} onOpenChange={(open) => !open && cancel()}>
       <DialogContent className="sm:max-w-lg" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{d.title || "Pi needs an answer"}</DialogTitle>
@@ -95,76 +79,15 @@ function DialogView({
           )}
         </DialogHeader>
         <fieldset disabled={disabled} className="contents">
-          {d.method === "select" && (
-            <div className="flex flex-col gap-2">
-              {(d.options ?? []).map((o) => (
-                <Button
-                  key={o}
-                  variant="outline"
-                  size="lg"
-                  className="justify-start font-normal"
-                  onClick={() => answer({ value: o })}
-                >
-                  {o}
-                </Button>
-              ))}
-            </div>
-          )}
-          {(d.method === "input" || d.method === "editor") && (
-            <form
-              id="pi-dialog-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                answer({ value });
-              }}
-            >
-              {d.method === "editor" ? (
-                <Textarea
-                  autoFocus
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  placeholder={d.placeholder}
-                  className="min-h-40 font-mono text-sm"
-                />
-              ) : (
-                <Input
-                  autoFocus
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  placeholder={d.placeholder}
-                />
-              )}
-            </form>
-          )}
           <DialogFooter>
-            {d.method === "confirm" ? (
-              <>
-                <Button variant="outline" onClick={() => answer({ confirmed: false })}>
-                  No
-                </Button>
-                <Button onClick={() => answer({ confirmed: true })}>Yes</Button>
-              </>
-            ) : (
-              <>
-                <Button variant="outline" onClick={() => answer({ cancelled: true })}>
-                  Cancel
-                </Button>
-                {d.method !== "select" && (
-                  <Button type="submit" form="pi-dialog-form">
-                    Send answer
-                  </Button>
-                )}
-              </>
-            )}
+            <Button variant="outline" onClick={() => answer({ confirmed: false })}>
+              No
+            </Button>
+            <Button onClick={() => answer({ confirmed: true })}>Yes</Button>
           </DialogFooter>
         </fieldset>
         <div className="flex items-center gap-3 border-t border-line pt-3 text-xs text-ink-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={abortDisabled}
-            onClick={() => dialogAnswer.abort(Date.now(), connected)}
-          >
+          <Button variant="outline" size="sm" disabled={abortDisabled} onClick={abort}>
             Abort current
           </Button>
           <p>

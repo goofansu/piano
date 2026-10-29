@@ -1,8 +1,9 @@
 import { type RefObject, useEffect } from "react";
 
-const editable = (el: EventTarget | null) =>
+const ownsInput = (el: EventTarget | null) =>
   el instanceof HTMLElement &&
-  (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  // Inline questions own Space on their radio buttons and actions, not just their text fields.
+  (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || !!el.closest("form"));
 
 /** Something else is taking keys: a menu, a listbox, a dialog. */
 const overlayOpen = () =>
@@ -23,7 +24,7 @@ export function useTypeToFocus(
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
       if (
         e.key.length !== 1 ||
-        editable(e.target) ||
+        ownsInput(e.target) ||
         overlayOpen() ||
         !ref.current ||
         ref.current.disabled ||
@@ -40,7 +41,7 @@ export function useTypeToFocus(
       const text = e.clipboardData?.getData("text/plain");
       if (
         !text ||
-        editable(e.target) ||
+        ownsInput(e.target) ||
         overlayOpen() ||
         !ref.current ||
         ref.current.disabled ||

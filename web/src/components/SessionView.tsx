@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
 import { useSessionCommands } from "@/components/CommandHost";
 import { Composer } from "@/components/Composer";
+import { InlineQuestion } from "@/components/InlineQuestion";
 import { LocalFileContext } from "@/components/Markdown";
 import { MessageList, SessionDestinationContext } from "@/components/MessageList";
 import {
@@ -27,6 +28,7 @@ import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
 import { tabKey } from "@/lib/navigation";
 import { AGENT_MIN_WIDTH, PANEL_WIDTH, RAIL_WIDTH, singleArea } from "@/lib/panelLayout";
+import { pendingDialogs } from "@/lib/piDialogs";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
   completionTarget,
@@ -104,7 +106,11 @@ export function SessionView({ state, send }: Props) {
         drafts.paragraph(draftKey, text);
         toast.success("Added to your message");
         if (single) showAgent();
-        requestAnimationFrame(() => agent.current?.querySelector("textarea")?.focus());
+        requestAnimationFrame(() =>
+          agent.current
+            ?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')
+            ?.focus(),
+        );
       }
     : undefined;
   // The pull request lives in Changes: it is followed only at its target, and its
@@ -249,6 +255,7 @@ export function SessionView({ state, send }: Props) {
                     <StatusLine key={n.id} notice={n} />
                   ),
                 )}
+              <InlineQuestion pending={pendingDialogs(state)} send={send} />
               <Composer
                 session={t}
                 draftKey={draftKey}

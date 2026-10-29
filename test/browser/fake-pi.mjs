@@ -77,8 +77,15 @@ function reply(text) {
 }
 
 function handle(cmd) {
-  audit({ command: cmd.type, text: cmd.message, sessionId });
+  audit({
+    command: cmd.type,
+    text: cmd.message,
+    sessionId,
+    ...(cmd.type === "extension_ui_response" ? { answer: cmd } : {}),
+  });
   switch (cmd.type) {
+    case "extension_ui_response":
+      return reply(`Answer: ${cmd.cancelled ? "cancelled" : cmd.value}`);
     case "get_state":
       return respond(cmd, {
         sessionId,
@@ -146,7 +153,15 @@ function handle(cmd) {
       out({ type: "turn_start" });
       out({ type: "message_start", message: user });
       out({ type: "message_end", message: user });
-      if (cmd.message === "stream") {
+      if (cmd.message === "question") {
+        out({
+          type: "extension_ui_request",
+          id: "browser-question",
+          method: "select",
+          title: "Which checks?",
+          options: ["Quick checks", "Full suite"],
+        });
+      } else if (cmd.message === "stream") {
         out({ type: "message_start", message: { role: "assistant", content: [] } });
         let line = 0;
         streamTimer = setInterval(() => {
