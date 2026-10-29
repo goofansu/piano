@@ -228,7 +228,8 @@ await run(
     })()`);
 
     // Deferred overflow measurement still offers long prompts' complete text and works again
-    // after collapsing and resizing. Code-copy controls remain present in the adjacent reply.
+    // after collapsing and resizing. The adjacent reply's code copy stays hidden until the
+    // block is pointed at, then copies the fence.
     // Scoped to the transcript: the sidebar's open groups are expanded disclosure buttons too.
     await page.click("button", "Show more");
     await page.until(
@@ -250,8 +251,21 @@ await run(
     await page.click("button", "Show more");
     const resized = await promptSize();
     assert.equal(resized.height, resized.content, "prompt still expands after resizing");
+    const copyOpacity = () =>
+      page.evaluate(`(() => {
+        const button = document.querySelector('.markdown-code-block [data-motion="reveal"]');
+        return button ? Number(getComputedStyle(button).opacity) : -1;
+      })()`);
+    assert.equal(await copyOpacity(), 0, "code copy stays hidden until the block is pointed at");
+    await page.capture("code-copy-rest");
+    // Headless Chrome reports pointer: none, so it never applies :hover. The control is still
+    // there: activating it copies, and the confirmation stays visible after the pointer leaves.
     await page.click("button", "Copy code");
     await page.until(`!!document.querySelector('button[aria-label="Code copied"]')`);
+    await page.until(
+      `Number(getComputedStyle(document.querySelector('.markdown-code-block [data-motion="reveal"]')).opacity) === 1`,
+    );
+    await page.capture("code-copy-copied");
     // Headless Chrome on macOS never pastes from the clipboard: a synthetic Cmd+V does nothing
     // and clipboard reads are denied, even with the permission granted over CDP. CI (Linux)
     // checks the copied content.
