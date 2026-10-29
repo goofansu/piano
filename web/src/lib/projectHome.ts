@@ -1,6 +1,6 @@
 /**
  * A project's home, from what the browser already holds: every member session with its title,
- * folder, branch, last activity and saved pull request number. It sends no request, reads no Git,
+ * folder, branch, last activity and saved pull request name. It sends no request, reads no Git,
  * starts no Pi and opens no history.
  */
 import type { Project } from "@shared/wire";
@@ -24,7 +24,7 @@ export function projectStartDirectory(state: AppState, projectId: string): strin
 }
 
 export interface ProjectHomeSession extends SessionEntry {
-  /** The saved pull request link's number; the home never reads GitHub for it. */
+  /** The saved pull request link's name; the home never reads GitHub for it. */
   pullRequest: string | undefined;
 }
 
@@ -53,7 +53,7 @@ export function projectHome(state: AppState, projectId: string): ProjectHomeView
       const link = links.get(sessionKey(entry));
       return {
         ...entry,
-        pullRequest: link ? pullRequestView({ link, pullRequest: null })?.number : undefined,
+        pullRequest: link ? pullRequestView({ link, pullRequest: null })?.name : undefined,
       };
     });
   return { kind: "home", project, sessions };

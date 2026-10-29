@@ -75,7 +75,7 @@ function ProjectHomeSkeleton() {
 
 /**
  * A project's home: its member sessions, newest activity first, each with its title, folder,
- * branch, saved pull request number and last activity. Everything comes from the session catalog the browser already holds.
+ * branch, saved pull request name and last activity. Everything comes from the session catalog the browser already holds.
  */
 export function ProjectHome({
   state,

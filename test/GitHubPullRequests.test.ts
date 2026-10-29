@@ -11,9 +11,9 @@ import {
   GitHubPullRequests,
   GitHubPullRequestsLive,
   githubRemote,
-  pullRequestIdentity,
 } from "../server/GitHubPullRequests.ts";
 import { GhCommand } from "../server/Subprocess.ts";
+import { pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
 
 const pr = (over: Partial<GitHubPullRequest> = {}): GitHubPullRequest => ({
   url: "https://github.com/example/repo/pull/42",
