@@ -1068,6 +1068,9 @@ export const ServerMessage = Schema.Union([
         status: Schema.Literal("ready"),
         sessions: Schema.Array(SessionStatusFacts),
       }),
+      /** Piano lists no such session or project. */
+      Schema.Struct({ status: Schema.Literal("unlisted"), detail: Schema.String }),
+      /** Piano refused or failed the read; it says nothing about whether the target is listed. */
       Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
     ]),
   }),

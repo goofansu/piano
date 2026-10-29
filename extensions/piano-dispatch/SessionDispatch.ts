@@ -601,9 +601,15 @@ interface Reading {
   readonly detail?: string;
   /** Nothing more will arrive on its own. */
   readonly terminal: boolean;
-  /** Terminal only once the host confirms it has no pending work. */
+  /**
+   * Terminal only once the host confirms it has no pending work. Until then the session is
+   * running, as its status reads, whatever ends the wait first.
+   */
   readonly needsQuiescence?: boolean;
 }
+
+const AWAITING_QUIESCENCE =
+  "The run looks finished, but Piano still reports pending work for this session.";
 
 /**
  * The session's own facts, in the order that decides them. A closure, a mismatch or a projection
@@ -647,7 +653,12 @@ function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): R
     case "idle":
       if (attributed.pending)
         return { status: "running", terminal: false, detail: attributed.detail };
-      return { status: "unknown", terminal: true, needsQuiescence: true };
+      return {
+        status: "running",
+        terminal: true,
+        needsQuiescence: true,
+        detail: AWAITING_QUIESCENCE,
+      };
   }
 }
 
@@ -810,13 +821,7 @@ function observeHandle(
       }
       if (recheck !== undefined) return;
       if (rechecks >= QUIESCENCE_RECHECKS) {
-        settle(
-          observation(
-            "running",
-            "observed",
-            "The run looks finished, but Piano still reports pending work for this session.",
-          ),
-        );
+        settle(observation(reading.status, "observed", reading.detail));
         return;
       }
       recheck = link.after(RECHECK_DELAY_MS, () => {
@@ -830,11 +835,7 @@ function observeHandle(
         ? attribute(handle, snapshot, hosted, generation)
         : { answer: null, attribution: "unattributable" as const };
       const reading = snapshot ? read(snapshot, attributed, completed(attributed)) : undefined;
-      return observation(
-        reading && !reading.terminal ? "running" : (reading?.status ?? "unknown"),
-        ending,
-        detail ?? reading?.detail,
-      );
+      return observation(reading?.status ?? "unknown", ending, detail ?? reading?.detail);
     };
     boundRead();
     return {
@@ -1105,6 +1106,9 @@ export const withLinks = (
 
 export type StatusReply =
   | { readonly status: "ready"; readonly sessions: ReadonlyArray<SessionStatusFacts> }
+  /** Piano answered that it lists no such session or project. */
+  | { readonly status: "unlisted"; readonly detail: string }
+  /** No answer, or Piano refused the read: whether the target is listed is unknown. */
   | { readonly status: "error"; readonly detail: string };
 
 /**

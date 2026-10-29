@@ -167,7 +167,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         status.read(target).pipe(
           Effect.match({
             onSuccess: (sessions) => ({ status: "ready" as const, sessions }),
-            onFailure: (e) => ({ status: "error" as const, detail: e.detail }),
+            onFailure: (e) => ({ status: "unlisted" as const, detail: e.detail }),
           }),
           Effect.flatMap((result) => send({ _tag: "session_status", requestId, result })),
         ),

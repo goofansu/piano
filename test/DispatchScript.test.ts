@@ -98,29 +98,32 @@ async function peer(t: TestContext) {
         const message = decodeClientMessage(payload.toString());
         requests.push(message);
         if (message._tag === "ping") send({ _tag: "pong", nonce: message.nonce });
-        // One existing session, "portable-session", running in `existingCwd`.
+        // One existing session, "portable-session", running in `existingCwd`; Piano refuses a
+        // read of "refused-session" for capacity.
         if (message._tag === "session_status" && "sessionId" in message.target)
           send({
             _tag: "session_status",
             requestId: message.requestId,
             result:
-              message.target.sessionId === "portable-session"
-                ? {
-                    status: "ready",
-                    sessions: [
-                      {
-                        sessionId: "portable-session",
-                        cwd: existingCwd,
-                        projectId: null,
-                        disposition: "running",
-                        since: null,
-                        needs: null,
-                        lastAnswer: null,
-                        changes: null,
-                      },
-                    ],
-                  }
-                : { status: "error", detail: "Piano does not list this session." },
+              message.target.sessionId === "refused-session"
+                ? { status: "error", detail: "Client input capacity is full." }
+                : message.target.sessionId === "portable-session"
+                  ? {
+                      status: "ready",
+                      sessions: [
+                        {
+                          sessionId: "portable-session",
+                          cwd: existingCwd,
+                          projectId: null,
+                          disposition: "running",
+                          since: null,
+                          needs: null,
+                          lastAnswer: null,
+                          changes: null,
+                        },
+                      ],
+                    }
+                  : { status: "unlisted", detail: "Piano does not list this session." },
           });
         if (message._tag === "select") {
           const cursor = {
@@ -316,6 +319,23 @@ test("a follow-up to an unknown session or with a blank prompt sends nothing", a
   writeFileSync(f.prompt, "  \n");
   assert.equal((await run(["follow-up", "portable-session", f.prompt], p.url)).code, 2);
   assert.equal((await run(["status", "portable-session", "--steer"], p.url)).code, 2);
+  assert.deepEqual(
+    p.requests.filter((m) => m._tag !== "session_status" && m._tag !== "ping"),
+    [],
+  );
+});
+
+test("a status read Piano refuses is an unexpected failure, not an unknown session", async (t) => {
+  const f = fixture(t);
+  const p = await peer(t);
+  for (const args of [
+    ["status", "refused-session"],
+    ["follow-up", "refused-session", f.prompt],
+  ]) {
+    const result = await run(args, p.url);
+    assert.equal(result.code, 1, `${args[0]}: ${result.stderr}`);
+    assert.match(result.stderr, /capacity is full/);
+  }
   assert.deepEqual(
     p.requests.filter((m) => m._tag !== "session_status" && m._tag !== "ping"),
     [],

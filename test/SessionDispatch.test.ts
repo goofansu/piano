@@ -903,6 +903,53 @@ test(
 );
 
 test(
+  "a session awaiting quiescence is running when a sibling's attention ends the wait",
+  bounded,
+  async () => {
+    const h = world();
+    const first = { ...(await handleOf()), sessionId: "a" };
+    const second = { ...(await handleOf()), sessionId: "b" };
+    const wait = waitSessions([first, second], undefined, h.env);
+    const [a, b] = h.sockets;
+    a!.accept();
+    b!.accept();
+    const pending = idle(answered(), { isQuiescent: false });
+    b!.frame(socketSnapshot(b!, pending));
+    a!.frame(
+      socketSnapshot(
+        a!,
+        idle(answered(), { submission: { id: 1, outcome: "rejected", detail: "No." } }),
+      ),
+    );
+    const [, observation] = await wait;
+    assert.equal(observation!.status, dispositionOf(pending, true).disposition);
+    assert.equal(observation!.status, "running");
+    assert.equal(observation!.answer, "the thing is done");
+  },
+);
+
+test("a session awaiting quiescence at the wait's deadline is running", bounded, async () => {
+  const h = world();
+  const wait = waitSessions([await handleOf()], 1_000, h.env);
+  h.last().accept();
+  const socket = h.last();
+  socket.frame(
+    socketSnapshot(
+      socket,
+      snapshotOf({ isStreaming: true, submission: { id: 1, outcome: "started" } }),
+    ),
+  );
+  h.advance(900);
+  const pending = idle(answered(), { isQuiescent: false });
+  socket.frame(socketSnapshot(socket, pending));
+  h.advance(100);
+  const [observation] = await wait;
+  assert.equal(observation!.ending, "deadline");
+  assert.equal(observation!.status, dispositionOf(pending, true).disposition);
+  assert.equal(observation!.status, "running");
+});
+
+test(
   "an idle session whose dialog answer may not have reached Pi is unknown, as its status reads",
   bounded,
   async () => {
