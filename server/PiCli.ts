@@ -27,12 +27,13 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
  * session runs in a user's repository, which must not be able to shadow or supply it.
  */
 export const sessionExtension = join(ROOT, "extensions/piano-sessions/index.ts");
+export const askUserExtension = join(ROOT, "extensions/piano-ask-user/index.ts");
 
 export const defaultPiCli = (): PiCliConfig => ({
   node: process.execPath,
   cli: process.env.PIANO_PI_CLI ?? join(ROOT, "server/PiRpcCli.ts"),
   extraArgs: (process.env.PIANO_PI_ARGS ?? "").split(/\s+/).filter(Boolean),
-  extensions: [sessionExtension],
+  extensions: [sessionExtension, askUserExtension],
 });
 
 export const PiCli = Context.Reference<PiCliConfig>("piano/PiCli", { defaultValue: defaultPiCli });

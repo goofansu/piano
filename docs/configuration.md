@@ -58,6 +58,24 @@ Piano limits incoming WebSocket messages, RPC lines and pending work, and keeps 
 and cancellation. It rejects overload instead of queueing it for retry. See
 [runtime input limits](runtime-input-limits.md).
 
+## User questions
+
+Every Pi child also loads `extensions/piano-ask-user/index.ts` from the Piano installation.
+It registers the model-callable `ask_user` tool, not a slash command. The model supplies one
+`question` and optionally an `options` array for a single choice; without options, the user can
+write a multiline answer. Essential context belongs in the question.
+
+Piano displays the question above the composer without replacing its draft. **Send answer**
+returns `{ status: "answered", answer }` to the waiting tool; **Cancel** returns
+`{ status: "cancelled" }`. Empty text is an answer, distinct from cancellation. Stop/Abort
+cancels the pending question and run. Questions without a reply are also subject to the host's
+existing dialog recovery deadline; cancellation is never approval and must not be retried automatically.
+
+Pi owns the tool call and result in session history. The extension sends no synthetic user
+message, starts no separate turn, and makes no extraction model call. It requires an interactive
+UI (Piano's RPC dialogs or Pi's terminal); headless use fails explicitly. This preserves the
+existing [dialog lifecycle](runtime-ownership.md) and INV-01/04/12.
+
 ## Browser origins
 
 Piano is a single-user tool for loopback use or access through a private authenticated proxy. It has

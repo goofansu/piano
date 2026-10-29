@@ -14,7 +14,7 @@ import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { configuredOrigins, sessionLinkOrigin } from "../server/OriginPolicy.ts";
-import { defaultPiCli, sessionExtension } from "../server/PiCli.ts";
+import { askUserExtension, defaultPiCli, sessionExtension } from "../server/PiCli.ts";
 import { sessionEndpoint, sessionEnvironment } from "../server/SessionEndpoint.ts";
 
 test("Piano's extension is resolved from the installation, never from the session's cwd", () => {
@@ -23,12 +23,16 @@ test("Piano's extension is resolved from the installation, never from the sessio
     sessionExtension,
     fileURLToPath(new URL("../extensions/piano-sessions/index.ts", import.meta.url)),
   );
-  assert.deepEqual(defaultPiCli().extensions, [sessionExtension]);
+  assert.equal(
+    askUserExtension,
+    fileURLToPath(new URL("../extensions/piano-ask-user/index.ts", import.meta.url)),
+  );
+  assert.deepEqual(defaultPiCli().extensions, [sessionExtension, askUserExtension]);
   // A session runs in the user's repository, so the launch must not follow the process cwd there.
   const installation = process.cwd();
   try {
     process.chdir(tmpdir());
-    assert.deepEqual(defaultPiCli().extensions, [sessionExtension]);
+    assert.deepEqual(defaultPiCli().extensions, [sessionExtension, askUserExtension]);
   } finally {
     process.chdir(installation);
   }
@@ -180,8 +184,8 @@ await import(${JSON.stringify(pathToFileURL(new URL("fake-pi.mjs", import.meta.u
       origin: string | null;
     };
     assert.deepEqual(
-      launch.argv.slice(0, 4),
-      ["--mode", "rpc", "--extension", sessionExtension],
+      launch.argv.slice(0, 6),
+      ["--mode", "rpc", "--extension", sessionExtension, "--extension", askUserExtension],
       "the extension loads before the session arguments",
     );
     assert.equal(launch.wsUrl, `ws://127.0.0.1:${port}/ws`);
