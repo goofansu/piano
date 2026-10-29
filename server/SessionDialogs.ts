@@ -106,6 +106,7 @@ export const makeSessionDialogs = ({
           reason,
           ...(dialog.toolCallId !== undefined ? { toolCallId: dialog.toolCallId } : {}),
           ...(dialog.questionId !== undefined ? { questionId: dialog.questionId } : {}),
+          ...(dialog.title !== undefined ? { title: dialog.title } : {}),
           delivery: send ? "pending" : "not-sent",
           detail,
           ...(reason === "answered" && receipt ? { answer: receipt } : {}),
@@ -224,6 +225,7 @@ export const makeSessionDialogs = ({
         generation,
         reason: "cancelled",
         toolCallId,
+        ...(dialog.title !== undefined ? { title: dialog.title } : {}),
         delivery: "not-sent",
         detail: "Pi closed this question before it was answered.",
       });
@@ -304,7 +306,7 @@ export const makeSessionDialogs = ({
           dialogResolution: {
             ...current,
             delivery: "rejected",
-            answer: { value },
+            answer: { ...(current.title !== undefined ? { title: current.title } : {}), value },
             detail:
               "The question closed before your answer arrived. Your answer was not sent and is kept here.",
           },
