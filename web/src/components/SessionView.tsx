@@ -4,9 +4,11 @@ import { cn } from "cn";
 import { MessagesSquareIcon } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AnsweredQuestion } from "@/components/AnsweredQuestion";
 import { Banner } from "@/components/Banner";
 import { useSessionCommands } from "@/components/CommandHost";
 import { Composer } from "@/components/Composer";
+import { InlineQuestion } from "@/components/InlineQuestion";
 import { LocalFileContext } from "@/components/Markdown";
 import { MessageList, SessionDestinationContext } from "@/components/MessageList";
 import {
@@ -27,6 +29,7 @@ import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
 import { tabKey } from "@/lib/navigation";
 import { AGENT_MIN_WIDTH, PANEL_WIDTH, RAIL_WIDTH, singleArea } from "@/lib/panelLayout";
+import { pendingDialogs } from "@/lib/piDialogs";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
   completionTarget,
@@ -104,7 +107,11 @@ export function SessionView({ state, send }: Props) {
         drafts.paragraph(draftKey, text);
         toast.success("Added to your message");
         if (single) showAgent();
-        requestAnimationFrame(() => agent.current?.querySelector("textarea")?.focus());
+        requestAnimationFrame(() =>
+          agent.current
+            ?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')
+            ?.focus(),
+        );
       }
     : undefined;
   // The pull request lives in Changes: it is followed only at its target, and its
@@ -249,6 +256,10 @@ export function SessionView({ state, send }: Props) {
                     <StatusLine key={n.id} notice={n} />
                   ),
                 )}
+              {!state.resync && t?.state.dialogResolution?.answer && (
+                <AnsweredQuestion resolution={t.state.dialogResolution} />
+              )}
+              <InlineQuestion pending={pendingDialogs(state)} send={send} />
               <Composer
                 session={t}
                 draftKey={draftKey}
@@ -321,6 +332,7 @@ function AreaTabs() {
 
 /** A status line under the transcript: the last dialog's or input's outcome. Hand-written: no shadcn component is a plain live line. */
 function StatusLine({ notice }: { notice: SessionNotice }) {
+  const cancellation = notice.id === "dialog-resolution" && notice.tone === "warning";
   return (
     <section
       aria-label={notice.id === "dialog-resolution" ? "Last dialog" : "Last input"}
@@ -330,13 +342,25 @@ function StatusLine({ notice }: { notice: SessionNotice }) {
         notice.tone === "warning" ? "text-warning" : "text-ink-2",
       )}
     >
-      <div className="mx-auto max-w-3xl break-words">
-        <p>{notice.title}</p>
-        {notice.details.map((detail) => (
-          <p key={detail} className="mt-1">
-            {detail}
-          </p>
-        ))}
+      <div className={cn("mx-auto max-w-3xl break-words", cancellation && "flex gap-3")}>
+        {cancellation && (
+          // Match transcript errors: the glyph centres on the first text line, not the whole row.
+          <span
+            data-slot="gutter"
+            aria-hidden
+            className="flex h-[1lh] w-4 shrink-0 items-center justify-center select-none"
+          >
+            <span>!</span>
+          </span>
+        )}
+        <div data-slot="row-content" className="min-w-0 flex-1">
+          <p>{notice.title}</p>
+          {notice.details.map((detail) => (
+            <p key={detail} className="mt-1">
+              {detail}
+            </p>
+          ))}
+        </div>
       </div>
     </section>
   );

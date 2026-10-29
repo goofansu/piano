@@ -67,6 +67,7 @@ const audit = (session: PiSession) =>
     return JSON.parse(event.message.slice(6)) as Array<{
       id: string;
       cancelled?: boolean;
+      confirmed?: boolean;
       value?: string;
     }>;
   });
@@ -90,9 +91,17 @@ test("INV-04: competing tabs claim one supported dialog before writing; late att
       for (const method of ["input", "select", "confirm", "editor"]) {
         const { dialog, prompt } = yield* openDialog(session, `/dialog ${method}`);
         const response =
-          method === "confirm" ? { ...answer(dialog), confirmed: true } : answer(dialog);
+          method === "confirm"
+            ? { ...answer(dialog), confirmed: false }
+            : {
+                ...answer(dialog),
+                value:
+                  method === "input" ? "" : method === "editor" ? "First line\nSecond line" : "A",
+              };
+        const other =
+          method === "confirm" ? { ...response, confirmed: true } : { ...response, value: "B" };
         const outcomes = yield* Effect.all(
-          [session.act(response).pipe(Effect.result), session.act(response).pipe(Effect.result)],
+          [session.act(response).pipe(Effect.result), session.act(other).pipe(Effect.result)],
           { concurrency: "unbounded" },
         );
         assert.equal(outcomes.filter((result) => result._tag === "Success").length, 1);
@@ -102,13 +111,23 @@ test("INV-04: competing tabs claim one supported dialog before writing; late att
           "fake/beta",
           "answering must not suppress the originating command's state reconciliation",
         );
+        const records = (yield* audit(session)).filter((record) => record.id === dialog.id);
         assert.equal(
-          (yield* audit(session)).filter((record) => record.id === dialog.id).length,
+          records.length,
           1,
           "count actual extension_ui_response records, not local events",
         );
-        assert.deepEqual((yield* snapshot(session)).dialogs, []);
-        assert.equal((yield* session.state).dialogResolution?.delivery, "written");
+        const late = yield* snapshot(session);
+        assert.deepEqual(late.dialogs, []);
+        assert.equal(late.state.dialogResolution?.delivery, "written");
+        assert.deepEqual(
+          late.state.dialogResolution?.answer,
+          {
+            title: `Fixture ${dialog.id}`,
+            value: records[0].confirmed ?? records[0].value,
+          },
+          "every attachment sees the winning reply, including false, empty and multiline answers",
+        );
       }
     }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
   );
@@ -143,6 +162,7 @@ test("INV-04: estimated timeout survives attachment, rejects expired answers, an
         "Pi owns advertised timeout; the host sends no answer after its estimate",
       );
       assert.equal((yield* session.state).dialogResolution?.reason, "expired");
+      assert.equal((yield* session.state).dialogResolution?.answer, undefined);
       assert.deepEqual((yield* snapshot(session)).dialogs, []);
       // Controlled competition at the deadline: either answer or timeout may win,
       // but Pi must never receive two responses and late attachment stays closed.
@@ -188,6 +208,7 @@ test("INV-04: invisible extension cancellation is bounded by an explicit host re
           [{ type: "extension_ui_response", id: dialog.id, cancelled: true }],
         );
         assert.equal((yield* session.state).dialogResolution?.reason, "recovery");
+        assert.equal((yield* session.state).dialogResolution?.answer, undefined);
         assert.deepEqual((yield* snapshot(session)).dialogs, []);
       }
     }).pipe(
@@ -312,6 +333,10 @@ test("INV-04: broken stdin is delivery-uncertain, never silently reopened or ret
         "a broken input pipe cannot leave an uncontrollable live session",
       );
       assert.equal((yield* session.state).dialogResolution?.delivery, "uncertain");
+      assert.deepEqual((yield* snapshot(session)).state.dialogResolution?.answer, {
+        title: `Fixture ${dialog.id}`,
+        value: "A",
+      });
       assert.deepEqual((yield* snapshot(session)).dialogs, []);
       assert.equal((yield* session.act(answer(dialog)).pipe(Effect.result))._tag, "Failure");
     }).pipe(

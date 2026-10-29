@@ -143,6 +143,13 @@ export const DialogResolution = Schema.Struct({
   reason: Schema.Literals(["answered", "cancelled", "expired", "aborted", "recovery", "exited"]),
   delivery: Schema.Literals(["pending", "written", "uncertain", "not-sent"]),
   detail: Schema.String,
+  /** The accepted reply, retained only with this live host resolution, not as Pi history. */
+  answer: Schema.optional(
+    Schema.Struct({
+      title: Schema.optional(Schema.String),
+      value: Schema.Union([Schema.String, Schema.Boolean]),
+    }),
+  ),
 });
 export type DialogResolution = typeof DialogResolution.Type;
 

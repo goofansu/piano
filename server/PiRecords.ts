@@ -15,6 +15,7 @@ import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../shared/dispatch.ts";
 import { turnEnding } from "../shared/turnEnding.ts";
 import type {
   Dialog,
+  DialogResolution,
   ModelChoice,
   QueuedMessage,
   RenderMsg,
@@ -663,7 +664,7 @@ export function piExchangeFor(
 export const dialogAnswerFor = (
   action: Extract<SessionAction, { _tag: "answer" }>,
   dialog: Dialog,
-): { readonly command: PiCommand } | PiRejection => {
+): { readonly command: PiCommand; readonly answer?: DialogResolution["answer"] } | PiRejection => {
   if (action.cancelled) return { command: dialogCancellation(dialog.id) };
   let value = action.value ?? "";
   if (dialog.method === "select") {
@@ -684,6 +685,7 @@ export const dialogAnswerFor = (
       id: dialog.id,
       ...(action.confirmed !== undefined ? { confirmed: action.confirmed } : { value }),
     },
+    answer: { title: dialog.title, value: action.confirmed ?? value },
   };
 };
 
