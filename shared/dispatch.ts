@@ -107,6 +107,8 @@ export interface StartArguments {
 /** The wait tool's arguments: handles exactly as a start returned them. */
 export interface WaitArguments {
   readonly sessions: SessionHandle[];
+  /** Omit to wait for all completions or any attention outcome. Explicit windows are 1–60s;
+   * reaching one ends observation only, never the child work. */
   readonly timeoutMs?: number;
 }
 

@@ -166,14 +166,26 @@ result. Creation alone is not prompt admission: the tool waits for the initial i
 If a session was created but its prompt failed or needs a dialog answered, the result retains its
 link. Resolve supported dialogs in the child's ordinary Piano UI.
 
-Pass the returned handle unchanged to wait. A wait lasts 30 seconds by default, configurable from
-1 to 60 seconds, and returns partial results. It distinguishes running, settled, failed, cancelled,
-needs input and unknown outcomes, and reads a live session as [status](#status-by-session-id)
-does: an idle session whose last input or dialog answer Piano could not confirm delivering is
-unknown, with the reason in `detail`. A wait deadline is not a child failure. Cancelling a wait
-or closing the parent only stops observation; it does not stop the child or its siblings.
-When one session needs attention, wait returns the other sessions' current observations promptly
-rather than keeping the parent blocked; their work continues.
+Pass the returned handle unchanged to wait and omit `timeoutMs`. One call stays open until all
+sessions complete or any needs attention (needs input, failure, cancellation or unavailable facts).
+Do not poll with repeated short waits or status reads when waiting for completion. For an explicitly
+bounded observation only, `timeoutMs` accepts 1000–60000 milliseconds and returns partial results
+at that deadline. When using codemode, await the call and omit the script's `timeout_ms` too.
+
+Wait distinguishes running, settled, failed, cancelled, needs input and unknown outcomes, and reads
+a live session as [status](#status-by-session-id) does: an idle session whose last input or dialog
+answer Piano could not confirm delivering is unknown, with the reason in `detail`. A wait deadline
+is not a child failure. Cancelling a wait or closing the parent only stops observation; it does not
+stop the child or its siblings. When one session needs attention, wait returns the other sessions'
+current observations promptly rather than keeping the parent blocked; their work continues.
+A pending tool call resumes its parent when it returns; there is no automatic wake-up after the
+parent's turn has ended.
+
+Healthy execution has no wait deadline. An initial selection or recovery after connection loss or
+missed frames must produce a current snapshot within 30 seconds, otherwise wait returns `unknown`.
+Merely reopening the socket does not extend that recovery budget. Existing bounded rechecks still
+refuse to call an idle-looking session settled without Piano confirming quiescence; if that cannot
+be confirmed, the result reports pending work rather than claiming completion.
 
 Settlement means execution stopped, **not that the task or its checks succeeded**. An input handled
 without a new assistant answer returns `null`. The parent should assess the child's answer and
