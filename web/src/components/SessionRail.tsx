@@ -11,7 +11,7 @@ import {
 import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
-import { FilePath } from "@/components/FilePath";
+import { MiddleEllipsis } from "@/components/MiddleEllipsis";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -297,14 +297,17 @@ function EnvironmentRow({
   children: string;
 }) {
   const { commands, run } = useSessionCommands();
+  const isName = menu === "repository" || menu === "branch";
   const content = (
     <>
       <ItemMedia variant="icon" className="text-ink-3">
         {icon}
       </ItemMedia>
       <ItemContent className="min-w-0">
-        <RailRowTitle className={mono ? "break-all font-mono" : "break-words"}>
-          {menu === "repository" || menu === "branch" ? <FilePath path={children} /> : children}
+        <RailRowTitle
+          className={isName ? "w-full font-mono" : mono ? "break-all font-mono" : "break-words"}
+        >
+          {isName ? <MiddleEllipsis text={children} /> : children}
         </RailRowTitle>
       </ItemContent>
     </>
