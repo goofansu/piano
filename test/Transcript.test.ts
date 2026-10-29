@@ -103,6 +103,31 @@ test("ask_user joins persisted answers to question text in order, including empt
   );
 });
 
+test("ask_user reads question IDs the model sent as numbers as Pi converts them", () => {
+  const asked: RenderMsg = {
+    id: "asked",
+    role: "assistant",
+    text: "",
+    toolCalls: [
+      {
+        id: "q",
+        name: "ask_user",
+        args: JSON.stringify({ questions: [{ id: 1, question: "Proceed?" }] }),
+      },
+    ],
+  };
+  const answered: RenderMsg = {
+    id: "answered",
+    role: "tool_result",
+    toolCallId: "q",
+    text: JSON.stringify({ status: "answered", answers: { "1": "Yes" } }),
+  };
+  assert.deepEqual(reply(transcriptRows([asked, answered]), "asked").tools[0]?.answers, {
+    status: "answered",
+    items: [{ id: "1", question: "Proceed?", answer: "Yes" }],
+  });
+});
+
 const apiError =
   'exe-dev-openai API error (429): {"type":"usage_limit_reached","message":"The usage limit has been reached","retry_after":123}';
 const failure = (errorMessage = apiError): RenderMsg => ({

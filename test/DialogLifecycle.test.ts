@@ -448,6 +448,27 @@ test("Stop during a question its tool call owns is confirmed by the tool's end, 
   );
 });
 
+test("question IDs the model sent as numbers are read as Pi converts them, so the stored batch accepts", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "owned-numeric",
+      });
+      const first = yield* openDialog(session, "/ask store 2 numeric");
+      assert.equal(first.dialog.questionId, "1");
+      const next = yield* watch(session, (event) => event._tag === "dialog");
+      yield* session.act(answer(first.dialog));
+      const second = (yield* Fiber.join(next)).find((event) => event._tag === "dialog");
+      assert.ok(second?._tag === "dialog");
+      assert.equal(second.dialog.questionId, "2");
+      const accepted = yield* watch(session, receipt(second.dialog.id, "accepted"));
+      yield* session.act({ ...answer(second.dialog), value: "B" });
+      yield* Fiber.join(accepted);
+    }).pipe(Effect.timeout("8 seconds"), Effect.scoped),
+  );
+});
+
 test("an answer the batch result stores only for an earlier question is rejected", async () => {
   await run(
     Effect.gen(function* () {

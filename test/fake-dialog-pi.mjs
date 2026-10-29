@@ -17,7 +17,7 @@ const questions = new Map();
 const held = new Set();
 const toolEnd = (call, answers) => {
   const status = answers.length === call.count ? "answered" : "cancelled";
-  const result = { status, answers: Object.fromEntries(answers.map((a, i) => [`q${i + 1}`, a])) };
+  const result = { status, answers: Object.fromEntries(answers.map((a, i) => [call.key(i), a])) };
   out({
     type: "tool_execution_end",
     toolCallId: call.id,
@@ -99,14 +99,24 @@ function handle(cmd) {
       out({ type: "agent_settled" });
       return reply(cmd);
     case "prompt": {
-      // `/ask [mode] [count]`: ask_user starts and raises its first question. Modes: `hold`
+      // `/ask [mode] [count] [ids]`: ask_user starts and raises its first question. Modes: `hold`
       // keeps the call running after the reply until `/end-held`; `drop` ends it without storing
       // the reply (Pi aborted it first); `drop-last` stores every reply but the last one.
+      // `numeric` IDs are announced as the model sent them (1, 2) and stored as Pi converts them.
       if (cmd.message.startsWith("/ask")) {
-        const [, mode = "store", count = "1"] = cmd.message.split(" ");
-        const call = { id: `call${++serial}`, mode, count: Number(count), asked: 0, answers: [] };
+        const [, mode = "store", count = "1", ids] = cmd.message.split(" ");
+        const numeric = ids === "numeric";
+        const key = (i) => (numeric ? String(i + 1) : `q${i + 1}`);
+        const call = {
+          id: `call${++serial}`,
+          mode,
+          count: Number(count),
+          asked: 0,
+          answers: [],
+          key,
+        };
         const questions = Array.from({ length: call.count }, (_, i) => ({
-          id: `q${i + 1}`,
+          id: numeric ? i + 1 : key(i),
           question: `Question ${i + 1}`,
         }));
         out({

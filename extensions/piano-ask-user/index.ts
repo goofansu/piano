@@ -1,7 +1,7 @@
 /** Model-initiated questions through Pi's supported dialogs; Piano owns the answer surface. */
 import { type Static, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { ASK_USER_TOOL } from "../../shared/askUser.ts";
+import { ASK_USER_TOOL, askUserQuestions } from "../../shared/askUser.ts";
 
 const Parameters = Type.Object({
   questions: Type.Array(
@@ -46,14 +46,12 @@ export default function pianoAskUser(pi: ExtensionAPI) {
       executionMode: "sequential",
       async execute(_id, { questions }, signal, _update, ctx) {
         // Validate the entire batch before collecting any answers: IDs must never overwrite one another.
+        // The same rule Piano reads the call's records by, so a batch it accepts is one Piano tracks.
         if (!questions.length) throw new Error("At least one question is required.");
-        const ids = new Set<string>();
-        for (const { id, question, options } of questions) {
-          if (!id.trim() || !question.trim() || options?.some((option) => !option.trim()))
-            throw new Error("Question IDs, questions and choices must not be blank.");
-          if (ids.has(id)) throw new Error("Question IDs must be unique.");
-          ids.add(id);
-        }
+        if (!askUserQuestions({ questions }))
+          throw new Error("Question IDs and questions must not be blank, and IDs must be unique.");
+        if (questions.some(({ options }) => options?.some((option) => !option.trim())))
+          throw new Error("Choices must not be blank.");
         if (!ctx.hasUI) throw new Error("ask_user requires an interactive UI.");
         const answers: Array<[string, string]> = [];
         for (const [index, { id, question, options }] of questions.entries()) {
