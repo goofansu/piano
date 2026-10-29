@@ -24,7 +24,7 @@ pressure. It does not claim draft restoration after a genuine document reload.
 ## Develop and verify separately
 
 For browser verification, start a scratch backend with a separate registry/repository
-and a separate Vite development process as described in root AGENTS.md and
+and a separate Vite development process as [the `verify-piano` skill](../.agents/skills/verify-piano/SKILL.md) launches it, and
 [the development handoff](development-on-exe-dev.md#scratch-verification):
 
 ```bash
