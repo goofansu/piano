@@ -157,8 +157,21 @@ function upstreamOf(branch: string, answer: string): Upstream {
   return { remote: target, name, ref: push, tracked };
 }
 
-/** A branch where Git would push it, once pushed: its name there (`Upstream.name`) and the URL
- * Git would contact for that remote, after the user's `url.<base>.insteadOf` rewrites. */
+/** The push URL of `remote` (`Upstream.remote`): its `pushurl`, else its `url`, after the user's
+ * `insteadOf` and `pushInsteadOf` rewrites; where the branch is, which its fetch URL need not
+ * name. Null without that remote. Keeps user config, which defines the answer (INV-06). */
+const pushUrlRead = (remote: string) => ["remote", "get-url", "--push", remote];
+const pushUrl = (cwd: string, remote: string, timeout?: number) =>
+  gitText(cwd, pushUrlRead(remote), { timeout, userConfig: true }).pipe(
+    Effect.map((out) => out.trim() || null),
+    Effect.catchIf(
+      (e) => e.detail.includes("No such remote"),
+      () => Effect.succeed(null),
+    ),
+  );
+
+/** A branch where Git would push it, once pushed: its name there (`Upstream.name`) and its
+ * remote's push URL. */
 export interface PushedBranch {
   readonly name: string;
   readonly url: string;
@@ -200,17 +213,7 @@ export const pushedBranches = Effect.fn("GitCheckout.pushedBranches")(function* 
   const urls = new Map<string, string | null>();
   for (const [branch, upstream] of upstreams) {
     if (!held.has(upstream.ref)) continue;
-    if (!urls.has(upstream.remote))
-      urls.set(
-        upstream.remote,
-        yield* read(["remote", "get-url", upstream.remote]).pipe(
-          Effect.map((out) => out.trim() || null),
-          Effect.catchIf(
-            (e) => e.detail.includes("No such remote"),
-            () => Effect.succeed(null),
-          ),
-        ),
-      );
+    if (!urls.has(upstream.remote)) urls.set(upstream.remote, yield* pushUrl(cwd, upstream.remote));
     const url = urls.get(upstream.remote);
     if (url) pushed.set(branch, { name: upstream.name, url });
   }
@@ -227,9 +230,8 @@ export type GitObservation =
       readonly toplevel: string;
       /** With `branch` or `remote`: null when detached. Discovery does not pay for it. */
       readonly branch?: string | null;
-      /** With `remote`: the URL Git would contact for the remote the branch pushes to
-       * (`Upstream.remote`), after the user's `url.<base>.insteadOf` rewrites; null without
-       * that remote. */
+      /** With `remote`: the push URL of the remote the branch pushes to (`Upstream.remote`, else
+       * `origin` when detached); null without that remote. */
       readonly remote?: string | null;
       /** With `remote`: the branch's name on that remote; null when detached or without it. */
       readonly remoteBranch?: string | null;
@@ -295,15 +297,9 @@ export const observeGit = Effect.fn("GitCheckout.observeGit")(function* (
     const branch = (yield* read(BRANCH)).trim() || null;
     if (!options.remote) return { ...checkout, branch };
     const upstream = branch ? upstreamOf(branch, yield* read(upstreamRead(branch), true)) : null;
-    // The one read whose answer the user's Git config defines (e.g. an exe.dev integration
-    // proxy configured globally), so it keeps user config.
-    const remote = yield* read(["remote", "get-url", upstream?.remote ?? "origin"], true).pipe(
-      Effect.map((out) => out.trim() || null),
-      Effect.catchIf(
-        (e) => e.detail.includes("No such remote"),
-        () => Effect.succeed(null),
-      ),
-    );
+    // The user's Git config defines the answer (e.g. an exe.dev integration proxy configured
+    // globally), so it keeps user config.
+    const remote = yield* pushUrl(path, upstream?.remote ?? "origin", options.timeout);
     return { ...checkout, branch, remote, remoteBranch: remote && (upstream?.name ?? null) };
   }).pipe(
     Effect.catchTag("GitReadError", (e) =>
@@ -366,8 +362,10 @@ export interface Checkout {
   readonly branch: () => Promise<string | null>;
   /** Where `branch`'s work goes and is counted. */
   readonly upstream: (branch: string) => Promise<Upstream>;
-  /** The URL Git would contact, including user-config rewrites; null without that remote. */
+  /** The fetch URL Git would contact, including user-config rewrites; null without that remote. */
   readonly remoteUrl: (name: string) => Promise<string | null>;
+  /** The push URL of `remote` (`Upstream.remote`): where the branch is. */
+  readonly pushUrl: (remote: string) => Promise<string | null>;
   /** The same checkout with added `-c` config or environment (a disposable GIT_INDEX_FILE). */
   readonly with: (extra: {
     readonly config?: readonly string[];
@@ -406,6 +404,14 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
         throw error;
       }
     };
+    const url = async (args: readonly string[]) => {
+      try {
+        return decode((await run(args, { userConfig: true })).stdout).trim() || null;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("No such remote")) return null;
+        throw error;
+      }
+    };
     const optional = async (args: readonly string[]) => {
       const result = await run(args, { okCodes: [0, 1] });
       return result.code === 0 ? decode(result.stdout).trim() : null;
@@ -436,17 +442,8 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
       branch: async () => decode((await run(BRANCH)).stdout).trim() || null,
       upstream: async (branch) =>
         upstreamOf(branch, decode((await run(upstreamRead(branch), { userConfig: true })).stdout)),
-      remoteUrl: async (name) => {
-        try {
-          return (
-            decode((await run(["remote", "get-url", name], { userConfig: true })).stdout).trim() ||
-            null
-          );
-        } catch (error) {
-          if (error instanceof Error && error.message.includes("No such remote")) return null;
-          throw error;
-        }
-      },
+      remoteUrl: (name) => url(["remote", "get-url", name]),
+      pushUrl: (remote) => url(pushUrlRead(remote)),
       with: (extra) => make([...config, ...(extra.config ?? [])], { ...env, ...extra.env }),
     };
   };

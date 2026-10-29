@@ -63,7 +63,7 @@ async function fromBranch(
   { remote, name }: Upstream,
   pr: NonNullable<TargetHints["pullRequest"]>,
 ): Promise<BranchHead | null> {
-  const pushed = branchRemote(name, await checkout.remoteUrl(remote));
+  const pushed = branchRemote(name, await checkout.pushUrl(remote));
   const head = pushed.on === "github" ? pushed.head : null;
   return head && isFromBranch(pr, head) ? head : null;
 }
@@ -74,7 +74,6 @@ async function fromBranch(
 async function pullRequestTarget(
   checkout: Checkout,
   { remote }: Upstream,
-  head: BranchHead,
   pr: NonNullable<TargetHints["pullRequest"]>,
 ): Promise<ComparisonTarget | null> {
   if (!pr.baseRepo || !pr.base) return null;
@@ -85,10 +84,9 @@ async function pullRequestTarget(
   )
     return null;
   const remotes = (await checkout.text(["remote"])).trim().split("\n").filter(Boolean);
+  // Git fetched the base's ref, so the remote's fetch URL names its repository.
   for (const name of new Set([remote, ...remotes])) {
-    const repo =
-      name === remote ? head.repo : githubRemote((await checkout.remoteUrl(name)) ?? "")?.repo;
-    if (repo !== pr.baseRepo) continue;
+    if (githubRemote((await checkout.remoteUrl(name)) ?? "")?.repo !== pr.baseRepo) continue;
     const ref = `refs/remotes/${name}/${pr.base}`;
     const commit = await commitOf(checkout, ref);
     if (commit) return { name: pr.base, ref, commit, from: "pull-request" };
@@ -123,7 +121,7 @@ async function resolveTarget(
   // The base lives where the branch started, which a fork's branch does not push to.
   const { tracked } = upstream;
   if (head && hints.pullRequest) {
-    const target = await pullRequestTarget(checkout, upstream, head, hints.pullRequest);
+    const target = await pullRequestTarget(checkout, upstream, hints.pullRequest);
     if (target) return target;
   }
   if (hints.worktreeBase) {
