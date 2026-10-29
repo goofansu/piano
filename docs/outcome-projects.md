@@ -131,7 +131,7 @@ New project dialog or edited later in the Project settings dialog (its home's he
 menu or Mod+K on the home); both dialogs show the same two fields. Each
 time Piano starts Pi for a
 member session, new or reopened, it passes the project's current instructions in the child's
-environment, and Piano's own extension adds them on every run as a `project_instructions` system
+environment, and Piano's `piano-project` extension adds them on every run as a `project_instructions` system
 prompt section. Pi's own sections, including the user's and the checkout's `APPEND_SYSTEM.md`,
 stay as Pi loads them; Pi's `--append-system-prompt` is not used because it replaces that file.
 An edit applies from the session's next Pi start, never to a running Pi; a session moved out of

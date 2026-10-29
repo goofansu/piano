@@ -23,17 +23,27 @@ export interface PiCliConfig {
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 /**
- * Piano's own extension, resolved from this installation rather than the session's cwd: a
- * session runs in a user's repository, which must not be able to shadow or supply it.
+ * Piano's own extensions, resolved from this installation rather than the session's cwd: a
+ * session runs in a user's repository, which must not be able to shadow or supply them.
  */
-export const sessionExtension = join(ROOT, "extensions/piano-sessions/index.ts");
+export const sessionExtension = join(ROOT, "extensions/piano-session/index.ts");
+export const projectExtension = join(ROOT, "extensions/piano-project/index.ts");
+export const dispatchExtension = join(ROOT, "extensions/piano-dispatch/index.ts");
+export const previewExtension = join(ROOT, "extensions/piano-preview/index.ts");
 export const askUserExtension = join(ROOT, "extensions/piano-ask-user/index.ts");
+const pianoExtensions = [
+  sessionExtension,
+  projectExtension,
+  dispatchExtension,
+  previewExtension,
+  askUserExtension,
+];
 
 export const defaultPiCli = (): PiCliConfig => ({
   node: process.execPath,
   cli: process.env.PIANO_PI_CLI ?? join(ROOT, "server/PiRpcCli.ts"),
   extraArgs: (process.env.PIANO_PI_ARGS ?? "").split(/\s+/).filter(Boolean),
-  extensions: [sessionExtension, askUserExtension],
+  extensions: pianoExtensions,
 });
 
 export const PiCli = Context.Reference<PiCliConfig>("piano/PiCli", { defaultValue: defaultPiCli });

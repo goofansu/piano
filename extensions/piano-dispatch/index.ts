@@ -1,16 +1,10 @@
-/** Bundled Pi tools: dispatch through Piano, never launch or own another Pi process. */
+/** Bundled Pi extension: dispatch work through Piano, never launch or own another Pi process. */
 import { type JsonValue, type Static, type TSchema, Type } from "@earendil-works/pi-ai";
-import {
-  defineTool,
-  type ExtensionAPI,
-  type ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
   DISPATCH_ENTRY,
   DISPATCHED_FROM_FLAG,
   DISPOSITIONS,
-  PROJECT_INSTRUCTIONS_ENV,
-  PROJECT_INSTRUCTIONS_SECTION,
   type SessionHandle,
   type SessionStatus,
   START_TOOL,
@@ -24,7 +18,6 @@ import {
   type WaitToolResult,
 } from "../../shared/dispatch.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
-import { registerPreview } from "./Preview.ts";
 import { readStatus, startSession, waitSessions, withLinks } from "./SessionDispatch.ts";
 
 /** The schema one of these literals has. */
@@ -150,8 +143,7 @@ export type SchemaChecks = [
   Holds<Describes<typeof StatusOutput, SessionStatus>>,
 ];
 
-export default function pianoSessions(pi: ExtensionAPI) {
-  registerPreview(pi);
+export default function pianoDispatch(pi: ExtensionAPI) {
   // Registered before the configuration check, so Pi always knows the flag Piano may pass.
   pi.registerFlag(DISPATCHED_FROM_FLAG, {
     type: "string",
@@ -169,25 +161,6 @@ export default function pianoSessions(pi: ExtensionAPI) {
     )
       pi.appendEntry(DISPATCH_ENTRY, { parentSessionId: parent });
   });
-  // Piano owns this child under one session ID (INV-02, INV-07). An extension's newSession,
-  // switchSession or fork would replace it behind that ID, so Pi is told to cancel; Piano starts,
-  // opens and dispatches sessions itself. Any handler's cancel wins, whatever the load order.
-  const refuseReplacement = (_event: unknown, ctx: ExtensionContext) => {
-    ctx.ui.notify(
-      "Piano keeps this session open. Start or open another session from Piano.",
-      "error",
-    );
-    return { cancel: true };
-  };
-  pi.on("session_before_switch", refuseReplacement);
-  pi.on("session_before_fork", refuseReplacement);
-  // The project's instructions, in a section of their own: Pi keeps the directory's
-  // APPEND_SYSTEM.md, which its --append-system-prompt would replace.
-  const instructions = process.env[PROJECT_INSTRUCTIONS_ENV];
-  if (instructions)
-    pi.on("before_agent_start", (event) => {
-      event.systemPromptOptions.sections[PROJECT_INSTRUCTIONS_SECTION] = instructions;
-    });
   const config = dispatchConfiguration();
   // No sockets at factory time: Pi also loads extensions for catalog probes and discovery.
   if (!config) return;

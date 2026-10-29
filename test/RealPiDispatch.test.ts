@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { sessionExtension } from "../server/PiCli.ts";
+import { dispatchExtension } from "../server/PiCli.ts";
 import { startRealPiDispatch } from "./fixtures/RealPiDispatch.ts";
 
 test("a real Pi dispatches a brief and reads the child's answer back", {
@@ -146,8 +146,8 @@ test("a real Pi dispatches a brief and reads the child's answer back", {
     );
     for (const spawned of sessions) {
       assert.ok(
-        spawned.extensions.includes(sessionExtension),
-        `${spawned.sessionId} loaded Piano's session extension`,
+        spawned.extensions.includes(dispatchExtension),
+        `${spawned.sessionId} loaded Piano's dispatch extension`,
       );
       assert.deepEqual(
         spawned.endpoint,

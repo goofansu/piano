@@ -7,7 +7,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TestContext, test } from "node:test";
-import { registerPreview } from "../extensions/piano-sessions/Preview.ts";
+import { registerPreview } from "../extensions/piano-preview/index.ts";
 import {
   PreviewAdapter,
   type PreviewConfig,

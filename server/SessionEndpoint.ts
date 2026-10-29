@@ -1,7 +1,7 @@
 /**
  * How a Pi child reaches the Piano that spawned it.
  *
- * Piano's bundled session extension connects back over the same `/ws` the browser uses, and a
+ * Piano's bundled dispatch extension connects back over the same `/ws` the browser uses, and a
  * child has no browser to supply an address or an `Origin`. The launch therefore hands it both,
  * derived from this instance's listener and its configured origins — never from a request or
  * proxy header (INV-11). The origin is *chosen from* the allowed set rather than added to it, so
@@ -39,7 +39,7 @@ export function sessionEndpoint(
 }
 
 /**
- * The environment a spawned Pi passes to the session extension. `PIANO_SESSION_ORIGIN` is both
+ * The environment a spawned Pi passes to the dispatch extension. `PIANO_SESSION_ORIGIN` is both
  * the `Origin` header for the upgrade and the base for a `/s/<id>` link into Piano's UI; there is no
  * separate base-URL variable, because a second spelling of the same origin could drift from it.
  */

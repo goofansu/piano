@@ -6,7 +6,7 @@ import { test } from "node:test";
 import {
   dispatchConfiguration,
   nodeSocketEnvironment,
-} from "../extensions/piano-sessions/NodeSocket.ts";
+} from "../extensions/piano-dispatch/NodeSocket.ts";
 import { sessionEndpoint, sessionEnvironment } from "../server/SessionEndpoint.ts";
 
 // INV-11: a non-browser observer must still send the explicit allowed Origin.

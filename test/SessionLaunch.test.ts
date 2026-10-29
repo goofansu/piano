@@ -10,29 +10,29 @@ import { once } from "node:events";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { configuredOrigins, sessionLinkOrigin } from "../server/OriginPolicy.ts";
-import { askUserExtension, defaultPiCli, sessionExtension } from "../server/PiCli.ts";
+import { defaultPiCli } from "../server/PiCli.ts";
 import { sessionEndpoint, sessionEnvironment } from "../server/SessionEndpoint.ts";
 
-test("Piano's extension is resolved from the installation, never from the session's cwd", () => {
-  assert.ok(isAbsolute(sessionExtension));
-  assert.equal(
-    sessionExtension,
-    fileURLToPath(new URL("../extensions/piano-sessions/index.ts", import.meta.url)),
-  );
-  assert.equal(
-    askUserExtension,
-    fileURLToPath(new URL("../extensions/piano-ask-user/index.ts", import.meta.url)),
-  );
-  assert.deepEqual(defaultPiCli().extensions, [sessionExtension, askUserExtension]);
+test("Piano's extensions are resolved from the installation, never from the session's cwd", () => {
+  const installed = (name: string) =>
+    fileURLToPath(new URL(`../extensions/${name}/index.ts`, import.meta.url));
+  const expected = [
+    installed("piano-session"),
+    installed("piano-project"),
+    installed("piano-dispatch"),
+    installed("piano-preview"),
+    installed("piano-ask-user"),
+  ];
+  assert.deepEqual(defaultPiCli().extensions, expected);
   // A session runs in the user's repository, so the launch must not follow the process cwd there.
   const installation = process.cwd();
   try {
     process.chdir(tmpdir());
-    assert.deepEqual(defaultPiCli().extensions, [sessionExtension, askUserExtension]);
+    assert.deepEqual(defaultPiCli().extensions, expected);
   } finally {
     process.chdir(installation);
   }
@@ -184,9 +184,9 @@ await import(${JSON.stringify(pathToFileURL(new URL("fake-pi.mjs", import.meta.u
       origin: string | null;
     };
     assert.deepEqual(
-      launch.argv.slice(0, 6),
-      ["--mode", "rpc", "--extension", sessionExtension, "--extension", askUserExtension],
-      "the extension loads before the session arguments",
+      launch.argv.slice(0, 12),
+      ["--mode", "rpc", ...defaultPiCli().extensions!.flatMap((path) => ["--extension", path])],
+      "the extensions load before the session arguments",
     );
     assert.equal(launch.wsUrl, `ws://127.0.0.1:${port}/ws`);
     assert.equal(launch.origin, proxy, "a `/s/<id>` link must open from a remote browser");

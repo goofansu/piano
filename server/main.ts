@@ -29,7 +29,7 @@ const listener = { host: HOST, port: PORT };
 const origins = configuredOrigins(PORT, process.env.PIANO_ALLOWED_ORIGINS);
 const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
-// Every Pi child loads Piano's session extension and is told how to reach this instance.
+// Every Pi child loads Piano's extensions and is told how to reach this instance.
 const endpoint = sessionEndpoint(listener, origins);
 const Launch = Layer.succeed(PiCli, {
   ...defaultPiCli(),

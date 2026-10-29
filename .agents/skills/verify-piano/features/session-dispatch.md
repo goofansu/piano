@@ -28,8 +28,8 @@ link a person can open.
 - Shell: `node scripts/dispatch-session.ts --help` from the checkout, with
   `PIANO_SESSION_WS_URL` and `PIANO_SESSION_ORIGIN` set (launch's `run.env` exports both) or
   `--ws-url` / `--origin`.
-- Pi sessions inside Piano reach the same path through the `piano-sessions` extension
-  (`extensions/piano-sessions/index.ts`).
+- Pi sessions inside Piano reach the same path through the `piano-dispatch` extension
+  (`extensions/piano-dispatch/index.ts`).
 - The printed `link` opens the session in the web UI.
 
 ## Driving it with agent-browser
