@@ -116,6 +116,32 @@ test("the rail shows the detached commit and the server's branch, and omits Git 
   assert.equal(nonGit.detachedHead, undefined);
 });
 
+test("the branch link is the shown branch where discovery found it on GitHub, else none", () => {
+  const path = "/work/repo.feature";
+  const facts = (branch: string, github?: { repo: string; branch: string }) => ({
+    path,
+    branch,
+    detached: false,
+    prunable: false,
+    ...(github ? { github } : {}),
+  });
+  const branchUrl = (checkout: WorktreeView, branch = "local-fix") =>
+    sessionContext({
+      ...base,
+      session: session(path),
+      folders: [{ ...folder, worktrees: [checkout] }],
+      sessionReferences: [sessionReference(path, "s1", { branch })],
+    }).branchUrl;
+  const pushed = facts("local-fix", { repo: "me/repo", branch: "feature/a#b" });
+  assert.equal(
+    branchUrl(worktree(path, "local-fix", { facts: pushed })),
+    "https://github.com/me/repo/tree/feature/a%23b",
+  );
+  assert.equal(branchUrl(worktree(path, "local-fix", { facts: facts("local-fix") })), undefined);
+  // Facts for a branch the session no longer shows link nothing rather than another branch.
+  assert.equal(branchUrl(worktree(path, "local-fix", { facts: pushed }), "other"), undefined);
+});
+
 // A closed folder lists no checkout, so only the reference knows the branch it was registered on.
 const closed: AppState = {
   ...base,
