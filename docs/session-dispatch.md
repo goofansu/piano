@@ -65,8 +65,9 @@ Piano places the directory the same way for every way of starting a session (the
 approved Worktrunk hooks. Without `--worktree`, no worktree is created.
 
 Exit codes: `0` means a JSON result was reported, **not** that work succeeded; inspect `creation`
-and `submission`. `1` is an unexpected failure, `2` invalid input or configuration (including a
-session or project Piano does not list) and `3` an existing output file. Errors go to stderr. A
+and `submission`. `1` is an unexpected failure (including Piano not answering, or refusing a read
+when its capacity is full), `2` invalid input or configuration (including a session or project
+Piano answers that it does not list) and `3` an existing output file. Errors go to stderr. A
 start result includes the full dispatch handle, the session `link` when known, the directory Piano
 placed the session in as `cwd`, the created `worktree` (`{ "path", "branch" }`, or `null`) and the
 requested `model` / `thinkingLevel` (`null` when omitted, not the resolved defaults). It does not wait for
@@ -244,7 +245,8 @@ never starts Pi and stores nothing.
 | `link` | Opens the session in Piano. |
 
 An unknown session or project is an error (exit code `2` from the script, a failed tool call in a
-session). After a restart a session reads `unknown`, or `settled` when its saved history ends with
+session). A read Piano does not answer in 30 seconds or refuses for capacity exits `1`: it says
+nothing about whether Piano lists the session. After a restart a session reads `unknown`, or `settled` when its saved history ends with
 a finished reply; it never reads `running` from history.
 
 ## Follow-up to a session

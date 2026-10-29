@@ -11,6 +11,7 @@ import {
 } from "../extensions/piano-dispatch/NodeSocket.ts";
 import {
   readStatus,
+  type StatusReply,
   type StatusTarget,
   sendFollowUp,
   startSession,
@@ -51,6 +52,12 @@ class CliError extends Error {
     super(message);
     this.exitCode = exitCode;
   }
+}
+
+/** A status read's sessions; a session or project Piano does not list is invalid input (2). */
+function sessionsOf(reply: StatusReply) {
+  if (reply.status === "ready") return reply.sessions;
+  throw new CliError(reply.status === "unlisted" ? 2 : 1, reply.detail);
 }
 
 function argumentsFromCommandLine() {
@@ -119,11 +126,12 @@ async function main() {
     const text = promptFrom(positionals[2]!);
     const { origin } = configured();
     // The status read names the session's directory, and refuses a session Piano does not list.
-    const reply = await readStatus({ sessionId }, nodeSocketEnvironment(configured()));
-    if (reply.status === "error") throw new CliError(2, reply.detail);
+    const [session] = sessionsOf(
+      await readStatus({ sessionId }, nodeSocketEnvironment(configured())),
+    );
     const result = await sendFollowUp(
       {
-        cwd: reply.sessions[0]!.cwd,
+        cwd: session!.cwd,
         sessionId,
         text,
         delivery: values.steer ? "steer" : "follow-up",
@@ -143,11 +151,8 @@ async function main() {
       target = { projectId: values.project };
     }
     const { origin } = configured();
-    const reply = await readStatus(target, nodeSocketEnvironment(configured()));
-    if (reply.status === "error") throw new CliError(2, reply.detail);
-    const statuses = reply.sessions.map((facts) =>
-      withLinks(facts, (id) => sessionLink(origin, id)),
-    );
+    const sessions = sessionsOf(await readStatus(target, nodeSocketEnvironment(configured())));
+    const statuses = sessions.map((facts) => withLinks(facts, (id) => sessionLink(origin, id)));
     if (command === "status") console.log(JSON.stringify(statuses[0], null, 2));
     else for (const status of statuses) console.log(JSON.stringify(status));
     return;

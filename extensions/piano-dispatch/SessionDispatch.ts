@@ -1106,6 +1106,9 @@ export const withLinks = (
 
 export type StatusReply =
   | { readonly status: "ready"; readonly sessions: ReadonlyArray<SessionStatusFacts> }
+  /** Piano answered that it lists no such session or project. */
+  | { readonly status: "unlisted"; readonly detail: string }
+  /** No answer, or Piano refused the read: whether the target is listed is unknown. */
   | { readonly status: "error"; readonly detail: string };
 
 /**
