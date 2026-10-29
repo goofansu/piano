@@ -22,9 +22,10 @@ import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { workspaceFile, workspaceFileDownload } from "@/lib/api";
+import { relativeToDocument } from "@/lib/markdownImageLoader";
 import type { SurfaceTab } from "@/lib/navigation";
 import { previewImage } from "@/lib/previewImage";
-import { relativeToDocument, useMarkdownImages } from "@/lib/useMarkdownImages";
+import { useMarkdownImages } from "@/lib/useMarkdownImages";
 import { useNavigation } from "@/lib/useNavigation";
 
 const FilePdf = lazy(() =>
