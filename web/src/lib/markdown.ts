@@ -40,8 +40,10 @@ export function isLinearLink(href: string): boolean {
 }
 
 /** A Markdown destination is either a web URL or a local path, never an executable scheme.
- * Decode once here; the server resolves relative paths against the session's workspace. */
-export function localFilePath(destination: string): string | undefined {
+ * Read from the raw Markdown URL: a `%XX` escape decodes, and any other `%` is part of the name,
+ * so `100%.png` is the file `100%.png`. The server resolves relative paths against the
+ * session's workspace. */
+function localFilePath(destination: string): string | undefined {
   let path = destination.trim();
   if (!path || path.startsWith("//") || path.startsWith("#") || path.startsWith("?")) return;
   try {
@@ -53,7 +55,8 @@ export function localFilePath(destination: string): string | undefined {
       if (/^[a-z][a-z\d+.-]*:/i.test(path)) return;
       path = path.split(/[?#]/, 1)[0];
     }
-    path = decodeURIComponent(path);
+    // Escapes that are not UTF-8 throw: a name Piano cannot spell is not a local file.
+    path = path.replace(/(?:%[\da-f]{2})+/gi, (escapes) => decodeURIComponent(escapes));
     // biome-ignore lint/suspicious/noControlCharactersInRegex: reject path control characters.
     return path && !/[\u0000-\u001f\u007f]/.test(path) ? path : undefined;
   } catch {
@@ -95,10 +98,19 @@ function linkKind(source: string): MarkdownLink["kind"] {
   return source.startsWith("[") ? "markdown" : source.startsWith("<") ? "autolink" : "bare";
 }
 
+/** The element properties remark-rehype gives a node (its types live in mdast-util-to-hast). */
+function hProperties(node: Node): Record<string, unknown> | undefined {
+  return (node.data as { hProperties?: Record<string, unknown> } | undefined)?.hProperties;
+}
+
 /** Shared remark policy for Streamdown and discovery. No HTML is interpreted. */
 export function remarkPiano() {
   return (tree: Root, file: { value: unknown }) => {
     const source = String(file.value);
+    const definitions = new Map<string, string>();
+    walk(tree, (node) => {
+      if (node.type === "definition") definitions.set(node.identifier, node.url);
+    });
     walk(tree, (node) => {
       if (node.type === "html") {
         // Keep raw markup readable, never executable.
@@ -124,9 +136,27 @@ export function remarkPiano() {
         const raw = source.slice(node.position?.start.offset, node.position?.end.offset);
         node.data = { ...node.data, hProperties: { "data-link-kind": linkKind(raw) } };
       }
+      // Each image and link's local file, decided once here from the Markdown URL, before
+      // rendering re-encodes it: the images loaded are the images shown.
+      const url =
+        node.type === "image" || node.type === "link"
+          ? node.url
+          : node.type === "imageReference" || node.type === "linkReference"
+            ? definitions.get(node.identifier)
+            : undefined;
+      const path = url === undefined ? undefined : localFilePath(url);
+      if (path) {
+        node.data = {
+          ...node.data,
+          hProperties: { ...hProperties(node), [LOCAL_PATH]: path },
+        };
+      }
     });
   };
 }
+
+/** The rendered element property naming an image or link's local file, if it has one. */
+export const LOCAL_PATH = "data-local-path";
 
 export const markdownPlugins = [remarkGfm, remarkPiano];
 const parser = unified().use(remarkParse).use(remarkGfm);
@@ -135,6 +165,7 @@ function parse(source: string): Root {
   const tree = parser.parse(source);
   // Validate the whole tree before exposing any partial discovery.
   walk(tree, () => {});
+  remarkPiano()(tree, { value: source });
   return tree;
 }
 
@@ -173,20 +204,11 @@ export function markdownLinks(source: string): MarkdownLink[] {
 export function markdownImages(source: string): string[] {
   try {
     const tree = parse(source);
-    const definitions = new Map<string, string>();
-    walk(tree, (node) => {
-      if (node.type === "definition") definitions.set(node.identifier, node.url);
-    });
     const paths = new Set<string>();
     walk(tree, (node) => {
-      const url =
-        node.type === "image"
-          ? node.url
-          : node.type === "imageReference"
-            ? definitions.get(node.identifier)
-            : undefined;
-      const path = url && localFilePath(url);
-      if (path) paths.add(path);
+      if (node.type !== "image" && node.type !== "imageReference") return;
+      const path = hProperties(node)?.[LOCAL_PATH];
+      if (typeof path === "string") paths.add(path);
     });
     return [...paths];
   } catch {

@@ -93,6 +93,8 @@ test("local links are preview actions, never native filesystem URLs", () => {
     ["/workspace/README.md", "/workspace/README.md"],
     ["docs/my%20notes.md", "docs/my notes.md"],
     ["docs/a(b).md", "docs/a(b).md"],
+    ["docs/100%.md", "docs/100%.md"],
+    ["bad%ZZ", "bad%ZZ"],
     ["file:///workspace/README.md", "/workspace/README.md"],
   ]) {
     const html = renderMarkdown(`Read [\`source\`](${destination}).`);
@@ -107,7 +109,7 @@ test("local links are preview actions, never native filesystem URLs", () => {
     "//example.test/a",
     "file://other-host/a",
     "#heading",
-    "bad%ZZ",
+    "bad%FFpath",
     "bad%00path",
   ]) {
     const html = renderMarkdown(`[source](${destination})`);
@@ -173,6 +175,25 @@ test("loaded local images are inline preview actions with a file action as their
     ),
     "prose without image loading keeps its original link",
   );
+});
+
+test("the image a document loads is the image it shows, whatever its name's characters", () => {
+  // A stray % names itself; %XX escapes decode; spaces and Unicode survive either form.
+  for (const [destination, path] of [
+    ["100%.png", "100%.png"],
+    ["bad%ZZ.png", "bad%ZZ.png"],
+    ["<my shot.png>", "my shot.png"],
+    ["my%20shot.png", "my shot.png"],
+    ["é.png", "é.png"],
+    ["%C3%A9.png", "é.png"],
+  ]) {
+    const source = `![chart](${destination}) [![linked](${destination})](https://example.test)`;
+    const loaded = markdownImages(source);
+    assert.deepEqual(loaded, [path], destination);
+    const html = renderMarkdown(source, new Map(loaded.map((key) => [key, "blob:loaded"])));
+    assert.equal((html.match(/<img[^>]*src="blob:loaded"/g) ?? []).length, 2, destination);
+    assert.ok(!html.includes("href="), destination);
+  }
 });
 
 test("code excludes links and images for nested lists, quotes, tilde and long fences", () => {
