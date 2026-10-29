@@ -6,6 +6,7 @@ import {
   FolderOpenIcon,
   GitBranchIcon,
   GitCommitHorizontalIcon,
+  GitPullRequestIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
@@ -24,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { createPreference, parseJson } from "@/lib/preference";
+import { pullRequestView } from "@/lib/pullRequestView";
 import { type EnvironmentRowKind, environmentRowMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { type SessionLink, sessionLinks } from "@/lib/sessionLinks";
@@ -48,7 +50,7 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
 });
 
 /**
- * The session rail: Environment (its repository or folder, and branch), Outputs (the
+ * The session rail: Environment (its repository or folder, branch and linked pull request), Outputs (the
  * files Pi wrote or edited) and Links (the web links the conversation mentions), each a section that folds; Outputs and Links appear once they have a row. It reads
  * nothing itself: the facts are the registry's and Pi's, the lists the transcript's, so it is
  * never stale. Links shows five recent entries; its full, searchable view replaces the overview.
@@ -175,7 +177,8 @@ function RailSections({
   showAllRef: React.Ref<HTMLButtonElement>;
 }) {
   const session = state.session;
-  const { cwd, branch, detachedHead, githubRepo } = sessionContext(state);
+  const { cwd, branch, detachedHead, githubRepo, pullRequest } = sessionContext(state);
+  const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;
   const files = useSessionFiles();
   const messages = session?.messages ?? [];
@@ -233,6 +236,16 @@ function RailSections({
               {branch}
             </EnvironmentRow>
           ) : null}
+          {pr && (
+            <EnvironmentRow
+              name="Pull request"
+              menu="pull request"
+              icon={<GitPullRequestIcon />}
+              href={pr.url}
+            >
+              {pr.number ? `#${pr.number}` : "PR"}
+            </EnvironmentRow>
+          )}
         </RailList>
       </RailSection>
       {files.length > 0 && (
