@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ClientCommand, Dialog, SessionState } from "../shared/wire.ts";
-import { createDialogAnswer, pendingDialogs } from "../web/src/lib/piDialogs.ts";
+import type { ClientCommand, Dialog, DialogResolution, SessionState } from "../shared/wire.ts";
+import { answeredQuestion, createDialogAnswer, pendingDialogs } from "../web/src/lib/piDialogs.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 
 const DEADLINE = 10_000;
@@ -109,6 +109,40 @@ const session = (dialogs: Dialog[]): SessionView => ({
   dialogs,
 });
 const ready: AppState = { ...initialState, connected: true, selectionId: "sel" };
+
+test("a written answer leaves the composer after the last question; delivery problems remain visible", () => {
+  const resolution: DialogResolution = {
+    id: "d1",
+    generation: "g1",
+    reason: "answered",
+    delivery: "written",
+    detail: "Written to Pi",
+    answer: { title: "Last question", value: "Last answer" },
+  };
+  const view = (receipt = resolution, dialogs: Dialog[] = []): AppState => ({
+    ...ready,
+    session: {
+      ...session(dialogs),
+      state: { sessionId: "s1", isStreaming: true, dialogResolution: receipt },
+    },
+  });
+  assert.equal(
+    answeredQuestion(view()),
+    undefined,
+    "completed questions must not pin the last answer above the composer",
+  );
+  assert.equal(
+    answeredQuestion(view(resolution, [dialog("d2")])),
+    undefined,
+    "a new question must not resurrect an old receipt",
+  );
+  for (const delivery of ["pending", "uncertain", "not-sent"] as const) {
+    const receipt = { ...resolution, delivery };
+    assert.equal(answeredQuestion(view(receipt)), receipt);
+  }
+  assert.equal(answeredQuestion({ ...view(), resync: true }), undefined);
+  assert.equal(answeredQuestion(ready), undefined);
+});
 
 test("pending dialogs expose the queue head and how many follow it", () => {
   const pending = pendingDialogs({

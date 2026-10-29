@@ -29,7 +29,7 @@ import type { Client } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
 import { tabKey } from "@/lib/navigation";
 import { AGENT_MIN_WIDTH, PANEL_WIDTH, RAIL_WIDTH, singleArea } from "@/lib/panelLayout";
-import { pendingDialogs } from "@/lib/piDialogs";
+import { answeredQuestion, pendingDialogs } from "@/lib/piDialogs";
 import { sessionDestination } from "@/lib/sessionCatalog";
 import {
   completionTarget,
@@ -135,6 +135,7 @@ export function SessionView({ state, send }: Props) {
   const destination = (sessionId: string) => sessionDestination(state, sessionId);
   const pane = sessionPane(state);
   const notices = sessionNotices(state, messagesOnly);
+  const answerReceipt = answeredQuestion(state);
   const readOnly = notices.find((n) => n.placement === "composer");
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
   // The transcript reports where the reader is; the composer's jump list reads and moves it.
@@ -257,9 +258,7 @@ export function SessionView({ state, send }: Props) {
                     <StatusLine key={n.id} notice={n} />
                   ),
                 )}
-              {!state.resync && t?.state.dialogResolution?.answer && (
-                <AnsweredQuestion resolution={t.state.dialogResolution} />
-              )}
+              {answerReceipt && <AnsweredQuestion resolution={answerReceipt} />}
               <InlineQuestion pending={pendingDialogs(state)} send={send} />
               <Composer
                 session={t}

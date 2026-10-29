@@ -55,6 +55,22 @@ const messages = [
   assistant([call("run", "bash", { command: "npm test" })]),
   result("run", "bash", "ok"),
   assistant([
+    call("questions", "ask_user", {
+      questions: [
+        { id: "database", question: "Which database?", options: ["PostgreSQL", "SQLite"] },
+        { id: "requirements", question: "What should change?" },
+      ],
+    }),
+  ]),
+  result(
+    "questions",
+    "ask_user",
+    JSON.stringify({
+      status: "answered",
+      answers: { database: "SQLite", requirements: "Keep the API\nChange the layout" },
+    }),
+  ),
+  assistant([
     call("dispatch", "piano_start_session", {
       prompt: "Review the login fix.",
       worktree: { branch: "review-login" },
@@ -101,6 +117,7 @@ const expected = [
   "Question: why does login fail?",
   "Reply: the CSRF token is stale.",
   "Ran",
+  "Answers",
   "Review the login fix.",
   "Session",
   "/skill:",
@@ -143,6 +160,18 @@ await run(
     await page.open("/");
     await page.click("button", "Every row kind");
     await page.see("Done: every row kind is above.");
+    await page.see("Which database?");
+    assert.deepEqual(
+      await page.evaluate(`[...document.querySelectorAll('[data-slot="question-answers"] [role="listitem"]')].map(item => ({
+        question: item.querySelector('[data-slot="item-title"]').textContent,
+        answer: item.querySelector('p').textContent,
+      }))`),
+      [
+        { question: "Which database?", answer: "SQLite" },
+        { question: "What should change?", answer: "Keep the API\nChange the layout" },
+      ],
+      "saved question/answer pairs start expanded, not hidden behind raw JSON",
+    );
     await page.capture("1-rows");
     const rows = await page.evaluate(measure);
     writeFileSync(
