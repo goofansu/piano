@@ -10,7 +10,7 @@ import {
 import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Item, ItemContent, ItemHeader, ItemTitle } from "@/components/ui/item";
-import { answerReceipt } from "@/lib/piDialogs";
+import { answerReceipt, dialogTitle } from "@/lib/piDialogs";
 
 /** The latest submitted reply and its delivery problem, never an addition to Pi’s history. */
 export function AnsweredQuestion({ resolution }: { resolution: DialogResolution }) {
@@ -46,7 +46,7 @@ export function AnsweredQuestion({ resolution }: { resolution: DialogResolution 
         )}
         <ItemContent className="min-w-0">
           <ItemTitle className="line-clamp-none whitespace-pre-wrap break-words">
-            {answer.title || "Pi needs an answer"}
+            {dialogTitle(answer.title)}
           </ItemTitle>
           <p className="max-h-32 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words">
             {value || <span className="text-ink-2">Empty answer</span>}

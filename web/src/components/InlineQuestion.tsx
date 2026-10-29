@@ -25,13 +25,13 @@ import { useDialogAnswer } from "@/lib/useDialogAnswer";
 
 /** The queue head alone owns the answer surface; confirmations stay in DialogHost. */
 export function InlineQuestion({
-  pending: { head, more, connected },
+  pending: { head, surface, more, connected },
   send,
 }: {
   pending: PendingDialogs;
   send: (command: ClientCommand) => void;
 }) {
-  return head && head.method !== "confirm" ? (
+  return head && surface === "inline" ? (
     <Question
       key={`${head.generation}/${head.id}`}
       dialog={head}
@@ -57,10 +57,9 @@ function Question({
   const [value, setValue] = useState(d.prefill ?? "");
   // Indices distinguish an unselected group from an option whose value is an empty string.
   const [selected, setSelected] = useState("");
-  const { answer, cancel, abort, submitted, disabled, abortDisabled, remainingSeconds } =
+  const { answer, cancel, abort, submitted, disabled, abortDisabled, title, deadline, waiting } =
     useDialogAnswer(d, connected, send);
   const choice = d.method === "select";
-  const title = d.title || "Pi needs an answer";
 
   return (
     <section aria-label="Question" className="px-(--gutter) pt-3">
@@ -130,7 +129,7 @@ function Question({
         <div className="flex flex-wrap items-center gap-2">
           {/* A question its tool call owns has no deadline to report, and the composer's Stop is
               its escape; only an estimated deadline is a fact worth a popover. */}
-          {d.deadlineAt !== null && (
+          {deadline && (
             <Popover>
               <PopoverTrigger asChild>
                 <Button type="button" variant="ghost" size="sm">
@@ -141,11 +140,8 @@ function Question({
                 <PopoverHeader>
                   <PopoverTitle>Question details</PopoverTitle>
                   <PopoverDescription>
-                    {d.deadlineKind === "pi-timeout"
-                      ? "Estimated Pi timeout"
-                      : "Host recovery cancellation"}
-                    : {remainingSeconds}s remaining. Pi may have already closed this question; it
-                    sends no closure acknowledgement.
+                    {deadline.label}: {deadline.remainingSeconds}s remaining. Pi may have already
+                    closed this question; it sends no closure acknowledgement.
                   </PopoverDescription>
                 </PopoverHeader>
                 {d.placeholder && (
@@ -183,7 +179,7 @@ function Question({
         </div>
         {submitted && (
           <p role="status" className="text-sm text-ink-2">
-            {d.deadlineKind === "tool-end" ? "Waiting for Pi to confirm…" : "Sending response…"}
+            {waiting}
           </p>
         )}
       </form>

@@ -12,13 +12,16 @@ export function useDialogAnswer(
   const [controller] = useState(() => createDialogAnswer({ dialog, send }));
   useSyncExternalStore(controller.subscribe, controller.getState);
   const [now, setNow] = useState(Date.now);
+  const view = controller.view(now, connected);
+  // Only a deadline counts down; a dialog its tool call owns has none to tick.
+  const ticking = open && view.deadline !== null;
   useEffect(() => {
-    if (!open || dialog.deadlineAt === null) return;
+    if (!ticking) return;
     const timer = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(timer);
-  }, [open, dialog.deadlineAt]);
+  }, [ticking]);
   return {
-    ...controller.view(now, connected),
+    ...view,
     answer: (reply: DialogReply) => controller.answer(reply, Date.now(), connected),
     cancel: () => controller.cancel(Date.now(), connected),
     abort: () => controller.abort(Date.now(), connected),

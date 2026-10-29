@@ -4,17 +4,33 @@
  * answerable only on a settled attachment (`sessionReady`). How it is answered: at most once, never
  * after its deadline or while disconnected, and closing it counts as cancelling. Pi sends no closure
  * acknowledgement, so a sent answer is never resent, even after a reconnect. Abort is the user's
- * escape hatch: it is sent at most once and, by rule, still offered after the deadline. Nothing
- * here depends on React.
+ * escape hatch: it is sent at most once and, by rule, still offered after the deadline. How it
+ * reads: which surface asks it, its title and deadline wording are decided here, not per component.
+ * Nothing here depends on React.
  */
 import type { ClientCommand, Dialog, DialogResolution } from "@shared/wire";
 import type { AppState } from "../store.ts";
 // Relative, not @/: module tests load this file directly in Node.
 import { sessionReady } from "./sessionContext.ts";
 
+/** Where a dialog is asked: a confirmation in a modal, any other method inline by the composer. */
+export type DialogSurface = "modal" | "inline";
+
+export const dialogSurface = (dialog: Dialog): DialogSurface =>
+  dialog.method === "confirm" ? "modal" : "inline";
+
+/** A question's title, or the generic one when Pi gave none; the asking and answered views share it. */
+export const dialogTitle = (title: string | undefined): string => title || "Pi needs an answer";
+
+/** A tool call owns the dialog or answer (Piano's own `ask_user`): it ends with that call, never on
+ * a timer, and only the call's stored result confirms the answer. */
+const ownedByToolCall = ({ toolCallId }: { toolCallId?: string }) => toolCallId !== undefined;
+
 export interface PendingDialogs {
   /** The dialog to answer now; undefined when none is pending or a resync is replacing the list. */
   head: Dialog | undefined;
+  /** Which surface asks the head; null when there is none. */
+  surface: DialogSurface | null;
   /** Dialogs queued behind the head. */
   more: number;
   /** Answers may be sent (see `sessionReady`). */
@@ -26,6 +42,7 @@ export function pendingDialogs(state: AppState): PendingDialogs {
   const dialogs = state.resync ? [] : (state.session?.dialogs ?? []);
   return {
     head: dialogs[0],
+    surface: dialogs[0] ? dialogSurface(dialogs[0]) : null,
     more: Math.max(0, dialogs.length - 1),
     connected: sessionReady(state),
   };
@@ -65,7 +82,7 @@ const deliveryStatus: Record<
  * Pending/failed/uncertain writes remain visible even without a pending question (INV-04). */
 export function answerReceipt(resolution: DialogResolution): AnswerReceipt {
   const { delivery, answer } = resolution;
-  const owned = resolution.toolCallId !== undefined;
+  const owned = ownedByToolCall(resolution);
   // A written answer to one of Piano's own questions still awaits Pi's confirmation.
   const status =
     delivery === "written" && owned
@@ -105,8 +122,19 @@ export interface DialogAnswerView {
   disabled: boolean;
   /** Abort is disabled: already submitted or disconnected. It ignores the deadline. */
   abortDisabled: boolean;
-  /** Whole seconds until the deadline, rounded up and never negative. */
-  remainingSeconds: number | null;
+  /** The title to show, with the generic fallback applied. */
+  title: string;
+  /** The estimated answer deadline; null when a tool call owns the dialog and so it has none. */
+  deadline: {
+    /** What the estimate is: Pi's own timeout, or Piano cancelling it on recovery. */
+    label: string;
+    /** Whole seconds until the deadline, rounded up and never negative. */
+    remainingSeconds: number;
+    /** The deadline as epoch milliseconds. */
+    at: number;
+  } | null;
+  /** The status line once submitted: what the dialog now waits for. */
+  waiting: string;
 }
 
 export interface DialogAnswer {
@@ -143,16 +171,29 @@ export function createDialogAnswer({
     for (const listener of listeners) listener();
     return true;
   };
+  const owned = ownedByToolCall(dialog);
+  const at = owned ? null : dialog.deadlineAt;
+  const title = dialogTitle(dialog.title);
+  const label =
+    dialog.deadlineKind === "pi-timeout" ? "Estimated Pi timeout" : "Host recovery cancellation";
+  const waiting =
+    dialogSurface(dialog) === "modal"
+      ? "Waiting for the host’s resolution. Do not resend on reconnect."
+      : owned
+        ? "Waiting for Pi to confirm…"
+        : "Sending response…";
   const view = (now: number, connected: boolean): DialogAnswerView => {
-    const expired = dialog.deadlineAt !== null && now >= dialog.deadlineAt;
+    const expired = at !== null && now >= at;
     return {
       submitted,
       disabled: submitted || !connected || expired,
       abortDisabled: submitted || !connected || (!ABORT_IGNORES_DEADLINE && expired),
-      remainingSeconds:
-        dialog.deadlineAt === null
+      title,
+      deadline:
+        at === null
           ? null
-          : Math.max(0, Math.ceil((dialog.deadlineAt - now) / 1000)),
+          : { label, remainingSeconds: Math.max(0, Math.ceil((at - now) / 1000)), at },
+      waiting,
     };
   };
   const answer = (reply: DialogReply, now: number, connected: boolean) =>
