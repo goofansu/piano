@@ -235,11 +235,10 @@ export const makeSessionDialogs = ({
       !ownedReceipt(current, toolCallId)
     )
       return;
-    if (current.reason === "cancelled")
-      yield* transaction.mergeState({
+    if (current.reason !== "answered")
+      return yield* transaction.mergeState({
         dialogResolution: { ...current, delivery: "accepted", detail: "Question cancelled." },
       });
-    if (current.reason !== "answered") return;
     const stored =
       typeof current.answer?.value === "string" &&
       current.questionId !== undefined &&

@@ -423,6 +423,31 @@ test("the next question of a batch accepts the previous answer; the batch result
   );
 });
 
+test("Stop during a question its tool call owns is confirmed by the tool's end, not left waiting until exit", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "owned-abort",
+      });
+      const { dialog } = yield* openDialog(session, "/ask");
+      const accepted = yield* watch(session, receipt(dialog.id, "accepted"));
+      yield* session.act({ _tag: "abort" });
+      yield* Fiber.join(accepted);
+      assert.deepEqual(
+        (yield* audit(session)).map(({ cancelled }) => cancelled),
+        [true],
+      );
+      const exited = yield* watch(session, (event) => event._tag === "closed");
+      yield* session.act({ _tag: "prompt", text: "/exit" }).pipe(Effect.ignore);
+      yield* Fiber.join(exited);
+      const closed = (yield* snapshot(session)).state.dialogResolution;
+      assert.equal(closed?.reason, "aborted");
+      assert.equal(closed?.delivery, "accepted", "exit cannot cast doubt on a confirmed close");
+    }).pipe(Effect.timeout("8 seconds"), Effect.scoped),
+  );
+});
+
 test("an answer the batch result stores only for an earlier question is rejected", async () => {
   await run(
     Effect.gen(function* () {
