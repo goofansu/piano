@@ -105,6 +105,7 @@ export const makeSessionDialogs = ({
           generation,
           reason,
           ...(dialog.toolCallId !== undefined ? { toolCallId: dialog.toolCallId } : {}),
+          ...(dialog.questionId !== undefined ? { questionId: dialog.questionId } : {}),
           delivery: send ? "pending" : "not-sent",
           detail,
           ...(reason === "answered" && receipt ? { answer: receipt } : {}),
@@ -209,8 +210,8 @@ export const makeSessionDialogs = ({
   /**
    * A tool call ended (Pi's native record, consumed under the same lock as local claims). Its
    * dialogs still open closed with it: nothing is written, Pi no longer reads a reply. The answer
-   * written for it is accepted when the result Pi stored holds it, otherwise rejected and kept;
-   * a written cancellation is confirmed by the end alone.
+   * written for it is accepted when the result Pi stored holds it for its question, otherwise
+   * rejected and kept; a written cancellation is confirmed by the end alone.
    */
   const toolEnded = Effect.fnUntraced(function* (
     transaction: PublicationTransaction,
@@ -240,7 +241,9 @@ export const makeSessionDialogs = ({
       });
     if (current.reason !== "answered") return;
     const stored =
-      typeof current.answer?.value === "string" && answerStored(result, current.answer.value);
+      typeof current.answer?.value === "string" &&
+      current.questionId !== undefined &&
+      answerStored(result, current.questionId, current.answer.value);
     yield* transaction.mergeState({
       dialogResolution: {
         ...current,

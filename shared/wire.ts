@@ -128,6 +128,8 @@ export const Dialog = Schema.Struct({
    * Pi's native end record for that call closes the dialog and its stored result confirms the
    * answer, so no deadline is estimated. Other dialogs get a host estimate (`deadlineAt`). */
   toolCallId: Schema.optional(Schema.String),
+  /** The `ask_user` question this owned dialog asks: its stored answer is looked up by this ID. */
+  questionId: Schema.optional(Schema.String),
   /** Null when a tool call owns the dialog: it closes with that call, never on a timer. */
   deadlineAt: Schema.NullOr(Schema.Number),
   deadlineKind: Schema.Literals(["pi-timeout", "host-recovery", "tool-end"]),
@@ -148,6 +150,8 @@ export const DialogResolution = Schema.Struct({
   reason: Schema.Literals(["answered", "cancelled", "expired", "aborted", "recovery", "exited"]),
   /** The tool call that owned the dialog: its end will confirm or reject a written response. */
   toolCallId: Schema.optional(Schema.String),
+  /** The owned dialog's `ask_user` question, whose stored answer confirms the written one. */
+  questionId: Schema.optional(Schema.String),
   delivery: Schema.Literals([
     "pending",
     "written",

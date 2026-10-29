@@ -71,7 +71,7 @@ dialog. A failed write produces an explicit transport/process outcome, not a sil
 write. Extension UI responses have no RPC acknowledgement. A question raised by Piano's own
 `ask_user` tool call has no answer deadline: Pi's native end record for that call closes it, and only
 the result Pi stored for the call may label a submitted answer accepted. An answer the result does
-not hold, or one arriving after closure, is kept as rejected and never resent (see
+not hold for its question, or one arriving after closure, is kept as rejected and never resent (see
 [runtime ownership](runtime-ownership.md#questions-owned-by-a-tool-call)).
 
 ## INV-05 — Reconnect creates a consistent view

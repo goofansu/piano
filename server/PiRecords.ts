@@ -10,7 +10,7 @@
  */
 import { createHmac, randomBytes } from "node:crypto";
 import { Option, Schema } from "effect";
-import { ASK_USER_TOOL } from "../shared/askUser.ts";
+import { ASK_USER_TOOL, askUserQuestions } from "../shared/askUser.ts";
 import { imageType } from "../shared/attachments.ts";
 import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../shared/dispatch.ts";
 import { turnEnding } from "../shared/turnEnding.ts";
@@ -740,6 +740,9 @@ export class PiProjector {
   private partial: RenderMsg | undefined;
   private blocks = new Map<number, Block>();
   private tools = new Map<string, ToolExecution>();
+  /** A running `ask_user` call's question IDs in presentation order, and how many it has asked:
+   * the tool asks them one dialog at a time, so its Nth dialog asks the Nth question. */
+  private asking = new Map<string, { readonly ids: readonly string[]; asked: number }>();
   /** Pi's message count as last read back plus the messages ended since: the next one's position. */
   private messages = 0;
   private turnRetry = false;
@@ -907,11 +910,14 @@ export class PiProjector {
     if (!DIALOG_METHODS.has(method) || this.seenDialogs.has(id)) return project();
     this.seenDialogs.add(id);
     const owner = this.askingTool();
+    const asking = owner ? this.asking.get(owner) : undefined;
+    const questionId = asking?.ids[asking.asked++];
     const dialog: DialogRequest = {
       id,
       generation: this.options.generation,
       receivedAt,
       ...(owner ? { toolCallId: owner } : {}),
+      ...(questionId !== undefined ? { questionId } : {}),
       timeoutMs:
         typeof raw.timeout === "number" && Number.isFinite(raw.timeout) && raw.timeout > 0
           ? raw.timeout
@@ -1045,6 +1051,12 @@ export class PiProjector {
         // owns completed previews; retaining them here keeps obsolete output after compaction.
         if (ended) this.tools.delete(id);
         else this.tools.set(id, tool);
+        if (ended) this.asking.delete(id);
+        else if (event.type === "tool_execution_start" && tool.name === ASK_USER_TOOL)
+          this.asking.set(id, {
+            ids: askUserQuestions(event.args)?.map((question) => question.id) ?? [],
+            asked: 0,
+          });
         return [{ _tag: "tool_update", tool }];
       }
       default:
@@ -1065,6 +1077,7 @@ export class PiProjector {
       tool: { ...tool, status: "incomplete" as const },
     }));
     this.tools.clear();
+    this.asking.clear();
     return events;
   }
 

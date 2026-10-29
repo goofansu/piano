@@ -15,7 +15,8 @@ const responses = [];
 // ends with the batch result it stores. `mode` scripts what the fixture does with the reply.
 const questions = new Map();
 const held = new Set();
-const toolEnd = (call, answers, status = answers.length ? "answered" : "cancelled") => {
+const toolEnd = (call, answers) => {
+  const status = answers.length === call.count ? "answered" : "cancelled";
   const result = { status, answers: Object.fromEntries(answers.map((a, i) => [`q${i + 1}`, a])) };
   out({
     type: "tool_execution_end",
@@ -27,6 +28,7 @@ const toolEnd = (call, answers, status = answers.length ? "answered" : "cancelle
 };
 const ask = (call) => {
   const id = `d${++serial}`;
+  call.asked++;
   questions.set(id, call);
   out({ type: "extension_ui_request", id, method: "editor", title: `Question ${id}` });
 };
@@ -73,10 +75,11 @@ function handle(cmd) {
       if (questions.has(cmd.id)) {
         const call = questions.get(cmd.id);
         questions.delete(cmd.id);
-        if (!cmd.cancelled && call.mode !== "drop") call.answers.push(cmd.value);
+        const last = call.asked >= call.count;
+        if (!cmd.cancelled && call.mode !== "drop" && !(call.mode === "drop-last" && last))
+          call.answers.push(cmd.value);
         if (call.mode === "hold") held.add(call);
-        else if (cmd.cancelled || call.mode === "drop" || call.answers.length >= call.count)
-          toolEnd(call, call.answers);
+        else if (cmd.cancelled || call.mode === "drop" || last) toolEnd(call, call.answers);
         else ask(call);
         return;
       }
@@ -98,11 +101,20 @@ function handle(cmd) {
     case "prompt": {
       // `/ask [mode] [count]`: ask_user starts and raises its first question. Modes: `hold`
       // keeps the call running after the reply until `/end-held`; `drop` ends it without storing
-      // the reply (Pi aborted it first).
+      // the reply (Pi aborted it first); `drop-last` stores every reply but the last one.
       if (cmd.message.startsWith("/ask")) {
         const [, mode = "store", count = "1"] = cmd.message.split(" ");
-        const call = { id: `call${++serial}`, mode, count: Number(count), answers: [] };
-        out({ type: "tool_execution_start", toolCallId: call.id, toolName: "ask_user", args: {} });
+        const call = { id: `call${++serial}`, mode, count: Number(count), asked: 0, answers: [] };
+        const questions = Array.from({ length: call.count }, (_, i) => ({
+          id: `q${i + 1}`,
+          question: `Question ${i + 1}`,
+        }));
+        out({
+          type: "tool_execution_start",
+          toolCallId: call.id,
+          toolName: "ask_user",
+          args: { questions },
+        });
         ask(call);
         return reply(cmd, { disposition: "handled" });
       }

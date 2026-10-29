@@ -423,6 +423,36 @@ test("the next question of a batch accepts the previous answer; the batch result
   );
 });
 
+test("an answer the batch result stores only for an earlier question is rejected", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "owned-same-answer",
+      });
+      // Both questions answered "A"; the call ends before storing the second (a Stop racing it).
+      const first = yield* openDialog(session, "/ask drop-last 2");
+      const next = yield* watch(session, (event) => event._tag === "dialog");
+      yield* session.act(answer(first.dialog));
+      const second = (yield* Fiber.join(next)).find((event) => event._tag === "dialog");
+      assert.ok(second?._tag === "dialog");
+      const ended = yield* watch(
+        session,
+        (event) =>
+          event._tag === "state" &&
+          event.state.dialogResolution?.id === second.dialog.id &&
+          event.state.dialogResolution.delivery !== "pending" &&
+          event.state.dialogResolution.delivery !== "written",
+      );
+      yield* session.act(answer(second.dialog));
+      yield* Fiber.join(ended);
+      const kept = (yield* snapshot(session)).state.dialogResolution;
+      assert.equal(kept?.delivery, "rejected", "the same text stored for q1 does not store q2");
+      assert.equal(kept?.answer?.value, "A");
+    }).pipe(Effect.timeout("8 seconds"), Effect.scoped),
+  );
+});
+
 test("a tool's end removes a stale form; an unstored or late answer is kept as rejected, an unconfirmed one as uncertain on exit", async () => {
   await run(
     Effect.gen(function* () {
