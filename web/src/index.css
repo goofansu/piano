@@ -921,7 +921,8 @@
   transition-duration: 0ms;
 }
 @media (pointer: coarse) {
-  [data-row] [data-motion="reveal"] {
+  [data-row] [data-motion="reveal"],
+  .markdown-code-block [data-motion="reveal"] {
     opacity: 1;
   }
   [data-row] [data-motion="aside"] {
@@ -931,22 +932,13 @@
     mask-image: none;
   }
 }
-/* A code block's copy control stays off the code until the block is pointed at, holds keyboard
- * focus, or is confirming the copy. A finger taps the block (`data-pointed`); a drag does not.
- * On a coarse pointer :hover is only the press, so it does not reveal the control. The control
- * does not stay up on touch the way a row's actions do: the fence is the code. */
-.markdown-code-block:where(:hover, :has(:focus-visible), [data-pointed]) [data-motion="reveal"],
+/* A code block's copy control stays off the code until the block is hovered, holds keyboard
+ * focus, or is confirming the copy. A touch screen keeps it visible: nothing there hovers. */
+.markdown-code-block:where(:hover, :has(:focus-visible)) [data-motion="reveal"],
 .markdown-code-block [data-motion="reveal"][data-copied] {
   opacity: 1;
   transition-duration: 150ms;
   transition-timing-function: var(--ease-out);
-}
-@media (pointer: coarse) {
-  .markdown-code-block:hover:not([data-pointed]):not(:has(:focus-visible))
-    [data-motion="reveal"]:not([data-copied]) {
-    opacity: 0;
-    transition-duration: 0ms;
-  }
 }
 .markdown-code-block:has(:focus-visible) [data-motion="reveal"] {
   transition-duration: 0ms;

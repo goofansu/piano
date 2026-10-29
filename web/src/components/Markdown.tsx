@@ -5,7 +5,6 @@ import {
   type ComponentProps,
   createContext,
   type ReactNode,
-  type PointerEvent as ReactPointerEvent,
   useContext,
   useEffect,
   useRef,
@@ -26,42 +25,6 @@ import {
 export const LocalFileContext = createContext<(path: string) => void>(() => {});
 const ImagesContext = createContext<ReadonlyMap<string, string> | undefined>(undefined);
 const DiagramsContext = createContext(true);
-
-/** A finger's tap, not a drag, points at a code block so its copy control can appear. */
-const TAP_SLOP = 10;
-
-function useTouchPointed() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [pointed, setPointed] = useState(false);
-  const origin = useRef<{ x: number; y: number } | null>(null);
-  useEffect(() => {
-    if (!pointed) return;
-    const leave = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setPointed(false);
-    };
-    document.addEventListener("pointerdown", leave, true);
-    return () => document.removeEventListener("pointerdown", leave, true);
-  }, [pointed]);
-  return {
-    ref,
-    pointed,
-    onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-      if (event.pointerType !== "touch") return;
-      origin.current = { x: event.clientX, y: event.clientY };
-    },
-    onPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
-      const start = origin.current;
-      origin.current = null;
-      if (!start || event.pointerType !== "touch") return;
-      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > TAP_SLOP) return;
-      if (event.target instanceof Element && event.target.closest("button")) return;
-      setPointed(true);
-    },
-    onPointerCancel() {
-      origin.current = null;
-    },
-  };
-}
 
 function CopyCode({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -229,7 +192,6 @@ function MarkdownPre({ node }: ComponentProps<"pre"> & ExtraProps) {
   const diagrams = useContext(DiagramsContext);
   const { resolvedTheme } = useTheme();
   const ref = useRef<HTMLDivElement>(null);
-  const pointed = useTouchPointed();
   const [rendered, setRendered] = useState(false);
   useEffect(() => {
     const host = ref.current;
@@ -270,14 +232,7 @@ function MarkdownPre({ node }: ComponentProps<"pre"> & ExtraProps) {
   }, [text, language, incomplete, closed, diagrams, resolvedTheme]);
   // Custom code/diagram host: shadcn has no Markdown renderer or shadow-isolated Mermaid host.
   return (
-    <div
-      ref={pointed.ref}
-      className="markdown-code-block"
-      data-pointed={pointed.pointed ? "" : undefined}
-      onPointerDown={pointed.onPointerDown}
-      onPointerUp={pointed.onPointerUp}
-      onPointerCancel={pointed.onPointerCancel}
-    >
+    <div className="markdown-code-block">
       {!rendered && (
         <pre>
           <code>{text}</code>
