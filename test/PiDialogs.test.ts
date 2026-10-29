@@ -53,7 +53,7 @@ test("a question its tool call owns has no answer deadline but still requires a 
     dialog("owned", { toolCallId: "call-1", deadlineAt: null, deadlineKind: "tool-end" }),
   );
   const later = 24 * 60 * 60_000;
-  assert.equal(dialogAnswer.view(later, true).remainingSeconds, null);
+  assert.equal(dialogAnswer.view(later, true).deadline, null);
   assert.equal(dialogAnswer.view(later, true).disabled, false);
   assert.equal(dialogAnswer.answer({ value: "kept" }, later, false), false);
   assert.equal(dialogAnswer.answer({ value: "kept" }, later, true), true);
@@ -67,7 +67,9 @@ test("a disconnected answer sends nothing and leaves the dialog answerable", () 
     submitted: false,
     disabled: true,
     abortDisabled: true,
-    remainingSeconds: 9,
+    title: "Pi needs an answer",
+    deadline: { label: "Estimated Pi timeout", remainingSeconds: 9, at: DEADLINE },
+    waiting: "Sending response…",
   });
   assert.equal(
     dialogAnswer.answer({ confirmed: true }, 1_000, true),
@@ -109,12 +111,45 @@ test("subscribers hear the dialog become submitted", () => {
 
 test("remaining seconds round up and stop at zero", () => {
   const { dialogAnswer } = answering();
-  const remaining = (now: number) => dialogAnswer.view(now, true).remainingSeconds;
+  const remaining = (now: number) => dialogAnswer.view(now, true).deadline?.remainingSeconds;
   assert.equal(remaining(0), 10);
   assert.equal(remaining(1), 10);
   assert.equal(remaining(DEADLINE - 1), 1);
   assert.equal(remaining(DEADLINE), 0);
   assert.equal(remaining(DEADLINE + 3_000), 0);
+});
+
+test("a dialog reads the same on every surface: title, deadline and what it waits for", () => {
+  const view = (extra: Partial<Dialog>) =>
+    answering(dialog("d1", extra)).dialogAnswer.view(1_000, true);
+  const owned = { toolCallId: "call-1", deadlineAt: null, deadlineKind: "tool-end" } as const;
+
+  assert.equal(view({}).title, "Pi needs an answer");
+  assert.equal(view({ title: "" }).title, "Pi needs an answer");
+  assert.equal(view({ title: "Pick one" }).title, "Pick one");
+
+  assert.deepEqual(view({}).deadline, {
+    label: "Estimated Pi timeout",
+    remainingSeconds: 9,
+    at: DEADLINE,
+  });
+  assert.equal(
+    view({ deadlineKind: "host-recovery" }).deadline?.label,
+    "Host recovery cancellation",
+  );
+  assert.equal(view(owned).deadline, null, "an owned question has no deadline to report");
+  assert.equal(
+    view({ ...owned, method: "confirm" }).deadline,
+    null,
+    "an owned confirmation must not read as a host recovery with null seconds",
+  );
+
+  assert.equal(view({ method: "select" }).waiting, "Sending response…");
+  assert.equal(view({ ...owned, method: "select" }).waiting, "Waiting for Pi to confirm…");
+  assert.equal(
+    view({ method: "confirm" }).waiting,
+    "Waiting for the host’s resolution. Do not resend on reconnect.",
+  );
 });
 
 const session = (dialogs: Dialog[]): SessionView => ({
@@ -245,13 +280,27 @@ test("pending dialogs expose the queue head and how many follow it", () => {
   assert.equal(pending.head?.id, "d1");
   assert.equal(pending.more, 2);
   assert.equal(pending.connected, true);
-  assert.deepEqual(pendingDialogs(ready), { head: undefined, more: 0, connected: true });
+  assert.deepEqual(pendingDialogs(ready), {
+    head: undefined,
+    surface: null,
+    more: 0,
+    connected: true,
+  });
+});
+
+test("a confirmation is asked in a modal, every other method inline", () => {
+  const surface = (method: Dialog["method"]) =>
+    pendingDialogs({ ...ready, session: session([dialog("d1", { method })]) }).surface;
+  assert.equal(surface("confirm"), "modal");
+  for (const method of ["select", "input", "editor"] as const)
+    assert.equal(surface(method), "inline", method);
 });
 
 test("no dialog is pending during a resync, and answers wait for a settled attachment", () => {
   const queued = session([dialog("d1")]);
   assert.deepEqual(pendingDialogs({ ...ready, resync: true, session: queued }), {
     head: undefined,
+    surface: null,
     more: 0,
     connected: false,
   });

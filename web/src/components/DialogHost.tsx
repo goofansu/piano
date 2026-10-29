@@ -14,14 +14,14 @@ import { useLastShown } from "@/lib/useLastShown";
 
 /** Only the queue head may open a modal, and only for a confirmation. */
 export function DialogHost({
-  pending: { head, more, connected },
+  pending: { head, surface, more, connected },
   send,
 }: {
   pending: PendingDialogs;
   send: (m: ClientMessage) => void;
 }) {
   // The dialog animates closed after it leaves the queue, so it keeps the last question meanwhile.
-  const confirmation = head?.method === "confirm" ? head : undefined;
+  const confirmation = surface === "modal" ? head : undefined;
   const shown = useLastShown(confirmation);
   return shown ? (
     <DialogView
@@ -48,31 +48,30 @@ function DialogView({
   send: (m: ClientMessage) => void;
   connected: boolean;
 }) {
-  const { answer, cancel, abort, submitted, disabled, abortDisabled, remainingSeconds } =
+  const { answer, cancel, abort, submitted, disabled, abortDisabled, title, deadline, waiting } =
     useDialogAnswer(d, connected, send, open);
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && cancel()}>
       <DialogContent className="sm:max-w-lg" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>{d.title || "Pi needs an answer"}</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="whitespace-pre-wrap">
             {d.message && (
               <>
                 {d.message}
-                <br />
+                {deadline && <br />}
               </>
             )}
-            {d.deadlineKind === "pi-timeout"
-              ? "Estimated Pi timeout"
-              : "Host recovery cancellation"}
-            : {remainingSeconds}s remaining.{" "}
-            {d.deadlineAt !== null && (
-              <time dateTime={new Date(d.deadlineAt).toISOString()}>
-                {new Date(d.deadlineAt).toLocaleTimeString()}
-              </time>
+            {deadline && (
+              <>
+                {deadline.label}: {deadline.remainingSeconds}s remaining.{" "}
+                <time dateTime={new Date(deadline.at).toISOString()}>
+                  {new Date(deadline.at).toLocaleTimeString()}
+                </time>
+                . Pi may have already closed this dialog; it sends no closure acknowledgement.
+              </>
             )}
-            . Pi may have already closed this dialog; it sends no closure acknowledgement.
           </DialogDescription>
           {more > 0 && (
             <p className="text-sm text-ink-3">
@@ -98,7 +97,7 @@ function DialogView({
         </div>
         {submitted && (
           <p role="status" className="text-sm text-ink-2">
-            Waiting for the host’s resolution. Do not resend on reconnect.
+            {waiting}
           </p>
         )}
       </DialogContent>
