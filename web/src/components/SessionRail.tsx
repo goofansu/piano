@@ -220,7 +220,6 @@ function RailSections({
               icon={<GitCommitHorizontalIcon />}
               mono
               description="A commit is checked out directly; no branch is active."
-              href={repositoryUrl ? `${repositoryUrl}/commit/${detachedHead}` : undefined}
             >
               {`${detachedHead.slice(0, 10)} (detached)`}
             </EnvironmentRow>
