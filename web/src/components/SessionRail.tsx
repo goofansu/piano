@@ -11,6 +11,7 @@ import {
 import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
+import { FilePath } from "@/components/FilePath";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -301,10 +302,9 @@ function EnvironmentRow({
       <ItemMedia variant="icon" className="text-ink-3">
         {icon}
       </ItemMedia>
-      <ItemContent>
+      <ItemContent className="min-w-0">
         <RailRowTitle className={mono ? "break-all font-mono" : "break-words"}>
-          <span className="sr-only">{name}: </span>
-          {children}
+          {menu === "repository" || menu === "branch" ? <FilePath path={children} /> : children}
         </RailRowTitle>
       </ItemContent>
     </>
@@ -323,7 +323,7 @@ function EnvironmentRow({
           title={description ?? cwd ?? name}
           asChild
         >
-          <button type="button">
+          <button type="button" aria-label={`${name}: ${children}`}>
             {content}
             <ItemMedia variant="icon" className="text-ink-3">
               <ChevronDownIcon aria-hidden />
