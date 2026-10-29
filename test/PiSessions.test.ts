@@ -238,7 +238,11 @@ for (const role of ["custom", "assistant"]) {
         assert.equal(initial._tag, "snapshot");
         if (initial._tag !== "snapshot") return;
         const snapshot = initial.snapshot;
-        assert.match(snapshot.state.projectionError ?? "", /Pi context changed/);
+        assert.equal(
+          snapshot.state.projectionError,
+          undefined,
+          "a running message defers the context without a warning",
+        );
         assert.deepEqual(
           snapshot.messages,
           [],
@@ -328,6 +332,21 @@ test("a submission names the caller's input, for a steer as for a prompt", async
       const submission = (yield* t.state).submission;
       assert.equal(submission?.outcome, "handled");
       assert.equal(submission?.inputId, "steered");
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+});
+
+test("a prompt Pi starts before its agent_start arrives shows no projection error", async () => {
+  await run(
+    Effect.gen(function* () {
+      const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "late-start" });
+      yield* t.act({ _tag: "prompt", text: "late start" });
+      assert.equal((yield* t.state).projectionError, undefined, "a busy Pi is not an error");
+      const ends = yield* collectUntil(
+        t.events,
+        (e) => e._tag === "state" && e.state.isStreaming === false,
+      );
+      assert.ok(ends.length > 0);
     }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
   );
 });

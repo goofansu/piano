@@ -774,8 +774,8 @@ const openSession = (spec: PiSessionSpec) =>
         }
       });
 
-    // Never wait for a dialog or a running message to finish readiness. A bounded, explicit
-    // projection error leaves those controls available; a later message/settled boundary retries.
+    // Never wait for a dialog or a running message to finish readiness. Active work defers the
+    // context to a later settled boundary; only a snapshot Pi keeps racing is a projection error.
     yield* readbacks.refresh("context");
     initializing = false;
     yield* readbacks.schedule(...initialRefreshes);
