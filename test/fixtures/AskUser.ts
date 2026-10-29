@@ -30,7 +30,7 @@ export async function askUserFixture() {
       .filter((message) => message.role === "tool")
       .map((message) => text(message.content));
     requests.push({ prompt, tools: body.tools?.map((tool) => tool.function.name) ?? [], results });
-    if (!/^ASK_(CHOICE|TEXT|CANCEL|STOP)$/.test(prompt)) {
+    if (!/^ASK_(CHOICE|TEXT|CANCEL|STOP|BATCH|BATCH_CANCEL|BATCH_STOP)$/.test(prompt)) {
       response.writeHead(400);
       response.end("Only ASK_* fixture prompts are permitted");
       return;
@@ -47,8 +47,24 @@ export async function askUserFixture() {
               function: {
                 name: "ask_user",
                 arguments: JSON.stringify({
-                  question: prompt === "ASK_CHOICE" ? "Which database?" : "What should change?",
-                  ...(prompt === "ASK_CHOICE" ? { options: ["PostgreSQL", "SQLite"] } : {}),
+                  questions: prompt.startsWith("ASK_BATCH")
+                    ? [
+                        {
+                          id: "database",
+                          question: "Which database?",
+                          options: ["PostgreSQL", "SQLite"],
+                        },
+                        { id: "requirements", question: "What should change?" },
+                        { id: "schedule", question: "When should it ship?" },
+                      ]
+                    : [
+                        {
+                          id: prompt === "ASK_CHOICE" ? "database" : "requirements",
+                          question:
+                            prompt === "ASK_CHOICE" ? "Which database?" : "What should change?",
+                          ...(prompt === "ASK_CHOICE" ? { options: ["PostgreSQL", "SQLite"] } : {}),
+                        },
+                      ],
                 }),
               },
             },
