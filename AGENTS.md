@@ -91,10 +91,12 @@ explanation in `docs/` and link to it from the guide that needs it.
 
 ## Branches
 
-Start each new branch in its own worktree. When `piano_start_session` is available, always use
-it to start a new session in a new worktree for development. Otherwise, in Claude Code run
-`/worktrunk:wt-switch-create`; elsewhere, run `wt switch -c <branch>` (`wt switch -h` lists the
-options). With either fallback, run every later command from that worktree's directory.
+Develop each new change in a dedicated branch and worktree. A session already assigned the change
+in its dedicated worktree performs the work there. Otherwise, use `piano_start_session` when
+available to dispatch the change into a new worktree. When unavailable, or when the user asks to
+keep the work in the current session, create the worktree with `/worktrunk:wt-switch-create` in
+Claude Code or `wt switch -c <branch>` elsewhere (`wt switch -h` lists the options). Run every
+later command from that worktree's directory.
 
 A worktree ends in one of two outcomes:
 

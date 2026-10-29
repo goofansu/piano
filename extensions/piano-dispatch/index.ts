@@ -198,13 +198,12 @@ export default function pianoDispatch(pi: ExtensionAPI) {
     defineTool({
       name: START_TOOL,
       label: "Start Piano session",
-      promptSnippet: "Dispatch work to a new Piano session when explicitly requested",
+      promptSnippet: "Start a Piano session, optionally in a new worktree",
       promptGuidelines: [
-        "Start Piano sessions only when the user explicitly asks to dispatch work through Piano. Otherwise, work in the current session. Waiting for that dispatched work is part of the authorized request.",
         "piano_session_status only reads: use it whenever you need to know what a Piano session is doing, dispatched or not.",
       ],
       description:
-        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there; use it for each concurrent writing task. A missing cwd, a non-Git cwd or a branch that exists refuses the start and creates no session. Worktrunk hooks are skipped unless worktree.hooks is true; then an unapproved hook refuses the start, and a failed hook may leave the new checkout on disk (see detail). Always uses normal new-session model and effort defaults, not the parent's settings. Returns creation (created; refused, when no session exists; or uncertain, when one may), submission (what Pi did with the brief: started, queued, handled, needs_input, rejected, not_sent or uncertain), a handle to pass unchanged to piano_wait_sessions, the created worktree, and an Open session link. Creation/admission is not completion. On uncertain creation or delivery inspect Piano before trying again: never automatically repeat dispatch.",
+        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there. A missing cwd, a non-Git cwd or a branch that exists refuses the start and creates no session. Worktrunk hooks are skipped unless worktree.hooks is true; then an unapproved hook refuses the start, and a failed hook may leave the new checkout on disk (see detail). Always uses normal new-session model and effort defaults, not the parent's settings. Returns creation (created; refused, when no session exists; or uncertain, when one may), submission (what Pi did with the brief: started, queued, handled, needs_input, rejected, not_sent or uncertain), a handle to pass unchanged to piano_wait_sessions, the created worktree, and an Open session link. Creation/admission is not completion. On uncertain creation or delivery inspect Piano before trying again: never automatically repeat dispatch.",
       parameters: StartParameters,
       outputSchema: StartOutput,
       async execute(_id, params, signal, _update, ctx) {
@@ -255,7 +254,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
     defineTool({
       name: WAIT_TOOL,
       label: "Wait for Piano sessions",
-      promptSnippet: "Wait for explicitly dispatched Piano work",
+      promptSnippet: "Wait for dispatched Piano work",
       description:
         "Observe fresh work sessions using the exact handles returned by piano_start_session. Default wait 30 seconds; timeoutMs allows 1000–60000. Returns partial results with running, settled, failed, cancelled, needs_input or unknown status, answer or null, and Open session links. ending=deadline is an observation limit, not child failure. Cancelling this wait never stops children. Later input, a restarted host or missing evidence may prevent attribution; inspect that session instead. Settlement does not certify task/check success, handled input may have no answer, and child completion does not automatically wake this parent.",
       parameters: WaitParameters,
