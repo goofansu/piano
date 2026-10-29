@@ -96,6 +96,14 @@ it to start a new session in a new worktree for development. Otherwise, in Claud
 `/worktrunk:wt-switch-create`; elsewhere, run `wt switch -c <branch>` (`wt switch -h` lists the
 options). With either fallback, run every later command from that worktree's directory.
 
+A worktree ends in one of two outcomes:
+
+- **Pull request:** once the work passes [Verification](#verification), commit, push and open a
+  pull request. Starting the worktree is the request for all three; the user reviews and merges.
+- **User's decision:** when the work cannot pass Verification, or the next step is the user's to
+  choose (scope, design, a trade-off), stop and ask, naming what stands between the work and its
+  pull request.
+
 ## Deploy
 
 Rebuild, restart or deploy only when the user asks. On an exe.dev VM, follow
