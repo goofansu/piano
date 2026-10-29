@@ -336,6 +336,21 @@ test("a submission names the caller's input, for a steer as for a prompt", async
   );
 });
 
+test("a prompt Pi starts before its agent_start arrives shows no projection error", async () => {
+  await run(
+    Effect.gen(function* () {
+      const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "late-start" });
+      yield* t.act({ _tag: "prompt", text: "late start" });
+      assert.equal((yield* t.state).projectionError, undefined, "a busy Pi is not an error");
+      const ends = yield* collectUntil(
+        t.events,
+        (e) => e._tag === "state" && e.state.isStreaming === false,
+      );
+      assert.ok(ends.length > 0);
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+});
+
 test("snapshot first, then a streamed turn", async () => {
   const seen = await run(
     Effect.gen(function* () {

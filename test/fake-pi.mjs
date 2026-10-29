@@ -460,6 +460,25 @@ function handle(cmd) {
           .then((message) => out({ type: "extension_ui_request", method: "notify", message }));
         return;
       }
+      // Pi accepts the prompt and is busy before its agent_start reaches Piano.
+      if (cmd.message === "late start") {
+        respond(cmd, { disposition: "started" });
+        streaming = true;
+        setTimeout(() => {
+          out({ type: "agent_start" });
+          const message = {
+            role: "assistant",
+            content: [{ type: "text", text: "Late reply" }],
+            stopReason: "stop",
+          };
+          messages.push(message);
+          out({ type: "message_end", message });
+          out({ type: "agent_end", messages: [message], willRetry: false });
+          streaming = false;
+          out({ type: "agent_settled" });
+        }, 200);
+        return;
+      }
       if (cmd.message.startsWith("notification ")) {
         respond(cmd, { disposition: "started" });
         if (cmd.message !== "notification finish") {
