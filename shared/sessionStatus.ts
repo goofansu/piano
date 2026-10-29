@@ -46,6 +46,14 @@ export const workUnderWay = (state: SessionState): boolean =>
   (state.queuedMessages?.length ?? 0) > 0 ||
   state.dialogResolution?.delivery === "pending";
 
+/**
+ * What a waiting dialog asks, in one line: its title (the question; a confirm's message is the
+ * detail under it), else its message, else what kind of answer Pi waits for. A blank field counts
+ * as absent. The status read and the start and wait tools all report this.
+ */
+export const dialogAsks = (dialog: Dialog): string =>
+  dialog.title?.trim() || dialog.message?.trim() || `Pi is waiting for a ${dialog.method} answer.`;
+
 export function liveActivityOf({ state, dialogs }: Snapshot): LiveActivity {
   const dialog = dialogs[0];
   if (dialog) return { _tag: "needs_input", dialog };

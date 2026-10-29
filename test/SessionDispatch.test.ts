@@ -443,11 +443,17 @@ test("a dialog on the first prompt returns the handle at once", bounded, async (
   h.last().accept();
   const socket = h.last();
   socket.frame(selected(socket.selection(), snapshotOf()));
-  socket.frame(frameOf(socket.selection(), { _tag: "dialog", dialog: dialog() }));
+  socket.frame(
+    frameOf(socket.selection(), {
+      _tag: "dialog",
+      dialog: dialog({ title: "Run the migration?", message: "This rewrites the schema." }),
+    }),
+  );
   const result = await start;
   assert.equal(result.submission, "needs_input");
   assert.equal(result.handle?.sessionId, sessionId, "the session exists and can be waited on");
-  assert.match(result.detail ?? "", /Run the migration\?/);
+  // What the dialog asks, as status reports it: the question, not the detail under it.
+  assert.equal(result.detail, "Run the migration?");
   assert.equal(h.pendingTimers(), 0, "it does not sit on the start deadline");
 });
 
@@ -644,13 +650,17 @@ test(
     socket.frame(
       socketSnapshot(
         socket,
-        snapshotOf({ submission: { id: 1, outcome: "started" } }, [], [dialog()]),
+        snapshotOf(
+          { submission: { id: 1, outcome: "started" } },
+          [],
+          [dialog({ title: "Run the migration?", message: "This rewrites the schema." })],
+        ),
       ),
     );
     const [observation] = await wait;
     assert.equal(observation!.status, "needs_input");
     assert.equal(observation!.answer, null);
-    assert.match(observation!.detail ?? "", /Run the migration\?/);
+    assert.equal(observation!.detail, "Run the migration?");
   },
 );
 
