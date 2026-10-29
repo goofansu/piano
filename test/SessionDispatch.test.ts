@@ -1134,28 +1134,153 @@ test("a wait reconnects by selecting only, and never replays a mutation", bounde
   );
 });
 
-test("each waited handle keeps its own connection, deadline and result", bounded, async () => {
+for (const ending of ["settled", "needs_input", "aborted"] as const) {
+  test(`one default wait survives the old cap until ${ending}`, bounded, async () => {
+    const h = world();
+    const controller = new AbortController();
+    const wait = waitSessions([await handleOf()], undefined, h.env, controller.signal);
+    let resolved = false;
+    void wait.then(() => {
+      resolved = true;
+    });
+    const socket = h.last();
+    socket.accept();
+    socket.frame(
+      socketSnapshot(
+        socket,
+        snapshotOf({
+          isStreaming: true,
+          submission: { id: 1, outcome: "started" },
+        }),
+      ),
+    );
+    await h.advanceAsync(600_000);
+    assert.equal(resolved, false, "healthy observation has no default deadline");
+    assert.equal(h.sockets.length, 1, "no reconnect or repeated wait is needed");
+    if (ending === "aborted") controller.abort();
+    else if (ending === "needs_input") {
+      socket.frame(frameOf(socket.selection(), { _tag: "dialog", dialog: dialog() }));
+    } else {
+      socket.frame(socketSnapshot(socket, idle(answered())));
+    }
+    const [result] = await wait;
+    assert.equal(result!.status, ending === "aborted" ? "running" : ending);
+    assert.equal(result!.ending, ending === "aborted" ? "aborted" : "observed");
+    if (ending === "settled") assert.equal(result!.answer, "the thing is done");
+    assert.equal(h.sentOf("act").length, 0, "cancelling observation never stops the worker");
+    assert.ok(socket.isClosed());
+    assert.equal(h.pendingTimers(), 0);
+  });
+}
+
+test("default multi-handle wait waits for all completions", bounded, async () => {
   const h = world();
-  const quick = { ...(await handleOf()), sessionId: "quick" };
-  const quiet = { ...(await handleOf()), sessionId: "quiet" };
-  const wait = waitSessions([quick, quiet], undefined, h.env);
-  assert.equal(h.sockets.length, 2, "one connection per waited handle");
+  const handle = await handleOf();
+  const wait = waitSessions([handle, { ...handle, sessionId: "second" }], undefined, h.env);
+  let resolved = false;
+  void wait.then(() => {
+    resolved = true;
+  });
   const [first, second] = h.sockets;
   first!.accept();
   second!.accept();
-  first!.frame(socketSnapshot(first!, idle(answered())));
-  await settleMicrotasks();
-  assert.ok(first!.isClosed(), "a settled handle releases its connection at once");
-  assert.ok(!second!.isClosed(), "while the other keeps observing");
-  h.advance(30_000);
-  const [done, waiting] = await wait;
-  assert.equal(done!.status, "settled");
-  assert.equal(done!.ending, "observed");
-  assert.equal(done!.answer, "the thing is done");
-  assert.equal(waiting!.ending, "deadline", "the deadline is reported apart from the status");
-  assert.equal(waiting!.answer, null);
+  first!.frame(socketSnapshot(first!, idle(answered("first answer"))));
+  second!.frame(
+    socketSnapshot(
+      second!,
+      snapshotOf({
+        isStreaming: true,
+        submission: { id: 1, outcome: "started" },
+      }),
+    ),
+  );
+  await h.advanceAsync(600_000);
+  assert.equal(resolved, false);
+  assert.ok(first!.isClosed());
+  second!.frame(socketSnapshot(second!, idle(answered("second answer"))));
+  assert.deepEqual(
+    (await wait).map(({ status, answer }) => ({ status, answer })),
+    [
+      { status: "settled", answer: "first answer" },
+      { status: "settled", answer: "second answer" },
+    ],
+  );
   assert.equal(h.pendingTimers(), 0);
 });
+
+for (const failure of [
+  "never connects",
+  "silent selection",
+  "disconnect",
+  "silent reconnect",
+  "flapping",
+] as const) {
+  test(`default observation bounds unavailable state: ${failure}`, bounded, async () => {
+    const h = world();
+    const wait = waitSessions([await handleOf()], undefined, h.env);
+    if (failure !== "never connects") h.last().accept();
+    if (!["never connects", "silent selection"].includes(failure)) {
+      const socket = h.last();
+      socket.frame(
+        socketSnapshot(
+          socket,
+          snapshotOf({
+            isStreaming: true,
+            submission: { id: 1, outcome: "started" },
+          }),
+        ),
+      );
+      await h.advanceAsync(600_000);
+      socket.serverClose(1006);
+      if (failure === "silent reconnect") {
+        h.advance(2_000);
+        h.last().accept();
+      }
+      if (failure === "flapping") {
+        for (let i = 0; i < 10; i++) {
+          h.advance(2_000);
+          h.last().accept();
+          h.last().serverClose(1006);
+        }
+      }
+    }
+    await h.advanceAsync(30_000);
+    const [result] = await wait;
+    assert.equal(result!.status, "unknown");
+    assert.equal(result!.ending, "observed", "loss of observation is not a caller deadline");
+    assert.match(result!.detail!, /could not.*read/i);
+    assert.equal(h.sentOf("act").length, 0);
+    assert.ok(h.sockets.every((socket) => socket.isClosed()));
+    assert.equal(h.pendingTimers(), 0);
+  });
+}
+
+test(
+  "each waited handle keeps its own connection, explicit deadline and result",
+  bounded,
+  async () => {
+    const h = world();
+    const quick = { ...(await handleOf()), sessionId: "quick" };
+    const quiet = { ...(await handleOf()), sessionId: "quiet" };
+    const wait = waitSessions([quick, quiet], 1_000, h.env);
+    assert.equal(h.sockets.length, 2, "one connection per waited handle");
+    const [first, second] = h.sockets;
+    first!.accept();
+    second!.accept();
+    first!.frame(socketSnapshot(first!, idle(answered())));
+    await settleMicrotasks();
+    assert.ok(first!.isClosed(), "a settled handle releases its connection at once");
+    assert.ok(!second!.isClosed(), "while the other keeps observing");
+    h.advance(1_000);
+    const [done, waiting] = await wait;
+    assert.equal(done!.status, "settled");
+    assert.equal(done!.ending, "observed");
+    assert.equal(done!.answer, "the thing is done");
+    assert.equal(waiting!.ending, "deadline", "the deadline is reported apart from the status");
+    assert.equal(waiting!.answer, null);
+    assert.equal(h.pendingTimers(), 0);
+  },
+);
 
 test("an observation deadline is not a sibling attention event", bounded, async () => {
   const h = world();

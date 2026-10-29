@@ -82,7 +82,13 @@ const StartOutput = Type.Object({
 });
 const WaitParameters = Type.Object({
   sessions: Type.Array(Handle, { minItems: 1, maxItems: 32 }),
-  timeoutMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 60000 })),
+  timeoutMs: Type.Optional(
+    Type.Integer({
+      minimum: 1000,
+      maximum: 60000,
+      description: "Only for an explicitly bounded observation; omit to wait for completion.",
+    }),
+  ),
 });
 const WaitOutput = Type.Object({ results: Type.Array(Observation) });
 const StatusParameters = Type.Object({
@@ -256,7 +262,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
       label: "Wait for Piano sessions",
       promptSnippet: "Wait for dispatched Piano work",
       description:
-        "Observe fresh work sessions using the exact handles returned by piano_start_session. Default wait 30 seconds; timeoutMs allows 1000–60000. Returns partial results with running, settled, failed, cancelled, needs_input or unknown status, answer or null, and Open session links. ending=deadline is an observation limit, not child failure. Cancelling this wait never stops children. Later input, a restarted host or missing evidence may prevent attribution; inspect that session instead. Settlement does not certify task/check success, handled input may have no answer, and child completion does not automatically wake this parent.",
+        "Wait for fresh work sessions using the exact handles returned by piano_start_session. Omit timeoutMs: one call stays open until all sessions finish or any needs input, fails, is cancelled or becomes unobservable. Do not poll with repeated short waits or status reads when you need completion. Only set timeoutMs (1000–60000) for an explicitly bounded observation. Returns every handle's current result with running, settled, failed, cancelled, needs_input or unknown status, answer or null, and Open session links. ending=deadline is an observation limit, not child failure. Cancelling this wait only closes observation; children keep running. Lost connections and unreadable state have bounded recovery. Later input, a restarted host or missing evidence may prevent attribution; inspect that session instead. Settlement does not certify task/check success, handled input may have no answer, and child completion does not wake a parent whose turn has ended. When called through codemode, await the call and omit the script timeout too.",
       parameters: WaitParameters,
       outputSchema: WaitOutput,
       async execute(_id, params, signal) {

@@ -69,8 +69,7 @@ export type {
   WaitEnding,
 } from "../../shared/dispatch.ts";
 
-/** A wait's bounds. A model asking for less than a second, or for an hour, gets neither. */
-export const WAIT_DEFAULT_MS = 30_000;
+/** Bounds for an explicitly requested observation window; omission waits for completion. */
 export const WAIT_MIN_MS = 1_000;
 export const WAIT_MAX_MS = 60_000;
 /** A start waits this long for creation and the input's acknowledgement, plus Piano's worktree
@@ -84,13 +83,16 @@ const RECHECK_DELAY_MS = 250;
 const SELECT_ATTEMPTS = 3;
 /** Milliseconds before retrying a refused or failed attach. */
 const RETRY_DELAY_MS = 500;
+/** Bound missing snapshots and reconnects, not healthy execution. Reopening a socket alone
+ * cannot reset this budget: only a current selection proves observation recovered. */
+const READ_DEADLINE_MS = 30_000;
 /** How much of a session a wait is willing to hold in memory before it gives up on observing it. */
 const MAX_VIEW_MESSAGES = 5_000;
 const MAX_VIEW_CHARS = 4_000_000;
 
-export const waitTimeout = (timeoutMs: number | undefined): number =>
+const waitTimeout = (timeoutMs: number | undefined): number | undefined =>
   timeoutMs === undefined || !Number.isFinite(timeoutMs)
-    ? WAIT_DEFAULT_MS
+    ? undefined
     : Math.min(WAIT_MAX_MS, Math.max(WAIT_MIN_MS, Math.trunc(timeoutMs)));
 
 const fingerprint = (text: string): string => createHash("sha256").update(text).digest("hex");
@@ -130,7 +132,7 @@ interface Observer<T> {
  */
 function observe<T>(
   environment: SocketEnvironment,
-  options: { readonly deadlineMs: number; readonly signal?: AbortSignal },
+  options: { readonly deadlineMs: number | undefined; readonly signal?: AbortSignal },
   create: (link: Link, settle: (value: T) => void) => Observer<T>,
 ): Promise<T> {
   return new Promise<T>((resolve) => {
@@ -142,6 +144,7 @@ function observe<T>(
       nonce: () => environment.nonce(),
       after: (ms, run) => {
         const timer = environment.setTimeout(() => {
+          timers.delete(timer);
           if (!done) run();
         }, ms);
         timers.add(timer);
@@ -170,7 +173,8 @@ function observe<T>(
       return;
     }
     options.signal?.addEventListener("abort", onAbort, { once: true });
-    link.after(options.deadlineMs, () => settle(observer.deadline()));
+    if (options.deadlineMs !== undefined)
+      link.after(options.deadlineMs, () => settle(observer.deadline()));
     connection = openConnection(
       {
         onMessage: (message) => {
@@ -692,7 +696,7 @@ function verdict(
  */
 function observeHandle(
   handle: SessionHandle,
-  deadlineMs: number,
+  deadlineMs: number | undefined,
   environment: SocketEnvironment,
   signal?: AbortSignal,
 ): Promise<SessionObservation> {
@@ -732,7 +736,21 @@ function observeHandle(
         detail: detail ?? attributed.detail,
       };
     };
+    let readDeadline: unknown;
+    const boundRead = () => {
+      if (readDeadline !== undefined) return;
+      readDeadline = link.after(READ_DEADLINE_MS, () => {
+        settle(
+          observation(
+            "unknown",
+            "observed",
+            "Piano could not be read within 30 seconds; inspect the session before waiting again.",
+          ),
+        );
+      });
+    };
     const select = () => {
+      boundRead();
       selectionId = link.nonce();
       sequence = 0;
       link.send({
@@ -744,6 +762,7 @@ function observeHandle(
     };
     /** Attaches again, up to the attempt bound, rather than trusting an incomplete view. */
     const reattach = (detail: string) => {
+      boundRead();
       if (attempts >= SELECT_ATTEMPTS) {
         settle(observation("unknown", "observed", detail));
         return;
@@ -815,6 +834,7 @@ function observeHandle(
         detail ?? reading?.detail,
       );
     };
+    boundRead();
     return {
       connected: () => {
         attempts++;
@@ -822,6 +842,7 @@ function observeHandle(
       },
       disconnected: (fatal) => {
         fresh = false;
+        boundRead();
         if (fatal)
           settle(
             observation(
@@ -835,6 +856,8 @@ function observeHandle(
         if (selectionId === null || selectionOf(message) !== selectionId) return;
         switch (message._tag) {
           case "selected":
+            link.cancel(readDeadline);
+            readDeadline = undefined;
             snapshot = message.snapshot;
             hosted = message.hosted;
             generation = message.cursor?.generation ?? "";
@@ -883,10 +906,10 @@ function observeHandle(
 }
 
 /**
- * Observes each handle on its own connection, up to a shared deadline (30 seconds by default,
- * never under a second or over a minute). Every handle is reported: a handle that could not be
- * observed, timed out or was abandoned produces an observation that says so, not a missing row
- * and not a rejected promise.
+ * Observes until all handles complete or any needs attention, with no default execution deadline.
+ * An explicit timeout requests a bounded observation instead (1–60 seconds). Every handle is
+ * reported, including unavailable or abandoned observations. Cancellation closes observers,
+ * never workers; nothing here wakes a parent after its turn ends.
  */
 export function waitSessions(
   handles: ReadonlyArray<SessionHandle>,
