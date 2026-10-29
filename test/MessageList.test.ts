@@ -68,6 +68,21 @@ test("API errors render as concise standalone errors with details available on d
   );
 });
 
+test("saved and streaming assistant images retain file-preview fallback actions", () => {
+  const image: RenderMsg = {
+    id: "image",
+    role: "assistant",
+    text: "Before ![Input](.scratch/inline-questions/pr-journey/01-input.png) after.",
+  };
+  for (const html of [render([image]), render([], {}, image)]) {
+    assert.match(html, /data-local-file=".scratch\/inline-questions\/pr-journey\/01-input.png"/);
+    assert.match(html, />Input<\/button>/);
+    assert.ok(html.indexOf("Before") < html.indexOf("data-local-file"));
+    assert.ok(html.indexOf("data-local-file") < html.indexOf("after."));
+    assert.doesNotMatch(html, /<img|href=/, "no unchecked resource URL while loading");
+  }
+});
+
 test("a represented abort renders as the failed tool alone", () => {
   const html = render([call, result, abort]);
   assert.match(html, />Failed</);

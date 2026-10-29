@@ -17,12 +17,9 @@ import { NativeFile } from "@/components/NativeFile";
 import { PianoViewToggle, PianoViewToggleItem } from "@/components/PianoViewToggle";
 import { SurfaceFrame } from "@/components/SurfaceArea";
 import { workspaceFile, workspaceFileDownload } from "@/lib/api";
-import { markdownImages } from "@/lib/markdown";
 import type { SurfaceTab } from "@/lib/navigation";
+import { relativeToDocument, useMarkdownImages } from "@/lib/useMarkdownImages";
 import { useNavigation } from "@/lib/useNavigation";
-
-const relativeTo = (document: string, path: string) =>
-  path.startsWith("/") ? path : `${document.slice(0, document.lastIndexOf("/") + 1)}${path}`;
 
 const FilePdf = lazy(() =>
   import("@/components/FilePdf").catch(() => ({
@@ -123,46 +120,11 @@ export function WorkspaceFile({
     setBinary({ result, url });
     return () => URL.revokeObjectURL(url);
   }, [result]);
-  const [images, setImages] = useState<ReadonlyMap<string, string>>(new Map());
-  useEffect(() => {
-    setImages(new Map());
-    if (mode !== "preview" || result?.kind !== "markdown" || !workspaceId) return;
-    const controller = new AbortController();
-    const urls = new Map<string, string>();
-    let paths: string[];
-    try {
-      paths = markdownImages(result.content).slice(0, 8);
-    } catch {
-      // Image enhancement is optional; preview fallback and Source must remain available.
-      return;
-    }
-    void (async () => {
-      let total = 0;
-      for (const path of paths) {
-        if (controller.signal.aborted || total >= 20 * 1024 * 1024) break;
-        try {
-          const image = await workspaceFile(workspaceId, relativeTo(result.path, path), {
-            signal: controller.signal,
-          });
-          if (controller.signal.aborted) return;
-          if (image.kind !== "image") continue;
-          total += image.bytes.byteLength;
-          if (total > 20 * 1024 * 1024) break;
-          urls.set(
-            path,
-            URL.createObjectURL(new Blob([new Uint8Array(image.bytes)], { type: image.mime })),
-          );
-          setImages(new Map(urls));
-        } catch {
-          /* Keep the image's local link usable for an explicit retry/error. */
-        }
-      }
-    })();
-    return () => {
-      controller.abort();
-      for (const url of urls.values()) URL.revokeObjectURL(url);
-    };
-  }, [mode, result, workspaceId]);
+  const images = useMarkdownImages(
+    workspaceId,
+    mode === "preview" && result?.kind === "markdown" ? result.content : "",
+    result?.path,
+  );
   const [saving, setSaving] = useState(false);
   // The browser saves the file through a short-lived object URL; the server sends exact bytes.
   const save = async () => {
@@ -233,7 +195,7 @@ export function WorkspaceFile({
           ) : result.kind === "markdown" && mode === "preview" ? (
             <LocalFileContext
               // A link in a file opens beside it, in the Surface area.
-              value={(path) => openFile(relativeTo(result.path, path), "surface")}
+              value={(path) => openFile(relativeToDocument(result.path, path), "surface")}
             >
               <Markdown
                 text={result.content}

@@ -56,6 +56,7 @@ import {
   type TranscriptRow,
   transcriptRows,
 } from "@/lib/transcript";
+import { useMarkdownImages } from "@/lib/useMarkdownImages";
 import { NavigationContext } from "@/lib/useNavigation";
 import {
   TranscriptDisclosures,
@@ -79,6 +80,7 @@ export const SessionDestinationContext = createContext<
 const PromptMeasurementsContext = createContext<Set<() => void> | null>(null);
 
 interface Props {
+  workspaceId?: string;
   messages: ReadonlyArray<RenderMsg>;
   pending: RenderMsg | null;
   /** Local first input awaiting authoritative history; not a transcript message. */
@@ -103,6 +105,7 @@ interface Props {
  * Tool results are folded under the call that produced them.
  */
 export function MessageList({
+  workspaceId,
   messages,
   pending,
   submittedInput,
@@ -202,7 +205,7 @@ export function MessageList({
                       >
                         {ready ? (
                           <TranscriptRowKey value={row.key}>
-                            <TranscriptRowView row={row} />
+                            <TranscriptRowView row={row} workspaceId={workspaceId} />
                           </TranscriptRowKey>
                         ) : (
                           <div
@@ -282,7 +285,14 @@ function Row({
   );
 }
 
-const TranscriptRowView = memo(function TranscriptRowView({ row }: { row: TranscriptRow }) {
+const TranscriptRowView = memo(function TranscriptRowView({
+  row,
+  workspaceId,
+}: {
+  row: TranscriptRow;
+  workspaceId?: string;
+}) {
+  const images = useMarkdownImages(workspaceId, row.kind === "reply" ? row.text : "");
   // Saved replies parse once rather than mounting a parser per streaming block. A live reply
   // retains its streaming block identities when it completes, until this window unmounts it.
   const [mode] = useState<"streaming" | "static">(() =>
@@ -323,6 +333,7 @@ const TranscriptRowView = memo(function TranscriptRowView({ row }: { row: Transc
               {/* Labels and controls are select-none, so copied or quoted text is only what was said. */}
               <span className="sr-only select-none">Pi said</span>
               <Markdown
+                images={images}
                 text={text}
                 streaming={streaming}
                 mode={mode}
