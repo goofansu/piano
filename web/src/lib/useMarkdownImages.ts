@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { workspaceFile } from "@/lib/api";
 import { markdownImages } from "@/lib/markdown";
-import { mayPreviewAsImage, previewImage } from "@/lib/previewImage";
+import {
+  type MarkdownImageLoader,
+  markdownImageLoader,
+  relativeToDocument,
+} from "@/lib/markdownImageLoader";
 
 const empty: ReadonlyMap<string, string> = new Map();
-
-/** Replies resolve from the workspace root; Markdown files resolve from their own directory. */
-export const relativeToDocument = (document: string, path: string) =>
-  path.startsWith("/") ? path : `${document.slice(0, document.lastIndexOf("/") + 1)}${path}`;
 
 /** Optional, bounded image enhancement through the same policy as an explicit file preview.
  * Only mounted prose owns blobs; changing workspace/document or unmounting cancels and revokes. */
@@ -16,52 +16,35 @@ export function useMarkdownImages(
   text: string,
   document = "",
 ): ReadonlyMap<string, string> {
-  // Streaming prose after an image must not refetch it or flash its fallback on every delta.
-  // A name that claims a non-image format (`demo.mp4`, `spec.pdf`) is never fetched or counted.
-  const paths = useMemo(
-    () => JSON.stringify(markdownImages(text).filter(mayPreviewAsImage).slice(0, 8)),
-    [text],
-  );
-  const [loaded, setLoaded] = useState<{
+  const paths = useMemo(() => markdownImages(text), [text]);
+  const [owner, setOwner] = useState<{
     workspaceId: string;
     document: string;
-    paths: string;
+    loader: MarkdownImageLoader;
     images: ReadonlyMap<string, string>;
   }>();
   useEffect(() => {
-    setLoaded(undefined);
     if (!workspaceId) return;
-    const controller = new AbortController();
-    const urls = new Map<string, string>();
-    void (async () => {
-      let total = 0;
-      for (const path of JSON.parse(paths) as string[]) {
-        if (controller.signal.aborted || total >= 20 * 1024 * 1024) break;
-        try {
-          const preview = await workspaceFile(workspaceId, relativeToDocument(document, path), {
-            signal: controller.signal,
-          });
-          if (controller.signal.aborted) return;
-          const image = previewImage(preview);
-          if (!image) continue;
-          total += image.size;
-          if (total > 20 * 1024 * 1024) break;
-          urls.set(path, URL.createObjectURL(image));
-          setLoaded({ workspaceId, document, paths, images: new Map(urls) });
-        } catch {
-          // Keep the local-file action usable for an explicit retry/error.
-        }
-      }
-    })();
+    const loader = markdownImageLoader({
+      read: (path, signal) =>
+        workspaceFile(workspaceId, relativeToDocument(document, path), { signal }),
+      createUrl: (blob) => URL.createObjectURL(blob),
+      revokeUrl: (url) => URL.revokeObjectURL(url),
+    });
+    const own = (images: ReadonlyMap<string, string>) =>
+      setOwner({ workspaceId, document, loader, images });
+    own(empty);
+    const unsubscribe = loader.subscribe(own);
     return () => {
-      controller.abort();
-      for (const url of urls.values()) URL.revokeObjectURL(url);
+      unsubscribe();
+      loader.dispose();
     };
-  }, [workspaceId, document, paths]);
+  }, [workspaceId, document]);
   // Never show an old workspace's blobs, even for the render before effect cleanup.
-  return loaded?.workspaceId === workspaceId &&
-    loaded?.document === document &&
-    loaded?.paths === paths
-    ? loaded.images
-    : empty;
+  const current =
+    owner?.workspaceId === workspaceId && owner?.document === document ? owner : undefined;
+  const loader = current?.loader;
+  // Streaming prose feeds every delta; the loader reads only paths it has not seen.
+  useEffect(() => loader?.show(paths), [loader, paths]);
+  return current?.images ?? empty;
 }
