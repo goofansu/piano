@@ -183,7 +183,8 @@ parent's turn has ended.
 
 Healthy execution has no wait deadline. An initial selection or recovery after connection loss or
 missed frames must produce a current snapshot within 30 seconds, otherwise wait returns `unknown`.
-Merely reopening the socket does not extend that recovery budget. Existing bounded rechecks still
+Merely reopening the socket does not extend that recovery budget, nor its three attempts to attach;
+a current snapshot renews both, so a long wait survives any number of losses it recovered from. Existing bounded rechecks still
 refuse to call an idle-looking session settled without Piano confirming quiescence; if that cannot
 be confirmed, the result reports pending work rather than claiming completion.
 
