@@ -266,7 +266,7 @@ test("an open message defers the context read until its end", async () => {
       yield* Fiber.join(refresh);
       assert.equal(yield* pi.pending, 0, "Pi's context is not read while a message is open");
       assert.equal(yield* pi.contextLanded, false);
-      assert.match((yield* pi.state).projectionError ?? "", /Pi context changed/);
+      assert.equal((yield* pi.state).projectionError, undefined, "an open message is not an error");
 
       yield* pi.output({ type: "message_end" });
       const retry = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
@@ -280,12 +280,19 @@ test("an open message defers the context read until its end", async () => {
   );
 });
 
-for (const activeAt of ["preflight", "post-read"]) {
-  test(`active ${activeAt} defers without retrying, then a stats boundary recovers pending context`, async () => {
+for (const [activeAt, via] of [
+  ["preflight", "schedule"],
+  ["post-read", "schedule"],
+  // Opening a session Pi is still running asks for its context explicitly.
+  ["preflight", "refresh"],
+  ["post-read", "refresh"],
+] as const) {
+  test(`active ${activeAt} defers a ${via} without retrying, then a stats boundary recovers pending context`, async () => {
     await run(
       Effect.gen(function* () {
         const pi = yield* harness();
-        yield* pi.readbacks.schedule("context", "context");
+        if (via === "schedule") yield* pi.readbacks.schedule("context", "context");
+        else yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
         yield* pi.answer(
           yield* pi.next("get_state"),
           rawState({ isStreaming: activeAt === "preflight" }),

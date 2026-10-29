@@ -238,7 +238,11 @@ for (const role of ["custom", "assistant"]) {
         assert.equal(initial._tag, "snapshot");
         if (initial._tag !== "snapshot") return;
         const snapshot = initial.snapshot;
-        assert.match(snapshot.state.projectionError ?? "", /Pi context changed/);
+        assert.equal(
+          snapshot.state.projectionError,
+          undefined,
+          "a running message defers the context without a warning",
+        );
         assert.deepEqual(
           snapshot.messages,
           [],

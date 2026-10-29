@@ -144,11 +144,9 @@ export const makeSessionReadbacks = ({
   );
 
   /** Replace current context, never concatenate raw history. Active work defers to a
-   * later boundary; only snapshots raced by Pi output spend the bounded retry budget.
-   * Explicit refreshes (including startup) must still report an unresolved projection. */
-  const refreshContext = Effect.fn("SessionReadbacks.refreshContext")(function* (
-    scheduled = false,
-  ) {
+   * later boundary without a projection error: the user can do nothing about it, and the
+   * boundary retries. Only snapshots raced by Pi output spend the bounded retry budget. */
+  const refreshContext = Effect.fn("SessionReadbacks.refreshContext")(function* () {
     const version = ++contextVersion;
     contextPending = false;
     const failed = (detail: string) =>
@@ -159,12 +157,8 @@ export const makeSessionReadbacks = ({
       });
     const unresolved =
       "Pi context changed during refresh. This view may be stale until the next command or settled boundary.";
-    const defer = Effect.gen(function* () {
-      if (version !== contextVersion || announced()) return;
-      contextPending = true;
-      // Background activity is expected, not a failed snapshot. A caller waiting for a
-      // projection (notably open) still needs a bounded, explicit incomplete outcome.
-      if (!scheduled) yield* failed(unresolved);
+    const defer = Effect.sync(() => {
+      if (version === contextVersion && !announced()) contextPending = true;
     });
     yield* Effect.gen(function* () {
       for (let attempt = 0; attempt < contextAttempts; attempt++) {
@@ -224,8 +218,7 @@ export const makeSessionReadbacks = ({
       if (refreshing.has(kind)) continue;
       refreshing.add(kind);
       yield* Effect.gen(function* () {
-        while (requested.delete(kind) && !announced())
-          yield* kind === "context" ? refreshContext(true) : refresh(kind);
+        while (requested.delete(kind) && !announced()) yield* refresh(kind);
       }).pipe(
         Effect.ensuring(
           Effect.sync(() => {
