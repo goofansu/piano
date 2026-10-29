@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { workspaceFile } from "@/lib/api";
 import { markdownImages } from "@/lib/markdown";
+import { mayPreviewAsImage, previewImage } from "@/lib/previewImage";
 
 const empty: ReadonlyMap<string, string> = new Map();
 
@@ -16,7 +17,11 @@ export function useMarkdownImages(
   document = "",
 ): ReadonlyMap<string, string> {
   // Streaming prose after an image must not refetch it or flash its fallback on every delta.
-  const paths = useMemo(() => JSON.stringify(markdownImages(text).slice(0, 8)), [text]);
+  // A name that claims a non-image format (`demo.mp4`, `spec.pdf`) is never fetched or counted.
+  const paths = useMemo(
+    () => JSON.stringify(markdownImages(text).filter(mayPreviewAsImage).slice(0, 8)),
+    [text],
+  );
   const [loaded, setLoaded] = useState<{
     workspaceId: string;
     document: string;
@@ -33,17 +38,15 @@ export function useMarkdownImages(
       for (const path of JSON.parse(paths) as string[]) {
         if (controller.signal.aborted || total >= 20 * 1024 * 1024) break;
         try {
-          const image = await workspaceFile(workspaceId, relativeToDocument(document, path), {
+          const preview = await workspaceFile(workspaceId, relativeToDocument(document, path), {
             signal: controller.signal,
           });
           if (controller.signal.aborted) return;
-          if (image.kind !== "image") continue;
-          total += image.bytes.byteLength;
+          const image = previewImage(preview);
+          if (!image) continue;
+          total += image.size;
           if (total > 20 * 1024 * 1024) break;
-          urls.set(
-            path,
-            URL.createObjectURL(new Blob([new Uint8Array(image.bytes)], { type: image.mime })),
-          );
+          urls.set(path, URL.createObjectURL(image));
           setLoaded({ workspaceId, document, paths, images: new Map(urls) });
         } catch {
           // Keep the local-file action usable for an explicit retry/error.

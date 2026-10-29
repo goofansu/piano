@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { workspaceFile, workspaceFileDownload } from "@/lib/api";
 import type { SurfaceTab } from "@/lib/navigation";
+import { previewImage } from "@/lib/previewImage";
 import { relativeToDocument, useMarkdownImages } from "@/lib/useMarkdownImages";
 import { useNavigation } from "@/lib/useNavigation";
 
@@ -96,12 +97,12 @@ export function WorkspaceFile({
   useEffect(() => {
     setBinary(undefined);
     if (!result || result.kind === "pdf") return;
+    // Images (raster or SVG) as Markdown shows them; audio and video play their own bytes.
     const blob =
-      result.kind === "svg"
-        ? new Blob([result.content], { type: "image/svg+xml" })
-        : "bytes" in result
-          ? new Blob([new Uint8Array(result.bytes)], { type: result.mime })
-          : undefined;
+      previewImage(result) ??
+      ("bytes" in result
+        ? new Blob([new Uint8Array(result.bytes)], { type: result.mime })
+        : undefined);
     if (!blob) return;
     const url = URL.createObjectURL(blob);
     setBinary({ result, url });
