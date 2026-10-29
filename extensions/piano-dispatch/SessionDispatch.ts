@@ -29,7 +29,7 @@ import {
   type WorktreeRequest,
 } from "../../shared/dispatch.ts";
 import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
-import { dialogAsks, liveActivityOf } from "../../shared/sessionStatus.ts";
+import { dialogAsks, isAnswer, liveActivityOf } from "../../shared/sessionStatus.ts";
 import { turnEnding } from "../../shared/turnEnding.ts";
 import {
   type ClientMessage,
@@ -519,8 +519,8 @@ interface Attributed {
 }
 
 /**
- * The finalized assistant text this handle's input produced, if the facts still tie it to that
- * input. Partial replies are never read: only a message Pi finished is an answer.
+ * The answer this handle's input produced, if the facts still tie it to that input. Partial
+ * replies are never read: only a message that is an answer (`isAnswer`) counts.
  */
 function attribute(
   handle: SessionHandle,
@@ -588,7 +588,7 @@ function attribute(
     .filter((message) => message.role === "assistant")
     .at(-1);
   if (!last) return { answer: null, attribution: "no-output" };
-  return last.text.trim().length > 0 && last.stopReason !== "toolUse"
+  return isAnswer(last)
     ? { answer: last.text, attribution: "attributed", message: last }
     : { answer: null, attribution: "no-output", message: last };
 }

@@ -112,16 +112,23 @@ export function dispositionOf(
 }
 
 /**
- * The last turn's final reply, at most `limit` (default LAST_ANSWER_CHARS): the last assistant message after the
- * last user message, when it has text and its turn completed (a reply cut off at the token limit
- * included). Null otherwise: a step toward a tool call, an interrupted or failed reply, or a
- * reply still being written, whose text is not yet an answer.
+ * Whether an assistant message is an answer: it has text and its turn completed (a reply cut off
+ * at the token limit included). A step toward a tool call, an interrupted or failed reply, or a
+ * reply still being written is not, whatever text it already shows. The status read, webhooks and
+ * the dispatch wait each choose their message and ask here.
+ */
+export const isAnswer = (message: Snapshot["messages"][number]): boolean =>
+  message.text.trim().length > 0 &&
+  !message.isError &&
+  turnEnding(message.stopReason) === "completed";
+
+/**
+ * The last turn's final reply, at most `limit` (default LAST_ANSWER_CHARS): the last assistant
+ * message after the last user message, when it is an answer. Null otherwise.
  */
 export function lastAnswerOf(snapshot: Snapshot, limit = LAST_ANSWER_CHARS): string | null {
   const messages = snapshot.messages;
   const turn = messages.slice(messages.findLastIndex((m) => m.role === "user") + 1);
   const last = turn.findLast((m) => m.role === "assistant");
-  if (!last?.text.trim() || last.isError || turnEnding(last.stopReason) !== "completed")
-    return null;
-  return cutText(last.text, limit);
+  return last && isAnswer(last) ? cutText(last.text, limit) : null;
 }

@@ -188,7 +188,9 @@ refuse to call an idle-looking session settled without Piano confirming quiescen
 be confirmed, the result reports pending work rather than claiming completion.
 
 Settlement means execution stopped, **not that the task or its checks succeeded**. An input handled
-without a new assistant answer returns `null`. The parent should assess the child's answer and
+without a new assistant answer returns `null`. `answer` follows the rule `lastAnswer` reads by: the
+text of an interrupted or failed reply is not an answer, so a `cancelled` or `failed` wait returns
+`null` with the reason in `detail`. The parent should assess the child's answer and
 reported evidence rather than treating settlement as verification.
 
 Observation is scoped to the fresh session's initial submission and live host generation. Input
