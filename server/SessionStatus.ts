@@ -8,7 +8,7 @@
 import { Clock, Context, Data, Effect, Layer, Option, Stream } from "effect";
 import { STATUS_CHANGES_MS } from "../shared/dispatch.ts";
 import { pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
-import { dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
+import { dialogAsks, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import type { SessionStatusFacts, Snapshot } from "../shared/wire.ts";
 import { GitHubPullRequests } from "./GitHubPullRequests.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
@@ -119,8 +119,7 @@ export const SessionStatusLive = Layer.effect(
         since: dialog ? new Date(dialog.receivedAt).toISOString() : entry.updatedAt,
         needs: dialog
           ? {
-              title:
-                dialog.title ?? dialog.message ?? `Pi is waiting for a ${dialog.method} answer.`,
+              title: dialogAsks(dialog),
               kind: dialog.method,
             }
           : null,

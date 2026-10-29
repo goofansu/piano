@@ -21,7 +21,7 @@ import { SessionStatus, SessionStatusLive, StatusChangesMs } from "../server/Ses
 import { GitCommand } from "../server/Subprocess.ts";
 import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
-import { dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
+import { dialogAsks, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import type { PullRequest, RenderMsg, Snapshot } from "../shared/wire.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-status-")));
@@ -327,4 +327,26 @@ test("the shared reading: a stopped Pi reads from its closure, and only a comple
     { stopReason: "stop", isError: true },
   ])
     assert.equal(answerOf(over), null, JSON.stringify(over));
+});
+
+test("what a waiting dialog asks: its title, else its message, else the kind of answer", () => {
+  const asking = (over: Partial<Snapshot["dialogs"][number]>) =>
+    dialogAsks({
+      id: "d1",
+      generation: "g1",
+      receivedAt: 0,
+      deadlineAt: null,
+      deadlineKind: "pi-timeout",
+      method: "confirm",
+      ...over,
+    });
+  assert.equal(
+    asking({ title: "Overwrite config?", message: "This replaces config.json" }),
+    "Overwrite config?",
+  );
+  assert.equal(
+    asking({ title: " ", message: "This replaces config.json" }),
+    "This replaces config.json",
+  );
+  assert.equal(asking({ title: "" }), "Pi is waiting for a confirm answer.");
 });

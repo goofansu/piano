@@ -29,7 +29,7 @@ import {
   type WorktreeRequest,
 } from "../../shared/dispatch.ts";
 import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
-import { liveActivityOf } from "../../shared/sessionStatus.ts";
+import { dialogAsks, liveActivityOf } from "../../shared/sessionStatus.ts";
 import { turnEnding } from "../../shared/turnEnding.ts";
 import {
   type ClientMessage,
@@ -276,13 +276,7 @@ export function startSession(
       const applyDialogs = () => {
         const dialog = snapshot?.dialogs[0];
         if (!dialog || !handle) return;
-        settle(
-          result(
-            "created",
-            "needs_input",
-            dialog.message ?? dialog.title ?? `Pi is waiting for a ${dialog.method} answer.`,
-          ),
-        );
+        settle(result("created", "needs_input", dialogAsks(dialog)));
       };
       return {
         connected: () => {
@@ -640,7 +634,7 @@ function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): R
       return {
         status: "needs_input",
         terminal: true,
-        detail: dialog.message ?? dialog.title ?? `Pi is waiting for a ${dialog.method} answer.`,
+        detail: dialogAsks(dialog),
       };
     }
     case "running":
