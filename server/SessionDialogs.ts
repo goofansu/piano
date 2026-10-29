@@ -49,9 +49,12 @@ export const makeSessionDialogs = ({
 }: SessionDialogsOptions) => {
   // Claim/removal, deadline wakeup and resolution frames share one atomic snapshot boundary.
   const closed = new Map<string, Deferred.Deferred<void>>();
-  /** Dialog id to the tool call that owns it. Kept for the generation, so an answer arriving
-   * after the call ended is still recognised as one of Piano's own questions. */
-  const owners = new Map<string, string>();
+  /** True when this generation's dialog or receipt belongs to `toolCallId` (any call when omitted):
+   * ownership travels on the dialog and its resolution, so a receipt outlives the dialog. */
+  const ownedReceipt = (resolution: DialogResolution | undefined, toolCallId?: string) =>
+    resolution?.generation === generation &&
+    resolution.toolCallId !== undefined &&
+    (toolCallId === undefined || resolution.toolCallId === toolCallId);
 
   /** Settle one dialog's claim under the lock: remove it, wake its watcher, publish. */
   const settle = Effect.fnUntraced(function* (
@@ -171,12 +174,11 @@ export const makeSessionDialogs = ({
           }
         : { ...request, deadlineAt: null, deadlineKind: "tool-end" };
     if (toolCallId !== undefined) {
-      owners.set(dialog.id, toolCallId);
       const previous = (yield* publication.state).dialogResolution;
       if (
         previous?.reason === "answered" &&
         (previous.delivery === "pending" || previous.delivery === "written") &&
-        owners.get(previous.id) === toolCallId
+        ownedReceipt(previous, toolCallId)
       )
         yield* transaction.mergeState({
           dialogResolution: { ...previous, delivery: "accepted", detail: "Pi stored your answer." },
@@ -215,7 +217,7 @@ export const makeSessionDialogs = ({
     { toolCallId, result }: { toolCallId: string; result: unknown },
   ) {
     for (const dialog of yield* publication.dialogs) {
-      if (owners.get(dialog.id) !== toolCallId) continue;
+      if (dialog.toolCallId !== toolCallId) continue;
       yield* settle(transaction, {
         id: dialog.id,
         generation,
@@ -229,7 +231,7 @@ export const makeSessionDialogs = ({
     if (
       !current ||
       (current.delivery !== "pending" && current.delivery !== "written") ||
-      owners.get(current.id) !== toolCallId
+      !ownedReceipt(current, toolCallId)
     )
       return;
     if (current.reason === "cancelled")
@@ -290,18 +292,12 @@ export const makeSessionDialogs = ({
    * different dialog's receipt. Ordinary dialogs keep their recovery policy and no echo.
    */
   const retain = Effect.fnUntraced(function* (action: Extract<SessionAction, { _tag: "answer" }>) {
-    if (
-      action.cancelled ||
-      action.generation !== generation ||
-      action.value === undefined ||
-      !owners.has(action.id)
-    )
-      return;
+    if (action.cancelled || action.generation !== generation || action.value === undefined) return;
     const value = action.value;
     yield* publication.transaction((transaction) =>
       Effect.gen(function* () {
         const current = (yield* publication.state).dialogResolution;
-        if (current?.id !== action.id || current.answer) return;
+        if (current?.id !== action.id || !ownedReceipt(current) || current.answer) return;
         yield* transaction.mergeState({
           dialogResolution: {
             ...current,
@@ -333,7 +329,7 @@ export const makeSessionDialogs = ({
         // An owned dialog's written reply was still awaiting its tool's end; an ordinary one was final.
         if (
           resolution?.delivery === "pending" ||
-          (resolution?.delivery === "written" && owners.has(resolution.id))
+          (resolution?.delivery === "written" && ownedReceipt(resolution))
         )
           yield* transaction.mergeState({
             dialogResolution: {
@@ -346,7 +342,6 @@ export const makeSessionDialogs = ({
           });
       }),
     );
-    owners.clear();
   });
 
   return { opened, watch, answer, toolEnded, resolveAll };
