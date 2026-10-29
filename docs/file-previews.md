@@ -43,7 +43,10 @@ and resource policy. Input above 262,144 characters or the nesting/structure bud
 readable source. Link and image discovery use the same remark grammar as rendering.
 
 Assistant replies and Markdown previews load at most eight distinct local images per prose
-surface, sequentially, retaining at most 20 MiB of image bytes. Images appear in place as thumbnails
+surface, sequentially, retaining at most 20 MiB of image bytes. An image is whatever its file tab
+shows as one, PNG, JPEG, GIF, WebP or SVG; a reference whose name claims another format
+(`demo.mp4`, `spec.pdf`) is neither read nor counted, while a name without a known extension is
+read and shown if its bytes are an image. Images appear in place as thumbnails
 within the content width and a 192 × 192px maximum, without cropping or upscaling; clicking one
 opens its full file-preview tab. Unavailable, undecodable and over-budget images remain clickable
 local links; remote images never load.
