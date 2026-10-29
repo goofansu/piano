@@ -152,6 +152,8 @@ export const DialogResolution = Schema.Struct({
   toolCallId: Schema.optional(Schema.String),
   /** The owned dialog's `ask_user` question, whose stored answer confirms the written one. */
   questionId: Schema.optional(Schema.String),
+  /** The closed dialog's title, so an answer kept after it closed still names its question. */
+  title: Schema.optional(Schema.String),
   delivery: Schema.Literals([
     "pending",
     "written",

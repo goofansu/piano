@@ -517,6 +517,8 @@ test("a tool's end removes a stale form; an unstored or late answer is kept as r
       assert.equal(late?.id, first.dialog.id);
       assert.equal(late?.delivery, "rejected");
       assert.equal(late?.answer?.value, "A", "an answer rejected after closure is retained");
+      assert.ok(first.dialog.title);
+      assert.equal(late?.answer?.title, first.dialog.title, "with the question it answered");
 
       const second = yield* openDialog(session, "/ask drop");
       const rejected = yield* watch(session, receipt(second.dialog.id, "rejected"));
