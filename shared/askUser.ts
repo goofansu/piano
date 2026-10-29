@@ -26,16 +26,30 @@ const recordOf = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
-/** A call's questions, from its arguments; undefined unless every ID and question is non-blank and
- * every ID unique, as the tool requires before asking anything. */
+/** A string field as Pi converts it before the tool runs (TypeBox `Value.Convert`): Pi's records
+ * keep the model's raw arguments, so `id: 1` is announced as a number but asked and stored as "1". */
+const asText = (value: unknown): string | undefined =>
+  typeof value === "string"
+    ? value
+    : typeof value === "number" || typeof value === "boolean" || value === null
+      ? String(value)
+      : value === undefined
+        ? ""
+        : undefined;
+
+/** A call's questions, from its raw or converted arguments; undefined unless every ID and question
+ * is non-blank and every ID unique, the rule the tool checks before asking anything. */
 export function askUserQuestions(args: unknown): AskUserQuestion[] | undefined {
   const questions = recordOf(args)?.questions;
   if (!Array.isArray(questions) || !questions.length) return;
   const ids = new Set<string>();
   const items: AskUserQuestion[] = [];
   for (const value of questions) {
-    const { id, question } = recordOf(value) ?? {};
-    if (typeof id !== "string" || typeof question !== "string") return;
+    const fields = recordOf(value);
+    if (!fields) return;
+    const id = asText(fields.id);
+    const question = asText(fields.question);
+    if (id === undefined || question === undefined) return;
     if (!id.trim() || !question.trim() || ids.has(id)) return;
     ids.add(id);
     items.push({ id, question });
