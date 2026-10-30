@@ -190,6 +190,17 @@ output path, whose parent directory must exist. To compare before and after a ch
 `test/performance-{folder-registry,monitor}.mjs` into a separate checkout of the base revision and
 run them there too; never against a running checkout or the real registry.
 
+## Saved-history benchmark
+
+`node test/performance-saved-history.mjs .scratch/saved-history.json` measures cold and five warm
+saved peeks plus 16 concurrent peeks of the same 34.7 MB synthetic history with one tiny active
+message. Run uncontended on Node 24: it records latency, process CPU, interactive-thread CPU and
+1 ms timer gaps, using PiSessions with temporary history/Pi directories and no agent or model calls.
+It disposes the service/worker and removes its fixture; the JSON survives at the supplied path.
+For a baseline comparison, copy this script and `test/fixtures/large-history.ts` into a separate
+checkout of the base revision and run there too. Cold observations include SDK worker startup;
+warm observations do not reuse completed projections. This is evidence, not a CI wall-clock gate.
+
 ## Sidebar sessions benchmark
 
 `test/performance-sidebar-sessions.mjs` is an opt-in rendering benchmark, not a CI timing gate:

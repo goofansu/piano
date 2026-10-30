@@ -17,10 +17,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { Worker } from "node:worker_threads";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { getImagePreview } from "../server/ImagePreviews.ts";
+import { inputFingerprint } from "../server/PiRecords.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import { largeHistory } from "./fixtures/large-history.ts";
 
 // Fixture history only: Pi reads PI_CODING_AGENT_SESSION_DIR and filters it by each file's cwd.
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-history-")));
@@ -60,11 +64,136 @@ const settleHistoryWrite = async (file: string) => {
 };
 const run = Effect.runPromise;
 // Saved sessions are read through PiSessions without starting Pi.
-const history = await run(
-  Effect.gen(function* () {
-    return (yield* PiSessions).history;
-  }).pipe(Effect.provide(PiSessionsLive.pipe(Layer.provide(NodeServices.layer)))),
-);
+const runtime = ManagedRuntime.make(PiSessionsLive.pipe(Layer.provide(NodeServices.layer)));
+after(() => runtime.dispose());
+const history = await runtime.runPromise(Effect.map(PiSessions, (sessions) => sessions.history));
+
+test("large saved history with tiny active context leaves the server thread responsive", async (t) => {
+  const file = join(sessions, "large-projection.jsonl");
+  largeHistory(file, "large-projection", cwd);
+  // Warm runtime/worker imports separately from the measured projection.
+  await run(history.peek("warm", seed(cwd, "warm", "warm worker")));
+  let ticks = 0;
+  const timer = setInterval(() => ticks++, 1);
+  const cpu = process.cpuUsage();
+  const thread = process.threadCpuUsage();
+  const start = performance.now();
+  try {
+    const snapshot = await run(history.peek("large-projection", file));
+    const main = process.threadCpuUsage(thread);
+    const total = process.cpuUsage(cpu);
+    t.diagnostic(
+      JSON.stringify({
+        bytes: statSync(file).size,
+        latencyMs: performance.now() - start,
+        mainCpuMs: (main.user + main.system) / 1000,
+        totalCpuMs: (total.user + total.system) / 1000,
+        ticks,
+      }),
+    );
+    assert.deepEqual(
+      snapshot.messages.map((m) => m.text),
+      ["tiny active branch"],
+    );
+    assert.ok(ticks > 0, "another server timer must run during projection");
+    // Unlike a timer alone, this also rejects async-read followed by on-loop JSON parsing.
+    assert.ok(
+      main.user + main.system < (total.user + total.system) / 2,
+      "full-history CPU must not run on the interactive thread",
+    );
+    const concurrentCpu = process.cpuUsage();
+    const concurrentStart = performance.now();
+    const snapshots = await Promise.all(
+      Array.from({ length: 16 }, () => run(history.peek("large-projection", file))),
+    );
+    const concurrent = process.cpuUsage(concurrentCpu);
+    t.diagnostic(
+      JSON.stringify({
+        readers: 16,
+        latencyMs: performance.now() - concurrentStart,
+        totalCpuMs: (concurrent.user + concurrent.system) / 1000,
+      }),
+    );
+    for (const result of snapshots) assert.deepEqual(result, snapshot);
+    // A deliberately loose CPU budget, not a wall-clock gate: 16 simultaneous observations
+    // must not do 16 full projections. This catches serialized duplication as well as fan-out.
+    assert.ok(
+      concurrent.user + concurrent.system < 8 * (total.user + total.system),
+      "concurrent reads must share expensive work",
+    );
+  } finally {
+    clearInterval(timer);
+  }
+});
+
+test("a projection worker exit reports unreadable history and a later read recovers", async (t) => {
+  const file = seed(cwd, "worker-exit", "worker recovery");
+  // Fault at the real thread boundary, not in the history parser/projector.
+  const fault = t.mock.method(Worker.prototype, "postMessage", function (this: Worker) {
+    fault.mock.restore();
+    void this.terminate();
+  });
+  const failed = await run(history.peek("worker-exit", file));
+  assert.match(failed.state.projectionError ?? "", /History was not replaced or repaired/);
+  const recovered = await run(history.peek("worker-exit", file));
+  assert.equal(recovered.messages[0].text, "worker recovery");
+});
+
+test("saved projection refreshes mutations and preserves process-local fingerprints, images and redaction", async () => {
+  const file = seed(cwd, "changing-peek", "before");
+  const first = await run(history.peek("changing-peek", file));
+  assert.equal(first.messages[0].inputFingerprint, inputFingerprint("before"));
+  const original = readFileSync(file, "utf8");
+  const metadata = statSync(file);
+  writeFileSync(file, original.replace('"content":"before"', '"content":"after!"'));
+  utimesSync(file, metadata.atime, metadata.mtime);
+  assert.equal((await run(history.peek("changing-peek", file))).messages[0].text, "after!");
+  const replacement = seed(cwd, "changing-peek", "replacement");
+  renameSync(replacement, file);
+  assert.equal((await run(history.peek("changing-peek", file))).messages[0].text, "replacement");
+  // The worker is already warm when this secret is introduced.
+  process.env.PIANO_HISTORY_TEST_SECRET = "history-test-secret-123456";
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6VxkAAAAASUVORK5CYII=";
+  try {
+    appendFileSync(
+      file,
+      `${JSON.stringify({
+        type: "message",
+        id: "image",
+        parentId: "saved",
+        timestamp: "2026-10-05T00:00:02Z",
+        message: {
+          role: "user",
+          content: [
+            { type: "text", text: process.env.PIANO_HISTORY_TEST_SECRET },
+            { type: "image", data: png, mimeType: "image/png" },
+          ],
+          timestamp: 2,
+        },
+      })}\n`,
+    );
+    const snapshot = await run(history.peek("changing-peek", file));
+    assert.ok(!JSON.stringify(snapshot).includes(process.env.PIANO_HISTORY_TEST_SECRET));
+    const id = snapshot.messages[1].attachments?.[0].url.split("/").at(-1);
+    assert.ok(id);
+    assert.deepEqual(getImagePreview(id)?.bytes, Buffer.from(png, "base64"));
+    assert.ok(
+      !(await run(history.exportBranch("changing-peek", file))).includes(
+        process.env.PIANO_HISTORY_TEST_SECRET,
+      ),
+    );
+  } finally {
+    delete process.env.PIANO_HISTORY_TEST_SECRET;
+  }
+  rmSync(file);
+  assert.match(
+    (await run(history.peek("changing-peek", file))).state.projectionError ?? "",
+    /History was not replaced/,
+  );
+  seed(cwd, "changing-peek", "before");
+  assert.equal((await run(history.peek("changing-peek", file))).messages[0].text, "before");
+});
 
 test("INV-01: history recorded under another checkout spelling is found where Pi wrote it", async () => {
   const file = seed(alias, "legacy", "alias history"),

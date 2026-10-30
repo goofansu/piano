@@ -10,7 +10,7 @@
  * caller knows and reports the one file, no file, or a conflict: distinct physical files claiming
  * the same session ID. A conflict is never resolved by choosing one.
  */
-import { type BigIntStats, createReadStream, readFileSync } from "node:fs";
+import { type BigIntStats, createReadStream } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -20,12 +20,11 @@ import {
   type SessionHeader,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { Effect } from "effect";
+import { Effect, type Scope } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Snapshot } from "../shared/wire.ts";
-import { compileRedaction, projectSnapshot } from "./DisplayProjection.ts";
 import { agentDir, directoryPath, sessionDirFor } from "./PiEnv.ts";
-import { type PiSessionFacts, type RawMessage, snapshotOf } from "./PiRecords.ts";
+import { PiHistoryJobs } from "./PiHistoryJobs.ts";
 import { PiSessionError } from "./PiTransport.ts";
 
 /** Where a session's Pi history is, across the spellings of its checkout. */
@@ -100,13 +99,6 @@ const sessionEntries = (content: string, sessionId: string) => {
     throw new Error("Missing session header");
   return entries;
 };
-const readSession = (path: string, sessionId: string): SessionManager =>
-  SessionManager.inMemory(
-    undefined,
-    undefined,
-    sessionEntries(readFileSync(path, "utf8"), sessionId),
-  );
-
 /**
  * Every entry of a saved session, as Pi's `get_entries` lists them. Pi answers that in one RPC
  * line, which a long compacted history can push past the line limit; the file has no such limit.
@@ -131,73 +123,6 @@ export const savedEntries = Effect.fn("PiHistory.savedEntries")(function* (
   });
 });
 
-/** A saved session's facts as Pi would report them, read from its file. */
-const savedFacts = (path: string, sessionId: string): PiSessionFacts => {
-  const sm = readSession(path, sessionId);
-  // Use Pi's own compaction/context-edit/active-branch projection, the same
-  // display scope as RPC get_messages. Never infer selection from an answer.
-  const context = sm.buildSessionContext();
-  // Pi's context builder uses the last assistant's physical model. Selection
-  // is recorded separately; this read-only peek cannot check whether a virtual
-  // model is still registered. The next CLI open confirms/falls back itself.
-  const selection = sm.getBranch().findLast((entry) => entry.type === "model_change");
-  const model =
-    selection?.type === "model_change"
-      ? { provider: selection.provider, id: selection.modelId }
-      : context.model
-        ? { provider: context.model.provider, id: context.model.modelId }
-        : undefined;
-  return {
-    source: "saved",
-    state: {
-      sessionId,
-      sessionFile: path,
-      sessionName: sm.getSessionName(),
-      model,
-      thinkingLevel: context.thinkingLevel,
-      isStreaming: false,
-    },
-    messages: context.messages as RawMessage[],
-    entries: sm.getEntries(),
-  };
-};
-
-const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
-  // The transcript was projected for display as it was built; the rest is projected here.
-  Effect.try(() => projectSnapshot(snapshotOf(savedFacts(path, sessionId)))).pipe(
-    Effect.orElseSucceed(() => ({
-      state: {
-        sessionId,
-        sessionFile: path,
-        isStreaming: false,
-        projectionError:
-          "Could not read Pi's current context. History was not replaced or repaired.",
-      },
-      messages: [],
-      dialogs: [],
-    })),
-  );
-
-const exportBranch = Effect.fn("PiHistory.exportBranch")(function* (
-  sessionId: string,
-  file: string | undefined,
-) {
-  return yield* Effect.try({
-    try: () => {
-      if (!file) throw new Error("Missing history");
-      const manager = readSession(file, sessionId);
-      const header = manager.getHeader();
-      const branch = manager.getBranch();
-      if (header?.id !== sessionId || !branch.some((entry) => entry.type === "message"))
-        throw new Error("No saved conversation");
-      const redaction = compileRedaction();
-      // Pi chooses the branch. Preserve its entry vocabulary and IDs, not Piano's display messages.
-      return `${[header, ...branch].map((entry) => JSON.stringify(redaction.value(entry))).join("\n")}\n`;
-    },
-    catch: () => rejected("This session has no readable saved conversation to share."),
-  });
-});
-
 // Only discovery metadata is retained, never transcripts or arbitrary header metadata. Every
 // lookup still enumerates the store and stats each candidate: directory mtime alone cannot detect
 // in-place rewrites. ctime detects same-size rewrites with restored mtime, but even nanosecond
@@ -208,7 +133,43 @@ const headerVersion = (info: BigIntStats) =>
 const HEADER_CACHE_LIMIT = 4096;
 
 /** A disposable, bounded header cache owned by one PiSessions service. */
-export const makePiHistory = (): PiHistory => {
+export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn.Return<
+  PiHistory,
+  never,
+  Scope.Scope
+> {
+  const jobs = new PiHistoryJobs();
+  yield* Effect.addFinalizer(() => Effect.promise(() => jobs.close()));
+
+  const peekFile = (path: string, sessionId: string): Effect.Effect<Snapshot> =>
+    Effect.promise(() => jobs.read({ operation: "peek", path, sessionId })).pipe(
+      Effect.map((reply) =>
+        "value" in reply
+          ? (reply.value as Snapshot)
+          : {
+              state: {
+                sessionId,
+                sessionFile: path,
+                isStreaming: false,
+                projectionError:
+                  "Could not read Pi's current context. History was not replaced or repaired.",
+              },
+              messages: [],
+              dialogs: [],
+            },
+      ),
+    );
+
+  const exportBranch = Effect.fn("PiHistory.exportBranch")(function* (
+    sessionId: string,
+    file: string | undefined,
+  ) {
+    const reply = file
+      ? yield* Effect.promise(() => jobs.read({ operation: "export", path: file, sessionId }))
+      : { error: true };
+    if ("value" in reply) return reply.value as string;
+    return yield* rejected("This session has no readable saved conversation to share.");
+  });
   const headers = new Map<string, { version: string; info: Pick<SessionHeader, "id" | "cwd"> }>();
   const header = async (path: string) => {
     try {
@@ -302,4 +263,4 @@ export const makePiHistory = (): PiHistory => {
     peek: (sessionId, file) =>
       file ? peekFile(file, sessionId) : Effect.succeed(emptySnapshot(sessionId)),
   };
-};
+});
