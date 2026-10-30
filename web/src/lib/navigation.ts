@@ -301,32 +301,45 @@ export interface Address {
   title: string;
 }
 
+/**
+ * What the session pane holds, decided once for its address, for closing Settings over it and for
+ * telling whether the user has moved on: a session (shown or being selected), a creation without
+ * an ID yet (its first message may be uncertain), a selection that failed (its banner offers a
+ * retry), or nothing (a deep link not applied yet, or one Settings superseded).
+ */
+export type SessionPane =
+  | { kind: "session"; sessionId: string }
+  | { kind: "creating" }
+  | { kind: "failed"; sessionId: string }
+  | { kind: "unresolved" };
+
+export function sessionPane(state: AppState): SessionPane {
+  const sessionId = (state.session ?? state.selecting)?.sessionId;
+  if (sessionId) return { kind: "session", sessionId };
+  // A creation's failure keeps its input, so it is still the creation.
+  if (state.selecting || state.pendingCreate) return { kind: "creating" };
+  const failed = state.selectionFailure?.sessionId;
+  return failed ? { kind: "failed", sessionId: failed } : { kind: "unresolved" };
+}
+
+/** The screen's identity: equal for two states exactly when they show the same screen. */
+export function screenKey(state: AppState): string {
+  if (state.view.kind !== "session") return routePath(pageAddress(state, state.view).route);
+  const pane = sessionPane(state);
+  return "sessionId" in pane ? `${pane.kind}:${pane.sessionId}` : pane.kind;
+}
+
 /** The URL and title for the screen, or null while a deep link has not resolved. */
 export function addressFor(
   state: AppState,
   settings: SettingsSection | null,
   currentPathname: string,
 ): Address | null {
-  const sessionId = (state.session ?? state.selecting)?.sessionId;
-  const ref =
-    !settings && state.view.kind === "session" && sessionId
-      ? state.sessionReferences.find((ref) => ref.sessionId === sessionId)
-      : undefined;
   const shown: { route: Route; title: string } | null = settings
     ? { route: { kind: "settings", section: settings }, title: "Settings" }
     : state.view.kind !== "session"
       ? pageAddress(state, state.view)
-      : sessionId
-        ? {
-            route: { kind: "session", sessionId },
-            // "Session" only until the catalog knows the session.
-            title: ref ? sessionLabel(ref.title) : "Session",
-          }
-        : state.selecting || state.pendingCreate
-          ? // Creation has no addressable identity yet. Use the landing address, but keep the
-            // session pane and title, including when its first message's delivery is uncertain.
-            { route: { kind: "new" }, title: "Session" }
-          : null;
+      : paneAddress(state, sessionPane(state));
   if (!shown) return null;
   const path = routePath(shown.route);
   // The bare root is an alias for /new and a query string carries nothing: replace those, push real moves.
@@ -335,6 +348,25 @@ export function addressFor(
       ? "replace"
       : "push";
   return { path, mode, title: `${shown.title} - Piano` };
+}
+
+function paneAddress(state: AppState, pane: SessionPane): { route: Route; title: string } | null {
+  switch (pane.kind) {
+    case "session":
+    case "failed": {
+      // A failed selection keeps the address of the session its retry selects.
+      const ref = state.sessionReferences.find((ref) => ref.sessionId === pane.sessionId);
+      // "Session" only until the catalog knows the session.
+      const title = ref ? sessionLabel(ref.title) : "Session";
+      return { route: { kind: "session", sessionId: pane.sessionId }, title };
+    }
+    case "creating":
+      // Creation has no addressable identity yet. Use the landing address, but keep the
+      // session pane and title, including when its first message's delivery is uncertain.
+      return { route: { kind: "new" }, title: "Session" };
+    case "unresolved":
+      return null;
+  }
 }
 
 const panelOwner = (s: AppState) => (s.session ? sessionKey(s.session) : null);
@@ -544,8 +576,7 @@ export function createNavigation({
     const c = client.getState();
     const inputs = [
       c.view,
-      (c.session ?? c.selecting)?.sessionId,
-      !!(c.selecting || c.pendingCreate),
+      c.view.kind === "session" ? screenKey(c) : null,
       c.projects,
       c.sessionReferences,
       state.settings,
@@ -606,9 +637,9 @@ export function createNavigation({
     batch(() => {
       if (state.settings) {
         const c = client.getState();
-        // An abandoned deep link has neither a selection nor retained input. A creation can
-        // lack a session ID (and, after uncertainty, a selection) without being abandoned.
-        if (c.view.kind === "session" && !c.session && !c.selecting && !c.pendingCreate)
+        // Only an abandoned deep link leaves nothing to come back to; a creation or a failed
+        // selection is still on the session pane.
+        if (c.view.kind === "session" && sessionPane(c).kind === "unresolved")
           return open({ kind: "new" });
       }
       set({ settings: null });
