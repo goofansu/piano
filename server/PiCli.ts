@@ -31,6 +31,7 @@ export const pianoProjectExtension = join(ROOT, "extensions/piano-project/index.
 export const pianoDispatchExtension = join(ROOT, "extensions/piano-dispatch/index.ts");
 export const pianoPreviewExtension = join(ROOT, "extensions/piano-preview/index.ts");
 export const pianoAskUserExtension = join(ROOT, "extensions/piano-ask-user/index.ts");
+export const radiusArtifactsExtension = join(ROOT, "extensions/radius-artifacts/index.ts");
 
 export const defaultPiCli = (): PiCliConfig => ({
   node: process.execPath,
@@ -42,6 +43,7 @@ export const defaultPiCli = (): PiCliConfig => ({
     pianoDispatchExtension,
     pianoPreviewExtension,
     pianoAskUserExtension,
+    radiusArtifactsExtension,
   ],
 });
 

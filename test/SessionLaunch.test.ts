@@ -26,6 +26,7 @@ test("Piano's extensions are resolved from the installation, never from the sess
     installed("piano-dispatch"),
     installed("piano-preview"),
     installed("piano-ask-user"),
+    installed("radius-artifacts"),
   ];
   assert.deepEqual(defaultPiCli().extensions, expected);
   // A session runs in the user's repository, so the launch must not follow the process cwd there.

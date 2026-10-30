@@ -46,6 +46,12 @@ Click a local file link in a session to read it beside the conversation. Markdow
 saves the file as it is on disk. Click the link again to reread. See
 [supported formats, limits and privacy](docs/file-previews.md).
 
+### Publish an artifact
+
+With Radius signed in, ask **“Create an artifact containing this report.”** The agent publishes it
+privately to Radius and returns a confirmed viewing link. Ask to update or view the same artifact
+on later turns. See [setup, supported formats and failure handling](docs/radius-artifacts.md).
+
 ### Run an app preview
 
 On macOS, or on a configured private exe.dev host, ask **“Run this app so I can try it.”** The
