@@ -134,6 +134,12 @@ the kill bound. Only its scratch services stop; native platform gaps must be rep
 Authenticated external exe.dev access is a separate manual observation; this journey does not grant
 access or change proxy configuration. See [managed previews](live-previews.md).
 
+`PIANO_TEST_NATIVE_PREVIEW=1 node --test test/PreviewNative.test.ts` is the smaller opt-in native
+runner/supervisor check for clean exit, nonzero exit, application signal, explicit stop and owner
+disconnect. It uses temporary owners/workspaces/state and ports 9480–9519; it has the same native
+supervisor prerequisites. Portable runner tests also cover spawn errors without a supervisor.
+Report the platform actually run; simulated launchd output is not native macOS evidence.
+
 ## Alignment
 
 Every transcript row is a gutter glyph beside its content (`Row` in `MessageList.tsx`). The glyph

@@ -26,6 +26,7 @@ for (const dead of [true, false])
         owner.identity.endpoint,
         dead ? owner.identity.generation : "different-generation",
         "late-instance",
+        join(root, "late.outcome"),
         process.execPath,
         "-e",
         `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'escaped')`,
@@ -92,6 +93,58 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
   // A running app's ownership is discovered from the real host (/proc on Linux, ps and lsof on
   // macOS), so cases that observe one run only on their native platform.
   const foreign = process.platform !== platform;
+
+  test(`[${platform}] terminal outcomes distinguish app failure from cleanup and fence attribution`, async (t) => {
+    const f = await fixture(t);
+    const app = await f.call();
+    const outcome = join(f.state, `${app.serviceId}.json.${app.instanceId}.outcome`);
+    const terminal = {
+      instanceId: app.instanceId,
+      generation: app.owner.generation,
+      reason: "app-exit",
+      exitCode: 42,
+      signal: null,
+    };
+    // systemd can unload a clean transient unit; launchd records the runner's group kill.
+    f.host.phase = platform === "linux" ? "gone" : "failed";
+    for (const [reason, exitCode, signal, expected] of [
+      ["app-exit", 42, null, "failed"],
+      ["app-exit", 0, null, "exited"],
+      ["app-exit", null, "SIGTERM", "failed"],
+      ["spawn-error", null, null, "failed"],
+      ["stop", null, null, "exited"],
+      ["owner-disconnect", null, null, "exited"],
+    ]) {
+      await writeFile(outcome, JSON.stringify({ ...terminal, reason, exitCode, signal }));
+      const status = await f.call(f.owner, { action: "status" });
+      assert.equal(status.state, expected);
+      assert.equal(status.termination.reason, reason);
+    }
+    if (!foreign) {
+      f.host.phase = "running";
+      const active = await f.call(f.owner, { action: "status" });
+      assert.equal(active.state, "running", "terminal evidence cannot overrule a live supervisor");
+      assert.equal(active.termination, undefined);
+    }
+    f.host.phase = "failed";
+    if (platform === "linux")
+      assert.equal(
+        (await f.call(f.owner, { action: "status" })).state,
+        "failed",
+        "a clean owner disconnect cannot hide a native cleanup failure",
+      );
+    for (const stale of [{ generation: "other-generation" }, { instanceId: "other-instance" }]) {
+      await writeFile(outcome, JSON.stringify({ ...terminal, ...stale }));
+      await assert.rejects(f.call(f.owner, { action: "status" }), /refusing to attribute/);
+    }
+    await writeFile(outcome, JSON.stringify(terminal));
+    f.host.phase = "failed";
+    await f.call(f.owner, { action: "stop", instanceId: app.instanceId });
+    await assert.rejects(access(outcome), { code: "ENOENT" });
+    const next = await f.call();
+    assert.notEqual(next.instanceId, app.instanceId);
+    assert.equal(next.termination, undefined);
+  });
 
   test(`[${platform}] trusted generation, ownership conflict and independent workspaces`, async (t) => {
     if (foreign) return t.skip("needs native process ownership");

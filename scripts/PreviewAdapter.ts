@@ -22,6 +22,7 @@ import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { outcomeFailed, outcomePath, readOutcome } from "./PreviewOutcome.ts";
 
 export interface PreviewRequest {
   action: "start" | "status" | "stop";
@@ -797,6 +798,23 @@ export class PreviewAdapter {
     withLogs = true,
   ) {
     const state = await this.current(supervisor, record, path);
+    // Only reconcile after native termination, never while the supervisor is still cleaning
+    // descendants. In particular launchd's group SIGKILL is not the application's exit cause.
+    const termination =
+      record.owner && ["exited", "failed", "not-loaded"].includes(state.state)
+        ? await readOutcome(
+            outcomePath(path, record.instanceId),
+            record.instanceId,
+            record.owner.generation,
+          )
+        : undefined;
+    const terminalState = termination
+      ? outcomeFailed(termination)
+        ? "failed"
+        : this.platform === "linux" && state.state === "failed"
+          ? "failed" // Do not hide native cleanup failures (e.g. a cgroup stop timeout).
+          : "exited"
+      : state.state;
     const loopback = loopbackOrigin.test(record.spec.origin);
     let ready = false;
     let detail =
@@ -829,7 +847,8 @@ export class PreviewAdapter {
           }
         : undefined,
       spec: { ...record.spec, env: Object.keys(record.spec.env) },
-      state: state.state,
+      state: terminalState,
+      termination,
       supervisor: state.raw,
       ready,
       detail,
@@ -911,12 +930,24 @@ export class PreviewAdapter {
     if (before.state === "not-loaded") {
       // Gone after reboot, logout or a failed submission: nothing to stop. An intent never seen
       // running may still have an orphaned submission in flight, so it waits out a grace period.
-      if (!record.invocation && Date.now() / 1000 - record.createdAt < SUBMISSION_GRACE_SECONDS)
+      const terminated = record.owner
+        ? await readOutcome(
+            outcomePath(path, record.instanceId),
+            record.instanceId,
+            record.owner.generation,
+          )
+        : undefined;
+      if (
+        !record.invocation &&
+        !terminated &&
+        Date.now() / 1000 - record.createdAt < SUBMISSION_GRACE_SECONDS
+      )
         throw new Error(
           `Unit not loaded yet; its submission may still be in flight. Re-observe after ${SUBMISSION_GRACE_SECONDS} seconds.`,
         );
       if (record.processGroup) await supervisor.stop(record, before, root);
       else await supervisor.forget(record, root);
+      await rm(outcomePath(path, record.instanceId), { force: true });
       await unlink(path);
       return {
         serviceId,
@@ -928,6 +959,7 @@ export class PreviewAdapter {
       };
     }
     await supervisor.stop(record, before, root);
+    await rm(outcomePath(path, record.instanceId), { force: true });
     await unlink(path);
     return { serviceId, instanceId: record.instanceId, status: "stopped", stopped: true };
   }
@@ -1049,6 +1081,7 @@ export class PreviewAdapter {
           owner.endpoint,
           owner.generation,
           record.instanceId,
+          outcomePath(path, record.instanceId),
           ...appArgv(record),
         ],
         root,

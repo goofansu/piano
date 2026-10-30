@@ -161,6 +161,16 @@ expiry timer exists. Transport exit closes all these connections before waiting 
 lock; a Piano crash closes them in the kernel. A late submission against a dead endpoint cannot
 spawn. A five-second **admission-only** timeout also refuses a stalled handshake, not a running app.
 
+The runner preserves application exit codes (signals become nonzero exits on Linux) and atomically
+records the first terminal cause before cleanup: app exit with code/signal, spawn error, explicit
+stop or owner disconnect. This private outcome is fenced by instance and generation and removed
+with the saved launch. Observations use it only after native termination: exit 0 is `exited`;
+nonzero exit, signal or spawn error is `failed`. Stop/owner cleanup is not an application crash.
+Linux supervisor cleanup failures remain failed. On macOS the outcome distinguishes the app's
+result from the runner's deliberate group SIGKILL; without an outcome, native failure is retained.
+The outcome also preserves a clean exit after systemd unloads its transient unit; it is not a
+liveness signal or authority to stop another generation.
+
 - **Linux:** runner exit triggers systemd's `KillMode=control-group`, TERM then KILL after
   `TimeoutStopSec=5s`. `Restart=no`; new jobs do **not** use `RemainAfterExit`. Listener ownership
   compares `/proc/net/tcp{,6}` socket inodes with processes in the exact unit cgroup. The helper
