@@ -1,4 +1,5 @@
-/** Read-only saved-history projection. Full files/SDK entries never cross back to the server. */
+/** Read-only saved-history projection. Full files/SDK entries never cross back to the server:
+ * a reply is a Snapshot, an exported branch, or the dispatching session ID. */
 import { readFileSync } from "node:fs";
 import { parentPort } from "node:worker_threads";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -6,15 +7,18 @@ import type { Snapshot } from "../shared/wire.ts";
 import { compileRedaction, projectSnapshot } from "./DisplayProjection.ts";
 import { getImagePreview, type ImagePreview } from "./ImagePreviews.ts";
 import { savedSession } from "./PiHistoryFile.ts";
-import { type PiSessionFacts, type RawMessage, snapshotOf } from "./PiRecords.ts";
+import { dispatchedFromOf, type PiSessionFacts, type RawMessage, snapshotOf } from "./PiRecords.ts";
 
 export type HistoryRequest = {
-  readonly operation: "peek" | "export";
+  readonly operation: "peek" | "export" | "dispatchedFrom";
   readonly path: string;
   readonly sessionId: string;
 };
 export type HistoryReply =
-  | { readonly value: Snapshot | string; readonly images?: ReadonlyArray<ImagePreview> }
+  | {
+      readonly value: Snapshot | string | undefined;
+      readonly images?: ReadonlyArray<ImagePreview>;
+    }
   | { readonly error: true };
 
 const savedFacts = (sm: SessionManager, path: string, sessionId: string): PiSessionFacts => {
@@ -39,7 +43,7 @@ const savedFacts = (sm: SessionManager, path: string, sessionId: string): PiSess
       isStreaming: false,
     },
     messages: context.messages as RawMessage[],
-    entries: sm.getEntries(),
+    dispatchedFrom: dispatchedFromOf(sm.getEntries()),
   };
 };
 
@@ -58,6 +62,8 @@ parentPort!.on("message", ({ operation, path, sessionId }: HistoryRequest) => {
         return image ? [{ id, ...image }] : [];
       });
       reply = { value, images };
+    } else if (operation === "dispatchedFrom") {
+      reply = { value: dispatchedFromOf(manager.getEntries()) };
     } else {
       const header = manager.getHeader();
       const branch = manager.getBranch();

@@ -1,16 +1,19 @@
 import assert from "node:assert/strict";
+import { appendFileSync, rmSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import { DISPATCH_ENTRY } from "../shared/dispatch.ts";
 import {
   type Attachment,
   Attachments,
   decodeClientMessage,
   type SessionEvent,
 } from "../shared/wire.ts";
+import { largeHistory } from "./fixtures/large-history.ts";
 
 const fakeCli = {
   node: process.execPath,
@@ -765,6 +768,53 @@ test("a session whose entries Pi refuses still opens, without its parent", async
       assert.equal(state.dispatchedFrom, undefined);
     }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
   );
+});
+
+test("opening a large saved history reads its dispatching session off the server thread", async (t) => {
+  // Fake Pi reports /tmp/<id>.jsonl as its session file; its get_entries names no dispatcher.
+  const sessionId = `large-dispatched-${process.pid}`;
+  const file = `/tmp/${sessionId}.jsonl`;
+  largeHistory(file, sessionId, process.cwd());
+  appendFileSync(
+    file,
+    `${JSON.stringify({ type: "custom", customType: DISPATCH_ENTRY, id: "dispatch", parentId: "visible", timestamp: "2026-10-05T00:00:03Z", data: { parentSessionId: "the-parent" } })}\n`,
+  );
+  const warm = `/tmp/large-dispatched-warm-${process.pid}.jsonl`;
+  writeFileSync(
+    warm,
+    `${JSON.stringify({ type: "session", version: 3, id: `large-dispatched-warm-${process.pid}`, cwd: process.cwd(), timestamp: "2026-10-05T00:00:00Z" })}\n`,
+  );
+  try {
+    await run(
+      Effect.gen(function* () {
+        const sessions = yield* PiSessions;
+        // Warm the child spawn path and history worker separately from the measured open.
+        yield* sessions.open({
+          cwd: process.cwd(),
+          sessionId: `large-dispatched-warm-${process.pid}`,
+        });
+        const cpu = process.cpuUsage();
+        const thread = process.threadCpuUsage();
+        const session = yield* sessions.open({ cwd: process.cwd(), sessionId });
+        const main = process.threadCpuUsage(thread);
+        const total = process.cpuUsage(cpu);
+        t.diagnostic(
+          JSON.stringify({
+            mainCpuMs: (main.user + main.system) / 1000,
+            totalCpuMs: (total.user + total.system) / 1000,
+          }),
+        );
+        assert.equal((yield* session.state).dispatchedFrom, "the-parent");
+        assert.ok(
+          main.user + main.system < (total.user + total.system) / 2,
+          "full-history CPU must not run on the interactive thread",
+        );
+      }).pipe(Effect.timeout("30 seconds"), Effect.scoped),
+    );
+  } finally {
+    rmSync(file, { force: true });
+    rmSync(warm, { force: true });
+  }
 });
 
 test("canonical context updates after a response and compaction while still running", async () => {
