@@ -2,8 +2,8 @@
  * The forms `runCommand` opens (see `CommandForm`) and their one lifecycle: `open` a form, edit its
  * input (a session title, or a project draft), `submit` or `cancel` it. Submitting re-checks the
  * form's rule, since the connection, the session's attachment or the project may have changed while
- * the form was open, and a form closes only after its answer was sent; a refused answer leaves it
- * open having sent nothing. Project settings starts from the project as saved when it opens. Sharing is a phase of its form (confirm, publishing, shared or failed) and publishes
+ * the form was open, and a form closes only after its answer was sent; a refused answer, or one the
+ * connection is known not to have sent, leaves it open with its input. Project settings starts from the project as saved when it opens. Sharing is a phase of its form (confirm, publishing, shared or failed) and publishes
  * at most once per opening. A new project not created for a session opens once it is saved: its
  * home, or the New page for it when the New page's project picker created it. That page, and the
  * Projects index a deleted project's page gives way to, waits for the page's state to show the change (`settle`);
@@ -27,6 +27,7 @@ import { inSidebarGroups, sessionCatalog, sessionLabel } from "./sessionCatalog.
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
 import { sessionMutable, sessionWorking, workspaceFor } from "./sessionContext.ts";
 import { sessionHasPreview } from "./sessionPreview.ts";
+import type { SendDisposition } from "./ws.ts";
 
 export interface FormAnswer {
   /** The form may be submitted now; otherwise its submit control is disabled. */
@@ -251,7 +252,8 @@ export interface CommandFormsOptions {
   /** The page's state as of now; forms are answered against it when rendered and submitted. */
   getState: () => AppState;
   radiusSignedIn: () => boolean;
-  send: (command: ClientCommand) => void;
+  /** Sends a form's answer; one known not sent ("not-sent") keeps the form open to retry. */
+  send: (command: ClientCommand) => SendDisposition;
   /** Publish a session to Radius; resolves once the publication is confirmed. */
   share: (workspaceId: string, sessionId: string) => Promise<SessionShare>;
   /** Opens the page a submitted form waits on, once the server confirms its change. */
@@ -275,7 +277,8 @@ export interface CommandForms {
   editProject: (draft: ProjectDraft) => void;
   /**
    * Send the open form's answer if it is allowed now, then close; a share form publishes instead and
-   * stays open on its result. Returns whether anything was sent or published.
+   * stays open on its result. An answer known not sent leaves the form open with its input. Returns
+   * whether anything was sent (or may have been) or published.
    */
   submit: () => boolean;
   /** Close the open form; ignored while a share is publishing. */
@@ -293,6 +296,9 @@ export interface CommandForms {
 /** The forms whose input is a project draft rather than a title. */
 const editsProject = (form: CommandForm) =>
   form.kind === "project" || form.kind === "project-settings";
+
+/** Said when a form's answer is known not sent; the form stays open to retry. */
+export const FORM_NOT_SENT = "Change not sent. Retry when Piano reconnects.";
 
 export const SHARE_UNCONFIRMED =
   "Sharing could not be confirmed. Check Radius artifacts before sharing again.";
@@ -398,7 +404,8 @@ export function createCommandForms({
         return true;
       }
       if (!answered.command) return false;
-      send(answered.command);
+      // Sent or uncertain closes: an uncertain answer may have arrived, so it is never replayed.
+      if (send(answered.command) === "not-sent") return false;
       waiting = answered.open
         ? { page: answered.open, command: answered.command, from: screen() }
         : null;

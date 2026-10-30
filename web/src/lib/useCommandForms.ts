@@ -1,5 +1,6 @@
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { SendDisposition } from "@/lib/ws";
 import type { AppState } from "@/store";
 import { shareSession } from "./api.ts";
 import {
@@ -17,7 +18,7 @@ import {
 export function useCommandForms(deps: {
   state: AppState;
   radiusSignedIn: boolean;
-  send: (command: ClientCommand) => void;
+  send: (command: ClientCommand) => SendDisposition;
   openPage: (page: FormPage) => void;
   listen: (listener: (message: ServerMessage) => void) => () => void;
 }): CommandForms & CommandFormsState {
