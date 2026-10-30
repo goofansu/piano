@@ -6,6 +6,7 @@ import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { outcomeFailed, type PreviewOutcome } from "../scripts/PreviewOutcome.ts";
 
 const cases = [
   { name: "clean exit", script: "process.exit(0)", reason: "app-exit", exitCode: 0, status: 0 },
@@ -83,12 +84,16 @@ for (const scenario of cases) {
     if (process.platform === "darwin")
       assert.equal(signal, "SIGKILL", "runner kills its own group");
     else assert.equal(status, scenario.status);
-    assert.deepEqual(JSON.parse(await readFile(outcome, "utf8")), {
+    const written: PreviewOutcome = JSON.parse(await readFile(outcome, "utf8"));
+    assert.deepEqual(written, {
       instanceId: "instance",
       generation: "generation",
       reason: scenario.reason,
       exitCode: scenario.exitCode ?? null,
       signal: scenario.signal ?? null,
     });
+    // systemd reads the status; the adapter reads the outcome. Both must call it the same.
+    if (process.platform !== "darwin")
+      assert.equal(outcomeFailed(written), status !== 0, "status and outcome agree on failure");
   });
 }

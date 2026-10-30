@@ -3,8 +3,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { renameSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
-import { constants } from "node:os";
-import type { PreviewOutcome } from "./PreviewOutcome.ts";
+import { outcomeStatus, type PreviewOutcome } from "./PreviewOutcome.ts";
 
 const [endpoint, generation, instanceId, outcomeFile, executable, ...args] = process.argv.slice(2);
 if (process.platform === "darwin") {
@@ -24,8 +23,7 @@ const end = (
   ending = true;
   // Persist before macOS kills this leader with its group. A unique instance path and the
   // generation in the payload fence late outcomes; atomic rename prevents partial observations.
-  let status =
-    reason === "spawn-error" ? 1 : (exitCode ?? (signal ? 128 + constants.signals[signal] : 0));
+  let status = outcomeStatus({ reason, exitCode, signal });
   try {
     const outcome: PreviewOutcome = { instanceId, generation, reason, exitCode, signal };
     writeFileSync(`${outcomeFile}.tmp`, JSON.stringify(outcome), { mode: 0o600 });
