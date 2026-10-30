@@ -139,10 +139,7 @@ function hostRun(platform: string): Run {
         };
   return (args, timeout = 5000) =>
     new Promise((resolve, reject) => {
-      const child = spawn(args[0], args.slice(1), {
-        env,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+      const child = spawn(args[0], args.slice(1), { env, stdio: ["ignore", "pipe", "pipe"] });
       let stdout = Buffer.alloc(0);
       let stderr = Buffer.alloc(0);
       let expired = false;
@@ -235,14 +232,7 @@ function httpStatus(port: number, path: string, host: string): Promise<number> {
   return new Promise((resolve, reject) => {
     // Absolute wall deadline, not a socket inactivity timeout (a slow responder must not extend it).
     const request = httpRequest(
-      {
-        hostname: "127.0.0.1",
-        port,
-        path,
-        method: "GET",
-        agent: false,
-        headers: { host },
-      },
+      { hostname: "127.0.0.1", port, path, method: "GET", agent: false, headers: { host } },
       (response) => {
         resolve(response.statusCode ?? 0);
         response.destroy();
@@ -985,12 +975,7 @@ export class PreviewAdapter {
     await supervisor.stop(record, before, root);
     await rm(outcomePath(path, record.instanceId), { force: true });
     await unlink(path);
-    return {
-      serviceId,
-      instanceId: record.instanceId,
-      status: "stopped",
-      stopped: true,
-    };
+    return { serviceId, instanceId: record.instanceId, status: "stopped", stopped: true };
   }
 
   private async handle(
