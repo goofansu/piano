@@ -928,6 +928,55 @@ test(
   },
 );
 
+test(
+  "a working session with uncertain delivery is running when a sibling's attention ends the wait",
+  bounded,
+  async () => {
+    const h = world();
+    const first = { ...(await handleOf()), sessionId: "a" };
+    const second = { ...(await handleOf()), sessionId: "b" };
+    const wait = waitSessions([first, second], undefined, h.env);
+    const [a, b] = h.sockets;
+    a!.accept();
+    b!.accept();
+    // Pi started the run, then its acknowledgement timed out.
+    const working = snapshotOf({
+      isStreaming: true,
+      submission: { id: 1, outcome: "uncertain", detail: "Pi did not acknowledge in time." },
+    });
+    b!.frame(socketSnapshot(b!, working));
+    a!.frame(
+      socketSnapshot(
+        a!,
+        idle(answered(), { submission: { id: 1, outcome: "rejected", detail: "No." } }),
+      ),
+    );
+    const [refused, observed] = await wait;
+    assert.equal(refused!.status, "failed");
+    assert.equal(observed!.status, dispositionOf(working, true).disposition);
+    assert.equal(observed!.status, "running");
+  },
+);
+
+test(
+  "uncertain delivery ends a wait only once the session is idle, and a dialog first asks",
+  bounded,
+  async () => {
+    const h = world();
+    const wait = waitSessions([await handleOf()], undefined, h.env);
+    h.last().accept();
+    const socket = h.last();
+    const uncertain = { id: 1, outcome: "uncertain", detail: "No acknowledgement." } as const;
+    socket.frame(socketSnapshot(socket, snapshotOf({ isStreaming: true, submission: uncertain })));
+    const asking = snapshotOf({ submission: uncertain }, [], [dialog()]);
+    socket.frame(socketSnapshot(socket, asking));
+    const [observation] = await wait;
+    assert.equal(observation!.status, dispositionOf(asking, true).disposition);
+    assert.equal(observation!.status, "needs_input");
+    assert.equal(observation!.detail, "Run the migration?");
+  },
+);
+
 test("a session awaiting quiescence at the wait's deadline is running", bounded, async () => {
   const h = world();
   const wait = waitSessions([await handleOf()], 1_000, h.env);
