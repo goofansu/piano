@@ -301,7 +301,7 @@ export interface Address {
   title: string;
 }
 
-/** The URL and title for the screen, or null while there is nothing to address (a new session not yet created). */
+/** The URL and title for the screen, or null while a deep link has not resolved. */
 export function addressFor(
   state: AppState,
   settings: SettingsSection | null,
@@ -322,7 +322,11 @@ export function addressFor(
             // "Session" only until the catalog knows the session.
             title: ref ? sessionLabel(ref.title) : "Session",
           }
-        : null;
+        : state.selecting || state.pendingCreate
+          ? // Creation has no addressable identity yet. Use the landing address, but keep the
+            // session pane and title, including when its first message's delivery is uncertain.
+            { route: { kind: "new" }, title: "Session" }
+          : null;
   if (!shown) return null;
   const path = routePath(shown.route);
   // The bare root is an alias for /new and a query string carries nothing: replace those, push real moves.
@@ -541,6 +545,7 @@ export function createNavigation({
     const inputs = [
       c.view,
       (c.session ?? c.selecting)?.sessionId,
+      !!(c.selecting || c.pendingCreate),
       c.projects,
       c.sessionReferences,
       state.settings,
@@ -601,9 +606,9 @@ export function createNavigation({
     batch(() => {
       if (state.settings) {
         const c = client.getState();
-        // Settings may have superseded a deep link before it could select anything. There is no
-        // session to return to in that case, even after the registry arrives: use the New page.
-        if (c.view.kind === "session" && !(c.session ?? c.selecting)?.sessionId)
+        // An abandoned deep link has neither a selection nor retained input. A creation can
+        // lack a session ID (and, after uncertainty, a selection) without being abandoned.
+        if (c.view.kind === "session" && !c.session && !c.selecting && !c.pendingCreate)
           return open({ kind: "new" });
       }
       set({ settings: null });
