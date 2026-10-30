@@ -628,13 +628,8 @@ function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): R
       terminal: true,
       detail: submission.detail ?? "Pi refused the input.",
     };
-  // This input's own delivery is uncertain: nothing later in the session can settle it.
-  if (submission?.outcome === "uncertain")
-    return {
-      status: "unknown",
-      terminal: true,
-      detail: submission.detail ?? "Prompt delivery is uncertain.",
-    };
+  // Uncertain delivery is read as status reads it: work under way or a dialog decides first, and
+  // an idle session whose delivery is uncertain is unknown.
   const activity = liveActivityOf(snapshot);
   switch (activity._tag) {
     case "needs_input": {
