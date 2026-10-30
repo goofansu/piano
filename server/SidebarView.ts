@@ -16,6 +16,7 @@
  * before: re-observing is frequent (every page load, every five-second checkout poll, every Pi
  * resource invalidation), and finding the same facts again is not news for any browser.
  */
+import { stat } from "node:fs/promises";
 import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
 import {
   type FolderView,
@@ -57,6 +58,8 @@ interface Observation {
   readonly shape: string;
   readonly paths: ReadonlySet<string>;
   readonly discoveries: ReadonlyMap<string, WorktreeDiscovery>;
+  /** Those of `paths` the run found absent from disk (ENOENT), whatever Git said about them. */
+  readonly gone: ReadonlySet<string>;
   /** Pi's trust for each of `paths`, re-read whenever DirectoryFacts reports a change. */
   readonly trust: ReadonlyMap<string, ProjectTrust>;
 }
@@ -113,17 +116,37 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       // a new session must not inherit a sibling's previously observed missing-history verdict.
       let unavailable = new Map<string, SessionReference["unavailable"]>();
 
-      /** Git discovery only; trust is read under the publishing lock when this is installed. */
+      /**
+       * Git discovery and whether each registered directory still exists; trust is read under the
+       * publishing lock when this is installed. Git cannot say a folder root is gone: its
+       * discovery of a deleted root fails or finds no checkout. One stat per registered directory,
+       * beside the several Git processes per folder, answers that. Only ENOENT is absence; any
+       * other stat failure leaves the directory unknown (INV-06).
+       */
       const observe = Effect.fn("SidebarView.observe")(function* (data: RegistryData) {
-        const discoveries = new Map(
-          yield* Effect.forEach(
-            data.folders,
-            (folder) => Effect.map(discover(folder), (d) => [folder, d] as const),
-            { concurrency: 4 },
-          ),
-        );
         const paths = new Set([...data.folders, ...data.worktrees.map((w) => w.path)]);
-        return { shape: shapeOf(data), paths, discoveries };
+        const absent = (path: string) =>
+          Effect.promise(() =>
+            stat(path).then(
+              () => false,
+              (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+            ),
+          );
+        const [discovered, absence] = yield* Effect.all(
+          [
+            Effect.forEach(
+              data.folders,
+              (folder) => Effect.map(discover(folder), (d) => [folder, d] as const),
+              { concurrency: 4 },
+            ),
+            Effect.forEach(paths, (path) => Effect.map(absent(path), (a) => [path, a] as const), {
+              concurrency: 4,
+            }),
+          ],
+          { concurrency: 2 },
+        );
+        const gone = new Set(absence.flatMap(([path, a]) => (a ? [path] : [])));
+        return { shape: shapeOf(data), paths, discoveries: new Map(discovered), gone };
       });
 
       const trustOf = Effect.fn("SidebarView.trustOf")(function* (paths: Iterable<string>) {
@@ -135,7 +158,8 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       });
 
       /** Registry selects directories and sessions; discovery supplies current Git facts. A registered
-       * worktree's last-known branch is shown only once Git no longer lists it, never in place of a failed read. */
+       * directory gone from disk is missing whatever Git said. A registered worktree's last-known
+       * branch is shown only once it is missing, never in place of a failed read. */
       const assemble = Effect.fn("SidebarView.assemble")(function* (
         data: RegistryData,
         running: ReadonlyArray<HostInfo>,
@@ -163,8 +187,9 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
             };
             const worktrees = yield* Effect.forEach(paths, (cwd) =>
               Effect.map(trustAt(cwd), (trust): WorktreeView => {
+                const gone = seen.gone.has(cwd);
                 const facts =
-                  discovery.status === "ready"
+                  !gone && discovery.status === "ready"
                     ? discovery.worktrees.find(
                         (w) => w.path === (cwd === path ? discovery.currentPath : cwd),
                       )
@@ -176,15 +201,17 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
                   branch: facts?.branch ?? null,
                   root: cwd === path,
                   facts,
-                  status: facts
-                    ? "current"
-                    : !seen.paths.has(cwd)
-                      ? "unknown"
-                      : discovery.status === "ready"
-                        ? "missing"
-                        : discovery.status === "non-git" && cwd === path
-                          ? "non-git"
-                          : "unknown",
+                  status: gone
+                    ? "missing"
+                    : facts
+                      ? "current"
+                      : !seen.paths.has(cwd)
+                        ? "unknown"
+                        : discovery.status === "ready"
+                          ? "missing"
+                          : discovery.status === "non-git" && cwd === path
+                            ? "non-git"
+                            : "unknown",
                 };
               }),
             );
@@ -198,8 +225,8 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         );
         // A session's branch is Git's, from its open folder's discovery; a worktree Git lists keeps
         // Git's answer, detached included. The registry's last-known branch, the last one Git
-        // reported for the worktree, stands in only once Git no longer lists it: a ready discovery
-        // left it out, or its folder closed. A failed or not-yet-run discovery is unknown, so no
+        // reported for the worktree, stands in only once it is missing (gone from disk, or a ready
+        // discovery left it out) or its folder closed. A failed or not-yet-run discovery is unknown, so no
         // branch (INV-06).
         const shown = new Map(folders.flatMap((f) => f.worktrees.map((w) => [w.path, w] as const)));
         const open = new Set(data.folders);

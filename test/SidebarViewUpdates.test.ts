@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs, { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import fsPromises from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
@@ -13,6 +14,7 @@ import { PiCli } from "../server/PiCli.ts";
 import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { type SidebarMessage, SidebarView } from "../server/SidebarView.ts";
+import { listWorktrees } from "../server/Worktrees.ts";
 import type { WorktreeDiscovery } from "../shared/wire.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-sidebar-")));
@@ -362,6 +364,8 @@ test("INV-01/07: a removed worktree's sessions keep the last branch Git reported
   const live = join(root, "first.live"),
     detached = join(root, "first.detached"),
     removed = join(root, "first.removed");
+  // On disk throughout: what changes is only what Git says about them.
+  for (const dir of [live, detached, removed]) mkdirSync(dir);
   // Git's answer as the test moves the checkouts: every worktree listed, then a failed read,
   // then the linked worktrees gone.
   let listing: "all" | "failed" | "gone" = "all";
@@ -447,6 +451,7 @@ test("INV-01/07: a removed worktree's sessions keep the last branch Git reported
 
 test("INV-06: while Git discovery fails, a worktree's sessions show no branch rather than the saved one", async () => {
   const linked = join(root, "first.switched");
+  mkdirSync(linked); // present, so only the failed read stands between it and a branch
   const git = {
     ...slowGit(),
     discover: (_folder: string) =>
@@ -877,6 +882,88 @@ test("INV-01: the sidebar marks a session unavailable when its history or checko
         "loose-never-written": "history",
         "loose-removed": "checkout",
       });
+    }),
+  );
+});
+
+test("INV-06: a registered directory deleted outside Piano reads missing whatever Git says; one that cannot be read stays unknown", async () => {
+  const repo = join(root, "deleted-repo"),
+    linked = join(root, "deleted-repo.linked"),
+    plain = join(root, "deleted-plain"),
+    fenced = join(root, "fenced"),
+    hidden = join(fenced, "hidden");
+  const gitIn = (dir: string, ...args: string[]) =>
+    execFileSync("git", ["-C", dir, ...args], { stdio: "pipe" });
+  mkdirSync(repo);
+  gitIn(repo, "init", "--quiet", "-b", "main");
+  gitIn(
+    repo,
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "--quiet",
+    "--allow-empty",
+    "-m",
+    "init",
+  );
+  gitIn(repo, "worktree", "add", "--quiet", "-b", "linked", linked);
+  mkdirSync(plain);
+  mkdirSync(hidden, { recursive: true });
+  // Real Git discovery: a deleted root is not a checkout (non-Git) or a broken one (error), never "ready".
+  await run(
+    { ...slowGit(), discover: listWorktrees },
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      for (const folder of [repo, plain, fenced]) yield* registry.addFolder(folder);
+      yield* registry.addWorktree({ folder: repo, path: linked, branch: "linked" });
+      yield* registry.addWorktree({ folder: fenced, path: hidden, branch: "" });
+      const statuses = (m: SidebarMessage) =>
+        Object.fromEntries(m.folders.flatMap((f) => f.worktrees.map((w) => [w.path, w.status])));
+      assert.deepEqual(statuses(yield* view.fresh), {
+        [repo]: "current",
+        [linked]: "current",
+        [plain]: "non-git",
+        [fenced]: "non-git",
+        [hidden]: "unknown",
+      });
+
+      rmSync(linked, { recursive: true });
+      rmSync(plain, { recursive: true });
+      assert.deepEqual(
+        statuses(yield* view.fresh),
+        {
+          [repo]: "current",
+          [linked]: "missing",
+          [plain]: "missing",
+          [fenced]: "non-git",
+          [hidden]: "unknown",
+        },
+        "a deleted linked worktree Git still lists as prunable, and a deleted non-Git folder, are missing",
+      );
+
+      rmSync(repo, { recursive: true });
+      // A directory that exists but cannot be looked into is not verifiably gone (root reads anyway).
+      fs.chmodSync(fenced, 0);
+      try {
+        const seen = statuses(yield* view.fresh);
+        assert.equal(
+          seen[repo],
+          "missing",
+          "a deleted repository root is missing, so New session disables it",
+        );
+        assert.equal(seen[linked], "missing");
+        if (process.getuid?.() !== 0)
+          assert.equal(
+            seen[hidden],
+            "unknown",
+            "a stat that fails for another reason stays unknown",
+          );
+      } finally {
+        fs.chmodSync(fenced, 0o755);
+      }
     }),
   );
 });
