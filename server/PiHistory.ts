@@ -10,20 +10,16 @@
  * caller knows and reports the one file, no file, or a conflict: distinct physical files claiming
  * the same session ID. A conflict is never resolved by choosing one.
  */
-import { type BigIntStats, createReadStream } from "node:fs";
+import { createReadStream } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import {
-  type FileEntry,
-  parseSessionEntries,
-  type SessionHeader,
-  SessionManager,
-} from "@earendil-works/pi-coding-agent";
+import type { FileEntry, SessionHeader } from "@earendil-works/pi-coding-agent";
 import { Effect, type Scope } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import type { Snapshot } from "../shared/wire.ts";
 import { agentDir, directoryPath, sessionDirFor } from "./PiEnv.ts";
+import { fileVersion, savedSession } from "./PiHistoryFile.ts";
 import { PiHistoryJobs } from "./PiHistoryJobs.ts";
 import { PiSessionError } from "./PiTransport.ts";
 
@@ -92,13 +88,6 @@ const readHeader = async (file: string): Promise<SessionHeader | undefined> => {
   return header(pending + decoder.end()) ?? undefined;
 };
 
-/** Pi parses and migrates only in memory: a persistent manager can rewrite legacy/empty files. */
-const sessionEntries = (content: string, sessionId: string) => {
-  const entries = parseSessionEntries(content);
-  if (!entries.some((entry) => entry.type === "session" && entry.id === sessionId))
-    throw new Error("Missing session header");
-  return entries;
-};
 /**
  * Every entry of a saved session, as Pi's `get_entries` lists them. Pi answers that in one RPC
  * line, which a long compacted history can push past the line limit; the file has no such limit.
@@ -113,23 +102,15 @@ export const savedEntries = Effect.fn("PiHistory.savedEntries")(function* (
     catch: (error) => rejected(`Cannot read Pi history ${path}: ${String(error)}`),
   });
   return yield* Effect.try({
-    try: (): ReadonlyArray<unknown> =>
-      SessionManager.inMemory(
-        undefined,
-        undefined,
-        sessionEntries(content, sessionId),
-      ).getEntries(),
+    try: (): ReadonlyArray<unknown> => savedSession(content, sessionId).getEntries(),
     catch: () => rejected(`Pi history ${path} is not session ${sessionId}.`),
   });
 });
 
 // Only discovery metadata is retained, never transcripts or arbitrary header metadata. Every
 // lookup still enumerates the store and stats each candidate: directory mtime alone cannot detect
-// in-place rewrites. ctime detects same-size rewrites with restored mtime, but even nanosecond
-// stat fields can share a filesystem clock tick. Do not cache recent writes until that tick is
-// safely past; this also keeps active/partial histories on the real-read path.
-const headerVersion = (info: BigIntStats) =>
-  [info.dev, info.ino, info.mode, info.size, info.mtimeNs, info.ctimeNs].join(":");
+// in-place rewrites. Do not cache recent writes until their clock tick is safely past (see
+// `fileVersion`); this also keeps active/partial histories on the real-read path.
 const HEADER_CACHE_LIMIT = 4096;
 
 /** A disposable, bounded header cache owned by one PiSessions service. */
@@ -174,7 +155,7 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
   const header = async (path: string) => {
     try {
       const before = await stat(path, { bigint: true });
-      const version = headerVersion(before);
+      const version = fileVersion(before);
       const cached = headers.get(path);
       // Refresh insertion order for LRU eviction. A failed/unstable read never enters the cache.
       headers.delete(path);
@@ -187,7 +168,7 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
       const info = { id: found.id, cwd: found.cwd };
       if (
         before.ctimeMs < BigInt(Date.now() - 1000) &&
-        headerVersion(await stat(path, { bigint: true })) === version
+        fileVersion(await stat(path, { bigint: true })) === version
       ) {
         headers.set(path, { version, info });
         if (headers.size > HEADER_CACHE_LIMIT) headers.delete(headers.keys().next().value!);

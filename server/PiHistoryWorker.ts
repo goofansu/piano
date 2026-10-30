@@ -1,10 +1,11 @@
 /** Read-only saved-history projection. Full files/SDK entries never cross back to the server. */
 import { readFileSync } from "node:fs";
 import { parentPort } from "node:worker_threads";
-import { parseSessionEntries, SessionManager } from "@earendil-works/pi-coding-agent";
+import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { Snapshot } from "../shared/wire.ts";
 import { compileRedaction, projectSnapshot } from "./DisplayProjection.ts";
 import { getImagePreview, type ImagePreview } from "./ImagePreviews.ts";
+import { savedSession } from "./PiHistoryFile.ts";
 import { type PiSessionFacts, type RawMessage, snapshotOf } from "./PiRecords.ts";
 
 export type HistoryRequest = {
@@ -15,14 +16,6 @@ export type HistoryRequest = {
 export type HistoryReply =
   | { readonly value: Snapshot | string; readonly images?: ReadonlyArray<ImagePreview> }
   | { readonly error: true };
-
-const readSession = (path: string, sessionId: string) => {
-  const entries = parseSessionEntries(readFileSync(path, "utf8"));
-  if (!entries.some((entry) => entry.type === "session" && entry.id === sessionId))
-    throw new Error("Missing session header");
-  // A persistent manager could rewrite legacy/empty histories. Migrate only in memory.
-  return SessionManager.inMemory(undefined, undefined, entries);
-};
 
 const savedFacts = (sm: SessionManager, path: string, sessionId: string): PiSessionFacts => {
   // Pi owns compaction/context edits/active branch, just as for RPC get_messages.
@@ -53,7 +46,7 @@ const savedFacts = (sm: SessionManager, path: string, sessionId: string): PiSess
 parentPort!.on("message", ({ operation, path, sessionId }: HistoryRequest) => {
   let reply: HistoryReply;
   try {
-    const manager = readSession(path, sessionId);
+    const manager = savedSession(readFileSync(path, "utf8"), sessionId);
     if (operation === "peek") {
       const value = projectSnapshot(snapshotOf(savedFacts(manager, path, sessionId)));
       // Image URLs refer to the server's bounded cache, not this worker's private heap.
