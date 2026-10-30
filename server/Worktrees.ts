@@ -11,7 +11,7 @@ import {
   type WorktreeDiscovery,
   type WorktreeFacts,
 } from "../shared/wire.ts";
-import { gitText, observeGit, type PushedBranch, pushedBranches } from "./GitCheckout.ts";
+import { type BranchHome, branchHomes, gitText, observeGit } from "./GitCheckout.ts";
 import { gitEnvironment } from "./GitEnvironment.ts";
 import { branchRemote, githubRemote } from "./GitHubPullRequests.ts";
 import { run as runProcess } from "./Subprocess.ts";
@@ -189,17 +189,18 @@ export const listWorktrees = Effect.fn("Worktrees.listWorktrees")(function* (
       userConfig: true,
     }).pipe(Effect.orElseSucceed(() => ""));
     const githubRepo = githubRemote(remote.trim())?.repo;
-    // Where each branch lives on GitHub, by the rule pull request discovery and Changes use; an
-    // unreadable answer only leaves the branches unlinked.
-    const pushed = yield* pushedBranches(
+    // Where each worktree's branch lives on GitHub, as pull request discovery and Changes read it
+    // in that worktree, linked only once Git holds the pushed ref; an unreadable answer only
+    // leaves the branches unlinked.
+    const homes = yield* branchHomes(
       folder,
-      worktrees.flatMap((w) => (w.branch ? [w.branch] : [])),
-    ).pipe(Effect.orElseSucceed(() => new Map<string, PushedBranch>()));
+      worktrees.flatMap((w) => (w.branch ? [{ path: w.path, branch: w.branch }] : [])),
+    ).pipe(Effect.orElseSucceed(() => new Map<string, BranchHome>()));
     const located = worktrees.map((w) => {
-      const at = w.branch ? pushed.get(w.branch) : undefined;
-      const home = at && branchRemote(at.name, at.url);
-      return home?.on === "github" && home.head
-        ? { ...w, github: { repo: home.head.repo, branch: home.head.name } }
+      const home = homes.get(w.path);
+      const remote = home?.pushed ? branchRemote(home) : undefined;
+      return remote?.on === "github" && remote.head
+        ? { ...w, github: { repo: remote.head.repo, branch: remote.head.name } }
         : w;
     });
     return {

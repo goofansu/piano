@@ -8,7 +8,7 @@ import { Context, Data, Effect, Layer, Schema } from "effect";
 import { EXE_GITHUB, type GitHubHost, pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
 import type { PullRequest } from "../shared/wire.ts";
 import { childEnvironment } from "./ChildEnvironment.ts";
-import { observeGit } from "./GitCheckout.ts";
+import { type BranchHome, observeGit } from "./GitCheckout.ts";
 import { GhCommand, run as runProcess } from "./Subprocess.ts";
 
 export class PullRequestError extends Data.TaggedError("PullRequestError")<{
@@ -55,24 +55,30 @@ export type BranchRemote =
   | { readonly on: "other" }
   | { readonly on: "github"; readonly apiHost: GitHubHost; readonly head: BranchHead | null };
 
-/** Git's answer for a branch (its name on the remote it pushes to, null when detached, and that
- * remote's URL, null without one) as GitHub sees it. */
-export function branchRemote(name: string | null, url: string | null): BranchRemote {
+/** Where Git says a branch lives (GitCheckout's `BranchHome`) as GitHub sees it, pushed or not:
+ * each caller decides what an unpushed branch means to it. */
+export function branchRemote({ upstream, url }: BranchHome): BranchRemote {
   if (!url) return { on: "none" };
   const github = githubRemote(url);
   if (!github) return { on: "other" };
-  return { on: "github", apiHost: github.apiHost, head: name ? { name, repo: github.repo } : null };
+  return {
+    on: "github",
+    apiHost: github.apiHost,
+    head: upstream ? { name: upstream.name, repo: github.repo } : null,
+  };
 }
 
-/** `cwd`'s branch as GitHub sees it, through GitCheckout's hardened observation (INV-06):
- * inherited GIT_* state cannot redirect it. Null outside Git; fails when Git cannot answer. */
+/** `cwd`'s branch as GitHub sees it, read in `cwd` through GitCheckout's hardened observation
+ * (INV-06): inherited GIT_* state cannot redirect it. Null outside Git; fails when Git cannot
+ * answer. A branch Git holds no pushed ref for still names where it would be: discovery can find
+ * a pull request opened from a push Git has not fetched. */
 export const observeBranchRemote = Effect.fn("GitHubPullRequests.observeBranchRemote")(function* (
   cwd: string,
 ): Effect.fn.Return<BranchRemote | null, PullRequestError> {
-  const observed = yield* observeGit(cwd, { remote: true });
+  const observed = yield* observeGit(cwd, { home: true });
   if (observed.status === "broken") return yield* failure(observed.detail);
-  if (observed.status === "non-git") return null;
-  return branchRemote(observed.remoteBranch ?? null, observed.remote ?? null);
+  if (observed.status === "non-git" || !observed.home) return null;
+  return branchRemote(observed.home);
 });
 
 /** Whether a pull request was opened from `branch`: its head names the same branch in the same

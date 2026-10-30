@@ -6,8 +6,8 @@
  * (a remote URL after `url.<base>.insteadOf`) opts back into global and system config with
  * `userConfig`; inherited GIT_* state stays cleared. Output is bounded, UTF-8 checked and NUL lists
  * must be complete; repository paths must be relative and stay out of embedded repositories.
- * `observeGit` is the one answer to "is this path a Git checkout, and of what branch", and
- * `Upstream` to "where does that branch's work go".
+ * `observeGit` is the one answer to "is this path a Git checkout, and of what branch",
+ * `Upstream` to "where does that branch's work go", and `BranchHome` to "where does it live".
  */
 import { lstat, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
@@ -157,67 +157,145 @@ function upstreamOf(branch: string, answer: string): Upstream {
   return { remote: target, name, ref: push, tracked };
 }
 
-/** The push URL of `remote` (`Upstream.remote`): its `pushurl`, else its `url`, after the user's
- * `insteadOf` and `pushInsteadOf` rewrites; where the branch is, which its fetch URL need not
- * name. Null without that remote. Keeps user config, which defines the answer (INV-06). */
-const pushUrlRead = (remote: string) => ["remote", "get-url", "--push", remote];
-const pushUrl = (cwd: string, remote: string, timeout?: number) =>
-  gitText(cwd, pushUrlRead(remote), { timeout, userConfig: true }).pipe(
-    Effect.map((out) => out.trim() || null),
-    Effect.catchIf(
-      (e) => e.detail.includes("No such remote"),
-      () => Effect.succeed(null),
-    ),
-  );
-
-/** A branch where Git would push it, once pushed: its name there (`Upstream.name`) and its
- * remote's push URL. */
-export interface PushedBranch {
-  readonly name: string;
-  readonly url: string;
+/** Where a branch lives: where Git would push it (`Upstream`), that remote's push URL, and
+ * whether Git holds what the push updates. The one answer for the session rail's branch link,
+ * pull request discovery and its API route, and Changes' "pull request from this branch"; each
+ * decides what an unpushed branch means to it. Read from the branch's own checkout: a linked
+ * worktree's config (`extensions.worktreeConfig`) can push it elsewhere than the main checkout. */
+export interface BranchHome {
+  /** Where the branch's work goes; null when detached, whose home is `origin`, unnamed. */
+  readonly upstream: Upstream | null;
+  /** The push URL of `upstream.remote` (else `origin`): its `pushurl`, else its `url`, after the
+   * user's `insteadOf` and `pushInsteadOf` rewrites; where the branch is, which its fetch URL need
+   * not name. Null without that remote. */
+  readonly url: string | null;
+  /** Git holds `upstream.ref`: the branch was pushed, or fetched from where it pushes. */
+  readonly pushed: boolean;
 }
 
-/**
- * Which of `branches` Git holds the push ref for (`Upstream.ref`: they were pushed, or fetched
- * from where they push), each with where it went; a branch never pushed, or whose push remote is
- * gone, is absent. Refs and remotes are shared by a repository's worktrees, so one call answers
- * for all of them: one read of the branches' upstreams, one of the refs a push would update, and
- * one URL read per remote. Keeps user config, which defines both answers (INV-06).
- */
-export const pushedBranches = Effect.fn("GitCheckout.pushedBranches")(function* (
-  cwd: string,
-  branches: readonly string[],
-): Effect.fn.Return<ReadonlyMap<string, PushedBranch>, GitReadError> {
-  const pushed = new Map<string, PushedBranch>();
-  if (branches.length === 0) return pushed;
-  const read = (args: readonly string[]) => gitText(cwd, args, { userConfig: true });
-  const wanted = new Set(branches);
-  // A pattern also matches refs beneath it (`feature` matches `feature/x`): keep exact names.
+/** A Git read in one checkout that keeps user config: `push.default`, `remote.pushDefault` and
+ * URL rewrites usually live there, and define these answers (INV-06). */
+type UserRead = (args: readonly string[]) => Promise<string>;
+
+/** `remote`'s push URL, null without that remote. */
+const pushUrlOf = async (read: UserRead, remote: string) => {
+  try {
+    return (await read(["remote", "get-url", "--push", remote])).trim() || null;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("No such remote")) return null;
+    throw error;
+  }
+};
+
+/** The homes of `branches` as one checkout's config answers: one read of their upstreams, one of
+ * the refs a push would update and one push URL per remote, however many branches. A detached
+ * HEAD (null) is homed at `origin`. */
+async function homesOf(
+  read: UserRead,
+  branches: readonly (string | null)[],
+): Promise<Map<string | null, BranchHome>> {
+  const wanted = new Set(branches.filter((b) => b !== null));
   const upstreams = new Map<string, Upstream>();
-  const answer = yield* read([
-    "for-each-ref",
-    `--format=%(refname)%00${UPSTREAM_FORMAT}`,
-    ...[...wanted].map((b) => `refs/heads/${b}`),
-  ]);
-  for (const line of answer.split("\n")) {
-    const [ref = "", ...rest] = line.split("\0");
-    const branch = ref.slice("refs/heads/".length);
-    if (ref.startsWith("refs/heads/") && wanted.has(branch))
-      upstreams.set(branch, upstreamOf(branch, rest.join("\0")));
+  if (wanted.size > 0) {
+    const answer = await read([
+      "for-each-ref",
+      `--format=%(refname)%00${UPSTREAM_FORMAT}`,
+      ...[...wanted].map((b) => `refs/heads/${b}`),
+    ]);
+    // A pattern also matches refs beneath it (`feature` matches `feature/x`): keep exact names.
+    for (const line of answer.split("\n")) {
+      const [ref = "", ...rest] = line.split("\0");
+      const branch = ref.slice("refs/heads/".length);
+      if (ref.startsWith("refs/heads/") && wanted.has(branch))
+        upstreams.set(branch, upstreamOf(branch, rest.join("\0")));
+    }
   }
-  if (upstreams.size === 0) return pushed;
   const refs = [...new Set([...upstreams.values()].map((u) => u.ref))];
-  const held = new Set(
-    (yield* read(["for-each-ref", "--format=%(refname)", ...refs])).split("\n").filter(Boolean),
+  const remotes = new Set([...upstreams.values()].map((u) => u.remote));
+  if (branches.includes(null) || upstreams.size < wanted.size) remotes.add("origin");
+  const [held, urls] = await Promise.all([
+    refs.length
+      ? read(["for-each-ref", "--format=%(refname)", ...refs]).then(
+          (out) => new Set(out.split("\n").filter(Boolean)),
+        )
+      : new Set<string>(),
+    Promise.all([...remotes].map(async (r) => [r, await pushUrlOf(read, r)] as const)).then(
+      (pairs) => new Map(pairs),
+    ),
+  ]);
+  return new Map(
+    branches.map((branch) => {
+      // An unborn branch is listed by no ref: it pushes where an untracked branch would.
+      const upstream = branch === null ? null : (upstreams.get(branch) ?? upstreamOf(branch, ""));
+      return [
+        branch,
+        {
+          upstream,
+          url: urls.get(upstream?.remote ?? "origin") ?? null,
+          pushed: !!upstream && held.has(upstream.ref),
+        },
+      ];
+    }),
   );
-  const urls = new Map<string, string | null>();
-  for (const [branch, upstream] of upstreams) {
-    if (!held.has(upstream.ref)) continue;
-    if (!urls.has(upstream.remote)) urls.set(upstream.remote, yield* pushUrl(cwd, upstream.remote));
-    const url = urls.get(upstream.remote);
-    if (url) pushed.set(branch, { name: upstream.name, url });
+}
+
+/** `homesOf` in the checkout at `cwd`, as an Effect: one timeout for the whole read. */
+const homesIn = (cwd: string, branches: readonly (string | null)[], timeout = 20_000) =>
+  Effect.gen(function* () {
+    const git = yield* GitCommand;
+    return yield* Effect.tryPromise({
+      try: (signal) =>
+        homesOf(
+          async (args) =>
+            (
+              await runGit(
+                git,
+                args,
+                { cwd, timeout, userConfig: true, limit: 8 * 1024 * 1024 },
+                signal,
+              )
+            ).stdout.toString(),
+          branches,
+        ),
+      catch: (error) =>
+        new GitReadError({ detail: error instanceof Error ? error.message : String(error) }),
+    });
+  });
+
+/**
+ * The home of each checkout's branch (`BranchHome`), keyed by checkout path. `repository` is any
+ * checkout of the repository the others belong to. Its worktrees share refs and, unless the
+ * repository enables per-worktree config (`extensions.worktreeConfig`), config too: then one
+ * read from `repository` answers for all of them; otherwise each checkout is read from its own
+ * path, as Git would answer there.
+ */
+export const branchHomes = Effect.fn("GitCheckout.branchHomes")(function* (
+  repository: string,
+  checkouts: readonly { readonly path: string; readonly branch: string }[],
+): Effect.fn.Return<ReadonlyMap<string, BranchHome>, GitReadError> {
+  if (checkouts.length === 0) return new Map();
+  const perWorktree =
+    (yield* gitText(repository, [
+      "config",
+      "--type=bool",
+      "--default=false",
+      "extensions.worktreeConfig",
+    ])).trim() === "true";
+  if (!perWorktree) {
+    const homes = yield* homesIn(
+      repository,
+      checkouts.map((c) => c.branch),
+    );
+    return new Map(checkouts.map((c) => [c.path, homes.get(c.branch)!]));
   }
-  return pushed;
+  return new Map(
+    yield* Effect.forEach(
+      checkouts,
+      (c) =>
+        Effect.map(homesIn(c.path, [c.branch]), (homes) => [c.path, homes.get(c.branch)!] as const),
+      { concurrency: 4 },
+    ),
+  );
 });
 
 /** What Git says about a path: outside any repository, inside a working checkout, or `broken`:
@@ -228,13 +306,10 @@ export type GitObservation =
       readonly status: "checkout";
       /** The root of the checkout `path` is in. */
       readonly toplevel: string;
-      /** With `branch` or `remote`: null when detached. Discovery does not pay for it. */
+      /** With `branch` or `home`: null when detached. Discovery does not pay for it. */
       readonly branch?: string | null;
-      /** With `remote`: the push URL of the remote the branch pushes to (`Upstream.remote`, else
-       * `origin` when detached); null without that remote. */
-      readonly remote?: string | null;
-      /** With `remote`: the branch's name on that remote; null when detached or without it. */
-      readonly remoteBranch?: string | null;
+      /** With `home`: where the checked-out branch lives, read in this checkout. */
+      readonly home?: BranchHome;
     }
   | { readonly status: "broken"; readonly detail: string };
 
@@ -263,12 +338,11 @@ export const observeGit = Effect.fn("GitCheckout.observeGit")(function* (
   options: {
     readonly branch?: boolean;
     /** Implies `branch`. */
-    readonly remote?: boolean;
+    readonly home?: boolean;
     readonly timeout?: number;
   } = {},
 ): Effect.fn.Return<GitObservation> {
-  const read = (args: readonly string[], userConfig?: boolean) =>
-    gitText(path, args, { timeout: options.timeout, userConfig });
+  const read = (args: readonly string[]) => gitText(path, args, { timeout: options.timeout });
   return yield* Effect.gen(function* () {
     const metadata = yield* Effect.tryPromise({
       try: () => hasGitMetadata(path),
@@ -293,14 +367,11 @@ export const observeGit = Effect.fn("GitCheckout.observeGit")(function* (
     const [inside, toplevel] = answer.trim().split("\n");
     if (inside !== "true" || !toplevel) return yield* bare;
     const checkout = { status: "checkout", toplevel: toplevel.trim() } as const;
-    if (!options.branch && !options.remote) return checkout;
+    if (!options.branch && !options.home) return checkout;
     const branch = (yield* read(BRANCH)).trim() || null;
-    if (!options.remote) return { ...checkout, branch };
-    const upstream = branch ? upstreamOf(branch, yield* read(upstreamRead(branch), true)) : null;
-    // The user's Git config defines the answer (e.g. an exe.dev integration proxy configured
-    // globally), so it keeps user config.
-    const remote = yield* pushUrl(path, upstream?.remote ?? "origin", options.timeout);
-    return { ...checkout, branch, remote, remoteBranch: remote && (upstream?.name ?? null) };
+    if (!options.home) return { ...checkout, branch };
+    const home = (yield* homesIn(path, [branch], options.timeout)).get(branch)!;
+    return { ...checkout, branch, home };
   }).pipe(
     Effect.catchTag("GitReadError", (e) =>
       Effect.succeed({ status: "broken", detail: e.detail } as const),
@@ -364,8 +435,8 @@ export interface Checkout {
   readonly upstream: (branch: string) => Promise<Upstream>;
   /** The fetch URL Git would contact, including user-config rewrites; null without that remote. */
   readonly remoteUrl: (name: string) => Promise<string | null>;
-  /** The push URL of `remote` (`Upstream.remote`): where the branch is. */
-  readonly pushUrl: (remote: string) => Promise<string | null>;
+  /** Where `branch` lives (`BranchHome`), as this checkout's config answers. */
+  readonly home: (branch: string | null) => Promise<BranchHome>;
   /** The same checkout with added `-c` config or environment (a disposable GIT_INDEX_FILE). */
   readonly with: (extra: {
     readonly config?: readonly string[];
@@ -443,7 +514,13 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
       upstream: async (branch) =>
         upstreamOf(branch, decode((await run(upstreamRead(branch), { userConfig: true })).stdout)),
       remoteUrl: (name) => url(["remote", "get-url", name]),
-      pushUrl: (remote) => url(pushUrlRead(remote)),
+      home: async (branch) =>
+        (
+          await homesOf(
+            async (args) => decode((await run(args, { userConfig: true })).stdout),
+            [branch],
+          )
+        ).get(branch)!,
       with: (extra) => make([...config, ...(extra.config ?? [])], { ...env, ...extra.env }),
     };
   };
