@@ -8,10 +8,11 @@
  * dialog and rejects any other), so the person may answer it again. Abort is the user's escape
  * hatch: it follows the same rule and, by rule, is still offered after the deadline. How it
  * reads: which surface asks it, its title and deadline wording are decided here, not per component.
+ * What the person has typed or chosen is kept here too, for as long as the question stays open.
  * Nothing here depends on React.
  */
 import type { ClientCommand, Dialog, DialogResolution } from "@shared/wire";
-import type { AppState } from "../store.ts";
+import { type AppState, sessionKey } from "../store.ts";
 // Relative, not @/: module tests load this file directly in Node.
 import { sessionReady } from "./sessionContext.ts";
 import type { SendDisposition } from "./ws.ts";
@@ -38,6 +39,8 @@ export interface PendingDialogs {
   more: number;
   /** The settled attachment answers go out on (see `sessionReady`); null while there is none. */
   attachment: string | null;
+  /** The selected session's key, which its questions' replies are kept under; null with no session. */
+  session: string | null;
 }
 
 /** The selected session's dialog queue as the dialog host shows it. */
@@ -48,6 +51,7 @@ export function pendingDialogs(state: AppState): PendingDialogs {
     surface: dialogs[0] ? dialogSurface(dialogs[0]) : null,
     more: Math.max(0, dialogs.length - 1),
     attachment: sessionReady(state) ? state.selectionId : null,
+    session: state.session ? sessionKey(state.session) : null,
   };
 }
 
@@ -231,3 +235,69 @@ export function createDialogAnswer({
     view,
   };
 }
+
+/** The client state a `QuestionReplies` follows; the page's `Client` is one. */
+export interface QueueSource {
+  getState: () => AppState;
+  subscribe: (listener: () => void) => () => void;
+}
+
+/**
+ * The reply being written to each open question: an input's or editor's text, or a choice's
+ * 1-based option index ("" when none is chosen). It belongs to the question, not to the view that
+ * shows it, so switching sessions or a resync keeps it. It is dropped when its session's queue is
+ * next seen without it (answered, cancelled, timed out, or a restarted Pi's new generation).
+ * Like message drafts it lives in browser memory for this page load only.
+ */
+export interface QuestionReplies {
+  /** The reply so far; an untouched question starts from its prefill, a choice unselected. */
+  get: (session: string | null, dialog: Dialog) => string;
+  subscribe: (listener: () => void) => () => void;
+  set: (session: string | null, dialog: Dialog, reply: string) => void;
+  /** Drops replies whose question left the selected session's queue; returns the stop function. */
+  follow: (source: QueueSource) => () => void;
+}
+
+const questionKey = (dialog: Dialog) => `${dialog.generation}/${dialog.id}`;
+
+export function createQuestionReplies(): QuestionReplies {
+  const replies = new Map<string, Map<string, string>>();
+  const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
+  return {
+    get: (session, dialog) =>
+      (session === null ? undefined : replies.get(session)?.get(questionKey(dialog))) ??
+      (dialog.method === "select" ? "" : (dialog.prefill ?? "")),
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    set(session, dialog, reply) {
+      if (session === null) return;
+      const open = replies.get(session) ?? new Map<string, string>();
+      replies.set(session, open.set(questionKey(dialog), reply));
+      notify();
+    },
+    follow: (source) =>
+      source.subscribe(() => {
+        const state = source.getState();
+        // A resync is replacing the list, so it says nothing about which questions closed.
+        if (state.resync || !state.session) return;
+        const session = sessionKey(state.session);
+        const open = replies.get(session);
+        if (!open) return;
+        const queued = new Set(state.session.dialogs.map(questionKey));
+        let dropped = false;
+        for (const key of open.keys()) if (!queued.has(key)) dropped = open.delete(key);
+        if (!open.size) replies.delete(session);
+        if (dropped) notify();
+      }),
+  };
+}
+
+/** The page's question replies; App follows the client with them so closed questions drop theirs. */
+export const questionReplies = createQuestionReplies();

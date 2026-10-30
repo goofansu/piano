@@ -7,9 +7,10 @@ import {
   answeredQuestion,
   answerReceipt,
   createDialogAnswer,
+  createQuestionReplies,
   pendingDialogs,
 } from "../web/src/lib/piDialogs.ts";
-import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
+import { type AppState, initialState, type SessionView, sessionKey } from "../web/src/store.ts";
 
 const DEADLINE = 10_000;
 const dialog = (id: string, extra: Partial<Dialog> = {}): Dialog => ({
@@ -346,6 +347,7 @@ test("pending dialogs expose the queue head and how many follow it", () => {
     surface: null,
     more: 0,
     attachment: "sel",
+    session: null,
   });
 });
 
@@ -364,6 +366,7 @@ test("no dialog is pending during a resync, and answers wait for a settled attac
     surface: null,
     more: 0,
     attachment: null,
+    session: sessionKey(queued),
   });
   const selecting = pendingDialogs({
     ...ready,
@@ -373,4 +376,48 @@ test("no dialog is pending during a resync, and answers wait for a settled attac
   assert.equal(selecting.head?.id, "d1");
   assert.equal(selecting.attachment, null);
   assert.equal(pendingDialogs({ ...ready, connected: false, session: queued }).attachment, null);
+});
+
+test("a question's typed reply outlasts its component while the question stays open", () => {
+  const replies = createQuestionReplies();
+  let state: AppState = ready;
+  const listeners = new Set<() => void>();
+  const show = (next: AppState) => {
+    state = next;
+    for (const listener of listeners) listener();
+  };
+  const stop = replies.follow({
+    getState: () => state,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  const asked = dialog("d1", { prefill: "draft" });
+  const queued = session([asked]);
+  show({ ...ready, session: queued });
+  const key = pendingDialogs(state).session;
+  assert.equal(replies.get(key, asked), "draft", "an untouched question starts from its prefill");
+  replies.set(key, asked, "a half-typed paragraph");
+  // A resync and another session's view both hide the question; neither ends it.
+  show({ ...ready, resync: true, session: queued });
+  show({ ...ready, session: { ...session([]), sessionId: "s2" } });
+  show({ ...ready, session: queued });
+  assert.equal(replies.get(key, asked), "a half-typed paragraph");
+  assert.equal(
+    replies.get(key, { ...asked, generation: "g2" }),
+    "draft",
+    "a restarted Pi's question starts from its own prefill",
+  );
+  const choice = dialog("d2", { method: "select", options: ["a", "b"] });
+  assert.equal(replies.get(key, choice), "", "a choice starts unselected");
+  replies.set(key, choice, "2");
+  show({ ...ready, session: session([asked, choice]) });
+  assert.equal(replies.get(key, choice), "2");
+  // Answered, cancelled or timed out: the question leaves the queue and its reply goes with it.
+  show({ ...ready, session: session([choice]) });
+  assert.equal(replies.get(key, asked), "draft");
+  stop();
+  show({ ...ready, session: session([]) });
+  assert.equal(replies.get(key, choice), "2", "a stopped follower drops nothing");
 });
