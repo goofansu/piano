@@ -2,8 +2,9 @@
 
 From a session the user sees what changed in its workspace: Changes, in the Surface area beside
 the Agent area (or under its own tab where the areas take turns), shows the Git diff of
-the session's folder or worktree against HEAD (per-file additions and removals, new files, a diff
-per file), and the session rail (turned on or off for every session from the header, and
+the session's folder or worktree (per-file additions and removals, new files, a diff
+per file). The comparison is Uncommitted (against HEAD), the branch's target, or Since start
+(against the commit Piano recorded when it started the session). The session rail (turned on or off for every session from the header, and
 sharing the right side with the Surface area: whichever came in last shows), shows where the
 session runs as the Environment section (Folder, or Repository once GitHub is known, then Branch,
 or the commit when HEAD is detached), Outputs, the files Pi wrote or edited in this session, each
@@ -20,14 +21,21 @@ The palette (Mod+K) searches neither outputs nor links.
   something is open: `Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar
   closes it. The header's end holds only "Show session rail" / "Hide session rail" and this
   toggle (plus the preview control while an app runs); the pull request is read in Changes.
-- `changes-scope`: the toolbar starts with the comparison menu, "Comparison: Uncommitted" by
-  default (visible text `Uncommitted`), or "Comparison: <target>" (`main`, `origin/main`):
-  Uncommitted compares with HEAD, the branch option with the branch's target (the pull request's
-  base, the base Worktrunk reported at creation, the remote's default branch, or a local
-  main/master). An unavailable option is disabled and shows only its name (on `main`, the
-  menuitemradio `main`, since main is the base branch). The choice is saved for the session. The toolbar's actions are Collapse all
-  / Expand all, Wrap (pressed while on) and Refresh changes; a failed refresh keeps the previous
-  list with "Refresh failed. Showing previous changes." and the reason.
+- `changes-scope`: the toolbar starts with the comparison menu. With no saved choice Piano
+  opens Branch when that comparison can be read, otherwise Since start, otherwise Uncommitted.
+  A seeded session on `main` has no start commit, so it still opens "Comparison: Uncommitted"
+  (visible text `Uncommitted`), or "Comparison: <target>" (`main`, `origin/main`) on a feature
+  branch. Uncommitted compares with HEAD, the branch option with the branch's target (the pull
+  request's base, the base Worktrunk reported at creation, the remote's default branch, or a
+  local main/master), and Since start with the commit recorded when Piano started the session.
+  The menu order is Uncommitted, then the branch (on `main`, the menuitemradio `main`), then
+  Since start. An unavailable option is disabled and shows its reason on a second line (`main
+  is the base branch.`, `Nothing was recorded when this session started.`, `The commit from the
+  start of this session is gone.`). Choosing one saves it for the session. The toolbar's actions
+  are Collapse all / Expand all, Wrap (pressed while on) and Refresh changes; a failed refresh
+  keeps the previous list with "Refresh failed. Showing previous changes." and the reason. On a
+  narrow Changes toolbar the comparison takes the full first line and the view controls wrap
+  beneath it.
 - `pull-request-link`: with no PR linked, the toolbar starts its actions with a ghost icon button,
   "Pull request", before Expand / Collapse all. It opens the existing link dialog (URL field, Link,
   Find from branch). Once linked, the button gives way to the PR row below. Removing the link
@@ -106,6 +114,18 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
 - `changes-refresh`
   - Action: `rm "$REPO/new.txt"; ab find role button click --name "Refresh changes" --exact`
   - Result: `new.txt` leaves the list; `src/answer.ts` stays. Capture `02-refreshed`.
+- `changes-since-start`
+  - A session Piano itself starts on the folder root records that commit. Seeded sessions were
+    not started that way, so Since start stays disabled for them.
+  - Action: from `/new`, send a first message in `repo` and wait for the echo. Edit
+    `src/answer.ts`, open Changes. The face reads `Since start` and the diff shows the edit.
+    Commit that edit in `$REPO`, then "Refresh changes": the same patch stays, and "1 commit
+    not pushed" appears only when the branch has a remote-tracking ref (the scratch repo has
+    none). Open the menu and choose Uncommitted: the body is "No changes". Choose Since start
+    again: the patch returns. On the seeded "Plan the verification" session, open the comparison
+    menu: Since start is disabled, with `Nothing was recorded when this session started.`
+  - Result: captures of the open patch, the patch after the commit, Uncommitted empty, the
+    disabled menu item, and the Changes toolbar at 390px and 320px wide.
 - `changes-close`
   - Action: `ab find role button click --name "Hide changes" --exact`
   - Result: `document.querySelector('[data-slot=surface-area]:not([inert])')` is null and the

@@ -33,7 +33,8 @@ const schema = `
     pull_request_url TEXT, pull_request_source TEXT, pull_request_api_host TEXT CHECK (pull_request_api_host IS NULL OR pull_request_api_host = 'github.int.exe.xyz'), position INTEGER NOT NULL,
     pull_request_head TEXT, pull_request_base TEXT,
     pull_request_head_repo TEXT, pull_request_base_repo TEXT,
-    changes_scope TEXT CHECK (changes_scope IS NULL OR changes_scope IN ('branch', 'uncommitted')),
+    changes_scope TEXT CHECK (changes_scope IS NULL OR changes_scope IN ('branch', 'since-start', 'uncommitted')),
+    start_head TEXT,
     PRIMARY KEY (cwd, session_id),
     CHECK ((pull_request_state = 'linked' AND pull_request_url IS NOT NULL AND pull_request_source IS NOT NULL AND pull_request_source IN ('branch', 'manual'))
       OR (pull_request_state != 'linked' AND pull_request_url IS NULL AND pull_request_source IS NULL AND pull_request_api_host IS NULL))
@@ -136,6 +137,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       "pull_request_head_repo",
       "pull_request_base_repo",
       "changes_scope",
+      "start_head",
     ],
     keys: 2,
     key: (s) => [s.cwd, s.sessionId],
@@ -160,6 +162,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       s.pullRequest?.headRepo ?? null,
       s.pullRequest?.baseRepo ?? null,
       s.changesScope ?? null,
+      s.startHead ?? null,
     ],
     decode: (r) => ({
       cwd: r.cwd as string,
@@ -170,7 +173,8 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       ...(r.pinned ? { pinned: true } : {}),
       ...(r.changes_scope === null
         ? {}
-        : { changesScope: r.changes_scope as "branch" | "uncommitted" }),
+        : { changesScope: r.changes_scope as "branch" | "since-start" | "uncommitted" }),
+      ...(r.start_head === null ? {} : { startHead: r.start_head as string }),
       ...(r.project_id === null ? {} : { projectId: r.project_id as string }),
       ...(r.title === null ? {} : { title: r.title as string }),
       ...(r.stats === null ? {} : { stats: JSON.parse(r.stats as string) }),
@@ -328,7 +332,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 9 &&
         version !== 10 &&
         version !== 11 &&
-        version !== 12
+        version !== 12 &&
+        version !== 13
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -389,6 +394,58 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
             db.exec(`ALTER TABLE sessions ADD COLUMN ${column} TEXT;`);
         }
         db.exec("PRAGMA user_version = 12;");
+      }
+      // Version 13 records the commit a session started at, and lets the saved comparison name
+      // Since start. A database created since already has both. Widening the scope check means
+      // rebuilding the table: SQLite cannot alter a CHECK.
+      if (Number(version) < 13) {
+        const sql = String(
+          db
+            .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sessions'")
+            .get()?.sql ?? "",
+        );
+        const hasStart =
+          db
+            .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'start_head'")
+            .get() !== undefined;
+        if (!sql.includes("'since-start'")) {
+          db.exec(`CREATE TABLE sessions_next (
+            cwd TEXT NOT NULL REFERENCES workspaces(path), session_id TEXT NOT NULL,
+            project_id TEXT REFERENCES projects(id), title TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            archived INTEGER NOT NULL CHECK (archived IN (0, 1)),
+            pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
+            stats TEXT CHECK (stats IS NULL OR json_valid(stats)),
+            radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)),
+            pull_request_state TEXT NOT NULL CHECK (pull_request_state IN ('discover', 'removed', 'linked')),
+            pull_request_url TEXT, pull_request_source TEXT, pull_request_api_host TEXT CHECK (pull_request_api_host IS NULL OR pull_request_api_host = 'github.int.exe.xyz'), position INTEGER NOT NULL,
+            pull_request_head TEXT, pull_request_base TEXT,
+            pull_request_head_repo TEXT, pull_request_base_repo TEXT,
+            changes_scope TEXT CHECK (changes_scope IS NULL OR changes_scope IN ('branch', 'since-start', 'uncommitted')),
+            start_head TEXT,
+            PRIMARY KEY (cwd, session_id),
+            CHECK ((pull_request_state = 'linked' AND pull_request_url IS NOT NULL AND pull_request_source IS NOT NULL AND pull_request_source IN ('branch', 'manual'))
+              OR (pull_request_state != 'linked' AND pull_request_url IS NULL AND pull_request_source IS NULL AND pull_request_api_host IS NULL))
+          ) STRICT;`);
+          db.exec(`INSERT INTO sessions_next (
+            cwd, session_id, project_id, title, created_at, updated_at, archived, pinned, stats,
+            radius_share, pull_request_state, pull_request_url, pull_request_source,
+            pull_request_api_host, position, pull_request_head, pull_request_base,
+            pull_request_head_repo, pull_request_base_repo, changes_scope
+          ) SELECT
+            cwd, session_id, project_id, title, created_at, updated_at, archived, pinned, stats,
+            radius_share, pull_request_state, pull_request_url, pull_request_source,
+            pull_request_api_host, position, pull_request_head, pull_request_base,
+            pull_request_head_repo, pull_request_base_repo, changes_scope
+          FROM sessions;`);
+          db.exec("DROP TABLE sessions;");
+          db.exec("ALTER TABLE sessions_next RENAME TO sessions;");
+          db.exec(
+            "CREATE INDEX sessions_activity ON sessions(archived, updated_at DESC); CREATE INDEX sessions_project ON sessions(project_id, updated_at DESC);",
+          );
+        } else if (!hasStart) {
+          db.exec("ALTER TABLE sessions ADD COLUMN start_head TEXT;");
+        }
+        db.exec("PRAGMA user_version = 13;");
       }
       db.exec("COMMIT");
     } catch (error) {

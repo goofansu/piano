@@ -481,10 +481,11 @@ export const ChangeFile = Schema.Struct({
 export type ChangeFile = typeof ChangeFile.Type;
 /**
  * What Changes compares the working tree with, named by the question it answers: `branch`, the
- * merge-base with the branch's target (what does this branch propose?); `uncommitted`, HEAD (what
- * is not committed yet?).
+ * merge-base with the branch's target (what does this branch propose?); `since-start`, the commit
+ * HEAD was at when Piano started this session here (what changed since then?); `uncommitted`, HEAD
+ * (what is not committed yet?).
  */
-export const ChangesScope = Schema.Literals(["branch", "uncommitted"]);
+export const ChangesScope = Schema.Literals(["branch", "since-start", "uncommitted"]);
 export type ChangesScope = typeof ChangesScope.Type;
 /** The `branch` scope's target and where Piano got it, each labelled for the user. */
 export const ComparisonTarget = Schema.Struct({

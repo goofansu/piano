@@ -98,7 +98,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 12);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 13);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -317,6 +317,79 @@ test("version-11 links migrate without inventing repository proof, then persist 
   assert.deepEqual((await f.get()).sessions[0]?.pullRequest, qualified);
 });
 
+test("version-12 sessions keep their comparison when Since start is added", async (t) => {
+  const f = fixture(t),
+    cwd = join(f.root, "repo");
+  await f.run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addSession(cwd, "one", "Kept");
+      yield* registry.setSessionChangesScope(cwd, "one", "branch");
+    }),
+  );
+  const legacy = new DatabaseSync(f.dbPath);
+  try {
+    legacy.exec("BEGIN");
+    legacy.exec(`CREATE TABLE sessions_v12 (
+      cwd TEXT NOT NULL REFERENCES workspaces(path), session_id TEXT NOT NULL,
+      project_id TEXT REFERENCES projects(id), title TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      archived INTEGER NOT NULL CHECK (archived IN (0, 1)),
+      pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
+      stats TEXT CHECK (stats IS NULL OR json_valid(stats)),
+      radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)),
+      pull_request_state TEXT NOT NULL CHECK (pull_request_state IN ('discover', 'removed', 'linked')),
+      pull_request_url TEXT, pull_request_source TEXT, pull_request_api_host TEXT CHECK (pull_request_api_host IS NULL OR pull_request_api_host = 'github.int.exe.xyz'), position INTEGER NOT NULL,
+      pull_request_head TEXT, pull_request_base TEXT,
+      pull_request_head_repo TEXT, pull_request_base_repo TEXT,
+      changes_scope TEXT CHECK (changes_scope IS NULL OR changes_scope IN ('branch', 'uncommitted')),
+      PRIMARY KEY (cwd, session_id),
+      CHECK ((pull_request_state = 'linked' AND pull_request_url IS NOT NULL AND pull_request_source IS NOT NULL AND pull_request_source IN ('branch', 'manual'))
+        OR (pull_request_state != 'linked' AND pull_request_url IS NULL AND pull_request_source IS NULL AND pull_request_api_host IS NULL))
+    ) STRICT`);
+    legacy.exec(`INSERT INTO sessions_v12 (
+      cwd, session_id, project_id, title, created_at, updated_at, archived, pinned, stats,
+      radius_share, pull_request_state, pull_request_url, pull_request_source,
+      pull_request_api_host, position, pull_request_head, pull_request_base,
+      pull_request_head_repo, pull_request_base_repo, changes_scope
+    ) SELECT
+      cwd, session_id, project_id, title, created_at, updated_at, archived, pinned, stats,
+      radius_share, pull_request_state, pull_request_url, pull_request_source,
+      pull_request_api_host, position, pull_request_head, pull_request_base,
+      pull_request_head_repo, pull_request_base_repo, changes_scope
+    FROM sessions`);
+    legacy.exec("DROP TABLE sessions");
+    legacy.exec("ALTER TABLE sessions_v12 RENAME TO sessions");
+    legacy.exec(
+      "CREATE INDEX sessions_activity ON sessions(archived, updated_at DESC); CREATE INDEX sessions_project ON sessions(project_id, updated_at DESC);",
+    );
+    legacy.exec("PRAGMA user_version = 12");
+    legacy.exec("COMMIT");
+  } finally {
+    legacy.close();
+  }
+  const migrated = (await f.get()).sessions[0];
+  assert.equal(migrated?.title, "Kept");
+  assert.equal(migrated?.changesScope, "branch");
+  assert.equal(migrated?.startHead, undefined);
+  const start = "a".repeat(40);
+  await f.run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.setSessionChangesScope(cwd, "one", "since-start");
+      yield* registry.setSessionStartHead(cwd, "one", start);
+    }),
+  );
+  const saved = (await f.get()).sessions[0];
+  assert.equal(saved?.changesScope, "since-start");
+  assert.equal(saved?.startHead, start);
+  const stored = new DatabaseSync(f.dbPath, { readOnly: true });
+  try {
+    assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 13);
+  } finally {
+    stored.close();
+  }
+});
+
 test("version-3 sharing migration preserves sessions; Radius destinations survive restart and reject stale replacements", async (t) => {
   const f = fixture(t),
     cwd = join(f.root, "folder");
@@ -479,7 +552,7 @@ for (const version of [4, 5, 6]) {
     assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 12);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 13);
       assert.deepEqual(
         stored
           .prepare(

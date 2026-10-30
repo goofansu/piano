@@ -1,9 +1,10 @@
 /**
  * The selected session's Changes: the checkout it inspects (its own), the comparison it reads
- * (the session's saved scope, else Uncommitted) and the identities that name a branch's
- * target: the session's pull request branches as GitHub last reported them, and the base branch
- * Worktrunk reported when Piano created the worktree. Git owns the facts through
- * WorkspaceChanges; the registry holds only the session's choice (INV-01).
+ * (the session's saved scope, else Branch, else Since start, else Uncommitted) and the identities
+ * that name a branch's target: the session's pull request branches as GitHub last reported them,
+ * and the base branch Worktrunk reported when Piano created the worktree. Since start uses the
+ * commit Piano recorded when it started the session. Git owns the facts through
+ * WorkspaceChanges; the registry holds only the session's choice and that commit (INV-01).
  */
 import { Context, Effect, Layer } from "effect";
 import { pullRequestBranches } from "../shared/pullRequestBranches.ts";
@@ -13,7 +14,7 @@ import { Registry, type RegistryError, type SessionEntry } from "./Registry.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 
 export interface SessionChangesOptions {
-  /** The comparison for this read; without it, the session's saved scope, else Uncommitted. */
+  /** The comparison for this read; without it, the session's saved scope, else the automatic one. */
   readonly scope?: ChangesScope;
   /** One file's fresh patch instead of the whole change. */
   readonly path?: string;
@@ -28,7 +29,7 @@ export class SessionChanges extends Context.Service<
       session: SessionEntry,
       options?: SessionChangesOptions,
     ) => Effect.Effect<Observation>;
-    /** Save the session's scope (`null` restores the Uncommitted default) and read with it. */
+    /** Save the session's scope (`null` restores the automatic comparison) and read with it. */
     readonly setScope: (
       workspace: Workspace,
       session: SessionEntry,
@@ -51,6 +52,7 @@ export const SessionChangesLive = Layer.effect(
       const hints: TargetHints = {
         ...(link ? { pullRequest: pullRequestBranches(link) } : {}),
         ...(worktree?.baseBranch ? { worktreeBase: worktree.baseBranch } : {}),
+        ...(session.startHead ? { startHead: session.startHead } : {}),
       };
       return hints;
     });
@@ -61,8 +63,9 @@ export const SessionChangesLive = Layer.effect(
       options: SessionChangesOptions = {},
     ) {
       const hints = yield* hintsFor(session);
+      const scope = options.scope ?? session.changesScope;
       return yield* changes.preview(workspace, {
-        scope: options.scope ?? session.changesScope,
+        ...(scope ? { scope } : { automatic: true }),
         hints,
         path: options.path,
       });

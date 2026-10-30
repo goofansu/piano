@@ -336,7 +336,13 @@ test("the comparison menu puts Uncommitted first and names the actual target ref
     label: "Uncommitted",
     options: [
       { scope: "uncommitted", name: "Uncommitted", available: true },
-      { scope: "branch", name: "Base branch", available: false },
+      {
+        scope: "branch",
+        name: "Base branch",
+        available: false,
+        reason: "main is the base branch.",
+      },
+      { scope: "since-start", name: "Since start", available: false, reason: "Unavailable" },
     ],
   });
   const branch = changes([["a", 1]]);
@@ -395,7 +401,12 @@ test("an unavailable scope is the body's reason, with the menu still offering th
   });
   assert.equal(view.scope?.current, "branch");
   assert.equal(view.scope?.label, "main");
-  assert.deepEqual(view.scope?.options[1], { scope: "branch", name: "main", available: false });
+  assert.deepEqual(view.scope?.options[1], {
+    scope: "branch",
+    name: "main",
+    available: false,
+    reason: "main is the base branch.",
+  });
   assert.equal(view.scope?.options[0].available, true);
 });
 

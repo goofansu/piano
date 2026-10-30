@@ -98,14 +98,22 @@ async function fixture(t: TestContext) {
         session: data.sessions.find((s) => s.cwd === cwd && s.sessionId === sessionId)!,
       };
     });
-  const read = (cwd: string, sessionId: string, options?: { scope?: "branch" | "uncommitted" }) =>
+  const read = (
+    cwd: string,
+    sessionId: string,
+    options?: { scope?: "branch" | "since-start" | "uncommitted" },
+  ) =>
     runtime.runPromise(
       Effect.gen(function* () {
         const { workspace, session } = yield* resolve(cwd, sessionId);
         return yield* (yield* SessionChanges).read(workspace, session, options);
       }),
     );
-  const setScope = (cwd: string, sessionId: string, scope: "branch" | "uncommitted" | null) =>
+  const setScope = (
+    cwd: string,
+    sessionId: string,
+    scope: "branch" | "since-start" | "uncommitted" | null,
+  ) =>
     runtime.runPromise(
       Effect.gen(function* () {
         const { workspace, session } = yield* resolve(cwd, sessionId);
@@ -272,26 +280,32 @@ test("legacy links do not retarget until a successful refresh proves repository 
   );
 });
 
-test("Uncommitted is the default; a saved branch choice overrides it only for that session", async (t) => {
+test("without a saved scope, Branch else Since start else Uncommitted; a saved scope stays", async (t) => {
   const f = await fixture(t);
   const initial = ready(await f.read(f.worktree, "one"));
-  assert.equal(initial.comparison.scope, "uncommitted");
-  assert.deepEqual(initial.files, []);
-  assert.equal(initial.scopes.find((scope) => scope.scope === "branch")?.available, true);
-  assert.equal(ready(await f.setScope(f.worktree, "one", "branch")).comparison.scope, "branch");
-  assert.equal(ready(await f.read(f.worktree, "one")).comparison.scope, "branch");
-  assert.equal(ready(await f.read(f.worktree, "two")).comparison.scope, "uncommitted");
+  assert.equal(initial.comparison.scope, "branch");
+  assert.deepEqual(
+    initial.files.map((file) => file.path),
+    ["a"],
+  );
+  assert.equal(ready(await f.read(f.worktree, "two")).comparison.scope, "branch");
+  assert.equal(
+    ready(await f.setScope(f.worktree, "one", "uncommitted")).comparison.scope,
+    "uncommitted",
+  );
+  assert.deepEqual(ready(await f.read(f.worktree, "one")).files, []);
+  assert.equal(ready(await f.read(f.worktree, "two")).comparison.scope, "branch");
   const saved = (await f.runtime.runPromise(f.registry.get)).sessions.find(
     (s) => s.sessionId === "one",
   );
-  assert.equal(saved?.changesScope, "branch");
+  assert.equal(saved?.changesScope, "uncommitted");
   // A read may still ask for another scope without changing the saved one.
   assert.equal(
-    ready(await f.read(f.worktree, "one", { scope: "uncommitted" })).comparison.scope,
-    "uncommitted",
+    ready(await f.read(f.worktree, "one", { scope: "branch" })).comparison.scope,
+    "branch",
   );
-  assert.equal(ready(await f.read(f.worktree, "one")).comparison.scope, "branch");
-  assert.equal(ready(await f.setScope(f.worktree, "one", null)).comparison.scope, "uncommitted");
+  assert.equal(ready(await f.read(f.worktree, "one")).comparison.scope, "uncommitted");
+  assert.equal(ready(await f.setScope(f.worktree, "one", null)).comparison.scope, "branch");
   const cleared = (await f.runtime.runPromise(f.registry.get)).sessions.find(
     (s) => s.sessionId === "one",
   );
@@ -301,6 +315,42 @@ test("Uncommitted is the default; a saved branch choice overrides it only for th
     .setScope(f.repo, "root", "branch")
     .then((value) => assert.equal(value.result.status, "unavailable"));
   assert.equal((await f.read(f.repo, "root")).result.status, "unavailable");
+});
+
+test("Since start keeps the patch after a commit on the base branch, and names a missing start", async (t) => {
+  const f = await fixture(t);
+  const start = f.git(f.repo, "rev-parse", "HEAD");
+  const remember = (cwd: string, sessionId: string, head: string) =>
+    f.runtime.runPromise(f.registry.setSessionStartHead(cwd, sessionId, head));
+  await remember(f.repo, "root", start);
+  writeFileSync(join(f.repo, "a"), "during\n");
+  const edited = ready(await f.read(f.repo, "root"));
+  assert.equal(edited.comparison.scope, "since-start");
+  assert.equal(edited.comparison.base, start);
+  assert.deepEqual(
+    edited.files.map((file) => file.path),
+    ["a"],
+  );
+  f.git(f.repo, "add", ".");
+  f.git(f.repo, "commit", "-qm", "during");
+  const committed = ready(await f.read(f.repo, "root"));
+  assert.equal(committed.comparison.scope, "since-start");
+  assert.equal(committed.comparison.base, start);
+  assert.match(committed.diff, /during/);
+  assert.deepEqual(ready(await f.read(f.repo, "root", { scope: "uncommitted" })).files, []);
+  // A later start does not move the recorded commit, so the patch stays.
+  await remember(f.repo, "root", f.git(f.repo, "rev-parse", "HEAD"));
+  assert.equal(ready(await f.read(f.repo, "root")).comparison.base, start);
+  const missing = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  await remember(f.worktree, "two", missing);
+  const gone = await f.read(f.worktree, "two", { scope: "since-start" });
+  assert.equal(gone.result.status, "unavailable");
+  if (gone.result.status === "unavailable")
+    assert.equal(gone.result.detail, "The commit from the start of this session is gone.");
+  const none = await f.read(f.worktree, "one", { scope: "since-start" });
+  assert.equal(none.result.status, "unavailable");
+  if (none.result.status === "unavailable")
+    assert.equal(none.result.detail, "Nothing was recorded when this session started.");
 });
 
 test("local work shows whatever the scope, even one the checkout cannot read", async (t) => {

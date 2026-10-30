@@ -20,7 +20,12 @@ export interface TargetHints {
   readonly pullRequest?: PullRequestBranches;
   /** The base branch Worktrunk reported when Piano created this worktree. */
   readonly worktreeBase?: string;
+  /** The commit HEAD was at when Piano started the session in this checkout. */
+  readonly startHead?: string;
 }
+
+/** A full Git object id. Anything else is not a commit Piano recorded. */
+const COMMIT_ID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i;
 
 /** Every scope resolved for one checkout: what each would compare with, or why it cannot. */
 export interface Comparisons {
@@ -167,6 +172,19 @@ async function branchScope(
   return { comparison: { scope: "branch", base: found[0]!, target } };
 }
 
+/** The `since-start` scope: the working tree against the commit Piano recorded at session start. */
+async function sinceStartScope(
+  checkout: Checkout,
+  startHead: string | undefined,
+): Promise<{ comparison: Comparison } | { unavailable: string }> {
+  if (!startHead) return { unavailable: "Nothing was recorded when this session started." };
+  if (!COMMIT_ID.test(startHead))
+    return { unavailable: "The commit from the start of this session is gone." };
+  const commit = await commitOf(checkout, startHead);
+  if (!commit) return { unavailable: "The commit from the start of this session is gone." };
+  return { comparison: { scope: "since-start", base: commit } };
+}
+
 /**
  * What of the branch is still only here: commits its remote-tracking ref does not have, as Git
  * holds that ref locally (no fetch), or null when there is no such ref to compare with.
@@ -210,6 +228,7 @@ export async function resolveComparisons(
     pullRequestHead,
     hints,
   );
+  const forSince = await sinceStartScope(checkout, hints.startHead);
   const scopes: ScopeAvailability[] = [
     "comparison" in forBranch
       ? { scope: "branch", available: true, target: forBranch.comparison.target }
@@ -219,10 +238,17 @@ export async function resolveComparisons(
           reason: forBranch.unavailable,
           ...(forBranch.target ? { target: forBranch.target } : {}),
         },
+    "comparison" in forSince
+      ? { scope: "since-start", available: true }
+      : { scope: "since-start", available: false, reason: forSince.unavailable },
     { scope: "uncommitted", available: true },
   ];
   const of = (scope: ChangesScope) =>
-    scope === "uncommitted" ? { comparison: uncommitted } : forBranch;
+    scope === "uncommitted"
+      ? { comparison: uncommitted }
+      : scope === "since-start"
+        ? forSince
+        : forBranch;
   return {
     head,
     branch,

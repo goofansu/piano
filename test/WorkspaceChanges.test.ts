@@ -227,6 +227,11 @@ test("branch scope: a commit or push keeps the branch's patch; advancing only th
   );
   assert.deepEqual(before.scopes, [
     { scope: "branch", available: true, target: before.comparison.target },
+    {
+      scope: "since-start",
+      available: false,
+      reason: "Nothing was recorded when this session started.",
+    },
     { scope: "uncommitted", available: true },
   ]);
   // The comparison is content-preserving: committing changes nothing a reader sees.
@@ -437,6 +442,11 @@ test("branch scope: unavailable states are named, never another comparison", asy
         commit: git("rev-parse", "HEAD").trim(),
         from: "assumed",
       },
+    },
+    {
+      scope: "since-start",
+      available: false,
+      reason: "Nothing was recorded when this session started.",
     },
     { scope: "uncommitted", available: true },
   ]);

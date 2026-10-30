@@ -77,22 +77,28 @@ const SessionEntry = Schema.Struct({
   archived: Schema.Boolean,
   /** Sidebar preference; absent means unpinned. */
   pinned: Schema.optional(Schema.Boolean),
-  /** Changes preference: the comparison the user chose; absent means Uncommitted. */
+  /** Changes preference: the comparison the user chose. Absent means Branch when it can be
+   * read, else Since start, else Uncommitted. */
   changesScope: Schema.optional(ChangesScope),
+  /** The commit HEAD was at when Piano started this session in a Git checkout. Absent when
+   * Piano did not start it, or the checkout was not Git. */
+  startHead: Schema.optional(Schema.String),
   /** Replaceable last-known Pi accounting, not session history. */
   stats: Schema.optional(SessionStats),
 });
 export type SessionEntry = typeof SessionEntry.Type;
 
-/** What a session reference shows: cached statistics, the Radius share and the Changes scope
- * never reach the sidebar. The pull request link does, so a browser reads GitHub facts only for a
- * session that has one. */
+/** What a session reference shows: cached statistics, the Radius share, the Changes scope and the
+ * start commit never reach the sidebar. The pull request link does, so a browser reads GitHub
+ * facts only for a session that has one. */
 export const shownReference = ({
   stats: _stats,
   radiusShare: _radiusShare,
   changesScope: _changesScope,
+  startHead: _startHead,
   ...shown
-}: SessionEntry): Omit<SessionEntry, "stats" | "radiusShare" | "changesScope"> => shown;
+}: SessionEntry): Omit<SessionEntry, "stats" | "radiusShare" | "changesScope" | "startHead"> =>
+  shown;
 
 /**
  * `entry` is still the reference `expected` was read as: not recreated (same creation time), not
@@ -367,11 +373,17 @@ export class Registry extends Context.Service<
       sessionId: string,
       pinned: boolean,
     ) => Effect.Effect<void, RegistryError>;
-    /** Save the comparison Changes opens the session on; `undefined` restores the Uncommitted default. */
+    /** Save the comparison Changes opens the session on; `undefined` restores the automatic one. */
     readonly setSessionChangesScope: (
       cwd: string,
       sessionId: string,
       scope: ChangesScope | undefined,
+    ) => Effect.Effect<void, RegistryError>;
+    /** Record the commit this session started at, once. A later start does not move it. */
+    readonly setSessionStartHead: (
+      cwd: string,
+      sessionId: string,
+      head: string,
     ) => Effect.Effect<void, RegistryError>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
     readonly removeSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
@@ -718,6 +730,18 @@ export const RegistryLive = Layer.effect(
             return {
               ...d,
               sessions: d.sessions.map((s) => (s === entry ? { ...s, changesScope: scope } : s)),
+            };
+          });
+        },
+      ),
+      setSessionStartHead: Effect.fn("Registry.setSessionStartHead")(
+        function* (cwd, sessionId, head) {
+          yield* update((d) => {
+            const entry = d.sessions.find(isSession(cwd, sessionId));
+            if (!entry || entry.startHead) return d;
+            return {
+              ...d,
+              sessions: d.sessions.map((s) => (s === entry ? { ...s, startHead: head } : s)),
             };
           });
         },

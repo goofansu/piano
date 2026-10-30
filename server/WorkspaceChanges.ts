@@ -12,6 +12,7 @@ import {
   type ChangesScope,
   type LocalWork,
   type WorkspaceChanges as Observation,
+  type ScopeAvailability,
   type Workspace,
   type WrittenFile,
   type WorkspaceWrittenFiles as WrittenObservation,
@@ -31,10 +32,20 @@ type Summary = Omit<Ready, "diff" | "truncated">;
 /** A preview's facts without its patch: what a status read carries. */
 export type ChangesSummary = CheckoutObservation<Summary | Unavailable>;
 
-/** What to compare, and for which file. Without `scope`, use `uncommitted`. */
+/** What to compare, and for which file. Without `scope`, use `uncommitted`, unless `automatic`. */
 export interface PreviewOptions {
   readonly scope?: ChangesScope;
   readonly hints?: TargetHints;
+  /** When `scope` is omitted: Branch, else Since start, else Uncommitted. */
+  readonly automatic?: boolean;
+}
+
+/** The comparison a session opens on when the person has not chosen one. */
+function chooseScope(scopes: readonly ScopeAvailability[]): ChangesScope {
+  if (scopes.some((scope) => scope.scope === "branch" && scope.available)) return "branch";
+  if (scopes.some((scope) => scope.scope === "since-start" && scope.available))
+    return "since-start";
+  return "uncommitted";
 }
 
 export class WorkspaceChanges extends Context.Service<
@@ -81,7 +92,7 @@ async function preview(
   if (path !== undefined) checkout.safePath(path);
   const comparisons = await resolveComparisons(checkout, options.hints);
   const { head, branch, pullRequestFromBranch, scopes } = comparisons;
-  const scope = options.scope ?? "uncommitted";
+  const scope = options.scope ?? (options.automatic ? chooseScope(scopes) : "uncommitted");
   const resolved = comparisons.of(scope);
   const unavailable = async (detail: string): Promise<Unavailable> => ({
     status: "unavailable",

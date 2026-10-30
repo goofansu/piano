@@ -58,7 +58,12 @@ export function ChangesScopeMenu({
               value={option.scope}
               disabled={!option.available}
             >
-              <span className="min-w-0 break-all">{option.name}</span>
+              <span className="flex min-w-0 flex-col">
+                <span className="break-all">{option.name}</span>
+                {option.reason && (
+                  <span className="text-xs font-normal text-muted-foreground">{option.reason}</span>
+                )}
+              </span>
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

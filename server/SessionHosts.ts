@@ -20,6 +20,7 @@ import {
 } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { FolderWorktrees, FolderWorktreesLive } from "./FolderWorktrees.ts";
+import { gitText } from "./GitCheckout.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
 import { Registry, RegistryError } from "./Registry.ts";
@@ -36,6 +37,7 @@ import {
   SessionReferences,
   SessionReferencesLive,
 } from "./SessionReferences.ts";
+import { GitCommand } from "./Subprocess.ts";
 import { type Webhooks, WebhooksLive } from "./Webhooks.ts";
 import { mainCheckoutOf, WorktreeError, worktreeOwner } from "./Worktrees.ts";
 
@@ -165,6 +167,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
     SessionHosts,
     Effect.gen(function* () {
       const registry = yield* Registry;
+      const git = yield* GitCommand;
       const references = yield* SessionReferences;
       const worktrees = yield* FolderWorktrees;
       const layerScope = yield* Effect.scope;
@@ -284,10 +287,38 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               if (stopping) return yield* rejected("Piano is shutting down.");
               if (ref.checkoutMissing) return yield* checkoutMissing;
               if (existing) return { session: existing.session, launched: false };
-              if (creation)
+              if (creation) {
+                const existed = (yield* registry.get).sessions.some((session) =>
+                  sameSession(session, { cwd: ref.cwd, sessionId: spec.sessionId }),
+                );
                 yield* registry
                   .addSession(ref.cwd, spec.sessionId, spec.name, creation.projectId)
                   .pipe(Effect.mapError((e) => rejected(e.detail)));
+                // The commit this session started at. A checkout that is not Git, or a session
+                // Piano did not just create, leaves it absent (INV-01).
+                if (!existed) {
+                  const head = yield* gitText(ref.cwd, [
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    "HEAD",
+                  ]).pipe(
+                    Effect.provideService(GitCommand, git),
+                    Effect.orElseSucceed(() => ""),
+                  );
+                  const commit = head.trim();
+                  if (/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i.test(commit))
+                    yield* registry
+                      .setSessionStartHead(ref.cwd, spec.sessionId, commit)
+                      .pipe(
+                        Effect.catchTag("RegistryError", (error) =>
+                          Effect.logWarning(
+                            `Could not record the session's start commit: ${error.detail}`,
+                          ),
+                        ),
+                      );
+                }
+              }
               registered = true;
               const lock = yield* lockFor(key);
               // The project's instructions as of this launch; an edit reaches the next one.

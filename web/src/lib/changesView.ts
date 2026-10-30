@@ -28,9 +28,10 @@ export type ShownChanges = WorkspaceChanges & { result: ReadyResult | Unavailabl
 /** Fallback names when no comparison target has been resolved. */
 const SCOPE_NAMES: Record<ChangesScope, string> = {
   branch: "Base branch",
+  "since-start": "Since start",
   uncommitted: "Uncommitted",
 };
-const SCOPE_ORDER: ChangesScope[] = ["uncommitted", "branch"];
+const SCOPE_ORDER: ChangesScope[] = ["uncommitted", "branch", "since-start"];
 
 /** Name the actual ref, preserving the remote rather than implying a local branch. */
 function scopeLabel({ scope, target }: { scope: ChangesScope; target?: ComparisonTarget }): string {
@@ -38,11 +39,12 @@ function scopeLabel({ scope, target }: { scope: ChangesScope; target?: Compariso
   return target.ref.replace(/^refs\/(heads|remotes)\//, "");
 }
 
-/** One scope's name and whether it can be picked. */
+/** One scope's name and whether it can be picked. `reason` is why a disabled one cannot. */
 export interface ScopeOption {
   scope: ChangesScope;
   name: string;
   available: boolean;
+  reason?: string;
 }
 
 /** The comparison on screen and the ones the menu offers. */
@@ -53,8 +55,13 @@ export interface ScopeView {
 }
 
 function scopeOption(availability: ScopeAvailability): ScopeOption {
-  const { scope, available } = availability;
-  return { scope, name: scopeLabel(availability), available };
+  const { scope, available, reason } = availability;
+  return {
+    scope,
+    name: scopeLabel(availability),
+    available,
+    ...(reason ? { reason } : {}),
+  };
 }
 
 function scopeView(result: ReadyResult | UnavailableResult): ScopeView {

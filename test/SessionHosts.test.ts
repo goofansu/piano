@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -1515,4 +1515,51 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
     }).pipe(Effect.provideService(WorktrunkCommand, wt)),
     { fakePi: "slow-worktree" },
   );
+});
+
+test("a session Piano starts in a Git checkout remembers that commit, and only then", async () => {
+  const repo = mkdtempSync(join(tmpdir(), "piano-start-head-"));
+  const plain = mkdtempSync(join(tmpdir(), "piano-start-plain-"));
+  const git = (...args: string[]) =>
+    execFileSync(
+      "git",
+      ["-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", ...args],
+      {
+        encoding: "utf8",
+        env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
+      },
+    ).trim();
+  execFileSync("git", ["init", "-q", "-b", "main", repo]);
+  writeFileSync(join(repo, "a"), "base\n");
+  git("add", ".");
+  git("commit", "-qm", "base");
+  const head = git("rev-parse", "HEAD");
+  try {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        const registry = yield* Registry;
+        const session = yield* hosts.create({ cwd: repo, options: {} });
+        const saved = (yield* registry.get).sessions.find(
+          (s) => s.sessionId === session.spec.sessionId,
+        );
+        assert.equal(saved?.startHead, head);
+        git("commit", "-q", "--allow-empty", "-m", "later");
+        yield* hosts.open({ cwd: repo, sessionId: session.spec.sessionId });
+        const again = (yield* registry.get).sessions.find(
+          (s) => s.sessionId === session.spec.sessionId,
+        );
+        assert.equal(again?.startHead, head, "reopening does not move the start commit");
+        const loose = yield* hosts.create({ cwd: plain, options: {} });
+        const unrecorded = (yield* registry.get).sessions.find(
+          (s) => s.sessionId === loose.spec.sessionId,
+        );
+        assert.equal(unrecorded?.startHead, undefined);
+      }),
+      { registry: "start-head", fakePi: "start-head" },
+    );
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(plain, { recursive: true, force: true });
+  }
 });
