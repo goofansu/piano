@@ -64,11 +64,11 @@ interface Observation {
 /** What a Git run reads: the registered folders and worktrees. A change here starts one. */
 const shapeOf = (data: RegistryData) =>
   JSON.stringify([data.folders, data.worktrees.map((w) => [w.folder, w.path])]);
-/** The sessions an availability read judges. One decision, used both to read and to compare,
- * so what the reader reads and what starts it cannot drift apart. */
-const projectMembersOf = (data: RegistryData) => data.sessions.filter((s) => s.projectId);
-const membersOf = (data: RegistryData) =>
-  JSON.stringify(projectMembersOf(data).map((s) => [s.cwd, s.sessionId]));
+/** What an availability read judges: every session reference, in a project or not, so
+ * `unavailable` means the same for each one. The read costs one stat and one history listing per
+ * distinct directory. An added or removed session starts one. */
+const sessionsOf = (data: RegistryData) =>
+  JSON.stringify(data.sessions.map((s) => [s.cwd, s.sessionId]));
 /** The registry facts the view shows. Statistics and the Radius share are not among them; a
  * session's pull request link is, so a link write reaches browsers without a Git run. */
 const visibleOf = (data: RegistryData) =>
@@ -109,8 +109,8 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       /** What the last published view showed, so a repeat observation publishes nothing. */
       let published: string | undefined;
       let observation: Observation | undefined;
-      // One writer, separate from Git/trust. Key individual members, not just their checkout:
-      // a new member must not inherit a sibling's previously observed missing-history verdict.
+      // One writer, separate from Git/trust. Key individual sessions, not just their checkout:
+      // a new session must not inherit a sibling's previously observed missing-history verdict.
       let unavailable = new Map<string, SessionReference["unavailable"]>();
 
       /** Git discovery only; trust is read under the publishing lock when this is installed. */
@@ -217,16 +217,16 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
           return open.has(registered.get(cwd)?.folder ?? cwd) ? null : saved;
         };
         // References survive closed directories and missing history; discovery never removes them.
-        // A member not yet observed counts as available until the next run says otherwise.
+        // A session not yet judged counts as available until the next run says otherwise; a hosted
+        // one is available whatever its saved files say.
         const sessionReferences = data.sessions.map(
           (s): SessionReference => ({
             ...shownReference(s),
             workspaceId: data.workspaces.find((w) => w.path === s.cwd)!.id,
             branch: branchOf(s.cwd),
-            unavailable:
-              !s.projectId || hosted(s.cwd, s.sessionId)
-                ? undefined
-                : unavailable.get(sessionKey(s.cwd, s.sessionId)),
+            unavailable: hosted(s.cwd, s.sessionId)
+              ? undefined
+              : unavailable.get(sessionKey(s.cwd, s.sessionId)),
           }),
         );
         return {
@@ -319,18 +319,18 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         read: (superseded) =>
           Effect.gen(function* () {
             const data = yield* registry.get;
-            const members = projectMembersOf(data);
-            const judged = yield* references.availability(members);
+            const sessions = data.sessions;
+            const judged = yield* references.availability(sessions);
             return yield* locked(
               Effect.gen(function* () {
                 if (superseded()) return false;
-                if (membersOf(data) !== membersOf(yield* registry.get)) {
+                if (sessionsOf(data) !== sessionsOf(yield* registry.get)) {
                   // A registry write can be visible before its listener requests this reader.
                   yield* availability.request();
                   return false;
                 }
                 unavailable = new Map(
-                  members.map((s) => [sessionKey(s.cwd, s.sessionId), judged(s.cwd, s.sessionId)]),
+                  sessions.map((s) => [sessionKey(s.cwd, s.sessionId), judged(s.cwd, s.sessionId)]),
                 );
                 // A newly registered folder may still be waiting on Git. Publish history
                 // against the folders already observed, just as a Git install does; shape
@@ -346,14 +346,14 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
       // Statistics and the Radius share change nothing shown and must not start a Git run. Neither
       // may a visible change no reader reads: a prompt's activity record, a rename or a pin
       // publishes from the last observations. Each reader starts only for the input it reads: a
-      // folder or worktree change rediscovers (INV-06), a membership change rejudges availability.
+      // folder or worktree change rediscovers (INV-06), an added or removed session rejudges availability.
       yield* registry.onChange((before, after) => {
         if (visibleOf(before) === visibleOf(after)) return Effect.void;
         const shape = shapeOf(before) !== shapeOf(after);
-        const members = membersOf(before) !== membersOf(after);
+        const sessions = sessionsOf(before) !== sessionsOf(after);
         return publish(true).pipe(
           Effect.andThen(shape ? git.request() : Effect.void),
-          Effect.andThen(members ? availability.request() : Effect.void),
+          Effect.andThen(sessions ? availability.request() : Effect.void),
         );
       });
       // Subscribe during construction, before callers can start a host. A bounded invalidation
