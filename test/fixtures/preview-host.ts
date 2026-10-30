@@ -19,6 +19,8 @@ export interface FakeHost {
   lostReply: boolean;
   /** Blocks every submission forever, after reporting it on stdout. */
   hangOnSubmit: boolean;
+  /** Makes the supervisor unavailable once a submission succeeds. */
+  unavailableAfterSubmit?: boolean;
 }
 
 const failure = (text: string, status: number) => Object.assign(new Error(text), { status });
@@ -68,6 +70,7 @@ export function fakeAdapter(platform: Platform, stateRoot: string, host: FakeHos
     if (args[0] === "systemd-run") {
       await submitted((unit) => args.includes(`--unit=${unit}`));
       launched.push(args.join("\n"));
+      if (host.unavailableAfterSubmit) host.unavailable = true;
       return "";
     }
     if (args.includes("stop")) stops.push(args);
@@ -102,6 +105,7 @@ export function fakeAdapter(platform: Platform, stateRoot: string, host: FakeHos
       launched.push(await readFile(plist, "utf8"));
       await writeFile(plist.replace(/\.plist$/, ".log"), host.journal);
       loaded.add(plist.slice(plist.lastIndexOf("/") + 1, -".plist".length));
+      if (host.unavailableAfterSubmit) host.unavailable = true;
       return "";
     }
     if (verb === "bootout") {

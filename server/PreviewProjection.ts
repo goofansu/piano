@@ -4,18 +4,18 @@
  * from the browser, into the last observation. Internal to PiSessions.
  */
 import type { PreviewRequest } from "../scripts/PreviewAdapter.ts";
+import type { PreviewOutcome } from "../scripts/PreviewOwner.ts";
 import { PREVIEW_STATES, type SessionPreview } from "../shared/wire.ts";
-
-type Outcome = { result: unknown } | { error: unknown };
 
 const text = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-/** An app observation that belongs to `generation`, or undefined for any other result. */
+/** An app observation that belongs to `generation`, or undefined for any other result. A launch
+ * intent without an observation is in an `unknown` state. */
 function observed(result: unknown, generation: string): SessionPreview | undefined {
   if (!isRecord(result) || typeof result.instanceId !== "string") return undefined;
-  const state = PREVIEW_STATES.find((s) => s === result.state);
+  const state = [...PREVIEW_STATES, "unknown" as const].find((s) => s === result.state);
   const owner = isRecord(result.owner) ? result.owner : undefined;
   const spec = isRecord(result.spec) ? result.spec : undefined;
   if (!state || owner?.generation !== generation) return undefined;
@@ -36,19 +36,24 @@ function observed(result: unknown, generation: string): SessionPreview | undefin
 /**
  * The preview after `request` ended with `outcome`. An observation of this generation's app
  * replaces it; another owner's app or an absent record is not this session's preview; a confirmed
- * stop of the current instance clears it. A failed observation makes it unknown rather than
- * stopped; a failed or refused start (an ownership conflict) leaves it unchanged.
+ * stop of the current instance clears it. A failed observation makes the current app, or the one a
+ * failed start launched, unknown rather than stopped. A failed or refused start (an ownership
+ * conflict) arrives as the status read that followed it.
  */
 export function projectPreview(
   current: SessionPreview | undefined,
   generation: string,
   request: Pick<PreviewRequest, "action">,
-  outcome: Outcome,
+  outcome: PreviewOutcome,
 ): SessionPreview | undefined {
   if ("error" in outcome) {
-    if (!current || request.action === "start") return current;
+    const app =
+      (isRecord(outcome.attempted) &&
+        observed({ ...outcome.attempted, state: "unknown" }, generation)) ||
+      current;
+    if (!app) return undefined;
     return {
-      ...current,
+      ...app,
       state: "unknown",
       ready: false,
       url: null,

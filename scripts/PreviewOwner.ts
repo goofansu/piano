@@ -7,13 +7,16 @@ import {
   type PreviewConfig,
   type PreviewOwnerIdentity,
   type PreviewRequest,
+  PreviewStartError,
 } from "./PreviewAdapter.ts";
 
-/** An admitted request's adapter outcome, as returned to its caller. */
-export type PreviewObserver = (
-  request: PreviewRequest,
-  outcome: { result: unknown } | { error: unknown },
-) => void;
+/** An adapter outcome. A failed observation after a failed start carries the instance that start
+ * saved, if any: it may be running. */
+export type PreviewOutcome = { result: unknown } | { error: unknown; attempted?: unknown };
+
+/** What each admitted request showed: its own outcome, or for a failed start, a status read of
+ * what that start left behind. */
+export type PreviewObserver = (request: PreviewRequest, outcome: PreviewOutcome) => void;
 
 /** One Pi generation's admission gate and live connections. Browser/tool cancellation never
  * closes it. The service runner must connect before it can spawn, including a late submission
@@ -142,17 +145,31 @@ export class PreviewOwner {
     return this.serial(async () => {
       if (this.ending) throw new Error("Pi owner is ending; no preview launch admitted.");
       if (request.action === "start") this.attempted = true;
-      try {
-        const result = await this.adapter.request(
+      const run = async (request: PreviewRequest) =>
+        this.adapter.request(
           { ...request, workspace: this.identity.workspace },
           this.root,
           await this.config(),
           this.identity,
         );
+      try {
+        const result = await run(request);
         this.observer?.(request, { result });
         return result;
       } catch (error) {
-        this.observer?.(request, { error });
+        if (request.action !== "start") {
+          this.observer?.(request, { error });
+          throw error;
+        }
+        // A failed start may already have stopped the app it replaced, or launched one it could
+        // not observe. Only the adapter can tell, so read the workspace before the next request.
+        const status: PreviewRequest = { action: "status", workspace: this.identity.workspace };
+        try {
+          this.observer?.(status, { result: await run(status) });
+        } catch (statusError) {
+          const attempted = error instanceof PreviewStartError ? error.instance : undefined;
+          this.observer?.(status, { error: statusError, attempted });
+        }
         throw error;
       }
     }).finally(() => {
