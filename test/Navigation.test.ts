@@ -4,6 +4,7 @@ import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import {
   type AddressBar,
+  addressFor,
   createNavigation,
   initialView,
   type SurfaceMemory,
@@ -264,6 +265,86 @@ test("New session supersedes a deferred startup route before the registry arrive
     assert.equal(p.path(), "/new");
     assert.equal(p.title(), "New session - Piano");
   }
+});
+
+test("Settings has an address even while the underlying session is unresolved", () => {
+  const state = { ...initialState, view: initialView({ kind: "session", sessionId: "a" }) };
+  assert.equal(addressFor(state, null, "/s/a"), null);
+  assert.deepEqual(addressFor(state, "providers", "/s/a"), {
+    path: "/settings/providers",
+    mode: "push",
+    title: "Settings - Piano",
+  });
+});
+
+test("Settings supersedes a deferred session route, whether the late registry finds it or not", () => {
+  for (const sessionId of ["a", "gone"]) {
+    const p = page(`/s/${sessionId}`);
+    p.navigation.openSettings();
+    p.registry();
+    assert.equal(p.navigation.getState().settings, "providers");
+    assert.deepEqual(p.selects(), [], "the obsolete route must not select a session");
+    assert.equal(p.client.getState().view.kind, "session", "no late Session not found page");
+    assert.equal(p.path(), "/settings/providers");
+    assert.equal(p.title(), "Settings - Piano");
+    assert.deepEqual(p.entries, [`/s/${sessionId}`, "/settings/providers"]);
+  }
+});
+
+test("closing Settings over an unresolved session returns to New before or after the registry", () => {
+  for (const registryFirst of [false, true]) {
+    const p = page("/s/a");
+    p.navigation.openSettings();
+    p.navigation.openSettings("mcp");
+    assert.equal(p.path(), "/settings/mcp", "sections work before registry delivery");
+    assert.equal(p.title(), "Settings - Piano");
+    if (registryFirst) p.registry();
+    p.navigation.closeSettings();
+    assert.equal(p.navigation.getState().settings, null);
+    assert.equal(p.client.getState().view.kind, "new");
+    assert.equal(p.path(), "/new");
+    assert.equal(p.title(), "New session - Piano");
+    if (!registryFirst) p.registry();
+    assert.deepEqual(p.selects(), []);
+    assert.equal(p.client.getState().view.kind, "new");
+    assert.equal(p.path(), "/new");
+  }
+});
+
+test("history can revisit a superseded session route or cancel it by returning to Settings", () => {
+  const p = page("/s/a");
+  p.navigation.openSettings();
+  p.back(); // /s/a waits for the registry again.
+  assert.equal(p.navigation.getState().settings, null);
+  p.forward();
+  assert.equal(p.navigation.getState().settings, "providers");
+  p.registry();
+  assert.deepEqual(p.selects(), []);
+  assert.equal(p.path(), "/settings/providers");
+  assert.equal(p.title(), "Settings - Piano");
+  p.back();
+  assert.deepEqual(p.selects(), ["a"]);
+  p.selected("a");
+  assert.equal(p.title(), "Alpha - Piano");
+  p.forward();
+  assert.equal(p.navigation.getState().settings, "providers");
+  assert.equal(p.title(), "Settings - Piano");
+  assert.deepEqual(p.entries, ["/s/a", "/settings/providers"]);
+  p.navigation.closeSettings();
+  assert.equal(p.path(), "/s/a", "a resolved session remains the close destination");
+  assert.equal(p.title(), "Alpha - Piano");
+});
+
+test("a direct Settings link closes to New before the registry arrives", () => {
+  const p = page("/settings/mcp");
+  assert.equal(p.navigation.getState().settings, "mcp");
+  assert.equal(p.title(), "Settings - Piano");
+  p.navigation.closeSettings();
+  assert.equal(p.path(), "/new");
+  assert.equal(p.client.getState().view.kind, "new");
+  p.registry();
+  assert.deepEqual(p.selects(), []);
+  assert.equal(p.path(), "/new");
 });
 
 test("explicit session selection supersedes a deferred startup route", () => {
