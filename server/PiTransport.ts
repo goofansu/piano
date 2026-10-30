@@ -1,7 +1,18 @@
 /** Internal to PiSessions: one scoped child, bounded byte framing/queues, request
  * correlation and delivery uncertainty. Owns terminal failure and process cleanup.
  * It never publishes browser state or decides dialog/action semantics. */
-import { Cause, Clock, Context, Data, Deferred, Effect, Queue, Schema, Stream } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  Data,
+  Deferred,
+  Effect,
+  Fiber,
+  Queue,
+  Schema,
+  Stream,
+} from "effect";
 import { ChildProcess } from "effect/process";
 import type { LaunchEnv } from "../shared/dispatch.ts";
 import type { SessionClosure } from "../shared/wire.ts";
@@ -59,7 +70,7 @@ export interface PiTransport {
     record: Record<string, unknown>,
     options: { readonly lane: PiLane },
   ) => Effect.Effect<void, PiSessionError>;
-  /** Every non-response record, in stdout order. Ends when the child exits. */
+  /** Every accepted non-response record, in stdout order. Ends after stdout drains or fails. */
   readonly records: Stream.Stream<{ record: PiRecord; receivedAt: number }>;
   readonly exited: Deferred.Deferred<SessionClosure>;
   /** Stop an unusable session and settle all transport work before killing Pi. */
@@ -95,7 +106,11 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
   const writes = new Map<Deferred.Deferred<void, PiSessionError>, () => void>();
   let transportError: PiSessionError | undefined;
   const pending = new Map<string, Deferred.Deferred<unknown, PiSessionError>>();
+  // OS exit stops input, but is not the end of already-produced RPC output.
+  const processExited = yield* Deferred.make<void>();
+  const stdoutDrained = yield* Deferred.make<void>();
   const exited = yield* Deferred.make<SessionClosure>();
+  let inputClosure: SessionClosure | undefined;
   let stderr = "";
   let closed = false;
   let seq = 0;
@@ -137,6 +152,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
   debug("spawned pid", handle.pid);
 
   const onLine = Effect.fnUntraced(function* (line: string) {
+    if (closed) return;
     const record: unknown = yield* Effect.try({
       try: () => JSON.parse(line),
       catch: () =>
@@ -198,21 +214,29 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     Effect.forkScoped,
   );
 
+  const stopInput = Effect.fn("PiTransport.stopInput")(function* (closure: SessionClosure) {
+    if (inputClosure) return;
+    inputClosure = closure;
+    lifetime?.onExit();
+    // Discard queued writes, not accepted stdout. Never replay an uncertain write.
+    yield* Queue.shutdown(stdin);
+    for (const [done, release] of writes) {
+      release();
+      yield* Deferred.fail(done, new PiSessionError({ reason: "exited", detail: closure.detail }));
+    }
+    writes.clear();
+  });
+
   const finish = Effect.fn("PiTransport.finish")(function* (closure: SessionClosure) {
     if (closed) return;
     closed = true;
-    lifetime?.onExit();
-    const reason = closure.detail;
+    yield* stopInput(closure);
     yield* Deferred.succeed(exited, closure);
     for (const d of pending.values()) {
-      yield* Deferred.fail(d, new PiSessionError({ reason: "exited", detail: reason }));
+      yield* Deferred.fail(d, new PiSessionError({ reason: "exited", detail: closure.detail }));
     }
     pending.clear();
-    for (const [done, release] of writes) {
-      release();
-      yield* Deferred.fail(done, new PiSessionError({ reason: "exited", detail: reason }));
-    }
-    writes.clear();
+    // Queue.end preserves accepted records; PiSessions projects them before closure.
     yield* Queue.end(records);
   });
 
@@ -256,7 +280,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       start = end + 1;
     }
   });
-  yield* handle.stdout
+  const stdoutReader = yield* handle.stdout
     .pipe(
       Stream.runForEach(onChunk),
       Effect.andThen(
@@ -266,10 +290,11 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       ),
     )
     .pipe(
+      Effect.andThen(Deferred.succeed(stdoutDrained, undefined)),
       // Normal EOF usually precedes exitCode notification. A child that closes
       // stdout but stays alive cannot acknowledge further commands.
       Effect.andThen(
-        Deferred.await(exited).pipe(
+        Deferred.await(processExited).pipe(
           Effect.timeoutOption("1 second"),
           Effect.flatMap((result) =>
             result._tag === "None"
@@ -291,10 +316,23 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
 
   yield* handle.exitCode.pipe(
     Effect.flatMap((code) =>
-      finish({
-        _tag: "exited",
-        code,
-        detail: `Pi exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ""}`,
+      Effect.gen(function* () {
+        const closure: SessionClosure = {
+          _tag: "exited",
+          code,
+          detail: `Pi exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ""}`,
+        };
+        yield* stopInput(closure);
+        yield* Deferred.succeed(processExited, undefined);
+        // A descendant may retain stdout indefinitely. Give already-produced
+        // output a bounded drain, including response correlation and framing.
+        const drained = yield* Deferred.await(stdoutDrained).pipe(Effect.timeoutOption("1 second"));
+        if (drained._tag === "None") {
+          yield* failOutput(
+            "Pi stdout drain timed out after process exit; final output or acknowledgements may be missing. Reopen history before continuing; do not automatically resend input.",
+          );
+          yield* Fiber.interrupt(stdoutReader);
+        } else yield* finish(closure);
       }),
     ),
     Effect.catchCause((cause) =>
@@ -336,10 +374,10 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
           yield* Deferred.fail(done, transportError);
         }
         writes.clear();
-        for (const d of pending.values()) yield* Deferred.fail(d, transportError);
-        // A write usually fails because Pi just exited; its exit, observed shortly after, is the
-        // closure. Only a child that keeps running with unusable stdin is a transport failure.
-        const exit = yield* Deferred.await(exited).pipe(Effect.timeoutOption("1 second"));
+        // Preserve pending response correlation: a failed write does not erase
+        // acknowledgements for earlier commands still draining from stdout.
+        // Only a child that keeps running with unusable stdin is a transport failure.
+        const exit = yield* Deferred.await(processExited).pipe(Effect.timeoutOption("1 second"));
         if (exit._tag === "None") yield* failOutput(transportError.detail);
       }),
     ),
@@ -362,10 +400,10 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     record: Record<string, unknown>,
     options: { readonly lane: PiLane },
   ) {
-    if (closed)
+    if (inputClosure)
       return yield* new PiSessionError({
         reason: "exited",
-        detail: (yield* Deferred.await(exited)).detail,
+        detail: inputClosure.detail,
       });
     if (transportError) return yield* transportError;
     const text = `${JSON.stringify(record)}\n`;

@@ -175,6 +175,121 @@ test("INV-03: a stdout reader defect fails readiness instead of stranding open",
   );
 });
 
+for (const mode of ["clean", "abnormal", "truncated", "stuck", "descendant"]) {
+  test(`INV-03/05: process exit drains final stdout before closure: ${mode}`, async () => {
+    const releaseOutput = Deferred.makeUnsafe<void>();
+    const processExited = Deferred.makeUnsafe<void>();
+    let holdOutput = false;
+    // Keep the real process, pipes, transport and session projection. Control only
+    // the OS-reader scheduling: final bytes cannot reach Piano until exit resolves.
+    const delayedReader = Layer.effect(
+      ChildProcessSpawner.ChildProcessSpawner,
+      Effect.gen(function* () {
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        return {
+          ...spawner,
+          spawn: Effect.fn("Test.spawn")(function* (...args: Parameters<typeof spawner.spawn>) {
+            const handle = yield* spawner.spawn(...args);
+            return {
+              ...handle,
+              exitCode: handle.exitCode.pipe(
+                Effect.tap(() => Deferred.succeed(processExited, undefined)),
+              ),
+              stdout: handle.stdout.pipe(
+                Stream.mapEffect((chunk) =>
+                  holdOutput
+                    ? Deferred.await(releaseOutput).pipe(Effect.as(chunk))
+                    : Effect.succeed(chunk),
+                ),
+                // An inherited stdout can remain open after its process exits.
+                Stream.concat(mode === "stuck" ? Stream.never : Stream.empty),
+              ),
+            };
+          }),
+        };
+      }),
+    ).pipe(Layer.provide(NodeServices.layer));
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const session = yield* (yield* PiSessions).open({
+          cwd: process.cwd(),
+          sessionId: `exit-tail-${mode}`,
+        });
+        const collector = yield* collectUntil(session.events, (e) => e._tag === "closed").pipe(
+          Effect.forkChild,
+        );
+        holdOutput = true;
+        const prompt = yield* session
+          .act({ _tag: "prompt", text: `exit tail ${mode}` })
+          .pipe(Effect.result, Effect.forkChild);
+        yield* Deferred.await(processExited);
+        // Let the transport's exit observer run before releasing the held bytes.
+        yield* Effect.yieldNow;
+        const stoppedInput = yield* session.commands.pipe(
+          Effect.flip,
+          Effect.timeout("250 millis"),
+        );
+        assert.equal(
+          stoppedInput.reason,
+          "exited",
+          "exit must stop new input without waiting for stdout",
+        );
+        yield* Deferred.succeed(releaseOutput, undefined);
+        const result = yield* Fiber.join(prompt);
+        const events = yield* Fiber.join(collector);
+        assert.ok(
+          events.some(
+            (e) => e._tag === "message_end" && e.message.text === "Final reply before exit",
+          ),
+          "final assistant text must survive early process exit",
+        );
+        const last = events.at(-1);
+        assert.ok(last?._tag === "closed");
+        assert.equal(events.filter((e) => e._tag === "closed").length, 1);
+        if (mode === "truncated" || mode === "descendant") {
+          assert.equal(
+            result._tag,
+            "Failure",
+            "missing or partial responses cannot acknowledge input",
+          );
+          assert.equal((yield* session.state).submission?.outcome, "uncertain");
+          assert.equal(last.closure._tag, "failed");
+          assert.match(
+            last.closure.detail,
+            mode === "truncated" ? /malformed JSON/ : /stdout.*drain.*timed out/i,
+          );
+        } else {
+          assert.equal(
+            result._tag,
+            "Success",
+            "the actual delayed acknowledgement must reach its caller",
+          );
+          assert.equal((yield* session.state).submission?.outcome, "started");
+          assert.ok(
+            events.some((e) => e._tag === "response_completed"),
+            "agent_settled must be published before closure",
+          );
+          if (mode === "stuck") {
+            assert.equal(last.closure._tag, "failed");
+            assert.match(last.closure.detail, /stdout.*drain.*timed out/i);
+          } else {
+            assert.equal(last.closure._tag, "exited");
+            assert.equal(
+              last.closure._tag === "exited" && last.closure.code,
+              mode === "abnormal" ? 3 : 0,
+            );
+          }
+        }
+      }).pipe(
+        Effect.provide(PiSessionsLive.pipe(Layer.provide(delayedReader))),
+        Effect.provideService(PiCli, fakeCli),
+        Effect.timeout("5 seconds"),
+        Effect.scoped,
+      ),
+    );
+  });
+}
+
 test("unknown Pi event types remain forward compatible", async () => {
   await run(
     Effect.gen(function* () {
