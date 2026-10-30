@@ -157,11 +157,12 @@ export type FollowUpDelivery = "follow-up" | "steer";
 
 /** A follow-up's result: Pi's handling of the message, in the start's submission words. `not_sent`
  * means Piano never received it; `uncertain` means it may have reached Pi, so read the session's
- * status before sending again. */
+ * status before sending again; `needs_input` means a dialog opened before Pi acknowledged it, and
+ * `detail` says what the dialog asks. */
 export interface FollowUpResult {
   readonly sessionId: string;
   readonly delivery: FollowUpDelivery;
-  readonly submission: Exclude<SessionSubmission, "needs_input">;
+  readonly submission: SessionSubmission;
   readonly detail?: string;
 }
 

@@ -33,6 +33,7 @@ import { dialogAsks, isAnswer, liveActivityOf } from "../../shared/sessionStatus
 import { turnEnding } from "../../shared/turnEnding.ts";
 import {
   type ClientMessage,
+  type Dialog,
   type PromptSubmission,
   type RenderMsg,
   type ServerMessage,
@@ -199,6 +200,34 @@ function observe<T>(
 const selectionOf = (message: ServerMessage): string | undefined =>
   "selectionId" in message ? message.selectionId : undefined;
 
+/** Pi's handling of one input, once it is known. */
+interface InputDisposition {
+  readonly submission: Exclude<SessionSubmission, "not_sent">;
+  readonly detail: string | undefined;
+}
+
+/**
+ * When an input's handling is known, for a start and a follow-up alike: its own submission once
+ * that is final, or a dialog that opened after the input was sent while its submission is not
+ * final yet. Pi holds a command's acknowledgement while the dialog it opened is waiting, so
+ * `submitting` would otherwise last until a person answers; the caller hears `needs_input` now.
+ * `opened` names the dialogs that were already waiting when the input was sent (none for a new
+ * session): they did not come from this input, which Pi acknowledges in their presence. A dialog
+ * the current run opens in the moment between the send and Pi's acknowledgement cannot be told
+ * apart from the input's own; either way the session waits on a person. `undefined` while the
+ * input is still `submitting`, or not acknowledged at all.
+ */
+const dispositionOf = (
+  submission: PromptSubmission | undefined,
+  dialogs: ReadonlyArray<Dialog>,
+  opened: ReadonlySet<string>,
+): InputDisposition | undefined => {
+  if (submission && submission.outcome !== "submitting")
+    return { submission: submission.outcome, detail: submission.detail };
+  const dialog = dialogs.find((d) => !opened.has(d.id));
+  return dialog && { submission: "needs_input", detail: dialogAsks(dialog) };
+};
+
 // ── Starting a session ──────────────────────────────────────────────────────
 
 /**
@@ -244,10 +273,15 @@ export function startSession(
       const unnamed = (detail: string) => result("uncertain", "uncertain", detail);
       const mine = (message: ServerMessage) =>
         selectionId !== null && selectionOf(message) === selectionId;
-      /** Settles once this input's own submission is final; `submitting` is not an outcome. */
-      const applySubmission = () => {
-        const submission = snapshot?.state.submission;
-        if (!submission || !handle) return;
+      /** Settles once this input's handling is known (`dispositionOf`). */
+      const applyInput = () => {
+        if (!snapshot || !handle) return;
+        const submission = snapshot.state.submission;
+        // Before Pi acknowledges this input, its submission is the previous one, or none.
+        if (!submission || submission.id < expectedSubmission) {
+          settleOn(undefined);
+          return;
+        }
         // The id is this child's counter: observing it is what lets a later wait attribute output.
         if (submission.id !== expectedSubmission) {
           settle(
@@ -271,14 +305,12 @@ export function startSession(
             submissionId: submission.id,
             inputFingerprint: submission.inputFingerprint ?? "",
           };
-        if (submission.outcome === "submitting") return;
-        settle(result("created", submission.outcome, submission.detail));
+        settleOn(submission);
       };
-      /** A dialog blocks the input until a person answers; the caller hears that now, not in 30s. */
-      const applyDialogs = () => {
-        const dialog = snapshot?.dialogs[0];
-        if (!dialog || !handle) return;
-        settle(result("created", "needs_input", dialogAsks(dialog)));
+      /** Everything in a new session arrived after its creation, which carries the input. */
+      const settleOn = (submission: PromptSubmission | undefined) => {
+        const known = snapshot && dispositionOf(submission, snapshot.dialogs, new Set());
+        if (known) settle(result("created", known.submission, known.detail));
       };
       return {
         connected: () => {
@@ -363,7 +395,7 @@ export function startSession(
                   );
                   return;
                 }
-                applyDialogs();
+                applyInput();
                 return;
               }
               // A re-attach after a loss. Only this incarnation can report on this input.
@@ -387,8 +419,7 @@ export function startSession(
                 );
                 return;
               }
-              applyDialogs();
-              applySubmission();
+              applyInput();
               return;
             }
             case "session": {
@@ -436,8 +467,7 @@ export function startSession(
                 snapshot.messages.length > handle.baselineMessages
               )
                 handle = { ...handle, anchorMessageId: message.event.message.id };
-              applyDialogs();
-              applySubmission();
+              applyInput();
               return;
             }
             case "selection_rejected":
@@ -985,6 +1015,9 @@ export function sendFollowUp(
       let selectionId: string | null = null;
       let inputId: string | null = null;
       let failed = false;
+      /** This message's latest submission, and the dialogs already waiting when it was sent. */
+      let submission: PromptSubmission | undefined;
+      let opened: ReadonlySet<string> = new Set();
       const result = (
         submission: FollowUpResult["submission"],
         detail?: string,
@@ -1000,11 +1033,13 @@ export function sendFollowUp(
       /** Before the act, nothing reached Piano; after it, Pi may hold the message. */
       const ended = (before: string, after: string) =>
         inputId === null ? unsent(before) : unconfirmed(after);
-      /** Settles on this message's own final submission; `submitting` is not an outcome. */
-      const apply = (submission: PromptSubmission | undefined) => {
-        if (inputId === null || submission?.inputId !== inputId) return;
-        if (submission.outcome !== "submitting")
-          settle(result(submission.outcome, submission.detail));
+      /** Settles once this message's handling is known (`dispositionOf`), from a frame's own
+       * submission and the dialogs it shows. */
+      const apply = (next: PromptSubmission | undefined, dialogs: ReadonlyArray<Dialog> = []) => {
+        if (inputId === null) return;
+        if (next?.inputId === inputId) submission = next;
+        const known = dispositionOf(submission, dialogs, opened);
+        if (known) settle(result(known.submission, known.detail));
       };
       return {
         connected: () => {
@@ -1031,6 +1066,7 @@ export function sendFollowUp(
                 }
                 // The selection is a claim on this connection; the act must reuse it.
                 inputId = selectionId;
+                opened = new Set(message.snapshot.dialogs.map((d) => d.id));
                 link.send({
                   _tag: "act",
                   selectionId,
@@ -1044,13 +1080,15 @@ export function sendFollowUp(
                 return;
               }
               // A stopped session started by the act is shown again under this selection.
-              apply(message.snapshot.state.submission);
+              apply(message.snapshot.state.submission, message.snapshot.dialogs);
               return;
             case "session": {
               const event = message.event;
               if (event._tag === "submission") apply(event.submission);
               else if (event._tag === "state") apply(event.state.submission);
-              else if (event._tag === "snapshot") apply(event.snapshot.state.submission);
+              else if (event._tag === "snapshot")
+                apply(event.snapshot.state.submission, event.snapshot.dialogs);
+              else if (event._tag === "dialog") apply(undefined, [event.dialog]);
               return;
             }
             case "selection_rejected":

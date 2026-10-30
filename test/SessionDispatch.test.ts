@@ -1775,6 +1775,98 @@ for (const [delivery, action] of [
   );
 }
 
+test(
+  "a follow-up whose command opens a dialog returns needs_input at once, as a start does",
+  bounded,
+  async () => {
+    const h = world();
+    const sent = sendFollowUp(
+      { cwd, sessionId, text: "/dialog select", delivery: "follow-up" },
+      h.env,
+    );
+    h.last().accept();
+    const socket = h.last();
+    socket.frame(selected(socket.selection(), snapshotOf()));
+    const inputId = h.sentOf("act")[0]!.action;
+    assert.ok(inputId._tag === "prompt");
+    // Pi holds a command's acknowledgement while its dialog is open: the submission stays
+    // `submitting` until a person answers.
+    socket.frame(
+      frameOf(socket.selection(), {
+        _tag: "submission",
+        submission: { id: 2, outcome: "submitting", inputId: inputId.inputId },
+      }),
+    );
+    socket.frame(
+      frameOf(
+        socket.selection(),
+        { _tag: "dialog", dialog: dialog({ id: "d2", title: "Pick one", method: "select" }) },
+        { sequence: 3 },
+      ),
+    );
+    assert.deepEqual(await sent, {
+      sessionId,
+      delivery: "follow-up",
+      submission: "needs_input",
+      detail: "Pick one",
+    });
+    assert.equal(h.pendingTimers(), 0, "it does not sit on the follow-up deadline");
+  },
+);
+
+test("a dialog already open before a follow-up does not answer for it", bounded, async () => {
+  const h = world();
+  const sent = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
+  h.last().accept();
+  const socket = h.last();
+  const asking = dialog({ id: "d0", title: "Earlier question" });
+  socket.frame(
+    selected(
+      socket.selection(),
+      snapshotOf(
+        { isStreaming: true, submission: { id: 1, outcome: "started", inputId: "earlier" } },
+        [],
+        [asking],
+      ),
+    ),
+  );
+  const act = h.sentOf("act")[0]!.action;
+  assert.ok(act._tag === "prompt");
+  socket.frame(
+    frameOf(socket.selection(), {
+      _tag: "submission",
+      submission: { id: 2, outcome: "submitting", inputId: act.inputId },
+    }),
+  );
+  // A fresh view of the session still shows the earlier dialog, and only it.
+  socket.frame(
+    frameOf(
+      socket.selection(),
+      {
+        _tag: "snapshot",
+        snapshot: snapshotOf(
+          {
+            isStreaming: true,
+            submission: { id: 2, outcome: "submitting", inputId: act.inputId },
+          },
+          [],
+          [asking],
+        ),
+      },
+      { sequence: 3 },
+    ),
+  );
+  socket.frame(
+    frameOf(
+      socket.selection(),
+      { _tag: "submission", submission: { id: 2, outcome: "queued", inputId: act.inputId } },
+      { sequence: 4 },
+    ),
+  );
+  assert.equal((await sent).submission, "queued");
+  assert.equal(h.pendingTimers(), 0);
+});
+
 test("a follow-up never adopts another input's submission", bounded, async () => {
   const h = world();
   const sent = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
