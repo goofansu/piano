@@ -15,7 +15,7 @@ import type { SessionShare } from "../../../shared/share.ts";
 import { type ClientCommand, SESSION_TITLE_MAX, type ServerMessage } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
-import { addressFor } from "./navigation.ts";
+import { screenKey } from "./navigation.ts";
 import {
   checkProjectDraft,
   EMPTY_PROJECT_DRAFT,
@@ -325,8 +325,8 @@ export function createCommandForms({
   let opened: ProjectDraft | undefined;
   /** The page a submitted form opens once the server confirms its command, and the screen it was
    * submitted from: a user who moves on in the meantime keeps the screen they chose. */
-  let waiting: { page: FormPage; command: ClientCommand; from: string | undefined } | null = null;
-  const screen = () => addressFor(getState(), null, "")?.path;
+  let waiting: { page: FormPage; command: ClientCommand; from: string } | null = null;
+  const screen = () => screenKey(getState());
   const listeners = new Set<() => void>();
   const set = (next: CommandFormsState) => {
     state = next;
