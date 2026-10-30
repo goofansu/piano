@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { constants } from "node:os";
 
 /** The first terminal cause, before supervisor cleanup can replace it with a group signal. */
 export interface PreviewOutcome {
@@ -38,6 +39,19 @@ export async function readOutcome(
   return value;
 }
 
-export const outcomeFailed = (outcome: PreviewOutcome) =>
-  outcome.reason === "spawn-error" ||
-  (outcome.reason === "app-exit" && (outcome.exitCode !== 0 || outcome.signal !== null));
+/**
+ * The runner's exit status for an outcome. On Linux systemd reports a non-zero status as `failed`,
+ * so this one rule decides failure there and, through `outcomeFailed`, everywhere else.
+ */
+export const outcomeStatus = ({
+  reason,
+  exitCode,
+  signal,
+}: Pick<PreviewOutcome, "reason" | "exitCode" | "signal">) => {
+  if (reason === "spawn-error") return 1;
+  if (reason !== "app-exit") return 0;
+  if (exitCode !== null) return exitCode;
+  return signal ? 128 + constants.signals[signal] : 1;
+};
+
+export const outcomeFailed = (outcome: PreviewOutcome) => outcomeStatus(outcome) !== 0;
