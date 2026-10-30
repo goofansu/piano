@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Layer, Option, type Scope, Stream } from "effect";
+import { Effect, Fiber, Layer, Option, type Scope, Stream } from "effect";
+import type { PreviewConfig } from "../scripts/PreviewAdapter.ts";
 import { PiCli } from "../server/PiCli.ts";
 import {
   type PiSession,
@@ -40,6 +41,7 @@ async function fixture(t: TestContext) {
     hangOnSubmit: false,
   };
   const { adapter, launched, stops } = fakeAdapter(platform, join(root, "state"), host);
+  const config: PreviewConfig = { origin: "http://localhost" };
   const run = <A, E>(effect: Effect.Effect<A, E, PiSessions | Scope.Scope>) =>
     Effect.runPromise(
       effect.pipe(
@@ -49,11 +51,11 @@ async function fixture(t: TestContext) {
         Effect.provideService(PreviewOwnerOptions, {
           adapter,
           root: join(root, "state"),
-          config: async () => ({ origin: "http://localhost" }),
+          config: async () => config,
         }),
       ),
     );
-  return { root, host, launched, stops, run };
+  return { root, host, config, launched, stops, run };
 }
 
 /** The first state, from the snapshot onwards, that satisfies `pred`. */
@@ -71,13 +73,27 @@ const stateWhere = (session: PiSession, pred: (state: SessionState) => boolean) 
     Effect.map(Option.getOrThrow),
   );
 
+/** The session's tool sends `request`; the reply the agent reads. */
+const askTool = (session: PiSession, request: object) =>
+  Effect.gen(function* () {
+    const reply = yield* session.events.pipe(
+      Stream.filter((frame) => frame._tag === "notice" && frame.message.startsWith("preview ")),
+      Stream.runHead,
+      Effect.map((frame) => (Option.getOrThrow(frame) as { message: string }).message),
+      Effect.forkChild,
+    );
+    yield* Effect.yieldNow;
+    yield* session.act({
+      _tag: "prompt",
+      text: `preview ${JSON.stringify(request)}`,
+    });
+    return yield* Fiber.join(reply);
+  });
+
 /** The session's tool starts an app, as the agent would. */
 const startFromTool = (session: PiSession) =>
   Effect.gen(function* () {
-    yield* session.act({
-      _tag: "prompt",
-      text: `preview ${JSON.stringify({ action: "start", command: ["/bin/false"] })}`,
-    });
+    yield* askTool(session, { action: "start", command: ["/bin/false"] });
     return (yield* stateWhere(session, (s) => !!s.preview)).preview!;
   });
 
@@ -86,7 +102,10 @@ test("the tool's app reaches the session state; the browser re-observes and stop
   const f = await fixture(t);
   await f.run(
     Effect.gen(function* () {
-      const session = yield* (yield* PiSessions).open({ cwd: f.root, sessionId: "preview-own" });
+      const session = yield* (yield* PiSessions).open({
+        cwd: f.root,
+        sessionId: "preview-own",
+      });
       const app = yield* startFromTool(session);
       assert.equal(app.state, "failed");
       assert.equal(app.ready, false);
@@ -118,7 +137,10 @@ test("the tool's app reaches the session state; the browser re-observes and stop
       assert.equal(f.stops.length, 0);
       assert.equal((yield* session.state).preview?.instanceId, app.instanceId);
 
-      const stopped = yield* session.act({ _tag: "preview_stop", instanceId: app.instanceId });
+      const stopped = yield* session.act({
+        _tag: "preview_stop",
+        instanceId: app.instanceId,
+      });
       assert.equal(stopped?._tag === "preview_stopped" && stopped.outcome, "stopped");
       assert.equal(f.stops.length, 1);
       const after = yield* session.state;
@@ -140,8 +162,14 @@ test("another session's app is never shown as, or stopped through, this session'
   await f.run(
     Effect.gen(function* () {
       const sessions = yield* PiSessions;
-      const owner = yield* sessions.open({ cwd: f.root, sessionId: "preview-owner" });
-      const other = yield* sessions.open({ cwd: f.root, sessionId: "preview-other" });
+      const owner = yield* sessions.open({
+        cwd: f.root,
+        sessionId: "preview-owner",
+      });
+      const other = yield* sessions.open({
+        cwd: f.root,
+        sessionId: "preview-other",
+      });
       const app = yield* startFromTool(owner);
 
       assert.deepEqual(yield* other.act({ _tag: "preview_status" }), {
@@ -166,7 +194,10 @@ test("a stale stop after a replacement neither stops nor clears the replacement"
   const f = await fixture(t);
   await f.run(
     Effect.gen(function* () {
-      const session = yield* (yield* PiSessions).open({ cwd: f.root, sessionId: "preview-swap" });
+      const session = yield* (yield* PiSessions).open({
+        cwd: f.root,
+        sessionId: "preview-swap",
+      });
       const first = yield* startFromTool(session);
       yield* session.act({
         _tag: "prompt",
@@ -179,21 +210,90 @@ test("a stale stop after a replacement neither stops nor clears the replacement"
       const stopped = f.stops.length;
 
       // The browser still shows the old instance and asks to stop it.
-      assert.deepEqual(yield* session.act({ _tag: "preview_stop", instanceId: first.instanceId }), {
-        _tag: "preview_stopped",
-        instanceId: first.instanceId,
-        outcome: "not-current",
-      });
+      assert.deepEqual(
+        yield* session.act({
+          _tag: "preview_stop",
+          instanceId: first.instanceId,
+        }),
+        {
+          _tag: "preview_stopped",
+          instanceId: first.instanceId,
+          outcome: "not-current",
+        },
+      );
       assert.equal(f.stops.length, stopped, "a stale ID never stops the replacement");
       assert.equal((yield* session.state).preview?.instanceId, next.instanceId);
 
-      const exact = yield* session.act({ _tag: "preview_stop", instanceId: next.instanceId });
+      const exact = yield* session.act({
+        _tag: "preview_stop",
+        instanceId: next.instanceId,
+      });
       assert.equal(exact?._tag === "preview_stopped" && exact.outcome, "stopped");
       assert.equal(f.stops.length, stopped + 1);
       assert.equal((yield* session.state).preview, undefined);
-      const repeated = yield* session.act({ _tag: "preview_stop", instanceId: next.instanceId });
+      const repeated = yield* session.act({
+        _tag: "preview_stop",
+        instanceId: next.instanceId,
+      });
       assert.equal(repeated?._tag === "preview_stopped" && repeated.outcome, "not-current");
       assert.equal(f.stops.length, stopped + 1, "a repeated stop is harmless");
+    }),
+  );
+});
+
+test("a replacement that fails after stopping the app no longer shows the stopped app", async (t) => {
+  if (!supported) return t.skip("managed previews need launchd or systemd");
+  const f = await fixture(t);
+  await f.run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: f.root,
+        sessionId: "preview-lost",
+      });
+      const app = yield* startFromTool(session);
+      f.config.ports = [5173]; // Reserved for Piano: no free port remains.
+
+      const reply = yield* askTool(session, {
+        action: "start",
+        replace: app.instanceId,
+        command: ["/bin/false"],
+      });
+      assert.match(reply, /preview failed: .*No free supported preview port/);
+      assert.equal(f.stops.length, 1, "the replaced app was stopped");
+      assert.equal((yield* session.state).preview, undefined);
+    }),
+  );
+});
+
+test("a first start whose observation fails shows its app as unknown, and can stop it", async (t) => {
+  if (!supported) return t.skip("managed previews need launchd or systemd");
+  const f = await fixture(t);
+  await f.run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: f.root,
+        sessionId: "preview-blind",
+      });
+      f.host.unavailableAfterSubmit = true;
+
+      const reply = yield* askTool(session, {
+        action: "start",
+        command: ["/bin/false"],
+      });
+      assert.match(reply, /preview failed: .*unavailable/);
+      assert.equal(f.launched.length, 1, "the app was submitted");
+      const unknown = (yield* session.state).preview;
+      assert.equal(unknown?.state, "unknown");
+      assert.equal(unknown?.url, null);
+      assert.deepEqual(unknown?.command, ["/bin/false"]);
+
+      f.host.unavailable = false;
+      const stopped = yield* session.act({
+        _tag: "preview_stop",
+        instanceId: unknown!.instanceId,
+      });
+      assert.equal(stopped?._tag === "preview_stopped" && stopped.outcome, "stopped");
+      assert.equal((yield* session.state).preview, undefined);
     }),
   );
 });

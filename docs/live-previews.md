@@ -12,7 +12,9 @@ link). It opens a menu with the status,
 preview, Preview details and Stop preview. Piano reads the app's status
 from that session's owner, without starting Pi or launching anything: once per page attachment, when
 the person returns to the page and when the menu or details open. There is no polling. A failed read
-shows the status as unknown, not as stopped. Stop names the exact instance it observed, so it can
+shows the status as unknown, not as stopped. After a failed start the owner reads the workspace
+again, so the header drops an app the start had already stopped and shows one it launched but could
+not observe as unknown. Stop names the exact instance it observed, so it can
 never stop a replacement. A saved, closed or restarted session shows no preview, even if its
 transcript still links one. Archive and Delete ask before stopping a session that owns an app.
 

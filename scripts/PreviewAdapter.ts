@@ -97,6 +97,28 @@ interface Supervisor {
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** An intent as callers see it: the owner without its endpoint, env names without values. */
+const publicIntent = (record: Intent) => ({
+  ...record,
+  owner: record.owner
+    ? {
+        sessionId: record.owner.sessionId,
+        generation: record.owner.generation,
+        workspace: record.owner.workspace,
+      }
+    : undefined,
+  spec: { ...record.spec, env: Object.keys(record.spec.env) },
+});
+
+/** A start that failed after saving its launch intent: `instance` may be running, or not. */
+export class PreviewStartError extends Error {
+  readonly instance: ReturnType<typeof publicIntent>;
+  constructor(cause: unknown, record: Intent) {
+    super(message(cause), { cause });
+    this.instance = publicIntent(record);
+  }
+}
 const code = (error: unknown) => (error as NodeJS.ErrnoException).code;
 const exitStatus = (error: unknown) => (error as { status?: number }).status;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -117,7 +139,10 @@ function hostRun(platform: string): Run {
         };
   return (args, timeout = 5000) =>
     new Promise((resolve, reject) => {
-      const child = spawn(args[0], args.slice(1), { env, stdio: ["ignore", "pipe", "pipe"] });
+      const child = spawn(args[0], args.slice(1), {
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
       let stdout = Buffer.alloc(0);
       let stderr = Buffer.alloc(0);
       let expired = false;
@@ -210,7 +235,14 @@ function httpStatus(port: number, path: string, host: string): Promise<number> {
   return new Promise((resolve, reject) => {
     // Absolute wall deadline, not a socket inactivity timeout (a slow responder must not extend it).
     const request = httpRequest(
-      { hostname: "127.0.0.1", port, path, method: "GET", agent: false, headers: { host } },
+      {
+        hostname: "127.0.0.1",
+        port,
+        path,
+        method: "GET",
+        agent: false,
+        headers: { host },
+      },
       (response) => {
         resolve(response.statusCode ?? 0);
         response.destroy();
@@ -838,15 +870,7 @@ export class PreviewAdapter {
       }
     }
     return {
-      ...record,
-      owner: record.owner
-        ? {
-            sessionId: record.owner.sessionId,
-            generation: record.owner.generation,
-            workspace: record.owner.workspace,
-          }
-        : undefined,
-      spec: { ...record.spec, env: Object.keys(record.spec.env) },
+      ...publicIntent(record),
       state: terminalState,
       termination,
       supervisor: state.raw,
@@ -961,7 +985,12 @@ export class PreviewAdapter {
     await supervisor.stop(record, before, root);
     await rm(outcomePath(path, record.instanceId), { force: true });
     await unlink(path);
-    return { serviceId, instanceId: record.instanceId, status: "stopped", stopped: true };
+    return {
+      serviceId,
+      instanceId: record.instanceId,
+      status: "stopped",
+      stopped: true,
+    };
   }
 
   private async handle(
@@ -1073,43 +1102,47 @@ export class PreviewAdapter {
     };
     await save(path, record); // Durable intent BEFORE submission; never blindly replay it.
     try {
-      await supervisor.submit(
-        record,
-        [
-          process.execPath,
-          fileURLToPath(new URL("./preview-runner.ts", import.meta.url)),
-          owner.endpoint,
-          owner.generation,
-          record.instanceId,
-          outcomePath(path, record.instanceId),
-          ...appArgv(record),
-        ],
-        root,
-      );
-    } catch (error) {
-      return {
-        ...(await this.observe(supervisor, record, path, root)),
-        launchError: this.redact(message(error), record),
-        reused: false,
-        ...(replaced && { replaced }),
-      };
-    }
-    const deadline = performance.now() + timeout * 1000;
-    for (;;) {
-      // Logs are read once, for the observation returned, not on every poll.
-      const result = await this.observe(supervisor, record, path, root, false);
-      if (
-        result.ready ||
-        ["exited", "failed", "not-loaded"].includes(result.state) ||
-        performance.now() >= deadline
-      )
+      try {
+        await supervisor.submit(
+          record,
+          [
+            process.execPath,
+            fileURLToPath(new URL("./preview-runner.ts", import.meta.url)),
+            owner.endpoint,
+            owner.generation,
+            record.instanceId,
+            outcomePath(path, record.instanceId),
+            ...appArgv(record),
+          ],
+          root,
+        );
+      } catch (error) {
         return {
-          ...result,
-          logs: await this.logs(supervisor, record, root),
+          ...(await this.observe(supervisor, record, path, root)),
+          launchError: this.redact(message(error), record),
           reused: false,
           ...(replaced && { replaced }),
         };
-      await delay(100);
+      }
+      const deadline = performance.now() + timeout * 1000;
+      for (;;) {
+        // Logs are read once, for the observation returned, not on every poll.
+        const result = await this.observe(supervisor, record, path, root, false);
+        if (
+          result.ready ||
+          ["exited", "failed", "not-loaded"].includes(result.state) ||
+          performance.now() >= deadline
+        )
+          return {
+            ...result,
+            logs: await this.logs(supervisor, record, root),
+            reused: false,
+            ...(replaced && { replaced }),
+          };
+        await delay(100);
+      }
+    } catch (error) {
+      throw new PreviewStartError(error, record);
     }
   }
 }
