@@ -328,6 +328,24 @@ test("a submitted form opens no page once the user has moved to another screen",
   });
   created.subject.settle();
   assert.deepEqual(created.opened, [], "the new project's home does not replace the page opened");
+
+  // From the New page, the first message starts a creation, addressed /new until it has an ID.
+  const started = forms();
+  started.setState({ ...withWorkspace, view: { kind: "new" }, session: null });
+  started.subject.open({ kind: "project", dialog: {} });
+  started.subject.editProject({ name: "Ship", instructions: "" });
+  assert.equal(started.subject.submit(), true);
+  const creating: AppState = {
+    ...withWorkspace,
+    view: { kind: "session" },
+    session: null,
+    selecting: { cwd: "/repo", sessionId: null },
+  };
+  started.setState(creating);
+  started.subject.settle();
+  started.setState({ ...creating, projects: [{ id: "new-id", name: "Ship" }] });
+  started.subject.settle();
+  assert.deepEqual(started.opened, [], "the creation keeps the screen");
 });
 
 test("Share needs Radius and a registered workspace", () => {
