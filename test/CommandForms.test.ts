@@ -18,6 +18,7 @@ import {
 } from "../web/src/lib/commandForms.ts";
 import type { CommandForm } from "../web/src/lib/commands.ts";
 import { type SessionTarget, sessionCommands } from "../web/src/lib/sessionCommands.ts";
+import type { SendDisposition } from "../web/src/lib/ws.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
@@ -362,6 +363,7 @@ test("Share needs Radius and a registered workspace", () => {
 
 function forms(
   share: (workspaceId: string, sessionId: string) => Promise<SessionShare> = async () => shared,
+  disposition: SendDisposition = "sent",
 ) {
   let state = withWorkspace;
   const sent: ClientCommand[] = [];
@@ -370,7 +372,10 @@ function forms(
   const subject = createCommandForms({
     getState: () => state,
     radiusSignedIn: () => true,
-    send: (command) => sent.push(command),
+    send: (command) => {
+      sent.push(command);
+      return disposition;
+    },
     share: (workspaceId, sessionId) => {
       published.push([workspaceId, sessionId]);
       return share(workspaceId, sessionId);
@@ -437,6 +442,40 @@ test("an allowed form sends its answer once, then closes", () => {
     assert.deepEqual(sent, [answerForm(withWorkspace, form, "Renamed").command], form.kind);
     assert.equal(subject.submit(), false, form.kind);
     assert.equal(sent.length, 1, form.kind);
+  }
+});
+
+test("a form whose answer was not sent stays open with its input and opens no page; an uncertain one closes", () => {
+  const submittable: CommandForm[] = [
+    rename(),
+    del(),
+    closeFolder,
+    { kind: "project", dialog: {} },
+    { kind: "project-settings", projectId: "p1" },
+  ];
+  for (const form of submittable) {
+    const { subject, sent, opened, setState } = forms(undefined, "not-sent");
+    setState({ ...withWorkspace, projects: [launch] });
+    subject.open(form);
+    subject.edit("Renamed");
+    subject.editProject({ name: "Ship", instructions: "" });
+    const input = subject.getState();
+    assert.equal(subject.submit(), false, form.kind);
+    assert.equal(sent.length, 1, form.kind);
+    assert.deepEqual(subject.getState(), input, form.kind);
+    // Nothing waits on a change the server never heard of.
+    setState({ ...withWorkspace, projects: [launch, { id: "new-id", name: "Ship" }] });
+    subject.settle();
+    assert.deepEqual(opened, [], form.kind);
+  }
+  for (const form of submittable) {
+    const { subject, setState } = forms(undefined, "uncertain");
+    setState({ ...withWorkspace, projects: [launch] });
+    subject.open(form);
+    subject.edit("Renamed");
+    subject.editProject({ name: "Ship", instructions: "" });
+    assert.equal(subject.submit(), true, form.kind);
+    assert.equal(subject.getState().form, null, form.kind);
   }
 });
 

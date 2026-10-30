@@ -37,7 +37,7 @@ import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { confirmation } from "@/lib/commandForms";
+import { confirmation, FORM_NOT_SENT } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import type { SessionLayout } from "@/lib/navigation";
@@ -60,6 +60,7 @@ import { useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
 import { webhookEditor } from "@/lib/useWebhookEditor";
+import type { SendDisposition } from "@/lib/ws";
 import type { AppState } from "@/store";
 
 async function copySessionValue(value: string, label: string) {
@@ -177,7 +178,7 @@ export function CommandHost({
   children,
 }: {
   state: AppState;
-  send: (command: ClientCommand) => void;
+  send: (command: ClientCommand) => SendDisposition;
   /** Hears each server frame, as `Client.listen` does. */
   listen: (listener: (message: ServerMessage) => void) => () => void;
   children: React.ReactNode;
@@ -205,7 +206,12 @@ export function CommandHost({
   const forms = useCommandForms({
     state,
     radiusSignedIn,
-    send,
+    // A form known not sent stays open with its input; say why, as the composer does.
+    send: (command) => {
+      const disposition = send(command);
+      if (disposition === "not-sent") toast.warning(FORM_NOT_SENT);
+      return disposition;
+    },
     openPage,
     listen,
   });
