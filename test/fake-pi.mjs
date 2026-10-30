@@ -1,5 +1,6 @@
 // A scripted stand-in for `pi --mode rpc`: speaks the JSONL protocol well enough to
 // exercise PiSessions through its interface. Behaviour is driven by the prompt text.
+import { spawn } from "node:child_process";
 import { closeSync, existsSync, readdirSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
@@ -547,6 +548,33 @@ function handle(cmd) {
           process.stdout.write(bytes.subarray(split));
           respond(cmd, { disposition: "handled" });
         });
+        return;
+      }
+      if (cmd.message.startsWith("exit tail ")) {
+        const mode = cmd.message.slice("exit tail ".length);
+        out({ type: "agent_start" });
+        const message = {
+          role: "assistant",
+          content: [{ type: "text", text: "Final reply before exit" }],
+          stopReason: "stop",
+        };
+        out({ type: "message_end", message });
+        if (mode === "descendant") {
+          // A real inherited pipe stays open without an acknowledgement. The
+          // transport must bound the drain and clean up its process group.
+          const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+            stdio: ["ignore", process.stdout, "ignore"],
+          });
+          child.once("spawn", () => process.stdout.write("", () => process.exit(0)));
+        } else if (mode === "truncated") {
+          process.stdout.write('{"type":"response",', () => process.exit(0));
+        } else {
+          respond(cmd, { disposition: "started" });
+          out({ type: "agent_end", messages: [message], willRetry: false });
+          process.stdout.write(`${JSON.stringify({ type: "agent_settled" })}\n`, () =>
+            process.exit(mode === "abnormal" ? 3 : 0),
+          );
+        }
         return;
       }
       if (cmd.message.startsWith("protocol raw:")) {

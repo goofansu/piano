@@ -28,6 +28,13 @@ Its `observationVersion` counts **received**, not merely projected, output; cont
 readbacks must not overtake queued records. `hasPendingWork` includes uncertainty
 left after caller timeout so retirement cannot infer false quiescence.
 
+Process exit stops input and disconnects preview ownership immediately, but is not stdout EOF.
+The transport allows one second after exit for stdout framing and response correlation to finish,
+then ends the record queue without dropping accepted records. PiSessions drains those records
+before publishing closure. A truncated record or a drain deadline (including a descendant holding
+stdout open) produces a terminal failure, not a clean exit; missing acknowledgements remain
+uncertain and mutations are never replayed (PIN-111, INV-02/03/05).
+
 Publication, dialogs and readbacks share one atomicity boundary: SessionDialogs and
 SessionReadbacks take the session's `SessionPublication` itself, its lock and gates included,
 rather than a bag of functions, so the boundary has one owner and readback tests use the real
