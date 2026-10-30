@@ -309,11 +309,12 @@ export function addressFor(
 ): Address | null {
   const sessionId = (state.session ?? state.selecting)?.sessionId;
   const ref =
-    state.view.kind === "session" && sessionId
+    !settings && state.view.kind === "session" && sessionId
       ? state.sessionReferences.find((ref) => ref.sessionId === sessionId)
       : undefined;
-  const shown: { route: Route; title: string } | null =
-    state.view.kind !== "session"
+  const shown: { route: Route; title: string } | null = settings
+    ? { route: { kind: "settings", section: settings }, title: "Settings" }
+    : state.view.kind !== "session"
       ? pageAddress(state, state.view)
       : sessionId
         ? {
@@ -323,13 +324,13 @@ export function addressFor(
           }
         : null;
   if (!shown) return null;
-  const path = routePath(settings ? { kind: "settings", section: settings } : shown.route);
+  const path = routePath(shown.route);
   // The bare root is an alias for /new and a query string carries nothing: replace those, push real moves.
   const mode =
     currentPathname === "/" || currentPathname === "/settings" || currentPathname === path
       ? "replace"
       : "push";
-  return { path, mode, title: `${settings ? "Settings" : shown.title} - Piano` };
+  return { path, mode, title: `${shown.title} - Piano` };
 }
 
 const panelOwner = (s: AppState) => (s.session ? sessionKey(s.session) : null);
@@ -386,7 +387,7 @@ export function createNavigation({
   moved = () => {},
 }: NavigationOptions): Navigation {
   // A route read from the address bar (on start, or on back/forward) that has not been applied yet.
-  // A newer explicit page/session choice invalidates it before changing the client.
+  // A newer explicit page/session/Settings choice invalidates it before changing the screen.
   let wanted: Route | null = parseRoute(address.location());
   const fields = {
     surface: null,
@@ -598,6 +599,13 @@ export function createNavigation({
 
   const closeSettings = () =>
     batch(() => {
+      if (state.settings) {
+        const c = client.getState();
+        // Settings may have superseded a deep link before it could select anything. There is no
+        // session to return to in that case, even after the registry arrives: use the New page.
+        if (c.view.kind === "session" && !(c.session ?? c.selecting)?.sessionId)
+          return open({ kind: "new" });
+      }
       set({ settings: null });
       moved();
     });
@@ -648,6 +656,7 @@ export function createNavigation({
     openProject: (projectId) => open({ kind: "project", projectId }),
     openSettings: (section = "providers") =>
       batch(() => {
+        wanted = null;
         // Asking for the section already open is still a request; what it reveals is revealed again.
         set({ settings: section, settingsRequest: state.settingsRequest + 1 });
         moved();
