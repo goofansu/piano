@@ -111,12 +111,12 @@ function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
         sessionReference("/scratch", "b", { title: "Beta" }),
       ],
     });
-  const selected = (sessionId: string) =>
+  const selected = (sessionId: string, selectionId = client.getState().selectionId!) =>
     server({
       _tag: "selected",
       cwd: "/scratch",
       sessionId,
-      selectionId: client.getState().selectionId!,
+      selectionId,
       hosted: true,
       cursor: { cwd: "/scratch", sessionId, generation: "g1", sequence: 1 },
       snapshot: { state: { sessionId, isStreaming: false }, messages: [], dialogs: [] },
@@ -130,6 +130,8 @@ function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
     registry,
     selected,
     selects,
+    sent,
+    status: (connected: boolean) => handlers!.onStatus(connected),
     moves: () => moves,
     reads: () => reads,
   };
@@ -310,6 +312,72 @@ test("closing Settings over an unresolved session returns to New before or after
     assert.equal(p.path(), "/new");
   }
 });
+
+test("Settings → Home preserves an in-flight creation and accepts its late selection", () => {
+  const p = page("/new");
+  p.registry();
+  p.client.send({ _tag: "create_session", cwd: "/scratch", options: {}, text: "Start here" });
+  const { selecting, selectionId, pendingCreate } = p.client.getState();
+  assert.ok(selectionId);
+  assert.deepEqual(selecting, { cwd: "/scratch", sessionId: null });
+  assert.equal(pendingCreate?.outcome, "starting");
+  p.navigation.openSettings();
+  assert.equal(p.path(), "/settings/providers");
+  p.navigation.closeSettings();
+  assert.equal(p.client.getState().view.kind, "session");
+  assert.equal(p.client.getState().selecting, selecting);
+  assert.equal(p.client.getState().selectionId, selectionId);
+  assert.equal(p.client.getState().pendingCreate, pendingCreate);
+  assert.equal(p.path(), "/new", "unnamed creation has no session URL yet");
+  assert.equal(p.title(), "Session - Piano", "neither Settings nor the New page is shown");
+  p.selected("a", selectionId);
+  assert.equal(p.client.getState().session?.sessionId, "a");
+  assert.equal(p.path(), "/s/a");
+  assert.equal(p.title(), "Alpha - Piano");
+  assert.equal(p.sent.filter((m) => m._tag === "create_session").length, 1);
+  assert.deepEqual(p.selects(), [], "closing Settings does not reselect or retry creation");
+});
+
+for (const failure of ["disconnect", "error"] as const)
+  test(`Settings → Home preserves uncertain creation after ${failure} without replay`, () => {
+    const p = page("/new");
+    p.registry();
+    const attachments = [
+      { kind: "image", name: "input.png", data: "aGVsbG8=", mimeType: "image/png" },
+    ] as const;
+    p.client.send({
+      _tag: "create_session",
+      cwd: "/scratch",
+      options: {},
+      text: "Possibly started",
+      attachments,
+    });
+    const selectionId = p.client.getState().selectionId!;
+    p.navigation.openSettings();
+    if (failure === "disconnect") p.status(false);
+    else p.server({ _tag: failure, selectionId, message: "Startup outcome unknown" });
+    const uncertain = p.client.getState().pendingCreate;
+    const correlation = p.client.getState().selectionId;
+    assert.equal(uncertain?.outcome, "uncertain");
+    assert.equal(p.client.getState().selecting, null);
+    p.navigation.closeSettings();
+    assert.equal(p.client.getState().view.kind, "session");
+    assert.equal(p.client.getState().selectionId, correlation);
+    assert.equal(p.client.getState().pendingCreate, uncertain);
+    assert.equal(uncertain?.text, "Possibly started");
+    assert.deepEqual(uncertain?.attachments, [
+      { kind: "image", url: "data:image/png;base64,aGVsbG8=" },
+    ]);
+    assert.equal(p.path(), "/new");
+    assert.equal(p.title(), "Session - Piano");
+    if (failure === "disconnect") p.status(true);
+    p.registry();
+    p.navigation.openSettings("mcp");
+    p.navigation.closeSettings();
+    assert.equal(p.client.getState().pendingCreate, uncertain);
+    assert.equal(p.sent.filter((m) => m._tag === "create_session").length, 1);
+    assert.deepEqual(p.selects(), [], "no automatic retry even after reconnect");
+  });
 
 test("history can revisit a superseded session route or cancel it by returning to Settings", () => {
   const p = page("/s/a");
