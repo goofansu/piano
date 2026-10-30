@@ -150,6 +150,65 @@ test("a session URL waits for the registry, then selects that session without mo
   assert.equal(p.title(), "Alpha - Piano");
 });
 
+test("New session supersedes a deferred startup route before the registry arrives", () => {
+  for (const sessionId of ["a", "gone"]) {
+    const p = page(`/s/${sessionId}`);
+    p.navigation.openNew();
+    assert.equal(p.client.getState().view.kind, "new");
+    assert.equal(p.path(), "/new", "the address follows New even before registry delivery");
+    assert.equal(p.title(), "New session - Piano");
+    p.registry();
+    assert.deepEqual(p.selects(), [], "the obsolete route must not select a session");
+    assert.equal(p.client.getState().view.kind, "new", "nor show Session not found");
+    assert.equal(p.path(), "/new");
+    assert.equal(p.title(), "New session - Piano");
+  }
+});
+
+test("explicit session selection supersedes a deferred startup route", () => {
+  const p = page("/s/a");
+  p.navigation.select("/scratch", "b");
+  assert.equal(p.path(), "/s/b");
+  p.registry();
+  p.selected("b");
+  assert.deepEqual(p.selects(), ["b"]);
+  assert.equal(p.path(), "/s/b");
+  assert.equal(p.title(), "Beta - Piano");
+});
+
+test("New supersedes a deferred history route, which back can still revisit", () => {
+  const p = page("/s/a");
+  p.navigation.openProjects();
+  p.back(); // The registry still has not arrived: /s/a is pending again.
+  p.navigation.openNew();
+  assert.equal(p.path(), "/new");
+  p.registry();
+  assert.deepEqual(p.selects(), []);
+  assert.equal(p.client.getState().view.kind, "new");
+  assert.deepEqual(p.entries, ["/s/a", "/new"]);
+
+  p.back();
+  assert.deepEqual(p.selects(), ["a"]);
+  p.selected("a");
+  assert.equal(p.path(), "/s/a");
+  assert.equal(p.client.getState().view.kind, "session");
+  p.forward();
+  assert.equal(p.path(), "/new");
+  assert.equal(p.client.getState().view.kind, "new");
+  assert.deepEqual(p.entries, ["/s/a", "/new"]);
+});
+
+test("forward to a page supersedes a deferred history route", () => {
+  const p = page("/s/a");
+  p.navigation.openNew();
+  p.back();
+  p.forward();
+  p.registry();
+  assert.deepEqual(p.selects(), []);
+  assert.equal(p.path(), "/new");
+  assert.equal(p.client.getState().view.kind, "new");
+});
+
 test("an unknown session keeps its URL and shows Session not found", () => {
   const p = page("/s/gone");
   p.registry();

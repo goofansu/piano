@@ -382,6 +382,7 @@ export function createNavigation({
   moved = () => {},
 }: NavigationOptions): Navigation {
   // A route read from the address bar (on start, or on back/forward) that has not been applied yet.
+  // A newer explicit page/session choice invalidates it before changing the client.
   let wanted: Route | null = parseRoute(address.location());
   const fields = {
     surface: null,
@@ -484,6 +485,7 @@ export function createNavigation({
 
   const select = (cwd: string, sessionId: string | null) =>
     batch(() => {
+      wanted = null;
       moved();
       set({ settings: null });
       // A move through the client re-checks the address even when nothing here changed.
@@ -558,6 +560,7 @@ export function createNavigation({
   /** A user's move to a page; it leaves Settings. */
   const open = (page: Page) =>
     batch(() => {
+      wanted = null;
       set({ settings: null });
       moving = true;
       client.dispatch({ type: "open", page });
