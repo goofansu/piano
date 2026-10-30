@@ -38,23 +38,23 @@ function answering(d: Dialog = dialog("d1")) {
 
 test("a dialog is answered at most once, with its id and generation", () => {
   const { sent, dialogAnswer } = answering();
-  assert.equal(dialogAnswer.answer({ value: "first" }, 1_000, true), true);
-  assert.equal(dialogAnswer.answer({ value: "second" }, 1_000, true), false);
-  assert.equal(dialogAnswer.cancel(1_000, true), false);
+  assert.equal(dialogAnswer.answer({ value: "first" }, 1_000, "sel"), true);
+  assert.equal(dialogAnswer.answer({ value: "second" }, 1_000, "sel"), false);
+  assert.equal(dialogAnswer.cancel(1_000, "sel"), false);
   assert.deepEqual(sent, [
     { _tag: "act", action: { _tag: "answer", id: "d1", generation: "g1", value: "first" } },
   ]);
-  assert.equal(dialogAnswer.view(1_000, true).submitted, true);
-  assert.equal(dialogAnswer.view(1_000, true).disabled, true);
+  assert.equal(dialogAnswer.view(1_000, "sel").submitted, true);
+  assert.equal(dialogAnswer.view(1_000, "sel").disabled, true);
 });
 
 test("an answer at or after the deadline sends nothing", () => {
   const { sent, dialogAnswer } = answering();
-  assert.equal(dialogAnswer.view(DEADLINE, true).disabled, true);
-  assert.equal(dialogAnswer.answer({ value: "late" }, DEADLINE, true), false);
-  assert.equal(dialogAnswer.answer({ value: "later" }, DEADLINE + 1, true), false);
+  assert.equal(dialogAnswer.view(DEADLINE, "sel").disabled, true);
+  assert.equal(dialogAnswer.answer({ value: "late" }, DEADLINE, "sel"), false);
+  assert.equal(dialogAnswer.answer({ value: "later" }, DEADLINE + 1, "sel"), false);
   assert.deepEqual(sent, []);
-  assert.equal(dialogAnswer.view(DEADLINE, true).submitted, false);
+  assert.equal(dialogAnswer.view(DEADLINE, "sel").submitted, false);
 });
 
 test("a question its tool call owns has no answer deadline but still requires a connection", () => {
@@ -62,17 +62,17 @@ test("a question its tool call owns has no answer deadline but still requires a 
     dialog("owned", { toolCallId: "call-1", deadlineAt: null, deadlineKind: "tool-end" }),
   );
   const later = 24 * 60 * 60_000;
-  assert.equal(dialogAnswer.view(later, true).deadline, null);
-  assert.equal(dialogAnswer.view(later, true).disabled, false);
-  assert.equal(dialogAnswer.answer({ value: "kept" }, later, false), false);
-  assert.equal(dialogAnswer.answer({ value: "kept" }, later, true), true);
+  assert.equal(dialogAnswer.view(later, "sel").deadline, null);
+  assert.equal(dialogAnswer.view(later, "sel").disabled, false);
+  assert.equal(dialogAnswer.answer({ value: "kept" }, later, null), false);
+  assert.equal(dialogAnswer.answer({ value: "kept" }, later, "sel"), true);
 });
 
 test("a disconnected answer sends nothing and leaves the dialog answerable", () => {
   const { sent, dialogAnswer } = answering();
-  assert.equal(dialogAnswer.answer({ confirmed: true }, 1_000, false), false);
+  assert.equal(dialogAnswer.answer({ confirmed: true }, 1_000, null), false);
   assert.deepEqual(sent, []);
-  assert.deepEqual(dialogAnswer.view(1_000, false), {
+  assert.deepEqual(dialogAnswer.view(1_000, null), {
     submitted: false,
     disabled: true,
     abortDisabled: true,
@@ -81,7 +81,7 @@ test("a disconnected answer sends nothing and leaves the dialog answerable", () 
     waiting: "Sending response…",
   });
   assert.equal(
-    dialogAnswer.answer({ confirmed: true }, 1_000, true),
+    dialogAnswer.answer({ confirmed: true }, 1_000, "sel"),
     true,
     "answerable on reconnect",
   );
@@ -95,70 +95,87 @@ for (const action of ["answer", "cancel", "abort"] as const) {
       dialog: dialog("d1"),
       send: () => {
         attempts++;
-        assert.equal(controller.cancel(1_000, true), false, "guard before calling transport");
+        assert.equal(controller.cancel(1_000, "sel"), false, "guard before calling transport");
         return disposition;
       },
     });
     const submit = () =>
       action === "answer"
-        ? controller.answer({ value: "kept" }, 1_000, true)
-        : controller[action](1_000, true);
+        ? controller.answer({ value: "kept" }, 1_000, "sel")
+        : controller[action](1_000, "sel");
     assert.equal(submit(), false);
-    assert.equal(controller.getState(), false);
-    assert.equal(controller.view(1_000, false).disabled, true);
-    assert.equal(controller.view(1_000, false).abortDisabled, true);
-    assert.equal(controller.view(1_000, true).disabled, false);
-    assert.equal(controller.view(1_000, true).abortDisabled, false);
-    assert.equal(controller.view(DEADLINE, true).disabled, true, "retry respects deadline");
-    assert.equal(controller.view(DEADLINE, true).abortDisabled, false);
+    assert.equal(controller.getState(), null);
+    assert.equal(controller.view(1_000, null).disabled, true);
+    assert.equal(controller.view(1_000, null).abortDisabled, true);
+    assert.equal(controller.view(1_000, "sel").disabled, false);
+    assert.equal(controller.view(1_000, "sel").abortDisabled, false);
+    assert.equal(controller.view(DEADLINE, "sel").disabled, true, "retry respects deadline");
+    assert.equal(controller.view(DEADLINE, "sel").abortDisabled, false);
     assert.equal(attempts, 1, "reconnection does not replay");
     disposition = "uncertain";
     assert.equal(submit(), true);
-    assert.equal(controller.getState(), true);
-    assert.equal(controller.view(1_000, false).disabled, true);
-    assert.equal(controller.view(1_000, true).disabled, true);
-    assert.equal(controller.view(1_000, true).abortDisabled, true);
+    assert.equal(controller.getState(), "sel");
+    assert.equal(controller.view(1_000, null).disabled, true);
+    assert.equal(controller.view(1_000, "sel").disabled, true);
+    assert.equal(controller.view(1_000, "sel").abortDisabled, true);
     assert.equal(submit(), false);
-    assert.equal(controller.cancel(1_000, true), false);
-    assert.equal(controller.abort(1_000, true), false);
+    assert.equal(controller.cancel(1_000, "sel"), false);
+    assert.equal(controller.abort(1_000, "sel"), false);
     assert.equal(attempts, 2);
   });
 }
 
 test("closing a dialog cancels it", () => {
   const { sent, dialogAnswer } = answering();
-  assert.equal(dialogAnswer.cancel(1_000, true), true);
+  assert.equal(dialogAnswer.cancel(1_000, "sel"), true);
   assert.deepEqual(sent, [
     { _tag: "act", action: { _tag: "answer", id: "d1", generation: "g1", cancelled: true } },
   ]);
 });
 
+test("a sent answer holds for its attachment; a later one may answer the dialog again", () => {
+  const { sent, dialogAnswer } = answering();
+  assert.equal(dialogAnswer.answer({ value: "first" }, 1_000, "sel"), true);
+  assert.equal(dialogAnswer.view(1_000, null).submitted, true, "awaits its outcome while closed");
+  assert.equal(dialogAnswer.view(1_000, null).disabled, true);
+  assert.equal(dialogAnswer.answer({ value: "again" }, 1_000, "sel"), false);
+  assert.equal(dialogAnswer.abort(1_000, "sel"), false);
+  // Still listed on a new attachment: the server never claimed the first answer.
+  assert.equal(dialogAnswer.view(1_000, "sel2").submitted, false);
+  assert.equal(dialogAnswer.answer({ value: "again" }, 1_000, "sel2"), true);
+  assert.equal(dialogAnswer.answer({ value: "third" }, 1_000, "sel2"), false);
+  assert.deepEqual(
+    sent.map((c) => c._tag === "act" && c.action._tag === "answer" && c.action.value),
+    ["first", "again"],
+  );
+});
+
 test("abort is sent once and stays available after the deadline", () => {
   const { sent, dialogAnswer } = answering();
-  const late = dialogAnswer.view(DEADLINE + 5_000, true);
+  const late = dialogAnswer.view(DEADLINE + 5_000, "sel");
   assert.equal(late.disabled, true);
   assert.equal(late.abortDisabled, false, "abort ignores the deadline");
-  assert.equal(dialogAnswer.abort(DEADLINE + 5_000, false), false, "not while disconnected");
-  assert.equal(dialogAnswer.abort(DEADLINE + 5_000, true), true);
-  assert.equal(dialogAnswer.abort(DEADLINE + 5_000, true), false);
-  assert.equal(dialogAnswer.answer({ value: "x" }, 1_000, true), false, "abort ends answering");
+  assert.equal(dialogAnswer.abort(DEADLINE + 5_000, null), false, "not while disconnected");
+  assert.equal(dialogAnswer.abort(DEADLINE + 5_000, "sel"), true);
+  assert.equal(dialogAnswer.abort(DEADLINE + 5_000, "sel"), false);
+  assert.equal(dialogAnswer.answer({ value: "x" }, 1_000, "sel"), false, "abort ends answering");
   assert.deepEqual(sent, [{ _tag: "act", action: { _tag: "abort" } }]);
-  assert.equal(dialogAnswer.view(1_000, true).abortDisabled, true);
+  assert.equal(dialogAnswer.view(1_000, "sel").abortDisabled, true);
 });
 
 test("subscribers hear the dialog become submitted", () => {
   const { dialogAnswer } = answering();
   let heard = 0;
   const stop = dialogAnswer.subscribe(() => heard++);
-  dialogAnswer.answer({ value: "x" }, 1_000, true);
+  dialogAnswer.answer({ value: "x" }, 1_000, "sel");
   stop();
   assert.equal(heard, 1);
-  assert.equal(dialogAnswer.getState(), true);
+  assert.equal(dialogAnswer.getState(), "sel");
 });
 
 test("remaining seconds round up and stop at zero", () => {
   const { dialogAnswer } = answering();
-  const remaining = (now: number) => dialogAnswer.view(now, true).deadline?.remainingSeconds;
+  const remaining = (now: number) => dialogAnswer.view(now, "sel").deadline?.remainingSeconds;
   assert.equal(remaining(0), 10);
   assert.equal(remaining(1), 10);
   assert.equal(remaining(DEADLINE - 1), 1);
@@ -168,7 +185,7 @@ test("remaining seconds round up and stop at zero", () => {
 
 test("a dialog reads the same on every surface: title, deadline and what it waits for", () => {
   const view = (extra: Partial<Dialog>) =>
-    answering(dialog("d1", extra)).dialogAnswer.view(1_000, true);
+    answering(dialog("d1", extra)).dialogAnswer.view(1_000, "sel");
   const owned = { toolCallId: "call-1", deadlineAt: null, deadlineKind: "tool-end" } as const;
 
   assert.equal(view({}).title, "Pi needs an answer");
@@ -193,10 +210,7 @@ test("a dialog reads the same on every surface: title, deadline and what it wait
 
   assert.equal(view({ method: "select" }).waiting, "Sending response…");
   assert.equal(view({ ...owned, method: "select" }).waiting, "Waiting for Pi to confirm…");
-  assert.equal(
-    view({ method: "confirm" }).waiting,
-    "Waiting for the host’s resolution. Do not resend on reconnect.",
-  );
+  assert.equal(view({ method: "confirm" }).waiting, "Waiting for the host’s resolution.");
 });
 
 const session = (dialogs: Dialog[]): SessionView => ({
@@ -326,12 +340,12 @@ test("pending dialogs expose the queue head and how many follow it", () => {
   });
   assert.equal(pending.head?.id, "d1");
   assert.equal(pending.more, 2);
-  assert.equal(pending.connected, true);
+  assert.equal(pending.attachment, "sel");
   assert.deepEqual(pendingDialogs(ready), {
     head: undefined,
     surface: null,
     more: 0,
-    connected: true,
+    attachment: "sel",
   });
 });
 
@@ -349,7 +363,7 @@ test("no dialog is pending during a resync, and answers wait for a settled attac
     head: undefined,
     surface: null,
     more: 0,
-    connected: false,
+    attachment: null,
   });
   const selecting = pendingDialogs({
     ...ready,
@@ -357,6 +371,6 @@ test("no dialog is pending during a resync, and answers wait for a settled attac
     selecting: { cwd: "/repo", sessionId: "s1" },
   });
   assert.equal(selecting.head?.id, "d1");
-  assert.equal(selecting.connected, false);
-  assert.equal(pendingDialogs({ ...ready, connected: false, session: queued }).connected, false);
+  assert.equal(selecting.attachment, null);
+  assert.equal(pendingDialogs({ ...ready, connected: false, session: queued }).attachment, null);
 });

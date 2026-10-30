@@ -15,7 +15,7 @@ import { useLastShown } from "@/lib/useLastShown";
 
 /** Only the queue head may open a modal, and only for a confirmation. */
 export function DialogHost({
-  pending: { head, surface, more, connected },
+  pending: { head, surface, more, attachment },
   send,
 }: {
   pending: PendingDialogs;
@@ -31,7 +31,7 @@ export function DialogHost({
       d={shown}
       more={more}
       send={send}
-      connected={connected}
+      attachment={attachment}
     />
   ) : null;
 }
@@ -41,16 +41,16 @@ function DialogView({
   d,
   more,
   send,
-  connected,
+  attachment,
 }: {
   open: boolean;
   d: PiDialog;
   more: number;
   send: Client["send"];
-  connected: boolean;
+  attachment: string | null;
 }) {
   const { answer, cancel, abort, submitted, disabled, abortDisabled, title, deadline, waiting } =
-    useDialogAnswer(d, connected, send, open);
+    useDialogAnswer(d, attachment, send, open);
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && cancel()}>
