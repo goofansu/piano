@@ -366,16 +366,16 @@ export const dispatchedFromOf = (entries: ReadonlyArray<unknown>): string | unde
 };
 
 /**
- * What Pi establishes about one session, and from where: a running child's `get_state`,
- * `get_messages` and `get_entries`, or its saved file read without Pi. Either becomes a Snapshot
- * only through {@link snapshotOf} or {@link PiProjector.snapshot}.
+ * What Pi establishes about one session, and from where: a running child's `get_state` and
+ * `get_messages` with the dispatching session from its entries, or its saved file read without
+ * Pi. Either becomes a Snapshot only through {@link snapshotOf} or {@link PiProjector.snapshot}.
  */
 export interface PiSessionFacts {
   readonly source: "live" | "saved";
   readonly state: RawState;
   readonly messages: ReadonlyArray<RawMessage>;
-  /** Every entry, on any branch: the dispatching session is recorded once in them. */
-  readonly entries: ReadonlyArray<unknown>;
+  /** The session that dispatched this one, from every entry on any branch ({@link dispatchedFromOf}). */
+  readonly dispatchedFrom: string | undefined;
 }
 
 /** The one projection of a Pi session into a Snapshot, with the session that dispatched it. A live session adds its run's own state (compacting only if Pi says so, nothing
@@ -383,7 +383,7 @@ export interface PiSessionFacts {
 export const snapshotOf = (facts: PiSessionFacts): Snapshot => {
   const state = {
     ...stateFactsOf(facts.state),
-    dispatchedFrom: dispatchedFromOf(facts.entries),
+    dispatchedFrom: facts.dispatchedFrom,
   };
   return {
     state:

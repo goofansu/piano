@@ -45,8 +45,9 @@ import type {
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
-import { makePiHistory, type PiHistory, savedEntries } from "./PiHistory.ts";
+import { makePiHistory, type PiHistory } from "./PiHistory.ts";
 import {
+  dispatchedFromOf,
   inputFingerprint,
   type PiExchange,
   PiProjector,
@@ -308,7 +309,7 @@ const displayed = <A>(effect: Effect.Effect<A, PiSessionError>) =>
 const replacedDetail =
   "Pi switched this process to another session, so Piano closed it. Reopen this session to continue; no input was resent.";
 
-const openSession = (spec: PiSessionSpec) =>
+const openSession = (spec: PiSessionSpec, history: PiHistory) =>
   Effect.gen(function* () {
     // A generation belongs to this concrete Pi open, never a saved ID, PID or browser.
     const generation = randomUUID();
@@ -342,23 +343,23 @@ const openSession = (spec: PiSessionSpec) =>
     const sessionScope = yield* Effect.scope;
     const recoveryMs = yield* PiDialogRecoveryMs;
 
-    // Every entry so far, for the dispatching session. Pi's get_entries answers in
-    // one RPC line, which a long compacted history pushes past the line limit, closing the child.
-    // Once Pi has saved the session, its file is read as `history` reads it; before that, Pi holds
-    // no conversation and its reply is small.
-    const allEntries = (file: string | undefined) =>
+    // The dispatching session, from every entry so far. Pi's get_entries answers in one RPC line,
+    // which a long compacted history pushes past the line limit, closing the child. Once Pi has
+    // saved the session, `history` reads its file off the server thread; before that, Pi holds no
+    // conversation and its reply is small.
+    const readDispatchedFrom = (file: string | undefined) =>
       file && existsSync(file)
-        ? savedEntries(file, spec.sessionId)
-        : child.read(piReadbacks.entries());
+        ? history.dispatchedFrom(spec.sessionId, file)
+        : child.read(piReadbacks.entries()).pipe(Effect.map(dispatchedFromOf));
 
-    // Ready check, then entries from the file Pi opened, racing the child exiting early. The
-    // transcript is not read here: the context refresh below reads it once, after records are
-    // drained. Entries are best effort: a failed read opens without the dispatching session.
-    const [state, entries] = yield* child.read(piReadbacks.state).pipe(
+    // Ready check, then the dispatching session from the file Pi opened, racing the child exiting
+    // early. The transcript is not read here: the context refresh below reads it once, after
+    // records are drained. The dispatcher is best effort: a failed read opens without it.
+    const [state, dispatchedFrom] = yield* child.read(piReadbacks.state).pipe(
       Effect.flatMap((state) =>
-        allEntries(state.sessionFile).pipe(
-          Effect.catchTag("PiSessionError", () => Effect.succeed<ReadonlyArray<unknown>>([])),
-          Effect.map((entries) => [state, entries] as const),
+        readDispatchedFrom(state.sessionFile).pipe(
+          Effect.catchTag("PiSessionError", () => Effect.succeed(undefined)),
+          Effect.map((dispatchedFrom) => [state, dispatchedFrom] as const),
         ),
       ),
       // Readiness failure wins too: race waits for a first success and would
@@ -376,7 +377,7 @@ const openSession = (spec: PiSessionSpec) =>
     // contain a finalized message whose message_end is still awaiting an extension. Project
     // records onto an empty provisional transcript; the context refresh reconciles it before
     // exposing it.
-    const opened = projector.snapshot({ source: "live", state, messages: [], entries });
+    const opened = projector.snapshot({ source: "live", state, messages: [], dispatchedFrom });
     if (opened.state.sessionId !== spec.sessionId)
       return yield* new PiSessionError({
         reason: "protocol",
@@ -885,11 +886,13 @@ export const PiSessionsLive: Layer.Layer<PiSessions, never, ChildProcessSpawner>
   PiSessions,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner;
+    const history = yield* makePiHistory();
     return PiSessions.of({
-      open: (spec) => openSession(spec).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
+      open: (spec) =>
+        openSession(spec, history).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
       probe: (cwd, options) =>
         probe(cwd, options).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
-      history: yield* makePiHistory(),
+      history,
     });
   }),
 );
