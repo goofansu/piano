@@ -28,6 +28,7 @@ export class RadiusHttp {
   wrongIdentity = false;
   unsafeUrl = false;
   unavailable = false;
+  unadvertised = new Set<string>();
 
   fetch: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -58,7 +59,9 @@ export class RadiusHttp {
       });
     if (body.method === "tools/list")
       return reply({
-        tools: operations.map((name) => ({ name, inputSchema: { type: "object" } })),
+        tools: operations
+          .filter((name) => !this.unadvertised.has(name))
+          .map((name) => ({ name, inputSchema: { type: "object" } })),
       });
     if (body.method !== "tools/call") return reply({});
     const { name, arguments: args } = body.params;

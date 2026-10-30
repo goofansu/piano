@@ -214,6 +214,33 @@ test("a lost update reply is reconciled by its pinned revision, never by replay"
   }
 });
 
+test("a publication Radius does not advertise is never sent, so the same key publishes later", async () => {
+  const h = await harness();
+  try {
+    h.http.unadvertised.add("artifacts.create");
+    const refused = await h.call("create", document);
+    assert.equal(refused.status, "error");
+    assert.match(String(refused.message), /does not advertise/);
+    h.http.unadvertised.clear();
+    const created = await h.call("create", document);
+    assert.equal(created.status, "confirmed");
+    const params = {
+      ...document,
+      operationKey: "revision",
+      content: "Revised",
+      artifactId: created.artifactId,
+      expectedRevision: 1,
+    };
+    h.http.unadvertised.add("artifacts.versions.publish");
+    assert.equal((await h.call("update", params)).status, "error");
+    h.http.unadvertised.clear();
+    assert.equal((await h.call("update", params)).status, "confirmed");
+    assert.equal(h.http.writes.length, 2);
+  } finally {
+    h.cleanup();
+  }
+});
+
 test("rejected writes, malformed replies, wrong identity and unsafe URLs never masquerade as publication", async () => {
   const h = await harness();
   try {

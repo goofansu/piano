@@ -98,10 +98,16 @@ export class RadiusClient {
     await this.client.close().catch(() => {});
   }
 
-  async call(name: string, args: Record<string, unknown>): Promise<unknown> {
+  /** Radius's name for an advertised operation. Throwing here proves nothing was sent. */
+  operation(name: string): string {
     const actual = this.names.get(name);
     if (!actual)
       throw new RadiusError("Radius does not advertise the required artifact operation.");
+    return actual;
+  }
+
+  async call(name: string, args: Record<string, unknown>): Promise<unknown> {
+    const actual = this.operation(name);
     const result = await this.client.callTool({ name: actual, arguments: args }, undefined, {
       signal: this.signal,
       timeout: 30_000,

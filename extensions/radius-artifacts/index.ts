@@ -178,7 +178,11 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
           "This operationKey belongs to different content. Reconcile that operation before starting a different publication.",
         );
       const retry = Boolean(intent);
+      const mutation = params.artifactId ? "artifacts_versions_publish" : "artifacts_create";
       if (!intent) {
+        // An operation Radius does not advertise is never sent: fail before recording an intent
+        // that would leave this key unknown for good.
+        client.operation(mutation);
         const before = params.artifactId ? await client.read(params.artifactId) : undefined;
         if (
           before &&
@@ -201,17 +205,14 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
       let mutationFailure: string | undefined;
       try {
         if (!retry) {
-          const published = await client.artifact(
-            intent.id ? "artifacts_versions_publish" : "artifacts_create",
-            {
-              ...(intent.id ? { slug: intent.id } : { visibility: "private" }),
-              title: params.title,
-              content_type: params.contentType,
-              content: params.content,
-              fresh: 1,
-              note: intent.note,
-            },
-          );
+          const published = await client.artifact(mutation, {
+            ...(intent.id ? { slug: intent.id } : { visibility: "private" }),
+            title: params.title,
+            content_type: params.contentType,
+            content: params.content,
+            fresh: 1,
+            note: intent.note,
+          });
           if (intent.id && (published.id !== intent.id || published.canonical_url !== intent.url))
             throw new RadiusError("Radius returned a different artifact identity.");
           intent = { ...intent, id: published.id, url: published.canonical_url };
