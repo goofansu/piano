@@ -20,6 +20,7 @@ import {
 } from "../server/WorkspaceChanges.ts";
 import type { WorkspaceChanges as Observation } from "../shared/wire.ts";
 import { parseUnifiedDiff } from "../web/src/lib/diff.ts";
+import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
 function fixture(t: TestContext) {
   const repo = mkdtempSync(join(tmpdir(), "piano-live-changes-"));
@@ -588,4 +589,29 @@ test("a branch pushed to a fork compares with the base on the remote it started 
       "upstream's commits are not this branch's work",
     );
   }
+});
+
+// The fork fixture's other half is in Worktrees and SessionPullRequests: all three name the same
+// repository and branch.
+test("INV-01: Changes reads the pull request from the branch where its own worktree pushes it", async (t) => {
+  const { repo, worktree } = forkWorktree(t);
+  const fromBranch = async (headRepo: string) => {
+    const { result } = await Effect.runPromise(
+      Effect.gen(function* () {
+        return yield* (yield* WorkspaceChanges).preview(
+          { id: "w", folder: repo, path: worktree },
+          {
+            scope: "uncommitted",
+            hints: {
+              pullRequest: { head: "feat", headRepo, base: "main", baseRepo: "up/repo" },
+            },
+          },
+        );
+      }).pipe(Effect.provide(WorkspaceChangesLive)),
+    );
+    assert.notEqual(result.status, "error", JSON.stringify(result));
+    return result.status === "error" ? undefined : result.pullRequestFromBranch;
+  };
+  assert.equal(await fromBranch("me/fork"), true);
+  assert.equal(await fromBranch("up/repo"), false, "origin's same-named branch is another");
 });

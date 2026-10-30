@@ -10,6 +10,7 @@ import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionPullRequests, SessionPullRequestsLive } from "../server/SessionPullRequests.ts";
 import { GhCommand } from "../server/Subprocess.ts";
+import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
 const candidate = (number: number, branch = "feature", owner = "example") => ({
   url: `https://github.com/example/repo/pull/${number}`,
@@ -23,7 +24,8 @@ const candidate = (number: number, branch = "feature", owner = "example") => ({
   headRepository: { name: "repo" },
   headRepositoryOwner: { login: owner },
 });
-async function fixture(t: TestContext) {
+/** Sessions `one` and `two` in `cwd`, else in a fresh repository on `feature`. */
+async function fixture(t: TestContext, cwd?: string) {
   const root = mkdtempSync(join(tmpdir(), "piano-session-pr-")),
     repo = join(root, "repo"),
     bin = join(root, "bin");
@@ -60,8 +62,9 @@ async function fixture(t: TestContext) {
   const runtime = ManagedRuntime.make(layer);
   const registry = await runtime.runPromise(Registry),
     prs = await runtime.runPromise(SessionPullRequests);
-  await runtime.runPromise(registry.addSession(repo, "one"));
-  await runtime.runPromise(registry.addSession(repo, "two"));
+  const at = cwd ?? repo;
+  await runtime.runPromise(registry.addSession(at, "one"));
+  await runtime.runPromise(registry.addSession(at, "two"));
   t.after(async () => {
     await runtime.dispose();
     rmSync(root, { recursive: true, force: true });
@@ -74,7 +77,7 @@ async function fixture(t: TestContext) {
     from.runPromise(
       Effect.gen(function* () {
         const s = (yield* (yield* Registry).get).sessions.find(
-          (s) => s.cwd === repo && s.sessionId === id,
+          (s) => s.cwd === at && s.sessionId === id,
         );
         return yield* (yield* SessionPullRequests).get(s!);
       }),
@@ -83,7 +86,7 @@ async function fixture(t: TestContext) {
   const change = (action: Parameters<typeof prs.change>[1], id = "one") =>
     runtime.runPromise(
       Effect.gen(function* () {
-        const s = (yield* registry.get).sessions.find((s) => s.cwd === repo && s.sessionId === id);
+        const s = (yield* registry.get).sessions.find((s) => s.cwd === at && s.sessionId === id);
         return yield* prs.change(s!, action);
       }),
     );
@@ -397,4 +400,21 @@ test("a link records the pull request's head and base as GitHub last reported th
     [manual.link?.source, manual.link?.head, manual.link?.base],
     ["manual", "topic", "main"],
   );
+});
+
+// The fork fixture's other half is in Worktrees and WorkspaceChanges: all three name the same
+// repository and branch.
+test("INV-01: discovery asks GitHub for the branch where the session's own worktree pushes it", async (t) => {
+  const { worktree } = forkWorktree(t);
+  const f = await fixture(t, worktree);
+  const pr = (number: number, owner: string, name: string) => ({
+    ...candidate(number, "feat", owner),
+    url: `https://github.com/up/repo/pull/${number}`,
+    headRepository: { name },
+    baseRefName: "main",
+  });
+  f.control({ prs: [pr(7, "up", "repo"), pr(42, "me", "fork")] });
+  const found = await f.get();
+  assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
+  assert.deepEqual([found.link?.head, found.link?.headRepo], ["feat", "me/fork"]);
 });

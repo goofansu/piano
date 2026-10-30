@@ -24,6 +24,7 @@ import {
   listWorktrees,
   WorktrunkCommand,
 } from "../server/Worktrees.ts";
+import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", ["-C", cwd, ...args], {
@@ -170,6 +171,18 @@ test("discovery names each worktree's branch where it was pushed on GitHub, and 
   // A remote that pushes elsewhere than it fetches holds the branch where it pushes.
   git(repo, "remote", "set-url", "--push", "fork", "git@github.com:me/pushed.git");
   assert.deepEqual((await homes()).forked, { repo: "me/pushed", branch: "forked" });
+});
+
+// The fork fixture's other half is in SessionPullRequests and WorkspaceChanges: all three name
+// the same repository and branch.
+test("INV-01: a worktree's branch is linked where that worktree's own config pushes it", async (t) => {
+  const { repo, worktree } = forkWorktree(t);
+  const result = await Effect.runPromise(listWorktrees(repo));
+  assert.equal(result.status, "ready");
+  const linked = (result.status === "ready" ? result.worktrees : []).find(
+    (w) => w.path === worktree,
+  );
+  assert.deepEqual(linked?.github, { repo: "me/fork", branch: "feat" });
 });
 
 test("INV-06: inherited GIT_* state cannot redirect discovery or directory hints", async (t) => {

@@ -11,7 +11,7 @@ import type {
   ComparisonTarget,
   ScopeAvailability,
 } from "../shared/wire.ts";
-import type { Checkout, Upstream } from "./GitCheckout.ts";
+import type { BranchHome, Checkout, Upstream } from "./GitCheckout.ts";
 import { type BranchHead, branchRemote, githubRemote, isFromBranch } from "./GitHubPullRequests.ts";
 
 /** Identities Piano holds that name a branch's target, in the order they are tried. */
@@ -57,14 +57,13 @@ async function namedTarget(
 }
 
 /** The branch as GitHub knows it when `pr` was opened from it, else null: no PR came from a
- * branch whose remote is not on GitHub. */
-async function fromBranch(
-  checkout: Checkout,
-  { remote, name }: Upstream,
+ * branch whose remote is not on GitHub. Pushed or not: the PR's head is proof enough. */
+function fromBranch(
+  home: BranchHome,
   pr: NonNullable<TargetHints["pullRequest"]>,
-): Promise<BranchHead | null> {
-  const pushed = branchRemote(name, await checkout.pushUrl(remote));
-  const head = pushed.on === "github" ? pushed.head : null;
+): BranchHead | null {
+  const remote = branchRemote(home);
+  const head = remote.on === "github" ? remote.head : null;
   return head && isFromBranch(pr, head) ? head : null;
 }
 
@@ -201,9 +200,9 @@ export async function resolveComparisons(
         })
       ).trim(),
   };
-  const upstream = branch ? await checkout.upstream(branch) : null;
-  const pullRequestHead =
-    upstream && hints.pullRequest ? await fromBranch(checkout, upstream, hints.pullRequest) : null;
+  const home = branch ? await checkout.home(branch) : null;
+  const upstream = home?.upstream ?? null;
+  const pullRequestHead = home && hints.pullRequest ? fromBranch(home, hints.pullRequest) : null;
   const forBranch = await branchScope(
     checkout,
     head,

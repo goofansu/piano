@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Effect, Semaphore } from "effect";
-import { observeCheckout, observeGit } from "../server/GitCheckout.ts";
+import { branchHomes, observeCheckout, observeGit } from "../server/GitCheckout.ts";
+import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync(
@@ -45,21 +46,6 @@ test("INV-06: the Git observation tells non-Git paths from broken metadata and n
     branch: null,
   });
   git(repo, "checkout", "--quiet", "main");
-  assert.deepEqual(await observe(repo, { remote: true }), {
-    status: "checkout",
-    toplevel: repo,
-    branch: "main",
-    remote: null,
-    remoteBranch: null,
-  });
-  git(repo, "remote", "add", "origin", "git@github.com:example/repo.git");
-  const tracked = await observe(repo, { remote: true });
-  assert.ok(tracked.status === "checkout" && tracked.remote === "git@github.com:example/repo.git");
-  assert.equal(tracked.remoteBranch, "main");
-  // The branch's remote is where it pushes, not where it fetches.
-  git(repo, "remote", "set-url", "--push", "origin", "git@github.com:me/fork.git");
-  const pushed = await observe(repo, { remote: true });
-  assert.ok(pushed.status === "checkout" && pushed.remote === "git@github.com:me/fork.git");
 
   const notes = join(root, "notes");
   mkdirSync(notes);
@@ -120,4 +106,68 @@ test("INV-06: an observation that writes an index runs no configured filter driv
   assert.equal((await add()).result, "added");
   assert.equal(existsSync(join(root, "FILTER_RAN")), true);
   assert.equal(existsSync(join(root, "HOOK_RAN")), true);
+});
+
+test("INV-01: a branch's home is where Git would push it, by push URL, read in its own checkout", async (t) => {
+  const root = mkdtempSync(join(realpathSync(tmpdir()), "piano-git-home-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const repo = join(root, "repo");
+  mkdirSync(repo);
+  git(repo, "init", "--quiet", "-b", "main");
+  git(repo, "commit", "--quiet", "--allow-empty", "-m", "baseline");
+  const home = async (path = repo) => {
+    const observed = await observe(path, { home: true });
+    assert.equal(observed.status, "checkout");
+    const h = observed.status === "checkout" ? observed.home : undefined;
+    return (
+      h && { remote: h.upstream?.remote, name: h.upstream?.name, url: h.url, pushed: h.pushed }
+    );
+  };
+  assert.deepEqual(await home(), { remote: "origin", name: "main", url: null, pushed: false });
+  git(repo, "remote", "add", "origin", "git@github.com:example/repo.git");
+  assert.deepEqual(await home(), {
+    remote: "origin",
+    name: "main",
+    url: "git@github.com:example/repo.git",
+    pushed: false,
+  });
+  // Pushed once Git holds the ref a push updates.
+  git(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
+  assert.equal((await home())?.pushed, true);
+  // The branch is where its remote pushes, not where it fetches.
+  git(repo, "remote", "set-url", "--push", "origin", "git@github.com:me/fork.git");
+  assert.equal((await home())?.url, "git@github.com:me/fork.git");
+  // A detached HEAD has no branch; its home is origin's, unnamed and never pushed.
+  git(repo, "checkout", "--quiet", "--detach");
+  assert.deepEqual(await home(), {
+    remote: undefined,
+    name: undefined,
+    url: "git@github.com:me/fork.git",
+    pushed: false,
+  });
+
+  // A worktree's own config pushes its branch to the fork; from the main checkout Git would push
+  // it to origin. Each checkout is read where it is.
+  const fork = forkWorktree(t);
+  assert.deepEqual(await home(fork.worktree), {
+    remote: "fork",
+    name: "feat",
+    url: "https://github.com/me/fork.git",
+    pushed: true,
+  });
+  const homes = await Effect.runPromise(
+    branchHomes(fork.repo, [
+      { path: fork.repo, branch: "main" },
+      { path: fork.worktree, branch: "feat" },
+    ]),
+  );
+  const feat = homes.get(fork.worktree);
+  assert.deepEqual(
+    [feat?.upstream?.remote, feat?.url, feat?.pushed],
+    ["fork", "https://github.com/me/fork.git", true],
+  );
+  assert.equal(homes.get(fork.repo)?.upstream?.remote, "origin");
+  // The fork's `feat` is gone: Git no longer holds the pushed ref.
+  fork.git(fork.repo, "update-ref", "-d", "refs/remotes/fork/feat");
+  assert.equal((await home(fork.worktree))?.pushed, false);
 });
