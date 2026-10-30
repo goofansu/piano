@@ -21,8 +21,9 @@ import { sessionContext } from "@/lib/sessionContext";
 
 type Page = "actions" | "projects";
 
-/** A full-width, 44px row; the sheet's own type size, not the 14px of a desktop menu. */
-const row = "h-11 w-full justify-start gap-3 px-3 text-base font-normal";
+/** A full-width, 44px row with 16px icons, shared by buttons and the display switch's label. */
+const row =
+  "h-11 w-full justify-start gap-3 border border-transparent px-3 text-base font-normal [&_svg]:size-4 [&_svg]:shrink-0";
 
 /** The selectable session ID, shared by the header menu and the phone sheet. */
 export function SessionDetails({
