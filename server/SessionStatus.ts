@@ -48,7 +48,7 @@ export const SessionStatusLive = Layer.effect(
     const github = yield* GitHubPullRequests;
 
     /** The live snapshot, or the saved one; undefined when neither can be read. */
-    const snapshotOf = (entry: SessionEntry) =>
+    const readSnapshot = (entry: SessionEntry) =>
       hosts.read(entry.cwd, entry.sessionId).pipe(
         Effect.flatMap((view) =>
           view._tag === "saved"
@@ -65,6 +65,28 @@ export const SessionStatusLive = Layer.effect(
         ),
         Effect.orElseSucceed(() => undefined),
       );
+
+    // SessionHosts serializes reads under its ownership lock. Coalesce before entering that
+    // lock, otherwise concurrent statuses would queue N full projections one after another.
+    // Keep only pending observations: a later status always reads current Pi/live facts.
+    const snapshots = new Map<string, ReturnType<typeof readSnapshot>>();
+    const snapshotOf = Effect.fn("SessionStatus.snapshotOf")(function* (entry: SessionEntry) {
+      const key = JSON.stringify([entry.cwd, entry.sessionId]);
+      let pending = snapshots.get(key);
+      if (!pending) {
+        pending = yield* Effect.cached(
+          readSnapshot(entry).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (snapshots.get(key) === pending) snapshots.delete(key);
+              }),
+            ),
+          ),
+        );
+        snapshots.set(key, pending);
+      }
+      return yield* pending;
+    });
 
     /**
      * The Git view, within the read's shared budget: a session whose checkout has no ready

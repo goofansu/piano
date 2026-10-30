@@ -117,6 +117,8 @@ const FakeRadius = Layer.succeed(
 );
 let file: string;
 let original: string;
+// Ordinary shares include cold SDK worker startup. Only the explicit timeout case shortens this.
+const sharingEnvironment = { timeoutMs: 5000 };
 const destination = (sessionId = id) =>
   server.run(
     Effect.flatMap(Registry, (registry) =>
@@ -169,7 +171,7 @@ before(async () => {
         deviceId: () => "unused",
       }),
       FakeRadius,
-      Layer.succeed(SharingEnvironment, { timeoutMs: 500 }),
+      Layer.succeed(SharingEnvironment, sharingEnvironment),
     ),
   );
   file = join(server.root, "sessions", `${id}.jsonl`);
@@ -445,8 +447,13 @@ test("failed, mismatched and timed-out revisions retain the destination and are 
         }),
       ),
     );
-  assert.equal((await share()).status, 409);
-  assert.equal(interrupted, true);
+  sharingEnvironment.timeoutMs = 500;
+  try {
+    assert.equal((await share()).status, 409);
+    assert.equal(interrupted, true);
+  } finally {
+    sharingEnvironment.timeoutMs = 5000;
+  }
   respond = normalPublish;
   assert.equal((await share()).status, 200);
   assert.deepEqual(await destination(), saved);

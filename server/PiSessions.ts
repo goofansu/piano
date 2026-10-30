@@ -889,7 +889,7 @@ export const PiSessionsLive: Layer.Layer<PiSessions, never, ChildProcessSpawner>
       open: (spec) => openSession(spec).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
       probe: (cwd, options) =>
         probe(cwd, options).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
-      history: makePiHistory(),
+      history: yield* makePiHistory(),
     });
   }),
 );

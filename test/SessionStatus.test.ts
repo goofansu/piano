@@ -23,6 +23,7 @@ import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
 import { dialogAsks, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import type { PullRequest, RenderMsg, Snapshot } from "../shared/wire.ts";
+import { largeHistory } from "./fixtures/large-history.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-status-")));
 mkdirSync(join(root, "sessions"));
@@ -111,6 +112,42 @@ const run = <A, E>(effect: Effect.Effect<A, E, SessionStatus | Registry | Sessio
       Effect.timeout("10 seconds"),
     ),
   );
+
+test("concurrent status reads share large saved projections rather than queueing one per caller", async (t) => {
+  const id = "large-status";
+  const file = join(root, "sessions", `${id}.jsonl`);
+  largeHistory(file, id, plain);
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      const status = yield* SessionStatus;
+      yield* registry.addSession(plain, id);
+      yield* status.read({ sessionId: id }); // cold worker startup is not projection CPU
+      const start = process.cpuUsage();
+      const expected = yield* status.read({ sessionId: id });
+      const single = process.cpuUsage(start);
+      const concurrentStart = process.cpuUsage();
+      const results = yield* Effect.all(
+        Array.from({ length: 16 }, () => status.read({ sessionId: id })),
+        { concurrency: "unbounded" },
+      );
+      const concurrent = process.cpuUsage(concurrentStart);
+      for (const result of results) assert.deepEqual(result, expected);
+      t.diagnostic(
+        JSON.stringify({
+          singleCpuMs: (single.user + single.system) / 1000,
+          concurrent16CpuMs: (concurrent.user + concurrent.system) / 1000,
+        }),
+      );
+      assert.ok(
+        concurrent.user + concurrent.system < 8 * (single.user + single.system),
+        "status callers must not serialize duplicate full-history projections behind the host lock",
+      );
+      saved(plain, id, [user("updated"), reply("Fresh answer")]);
+      assert.equal((yield* status.read({ sessionId: id }))[0].lastAnswer, "Fresh answer");
+    }),
+  );
+});
 
 test("a stopped session's history proves settlement only when it ends with a finished reply", async () => {
   const long = "x".repeat(LAST_ANSWER_CHARS + 50);

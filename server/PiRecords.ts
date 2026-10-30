@@ -9,6 +9,7 @@
  * builds a record's fields itself.
  */
 import { createHmac, randomBytes } from "node:crypto";
+import { getEnvironmentData, isMainThread, setEnvironmentData } from "node:worker_threads";
 import { Option, Schema } from "effect";
 import {
   ASK_USER_TOOL,
@@ -125,7 +126,13 @@ function skillCommandForPi(text: string): string {
 /** Equality evidence, not display text or a durable receipt. The key never leaves this process.
  * Pi owns skill expansion; normalize only its command name/arguments, before redaction. Plain
  * input stays byte-for-byte: a transformed prompt must not become equal through trimming. */
-const inputKey = randomBytes(32);
+// Saved-history projection workers must produce the same equality evidence as live Pi.
+// Environment data is inherited by workers, not OS children; the key stays in this process.
+const inputKeyName = "piano.inputFingerprintKey";
+const inheritedInputKey = getEnvironmentData(inputKeyName);
+const inputKey =
+  !isMainThread && inheritedInputKey instanceof Uint8Array ? inheritedInputKey : randomBytes(32);
+if (isMainThread) setEnvironmentData(inputKeyName, inputKey);
 export function inputFingerprint(text: string): string {
   const { text: args, skill } = splitSkill(text);
   const command = skill ? `/skill:${skill.name}${args ? ` ${args}` : ""}` : skillCommandForPi(text);
