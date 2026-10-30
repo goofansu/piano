@@ -338,6 +338,25 @@ test("Settings → Home preserves an in-flight creation and accepts its late sel
   assert.deepEqual(p.selects(), [], "closing Settings does not reselect or retry creation");
 });
 
+test("Settings → Home keeps a failed selection, its banner's retry and its address", () => {
+  const p = page("/s/a");
+  p.registry();
+  p.selected("a");
+  p.navigation.select("/scratch", "b");
+  const selectionId = p.client.getState().selectionId!;
+  p.server({ _tag: "selection_failed", selectionId, message: "Pi exited" });
+  const failure = p.client.getState().selectionFailure;
+  assert.equal(failure?.sessionId, "b");
+  assert.equal(p.path(), "/s/b");
+  p.navigation.openSettings();
+  p.navigation.closeSettings();
+  assert.equal(p.client.getState().view.kind, "session");
+  assert.equal(p.client.getState().selectionFailure, failure, "the Retry banner stays");
+  assert.equal(p.path(), "/s/b");
+  assert.equal(p.title(), "Beta - Piano");
+  assert.deepEqual(p.selects(), ["a", "b"], "closing Settings does not retry");
+});
+
 for (const failure of ["disconnect", "error"] as const)
   test(`Settings → Home preserves uncertain creation after ${failure} without replay`, () => {
     const p = page("/new");
