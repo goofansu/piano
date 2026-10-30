@@ -11,7 +11,7 @@ import type { Client } from "./client.ts";
 import type { Preference } from "./preference.ts";
 import { findProject } from "./projectCommands.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
-import { catalogEntry } from "./sessionCatalog.ts";
+import { sessionLabel } from "./sessionCatalog.ts";
 
 /** The session's own views in the Surface area, one tab each: Changes. */
 export type SurfaceView = "changes";
@@ -288,7 +288,7 @@ export function decideRoute(route: Route, state: AppState): RouteDecision {
       : { kind: "open", page };
   }
   if (!state.registryLoaded) return { kind: "wait" };
-  const session = catalogEntry(state, route.sessionId);
+  const session = state.sessionReferences.find((ref) => ref.sessionId === route.sessionId);
   return session
     ? { kind: "select", cwd: session.cwd, sessionId: session.sessionId }
     : { kind: "open", page: { kind: "missing-session", sessionId: route.sessionId } };
@@ -308,6 +308,10 @@ export function addressFor(
   currentPathname: string,
 ): Address | null {
   const sessionId = (state.session ?? state.selecting)?.sessionId;
+  const ref =
+    state.view.kind === "session" && sessionId
+      ? state.sessionReferences.find((ref) => ref.sessionId === sessionId)
+      : undefined;
   const shown: { route: Route; title: string } | null =
     state.view.kind !== "session"
       ? pageAddress(state, state.view)
@@ -315,7 +319,7 @@ export function addressFor(
         ? {
             route: { kind: "session", sessionId },
             // "Session" only until the catalog knows the session.
-            title: catalogEntry(state, sessionId)?.label ?? "Session",
+            title: ref ? sessionLabel(ref.title) : "Session",
           }
         : null;
   if (!shown) return null;
@@ -410,6 +414,7 @@ export function createNavigation({
   // never changes the address, which derives from the client's inputs and the Settings section.
   let moving = false;
   let synced: unknown[] = [];
+  let syncedTitle: string | undefined;
   let kept: (Omit<KeptSurface, "owner"> & { owner: string | null }) | undefined;
 
   /** The surface this browser tab kept for `key` before a reload. */
@@ -528,13 +533,13 @@ export function createNavigation({
       depth--;
     }
     // The address bar follows the screen; a route that is still being applied already matches it.
-    // Changes elsewhere in the client (drafts, hosts, catalogs) leave both URL and title as they are.
+    // Only the selected identity and registry title facts matter, not the streaming projection.
+    // References/projects are immutable registry revisions; transcripts, hosts and folders do not
+    // change the address. A revision can contain unchanged title facts, checked before writing.
     const c = client.getState();
     const inputs = [
       c.view,
-      c.session,
-      c.selecting,
-      c.folders,
+      (c.session ?? c.selecting)?.sessionId,
       c.projects,
       c.sessionReferences,
       state.settings,
@@ -544,11 +549,14 @@ export function createNavigation({
     if (!wanted && changed) {
       synced = inputs;
       const { pathname, search } = address.location();
-      const target = addressFor(client.getState(), state.settings, pathname);
+      const target = addressFor(c, state.settings, pathname);
       if (target) {
         if (target.path !== pathname + search)
           (target.mode === "replace" ? address.replace : address.push)(target.path);
-        address.setTitle(target.title);
+        if (target.title !== syncedTitle) {
+          address.setTitle(target.title);
+          syncedTitle = target.title;
+        }
       }
     }
     if (state !== notified) {

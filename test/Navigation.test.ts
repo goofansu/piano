@@ -134,6 +134,107 @@ function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
   };
 }
 
+test("100 transcript frames leave a 2k-session navigation catalog and title untouched", (t) => {
+  const p = page("/s/s1999");
+  let titleReads = 0;
+  let unrelatedTitleReads = 0;
+  let identityReads = 0;
+  const refs = Array.from({ length: 2000 }, (_, i) => {
+    const ref = sessionReference("/scratch", `s${i}`);
+    return {
+      ...ref,
+      get sessionId() {
+        identityReads++;
+        return ref.sessionId;
+      },
+      get title() {
+        titleReads++;
+        if (i !== 1999) unrelatedTitleReads++;
+        return `Session ${i}`;
+      },
+    };
+  });
+  p.server({ _tag: "registry", folders: [], projects: [], sessionReferences: refs });
+  p.selected("s1999");
+  assert.equal(p.title(), "Session 1999 - Piano");
+  assert.equal(unrelatedTitleReads, 0, "deep links and selection need only the selected title");
+  const before = { titles: p.titles.length, entries: [...p.entries] };
+  titleReads = 0;
+  identityReads = 0;
+  const start = performance.now();
+  for (let i = 0; i < 100; i++) {
+    p.server({
+      _tag: "session",
+      selectionId: p.client.getState().selectionId!,
+      cursor: { cwd: "/scratch", sessionId: "s1999", generation: "g1", sequence: i + 2 },
+      event: {
+        _tag: "message_update",
+        message: { id: "reply", role: "assistant", text: `Frame ${i}` },
+      },
+    });
+  }
+  const measurement = {
+    sessions: refs.length,
+    frames: 100,
+    elapsedMs: performance.now() - start,
+    titleReads,
+    identityReads,
+    titleWrites: p.titles.length - before.titles,
+  };
+  t.diagnostic(JSON.stringify(measurement));
+  assert.equal(p.client.getState().session?.pending?.text, "Frame 99", "frames were applied");
+  assert.deepEqual(
+    { titleReads, identityReads, titleWrites: measurement.titleWrites },
+    { titleReads: 0, identityReads: 0, titleWrites: 0 },
+    "transcript frames must neither scan/map the catalog nor rewrite the title",
+  );
+  assert.deepEqual(p.entries, before.entries);
+});
+
+test("registry refreshes update renamed sessions and projects without redundant title writes", () => {
+  const p = page("/s/a");
+  p.registry();
+  p.selected("a");
+  const writes = p.titles.length;
+  p.registry();
+  assert.equal(p.titles.length, writes, "an unchanged registry must not rewrite the title");
+  const refresh = (title: string | undefined, projectName: string, projectId?: string) =>
+    p.server({
+      _tag: "registry",
+      folders: [],
+      projects: [{ id: "p1", name: projectName }],
+      sessionReferences: [
+        sessionReference("/scratch", "a", { title, projectId, archived: true }),
+        sessionReference("/scratch", "b", { title: "Beta" }),
+      ],
+    });
+  refresh("Renamed", "Launch", "p1");
+  assert.equal(p.path(), "/s/a");
+  assert.equal(p.title(), "Renamed - Piano", "archived references still name deep links");
+  const renamedWrites = p.titles.length;
+  refresh("Renamed", "Launch");
+  assert.equal(p.path(), "/s/a", "membership does not change session identity");
+  assert.equal(p.titles.length, renamedWrites);
+  refresh(undefined, "Launch");
+  assert.equal(p.title(), "Untitled - Piano");
+  p.navigation.select("/scratch", "b");
+  assert.equal(p.path(), "/s/b", "selection updates before its snapshot arrives");
+  assert.equal(p.title(), "Beta - Piano");
+  p.selected("b");
+  p.navigation.openProject("p1");
+  assert.equal(p.path(), "/projects/p1");
+  refresh("Renamed", "Shipped");
+  assert.equal(p.title(), "Shipped - Piano");
+  p.navigation.openNew(undefined, "p1");
+  assert.equal(p.path(), "/projects/p1/new");
+  refresh("Renamed", "Next launch");
+  assert.equal(p.title(), "Next launch - Piano");
+  p.back();
+  p.back();
+  assert.equal(p.path(), "/s/b");
+  assert.equal(p.title(), "Beta - Piano");
+});
+
 test("a session URL waits for the registry, then selects that session without moving the address", () => {
   const p = page("/s/a");
   assert.equal(
