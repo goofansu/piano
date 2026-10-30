@@ -91,7 +91,7 @@ export function workspaceFor(state: AppState, cwd: string | undefined): Workspac
 /**
  * Pi cannot be asked about `cwd`: the selected session there reports its checkout gone, or the
  * registry marks a session reference in that directory's checkout unavailable. The one rule behind
- * Trust, New session here, Rename and the focused directory.
+ * Trust, New session here, Rename, the focused directory, the composer and the announced status.
  */
 export function checkoutMissingAt(state: AppState, cwd: string): boolean {
   return (
@@ -347,7 +347,7 @@ export function sessionActivity(state: AppState, messagesOnly: boolean): Session
           ? "Reconnecting"
           : !t
             ? "Loading"
-            : t.state.checkoutMissing
+            : checkoutMissingAt(state, t.cwd)
               ? "Read-only"
               : t.state.closure
                 ? "Exited"

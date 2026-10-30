@@ -635,7 +635,7 @@ test("a session is selected, working and previewing by cwd and ID together", () 
   );
 });
 
-test("a missing checkout is decided once: Trust, New session here, Rename and the focus agree", () => {
+test("a missing checkout is decided once: Trust, New session here, Rename, the focus, the composer and the status agree", () => {
   const trusts = {
     "/work/repo.feature": { required: true, trusted: false },
     "/closed": { required: true, trusted: false },
@@ -678,5 +678,11 @@ test("a missing checkout is decided once: Trust, New session here, Rename and th
     assert.equal(enabled("new-session-here"), !c.missing, `${c.name}: New session here`);
     assert.equal(enabled("rename"), !c.missing, `${c.name}: Rename`);
     assert.equal(focusedDirectory(c.state)?.checkoutMissing, c.missing, `${c.name}: focus`);
+    assert.equal(sessionContext(c.state).draftKey === null, c.missing, `${c.name}: composer`);
+    assert.equal(
+      sessionActivity(c.state, false).status === "Read-only",
+      c.missing,
+      `${c.name}: status`,
+    );
   }
 });
