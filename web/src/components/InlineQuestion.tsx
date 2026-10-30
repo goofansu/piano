@@ -1,5 +1,5 @@
 import type { Dialog } from "@shared/wire";
-import { useId, useState } from "react";
+import { useId, useSyncExternalStore } from "react";
 import {
   Popover,
   PopoverContent,
@@ -21,12 +21,12 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import type { Client } from "@/lib/client";
-import type { PendingDialogs } from "@/lib/piDialogs";
+import { type PendingDialogs, questionReplies } from "@/lib/piDialogs";
 import { useDialogAnswer } from "@/lib/useDialogAnswer";
 
 /** The queue head alone owns the answer surface; confirmations stay in DialogHost. */
 export function InlineQuestion({
-  pending: { head, surface, more, attachment },
+  pending: { head, surface, more, attachment, session },
   send,
 }: {
   pending: PendingDialogs;
@@ -38,6 +38,7 @@ export function InlineQuestion({
       dialog={head}
       more={more}
       attachment={attachment}
+      session={session}
       send={send}
     />
   ) : null;
@@ -47,20 +48,26 @@ function Question({
   dialog: d,
   more,
   attachment,
+  session,
   send,
 }: {
   dialog: Dialog;
   more: number;
   attachment: string | null;
+  session: string | null;
   send: Client["send"];
 }) {
   const id = useId();
-  const [value, setValue] = useState(d.prefill ?? "");
-  // Indices distinguish an unselected group from an option whose value is an empty string.
-  const [selected, setSelected] = useState("");
+  // The reply outlives this view (another session shown, a resync) while the question stays open.
+  const reply = useSyncExternalStore(questionReplies.subscribe, () =>
+    questionReplies.get(session, d),
+  );
+  const setReply = (next: string) => questionReplies.set(session, d, next);
   const { answer, cancel, abort, submitted, disabled, abortDisabled, title, deadline, waiting } =
     useDialogAnswer(d, attachment, send);
   const choice = d.method === "select";
+  // Indices distinguish an unselected group from an option whose value is an empty string.
+  const [value, selected] = choice ? ["", reply] : [reply, ""];
 
   return (
     <section aria-label="Question" className="px-(--gutter) pt-3">
@@ -87,7 +94,7 @@ function Question({
               <RadioGroup
                 aria-labelledby={`${id}-title`}
                 value={selected}
-                onValueChange={setSelected}
+                onValueChange={setReply}
                 disabled={disabled}
               >
                 {(d.options ?? []).map((option, index) => (
@@ -113,14 +120,14 @@ function Question({
                   <Textarea
                     aria-labelledby={`${id}-title`}
                     value={value}
-                    onChange={(event) => setValue(event.target.value)}
+                    onChange={(event) => setReply(event.target.value)}
                     className="min-h-24"
                   />
                 ) : (
                   <Input
                     aria-labelledby={`${id}-title`}
                     value={value}
-                    onChange={(event) => setValue(event.target.value)}
+                    onChange={(event) => setReply(event.target.value)}
                   />
                 )}
               </Field>

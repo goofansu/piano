@@ -18,7 +18,7 @@ import { checkoutRefresh } from "@/lib/checkoutRefresh";
 import type { NotifyLevel } from "@/lib/client";
 import { drafts } from "@/lib/messageDraft";
 import { initialView } from "@/lib/navigation";
-import { pendingDialogs } from "@/lib/piDialogs";
+import { pendingDialogs, questionReplies } from "@/lib/piDialogs";
 import { previewObservation } from "@/lib/previewObservation";
 import { parseRoute } from "@/lib/routes";
 import { useClient } from "@/lib/useClient";
@@ -51,6 +51,7 @@ export default function App() {
   useEffect(() => modelCatalogs.follow(client), [client]);
   useEffect(() => checkoutRefresh.follow(client), [client]);
   useEffect(() => drafts.follow(client), [client]);
+  useEffect(() => questionReplies.follow(client), [client]);
   useEffect(() => previewObservation.follow(client, notify), [client]);
   const layout = useSidebarLayoutController();
   // Details' Outputs reads this one answer, filtered by Git once per change.
