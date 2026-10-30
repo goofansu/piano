@@ -42,6 +42,7 @@ cannot supply or shadow them. The flags come before the session arguments, so a 
 | `piano-dispatch` | Dispatches work to sessions and observes them: `piano_start_session`, `piano_session_status` and `piano_wait_sessions`. |
 | `piano-preview` | Manages the workspace's app preview: [`piano_preview`](live-previews.md). |
 | `piano-ask-user` | Asks the user questions through Piano: [`ask_user`](#user-questions). |
+| `radius-artifacts` | When Radius is signed in, publishes, updates and views [Radius artifacts](radius-artifacts.md). Also usable as a standalone Pi package. |
 
 Each follows Pi's multi-file layout under `extensions/<name>/`: `index.ts` is the extension, and a
 module beside it, such as `piano-dispatch/SessionDispatch.ts`, is a supporting module, not a

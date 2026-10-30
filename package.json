@@ -38,7 +38,8 @@
     "typescript": "~6.0.3"
   },
   "workspaces": [
-    "web"
+    "web",
+    "extensions/radius-artifacts"
   ],
   "overrides": {
     "@earendil-works/pi-coding-agent": {
