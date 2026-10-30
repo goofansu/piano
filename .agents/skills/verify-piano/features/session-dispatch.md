@@ -71,8 +71,9 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
   - Command: `echo "ask for a value" > "$RUN/ask.txt"; node scripts/dispatch-session.ts "$RUN/ask.txt" "$REPO"`,
     then `status <id>`.
   - Result: `status` reports `"disposition": "needs_input"` and `"needs": {"title": "Enter a
-    value", "kind": "input", "link": "<link>"}`. `ab open <link>` shows the dialog "Enter a value"
-    with textbox "type", "Cancel" and "Send answer"; `ab find role textbox fill --name "type" --exact 42;
+    value", "kind": "input", "link": "<link>"}`. `ab open <link>` shows region "Question" titled "Enter a value"
+    with textbox "Enter a value" (the title, via `aria-labelledby`), "Cancel" and "Send answer";
+    `ab find role textbox fill --name "Enter a value" --exact 42;
     ab find role button click --name "Send answer" --exact` answers it: the dialog closes, the
     transcript shows `you said 42`, and `status` reports `"disposition": "settled"`. Capture
     `02-needs-input` and `03-answered`.

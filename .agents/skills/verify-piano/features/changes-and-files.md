@@ -64,10 +64,11 @@ The palette (Mod+K) searches neither outputs nor links.
   without Git. Narrow, neither the "Changes" icon nor the rail nor its
   toggle shows; widening again brings the rail back if it was on.
 - `environment`: the rail's "Environment" rows are menu buttons named `Folder: repo`, `Branch:
-  main`: the Folder row's menu has "Copy working directory" (a Repository row's also "Copy
-  repository name"), the Branch row's "Copy branch name" (a detached commit's "Copy commit SHA"), each with
-  "Open … on GitHub" once the repository is known. The rail shows no row for the working
-  directory itself.
+  main` (field names are screen-reader only in the visible text), and, when a pull request is
+  linked, a "Pull request" row showing its number without a hash (`222` on the seed). The Folder
+  row's menu has "Copy working directory" (a Repository row's also "Copy repository name"), the
+  Branch row's "Copy branch name" (a detached commit's "Copy commit SHA"), each with "Open … on
+  GitHub" once the repository is known. The rail shows no row for the working directory itself.
 - `files-list`: The rail's "Outputs" lists files written in the session by name only, and its
   "Links" (heading "Links <n>") lists the conversation's first five web links, each with "Jump to
   message", and "Show all" past five. Either section appears only once it has a row.
@@ -113,9 +114,10 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Action: `ab find role button click --name "Show session rail" --exact;
     ab wait "[data-slot=session-rail]:not([inert])"`
   - Result: `ab eval "document.querySelector('[data-slot=session-rail]:not([inert])').innerText"`
-    is `Environment` / `Folder:` / `repo` / `Branch:` / `main` / `Outputs` / `answer.ts` (no
-    Links yet): bordered lists of icon rows, the field names read only by screen readers; each
-    heading folds its section, and folds are remembered across reloads. Capture `03-rail`.
+    is `Environment` / `repo` / `main` / `222` / `Outputs` / `answer.ts` (no Links yet; the
+    Folder / Branch / Pull request labels are screen-reader only, and `222` is the seed's linked
+    PR): bordered lists of icon rows; each heading folds its section, and folds are remembered
+    across reloads. Capture `03-rail`.
     `ab find role button click --name "Branch: main" --exact` opens a menu of `Copy branch name`
     and "Folder: repo" one of `Copy working directory` (Escape each). Then
     `ab find role button click --name "answer.ts" --exact; ab wait '[aria-label="Close answer.ts"]'`

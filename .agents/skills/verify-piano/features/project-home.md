@@ -71,7 +71,7 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   - Action: read the rows, then open the only one.
     `ab eval "[...document.querySelectorAll('main [data-slot=item]')].map(b => b.innerText.replace(/\n+/g, ' | '))"`;
     `ab click 'main [data-slot=item-title] button'; ab wait --url "**/s/verify-plan"`
-  - Result: exactly one row, `Plan the verification | repo | main | #222 | 1 hour ago`; "Loose
+  - Result: exactly one row, `Plan the verification | repo | main | Pull request | 222 | 1 hour ago`; "Loose
     session" (no project) is absent; the click lands on `/s/verify-plan`. Capture `03-card-opened`.
 - `open-from-sidebar`
   - Action: `ab find role button click --name "View options" --exact;
