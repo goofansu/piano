@@ -78,7 +78,7 @@ function harness() {
 const act = { _tag: "act", action: { _tag: "abort" } } as const;
 
 for (const disposition of ["not-sent", "sent", "uncertain"] as const) {
-  test(`question answer ${disposition}: reconnect only permits retry after proven non-delivery`, () => {
+  test(`question answer ${disposition}: never replayed; answerable again while a new snapshot lists it`, () => {
     const h = harness();
     h.status(true);
     h.client.select("/scratch", "a");
@@ -91,47 +91,50 @@ for (const disposition of ["not-sent", "sent", "uncertain"] as const) {
       deadlineKind: "tool-end",
       toolCallId: "call-1",
     };
-    const attach = () => {
+    const attach = (dialogs: Dialog[]) => {
       const selected = h.selected("a");
       assert.ok(selected._tag === "selected");
-      h.server({ ...selected, snapshot: { ...selected.snapshot, dialogs: [{ ...dialog }] } });
+      h.server({ ...selected, snapshot: { ...selected.snapshot, dialogs } });
     };
-    attach();
+    const reconnect = (dialogs: Dialog[]) => {
+      h.status(false);
+      h.transport("sent");
+      h.status(true);
+      assert.equal(pendingDialogs(h.client.getState()).attachment, null, "wait for reattachment");
+      attach(dialogs);
+    };
+    attach([{ ...dialog }]);
     const rendered = pendingDialogs(h.client.getState());
-    assert.equal(rendered.connected, true);
+    assert.equal(rendered.attachment, "sel1");
     const controller = createDialogAnswer({ dialog: rendered.head!, send: h.client.send });
-    // The transport fails at click time, while the rendered connection status is still true.
+    // The transport fails at click time, while the rendered attachment is still current.
     h.transport(disposition);
     const reply = { value: "keep this answer" };
-    assert.equal(controller.answer(reply, 1_000, rendered.connected), disposition !== "not-sent");
+    assert.equal(controller.answer(reply, 1_000, rendered.attachment), disposition !== "not-sent");
     const answers = () => h.sent.filter((m) => m._tag === "act" && m.action._tag === "answer");
     assert.equal(answers().length, disposition === "not-sent" ? 0 : 1);
-    h.status(false);
     assert.equal(
-      controller.view(1_000, pendingDialogs(h.client.getState()).connected).disabled,
+      controller.view(1_000, pendingDialogs(h.client.getState()).attachment).disabled,
       true,
     );
-    h.transport("sent");
-    h.status(true);
-    assert.equal(pendingDialogs(h.client.getState()).connected, false, "wait for reattachment");
-    attach();
+    // The server never claimed it, so the new snapshot still lists the question.
+    reconnect([{ ...dialog }]);
     const reconnected = pendingDialogs(h.client.getState());
     assert.deepEqual(reconnected.head, rendered.head, "same pending question and generation");
-    assert.equal(reconnected.connected, true);
+    assert.equal(reconnected.attachment, "sel2");
     assert.equal(answers().length, disposition === "not-sent" ? 0 : 1, "no automatic replay");
-    assert.equal(controller.view(1_000, true).disabled, disposition !== "not-sent");
-    assert.equal(
-      controller.answer(reply, 1_000, reconnected.connected),
-      disposition === "not-sent",
-    );
-    assert.equal(controller.cancel(1_000, true), false);
-    assert.equal(controller.abort(1_000, true), false);
-    assert.equal(answers().length, 1, "exactly one possible delivery, even after explicit retry");
-    assert.deepEqual(answers()[0], {
+    assert.equal(controller.view(1_000, reconnected.attachment).disabled, false);
+    assert.equal(controller.answer(reply, 1_000, reconnected.attachment), true);
+    assert.equal(controller.cancel(1_000, reconnected.attachment), false);
+    assert.equal(controller.abort(1_000, reconnected.attachment), false);
+    assert.deepEqual(answers().at(-1), {
       _tag: "act",
-      selectionId: disposition === "not-sent" ? "sel2" : "sel1",
+      selectionId: "sel2",
       action: { _tag: "answer", id: dialog.id, generation: dialog.generation, ...reply },
     });
+    // Once the server claims an answer, a snapshot no longer lists the question to answer.
+    reconnect([]);
+    assert.equal(pendingDialogs(h.client.getState()).head, undefined);
   });
 }
 

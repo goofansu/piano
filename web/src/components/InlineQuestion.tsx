@@ -26,7 +26,7 @@ import { useDialogAnswer } from "@/lib/useDialogAnswer";
 
 /** The queue head alone owns the answer surface; confirmations stay in DialogHost. */
 export function InlineQuestion({
-  pending: { head, surface, more, connected },
+  pending: { head, surface, more, attachment },
   send,
 }: {
   pending: PendingDialogs;
@@ -37,7 +37,7 @@ export function InlineQuestion({
       key={`${head.generation}/${head.id}`}
       dialog={head}
       more={more}
-      connected={connected}
+      attachment={attachment}
       send={send}
     />
   ) : null;
@@ -46,12 +46,12 @@ export function InlineQuestion({
 function Question({
   dialog: d,
   more,
-  connected,
+  attachment,
   send,
 }: {
   dialog: Dialog;
   more: number;
-  connected: boolean;
+  attachment: string | null;
   send: Client["send"];
 }) {
   const id = useId();
@@ -59,7 +59,7 @@ function Question({
   // Indices distinguish an unselected group from an option whose value is an empty string.
   const [selected, setSelected] = useState("");
   const { answer, cancel, abort, submitted, disabled, abortDisabled, title, deadline, waiting } =
-    useDialogAnswer(d, connected, send);
+    useDialogAnswer(d, attachment, send);
   const choice = d.method === "select";
 
   return (

@@ -1,10 +1,12 @@
 /**
  * Answering the extension dialogs Pi raises (select / confirm / input / editor), one at a time.
  * Which dialog is shown: the head of the selected session's queue, none during a resync, and
- * answerable only on a settled attachment (`sessionReady`). How it is answered: at most once, never
- * after its deadline or while disconnected, and closing it counts as cancelling. Pi sends no closure
- * acknowledgement, so a sent answer is never resent, even after a reconnect. Abort is the user's
- * escape hatch: it is sent at most once and, by rule, still offered after the deadline. How it
+ * answerable only on a settled attachment (`sessionReady`). How it is answered: at most once per
+ * attachment, never after its deadline or while disconnected, and closing it counts as cancelling.
+ * Pi sends no closure acknowledgement, so nothing is ever resent automatically. A later attachment
+ * whose snapshot still lists the dialog shows the server never claimed an answer (it claims one per
+ * dialog and rejects any other), so the person may answer it again. Abort is the user's escape
+ * hatch: it follows the same rule and, by rule, is still offered after the deadline. How it
  * reads: which surface asks it, its title and deadline wording are decided here, not per component.
  * Nothing here depends on React.
  */
@@ -34,8 +36,8 @@ export interface PendingDialogs {
   surface: DialogSurface | null;
   /** Dialogs queued behind the head. */
   more: number;
-  /** Answers may be sent (see `sessionReady`). */
-  connected: boolean;
+  /** The settled attachment answers go out on (see `sessionReady`); null while there is none. */
+  attachment: string | null;
 }
 
 /** The selected session's dialog queue as the dialog host shows it. */
@@ -45,7 +47,7 @@ export function pendingDialogs(state: AppState): PendingDialogs {
     head: dialogs[0],
     surface: dialogs[0] ? dialogSurface(dialogs[0]) : null,
     more: Math.max(0, dialogs.length - 1),
-    connected: sessionReady(state),
+    attachment: sessionReady(state) ? state.selectionId : null,
   };
 }
 
@@ -117,7 +119,8 @@ export function answeredQuestion(state: AppState): DialogResolution | undefined 
 export type DialogReply = { value?: string; confirmed?: boolean; cancelled?: boolean };
 
 export interface DialogAnswerView {
-  /** A reply was sent (or abort requested); the host's resolution is awaited. */
+  /** A reply was sent (or abort requested) on this attachment, or the socket has since closed;
+   * the host's resolution is awaited. */
   submitted: boolean;
   /** The reply controls are disabled: already submitted, disconnected or past the deadline. */
   disabled: boolean;
@@ -138,17 +141,18 @@ export interface DialogAnswerView {
   waiting: string;
 }
 
+/** Each method takes the current `PendingDialogs.attachment`. */
 export interface DialogAnswer {
-  /** Whether a reply or abort may have been sent; `subscribe` fires after an attempt. */
-  getState: () => boolean;
+  /** The attachment a reply or abort may have been sent on; `subscribe` fires after an attempt. */
+  getState: () => string | null;
   subscribe: (listener: () => void) => () => void;
   /** Sends unless disabled; true for sent or uncertain, false for blocked or known not sent. */
-  answer: (reply: DialogReply, now: number, connected: boolean) => boolean;
+  answer: (reply: DialogReply, now: number, attachment: string | null) => boolean;
   /** Closing the dialog: a cancelled reply, under the same rules as `answer`. */
-  cancel: (now: number, connected: boolean) => boolean;
+  cancel: (now: number, attachment: string | null) => boolean;
   /** Requests native abort unless disabled; true for sent or uncertain delivery. */
-  abort: (now: number, connected: boolean) => boolean;
-  view: (now: number, connected: boolean) => DialogAnswerView;
+  abort: (now: number, attachment: string | null) => boolean;
+  view: (now: number, attachment: string | null) => DialogAnswerView;
 }
 
 /**
@@ -164,15 +168,15 @@ export function createDialogAnswer({
   dialog: Dialog;
   send: (command: ClientCommand) => SendDisposition;
 }): DialogAnswer {
-  let submitted = false;
+  let sentOn: string | null = null;
   const listeners = new Set<() => void>();
-  const submit = (command: ClientCommand) => {
+  const submit = (command: ClientCommand, attachment: string) => {
     // Claim before entering the transport: it can synchronously notify connection subscribers.
-    submitted = true;
-    // Only proven non-delivery permits an explicit retry. Sent/uncertain must never replay.
-    if (send(command) === "not-sent") submitted = false;
+    sentOn = attachment;
+    // Only proven non-delivery permits a retry on this attachment. Sent/uncertain never replay.
+    if (send(command) === "not-sent") sentOn = null;
     for (const listener of listeners) listener();
-    return submitted;
+    return sentOn !== null;
   };
   const owned = ownedByToolCall(dialog);
   const at = owned ? null : dialog.deadlineAt;
@@ -181,12 +185,15 @@ export function createDialogAnswer({
     dialog.deadlineKind === "pi-timeout" ? "Estimated Pi timeout" : "Host recovery cancellation";
   const waiting =
     dialogSurface(dialog) === "modal"
-      ? "Waiting for the host’s resolution. Do not resend on reconnect."
+      ? "Waiting for the host’s resolution."
       : owned
         ? "Waiting for Pi to confirm…"
         : "Sending response…";
-  const view = (now: number, connected: boolean): DialogAnswerView => {
+  const view = (now: number, attachment: string | null): DialogAnswerView => {
     const expired = at !== null && now >= at;
+    // Disconnected, the attempt still awaits its outcome; a new attachment's snapshot decides it.
+    const submitted = sentOn !== null && (attachment === null || attachment === sentOn);
+    const connected = attachment !== null;
     return {
       submitted,
       disabled: submitted || !connected || expired,
@@ -199,22 +206,28 @@ export function createDialogAnswer({
       waiting,
     };
   };
-  const answer = (reply: DialogReply, now: number, connected: boolean) =>
-    !view(now, connected).disabled &&
-    submit({
-      _tag: "act",
-      action: { _tag: "answer", id: dialog.id, generation: dialog.generation, ...reply },
-    });
+  const answer = (reply: DialogReply, now: number, attachment: string | null) =>
+    attachment !== null &&
+    !view(now, attachment).disabled &&
+    submit(
+      {
+        _tag: "act",
+        action: { _tag: "answer", id: dialog.id, generation: dialog.generation, ...reply },
+      },
+      attachment,
+    );
   return {
-    getState: () => submitted,
+    getState: () => sentOn,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     answer,
-    cancel: (now, connected) => answer({ cancelled: true }, now, connected),
-    abort: (now, connected) =>
-      !view(now, connected).abortDisabled && submit({ _tag: "act", action: { _tag: "abort" } }),
+    cancel: (now, attachment) => answer({ cancelled: true }, now, attachment),
+    abort: (now, attachment) =>
+      attachment !== null &&
+      !view(now, attachment).abortDisabled &&
+      submit({ _tag: "act", action: { _tag: "abort" } }, attachment),
     view,
   };
 }
