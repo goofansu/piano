@@ -1,4 +1,4 @@
-import type { ClientCommand as ClientMessage, Dialog as PiDialog } from "@shared/wire";
+import type { Dialog as PiDialog } from "@shared/wire";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/PianoDialog";
 import { Button } from "@/components/ui/button";
+import type { Client } from "@/lib/client";
 import type { PendingDialogs } from "@/lib/piDialogs";
 import { useDialogAnswer } from "@/lib/useDialogAnswer";
 import { useLastShown } from "@/lib/useLastShown";
@@ -18,7 +19,7 @@ export function DialogHost({
   send,
 }: {
   pending: PendingDialogs;
-  send: (m: ClientMessage) => void;
+  send: Client["send"];
 }) {
   // The dialog animates closed after it leaves the queue, so it keeps the last question meanwhile.
   const confirmation = surface === "modal" ? head : undefined;
@@ -45,7 +46,7 @@ function DialogView({
   open: boolean;
   d: PiDialog;
   more: number;
-  send: (m: ClientMessage) => void;
+  send: Client["send"];
   connected: boolean;
 }) {
   const { answer, cancel, abort, submitted, disabled, abortDisabled, title, deadline, waiting } =

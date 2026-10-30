@@ -1,4 +1,4 @@
-import type { ClientCommand, Dialog } from "@shared/wire";
+import type { Dialog } from "@shared/wire";
 import { useId, useState } from "react";
 import {
   Popover,
@@ -20,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
+import type { Client } from "@/lib/client";
 import type { PendingDialogs } from "@/lib/piDialogs";
 import { useDialogAnswer } from "@/lib/useDialogAnswer";
 
@@ -29,7 +30,7 @@ export function InlineQuestion({
   send,
 }: {
   pending: PendingDialogs;
-  send: (command: ClientCommand) => void;
+  send: Client["send"];
 }) {
   return head && surface === "inline" ? (
     <Question
@@ -51,7 +52,7 @@ function Question({
   dialog: Dialog;
   more: number;
   connected: boolean;
-  send: (command: ClientCommand) => void;
+  send: Client["send"];
 }) {
   const id = useId();
   const [value, setValue] = useState(d.prefill ?? "");

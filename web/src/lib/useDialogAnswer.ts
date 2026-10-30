@@ -1,12 +1,13 @@
-import type { ClientCommand, Dialog } from "@shared/wire";
+import type { Dialog } from "@shared/wire";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import type { Client } from "@/lib/client";
 import { createDialogAnswer, type DialogReply } from "@/lib/piDialogs";
 
 /** Both presentations keep the same single-send guard. Mount keyed by generation and dialog ID. */
 export function useDialogAnswer(
   dialog: Dialog,
   connected: boolean,
-  send: (command: ClientCommand) => void,
+  send: Client["send"],
   open = true,
 ) {
   const [controller] = useState(() => createDialogAnswer({ dialog, send }));
