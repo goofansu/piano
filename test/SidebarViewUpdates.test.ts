@@ -158,7 +158,7 @@ test("INV-06: a registry-only change publishes before Git answers; a later chang
   );
 });
 
-test("INV-01/06/07: a prompt, rename or pin starts no reader; membership and folders start only theirs", async (t) => {
+test("INV-01/06/07: a prompt, rename, pin or membership starts no reader; sessions and folders start only theirs", async (t) => {
   const git = slowGit();
   await run(
     git,
@@ -193,7 +193,7 @@ test("INV-01/06/07: a prompt, rename or pin starts no reader; membership and fol
       for (let i = 0; i < 5; i++) yield* registry.touchSession(first, "s1", `prompt ${i}`);
       yield* registry.mirrorSession(first, "s1", { sessionName: "After" });
       yield* registry.pinSession(first, "s1", true);
-      // A project's own row is not an observation input either; only membership is.
+      // A project's own row is not an observation input either.
       yield* registry.saveProject({ id: "outcome", name: "Outcome" });
       const shown = yield* nextView(view, () => true);
       assert.deepEqual(
@@ -208,17 +208,29 @@ test("INV-01/06/07: a prompt, rename or pin starts no reader; membership and fol
       assert.equal(git.calls, quiet, "no discovery run for visible metadata or a project row");
       assert.equal(scans, 0, "no history scan for visible metadata or a project row");
 
-      // Membership is availability's input, not Git's: assigning the session asks history
-      // whether s1 is saved (it is not) and asks Git nothing.
+      // Membership is neither reader's input: every session is judged, in a project or not, so
+      // assigning s1 shows its project and the verdict already observed for it, and reads nothing.
       yield* registry.assignProject(first, "s1", "outcome");
+      const assigned = yield* nextView(
+        view,
+        (m) => m.sessionReferences?.[0]?.projectId === "outcome",
+      );
+      assert.equal(assigned.sessionReferences?.[0]?.unavailable, "history");
+      yield* Effect.yieldNow;
+      assert.equal(scans, 0, "project membership started no history scan");
+      assert.equal(git.calls, quiet, "project membership started no Git discovery");
+
+      // The registered sessions are availability's input, not Git's: a new session asks history
+      // whether it is saved (it is not) and asks Git nothing.
+      yield* registry.addSession(first, "s2", "Added");
       const judged = yield* nextView(
         view,
-        (m) => m.sessionReferences?.[0]?.unavailable === "history",
+        (m) => m.sessionReferences?.find((s) => s.sessionId === "s2")?.unavailable === "history",
       );
-      assert.equal(judged.sessionReferences?.[0]?.projectId, "outcome");
+      assert.equal(judged.sessionReferences?.length, 2);
       yield* Effect.yieldNow;
-      assert.ok(scans > 0, "project membership rejudged availability");
-      assert.equal(git.calls, quiet, "project membership started no Git discovery");
+      assert.ok(scans > 0, "a new session was judged");
+      assert.equal(git.calls, quiet, "a new session started no Git discovery");
 
       // A folder is Git's input, not availability's: registering one discovers it and reads no history.
       const scanned = scans,
@@ -819,8 +831,9 @@ const seedHistory = (cwd: string, id: string) =>
   );
 
 // SessionReferences' tests own which sessions are unavailable and that the opener agrees; this
-// one owns that the sidebar shows that judgement for project members.
-test("INV-01: the sidebar marks a project member unavailable when its history or checkout is gone", async () => {
+// one owns that the sidebar shows that judgement for every session, in a project or not, so the
+// browser reads `unavailable` the same way for each row.
+test("INV-01: the sidebar marks a session unavailable when its history or checkout is gone, in a project or not", async () => {
   const kept = join(root, "kept"),
     gone = join(root, "gone");
   mkdirSync(kept);
@@ -835,6 +848,8 @@ test("INV-01: the sidebar marks a project member unavailable when its history or
       yield* registry.saveProject({ id: "outcome", name: "Outcome" });
       seedHistory(kept, "written");
       seedHistory(gone, "removed");
+      seedHistory(kept, "loose-written");
+      seedHistory(gone, "loose-removed");
       for (const [cwd, id] of [
         [kept, "written"],
         [kept, "never-written"],
@@ -843,6 +858,13 @@ test("INV-01: the sidebar marks a project member unavailable when its history or
         yield* registry.addSession(cwd, id);
         yield* registry.assignProject(cwd, id, "outcome");
       }
+      // Sessions in no project: the same verdicts, not "available" by default.
+      for (const [cwd, id] of [
+        [kept, "loose-written"],
+        [kept, "loose-never-written"],
+        [gone, "loose-removed"],
+      ])
+        yield* registry.addSession(cwd, id);
       rmSync(gone, { recursive: true });
       const unavailable = new Map(
         (yield* view.fresh).sessionReferences?.map((s) => [s.sessionId, s.unavailable]),
@@ -851,6 +873,9 @@ test("INV-01: the sidebar marks a project member unavailable when its history or
         written: undefined,
         "never-written": "history",
         removed: "checkout",
+        "loose-written": undefined,
+        "loose-never-written": "history",
+        "loose-removed": "checkout",
       });
     }),
   );
