@@ -1,9 +1,9 @@
 /**
  * Keeps the selected session's preview honest without polling: Piano re-observes the app once for
- * each attachment to a session that owns one, when the person comes back to the page, and when
- * they open the preview's details. Each read is one bounded status of that session's own app; it
- * never starts Pi or launches anything. The last answer's logs are kept for the details view.
- * Nothing here depends on React.
+ * each attachment to a session that owns one, when the person comes back to the page, when the
+ * preview view is shown, and when they open the preview's details. Each read is one bounded status
+ * of that session's own app; it never starts Pi or launches anything. The last answer's logs are
+ * kept for the details view. Nothing here depends on React.
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand, ServerMessage } from "../../../shared/wire.ts";

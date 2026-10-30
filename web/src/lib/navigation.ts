@@ -13,8 +13,8 @@ import { findProject } from "./projectCommands.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
 import { sessionLabel } from "./sessionCatalog.ts";
 
-/** The session's own views in the Surface area, one tab each: Changes. */
-export type SurfaceView = "changes";
+/** The session's own views in the Surface area, one tab each: Changes, and Preview while an app runs. */
+export type SurfaceView = "changes" | "preview";
 
 /**
  * One tab in the selected session's Surface area: one of its views, or a file a link opened. A
@@ -201,6 +201,11 @@ export interface Navigation {
   /** Shows Changes, opening its tab at the end if needed, or focuses it; never a toggle. */
   openChanges: () => void;
   /**
+   * Shows the session's preview beside the conversation, opening its tab at the end if needed,
+   * or focuses it. It does not start, stop or reload the app.
+   */
+  openPreview: () => void;
+  /**
    * Shows the session rail on the Agent area's right, or hides it, for every session: on hides
    * the Surface area until a tab is shown again or the rail goes off. Side by side only: one area
    * at a time the rail has no room, so the `session-rail` command is not offered there, and the
@@ -352,6 +357,7 @@ const isArea = (value: unknown): value is SessionArea => value === "agent" || va
 
 const isTab = (value: unknown): value is SurfaceTab =>
   value === "changes" ||
+  value === "preview" ||
   (typeof value === "object" &&
     value !== null &&
     (value as { kind?: unknown }).kind === "file" &&
@@ -668,6 +674,7 @@ export function createNavigation({
       }),
     closeSettings,
     openChanges: () => openView("changes"),
+    openPreview: () => openView("preview"),
     toggleRail: () => setRail(!state.layout.rail),
     openFile: (spelled, from = state.layout.agent ? "agent" : "surface") => {
       const path = filePath(spelled, client.getState().session?.cwd);

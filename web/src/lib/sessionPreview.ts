@@ -68,6 +68,21 @@ export function previewAccess(preview: SessionPreview): string {
     : "Checked on the server. Opening it uses your private exe.dev access.";
 }
 
+/**
+ * The framed app is another origin. It may run as itself, including its own cookies and a
+ * module dev server. It cannot navigate Piano: `allow-top-navigation` is absent on purpose.
+ */
+export const PREVIEW_FRAME_SANDBOX =
+  "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-same-origin";
+
+/**
+ * Text added to the draft for this app. The URL is the registered entry page, not whichever
+ * page the frame is showing; Piano cannot see that cross-origin route.
+ */
+export function previewDraft(url: string, workspace: string): string {
+  return `About the preview at ${url} (entry page in ${workspace}; the page on screen is not observed):`;
+}
+
 /** Re-observe the selected session's app; it never starts Pi or launches anything. */
 export const PREVIEW_STATUS: ClientCommand = { _tag: "act", action: { _tag: "preview_status" } };
 

@@ -674,6 +674,36 @@ test("a reload brings back the session's open tabs, the one shown and its area",
   );
 });
 
+test("a preview tab comes back with its session after a reload, and another session starts without it", () => {
+  const memory = tabMemory();
+  const p = page("/s/a", memory);
+  p.registry();
+  p.selected("a");
+  p.navigation.openPreview();
+  p.navigation.openChanges();
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["preview", "changes"],
+    active: "changes",
+    area: "surface",
+  });
+
+  const again = page("/s/a", memory);
+  again.registry();
+  again.selected("a");
+  assert.deepEqual(shownTabs(again.navigation), {
+    tabs: ["preview", "changes"],
+    active: "changes",
+    area: "surface",
+  });
+  again.navigation.select("/scratch", "b");
+  again.selected("b");
+  assert.deepEqual(
+    shownTabs(again.navigation).tabs,
+    [],
+    "another session does not keep this preview",
+  );
+});
+
 test("a reload brings back only the session last shown, and nothing once a page replaced it", () => {
   const memory = tabMemory();
   const p = page("/s/a", memory);

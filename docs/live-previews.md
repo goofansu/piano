@@ -8,10 +8,20 @@ No service manifest, skill collection or Stop session control is required.
 While it owns an app, the session header shows an app icon in the state's colour, breathing while
 the app starts or stops, with the app's host beside it on desktop (its state while there is no
 link). It opens a menu with the status,
-**Open preview**, **Copy link**, **Details** and **Stop preview**; the command palette offers Open
-preview, Preview details and Stop preview. Piano reads the app's status
+**Open preview**, **Copy link**, **Details** and **Stop preview**. On a wide session, Open preview
+shows the app in the Surface area beside the conversation, and the menu and palette also offer
+**Open in new tab**. On a narrow session, where the areas take turns, Open preview is that new tab
+rather than a squeezed second column. The view's toolbar has **Ask about this preview** (adds the
+registered entry URL and the workspace to the draft; it does not send), **Reload preview** (loads
+that entry URL again; Piano cannot see the frame's current page) and Open in new tab. Opening,
+closing and reloading the view never start, stop or restart the app. The frame is sandboxed so the
+app can run as itself, including its own cookies and a dev server, and cannot navigate Piano.
+An app that refuses to be framed stays blank there; Open in new tab remains. The command palette
+offers the same Open preview, Open in new tab (wide sessions), Preview details and Stop preview.
+Piano reads the app's status
 from that session's owner, without starting Pi or launching anything: once per page attachment, when
-the person returns to the page and when the menu or details open. There is no polling. A failed read
+the person returns to the page, when the preview view is shown and when the menu or details open.
+There is no polling. A failed read
 shows the status as unknown, not as stopped. Stop names the exact instance it observed, so it can
 never stop a replacement. A saved, closed or restarted session shows no preview, even if its
 transcript still links one. Archive and Delete ask before stopping a session that owns an app.
@@ -19,7 +29,7 @@ transcript still links one. Archive and Delete ask before stopping a session tha
 | Event | Outcome |
 | --- | --- |
 | Turn completes; composer Stop/abort | Preview continues; Stop interrupts generation only. |
-| Browser disconnect, tab close, session switching | Preview continues. |
+| Browser disconnect, tab close, session switching, hiding the preview view | Preview continues. |
 | Automatic idle retirement | Owning Pi is pinned while its preview is active or uncertain. |
 | Explicit preview stop | App stops; Pi remains available and normal idle retirement resumes. |
 | Archive/delete or explicit Pi release | Owned app stops before successful retention changes. Cleanup failure is an error, not success. |

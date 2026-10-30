@@ -3,13 +3,15 @@ import {
   AppWindowIcon,
   CopyIcon,
   ExternalLinkIcon,
+  MessageSquarePlusIcon,
   RefreshCwIcon,
   ScrollTextIcon,
   SquareIcon,
 } from "lucide-react";
-import { useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { useCommands, useSessionCommands } from "@/components/CommandHost";
+import { IconButton } from "@/components/IconButton";
 import { PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
@@ -30,13 +32,17 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
+import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
+  PREVIEW_FRAME_SANDBOX,
   type PreviewTone,
   previewAccess,
+  previewDraft,
   previewFace,
   previewHost,
   selectedPreview,
@@ -96,19 +102,26 @@ function PreviewStatus({ preview, className }: { preview: SessionPreview; classN
 /**
  * The session header's preview control, shown only while the selected session's live Pi owns an
  * app: the app icon in the state's colour, breathing while the app starts or stops, and on desktop
- * the app's host (or its state while there is no link). It always opens the menu: status, Open,
- * Copy link, Details and Stop. Opening the menu re-observes the app.
+ * the app's host (or its state while there is no link). It always opens the menu: status, Open
+ * preview (beside the conversation when there is room, otherwise a new tab), Open in new tab on
+ * a wide session, Copy link, Details and Stop. Opening the menu re-observes the app.
  */
 export function SessionPreviewControl() {
   const mobile = useIsMobile();
   const { state } = useCommands();
-  const commands = usePreviewCommands();
+  const { commands, run } = useSessionCommands();
+  const previewActions = usePreviewCommands();
+  const open = commands.find((c) => c.id === "open-preview");
+  const external = commands.find((c) => c.id === "open-preview-tab");
   const preview = selectedPreview(state);
   if (!preview) return null;
   const face = previewFace(preview);
   const label = preview.url ? previewHost(preview.url) : face.label;
   return (
-    <DropdownMenu modal={false} onOpenChange={(open) => open && previewObservation.refresh()}>
+    <DropdownMenu
+      modal={false}
+      onOpenChange={(menuOpen) => menuOpen && previewObservation.refresh()}
+    >
       <Tooltip>
         <DropdownMenuTrigger asChild>
           <TooltipTrigger asChild>
@@ -141,24 +154,36 @@ export function SessionPreviewControl() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          {preview.url && (
-            <>
-              <DropdownMenuItem asChild>
-                <a href={preview.url} target="_blank" rel="noopener noreferrer">
-                  <ExternalLinkIcon aria-hidden /> Open preview
-                </a>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void copyLink(preview.url!)}>
-                <CopyIcon aria-hidden /> Copy link
-              </DropdownMenuItem>
-            </>
+          {open?.enabled && open.intent.kind === "open-url" && (
+            <DropdownMenuItem asChild>
+              <a href={open.intent.url} target="_blank" rel="noopener noreferrer">
+                <ExternalLinkIcon aria-hidden /> Open preview
+              </a>
+            </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={commands.details}>
+          {open?.enabled && open.intent.kind === "open-preview" && (
+            <DropdownMenuItem onSelect={() => run(open)}>
+              <AppWindowIcon aria-hidden /> Open preview
+            </DropdownMenuItem>
+          )}
+          {external?.enabled && external.intent.kind === "open-url" && (
+            <DropdownMenuItem asChild>
+              <a href={external.intent.url} target="_blank" rel="noopener noreferrer">
+                <ExternalLinkIcon aria-hidden /> Open in new tab
+              </a>
+            </DropdownMenuItem>
+          )}
+          {preview.url && (
+            <DropdownMenuItem onSelect={() => void copyLink(preview.url!)}>
+              <CopyIcon aria-hidden /> Copy link
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={previewActions.details}>
             <ScrollTextIcon aria-hidden /> Details
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={!commands.canStop} onSelect={commands.stop}>
+        <DropdownMenuItem disabled={!previewActions.canStop} onSelect={previewActions.stop}>
           <SquareIcon className="fill-current" aria-hidden /> Stop preview
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -290,7 +315,7 @@ export function PreviewDetailsDialog({
           {preview?.url && (
             <Button asChild>
               <a ref={openRef} href={preview.url} target="_blank" rel="noopener noreferrer">
-                Open preview
+                Open in new tab
                 <ExternalLinkIcon data-icon="inline-end" aria-hidden />
               </a>
             </Button>
@@ -298,5 +323,101 @@ export function PreviewDetailsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The selected session's app, in the Surface area. The frame is the registered entry URL on
+ * another origin. Opening, closing and reloading it never starts, stops or restarts the app;
+ * reload returns to that entry page, because the frame's current route is not visible from here.
+ * A new session or a replaced instance mounts a new frame, so an old app is never shown under a
+ * new label.
+ */
+export function SessionPreviewPanel({
+  workspace,
+  shown,
+  onAsk,
+}: {
+  workspace: string;
+  /** On screen: re-observe once, the same read the menu takes. A hidden tab keeps its frame. */
+  shown: boolean;
+  /** Adds the entry page to the draft. Omitted while the draft takes no additions. */
+  onAsk: ((text: string) => void) | undefined;
+}) {
+  const { state } = useCommands();
+  const preview = selectedPreview(state);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    if (shown) previewObservation.refresh();
+  }, [shown]);
+  const url = preview?.url ?? null;
+  const face = preview ? previewFace(preview) : null;
+  const host = url ? previewHost(url) : null;
+  const ask = onAsk && url ? () => onAsk(previewDraft(url, workspace)) : undefined;
+  return (
+    <SurfaceFrame
+      tab="preview"
+      status={
+        host ? (
+          <span className="min-w-0 truncate font-mono">{host}</span>
+        ) : (
+          <span className="min-w-0 truncate">{face?.status ?? "No preview"}</span>
+        )
+      }
+      actions={
+        <>
+          <IconButton size="header" label="Ask about this preview" disabled={!ask} onClick={ask}>
+            <MessageSquarePlusIcon />
+          </IconButton>
+          <IconButton
+            size="header"
+            label="Reload preview"
+            disabled={!url}
+            onClick={() => setReload((n) => n + 1)}
+          >
+            <RefreshCwIcon />
+          </IconButton>
+          {url && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PianoButton asChild variant="ghost" size="header">
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Open in new tab"
+                  >
+                    <ExternalLinkIcon />
+                  </a>
+                </PianoButton>
+              </TooltipTrigger>
+              <TooltipContent>Open in new tab</TooltipContent>
+            </Tooltip>
+          )}
+        </>
+      }
+    >
+      {url && preview ? (
+        // No shadcn primitive is a cross-origin app frame. The sandbox lets the app run as
+        // itself and withholds navigation of this page.
+        <iframe
+          key={`${preview.instanceId}:${url}:${reload}`}
+          title={`Preview ${host}`}
+          src={url}
+          referrerPolicy="no-referrer"
+          sandbox={PREVIEW_FRAME_SANDBOX}
+          className="absolute inset-0 h-full w-full border-0 bg-surface-1"
+        />
+      ) : (
+        <Empty className="py-10">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <AppWindowIcon />
+            </EmptyMedia>
+            <EmptyTitle>{face?.status ?? "No preview"}</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
+      )}
+    </SurfaceFrame>
   );
 }

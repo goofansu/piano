@@ -68,6 +68,8 @@ export interface CommandEffects {
   openForm: (form: CommandForm) => void;
   /** Opens `url` in a new tab, without giving it this page. */
   openUrl: (url: string) => void;
+  /** Shows the selected session's preview beside the conversation. */
+  openPreview: () => void;
   openPreviewDetails: () => void;
   /** Opens the webhook editor on a new webhook. */
   addWebhook: () => void;
@@ -139,6 +141,9 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "open-url":
       effects.openUrl(intent.url);
+      break;
+    case "open-preview":
+      effects.openPreview();
       break;
     case "preview-details":
       effects.openPreviewDetails();

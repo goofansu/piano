@@ -22,13 +22,13 @@ const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
 /** A tab's name, the name of its Close, and its view's region. */
 export function surfaceTabNames(tab: SurfaceTab) {
-  return tab === "changes"
-    ? { name: "Changes", close: "Hide changes", region: "Changes" }
-    : { name: fileName(tab.path), close: `Close ${fileName(tab.path)}`, region: "File viewer" };
+  if (tab === "changes") return { name: "Changes", close: "Hide changes", region: "Changes" };
+  if (tab === "preview") return { name: "Preview", close: "Hide preview", region: "Preview" };
+  return { name: fileName(tab.path), close: `Close ${fileName(tab.path)}`, region: "File viewer" };
 }
 
 /**
- * One view in the Surface area: a session's Changes, or an open file. The area
+ * One view in the Surface area: a session's Changes, its Preview, or an open file. The area
  * (`SessionPanel`) draws the tabs, each with its name and Close, in a row of their own; a view
  * owns the toolbar beneath them, what it shows on the left and its actions on the right, so naming
  * and closing never mix with acting, and its scrolling body. A view with nothing to show there

@@ -3,6 +3,7 @@ import {
   AppWindowIcon,
   ArchiveIcon,
   CopyIcon,
+  ExternalLinkIcon,
   FileDiffIcon,
   GitPullRequestIcon,
   ListIcon,
@@ -78,6 +79,7 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   agent: MessagesSquareIcon,
   "pull-request": GitPullRequestIcon,
   preview: AppWindowIcon,
+  external: ExternalLinkIcon,
   details: ScrollTextIcon,
   stop: SquareIcon,
   messages: MessageSquareIcon,
@@ -188,6 +190,7 @@ export function CommandHost({
     openProjects,
     openProject,
     openChanges,
+    openPreview: showPreview,
     toggleRail,
     showAgent,
     openPullRequest,
@@ -241,6 +244,11 @@ export function CommandHost({
     copy: (value, label) => void copySessionValue(value, label),
     openForm: forms.open,
     openUrl: openLink,
+    openPreview: () => {
+      showPreview();
+      // A read of the app already running, the same one opening the menu takes. It never launches.
+      previewObservation.refresh();
+    },
     openPreviewDetails: () => {
       setPreviewDetails(selectedPreview(state)?.instanceId ?? null);
       previewObservation.refresh();

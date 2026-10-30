@@ -45,6 +45,7 @@ export type SessionCommandId =
   | "wrap-changes"
   | "pull-request"
   | "open-preview"
+  | "open-preview-tab"
   | "preview-details"
   | "stop-preview"
   | "messages-only"
@@ -62,6 +63,7 @@ export type SessionCommandIcon =
   | "agent"
   | "pull-request"
   | "preview"
+  | "external"
   | "details"
   | "stop"
   | "messages"
@@ -89,6 +91,8 @@ export type SessionCommandIntent =
   | { kind: "pull-request"; linked: boolean }
   /** Open the app in a new tab. */
   | { kind: "open-url"; url: string }
+  /** Show the app beside the conversation. It does not start, stop or reload it. */
+  | { kind: "open-preview" }
   | { kind: "preview-details" }
   /** Turn Messages only on or off. */
   | { kind: "messages-only"; on: boolean }
@@ -235,7 +239,9 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - pull request, copy session ID: the selected session has a Pi session ID; a pull request is
  *   linked, read and unlinked in Changes, so it also follows Changes' rule and says why not.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
- *   an app; open needs its link, stop needs the attachment (`sessionReady`).
+ *   an app; open needs its link, stop needs the attachment (`sessionReady`). Side by side, Open
+ *   preview shows the app beside the conversation and Open in new tab is the way out; one area
+ *   at a time, Open preview is that new tab, since a second column would not fit.
  * - new session here: the checkout is present.
  * - copy session path: saved history has supplied its file path; no live Pi needed.
  * - copy git branch, commit SHA, repository name: listed only while the session has one.
@@ -386,7 +392,7 @@ export function sessionCommands(
         keywords: ["pr"],
         intent: { kind: "pull-request", linked },
       },
-      ...previewCommands(state),
+      ...previewCommands(state, single),
       {
         id: "messages-only",
         label: "Messages only",
@@ -477,9 +483,10 @@ export function sessionCommands(
 }
 
 /** The selected session's app commands; none unless its live Pi owns one. */
-function previewCommands(state: AppState): SessionCommand[] {
+function previewCommands(state: AppState, single: boolean): SessionCommand[] {
   const preview = selectedPreview(state);
   if (!preview) return [];
+  const beside = !single && !!preview.url;
   return [
     {
       id: "open-preview",
@@ -488,8 +495,22 @@ function previewCommands(state: AppState): SessionCommand[] {
       enabled: !!preview.url,
       keywords: ["app", "run", "localhost"],
       ...(preview.url && { detail: previewHost(preview.url) }),
-      intent: { kind: "open-url", url: preview.url ?? "" },
+      intent: beside ? { kind: "open-preview" } : { kind: "open-url", url: preview.url ?? "" },
     },
+    // A second column is the wide session's Open preview; the new tab stays reachable beside it.
+    ...(beside
+      ? [
+          {
+            id: "open-preview-tab" as const,
+            label: "Open in new tab",
+            icon: "external" as const,
+            enabled: true,
+            keywords: ["preview", "app", "browser"],
+            detail: previewHost(preview.url!),
+            intent: { kind: "open-url" as const, url: preview.url! },
+          },
+        ]
+      : []),
     {
       id: "preview-details",
       label: "Preview details",

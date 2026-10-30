@@ -370,12 +370,32 @@ test("preview commands exist only while the selected session's live Pi owns an a
   const running = { ...base, session: session("/work/repo.feature", { preview: app() }) };
   assert.deepEqual(previewIds(running), [
     ["open-preview", true],
+    ["open-preview-tab", true],
     ["preview-details", true],
     ["stop-preview", true],
   ]);
   const open = sessionCommands(running).find((c) => c.id === "open-preview");
-  assert.deepEqual(open?.intent, { kind: "open-url", url: "http://localhost:5173/" });
+  assert.deepEqual(open?.intent, { kind: "open-preview" });
   assert.equal(open?.detail, "localhost:5173");
+  const tab = sessionCommands(running).find((c) => c.id === "open-preview-tab");
+  assert.deepEqual(tab?.intent, { kind: "open-url", url: "http://localhost:5173/" });
+  assert.ok(tab?.keywords?.includes("preview"));
+  const narrow: SessionLayout = {
+    single: true,
+    agent: true,
+    surface: false,
+    rail: false,
+    agentTab: true,
+  };
+  const phone = sessionCommands(running, undefined, { layout: narrow });
+  assert.deepEqual(phone.find((c) => c.id === "open-preview")?.intent, {
+    kind: "open-url",
+    url: "http://localhost:5173/",
+  });
+  assert.equal(
+    phone.find((c) => c.id === "open-preview-tab"),
+    undefined,
+  );
   assert.deepEqual(sessionCommands(running).find((c) => c.id === "stop-preview")?.intent, {
     kind: "send",
     command: { _tag: "act", action: { _tag: "preview_stop", instanceId: "i1" } },
@@ -397,6 +417,11 @@ test("preview commands exist only while the selected session's live Pi owns an a
     ["preview-details", true],
     ["stop-preview", true],
   ]);
+  assert.equal(
+    sessionCommands(failed).find((c) => c.id === "open-preview")?.intent.kind,
+    "open-url",
+    "an app with no link has nothing to show beside the conversation",
+  );
   assert.equal(
     previewIds({ ...running, resync: true }).at(-1)?.[1],
     false,

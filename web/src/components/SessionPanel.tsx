@@ -1,4 +1,4 @@
-import { FileDiffIcon, XIcon } from "lucide-react";
+import { AppWindowIcon, FileDiffIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ChangesPanel } from "@/components/Changes";
 import { IconButton } from "@/components/IconButton";
@@ -9,6 +9,7 @@ import {
   PianoStripTabTrigger,
   Tabs,
 } from "@/components/PianoTabs";
+import { SessionPreviewPanel } from "@/components/SessionPreview";
 import type { PullRequestControl } from "@/components/SessionPullRequest";
 import { SurfaceColumn, surfaceTabNames } from "@/components/SurfaceArea";
 import { FileTabIcon, WorkspaceFile } from "@/components/WorkspaceFile";
@@ -41,6 +42,8 @@ export function SurfaceTabTrigger({
       icon={
         tab === "changes" ? (
           <FileDiffIcon className="size-3.5" />
+        ) : tab === "preview" ? (
+          <AppWindowIcon className="size-3.5" />
         ) : (
           <FileTabIcon path={tab.path} className="size-3.5" />
         )
@@ -52,7 +55,7 @@ export function SurfaceTabTrigger({
 }
 
 /**
- * The selected session's Surface area: its tabs, Changes and the files links opened.
+ * The selected session's Surface area: its tabs, Changes, Preview and the files links opened.
  * Beside the Agent area a strip holds the tabs, each with its Close, above the shown view's own
  * toolbar; one area at a time the session's tabs name the views instead. Every open tab stays
  * mounted, hidden while another shows, so scroll and expanded files survive switching; Changes
@@ -144,6 +147,7 @@ export function SessionPanel({
   const { workspace, changesWorkspace, changesUnavailable, checkoutMissing } =
     sessionContext(state);
   const files = tabs.filter((tab): tab is Exclude<SurfaceTab, string> => !isView(tab));
+  const previewOpen = tabs.includes("preview");
   const view = (k: string, children: React.ReactNode) => (
     <SurfaceView key={k} tab={k} shown={active === k} single={single}>
       {children}
@@ -199,6 +203,17 @@ export function SessionPanel({
               active={navigation.shownTab === "changes"}
               onAsk={onAsk}
               pullRequest={pullRequest}
+            />,
+          )}
+        {previewOpen &&
+          view(
+            "preview",
+            <SessionPreviewPanel
+              // Another session never keeps this session's frame.
+              key={key}
+              workspace={t.cwd}
+              shown={navigation.shownTab === "preview"}
+              onAsk={onAsk}
             />,
           )}
         {files.map((file) =>

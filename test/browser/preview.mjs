@@ -247,7 +247,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           );
         const menuLink = () =>
           page.evaluate(
-            "(a => a && { href: a.href, target: a.target })([...document.querySelectorAll('[role=menu] a')].find(a => a.textContent.includes('Open preview')))",
+            "(a => a && { href: a.href, target: a.target })([...document.querySelectorAll('[role=menu] a')].find(a => a.textContent.includes('Open in new tab')))",
           );
         await page.until("!!document.querySelector('header button[aria-label^=\"Preview:\"]')");
         assert.equal(await headerPreview(), RUNNING);
@@ -256,11 +256,39 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.see("Details");
         assert.deepEqual(await menuLink(), { href: app.url, target: "_blank" });
         await page.capture("1c-preview-menu");
+        // Wide session: Open preview shows the app beside the conversation and leaves it running.
+        await page.click("menuitem", "Open preview");
+        await page.until(
+          `document.querySelector('iframe[title^="Preview "]')?.getAttribute('src') === ${JSON.stringify(app.url)}`,
+        );
+        await page.capture("1c2-preview-beside");
+        await page.click("button", "Reload preview");
+        await page.until(
+          `document.querySelector('iframe[title^="Preview "]')?.getAttribute('src') === ${JSON.stringify(app.url)}`,
+        );
+        assert.equal(
+          request({ action: "status" }).instanceId,
+          identity,
+          "reload does not replace the app",
+        );
+        await page.click("button", "Ask about this preview");
+        await page.see("Added to your message");
+        await page.until(
+          `document.querySelector('[aria-label=Message]')?.value.includes(${JSON.stringify(app.url)})`,
+        );
+        await page.click("button", "Hide preview");
+        await page.until("!document.querySelector('iframe[title^=\"Preview \"]')");
+        assert.equal(
+          request({ action: "status" }).instanceId,
+          identity,
+          "hiding the view leaves the app",
+        );
+        await page.click("button", RUNNING);
         await page.click("menuitem", "Details");
         await page.see("Output");
         // Enter in the details opens the app; it never stops it.
         await page.until(
-          "document.activeElement?.tagName === 'A' && document.activeElement.textContent.includes('Open preview')",
+          "document.activeElement?.tagName === 'A' && document.activeElement.textContent.includes('Open in new tab')",
         );
         // Re-observed on opening: the app's own output, not the agent's transcript.
         await page.until(

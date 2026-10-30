@@ -9,7 +9,8 @@ header's Changes control wearing the pull request's face; see
 [the branch Changes design](research/2026-10-27-branch-changes-and-pull-requests.md). Written 2026-10-24, after a walk through Amp's thread screen and the
 [one-line session header research](research/2026-10-24-one-line-session-header.md). Slice 1,
 the one-line header with its menu on the title, is built on `session-header-polish`; the views
-below remain a proposal. Terms follow [the glossary](glossary.md); workspace identity and
+below remain a proposal, except Preview: on a wide session Open preview shows the app in the
+Surface area (see [managed live previews](live-previews.md)). Terms follow [the glossary](glossary.md); workspace identity and
 lifetimes stay under INV-01 and INV-07, and a preview stays Pi's process under
 [ADR 0003](adr/0003-pi-owned-preview-lifetime.md).
 
