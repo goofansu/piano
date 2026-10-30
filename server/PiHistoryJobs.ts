@@ -2,6 +2,7 @@
 import { stat } from "node:fs/promises";
 import { SHARE_ENV, Worker } from "node:worker_threads";
 import { retainImagePreview } from "./ImagePreviews.ts";
+import { fileVersion } from "./PiHistoryFile.ts";
 import type { HistoryReply, HistoryRequest } from "./PiHistoryWorker.ts";
 
 type Job = {
@@ -24,8 +25,7 @@ export class PiHistoryJobs {
     // distinct job. No completed result is retained: subsequent reads always consult Pi again.
     let version: string;
     try {
-      const s = await stat(request.path, { bigint: true });
-      version = [s.dev, s.ino, s.mode, s.size, s.mtimeNs, s.ctimeNs].join(":");
+      version = fileVersion(await stat(request.path, { bigint: true }));
     } catch {
       return failed;
     }
