@@ -12,6 +12,7 @@ import type { ClientCommand, Dialog, DialogResolution } from "@shared/wire";
 import type { AppState } from "../store.ts";
 // Relative, not @/: module tests load this file directly in Node.
 import { sessionReady } from "./sessionContext.ts";
+import type { SendDisposition } from "./ws.ts";
 
 /** Where a dialog is asked: a confirmation in a modal, any other method inline by the composer. */
 export type DialogSurface = "modal" | "inline";
@@ -138,14 +139,14 @@ export interface DialogAnswerView {
 }
 
 export interface DialogAnswer {
-  /** Whether a reply or abort was sent; `subscribe` fires when it becomes true. */
+  /** Whether a reply or abort may have been sent; `subscribe` fires after an attempt. */
   getState: () => boolean;
   subscribe: (listener: () => void) => () => void;
-  /** Sends the reply unless `view(now, connected).disabled`; true when it was sent. */
+  /** Sends unless disabled; true for sent or uncertain, false for blocked or known not sent. */
   answer: (reply: DialogReply, now: number, connected: boolean) => boolean;
   /** Closing the dialog: a cancelled reply, under the same rules as `answer`. */
   cancel: (now: number, connected: boolean) => boolean;
-  /** Requests a native abort unless `view(now, connected).abortDisabled`; true when it was sent. */
+  /** Requests native abort unless disabled; true for sent or uncertain delivery. */
   abort: (now: number, connected: boolean) => boolean;
   view: (now: number, connected: boolean) => DialogAnswerView;
 }
@@ -161,15 +162,17 @@ export function createDialogAnswer({
   send,
 }: {
   dialog: Dialog;
-  send: (command: ClientCommand) => void;
+  send: (command: ClientCommand) => SendDisposition;
 }): DialogAnswer {
   let submitted = false;
   const listeners = new Set<() => void>();
   const submit = (command: ClientCommand) => {
+    // Claim before entering the transport: it can synchronously notify connection subscribers.
     submitted = true;
-    send(command);
+    // Only proven non-delivery permits an explicit retry. Sent/uncertain must never replay.
+    if (send(command) === "not-sent") submitted = false;
     for (const listener of listeners) listener();
-    return true;
+    return submitted;
   };
   const owned = ownedByToolCall(dialog);
   const at = owned ? null : dialog.deadlineAt;

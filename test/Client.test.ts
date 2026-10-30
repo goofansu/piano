@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ClientMessage, ServerMessage, SessionClosure } from "../shared/wire.ts";
+import type { ClientMessage, Dialog, ServerMessage, SessionClosure } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
-import type { ConnectionHandlers, DisconnectReason } from "../web/src/lib/ws.ts";
+import { createDialogAnswer, pendingDialogs } from "../web/src/lib/piDialogs.ts";
+import type { ConnectionHandlers, DisconnectReason, SendDisposition } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
@@ -13,14 +14,16 @@ function harness() {
   const notes: Array<[string, NotifyLevel | undefined]> = [];
   let handlers: ConnectionHandlers | undefined;
   let ids = 0;
+  let disposition: SendDisposition = "sent";
   const client = createClient({
     initial: initialState,
     connect: (h) => {
       handlers = h;
       return {
         send: (m) => {
-          sent.push(m);
-          return "sent";
+          if (disposition !== "not-sent") sent.push(m);
+          if (disposition !== "sent") h.onStatus(false);
+          return disposition;
         },
         close: () => {},
       };
@@ -57,10 +60,80 @@ function harness() {
     cursor: { cwd: "/scratch", sessionId: "a", generation: "g1", sequence },
     event: e,
   });
-  return { client, sent, notes, server, status, selects, selected, event };
+  return {
+    client,
+    sent,
+    notes,
+    server,
+    status,
+    selects,
+    selected,
+    event,
+    transport: (result: SendDisposition) => {
+      disposition = result;
+    },
+  };
 }
 
 const act = { _tag: "act", action: { _tag: "abort" } } as const;
+
+for (const disposition of ["not-sent", "sent", "uncertain"] as const) {
+  test(`question answer ${disposition}: reconnect only permits retry after proven non-delivery`, () => {
+    const h = harness();
+    h.status(true);
+    h.client.select("/scratch", "a");
+    const dialog: Dialog = {
+      id: "question",
+      generation: "g1",
+      method: "input",
+      receivedAt: 0,
+      deadlineAt: null,
+      deadlineKind: "tool-end",
+      toolCallId: "call-1",
+    };
+    const attach = () => {
+      const selected = h.selected("a");
+      assert.ok(selected._tag === "selected");
+      h.server({ ...selected, snapshot: { ...selected.snapshot, dialogs: [{ ...dialog }] } });
+    };
+    attach();
+    const rendered = pendingDialogs(h.client.getState());
+    assert.equal(rendered.connected, true);
+    const controller = createDialogAnswer({ dialog: rendered.head!, send: h.client.send });
+    // The transport fails at click time, while the rendered connection status is still true.
+    h.transport(disposition);
+    const reply = { value: "keep this answer" };
+    assert.equal(controller.answer(reply, 1_000, rendered.connected), disposition !== "not-sent");
+    const answers = () => h.sent.filter((m) => m._tag === "act" && m.action._tag === "answer");
+    assert.equal(answers().length, disposition === "not-sent" ? 0 : 1);
+    h.status(false);
+    assert.equal(
+      controller.view(1_000, pendingDialogs(h.client.getState()).connected).disabled,
+      true,
+    );
+    h.transport("sent");
+    h.status(true);
+    assert.equal(pendingDialogs(h.client.getState()).connected, false, "wait for reattachment");
+    attach();
+    const reconnected = pendingDialogs(h.client.getState());
+    assert.deepEqual(reconnected.head, rendered.head, "same pending question and generation");
+    assert.equal(reconnected.connected, true);
+    assert.equal(answers().length, disposition === "not-sent" ? 0 : 1, "no automatic replay");
+    assert.equal(controller.view(1_000, true).disabled, disposition !== "not-sent");
+    assert.equal(
+      controller.answer(reply, 1_000, reconnected.connected),
+      disposition === "not-sent",
+    );
+    assert.equal(controller.cancel(1_000, true), false);
+    assert.equal(controller.abort(1_000, true), false);
+    assert.equal(answers().length, 1, "exactly one possible delivery, even after explicit retry");
+    assert.deepEqual(answers()[0], {
+      _tag: "act",
+      selectionId: disposition === "not-sent" ? "sel2" : "sel1",
+      action: { _tag: "answer", id: dialog.id, generation: dialog.generation, ...reply },
+    });
+  });
+}
 
 for (const failure of ["selection_rejected", "selection_failed"] as const)
   for (const retained of [false, true]) {

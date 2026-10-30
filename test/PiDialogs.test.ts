@@ -24,7 +24,16 @@ const dialog = (id: string, extra: Partial<Dialog> = {}): Dialog => ({
 
 function answering(d: Dialog = dialog("d1")) {
   const sent: ClientCommand[] = [];
-  return { sent, dialogAnswer: createDialogAnswer({ dialog: d, send: (c) => sent.push(c) }) };
+  return {
+    sent,
+    dialogAnswer: createDialogAnswer({
+      dialog: d,
+      send: (c) => {
+        sent.push(c);
+        return "sent";
+      },
+    }),
+  };
 }
 
 test("a dialog is answered at most once, with its id and generation", () => {
@@ -77,6 +86,44 @@ test("a disconnected answer sends nothing and leaves the dialog answerable", () 
     "answerable on reconnect",
   );
 });
+
+for (const action of ["answer", "cancel", "abort"] as const) {
+  test(`a known-unsent ${action} releases the guard; uncertain delivery never does`, () => {
+    let disposition: "not-sent" | "uncertain" = "not-sent";
+    let attempts = 0;
+    const controller = createDialogAnswer({
+      dialog: dialog("d1"),
+      send: () => {
+        attempts++;
+        assert.equal(controller.cancel(1_000, true), false, "guard before calling transport");
+        return disposition;
+      },
+    });
+    const submit = () =>
+      action === "answer"
+        ? controller.answer({ value: "kept" }, 1_000, true)
+        : controller[action](1_000, true);
+    assert.equal(submit(), false);
+    assert.equal(controller.getState(), false);
+    assert.equal(controller.view(1_000, false).disabled, true);
+    assert.equal(controller.view(1_000, false).abortDisabled, true);
+    assert.equal(controller.view(1_000, true).disabled, false);
+    assert.equal(controller.view(1_000, true).abortDisabled, false);
+    assert.equal(controller.view(DEADLINE, true).disabled, true, "retry respects deadline");
+    assert.equal(controller.view(DEADLINE, true).abortDisabled, false);
+    assert.equal(attempts, 1, "reconnection does not replay");
+    disposition = "uncertain";
+    assert.equal(submit(), true);
+    assert.equal(controller.getState(), true);
+    assert.equal(controller.view(1_000, false).disabled, true);
+    assert.equal(controller.view(1_000, true).disabled, true);
+    assert.equal(controller.view(1_000, true).abortDisabled, true);
+    assert.equal(submit(), false);
+    assert.equal(controller.cancel(1_000, true), false);
+    assert.equal(controller.abort(1_000, true), false);
+    assert.equal(attempts, 2);
+  });
+}
 
 test("closing a dialog cancels it", () => {
   const { sent, dialogAnswer } = answering();
