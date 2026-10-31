@@ -46,7 +46,30 @@ await run(
       // Pi's last statistics, which Piano keeps for each session it has run.
       stats: { cost, statsUpdatedAt: Date.now() },
     });
-    history({ sessionId: "login-bug", cwd, messages: [1, 2, 3, 4, 5, 6].flatMap(exchange) });
+    history({
+      sessionId: "login-bug",
+      cwd,
+      messages: [
+        ...[1, 2, 3, 4, 5, 6].flatMap(exchange),
+        // A tall tool output at the end, where a freshly opened transcript follows the bottom. The
+        // call carries no usage, so the cost figures below stay those of the six replies.
+        {
+          ...exchange(6)[1],
+          usage: undefined,
+          content: [
+            { type: "toolCall", id: "tail-tool", name: "bash", arguments: { command: "npm test" } },
+          ],
+        },
+        {
+          role: "toolResult",
+          toolCallId: "tail-tool",
+          toolName: "bash",
+          content: [{ type: "text", text: "tail tool output\n".repeat(60) }],
+          isError: false,
+          timestamp,
+        },
+      ],
+    });
     // Alternating prompts and Markdown replies expose per-row forced layout on session switches.
     const release = Array.from({ length: 60 }, (_, i) => exchange(i + 1)).flat();
     release.splice(
@@ -102,6 +125,36 @@ await run(
     await page.click("button", "Fix the login bug");
     await page.see("Answer 6.");
     await page.capture("1-transcript");
+
+    // Opening a tool reads it from its header: the output grows below the header the reader
+    // clicked. A fresh transcript follows the bottom, and used to follow this growth too, so the
+    // first open showed the output's tail with its header pinned at the top.
+    const tailTool = '[role="group"][aria-label="bash tool call"]';
+    const tailToolGeometry = () =>
+      page.evaluate(`(() => {
+        const t = document.querySelector('[data-slot="transcript"]').getBoundingClientRect();
+        const h = document.querySelector('${tailTool} [data-slot="tool-header"]').getBoundingClientRect();
+        const pre = document.querySelector('${tailTool} [data-slot="tool-output"] pre');
+        return { header: h.top - t.top, output: pre ? pre.getBoundingClientRect().top - t.top : null };
+      })()`);
+    const closedTool = await tailToolGeometry();
+    await page.ab("click", `${tailTool} [data-slot="collapsible-trigger"]`);
+    await page.until(`document.querySelector('${tailTool}').dataset.state === 'open'`);
+    const openedTool = await tailToolGeometry();
+    assert.ok(
+      Math.abs(openedTool.header - closedTool.header) < 1,
+      `opening a tool keeps its header in place (${closedTool.header} → ${openedTool.header})`,
+    );
+    assert.ok(
+      openedTool.output > openedTool.header,
+      "the output starts below the header rather than scrolling past it",
+    );
+    await page.capture("1b-tool-opened-at-end");
+    await page.ab(
+      "click",
+      `${tailTool} [data-slot="tool-header"] [data-slot="collapsible-trigger"]`,
+    );
+    await page.until(`document.querySelector('${tailTool}').dataset.state === 'closed'`);
 
     const inView = (text) =>
       page.evaluate(`(() => {

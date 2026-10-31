@@ -476,6 +476,10 @@ function FoldRow({
     heading.current?.querySelector("button")?.focus({ preventScroll: true });
   });
   const changeOpen = (next: boolean) => {
+    // Opening expresses reading intent: the output grows under the header the reader clicked. A
+    // view following the bottom (a transcript that fits its window is at the bottom) would
+    // otherwise follow the growth and show the output's tail.
+    if (toolOutput && !open && next) viewport?.hold();
     if (toolOutput && open && !next) {
       const el = root.current;
       const head = heading.current;

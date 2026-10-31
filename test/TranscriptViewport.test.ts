@@ -184,6 +184,31 @@ test("a jump to the end re-pins a reader who had scrolled up, so new output foll
   assert.equal(el.scrollTop, 2100);
 });
 
+test("a reader who opened a fold stays on its header while it grows the content", () => {
+  // A transcript that fits its window sits at the end, so it is pinned; opening a tall tool
+  // output there must not follow the growth to the output's tail.
+  const fits = setup({ height: 500, client: 500 });
+  fits.viewport.hold();
+  fits.el.scrollHeight = 7000;
+  fits.viewport.rendered();
+  fits.viewport.resized({ container: true });
+  assert.equal(fits.el.scrollTop, 0, "the header the reader clicked stays where it was");
+  assert.equal(fits.viewport.atBottom(), false, "the end is now out of view");
+  fits.el.scrollHeight = 7600;
+  fits.viewport.rendered();
+  assert.equal(fits.el.scrollTop, 0, "later output leaves the reader in place too");
+
+  const pinned = setup();
+  pinned.viewport.hold();
+  pinned.el.scrollHeight = 2600;
+  pinned.viewport.rendered();
+  assert.equal(pinned.el.scrollTop, 1500, "a pinned reader at the end of a long transcript too");
+  scroll(pinned.el, pinned.viewport, 2100);
+  pinned.el.scrollHeight = 2700;
+  pinned.viewport.rendered();
+  assert.equal(pinned.el.scrollTop, 2200, "reaching the end again pins the view");
+});
+
 test("a jump to the top moves the reader there at once", () => {
   const { viewport, el } = setup();
   viewport.jump({ kind: "top", id: "top", label: "Top" });
