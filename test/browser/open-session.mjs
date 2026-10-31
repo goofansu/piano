@@ -302,8 +302,26 @@ await run(
     })()`);
     const tool = '[role="group"][aria-label="bash tool call"]';
     await page.evaluate(`document.querySelector('[data-slot="transcript"]').scrollTop -= 200`);
+    const headerGeometry = () =>
+      page.evaluate(`(() => {
+        const h = document.querySelector('${tool} [data-slot="tool-header"]').getBoundingClientRect();
+        const g = document.querySelector('${tool} [data-slot="tool-header"] [data-slot="gutter"]').getBoundingClientRect();
+        return { padding: [g.top - h.top, h.bottom - g.bottom], height: h.height };
+      })()`);
+    const compact = await headerGeometry();
+    assert.deepEqual(compact.padding, [4, 4], "tool headers retain their original compact density");
     await page.ab("click", `${tool} [data-slot="collapsible-trigger"]`);
     await page.see("measured tool output");
+    assert.deepEqual(await headerGeometry(), compact, "opening does not change header height");
+    assert.equal(
+      await page.evaluate(`(() => {
+        const h = document.querySelector('${tool} [data-slot="tool-header"]').getBoundingClientRect();
+        const body = document.querySelector('${tool} [data-slot="collapsible-content"] pre').getBoundingClientRect();
+        return body.top - h.bottom;
+      })()`),
+      8,
+      "tool output retains its original separation from the header",
+    );
     assert.equal(
       await page.evaluate(
         `document.querySelector('${tool} [data-slot="tool-output"]').textContent.match(/measured tool output/g).length`,
@@ -342,16 +360,8 @@ await run(
     })()`);
     assert.ok(Math.abs(await headerOffset()) < 1, "the tool header pins at the transcript edge");
     // The title stays inside the disclosure even while expanded and pinned (not just a
-    // separate Collapse button). Geometry, rather than class names, protects the breathing room.
-    assert.deepEqual(
-      await page.evaluate(`(() => {
-        const h = document.querySelector('${tool} [data-slot="tool-header"]').getBoundingClientRect();
-        const g = document.querySelector('${tool} [data-slot="tool-header"] [data-slot="gutter"]').getBoundingClientRect();
-        return [g.top - h.top, h.bottom - g.bottom];
-      })()`),
-      [12, 12],
-      "the pinned header retains transcript-scale padding above and below its line",
-    );
+    // separate Collapse button). Pinning must not change the compact header's geometry.
+    assert.deepEqual(await headerGeometry(), compact, "pinning does not change header height");
     await page.ab("click", `${tool} [data-slot="tool-header"] .font-medium`);
     await page.until(`document.querySelector('${tool}').dataset.state === 'closed'`);
     assert.ok(Math.abs(await headerOffset()) < 1, "collapse preserves the header's position");
