@@ -21,7 +21,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { SessionLinks, SessionLinksBrowser } from "@/components/SessionLinks";
 import { SessionOutputs } from "@/components/SessionOutputs";
-import { PreviewRailRow, useSelectedPreview } from "@/components/SessionPreview";
+import { PreviewRailRow, useSeenPreview } from "@/components/SessionPreview";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -188,7 +188,7 @@ function RailSections({
   showAllRef: React.Ref<HTMLButtonElement>;
 }) {
   const session = state.session;
-  const preview = useSelectedPreview(state);
+  const preview = useSeenPreview(state);
   const { cwd, branch, detachedHead, githubRepo, branchUrl, pullRequest } = sessionContext(state);
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;

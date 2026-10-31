@@ -6,6 +6,7 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { SessionLayout } from "./navigation.ts";
+import { type PreviewObservationState, seenPreview } from "./previewObservation.ts";
 import { pullRequestView } from "./pullRequestView.ts";
 import {
   checkoutMissingAt,
@@ -18,7 +19,7 @@ import {
   sessionWorking,
   workspaceFor,
 } from "./sessionContext.ts";
-import { previewHost, selectedPreview, sessionHasPreview } from "./sessionPreview.ts";
+import { previewHost, sessionHasPreview } from "./sessionPreview.ts";
 
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
@@ -241,9 +242,9 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  *   Surface tab.
  * - pull request, copy session ID: the selected session has a Pi session ID; a pull request is
  *   linked, read and unlinked in Changes, so it also follows Changes' rule and says why not.
- * - open, stop and details of the preview: listed only while the selected session's live Pi owns
- *   an app; open needs its link, which an unanswered status read withholds, stop needs the
- *   attachment (`sessionReady`).
+ * - open, stop and details of the preview: listed only with the page's preview observation and
+ *   while the selected session's live Pi owns an app (`seenPreview`); open needs its link, which
+ *   an unanswered status read withholds, stop needs the attachment (`sessionReady`).
  * - new session here: the checkout is present.
  * - copy session path: saved history has supplied its file path; no live Pi needed.
  * - copy git branch, commit SHA, repository name: listed only while the session has one.
@@ -258,8 +259,8 @@ export function sessionCommands(
     radiusSignedIn?: boolean;
     /** The session's layout as navigation has it; by default side by side with only Agent. */
     layout?: SessionLayout;
-    /** The app whose last status read went unanswered; its link waits for a read that answers. */
-    previewUnconfirmed?: string | null;
+    /** The page's preview observation (`seenPreview`); without it no preview command is listed. */
+    previewObservation?: Pick<PreviewObservationState, "unconfirmed">;
   } = {},
 ): SessionCommand[] {
   const session = state.session;
@@ -394,7 +395,7 @@ export function sessionCommands(
         keywords: ["pr"],
         intent: { kind: "pull-request", linked },
       },
-      ...previewCommands(state, options.previewUnconfirmed ?? null),
+      ...(options.previewObservation ? previewCommands(state, options.previewObservation) : []),
       {
         id: "messages-only",
         label: "Messages only",
@@ -485,8 +486,11 @@ export function sessionCommands(
 }
 
 /** The selected session's app commands; none unless its live Pi owns one. */
-function previewCommands(state: AppState, unconfirmed: string | null): SessionCommand[] {
-  const preview = selectedPreview(state, unconfirmed);
+function previewCommands(
+  state: AppState,
+  observed: Pick<PreviewObservationState, "unconfirmed">,
+): SessionCommand[] {
+  const preview = seenPreview(state, observed);
   if (!preview) return [];
   return [
     {

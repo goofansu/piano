@@ -26,8 +26,7 @@ import type {
 } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
-import { createPreviewObservation } from "../web/src/lib/previewObservation.ts";
-import { selectedPreview } from "../web/src/lib/sessionPreview.ts";
+import { createPreviewObservation, seenPreview } from "../web/src/lib/previewObservation.ts";
 import {
   createWorktreeOperation,
   type WorktreeOperation,
@@ -383,7 +382,7 @@ for (const refusal of ["client", "session"] as const) {
           refused.details?.error ?? "",
           refusal === "client" ? /Client input capacity is full/ : /Session input capacity is full/,
         );
-        const unknown = selectedPreview(page, refused.unconfirmed)!;
+        const unknown = seenPreview(page, refused)!;
         assert.equal(unknown.state, "unknown", "the app stays inspectable, with unknown status");
         assert.equal(unknown.url, null, "its ready link is withheld");
 

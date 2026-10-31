@@ -4,11 +4,11 @@
  * another authority for app lifetime. Nothing here depends on React.
  */
 // Relative, not @shared: module tests load this file directly in Node.
-import type { ClientCommand, ServerMessage } from "../../../shared/wire.ts";
+import type { ClientCommand, ServerMessage, SessionPreview } from "../../../shared/wire.ts";
 import { type AppState, isSession } from "../store.ts";
 import { browserEnvironment, type ObservationEnvironment } from "./observation.ts";
 import { sessionReady } from "./sessionContext.ts";
-import { previewStatus, selectedPreview } from "./sessionPreview.ts";
+import { hostedPreview, previewStatus } from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
 /** The last details answer for one session's app. */
@@ -36,6 +36,23 @@ export interface PreviewObservationState {
   terminal: PreviewTerminal | null;
   /** The app whose last read ended unanswered, so its status is unknown until a read answers. */
   unconfirmed: string | null;
+}
+
+/**
+ * The selected session's app as this page sees it, which the session rail, Preview, Details and
+ * palette all show. The store's app, unless this page cannot vouch for its status: without an
+ * attachment (`sessionReady`), or after its last status read went unanswered (`unconfirmed`), it
+ * is unknown, without its frame or link, until a read answers. Neither says anything about the
+ * server-owned app's lifetime: it is not stopped.
+ */
+export function seenPreview(
+  page: AppState,
+  observed: Pick<PreviewObservationState, "unconfirmed">,
+): SessionPreview | undefined {
+  const preview = hostedPreview(page);
+  if (!preview || (sessionReady(page) && preview.instanceId !== observed.unconfirmed))
+    return preview;
+  return { ...preview, state: "unknown", ready: false, url: null, detail: "" };
 }
 
 /** The client to follow; the page's `Client` is one. */
@@ -129,7 +146,7 @@ export function createPreviewObservation({
           pending = null;
           set(empty());
         }
-        const nextInstance = attachment ? (selectedPreview(page)?.instanceId ?? null) : null;
+        const nextInstance = attachment ? (hostedPreview(page)?.instanceId ?? null) : null;
         if (nextInstance !== instanceId) {
           changed = true;
           instanceId = nextInstance;

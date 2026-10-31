@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientCommand, ServerMessage, SessionPreview, SessionState } from "../shared/wire.ts";
-import { createPreviewObservation } from "../web/src/lib/previewObservation.ts";
+import { createPreviewObservation, seenPreview } from "../web/src/lib/previewObservation.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
-import { previewFrameUrl, selectedPreview } from "../web/src/lib/sessionPreview.ts";
+import { previewFrameUrl } from "../web/src/lib/sessionPreview.ts";
 import type { SendDisposition } from "../web/src/lib/ws.ts";
 import { type AppState, initialState, reduce } from "../web/src/store.ts";
 
@@ -72,7 +72,10 @@ test("embedding admits only the registered ready HTTP URL outside the control or
   assert.equal(previewFrameUrl({ ...app, url: null }, control), null);
   assert.equal(previewFrameUrl(undefined, control), null);
   assert.equal(
-    previewFrameUrl(selectedPreview({ ...page({ preview: app }), connected: false }), control),
+    previewFrameUrl(
+      seenPreview({ ...page({ preview: app }), connected: false }, { unconfirmed: null }),
+      control,
+    ),
     null,
   );
 });
@@ -308,7 +311,7 @@ test("disconnect is unknown, clears details, ignores late answers and reconnect 
   const disconnected = reduce(original, { type: "connected", connected: false });
   f.set(disconnected);
   assert.deepEqual(f.observation.getState(), empty);
-  const unknown = selectedPreview(disconnected)!;
+  const unknown = seenPreview(disconnected, f.observation.getState())!;
   assert.equal(unknown.state, "unknown");
   assert.equal(unknown.ready, false);
   assert.equal(unknown.url, null);
@@ -376,19 +379,24 @@ test("a refused read settles only its own request and leaves the app inspectable
       error: "Client input capacity is full. Request was not started.",
     },
   });
+  // Every view reads the app through the observation, so the refusal reaches them all.
   const state = page({ preview: app });
-  const unknown = selectedPreview(state, "i1")!;
+  const unknown = seenPreview(state, f.observation.getState())!;
   assert.deepEqual(
     [unknown.instanceId, unknown.state, unknown.ready, unknown.url],
     ["i1", "unknown", false, null],
   );
   assert.equal(previewFrameUrl(unknown, "http://localhost:7070"), null, "no stale frame");
-  assert.equal(selectedPreview(state, "other")?.url, app.url, "only that app is unconfirmed");
-  const open = (unconfirmed: string | null) =>
-    sessionCommands(state, undefined, { previewUnconfirmed: unconfirmed }).find(
+  assert.equal(
+    seenPreview(state, { unconfirmed: "other" })?.url,
+    app.url,
+    "only that app is unconfirmed",
+  );
+  const open = () =>
+    sessionCommands(state, undefined, { previewObservation: f.observation.getState() }).find(
       (c) => c.id === "open-preview",
     )?.enabled;
-  assert.deepEqual([open("i1"), open(null)], [false, true], "no ready-link action");
+  assert.equal(open(), false, "no ready-link action");
 
   f.focus(10_000);
   assert.equal(f.sent.length, 2, "the focus throttle still holds");
@@ -401,6 +409,7 @@ test("a refused read settles only its own request and leaves the app inspectable
     ...empty,
     details: { cwd: "/repo", sessionId: "s1", instanceId: "i1", logs: "current" },
   });
+  assert.equal(open(), true, "an answered read restores the link");
   f.focus(15_000);
   assert.equal(f.sent.length, 4);
   f.deliver(unobserved("r4"));
