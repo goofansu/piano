@@ -111,6 +111,26 @@ const publicIntent = (record: Intent) => ({
   spec: { ...record.spec, env: Object.keys(record.spec.env) },
 });
 
+/**
+ * An app observation: the public intent with its state, readiness and where opening it works.
+ * Every observation, including a launch's first `starting` progress, is built here, so a
+ * consumer reading one (PreviewProjection) never sees two shapes. A loopback origin is opened on
+ * this host, exactly where readiness was observed.
+ */
+const observation = <
+  Rest extends { state: string; ready: boolean; url: string | null; detail: string },
+>(
+  record: Intent,
+  rest: Rest,
+) => ({
+  ...publicIntent(record),
+  ...rest,
+  externalAccess: loopbackOrigin.test(record.spec.origin)
+    ? ("same-host" as const)
+    : ("unverified" as const),
+  observedAt: Date.now() / 1000,
+});
+
 /** A start that failed after saving its launch intent: `instance` may be running, or not. */
 export class PreviewStartError extends Error {
   readonly instance: ReturnType<typeof publicIntent>;
@@ -959,8 +979,7 @@ export class PreviewAdapter {
         detail = `Local readiness: ${message(error)}`;
       }
     }
-    return {
-      ...publicIntent(record),
+    return observation(record, {
       state: terminalState,
       termination,
       supervisor: state.raw,
@@ -968,11 +987,8 @@ export class PreviewAdapter {
       detail,
       binding: ready ? "127.0.0.1" : null,
       url: ready ? `${record.spec.origin}:${record.port}/` : null,
-      // A loopback origin is opened on this host, exactly where readiness was observed.
-      externalAccess: loopback ? "same-host" : "unverified",
-      observedAt: Date.now() / 1000,
       logs: withLogs ? await this.logs(supervisor, record, root) : "",
-    };
+    });
   }
 
   /** `progress` hears what a start has already changed before it returns: the replaced instance
@@ -1194,15 +1210,14 @@ export class PreviewAdapter {
       createdAt: Date.now() / 1000,
     };
     await save(path, record); // Durable intent BEFORE submission; never blindly replay it.
-    progress({
-      ...publicIntent(record),
-      state: "starting",
-      ready: false,
-      url: null,
-      detail: "Launching; waiting for its readiness check.",
-      externalAccess: loopbackOrigin.test(record.spec.origin) ? "same-host" : "unverified",
-      observedAt: Date.now() / 1000,
-    });
+    progress(
+      observation(record, {
+        state: "starting",
+        ready: false,
+        url: null,
+        detail: "Launching; waiting for its readiness check.",
+      }),
+    );
     try {
       try {
         await supervisor.submit(
