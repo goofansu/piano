@@ -49,7 +49,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Item, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
-import { previewObservation, seenPreview } from "@/lib/previewObservation";
+import { previewObservation, seenDetails, seenPreview, seenStop } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
   type PreviewTone,
@@ -187,11 +187,7 @@ export function PreviewPanel() {
   // tab discards this identity; browser memory never restores a Preview tab.
   const [viewedInstance, setViewedInstance] = useState(preview?.instanceId ?? null);
   if (preview && preview.instanceId !== viewedInstance) setViewedInstance(preview.instanceId);
-  const stopped =
-    !preview &&
-    observed.terminal?.instanceId === viewedInstance &&
-    observed.terminal?.cwd === state.session?.cwd &&
-    observed.terminal?.sessionId === state.session?.sessionId;
+  const stopped = seenStop(state, observed, viewedInstance);
   const url = previewFrameUrl(preview, window.location.origin);
   const actions = preview && (
     <>
@@ -408,14 +404,7 @@ export function PreviewDetailsDialog({
   const observed = usePreviewObservation();
   const openRef = useRef<HTMLAnchorElement>(null);
   const preview = seenPreview(state, observed);
-  const session = state.session;
-  const details =
-    preview &&
-    observed.details?.cwd === session?.cwd &&
-    observed.details?.sessionId === session?.sessionId &&
-    observed.details?.instanceId === preview.instanceId
-      ? observed.details
-      : undefined;
+  const details = seenDetails(state, observed);
   return (
     <Dialog
       open={!!preview && preview.instanceId === instanceId}

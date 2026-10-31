@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientCommand, ServerMessage, SessionPreview, SessionState } from "../shared/wire.ts";
-import { createPreviewObservation, seenPreview } from "../web/src/lib/previewObservation.ts";
+import {
+  createPreviewObservation,
+  seenDetails,
+  seenPreview,
+  seenStop,
+} from "../web/src/lib/previewObservation.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { previewFrameUrl } from "../web/src/lib/sessionPreview.ts";
 import type { SendDisposition } from "../web/src/lib/ws.ts";
@@ -453,6 +458,31 @@ test("confirmed stop leaves a disposable exact-instance terminal and notifies su
     assert.equal(f.observation.getState().terminal, null);
     assert.equal(f.observation.getState().refreshing, true);
   }
+});
+
+test("Details and Preview stopped show only the records of the session and app on screen", () => {
+  const details = { cwd: "/repo", sessionId: "s1", instanceId: "i1", logs: "ready" };
+  const terminal = { cwd: "/repo", sessionId: "s1", instanceId: "i1", state: "stopped" as const };
+  const withApp = page({ preview: app });
+  assert.equal(seenDetails(withApp, { ...empty, details }), details);
+  for (const other of [
+    { ...details, cwd: "/other" },
+    { ...details, sessionId: "other" },
+    { ...details, instanceId: "i2" },
+  ])
+    assert.equal(seenDetails(withApp, { ...empty, details: other }), undefined);
+  assert.equal(seenDetails(page(), { ...empty, details }), undefined);
+
+  assert.equal(seenStop(page(), { terminal }, "i1"), true);
+  // A view that never inspected the stopped app, or a session that has an app again, shows no stop.
+  assert.equal(seenStop(page(), { terminal }, null), false);
+  assert.equal(seenStop(page(), { terminal }, "i2"), false);
+  assert.equal(seenStop(withApp, { terminal }, "i1"), false);
+  for (const other of [
+    { ...terminal, cwd: "/other" },
+    { ...terminal, sessionId: "other" },
+  ])
+    assert.equal(seenStop(page(), { terminal: other }, "i1"), false);
 });
 
 test("not-current is informational; an old stop never marks a replacement as stopped", () => {

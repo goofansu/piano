@@ -55,6 +55,44 @@ export function seenPreview(
   return { ...preview, state: "unknown", ready: false, url: null, detail: "" };
 }
 
+/** Whether a record was taken for the session the page shows now: same checkout, same session. */
+const ofSession = (page: AppState, record: { cwd: string; sessionId: string }) =>
+  record.cwd === page.session?.cwd && record.sessionId === page.session?.sessionId;
+
+/**
+ * The details answer for the app `seenPreview` shows, or undefined when the last answer belongs to
+ * another session, checkout or app instance, or there is no app to inspect.
+ */
+export function seenDetails(
+  page: AppState,
+  observed: Pick<PreviewObservationState, "details" | "unconfirmed">,
+): PreviewDetails | undefined {
+  const preview = seenPreview(page, observed);
+  const details = observed.details;
+  return preview && details && ofSession(page, details) && details.instanceId === preview.instanceId
+    ? details
+    : undefined;
+}
+
+/**
+ * Whether a view that inspected `viewedInstance` shows its app as stopped: the session has no app
+ * now, and the confirmed stop is of that very instance in this session. Only a view that actually
+ * inspected the app can keep its stop; a view opened after it shows no app at all.
+ */
+export function seenStop(
+  page: AppState,
+  observed: Pick<PreviewObservationState, "terminal">,
+  viewedInstance: string | null,
+): boolean {
+  const terminal = observed.terminal;
+  return (
+    !hostedPreview(page) &&
+    !!terminal &&
+    terminal.instanceId === viewedInstance &&
+    ofSession(page, terminal)
+  );
+}
+
 /** The client to follow; the page's `Client` is one. */
 export interface PreviewObservationSource {
   getState: () => AppState;
