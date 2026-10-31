@@ -418,7 +418,9 @@ async function admitLaunch(command: string[], workspace: string) {
   const checkRoot = async (value: string) => {
     // Resolve existing ancestors too: a missing child beneath an outward symlink is outside.
     // Canonical comparison also accepts symlinked checkout spellings (e.g. /var on macOS).
-    let ancestor = resolve(checkout, value);
+    // Keep the spelling unnormalized: the kernel follows `link/..` through the link, so
+    // collapsing it lexically (as `resolve` does) would check a different file than runs.
+    let ancestor = isAbsolute(value) ? value : `${checkout}${sep}${value}`;
     for (;;) {
       try {
         if (!within(await realpath(ancestor)))
@@ -426,7 +428,10 @@ async function admitLaunch(command: string[], workspace: string) {
         break;
       } catch (error) {
         if (code(error) !== "ENOENT") throw error;
-        if (ancestor === checkout) throw error;
+        // `missing/..` has no destination until `missing` exists; refuse rather than guess.
+        if (basename(ancestor) === "..")
+          refuse("an explicit launch root climbs out of a missing directory");
+        if (resolve(ancestor) === checkout) throw error;
         ancestor = dirname(ancestor);
       }
     }
