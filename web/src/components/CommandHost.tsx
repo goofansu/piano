@@ -19,7 +19,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { createContext, useContext, useRef, useState } from "react";
+import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -118,8 +118,18 @@ export function useCommands() {
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
   const { state, run, messagesOnly, changesWrap, radiusSignedIn, layout } = useCommands();
+  const { unconfirmed } = useSyncExternalStore(
+    previewObservation.subscribe,
+    previewObservation.getState,
+  );
   return {
-    commands: sessionCommands(state, target, { messagesOnly, changesWrap, radiusSignedIn, layout }),
+    commands: sessionCommands(state, target, {
+      messagesOnly,
+      changesWrap,
+      radiusSignedIn,
+      layout,
+      previewUnconfirmed: unconfirmed,
+    }),
     run,
     messagesOnly,
   };

@@ -34,6 +34,8 @@ export interface PreviewObservationState {
   details: PreviewDetails | null;
   /** Discarded on attachment/owner loss or replacement, including disconnect and unfollow. */
   terminal: PreviewTerminal | null;
+  /** The app whose last read ended unanswered, so its status is unknown until a read answers. */
+  unconfirmed: string | null;
 }
 
 /** The client to follow; the page's `Client` is one. */
@@ -57,7 +59,12 @@ export interface PreviewObservation {
 
 /** Returning to the page re-observes at most this often. */
 const FOCUS_MS = 10_000;
-const empty = (): PreviewObservationState => ({ refreshing: false, details: null, terminal: null });
+const empty = (): PreviewObservationState => ({
+  refreshing: false,
+  details: null,
+  terminal: null,
+  unconfirmed: null,
+});
 
 export function createPreviewObservation({
   environment = browserEnvironment,
@@ -154,7 +161,37 @@ export function createPreviewObservation({
         read();
       });
       const unlisten = followed.listen((m) => {
-        if (!active || m._tag !== "action_result") return;
+        if (!active) return;
+        if (m._tag === "preview_unobserved") {
+          reconcile();
+          const page = followed.getState();
+          // Only this attachment's outstanding read: an unrelated error or a late refusal of an
+          // earlier read leaves it pending.
+          if (
+            !attachment ||
+            !pending ||
+            m.requestId !== pending ||
+            m.selectionId !== page.selectionId ||
+            !instanceId ||
+            !page.session?.sessionId
+          )
+            return;
+          pending = null;
+          set({
+            ...state,
+            refreshing: false,
+            unconfirmed: instanceId,
+            details: {
+              cwd: page.session.cwd,
+              sessionId: page.session.sessionId,
+              instanceId,
+              logs: state.details?.logs ?? "",
+              error: m.message,
+            },
+          });
+          return;
+        }
+        if (m._tag !== "action_result") return;
         reconcile();
         const onScreen = attachment !== null && isSession(followed.getState().session, m);
         if (m.result._tag === "preview_observed") {
@@ -173,6 +210,7 @@ export function createPreviewObservation({
           set({
             ...state,
             refreshing: false,
+            unconfirmed: null,
             details: {
               cwd: m.cwd,
               sessionId: m.sessionId,

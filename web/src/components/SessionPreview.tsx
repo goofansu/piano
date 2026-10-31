@@ -66,6 +66,7 @@ import {
   selectedPreview,
 } from "@/lib/sessionPreview";
 import { useNavigation } from "@/lib/useNavigation";
+import type { AppState } from "@/store";
 
 /** The app's state in the status dot's vocabulary; work in progress breathes. */
 const dotTone: Record<PreviewTone, StatusTone> = {
@@ -77,6 +78,11 @@ const dotTone: Record<PreviewTone, StatusTone> = {
 
 function usePreviewObservation() {
   return useSyncExternalStore(previewObservation.subscribe, previewObservation.getState);
+}
+
+/** The selected session's app as this page last observed it; see `selectedPreview`. */
+export function useSelectedPreview(state: AppState) {
+  return selectedPreview(state, usePreviewObservation().unconfirmed);
 }
 
 async function copyLink(url: string) {
@@ -175,9 +181,9 @@ export function PreviewPanel() {
     if (shownTab === "preview") previewObservation.refresh();
   }, [shownTab, surfaceRequest]);
   const { state } = useCommands();
-  const preview = selectedPreview(state);
-  const commands = usePreviewCommands();
   const observed = usePreviewObservation();
+  const preview = selectedPreview(state, observed.unconfirmed);
+  const commands = usePreviewCommands();
   // Only a view that actually inspected this app can retain its confirmed stop. Closing the
   // tab discards this identity; browser memory never restores a Preview tab.
   const [viewedInstance, setViewedInstance] = useState(preview?.instanceId ?? null);
@@ -443,7 +449,7 @@ export function PreviewDetailsDialog({
   const commands = usePreviewCommands();
   const observed = usePreviewObservation();
   const openRef = useRef<HTMLAnchorElement>(null);
-  const preview = selectedPreview(state);
+  const preview = selectedPreview(state, observed.unconfirmed);
   const session = state.session;
   const details =
     preview &&

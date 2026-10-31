@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientCommand, ServerMessage, SessionPreview, SessionState } from "../shared/wire.ts";
 import { createPreviewObservation } from "../web/src/lib/previewObservation.ts";
+import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { previewFrameUrl, selectedPreview } from "../web/src/lib/sessionPreview.ts";
 import type { SendDisposition } from "../web/src/lib/ws.ts";
 import { type AppState, initialState, reduce } from "../web/src/store.ts";
@@ -164,7 +165,7 @@ const stopped = (
   sessionId: "s1",
   result: { _tag: "preview_stopped", instanceId, outcome },
 });
-const empty = { refreshing: false, details: null, terminal: null };
+const empty = { refreshing: false, details: null, terminal: null, unconfirmed: null };
 
 test("an attachment observes once; changed session state does not poll; reattachment reads again", () => {
   const f = fakeSource(page({ preview: app }));
@@ -338,6 +339,73 @@ test("observation errors settle the matching read, retain unknown rather than st
   assert.equal(f.observation.getState().terminal, null);
   f.observation.refresh();
   assert.equal(f.sent.length, 2);
+});
+
+const unobserved = (requestId: string, selectionId = "sel-1"): ServerMessage => ({
+  _tag: "preview_unobserved",
+  selectionId,
+  requestId,
+  message: "Client input capacity is full. Request was not started.",
+});
+
+test("a refused read settles only its own request and leaves the app inspectable but unknown", () => {
+  const f = fakeSource(page({ preview: app }));
+  f.deliver(observed("i1", "earlier output"));
+  f.focus(5_000);
+  assert.equal(f.sent.length, 2);
+  // Neither an unrelated error, another request's refusal nor another selection's settles it.
+  for (const message of [
+    { _tag: "error", message: "Unrelated", selectionId: "sel-1" } as const,
+    unobserved("r1"),
+    unobserved("r2", "sel-2"),
+  ]) {
+    f.deliver(message);
+    assert.equal(f.observation.getState().refreshing, true);
+  }
+  f.observation.refresh();
+  assert.equal(f.sent.length, 2, "an outstanding read still coalesces");
+  f.deliver(unobserved("r2"));
+  assert.deepEqual(f.observation.getState(), {
+    ...empty,
+    unconfirmed: "i1",
+    details: {
+      cwd: "/repo",
+      sessionId: "s1",
+      instanceId: "i1",
+      logs: "earlier output",
+      error: "Client input capacity is full. Request was not started.",
+    },
+  });
+  const state = page({ preview: app });
+  const unknown = selectedPreview(state, "i1")!;
+  assert.deepEqual(
+    [unknown.instanceId, unknown.state, unknown.ready, unknown.url],
+    ["i1", "unknown", false, null],
+  );
+  assert.equal(previewFrameUrl(unknown, "http://localhost:7070"), null, "no stale frame");
+  assert.equal(selectedPreview(state, "other")?.url, app.url, "only that app is unconfirmed");
+  const open = (unconfirmed: string | null) =>
+    sessionCommands(state, undefined, { previewUnconfirmed: unconfirmed }).find(
+      (c) => c.id === "open-preview",
+    )?.enabled;
+  assert.deepEqual([open("i1"), open(null)], [false, true], "no ready-link action");
+
+  f.focus(10_000);
+  assert.equal(f.sent.length, 2, "the focus throttle still holds");
+  f.observation.refresh();
+  assert.equal(f.sent.length, 3, "an explicit check reads again");
+  f.deliver(unobserved("r2"));
+  assert.equal(f.observation.getState().refreshing, true, "a late refusal cannot settle it");
+  f.deliver(observed("i1", "current"));
+  assert.deepEqual(f.observation.getState(), {
+    ...empty,
+    details: { cwd: "/repo", sessionId: "s1", instanceId: "i1", logs: "current" },
+  });
+  f.focus(15_000);
+  assert.equal(f.sent.length, 4);
+  f.deliver(unobserved("r4"));
+  f.set({ ...page({ preview: app }), selectionId: "sel-2" });
+  assert.equal(f.observation.getState().unconfirmed, null, "a new attachment reads afresh");
 });
 
 test("unsent reads can retry; uncertain reads coalesce; synchronous disconnect cannot restore loading", () => {

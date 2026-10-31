@@ -17,15 +17,23 @@ import { type SessionStatus, SessionStatusLive } from "../server/SessionStatus.t
 import { SidebarView } from "../server/SidebarView.ts";
 import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
 import type { WorkspaceCommands } from "../server/WorkspaceCommands.ts";
-import type { ClientMessage, Dialog, ServerMessage, WorktreeDiscovery } from "../shared/wire.ts";
+import type {
+  ClientMessage,
+  Dialog,
+  ServerMessage,
+  SessionPreview,
+  WorktreeDiscovery,
+} from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
+import { createPreviewObservation } from "../web/src/lib/previewObservation.ts";
+import { selectedPreview } from "../web/src/lib/sessionPreview.ts";
 import {
   createWorktreeOperation,
   type WorktreeOperation,
 } from "../web/src/lib/worktreeOperation.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
-import { initialState } from "../web/src/store.ts";
+import { type AppState, initialState } from "../web/src/store.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-client-dispatch-")));
 const cwd = join(root, "checkout");
@@ -43,6 +51,19 @@ const discover = (_folder: string) =>
     if (discovered) Queue.offerUnsafe(discovered, sent.length);
     return { status: "non-git", observedAt: new Date().toISOString() };
   });
+
+/** A ready app, as a session's state reports it. */
+const app: SessionPreview = {
+  instanceId: "i1",
+  state: "running",
+  ready: true,
+  url: "http://localhost:5173/",
+  port: 5173,
+  command: ["npm", "run", "dev"],
+  detail: "",
+  externalAccess: "same-host",
+  observedAt: 0,
+};
 
 /** A registered session, running. */
 const registered = (sessionId: string) =>
@@ -255,6 +276,134 @@ test("INV-05: browser client recovers from dispatch saturation with a fresh expl
     }),
   );
 });
+
+for (const refusal of ["client", "session"] as const) {
+  test(`INV-04/05: a preview status read refused at ${refusal} admission settles its observer, which reads again once capacity returns`, async () => {
+    await run(
+      Effect.gen(function* () {
+        const session = yield* registered(`preview-refused-${refusal}`);
+        const { sessionId } = session.spec;
+        const queue = yield* Queue.unbounded<ServerMessage>();
+        const listeners = new Set<(m: ServerMessage) => void>();
+        const { receive } = yield* makeClientDispatch({
+          send: (m) =>
+            Effect.sync(() => {
+              for (const listener of listeners) listener(m);
+            }).pipe(Effect.andThen(Queue.offer(queue, m)), Effect.asVoid),
+          overflow: (e) => Effect.die(e),
+        });
+        yield* yield* receive({ _tag: "select", selectionId: "sel-1", cwd, sessionId });
+        // The browser's attachment to that session, which owns a ready app.
+        const page: AppState = {
+          ...initialState,
+          connected: true,
+          selectionId: "sel-1",
+          view: { kind: "session" },
+          session: {
+            cwd,
+            sessionId,
+            hosted: true,
+            cursor: { cwd, sessionId, generation: "g1", sequence: 1 },
+            state: { sessionId, isStreaming: false, preview: app },
+            messages: [],
+            dialogs: [],
+          },
+        };
+        const outbox: ClientRequest[] = [];
+        const observation = createPreviewObservation({
+          environment: { onFocus: () => () => {} },
+          newRequestId: (() => {
+            let n = 0;
+            return () => `read-${++n}`;
+          })(),
+        });
+        const stop = observation.follow(
+          {
+            getState: () => page,
+            subscribe: () => () => {},
+            send: (command) => {
+              if (command._tag === "act") outbox.push({ ...command, selectionId: "sel-1" });
+              return "sent";
+            },
+            listen: (listener) => {
+              listeners.add(listener);
+              return () => listeners.delete(listener);
+            },
+          },
+          () => {},
+        );
+        const deliver = Effect.gen(function* () {
+          const sent = outbox.splice(0);
+          for (const request of sent) yield* yield* receive(request);
+          return sent.map(
+            (m) => m._tag === "act" && m.action._tag === "preview_status" && m.action.requestId,
+          );
+        });
+
+        let release: Effect.Effect<void, unknown> = Effect.void;
+        if (refusal === "client") {
+          const held: Effect.Effect<void>[] = [];
+          for (let n = 0; n < inboundLimits.client.messages; n++)
+            held.push(yield* receive({ _tag: "registry" }));
+          release = Effect.forEach(held, (work) => work, { discard: true });
+        } else {
+          const pending: Fiber.Fiber<unknown, unknown>[] = [];
+          for (let n = 0; n < inboundLimits.requests.messages; n++)
+            pending.push(
+              yield* session.act({ _tag: "prompt", text: "capacity hold" }).pipe(Effect.forkChild),
+            );
+          let dialog: Dialog | undefined;
+          for (;;) {
+            const m = yield* Queue.take(queue);
+            if (m._tag !== "session") continue;
+            if (m.event._tag === "dialog") dialog = m.event.dialog;
+            if (
+              m.event._tag === "notice" &&
+              m.event.message === `Capacity held: ${inboundLimits.requests.messages}`
+            )
+              break;
+          }
+          release = Effect.gen(function* () {
+            assert.ok(dialog);
+            yield* session.act({
+              _tag: "answer",
+              id: dialog.id,
+              generation: dialog.generation,
+              value: "release",
+            });
+            for (const fiber of pending) yield* Fiber.join(fiber);
+          });
+        }
+
+        assert.deepEqual(yield* deliver, ["read-1"]);
+        const refused = observation.getState();
+        assert.equal(refused.refreshing, false, "the refused read settled");
+        assert.equal(refused.unconfirmed, "i1");
+        assert.match(
+          refused.details?.error ?? "",
+          refusal === "client" ? /Client input capacity is full/ : /Session input capacity is full/,
+        );
+        const unknown = selectedPreview(page, refused.unconfirmed)!;
+        assert.equal(unknown.state, "unknown", "the app stays inspectable, with unknown status");
+        assert.equal(unknown.url, null, "its ready link is withheld");
+
+        yield* release;
+        observation.refresh();
+        assert.deepEqual(yield* deliver, ["read-2"], "an explicit check sends a fresh request");
+        for (;;) {
+          const m = yield* Queue.take(queue);
+          if (m._tag === "error" || (m._tag === "preview_unobserved" && m.requestId === "read-2"))
+            assert.fail(m.message);
+          if (m._tag === "action_result" && m.result._tag === "preview_observed") {
+            assert.equal(m.result.requestId, "read-2", "the fresh read reached the session");
+            break;
+          }
+        }
+        stop();
+      }),
+    );
+  });
+}
 
 for (const outcome of ["refused", "probe failure", "dispatch failure"] as const) {
   test(`INV-05: ${outcome} settles a model refresh and allows one explicit retry`, async () => {
