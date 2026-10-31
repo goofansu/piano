@@ -6,13 +6,22 @@
 // Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand, SessionPreview } from "../../../shared/wire.ts";
 import { type AppState, isSession } from "../store.ts";
-import { hostOf, type SessionRef } from "./sessionContext.ts";
+import { hostOf, type SessionRef, sessionReady } from "./sessionContext.ts";
 
 /** The selected session's app while its live generation owns one. */
 export function selectedPreview(state: AppState): SessionPreview | undefined {
   const session = state.session;
   if (!session?.hosted || !session.sessionId || session.state.closure) return undefined;
-  return session.state.preview;
+  const preview = session.state.preview;
+  if (!preview || sessionReady(state)) return preview;
+  // Losing the browser attachment says nothing about the server-owned app's lifetime.
+  return {
+    ...preview,
+    state: "unknown",
+    ready: false,
+    url: null,
+    detail: "",
+  };
 }
 
 /** Ending this session's Pi would stop an app it owns: the selected one, or a background host. */
