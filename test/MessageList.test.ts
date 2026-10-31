@@ -213,12 +213,12 @@ test("every folding row folds the same way: context starts open, a card without 
   const skill = fold(html, "review skill");
   const tool = fold(html, "bash tool call");
   const bare = fold(html, "Dispatched session: Session");
-  // One header shape for every kind: padding out of flow, a sidebar swipe passes through it.
+  // Every header is a disclosure that lets a sidebar swipe pass through it.
   for (const row of [context, skill, tool, bare]) {
-    assert.match(row.header, /class="-ml-2 -my-1 flex /);
     assert.match(row.header, /data-sidebar-swipe="true"/);
     assert.equal(row.chevron, row.canOpen, "a chevron exactly when the row can open");
   }
+  assert.match(tool.header, /data-slot="gutter"/, "the tool gutter is part of its button");
   assert.deepEqual(
     [context, skill, tool].map((row) => [row.open, row.canOpen, row.bodyHidden]),
     [

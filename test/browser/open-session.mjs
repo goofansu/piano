@@ -341,7 +341,18 @@ await run(
       return h.getBoundingClientRect().top - t.getBoundingClientRect().top;
     })()`);
     assert.ok(Math.abs(await headerOffset()) < 1, "the tool header pins at the transcript edge");
-    await page.ab("click", `${tool} [data-slot="tool-header"] button`);
+    // The title stays inside the disclosure even while expanded and pinned (not just a
+    // separate Collapse button). Geometry, rather than class names, protects the breathing room.
+    assert.deepEqual(
+      await page.evaluate(`(() => {
+        const h = document.querySelector('${tool} [data-slot="tool-header"]').getBoundingClientRect();
+        const g = document.querySelector('${tool} [data-slot="tool-header"] [data-slot="gutter"]').getBoundingClientRect();
+        return [g.top - h.top, h.bottom - g.bottom];
+      })()`),
+      [12, 12],
+      "the pinned header retains transcript-scale padding above and below its line",
+    );
+    await page.ab("click", `${tool} [data-slot="tool-header"] .font-medium`);
     await page.until(`document.querySelector('${tool}').dataset.state === 'closed'`);
     assert.ok(Math.abs(await headerOffset()) < 1, "collapse preserves the header's position");
     await page.capture("11b-collapsed-tool");

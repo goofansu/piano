@@ -266,13 +266,16 @@ function Row({
   glyph,
   children,
   className,
+  as: Tag = "div",
 }: {
   glyph: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /** Phrasing content when the whole row sits inside a disclosure button. */
+  as?: "div" | "span";
 }) {
   return (
-    <div className={cn("flex gap-3", className)}>
+    <Tag className={cn("flex gap-3", className)}>
       {/* Exactly one line tall, so the glyph centres on the first line of text beside it. Content
           must not pad its first line (a folding row keeps its padding out of flow); the
           transcript-rows journey measures every row kind. */}
@@ -283,10 +286,10 @@ function Row({
       >
         {glyph}
       </span>
-      <div data-slot="row-content" className="min-w-0 flex-1">
+      <Tag data-slot="row-content" className="min-w-0 flex-1">
         {children}
-      </div>
-    </div>
+      </Tag>
+    </Tag>
   );
 }
 
@@ -376,8 +379,9 @@ const CONTEXT_ICON: Record<ContextFacts["kind"], typeof HistoryIcon> = {
 /**
  * A transcript row that folds: a gutter glyph, a header that opens and closes it, and a body under
  * the header. Context rows, tool calls, dispatched sessions and skill expansions all fold through it,
- * so the header's out-of-flow padding (`disclosureRow`), the chevron, the body's indent and its
- * open and close animation are decided here once. Without a glyph the row sits inside another
+ * so the disclosure, chevron and body indent are decided here once. Tool headers include their
+ * gutter and in-flow padding in the button; other disclosures keep padding out of flow to align
+ * with their outer gutter. Without a glyph the row sits inside another
  * row's content (a skill in its prompt bubble), so neither header nor body takes a gutter.
  */
 function FoldRow({
@@ -457,39 +461,42 @@ function FoldRow({
         viewport?.scrolled();
       }
     }
-    // Opening swaps the title disclosure for Collapse; closing removes the bottom shortcut.
-    // Keep keyboard focus on the header in both cases, without a browser scrollIntoView.
+    // Closing removes the bottom shortcut. Keep focus on the persistent header disclosure,
+    // without a browser scrollIntoView.
     if (toolOutput) restoreFocus.current = true;
     setOpen(next);
   };
   // A horizontal drag that starts on a header still opens the mobile sidebar; a tap folds.
-  const trigger =
-    toolOutput && open ? (
-      <div className={cn("flex min-w-0 flex-1 items-center gap-2", headerClassName)}>
-        {header}
-        <CollapsibleTrigger asChild>
-          <Button
-            variant="ghost"
-            size="xs"
-            data-sidebar-swipe="true"
-            className="-my-1 ml-auto shrink-0"
-          >
-            Collapse
-          </Button>
-        </CollapsibleTrigger>
-      </div>
-    ) : (
-      <CollapsibleTrigger asChild disabled={!canOpen}>
-        <button
-          type="button"
-          data-sidebar-swipe="true"
-          className={cn(disclosureRow, action && "w-auto flex-1", headerClassName)}
-        >
-          {header}
-          {canOpen && <DisclosureChevron open={open} className="ml-auto" />}
-        </button>
-      </CollapsibleTrigger>
-    );
+  const title = (
+    <>
+      {header}
+      {canOpen && <DisclosureChevron open={open} className="ml-auto" />}
+    </>
+  );
+  const trigger = (
+    <CollapsibleTrigger asChild disabled={!canOpen}>
+      <button
+        type="button"
+        data-sidebar-swipe="true"
+        className={cn(
+          disclosureRow,
+          // Match the tool stack's gap-3 rhythm in every state, including while pinned.
+          // The gutter and padding belong to the button too; output stays outside it.
+          toolOutput && "m-0 w-full px-0 py-3",
+          action && "w-auto flex-1",
+          !toolOutput && headerClassName,
+        )}
+      >
+        {toolOutput ? (
+          <Row as="span" glyph={glyph} className="w-full">
+            <span className={cn("flex min-w-0 items-center gap-2", headerClassName)}>{title}</span>
+          </Row>
+        ) : (
+          title
+        )}
+      </button>
+    </CollapsibleTrigger>
+  );
   const head = action ? (
     <div className="flex min-w-0 items-center gap-1">
       {trigger}
@@ -510,7 +517,7 @@ function FoldRow({
       )}
     </div>
   );
-  const headerRow = glyph === undefined ? head : <Row glyph={glyph}>{head}</Row>;
+  const headerRow = toolOutput || glyph === undefined ? head : <Row glyph={glyph}>{head}</Row>;
   return (
     <Collapsible
       ref={root}
@@ -528,7 +535,7 @@ function FoldRow({
         <div
           ref={heading}
           data-slot="tool-header"
-          className={cn("py-1", open && tall && "sticky top-0 z-10 bg-conversation")}
+          className={cn("bg-conversation", open && tall && "sticky top-0 z-10")}
         >
           {headerRow}
         </div>
@@ -541,7 +548,7 @@ function FoldRow({
           {glyph === undefined ? (
             <div className="pt-2">{body}</div>
           ) : (
-            <Row glyph={null} className="pt-2">
+            <Row glyph={null} className={toolOutput ? undefined : "pt-2"}>
               {body}
             </Row>
           )}
