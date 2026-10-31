@@ -5,6 +5,16 @@ const ownsInput = (el: EventTarget | null) =>
   // Inline questions own Space on their radio buttons and actions, not just their text fields.
   (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || !!el.closest("form"));
 
+/**
+ * A focused control activates on Space: a button, link, summary or ARIA widget keeps that key
+ * rather than having it typed into the composer. Other printable keys still go to the composer.
+ */
+const activates = (el: EventTarget | null) =>
+  el instanceof Element &&
+  el.matches(
+    'button, a[href], summary, [role="button"], [role="link"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="tab"], [role="checkbox"], [role="radio"], [role="switch"], [role="treeitem"]',
+  );
+
 /** Something else is taking keys: a menu, a listbox, a dialog. */
 const overlayOpen = () =>
   !!document.querySelector('[role="dialog"], [role="menu"], [role="listbox"], [cmdk-root]');
@@ -25,6 +35,7 @@ export function useTypeToFocus(
       if (
         e.key.length !== 1 ||
         ownsInput(e.target) ||
+        (e.key === " " && activates(e.target)) ||
         overlayOpen() ||
         !ref.current ||
         ref.current.disabled ||

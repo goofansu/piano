@@ -419,6 +419,47 @@ await run(
       await page.capture(`9-header-${id}`);
     }
 
+    // PIN-125: Space on a focused button activates it once; the type-anywhere shortcut must not
+    // take it into the composer. Wide, the header toggles the side-by-side rail; narrow, it
+    // opens the rail sheet. Both times the unsent draft stays byte-for-byte.
+    await page.open("/s/login-bug");
+    const draft = "Keep  this draft ";
+    await page.ab("fill", '[aria-label="Message"]', draft);
+    const railKey = async (width, key) => {
+      await page.ab("set", "viewport", String(width), "900");
+      await page.until("!!document.querySelector('[data-rail-trigger]')");
+      const before = await page.evaluate(
+        "document.querySelector('[data-rail-trigger]').getAttribute('aria-pressed')",
+      );
+      await page.ab("focus", "[data-rail-trigger]");
+      await page.press(key);
+      const after = await page.evaluate(`(() => ({
+        pressed: document.querySelector('[data-rail-trigger]')?.getAttribute('aria-pressed'),
+        sheet: !!document.querySelector('[role=dialog] [data-slot=session-rail]'),
+        draft: document.querySelector('[aria-label="Message"]').value,
+        focus: document.activeElement?.getAttribute('aria-label'),
+      }))()`);
+      await page.capture(`16-rail-${key.toLowerCase()}-${width}`);
+      assert.equal(after.draft, draft, `${key} at ${width}px leaves the draft alone`);
+      assert.notEqual(after.focus, "Message", `${key} at ${width}px does not focus the composer`);
+      return { before, after };
+    };
+    for (const key of ["Space", "Enter"]) {
+      const { before, after } = await railKey(1280, key);
+      assert.equal(
+        after.pressed,
+        before === "true" ? "false" : "true",
+        `${key} toggles the rail once`,
+      );
+    }
+    for (const key of ["Space", "Enter"]) {
+      const { after } = await railKey(600, key);
+      assert.ok(after.sheet, `${key} opens the rail sheet`);
+      await page.click("button", "Hide session rail");
+      await page.until("!document.querySelector('[role=dialog]')");
+    }
+    await page.ab("set", "viewport", "1280", "900");
+
     // An extension can pause the session for an inline answer. Form keys must not be stolen
     // by the composer's type-anywhere shortcut, and selecting must not submit prematurely.
     await page.open("/s/login-bug");

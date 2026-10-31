@@ -405,7 +405,17 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("button", "App");
         await page.capture("1b-app-folded");
         await page.click("button", "App");
-        await page.click("button", "Show preview");
+        // PIN-125: Space activates the focused row once; the draft is not typed into.
+        await page.ab("focus", '[data-slot=session-rail] button[aria-label="Show preview"]');
+        await page.press("Space");
+        await page.until(
+          "!!document.querySelector('[data-slot=surface-area]:not([inert]) section[aria-label=Preview]')",
+        );
+        assert.equal(
+          await page.evaluate("document.querySelector('[aria-label=Message]').value"),
+          "Keep my draft",
+          "Space on Show preview leaves the draft alone",
+        );
         if (embeddedLocal) {
           await frameReady();
           await appAct("Count: 0", "click");
