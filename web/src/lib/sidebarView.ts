@@ -115,39 +115,64 @@ export function projectGroups<
   ];
 }
 
-/** The date groups in list order; a session falls in the first whose boundary it reaches. */
-export const DATE_LABELS = [
-  "Today",
-  "Yesterday",
-  "Previous 7 days",
-  "Previous 30 days",
-  "Older",
-  "Unknown date",
-] as const;
-export type DateLabel = (typeof DATE_LABELS)[number];
+/**
+ * The sidebar names each of the last seven local calendar days: Today, Yesterday, then the date
+ * ("Oct 29"); anything last touched before that week is Older. Local midnights, not elapsed
+ * 24-hour periods: DST days can be shorter or longer.
+ */
+const NAMED_DAYS = 7;
+/** Day headings are English like Today and Yesterday, so one fixed format, not the browser locale. */
+const dayFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
-/** The date group of a session last touched at `updatedAt`, as of `now`. */
-export function dateLabel(updatedAt: string | undefined, now = new Date()): DateLabel {
-  const time = updatedAt ? Date.parse(updatedAt) : Number.NaN;
-  if (Number.isNaN(time)) return "Unknown date";
-  // Local midnights, not elapsed 24-hour periods: DST days can be shorter or longer.
-  const boundaries = [0, 1, 7, 30].map((days) =>
-    new Date(now.getFullYear(), now.getMonth(), now.getDate() - days).getTime(),
-  );
-  const bucket = boundaries.findIndex((boundary) => time >= boundary);
-  return DATE_LABELS[bucket === -1 ? 4 : bucket]!;
+export interface DateGroup {
+  /** Stable per calendar day ("2026-10-29") so a collapse remembers that day, not its distance from today. */
+  key: string;
+  label: string;
 }
 
-/** Listed sessions by local calendar date; unknown times stay visible last. */
+const localMidnight = (now: Date, daysAgo: number) =>
+  new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo);
+const isoDay = (day: Date) =>
+  [day.getFullYear(), day.getMonth() + 1, day.getDate()]
+    .map((n, i) => String(n).padStart(i === 0 ? 4 : 2, "0"))
+    .join("-");
+
+const OLDER: DateGroup = { key: "Older", label: "Older" };
+const UNKNOWN: DateGroup = { key: "Unknown date", label: "Unknown date" };
+
+/** Group `bucket`: one per named day back from today, then Older, then Unknown date. */
+function groupAt(now: Date, bucket: number): DateGroup {
+  if (bucket === 0) return { key: "Today", label: "Today" };
+  if (bucket === 1) return { key: "Yesterday", label: "Yesterday" };
+  if (bucket === NAMED_DAYS) return OLDER;
+  if (bucket > NAMED_DAYS) return UNKNOWN;
+  const day = localMidnight(now, bucket);
+  return { key: isoDay(day), label: dayFormat.format(day) };
+}
+
+/** The bucket of a session last touched at `updatedAt`: days before `now`, or the Older or Unknown date bucket. */
+function bucketOf(updatedAt: string | undefined, now: Date): number {
+  const time = updatedAt ? Date.parse(updatedAt) : Number.NaN;
+  if (Number.isNaN(time)) return NAMED_DAYS + 1;
+  for (let days = 0; days < NAMED_DAYS; days++)
+    if (time >= localMidnight(now, days).getTime()) return days;
+  return NAMED_DAYS;
+}
+
+/** The date group of a session last touched at `updatedAt`, as of `now`. */
+export function dateGroup(updatedAt: string | undefined, now = new Date()): DateGroup {
+  return groupAt(now, bucketOf(updatedAt, now));
+}
+
+/** Listed sessions by local calendar day, newest day first; empty days are omitted and unknown times stay visible last. */
 export function dateGroups<S extends SessionLike>(
   sessions: readonly S[],
   sort: SortBy,
   now = new Date(),
-): Array<{ label: DateLabel; sessions: S[] }> {
-  const groups = DATE_LABELS.map((label) => ({ label, sessions: [] as S[] }));
-  for (const session of sessions)
-    groups[DATE_LABELS.indexOf(dateLabel(session.updatedAt, now))]!.sessions.push(session);
-  return groups
-    .filter((g) => g.sessions.length > 0)
-    .map((g) => ({ ...g, sessions: sortSessions(g.sessions, sort) }));
+): Array<DateGroup & { sessions: S[] }> {
+  const buckets = Array.from({ length: NAMED_DAYS + 2 }, () => [] as S[]);
+  for (const session of sessions) buckets[bucketOf(session.updatedAt, now)]!.push(session);
+  return buckets.flatMap((bucket, index) =>
+    bucket.length === 0 ? [] : [{ ...groupAt(now, index), sessions: sortSessions(bucket, sort) }],
+  );
 }
