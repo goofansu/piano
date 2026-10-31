@@ -3,7 +3,8 @@
  * lockfile and error-text URLs nobody means to revisit.
  */
 import type { RenderMsg } from "../../../shared/wire.ts";
-import { githubLabel, markdownLinks } from "./markdown.ts";
+import { linkBrand } from "./linkBrand.ts";
+import { markdownLinks } from "./markdown.ts";
 
 export interface SessionLink {
   url: string;
@@ -41,7 +42,7 @@ export function sessionLinks(messages: ReadonlyArray<RenderMsg>): SessionLink[] 
     // Every link the transcript recognizes, plus the bare URLs it leaves undecorated and unlinked.
     for (const link of markdownLinks(message.text)) {
       const text = link.label?.trim();
-      const label = (text && text !== link.url ? text : undefined) ?? githubLabel(link.url);
+      const label = (text && text !== link.url ? text : undefined) ?? linkBrand(link.url)?.label;
       found.push({ url: link.url, ...(label ? { label } : {}), messageId: message.id });
     }
     const fresh = found.filter((link) => {

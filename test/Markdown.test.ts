@@ -71,10 +71,11 @@ test("provider links keep compact names, destinations, custom formatting and bra
   assert.ok(html.includes('href="/mcp-logos.svg#linear"'));
   for (const url of [
     "https://example.test/a",
-    "https://github.com.evil.test/a/b",
-    "https://user@github.com/a/b",
-    "https://linear.app:8080/x",
-    "https://linear.app@evil.test/x",
+    "https://radius.earendil.com.evil.test/x",
+    "https://sub.radius.earendil.com/x",
+    "https://radius.earendil.com@evil.test/x",
+    "https://user:password@radius.earendil.com/x",
+    "https://radius.earendil.com:8080/x",
   ]) {
     assert.ok(!renderMarkdown(url).includes("<a "), url);
     assert.ok(!renderMarkdown(`[label](${url})`).includes("brand-link"), url);
@@ -83,6 +84,26 @@ test("provider links keep compact names, destinations, custom formatting and bra
     renderMarkdown("**https://github.com/a/b/pull/7**"),
     /<strong><a [\s\S]*?b#7<\/a><\/strong>/,
   );
+});
+
+test("Radius links share provider branding without changing labels, titles or navigation", () => {
+  const url = "https://radius.earendil.com/artifacts/example?revision=2#section";
+  for (const source of [url, `<${url}>`, `[**Report**](${url} "Supplied title")`]) {
+    const html = renderMarkdown(source);
+    assert.ok(html.includes(`href="${url}"`), source);
+    assert.ok(html.includes('class="brand-link"'), source);
+    assert.ok(html.includes('target="_blank" rel="noreferrer"'), source);
+    assert.ok(html.includes('href="/provider-logos/radius.svg#logo"'), source);
+    assert.equal((html.match(/<svg /g) ?? []).length, 1, "only the brand icon, no arrow");
+    assert.ok(html.includes('aria-hidden="true" focusable="false"'), source);
+    if (source.startsWith("[")) {
+      assert.ok(html.includes("<strong>Report</strong></a>"));
+      assert.ok(html.includes('title="Supplied title"'));
+    } else {
+      assert.ok(html.includes(`>${url}</a>`));
+      assert.ok(html.includes(`title="${url}"`));
+    }
+  }
 });
 
 test("local links are preview actions, never native filesystem URLs", () => {
@@ -106,6 +127,7 @@ test("local links are preview actions, never native filesystem URLs", () => {
     "javascript:alert(1)",
     "data:text/html,bad",
     "mailto:a@b.test",
+    "ftp://example.test/a",
     "//example.test/a",
     "file://other-host/a",
     "#heading",

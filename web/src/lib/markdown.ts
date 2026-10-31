@@ -3,42 +3,6 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 
-/** "owner/repo" or "repo#N" for a github.com repository, issue or pull request URL. */
-export function githubLabel(href: string): string | undefined {
-  try {
-    const url = new URL(href);
-    if (
-      url.hostname !== "github.com" ||
-      url.username ||
-      url.password ||
-      url.port ||
-      !/^https?:$/.test(url.protocol)
-    )
-      return;
-    const issue = url.pathname.match(/^\/([\w.-]+)\/([\w.-]+)\/(?:issues|pull)\/([1-9]\d*)\/?$/);
-    if (issue) return `${issue[2]}#${issue[3]}`;
-    const repo = url.pathname.match(/^\/([\w.-]+)\/([\w.-]+)\/?$/);
-    return repo ? `${repo[1]}/${repo[2]}` : undefined;
-  } catch {
-    return;
-  }
-}
-
-export function isLinearLink(href: string): boolean {
-  try {
-    const url = new URL(href);
-    return (
-      url.hostname === "linear.app" &&
-      !url.username &&
-      !url.password &&
-      !url.port &&
-      /^https?:$/.test(url.protocol)
-    );
-  } catch {
-    return false;
-  }
-}
-
 /** A Markdown destination is either a web URL or a local path, never an executable scheme.
  * Read from the raw Markdown URL: a `%XX` escape decodes, and any other `%` is part of the name,
  * so `100%.png` is the file `100%.png`. The server resolves relative paths against the
