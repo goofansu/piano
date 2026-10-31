@@ -515,7 +515,11 @@ function FoldRow({
   const title = (
     <>
       {header}
-      {canOpen && <DisclosureChevron open={open} className="ml-auto" />}
+      {canOpen && (
+        // The 14px chevron's painted right inset is 4.67px closed, 2.92px open. Nudge the
+        // open tool chevron inward 1px to match the gutter dot's 4px inset, not its SVG box.
+        <DisclosureChevron open={open} className={cn("ml-auto", toolOutput && open && "mr-px")} />
+      )}
     </>
   );
   const trigger = (
@@ -525,10 +529,9 @@ function FoldRow({
         data-sidebar-swipe="true"
         className={cn(
           disclosureRow,
-          // Keep the original header's 4px padding in flow, including while pinned. The gutter
-          // and padding belong to the button too; output stays outside it. The chevron keeps
-          // its 8px inset from the content edge, where the out-of-flow header left it.
-          toolOutput && "m-0 w-full py-1 pr-2 pl-0",
+          // Keep vertical padding in flow, including while pinned, and the full-width target.
+          // The gutter and chevron supply their own optical insets; no horizontal padding.
+          toolOutput && "m-0 w-full px-0 py-1",
           action && "w-auto flex-1",
           !toolOutput && headerClassName,
         )}
@@ -594,7 +597,8 @@ function FoldRow({
           {glyph === undefined ? (
             <div className="pt-2">{body}</div>
           ) : (
-            <Row glyph={null} className="pt-2">
+            // Match the tool header's visible right edge without moving its text-aligned left.
+            <Row glyph={null} className={cn("pt-2", toolOutput && "pr-1")}>
               {body}
             </Row>
           )}

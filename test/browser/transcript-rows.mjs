@@ -229,6 +229,44 @@ await run(
     const offOpen = opened.filter((row) => Math.abs(row.offset) > 1);
     assert.deepEqual(offOpen, [], `open glyphs off their line: ${JSON.stringify(offOpen)}`);
     const tool = '[role="group"][aria-label="bash tool call"]';
+    // Tool edges align optically: measure the painted SVG path (including its round stroke),
+    // not just its viewBox. Equal CSS padding would leave the chevron farther in than the dot.
+    const edges = [];
+    for (const width of [1280, 390]) {
+      await page.ab("set", "viewport", String(width), "4000");
+      const edge = await page.evaluate(`(() => {
+        const group = document.querySelector('${tool}');
+        const trigger = group.querySelector('[data-slot="tool-header"] button');
+        const header = trigger.getBoundingClientRect();
+        const dot = trigger.querySelector('[data-slot="gutter"] > *').getBoundingClientRect();
+        const content = trigger.querySelector('[data-slot="row-content"]').getBoundingClientRect();
+        const body = group.querySelector('[data-slot="collapsible-content"] [data-slot="row-content"]').getBoundingClientRect();
+        const path = trigger.querySelector('svg path'), bounds = path.getBBox(), matrix = path.getScreenCTM();
+        const points = [[bounds.x, bounds.y], [bounds.x + bounds.width, bounds.y],
+          [bounds.x, bounds.y + bounds.height], [bounds.x + bounds.width, bounds.y + bounds.height]]
+          .map(([x, y]) => new DOMPoint(x, y).matrixTransform(matrix));
+        const inkRight = Math.max(...points.map(p => p.x)) + parseFloat(getComputedStyle(path).strokeWidth) / 2 * Math.hypot(matrix.a, matrix.b);
+        return { width: innerWidth, dotInset: dot.left - header.left, chevronInset: header.right - inkRight,
+          leftOffset: body.left - content.left, rightOffset: body.right - inkRight,
+          clickWidth: header.width, groupWidth: group.getBoundingClientRect().width };
+      })()`);
+      edges.push(edge);
+      assert.equal(edge.leftOffset, 0, "tool body starts under the header text");
+      assert.equal(edge.clickWidth, edge.groupWidth, "tool header remains a full-width target");
+      assert.ok(
+        Math.abs(edge.dotInset - edge.chevronInset) <= 1,
+        `tool glyph insets: ${JSON.stringify(edge)}`,
+      );
+      assert.ok(
+        Math.abs(edge.rightOffset) <= 1,
+        `tool body/chevron right edge: ${JSON.stringify(edge)}`,
+      );
+    }
+    writeFileSync(
+      join(process.argv[2] ?? ".scratch/browser/transcript-rows", "tool-edges.json"),
+      JSON.stringify(edges, null, 2),
+    );
+    await page.ab("set", "viewport", "1280", "4000");
     assert.equal(
       await page.evaluate(
         `document.querySelector('${tool} [data-slot="collapsible-content"]').textContent.includes("ok")`,
