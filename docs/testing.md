@@ -131,14 +131,16 @@ Pi SIGKILL and Piano SIGTERM/SIGKILL cleanup before reopening/restarting, no ado
 archive/delete via the palette, with confirmations that name the app, and cleanup after checkout
 removal. A child ignores TERM to exercise
 the kill bound. Only its scratch services stop; native platform gaps must be reported.
-With an explicitly loopback-configured scratch origin (`PIANO_PREVIEW_CONFIG` pointing to a JSON
-file containing `{"origin":"http://127.0.0.1"}`), it also checks embedded desktop/narrow page-state
+With a loopback origin (the macOS default `http://localhost`, or on Linux `PIANO_PREVIEW_CONFIG`
+pointing to a JSON file containing `{"origin":"http://127.0.0.1"}`), it also checks embedded desktop/narrow page-state
 preservation across tabs/rail, page-only reload, composer-driven deterministic HMR, native forms,
 keyboard traversal, synthetic Chromium touch scrolling, bounded loading, framing-denied and
 login-gated responses, and frame disposal on replacement/unknown/stop/owner loss. The pinned
 agent-browser's accessibility references reach the cross-origin app; no production DOM bridge is
 used. Synthetic touch is not real-device evidence. Authenticated external exe.dev access is a
-separate manual observation; this journey does not grant access or change proxy configuration. See [managed previews](live-previews.md).
+separate manual observation; this journey does not grant access or change proxy configuration.
+On the default Linux origin those embedded checks are skipped: the run warns and records
+`embeddedLocal: false`, so it is not embedding evidence. See [managed previews](live-previews.md).
 
 `PIANO_TEST_NATIVE_PREVIEW=1 node --test test/PreviewNative.test.ts` is the smaller opt-in native
 runner/supervisor check for clean exit, nonzero exit, application signal, explicit stop and owner
