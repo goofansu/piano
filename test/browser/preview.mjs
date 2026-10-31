@@ -467,6 +467,22 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         );
         await page.ab("fill", '[aria-label="Message"]', "Keep my draft");
         await page.ab("upload", 'input[type="file"]', join(evidence, "1-settled-preview-link.png"));
+        const alignedPreviewDot = async (viewport) => {
+          const offset = await page.evaluate(`(() => {
+            const row = document.querySelector('[data-slot=session-rail] button[aria-label="Show preview"]');
+            const dot = row.querySelector('[data-slot=status-dot]').getBoundingClientRect();
+            const range = document.createRange();
+            range.selectNodeContents(row.querySelector('[data-slot=item-title]'));
+            const line = range.getClientRects()[0];
+            return (dot.top + dot.bottom - line.top - line.bottom) / 2;
+          })()`);
+          observations.push({ previewDot: { viewport, offset } });
+          assert.ok(
+            Math.abs(offset) <= 1,
+            `${viewport}: Preview dot is ${offset}px off its first line`,
+          );
+        };
+        await alignedPreviewDot("desktop");
         await page.capture("1b-rail-preview");
         // Sibling keyboard targets: the row inspects, its link only opens a browser tab.
         await page.ab("focus", '[data-slot=session-rail] button[aria-label="Show preview"]');
@@ -506,8 +522,15 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await rememberFrame();
           await surfaceResize();
         }
+        assert.equal(
+          await page.evaluate(
+            "document.querySelector('section[aria-label=Preview] [data-slot=panel-body]').innerText.trim()",
+          ),
+          "",
+          "the healthy embedded preview has no persistent status or explanation",
+        );
         await page.capture("1c-preview-surface");
-        await page.click("link", "Open in new tab");
+        await page.click("link", "Open preview in new tab");
         await page.capture("1c-toolbar-external-answer");
         await page.ab("tab", "close");
         await page.click("button", "Changes");
@@ -633,7 +656,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
             "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'true'",
           );
           await page.capture("1g-frame-loading");
-          await page.click("link", "Open in new tab");
+          await page.click("link", "Open preview in new tab");
           await page.see("Preview journey v1");
           await page.capture("1g-open-while-loading");
           await page.ab("tab", "close");
@@ -641,10 +664,13 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
             "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'false'",
           );
           assert.equal(request({ action: "status" }).instanceId, identity);
-          await page.click("button", "Preview not appearing?");
+          // Recovery stays in the toolbar and on-demand Details, not a persistent help footer.
+          await more();
+          await page.click("menuitem", "Details");
+          await page.see("Output");
           await page.capture("1g-recovery-answer");
-          await page.ab("click", "[data-slot=popover-content] button");
-          await page.until("!document.querySelector('[data-radix-popper-content-wrapper]')");
+          await page.press("Escape");
+          await page.until("!document.querySelector('[role=dialog]')");
           await rememberFrame();
           await page.click("button", "Reload preview");
           // The old page's load handler goes with its detached frame; only the new page can
@@ -675,9 +701,11 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.until(
             "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'false'",
           );
-          await page.click("button", "Preview not appearing?");
+          await more();
+          await page.click("menuitem", "Details");
+          await page.see("Output");
           await page.capture("1g-framing-denied-recovery");
-          await page.ab("click", "[data-slot=popover-content] a");
+          await page.click("link", "Open in new tab");
           await page.see("Preview journey v1");
           await page.capture("1g-recovery-external-answer");
           await page.ab("tab", "close");
@@ -703,7 +731,9 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
             "document.activeElement?.getAttribute('aria-label') === 'More preview actions'",
           );
           await page.press("Shift+Tab");
-          await page.until("document.activeElement?.textContent.includes('Open in new tab')");
+          await page.until(
+            "document.activeElement?.getAttribute('aria-label') === 'Open preview in new tab'",
+          );
           await page.press("Shift+Tab");
           await page.until(
             "document.activeElement?.getAttribute('aria-label') === 'Reload preview'",
@@ -802,6 +832,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.ab("set", "viewport", "390", "844");
         await page.click("button", "Close preview");
         await showRail();
+        await alignedPreviewDot("narrow");
         await page.capture("2b-narrow-rail");
         await page.click("button", "Show preview");
         await page.until("!document.querySelector('[role=dialog]')");
@@ -887,7 +918,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.click("tab", "Changes");
           await page.click("button", "Hide changes");
         }
-        await page.click("link", "Open in new tab");
+        await page.click("link", "Open preview in new tab");
         await page.capture("2b-narrow-external-answer");
         await page.ab("tab", "close");
         await more();
