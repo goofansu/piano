@@ -23,7 +23,9 @@ Piano reads status from the session's owner without starting Pi or an app: on at
 return to the page, opening Preview/Details and explicit checks. Concurrent reads coalesce, focus
 reads retain their ten-second throttle, and there is no polling. Requests carry echoed observation
 IDs, and details are fenced to attachment, owner generation and instance. Disconnection or a failed
-read is unknown, not stopped; no external action remains usable from an uncertain observation.
+read is unknown, not stopped; no external action remains usable from an uncertain observation. A read
+that client or session input capacity refuses is answered under its ID too: it ends the check and
+leaves the app unknown, without its frame or link, until **Check status** or **Refresh** reads again.
 After a failed start the owner reads the workspace again, so the rail drops an app already stopped
 and keeps one launched but not observable as unknown.
 

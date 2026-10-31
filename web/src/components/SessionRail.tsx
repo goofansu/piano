@@ -21,7 +21,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { SessionLinks, SessionLinksBrowser } from "@/components/SessionLinks";
 import { SessionOutputs } from "@/components/SessionOutputs";
-import { PreviewRailRow } from "@/components/SessionPreview";
+import { PreviewRailRow, useSelectedPreview } from "@/components/SessionPreview";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -31,7 +31,6 @@ import { pullRequestView } from "@/lib/pullRequestView";
 import { type EnvironmentRowKind, environmentRowMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { type SessionLink, sessionLinks } from "@/lib/sessionLinks";
-import { selectedPreview } from "@/lib/sessionPreview";
 import type { TranscriptViewport } from "@/lib/transcriptViewport";
 import { usePreference } from "@/lib/usePreference";
 import { useSessionFiles } from "@/lib/useSessionFiles";
@@ -189,7 +188,7 @@ function RailSections({
   showAllRef: React.Ref<HTMLButtonElement>;
 }) {
   const session = state.session;
-  const preview = selectedPreview(state);
+  const preview = useSelectedPreview(state);
   const { cwd, branch, detachedHead, githubRepo, branchUrl, pullRequest } = sessionContext(state);
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;

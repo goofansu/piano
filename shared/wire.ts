@@ -1064,6 +1064,14 @@ export const ServerMessage = Schema.Union([
     sessionId: Schema.String,
     result: SessionActionResult,
   }),
+  /** A `preview_status` read that ended without an observation: refused at client or session
+   * admission, or failed before the app was read. Settles only the read with this `requestId`;
+   * the app's status is then unknown until a fresh read answers. */
+  Schema.TaggedStruct("preview_unobserved", {
+    selectionId: Schema.String,
+    requestId: Schema.String,
+    message: Schema.String,
+  }),
   Schema.TaggedStruct("worktree_result", { requestId: Schema.String, result: WorktreeResult }),
   Schema.TaggedStruct("session_status", {
     requestId: Schema.String,

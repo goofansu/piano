@@ -182,11 +182,17 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       admission: ({ action }) =>
         sessionActionPolicy[action._tag].priority ? "control" : "ordinary",
       run: ({ selectionId, action, start }) => sessions.act(selectionId, action, start),
-      unanswered: ({ selectionId }, reason) => ({
-        _tag: "error",
-        message: unansweredText(reason),
-        selectionId,
-      }),
+      // A status read settles by its request ID, whether client or session admission refused it
+      // or it failed; the browser then shows the app as unknown and may read again.
+      unanswered: ({ selectionId, action }, reason) =>
+        action._tag === "preview_status" && action.requestId !== undefined
+          ? {
+              _tag: "preview_unobserved",
+              selectionId,
+              requestId: action.requestId,
+              message: unansweredText(reason),
+            }
+          : { _tag: "error", message: unansweredText(reason), selectionId },
       confirmed: null,
     },
     registry: {

@@ -242,7 +242,8 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - pull request, copy session ID: the selected session has a Pi session ID; a pull request is
  *   linked, read and unlinked in Changes, so it also follows Changes' rule and says why not.
  * - open, stop and details of the preview: listed only while the selected session's live Pi owns
- *   an app; open needs its link, stop needs the attachment (`sessionReady`).
+ *   an app; open needs its link, which an unanswered status read withholds, stop needs the
+ *   attachment (`sessionReady`).
  * - new session here: the checkout is present.
  * - copy session path: saved history has supplied its file path; no live Pi needed.
  * - copy git branch, commit SHA, repository name: listed only while the session has one.
@@ -257,6 +258,8 @@ export function sessionCommands(
     radiusSignedIn?: boolean;
     /** The session's layout as navigation has it; by default side by side with only Agent. */
     layout?: SessionLayout;
+    /** The app whose last status read went unanswered; its link waits for a read that answers. */
+    previewUnconfirmed?: string | null;
   } = {},
 ): SessionCommand[] {
   const session = state.session;
@@ -391,7 +394,7 @@ export function sessionCommands(
         keywords: ["pr"],
         intent: { kind: "pull-request", linked },
       },
-      ...previewCommands(state),
+      ...previewCommands(state, options.previewUnconfirmed ?? null),
       {
         id: "messages-only",
         label: "Messages only",
@@ -482,8 +485,8 @@ export function sessionCommands(
 }
 
 /** The selected session's app commands; none unless its live Pi owns one. */
-function previewCommands(state: AppState): SessionCommand[] {
-  const preview = selectedPreview(state);
+function previewCommands(state: AppState, unconfirmed: string | null): SessionCommand[] {
+  const preview = selectedPreview(state, unconfirmed);
   if (!preview) return [];
   return [
     {

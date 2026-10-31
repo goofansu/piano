@@ -8,13 +8,20 @@ import type { ClientCommand, SessionPreview } from "../../../shared/wire.ts";
 import { type AppState, isSession } from "../store.ts";
 import { hostOf, type SessionRef, sessionReady } from "./sessionContext.ts";
 
-/** The selected session's app while its live generation owns one. */
-export function selectedPreview(state: AppState): SessionPreview | undefined {
+/**
+ * The selected session's app while its live generation owns one. `unconfirmed` names an app whose
+ * last status read went unanswered (see previewObservation); like a lost attachment, that leaves
+ * it unknown, without its frame or link, until a read answers.
+ */
+export function selectedPreview(
+  state: AppState,
+  unconfirmed: string | null = null,
+): SessionPreview | undefined {
   const session = state.session;
   if (!session?.hosted || !session.sessionId || session.state.closure) return undefined;
   const preview = session.state.preview;
-  if (!preview || sessionReady(state)) return preview;
-  // Losing the browser attachment says nothing about the server-owned app's lifetime.
+  if (!preview || (sessionReady(state) && preview.instanceId !== unconfirmed)) return preview;
+  // Neither says anything about the server-owned app's lifetime: it is not stopped.
   return {
     ...preview,
     state: "unknown",
