@@ -359,6 +359,69 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           page.evaluate(
             "window.previousPreviewFrame === document.querySelector('iframe[title=\"App preview\"]')",
           );
+        // A Surface resize released over the cross-origin app must end there: the release goes
+        // to the frame's browsing context, not Piano's window (PIN-126). Real CDP mouse input.
+        const surfaceResize = async () => {
+          const geometry = () =>
+            page.evaluate(`(() => {
+              const area = document.querySelector('[data-slot=surface-area]:not([inert])');
+              const separator = area.querySelector('[role=separator]');
+              const handle = separator.getBoundingClientRect();
+              const frame = document.querySelector('iframe[title="App preview"]').getBoundingClientRect();
+              return {
+                // The chosen width; the column may render narrower to leave Agent its minimum.
+                width: Number(separator.getAttribute('aria-valuenow')),
+                shown: Math.round(area.getBoundingClientRect().width),
+                dragging: area.dataset.dragging,
+                stored: localStorage.getItem('piano.panelWidth'),
+                handle: [handle.x + handle.width / 2, handle.y + handle.height / 2],
+                frame: [frame.x + frame.width / 2, frame.y + frame.height / 2],
+              };
+            })()`);
+          const mouse = (...args) => page.ab("mouse", ...args.map(String));
+          const start = await geometry();
+          const [hx, hy] = start.handle.map(Math.round);
+          // Wholly within Piano: press, drag over the Agent area, release there.
+          await mouse("move", hx, hy);
+          await mouse("down");
+          await mouse("move", hx - 30, hy);
+          await mouse("move", hx - 60, hy);
+          await mouse("up");
+          const inside = await geometry();
+          assert.equal(inside.dragging, "false", "release in Piano ends the drag");
+          assert.ok(inside.width > start.width, "drag in Piano widens the column");
+          assert.equal(inside.stored, String(inside.width), "release in Piano commits the width");
+          // Into the app: press on the divider, release over the embedded page.
+          const [ix, iy] = inside.handle.map(Math.round);
+          const [fx, fy] = inside.frame.map(Math.round);
+          await mouse("move", ix, iy);
+          await mouse("down");
+          await mouse("move", ix + 40, iy);
+          await mouse("move", ix + 100, fy);
+          await mouse("move", fx, fy);
+          await mouse("up");
+          const released = await geometry();
+          assert.equal(released.dragging, "false", "release over the app ends the drag");
+          assert.equal(released.stored, String(released.width), "release commits the width");
+          // Back across Piano with no button held: nothing follows the pointer.
+          await mouse("move", ix, iy);
+          await mouse("move", ix - 200, iy);
+          const after = await geometry();
+          observations.push({ surfaceResize: { start, inside, released, after } });
+          assert.equal(after.dragging, "false");
+          assert.equal(after.width, released.width, "moving after release leaves the width");
+          assert.equal(after.stored, released.stored);
+          // The app still takes pointer input: a press inside it focuses its browsing context.
+          await mouse("move", fx, fy);
+          await mouse("down");
+          await mouse("up");
+          await page.until(
+            "document.activeElement === document.querySelector('iframe[title=\"App preview\"]')",
+          );
+          await page.ab("focus", "[data-slot=surface-area] [role=separator]");
+          await page.press("Enter");
+          assert.equal((await geometry()).width, start.width);
+        };
         const noFrame = () =>
           page.until("!document.querySelector('iframe[title=\"App preview\"]')");
         const more = async () => {
@@ -412,6 +475,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await appAct("App draft", "fill", "Keep app state");
           await appAct("App route", "click");
           await rememberFrame();
+          await surfaceResize();
         }
         await page.capture("1c-preview-surface");
         await page.click("link", "Open in new tab");
