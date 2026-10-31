@@ -304,7 +304,13 @@ await run(
     await page.evaluate(`document.querySelector('[data-slot="transcript"]').scrollTop -= 200`);
     await page.ab("click", `${tool} [data-slot="collapsible-trigger"]`);
     await page.see("measured tool output");
-    await page.click("button", "… 26 more lines");
+    assert.equal(
+      await page.evaluate(
+        `document.querySelector('${tool} [data-slot="tool-output"]').textContent.match(/measured tool output/g).length`,
+      ),
+      30,
+      "one disclosure opens the tool's entire output",
+    );
     await page.capture("10-expanded-tool");
     await page.click("button", "Scroll to bottom");
     await page.until(`!document.querySelector('${tool}')`);
@@ -321,6 +327,24 @@ await run(
       "the expanded output stays expanded across remount",
     );
     await page.capture("11-remounted-tool");
+    // Layout coordinates, not virtual-row transforms: a tall tool pins to the transcript's
+    // edge, and collapsing it keeps that header in view instead of skipping past the tool.
+    await page.evaluate(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      const tool = document.querySelector('${tool}');
+      t.scrollTop += tool.getBoundingClientRect().top - t.getBoundingClientRect().top + 120;
+    })()`);
+    const headerOffset = () =>
+      page.evaluate(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      const h = document.querySelector('${tool} [data-slot="tool-header"]');
+      return h.getBoundingClientRect().top - t.getBoundingClientRect().top;
+    })()`);
+    assert.ok(Math.abs(await headerOffset()) < 1, "the tool header pins at the transcript edge");
+    await page.ab("click", `${tool} [data-slot="tool-header"] button`);
+    await page.until(`document.querySelector('${tool}').dataset.state === 'closed'`);
+    assert.ok(Math.abs(await headerOffset()) < 1, "collapse preserves the header's position");
+    await page.capture("11b-collapsed-tool");
     await page.click("button", "Scroll to bottom");
     await page.ab("fill", '[aria-label="Message"]', "stream");
     await page.ab("press", "Enter");
