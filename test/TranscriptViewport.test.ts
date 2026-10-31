@@ -188,7 +188,12 @@ test("a reader who opened a fold stays on its header while it grows the content"
   // A transcript that fits its window sits at the end, so it is pinned; opening a tall tool
   // output there must not follow the growth to the output's tail.
   const fits = setup({ height: 500, client: 500 });
-  fits.viewport.hold();
+  let measured = false;
+  fits.viewport.fold(true, () => {
+    measured = true;
+    return undefined;
+  });
+  assert.equal(measured, false, "opening reads no fold geometry");
   fits.el.scrollHeight = 7000;
   fits.viewport.rendered();
   fits.viewport.resized({ container: true });
@@ -199,7 +204,7 @@ test("a reader who opened a fold stays on its header while it grows the content"
   assert.equal(fits.el.scrollTop, 0, "later output leaves the reader in place too");
 
   const pinned = setup();
-  pinned.viewport.hold();
+  pinned.viewport.fold(true, () => undefined);
   pinned.el.scrollHeight = 2600;
   pinned.viewport.rendered();
   assert.equal(pinned.el.scrollTop, 1500, "a pinned reader at the end of a long transcript too");
@@ -207,6 +212,66 @@ test("a reader who opened a fold stays on its header while it grows the content"
   pinned.el.scrollHeight = 2700;
   pinned.viewport.rendered();
   assert.equal(pinned.el.scrollTop, 2200, "reaching the end again pins the view");
+});
+
+test("collapsing a fold whose header sticks to the edge moves its header there in the flow", () => {
+  const { viewport, el } = setup({ height: 5000 });
+  scroll(el, viewport, 2000);
+  // The fold starts 700px above the container's edge; its sticky header sits on that edge.
+  viewport.fold(false, () => ({ top: -700, header: 0 }));
+  assert.equal(el.scrollTop, 1300, "the fold's top, and so its header, is now on the edge");
+  el.scrollHeight = 4300; // The body goes.
+  viewport.scrolled(); // The browser reports the correction at the position already decided.
+  viewport.rendered();
+  assert.equal(el.scrollTop, 1300, "the header stays where the reader saw it");
+
+  const scrolledPast = setup({ height: 5000 });
+  scroll(scrolledPast.el, scrolledPast.viewport, 2000);
+  // A short fold scrolled partly out above the edge: its header is above the edge too.
+  scrolledPast.viewport.fold(false, () => ({ top: -30, header: -30 }));
+  assert.equal(scrolledPast.el.scrollTop, 1970, "the header comes back to the edge");
+});
+
+test("collapsing a fold whose header is in view leaves the view alone", () => {
+  const { viewport, el } = setup({ height: 5000 });
+  scroll(el, viewport, 2000);
+  viewport.fold(false, () => ({ top: 120, header: 120 }));
+  assert.equal(el.scrollTop, 2000);
+  viewport.fold(false, () => undefined);
+  assert.equal(el.scrollTop, 2000, "an unmeasured fold leaves it too");
+});
+
+test("collapsing a stuck header at the end does not follow the shrinking transcript past it", () => {
+  const { viewport, el } = setup({ height: 5000 });
+  assert.equal(el.scrollTop, 4500, "pinned to the end");
+  viewport.fold(false, () => ({ top: -1500, header: 0 }));
+  assert.equal(el.scrollTop, 3000);
+  assert.equal(viewport.atBottom(), false);
+  el.scrollHeight = 3600; // The body goes; the end is now 100px below the view.
+  viewport.rendered();
+  el.scrollHeight = 4000; // New output arrives.
+  viewport.rendered();
+  assert.equal(el.scrollTop, 3000, "the reader stays on the header they collapsed");
+});
+
+test("collapsing a fold in view at the end keeps following", () => {
+  const { viewport, el } = setup({ height: 5000 });
+  viewport.fold(false, () => ({ top: 200, header: 200 }));
+  el.scrollHeight = 4800;
+  el.scrollTop = 4300; // The browser clamps the view to the new end.
+  viewport.rendered();
+  el.scrollHeight = 5200;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 4700, "a view that did not move still follows output");
+});
+
+test("a fold cannot swallow a reader scroll whose event is still queued", () => {
+  const { viewport, el } = setup({ height: 5000 });
+  el.scrollTop = 4000; // The reader moved up; the scroll event is not yet dispatched.
+  viewport.fold(false, () => ({ top: 100, header: 100 }));
+  el.scrollHeight = 5600;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 4000, "the pending move up unpinned the view");
 });
 
 test("a jump to the top moves the reader there at once", () => {
