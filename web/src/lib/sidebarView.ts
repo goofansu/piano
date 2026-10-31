@@ -130,8 +130,12 @@ export interface DateGroup {
   label: string;
 }
 
-const localMidnight = (now: Date, daysAgo: number) =>
-  new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo);
+/**
+ * The start of the local day `days` after the one holding `date` (negative for earlier days).
+ * Date groups and the sidebar's rollover both draw their day boundary here.
+ */
+export const localMidnight = (date: Date, days = 0) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 const isoDay = (day: Date) =>
   [day.getFullYear(), day.getMonth() + 1, day.getDate()]
     .map((n, i) => String(n).padStart(i === 0 ? 4 : 2, "0"))
@@ -144,7 +148,7 @@ const UNKNOWN: DateGroup = { key: "Unknown date", label: "Unknown date" };
 function groupAt(now: Date, bucket: number): DateGroup {
   if (bucket === NAMED_DAYS) return OLDER;
   if (bucket > NAMED_DAYS) return UNKNOWN;
-  const day = localMidnight(now, bucket);
+  const day = localMidnight(now, -bucket);
   // Today and Yesterday too: a collapse belongs to the day, not to the name it has today.
   const label = bucket === 0 ? "Today" : bucket === 1 ? "Yesterday" : dayFormat.format(day);
   return { key: isoDay(day), label };
@@ -155,7 +159,7 @@ function bucketOf(updatedAt: string | undefined, now: Date): number {
   const time = updatedAt ? Date.parse(updatedAt) : Number.NaN;
   if (Number.isNaN(time)) return NAMED_DAYS + 1;
   for (let days = 0; days < NAMED_DAYS; days++)
-    if (time >= localMidnight(now, days).getTime()) return days;
+    if (time >= localMidnight(now, -days).getTime()) return days;
   return NAMED_DAYS;
 }
 

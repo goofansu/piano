@@ -19,6 +19,7 @@ import {
   dateGroup,
   dateGroups,
   folderGroups,
+  localMidnight,
   projectGroups,
   type SidebarView,
   sortSessions,
@@ -145,8 +146,6 @@ const NO_SESSIONS = "No sessions yet. Start one and it appears here.";
 const projectKey = (id: string) => `project:${id}`;
 const dateKey = (group: string) => `date:${group}`;
 const isDateKey = (key: string) => key.startsWith("date:");
-const localMidnight = (date: Date, days = 0) =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 
 /** The section listing the selected session, the one `list` built: Pinned for a pinned one. */
 function selectedKey(list: SidebarList): string | undefined {
