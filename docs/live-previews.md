@@ -67,9 +67,10 @@ health or establish authentication, usable embedding or HMR.
 
 **Reload preview** replaces only the page, never the process. It returns to the registered entry
 URL, not a claimed cross-origin current route. Its spinner ends on a frame load or after eight
-seconds (browsers fire no iframe error event); none of these establishes success. **Preview not appearing?** opens recovery actions on
-demand without a persistent warning over the app. **Open in new tab** stays available while loading,
-after the deadline and on opaque framing/login failures. It is a normal user-activated external link
+seconds (browsers fire no iframe error event); none of these establishes success. The healthy page
+has no status or help footer. Reload and **Open preview in new tab** are named icon controls in the
+toolbar; **Details** in its menu holds status and output on demand. The external link stays available
+while loading, after the deadline and on opaque framing/login failures. It is a normal user-activated external link
 with `noopener noreferrer`, not a second Surface tab. Keyboard Tab/Shift+Tab traverses the tested
 app and Piano's controls; iframe keys are not intercepted by a bridge. Removing a focused frame
 returns focus to its containing view; closing the tab uses the existing Surface focus policy.

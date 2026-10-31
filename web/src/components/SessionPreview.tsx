@@ -36,12 +36,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverTrigger,
-} from "@/components/PianoPopover";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
@@ -137,21 +131,27 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
         <button
           type="button"
           aria-label="Show preview"
-          className="flex min-w-0 flex-1 items-center gap-2.5 text-left outline-none pointer-coarse:min-h-11"
+          className="flex min-w-0 flex-1 items-center text-left outline-none pointer-coarse:min-h-11"
           onClick={() => {
             navigation.openPreview();
             previewObservation.refresh();
           }}
         >
-          <ItemMedia variant="icon">
-            <StatusDot tone={dotTone[face.tone]} pulse={face.tone === "pending"} />
-          </ItemMedia>
-          <ItemContent data-motion="yield" className="min-w-0 gap-0">
-            <RailRowTitle>Preview</RailRowTitle>
-            <ItemDescription className="line-clamp-none block truncate font-mono text-xs text-ink-3">
-              {preview.url ? previewHost(preview.url) : face.status}
-            </ItemDescription>
-          </ItemContent>
+          {/* Keep the first-line box with the text, even inside the taller touch target. */}
+          <div className="flex min-w-0 flex-1 items-start gap-2.5">
+            <ItemMedia
+              variant="icon"
+              className="h-lh group-has-data-[slot=item-description]/item:translate-y-0"
+            >
+              <StatusDot tone={dotTone[face.tone]} pulse={face.tone === "pending"} />
+            </ItemMedia>
+            <ItemContent data-motion="yield" className="min-w-0 gap-0">
+              <RailRowTitle>Preview</RailRowTitle>
+              <ItemDescription className="line-clamp-none block truncate font-mono text-xs text-ink-3">
+                {preview.url ? previewHost(preview.url) : face.status}
+              </ItemDescription>
+            </ItemContent>
+          </div>
         </button>
         {preview.url && (
           <RowActions className="top-1/2 right-1 -translate-y-1/2">
@@ -197,12 +197,11 @@ export function PreviewPanel() {
   const actions = preview && (
     <>
       {preview.url && (
-        <PianoButton asChild variant="ghost" size="sm">
+        <IconButton asChild size="header" label="Open preview in new tab">
           <a href={preview.url} target="_blank" rel="noopener noreferrer">
-            Open in new tab
-            <ExternalLinkIcon data-icon="inline-end" />
+            <ExternalLinkIcon />
           </a>
-        </PianoButton>
+        </IconButton>
       )}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
@@ -245,7 +244,6 @@ export function PreviewPanel() {
         // callbacks on owner/instance/URL change, not on ordinary status reads or hide/show.
         key={JSON.stringify([state.session?.cursor?.generation, preview.instanceId, url])}
         url={url}
-        preview={preview}
         actions={actions}
       />
     );
@@ -299,27 +297,17 @@ export function PreviewPanel() {
 const settled = (page: number) => (current: number | null) => (current === page ? null : current);
 
 /** One registered page. Reload replaces only its browsing context, never its managed process. */
-function EmbeddedPreview({
-  url,
-  preview,
-  actions,
-}: {
-  url: string;
-  preview: SessionPreview;
-  actions: ReactNode;
-}) {
+function EmbeddedPreview({ url, actions }: { url: string; actions: ReactNode }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [page, setPage] = useState(0);
   const [loadingPage, setLoadingPage] = useState<number | null>(0);
   const loading = loadingPage === page;
   const reload = () => {
-    setRecovery(false);
     setLoadingPage(page + 1);
     setPage(page + 1);
   };
   // An old iframe's queued load must not settle a later reload.
   const finish = () => setLoadingPage(settled(page));
-  const [recovery, setRecovery] = useState(false);
   useEffect(() => {
     // A load can be an opaque blocked/login page. Neither it nor this deadline says
     // anything about service health or successful embedding; just end the bounded feedback.
@@ -349,45 +337,16 @@ function EmbeddedPreview({
     >
       {/* An iframe has no shadcn primitive. No proxy, DOM bridge or delegated device permissions.
           Scripts/origin/forms are the tested app's minimum; top navigation/popups stay denied. */}
-      <div className="flex h-full min-h-0 flex-col">
-        <iframe
-          key={page}
-          ref={frame}
-          title="App preview"
-          src={url}
-          sandbox="allow-scripts allow-same-origin allow-forms"
-          referrerPolicy="no-referrer"
-          onLoad={finish}
-          className="min-h-0 w-full flex-1 border-0 bg-white"
-        />
-        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-line pr-2 pl-4">
-          <PreviewStatus preview={preview} className="flex items-center gap-2 text-xs text-ink-2" />
-          <Popover open={recovery} onOpenChange={setRecovery}>
-            <PopoverTrigger asChild>
-              <PianoButton variant="ghost" size="sm">
-                Preview not appearing?
-              </PianoButton>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="flex flex-col gap-3">
-              <PopoverDescription>
-                Reload returns to the app’s entry page. Opening in a new tab may require sign-in.
-              </PopoverDescription>
-              <div className="flex flex-wrap gap-2">
-                <PianoButton variant="outline" size="sm" onClick={reload}>
-                  <RefreshCwIcon data-icon="inline-start" />
-                  Reload preview
-                </PianoButton>
-                <PianoButton asChild variant="outline" size="sm">
-                  <a href={url} target="_blank" rel="noopener noreferrer">
-                    Open in new tab
-                    <ExternalLinkIcon data-icon="inline-end" />
-                  </a>
-                </PianoButton>
-              </div>
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
+      <iframe
+        key={page}
+        ref={frame}
+        title="App preview"
+        src={url}
+        sandbox="allow-scripts allow-same-origin allow-forms"
+        referrerPolicy="no-referrer"
+        onLoad={finish}
+        className="block h-full w-full border-0 bg-white"
+      />
     </SurfaceFrame>
   );
 }
