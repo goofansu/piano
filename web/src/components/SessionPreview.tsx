@@ -461,11 +461,16 @@ export function PreviewDetailsDialog({
                 </Button>
               </div>
               {details?.error && <p className="text-sm text-err">{details.error}</p>}
-              {/* Plain preformatted output has no dedicated UI primitive. */}
-              <pre className="max-h-[min(16rem,40dvh)] min-h-16 overflow-auto rounded-md border border-line bg-fill p-3 font-mono text-xs whitespace-pre-wrap break-words">
-                {details?.logs.trim() ||
-                  (observed.refreshing || !details ? "Reading output…" : "No output yet.")}
-              </pre>
+              {/* Plain preformatted output has no dedicated UI primitive. The scroll container
+                  wraps the <pre> instead of being it: when a scrollable <pre> is dragged over in
+                  Firefox, the selection jumps to the whole dialog each time the pointer crosses
+                  the gap between two lines. */}
+              <div className="max-h-[min(16rem,40dvh)] min-h-16 overflow-auto rounded-md border border-line bg-fill">
+                <pre className="p-3 font-mono text-xs whitespace-pre-wrap break-words">
+                  {details?.logs.trim() ||
+                    (observed.refreshing || !details ? "Reading output…" : "No output yet.")}
+                </pre>
+              </div>
             </section>
           </div>
         )}
