@@ -56,6 +56,12 @@ export interface TranscriptViewport {
    * leaves the decision alone.
    */
   wheel: (deltaY: number, deltaMode: number) => void;
+  /**
+   * The reader opened something to read where it is: the view stops following output, so what
+   * opens grows below the header they clicked instead of scrolling past them to its end. Reaching
+   * the end again pins the view, as any scroll does.
+   */
+  hold: () => void;
   /** The transcript re-rendered: a pinned view follows the bottom. */
   rendered: () => void;
   /**
@@ -195,6 +201,13 @@ export function createTranscriptViewport(): TranscriptViewport {
         deltaMode === DELTA_PAGE ? element.clientHeight : deltaMode === DELTA_LINE ? LINE_PX : 1;
       element.scrollTop = element.scrollTop + deltaY * unit;
       scrolled();
+    },
+    hold: () => {
+      if (!element) return;
+      // Consume older reader movement first, as a jump does, so a queued scroll event cannot
+      // rediscover that move and re-pin the view afterwards.
+      scrolled();
+      stick = false;
     },
     rendered: () => {
       if (element) follow(element);
