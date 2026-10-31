@@ -17,7 +17,7 @@ import {
 } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { createConnection, createServer, type Server } from "node:net";
-import { isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -368,6 +368,101 @@ async function launchSpec(
     origin,
     path,
   };
+}
+
+/** Admission catches identifiable unsupported launches, not what arbitrary scripts do. The
+ * agent must inspect the checkout's real app entry point; this is not an execution sandbox. */
+async function admitLaunch(command: string[], workspace: string) {
+  const refuse = (reason: string): never => {
+    throw new Error(
+      `Unsupported preview launch: ${reason}. Run the inspected app in this checkout; use file preview or artifact delivery for generated HTML/reports.`,
+    );
+  };
+  const generic = /^(?:http-server|serve|static-server|live-server)(?:@[^/]+)?$/;
+  const frameworks = ["vite", "next", "astro"];
+  const program = basename(command[0]);
+  let tool = program;
+  let args = command.slice(1);
+  // Recognize direct package invocations only; do not interpret scripts or shell programs.
+  if (program === "npx") {
+    args = args.filter((arg) => !["--yes", "-y", "--no-install", "--"].includes(arg));
+    tool = args.shift() ?? "";
+  } else if (
+    ["npm", "pnpm", "yarn", "bun"].includes(program) &&
+    ["exec", "dlx", "x"].includes(args[0])
+  ) {
+    args = args.slice(1).filter((arg) => !["--yes", "-y", "--"].includes(arg));
+    tool = args.shift() ?? "";
+  } else if (program === "node" && args[0]?.includes("node_modules/")) {
+    const packageName = args[0].match(/(?:^|\/)node_modules\/([^/]+)\//)?.[1];
+    if (packageName && (generic.test(packageName) || frameworks.includes(packageName))) {
+      tool = packageName;
+      args = args.slice(1);
+    }
+  }
+  const python = /^python(?:\d+(?:\.\d+)*)?$/.test(program);
+  const pythonArgs = python ? command.slice(1) : [];
+  while (/^-(?:u|B|E|I|s|S|O|OO)$/.test(pythonArgs[0] ?? "")) pythonArgs.shift();
+  const module = pythonArgs[0] === "-m" ? pythonArgs[1] : pythonArgs[0]?.match(/^-m(.+)$/)?.[1];
+  if (
+    generic.test(tool) ||
+    (python && /^(?:http\.server|SimpleHTTPServer|CGIHTTPServer)$/.test(module ?? ""))
+  )
+    refuse("generic static file servers are not checkout app previews");
+
+  const checkout = await realpath(workspace);
+  const within = (path: string) => {
+    const child = relative(checkout, path);
+    return child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child);
+  };
+  const checkRoot = async (value: string) => {
+    // Resolve existing ancestors too: a missing child beneath an outward symlink is outside.
+    // Canonical comparison also accepts symlinked checkout spellings (e.g. /var on macOS).
+    let ancestor = resolve(checkout, value);
+    for (;;) {
+      try {
+        if (!within(await realpath(ancestor)))
+          refuse("an explicit launch root resolves outside this checkout");
+        break;
+      } catch (error) {
+        if (code(error) !== "ENOENT") throw error;
+        if (ancestor === checkout) throw error;
+        ancestor = dirname(ancestor);
+      }
+    }
+  };
+  const rootFlags = new Set([
+    "--cwd",
+    "--prefix",
+    "--dir",
+    "--directory",
+    "--root",
+    "--app-dir",
+    "--app",
+    "--chdir",
+    "-C",
+  ]);
+  for (let i = 1; i < command.length; i++) {
+    const [flag, ...value] = command[i].split("=");
+    if (rootFlags.has(flag)) {
+      const root = value.length ? value.join("=") : command[++i];
+      if (!root || root.startsWith("-")) refuse(`missing path for ${flag}`);
+      await checkRoot(root);
+    }
+  }
+  // Unambiguous positional roots in common dev CLIs; options and opaque wrappers stay opaque.
+  if (frameworks.includes(tool.replace(/@[^/]+$/, ""))) {
+    const root = ["dev", "start", "preview", "serve"].includes(args[0]) ? args[1] : args[0];
+    if (root && !root.startsWith("-")) await checkRoot(root);
+  }
+  // An explicitly named application file must belong to this checkout. Installed executables
+  // still resolve on PATH; this does not restrict a language or inspect imported application code.
+  const entry = python
+    ? pythonArgs[0]
+    : program === "node" && tool === program
+      ? command[1]
+      : undefined;
+  if (entry && /\.(?:[cm]?js|tsx?|py)$/.test(entry)) await checkRoot(entry);
 }
 
 /** The app as `env -i` launches it: only PATH, PORT and the explicitly requested environment. */
@@ -1065,6 +1160,7 @@ export class PreviewAdapter {
       };
     }
     const spec = await launchSpec(requested, config, this.platform);
+    await admitLaunch(spec.command, workspace);
     const timeout = request.timeoutSeconds ?? 15;
     if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 1 || timeout > 30)
       throw new Error("timeoutSeconds must be between 1 and 30");

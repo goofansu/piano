@@ -1,18 +1,27 @@
 /**
- * The selected session's managed app, as the session header, palette and Archive/Delete show it.
+ * The selected session's managed app, as the session rail, Preview, palette and Archive/Delete show it.
  * An app belongs to one live Pi generation (ADR 0003): a saved, closed or peeked session has none,
  * and its old links in the transcript are not a running preview. Nothing here starts Pi or an app.
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand, SessionPreview } from "../../../shared/wire.ts";
 import { type AppState, isSession } from "../store.ts";
-import { hostOf, type SessionRef } from "./sessionContext.ts";
+import { hostOf, type SessionRef, sessionReady } from "./sessionContext.ts";
 
 /** The selected session's app while its live generation owns one. */
 export function selectedPreview(state: AppState): SessionPreview | undefined {
   const session = state.session;
   if (!session?.hosted || !session.sessionId || session.state.closure) return undefined;
-  return session.state.preview;
+  const preview = session.state.preview;
+  if (!preview || sessionReady(state)) return preview;
+  // Losing the browser attachment says nothing about the server-owned app's lifetime.
+  return {
+    ...preview,
+    state: "unknown",
+    ready: false,
+    url: null,
+    detail: "",
+  };
 }
 
 /** Ending this session's Pi would stop an app it owns: the selected one, or a background host. */
@@ -24,7 +33,7 @@ export function sessionHasPreview(state: AppState, target: SessionRef): boolean 
 
 export type PreviewTone = "ready" | "pending" | "problem" | "idle";
 
-/** How the header names an app: a short label, a tone for its icon, and one line of status. */
+/** How inspection names an app: a short label, a dot tone, and one line of status. */
 export interface PreviewFace {
   label: string;
   tone: PreviewTone;
@@ -69,7 +78,10 @@ export function previewAccess(preview: SessionPreview): string {
 }
 
 /** Re-observe the selected session's app; it never starts Pi or launches anything. */
-export const PREVIEW_STATUS: ClientCommand = { _tag: "act", action: { _tag: "preview_status" } };
+export const previewStatus = (requestId: string): ClientCommand => ({
+  _tag: "act",
+  action: { _tag: "preview_status", requestId },
+});
 
 /** Stop exactly this instance; a replacement is left alone. */
 export const stopPreview = (preview: Pick<SessionPreview, "instanceId">): ClientCommand => ({

@@ -124,9 +124,9 @@ Vite's allowed host comes from that origin. Only the origin is reused: ports and
 scratch-only. On macOS it opens the agent's `localhost` link itself.
 It uses the real installed Pi with a scripted loopback model (no credentials), scratch HOME/Pi
 history/database, and unique managed services. It checks prompt → tool → preview link, the session
-header's preview menu, its details and logs, and the palette rows, local browser load and HMR, then original-instance survival through settlement, abort, browser disconnect,
+rail and Preview Surface, details/logs, copy/external links and distinct palette rows, local browser load and HMR, then original-instance survival through settlement, abort, browser disconnect,
 session switching and a short idle timeout. Reload finds the same instance. **Stop preview** in the
-header menu stops it and leaves the session answering, and permits idle retirement. It checks
+Preview Surface (desktop and narrow) asks before stopping it, leaves the session answering and permits idle retirement. It also checks unknown/failed-stop inspection with an unreadable scratch intent, a non-owning session, and a replacement while confirmation is open. It checks
 Pi SIGKILL and Piano SIGTERM/SIGKILL cleanup before reopening/restarting, no adoption on reopen,
 archive/delete via the palette, with confirmations that name the app, and cleanup after checkout
 removal. A child ignores TERM to exercise

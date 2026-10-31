@@ -79,6 +79,71 @@ const archive = (target: SessionTarget = other): CommandForm => ({
 const closeFolder: CommandForm = { kind: "close-folder", folder: { path: "/repo", name: "repo" } };
 const deleteProject: CommandForm = { kind: "delete-project", project: launch };
 
+test("preview confirmation stays on its exact attachment, generation and instance", () => {
+  const preview = {
+    instanceId: "i1",
+    state: "running" as const,
+    ready: true,
+    url: "http://localhost:4000/",
+    port: 4000,
+    command: ["npm", "run", "dev"],
+    detail: "",
+    externalAccess: "same-host" as const,
+    observedAt: 0,
+  };
+  let current = { ...online, session: { ...session, state: { ...session.state, preview } } };
+  const form = sessionCommands(current).find((c) => c.id === "stop-preview")!.intent;
+  assert.equal(form.kind, "stop-preview");
+  if (form.kind !== "stop-preview") throw new Error("expected confirmation");
+  const sent: ClientCommand[] = [];
+  const forms = createCommandForms({
+    getState: () => current,
+    radiusSignedIn: () => false,
+    share: async () => shared,
+    send: (command) => {
+      sent.push(command);
+      return "sent";
+    },
+    openPage: () => {},
+  });
+  forms.open(form);
+  forms.cancel();
+  assert.deepEqual(sent, [], "cancel has no effect");
+  forms.open(form);
+  assert.equal(answerForm(current, form).allowed, true);
+  assert.equal(answerForm({ ...current, selectionId: "new-selection" }, form).allowed, false);
+  assert.equal(
+    answerForm(
+      {
+        ...current,
+        session: {
+          ...current.session,
+          cursor: { cwd: "/repo", sessionId: "s1", generation: "new-owner", sequence: 1 },
+        },
+      },
+      form,
+    ).allowed,
+    false,
+  );
+  assert.equal(answerForm({ ...current, connected: false }, form).allowed, false);
+  current = {
+    ...current,
+    session: {
+      ...current.session,
+      state: { ...current.session.state, preview: { ...preview, instanceId: "replacement" } },
+    },
+  };
+  assert.equal(forms.submit(), false, "old confirmation never targets replacement");
+  assert.deepEqual(sent, []);
+  current = {
+    ...current,
+    session: { ...current.session, state: { ...current.session.state, preview } },
+  };
+  assert.equal(forms.submit(), true);
+  assert.equal(forms.submit(), false);
+  assert.deepEqual(sent, [{ _tag: "act", action: { _tag: "preview_stop", instanceId: "i1" } }]);
+});
+
 test("rename sends the trimmed new title, and refuses an empty or unchanged one", () => {
   assert.deepEqual(answerForm(online, rename(), "  Renamed  "), {
     allowed: true,

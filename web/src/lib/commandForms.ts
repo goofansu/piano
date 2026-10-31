@@ -25,8 +25,8 @@ import {
 } from "./projectCommands.ts";
 import { inSidebarGroups, sessionCatalog, sessionLabel } from "./sessionCatalog.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
-import { sessionMutable, sessionWorking, workspaceFor } from "./sessionContext.ts";
-import { sessionHasPreview } from "./sessionPreview.ts";
+import { sessionMutable, sessionReady, sessionWorking, workspaceFor } from "./sessionContext.ts";
+import { selectedPreview, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
 export interface FormAnswer {
@@ -73,6 +73,17 @@ export function answerForm(
 ): FormAnswer {
   const text = typeof input === "string" ? input : "";
   switch (form.kind) {
+    case "stop-preview": {
+      const preview = selectedPreview(state);
+      if (
+        !sessionReady(state) ||
+        state.selectionId !== form.selectionId ||
+        (state.session?.cursor?.generation ?? null) !== form.generation ||
+        preview?.instanceId !== form.instanceId
+      )
+        return { allowed: false };
+      return { allowed: true, command: stopPreview(preview) };
+    }
     case "rename-session": {
       const { target } = form;
       const title = text.trim();
@@ -164,6 +175,13 @@ export interface Confirmation {
  */
 export function confirmation(state: AppState, form: CommandForm): Confirmation | undefined {
   switch (form.kind) {
+    case "stop-preview":
+      return {
+        title: "Stop preview?",
+        description: `This will stop ${form.host}. The session stays available.`,
+        confirmLabel: "Stop preview",
+        destructive: true,
+      };
     case "archive-session": {
       const title = sessionLabel(form.target.title);
       const preview = sessionHasPreview(state, form.target);

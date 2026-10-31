@@ -1,4 +1,4 @@
-import { FileDiffIcon, XIcon } from "lucide-react";
+import { AppWindowIcon, FileDiffIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ChangesPanel } from "@/components/Changes";
 import { IconButton } from "@/components/IconButton";
@@ -9,6 +9,7 @@ import {
   PianoStripTabTrigger,
   Tabs,
 } from "@/components/PianoTabs";
+import { PreviewPanel } from "@/components/SessionPreview";
 import type { PullRequestControl } from "@/components/SessionPullRequest";
 import { SurfaceColumn, surfaceTabNames } from "@/components/SurfaceArea";
 import { FileTabIcon, WorkspaceFile } from "@/components/WorkspaceFile";
@@ -41,6 +42,8 @@ export function SurfaceTabTrigger({
       icon={
         tab === "changes" ? (
           <FileDiffIcon className="size-3.5" />
+        ) : tab === "preview" ? (
+          <AppWindowIcon className="size-3.5" />
         ) : (
           <FileTabIcon path={tab.path} className="size-3.5" />
         )
@@ -117,8 +120,8 @@ export function SessionPanel({
   });
 
   // Closing a tab leaves focus where the user can go on: the tab now shown, else (beside the
-  // Agent area) the header's Changes button, where it can be opened again. One area at a time, back on Agent, focus is
-  // left alone so a phone keeps its keyboard down. Only focus that was lost is moved: an overlay
+  // Agent area) the rail trigger, where inspection starts. One area at a time this never focuses
+  // the composer or raises the keyboard. Only focus that was lost is moved: an overlay
   // that closed with the tab (the palette) restores its own first, so this checks after it.
   const previous = useRef({ count: tabs.length, key });
   useEffect(() => {
@@ -129,8 +132,20 @@ export function SessionPanel({
       const focused = document.activeElement;
       const lost = !focused || focused === document.body || !!focused.closest("[inert]");
       if (!lost) return;
-      if (shown && focusShown()) return;
-      if (!single) document.querySelector<HTMLElement>("[data-changes-trigger]")?.focus();
+      if (shown && active) {
+        (single
+          ? document.querySelector<HTMLElement>('[role="tab"][data-state="active"]')
+          : document.getElementById(surfaceTabId(active))
+        )?.focus({ preventScroll: true });
+        return;
+      }
+      document
+        .querySelector<HTMLElement>(
+          single
+            ? '[role="tab"][data-state="active"], [data-rail-trigger]'
+            : "[data-rail-trigger], [data-changes-trigger]",
+        )
+        ?.focus({ preventScroll: true });
     };
     const frame = requestAnimationFrame(settle);
     const late = setTimeout(settle, 300);
@@ -201,6 +216,7 @@ export function SessionPanel({
               pullRequest={pullRequest}
             />,
           )}
+        {tabs.includes("preview") && view("preview", <PreviewPanel key={key} />)}
         {files.map((file) =>
           view(
             tabKey(file),

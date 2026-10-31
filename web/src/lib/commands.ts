@@ -37,6 +37,7 @@ export function radioChoiceOf<
 
 /** A form the host owns, which asks before anything changes; `answerForm` re-checks its rule. */
 export type CommandForm =
+  | Extract<SessionCommand["intent"], { kind: "stop-preview" }>
   | { kind: "rename-session"; target: SessionTarget }
   | { kind: "delete-session"; target: SessionTarget }
   | { kind: "share-session"; target: SessionTarget }
@@ -55,6 +56,7 @@ export interface CommandEffects {
   openProjects: () => void;
   openProject: (projectId: string) => void;
   openChanges: () => void;
+  openPreview: () => void;
   toggleRail: () => void;
   showAgent: () => void;
   /** The dialog that links a pull request to the selected session. */
@@ -139,6 +141,12 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "open-url":
       effects.openUrl(intent.url);
+      break;
+    case "stop-preview":
+      effects.openForm(intent);
+      break;
+    case "show-preview":
+      effects.openPreview();
       break;
     case "preview-details":
       effects.openPreviewDetails();

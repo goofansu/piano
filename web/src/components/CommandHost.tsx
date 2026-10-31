@@ -189,6 +189,7 @@ export function CommandHost({
     openProjects,
     openProject,
     openChanges,
+    openPreview,
     toggleRail,
     showAgent,
     openPullRequest,
@@ -226,7 +227,11 @@ export function CommandHost({
   const project = form?.kind === "project" ? form.dialog : undefined;
   const projectSettings = form?.kind === "project-settings";
   // The app whose details are open; another app, even in the same session, never reopens them.
-  const [previewDetails, setPreviewDetails] = useState<string | null>(null);
+  const [previewDetails, setPreviewDetails] = useState<{
+    instanceId: string;
+    selectionId: string | null;
+    generation: string | null;
+  } | null>(null);
 
   const effects: CommandEffects = {
     send,
@@ -236,6 +241,10 @@ export function CommandHost({
     openProjects,
     openProject,
     openChanges,
+    openPreview: () => {
+      openPreview();
+      previewObservation.refresh();
+    },
     toggleRail,
     showAgent,
     openPullRequest,
@@ -245,10 +254,22 @@ export function CommandHost({
     setChangesWrap,
     setAppearance: setTheme,
     copy: (value, label) => void copySessionValue(value, label),
-    openForm: forms.open,
+    openForm: (form) => {
+      forms.open(form);
+      if (form.kind === "stop-preview") previewObservation.refresh();
+    },
     openUrl: openLink,
     openPreviewDetails: () => {
-      setPreviewDetails(selectedPreview(state)?.instanceId ?? null);
+      const preview = selectedPreview(state);
+      setPreviewDetails(
+        preview
+          ? {
+              instanceId: preview.instanceId,
+              selectionId: state.selectionId,
+              generation: state.session?.cursor?.generation ?? null,
+            }
+          : null,
+      );
       previewObservation.refresh();
     },
     addWebhook: () => webhookEditor.open("new"),
@@ -342,7 +363,15 @@ export function CommandHost({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <PreviewDetailsDialog instanceId={previewDetails} close={() => setPreviewDetails(null)} />
+      <PreviewDetailsDialog
+        instanceId={
+          previewDetails?.selectionId === state.selectionId &&
+          previewDetails?.generation === (state.session?.cursor?.generation ?? null)
+            ? (previewDetails?.instanceId ?? null)
+            : null
+        }
+        close={() => setPreviewDetails(null)}
+      />
       <ProjectDialogView
         open={!!project}
         dialog={project}

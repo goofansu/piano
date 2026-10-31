@@ -22,7 +22,6 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
-import { SessionPreviewControl } from "@/components/SessionPreview";
 import { type PullRequestControl, PullRequestLinkDialog } from "@/components/SessionPullRequest";
 import { SessionRail } from "@/components/SessionRail";
 import { surfaceTabNames } from "@/components/SurfaceArea";
@@ -189,7 +188,6 @@ export function SessionHeader({
         </span>
         {/* Ghost controls: the group pulls out so the last one's content ends on the gutter. */}
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
-          <SessionPreviewControl />
           <SessionRailToggle state={state} />
           <ChangesToggle />
           {mobile && sessionMenu}
@@ -217,6 +215,7 @@ function SessionRailToggle({ state }: { state: AppState }) {
     <>
       <IconButton
         ref={trigger}
+        data-rail-trigger
         size="header"
         label={command.label}
         aria-pressed={shown}

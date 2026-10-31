@@ -13,8 +13,8 @@ import { findProject } from "./projectCommands.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
 import { sessionLabel } from "./sessionCatalog.ts";
 
-/** The session's own views in the Surface area, one tab each: Changes. */
-export type SurfaceView = "changes";
+/** The session's own views in the Surface area, one tab each. */
+export type SurfaceView = "changes" | "preview";
 
 /**
  * One tab in the selected session's Surface area: one of its views, or a file a link opened. A
@@ -208,6 +208,8 @@ export interface Navigation {
   closeSettings: () => void;
   /** Shows Changes, opening its tab at the end if needed, or focuses it; never a toggle. */
   openChanges: () => void;
+  /** Shows the owned app inspector, never launching anything. */
+  openPreview: () => void;
   /**
    * Shows the session rail on the Agent area's right, or hides it, for every session: on hides
    * the Surface area until a tab is shown again or the rail goes off. One area at a time toggles
@@ -413,12 +415,20 @@ function decodeKept(
   }
   const surface = value?.owner === owner ? value.surface : null;
   if (!surface || !isArea(value?.area) || !Array.isArray(surface.tabs)) return null;
-  // A tab kind that no longer exists (Details was one) is left behind.
+  // Preview is deliberately disposable: browser memory is not evidence of a live owner.
+  // Retired tab kinds (Details was one) are left behind too.
   const tabs = surface.tabs.filter(isTab);
-  if (!tabs.some((tab) => tabKey(tab) === surface.active)) return null;
+  if (
+    !tabs.length ||
+    (surface.active !== "preview" && !tabs.some((tab) => tabKey(tab) === surface.active))
+  )
+    return null;
+  const active = tabs.some((tab) => tabKey(tab) === surface.active)
+    ? surface.active
+    : tabKey(tabs[0]);
   // Kept by an older Piano without it: the tabs were showing.
   return {
-    surface: { tabs, active: surface.active },
+    surface: { tabs, active },
     area: value.area,
     covered: value.covered === true,
   };
@@ -712,6 +722,7 @@ export function createNavigation({
       }),
     closeSettings,
     openChanges: () => openView("changes"),
+    openPreview: () => openView("preview"),
     toggleRail: () =>
       state.single ? moveArea({ railSheet: !state.railSheet }) : setRail(!state.layout.rail),
     closeRailSheet: () => batch(() => set({ railSheet: false })),
