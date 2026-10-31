@@ -24,6 +24,27 @@ export function selectedPreview(state: AppState): SessionPreview | undefined {
   };
 }
 
+/** Only a registered, ready HTTP page on a different origin may be embedded (INV-11).
+ * This is a browser policy check, not a hostile-code sandbox or proof of framing/authentication.
+ */
+export function previewFrameUrl(
+  preview: SessionPreview | undefined,
+  controlOrigin: string,
+): string | null {
+  if (!preview?.ready || preview.state !== "running" || !preview.url) return null;
+  try {
+    const url = new URL(preview.url);
+    return (url.protocol === "http:" || url.protocol === "https:") &&
+      !url.username &&
+      !url.password &&
+      url.origin !== new URL(controlOrigin).origin
+      ? preview.url
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Ending this session's Pi would stop an app it owns: the selected one, or a background host. */
 export function sessionHasPreview(state: AppState, target: SessionRef): boolean {
   const session = state.session;

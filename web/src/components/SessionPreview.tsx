@@ -8,7 +8,14 @@ import {
   ScrollTextIcon,
   SquareIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { toast } from "sonner";
 import { useCommands, useSessionCommands } from "@/components/CommandHost";
 import { IconButton } from "@/components/IconButton";
@@ -29,6 +36,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverTrigger,
+} from "@/components/PianoPopover";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
@@ -48,6 +61,7 @@ import {
   type PreviewTone,
   previewAccess,
   previewFace,
+  previewFrameUrl,
   previewHost,
   selectedPreview,
 } from "@/lib/sessionPreview";
@@ -153,7 +167,7 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
   );
 }
 
-/** An app inspector, not an embedded browser. Navigation never owns the service lifetime. */
+/** The current app in the existing Surface. Navigation never owns the service lifetime. */
 export function PreviewPanel() {
   const { shownTab, surfaceRequest } = useNavigation();
   // biome-ignore lint/correctness/useExhaustiveDependencies: repeated requests to show Preview are explicit observations too.
@@ -173,56 +187,64 @@ export function PreviewPanel() {
     observed.terminal?.instanceId === viewedInstance &&
     observed.terminal?.cwd === state.session?.cwd &&
     observed.terminal?.sessionId === state.session?.sessionId;
-  return (
-    <SurfaceFrame
-      tab="preview"
-      actions={
-        preview && (
-          <>
+  const url = previewFrameUrl(preview, window.location.origin);
+  const actions = preview && (
+    <>
+      {preview.url && (
+        <PianoButton asChild variant="ghost" size="sm">
+          <a href={preview.url} target="_blank" rel="noopener noreferrer">
+            Open in new tab
+            <ExternalLinkIcon data-icon="inline-end" />
+          </a>
+        </PianoButton>
+      )}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <IconButton size="header" label="More preview actions">
+            <MoreHorizontalIcon />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuGroup>
             {preview.url && (
-              <PianoButton asChild variant="ghost" size="sm">
-                <a href={preview.url} target="_blank" rel="noopener noreferrer">
-                  Open in new tab
-                  <ExternalLinkIcon data-icon="inline-end" />
-                </a>
-              </PianoButton>
+              <DropdownMenuItem onSelect={() => void copyLink(preview.url!)}>
+                <CopyIcon />
+                Copy link
+              </DropdownMenuItem>
             )}
-            <DropdownMenu modal={false}>
-              <DropdownMenuTrigger asChild>
-                <IconButton size="header" label="More preview actions">
-                  <MoreHorizontalIcon />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
-                  {preview.url && (
-                    <DropdownMenuItem onSelect={() => void copyLink(preview.url!)}>
-                      <CopyIcon />
-                      Copy link
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onSelect={commands.details}>
-                    <ScrollTextIcon />
-                    Details
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    disabled={!commands.canStop}
-                    onSelect={commands.stop}
-                  >
-                    <SquareIcon className="fill-current" />
-                    Stop preview
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        )
-      }
-    >
+            <DropdownMenuItem onSelect={commands.details}>
+              <ScrollTextIcon />
+              Details
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              variant="destructive"
+              disabled={!commands.canStop}
+              onSelect={commands.stop}
+            >
+              <SquareIcon className="fill-current" />
+              Stop preview
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
+  if (url && preview)
+    return (
+      <EmbeddedPreview
+        // SessionPanel fences the session. This boundary also disposes page state, timers and
+        // callbacks on owner/instance/URL change, not on ordinary status reads or hide/show.
+        key={JSON.stringify([state.session?.cursor?.generation, preview.instanceId, url])}
+        url={url}
+        preview={preview}
+        actions={actions}
+      />
+    );
+  return (
+    <SurfaceFrame tab="preview" actions={actions}>
       <Empty>
         <EmptyHeader>
           {preview ? (
@@ -263,6 +285,104 @@ export function PreviewPanel() {
           </EmptyContent>
         )}
       </Empty>
+    </SurfaceFrame>
+  );
+}
+
+/** One registered page. Reload replaces only its browsing context, never its managed process. */
+function EmbeddedPreview({
+  url,
+  preview,
+  actions,
+}: {
+  url: string;
+  preview: SessionPreview;
+  actions: ReactNode;
+}) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [page, setPage] = useState(0);
+  const [loadingPage, setLoadingPage] = useState<number | null>(0);
+  const loading = loadingPage === page;
+  const reload = () => {
+    setRecovery(false);
+    setLoadingPage(page + 1);
+    setPage(page + 1);
+  };
+  // An old iframe's queued load/error must not settle a later reload.
+  const finish = () => setLoadingPage((current) => (current === page ? null : current));
+  const [recovery, setRecovery] = useState(false);
+  useEffect(() => {
+    // A load/error can be an opaque blocked/login page. Neither it nor this deadline says
+    // anything about service health or successful embedding; just end the bounded feedback.
+    const timer = setTimeout(
+      () => setLoadingPage((current) => (current === page ? null : current)),
+      8_000,
+    );
+    return () => clearTimeout(timer);
+  }, [page]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each page is a different iframe DOM node.
+  useLayoutEffect(() => {
+    const element = frame.current;
+    return () => {
+      // Removing a focused cross-origin frame must not strand keyboard focus in a dead page.
+      if (element && document.activeElement === element)
+        element.closest<HTMLElement>('[tabindex="-1"]')?.focus({ preventScroll: true });
+    };
+  }, [page]);
+  return (
+    <SurfaceFrame
+      tab="preview"
+      actions={
+        <>
+          <IconButton size="header" label="Reload preview" aria-busy={loading} onClick={reload}>
+            <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
+          </IconButton>
+          {actions}
+        </>
+      }
+    >
+      {/* An iframe has no shadcn primitive. No proxy, DOM bridge or delegated device permissions.
+          Scripts/origin/forms are the tested app's minimum; top navigation/popups stay denied. */}
+      <div className="flex h-full min-h-0 flex-col">
+        <iframe
+          key={page}
+          ref={frame}
+          title="App preview"
+          src={url}
+          sandbox="allow-scripts allow-same-origin allow-forms"
+          referrerPolicy="no-referrer"
+          onLoad={finish}
+          onError={finish}
+          className="min-h-0 w-full flex-1 border-0 bg-white"
+        />
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-line pr-2 pl-4">
+          <PreviewStatus preview={preview} className="flex items-center gap-2 text-xs text-ink-2" />
+          <Popover open={recovery} onOpenChange={setRecovery}>
+            <PopoverTrigger asChild>
+              <PianoButton variant="ghost" size="sm">
+                Preview not appearing?
+              </PianoButton>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="flex flex-col gap-3">
+              <PopoverDescription>
+                Reload returns to the app’s entry page. Opening in a new tab may require sign-in.
+              </PopoverDescription>
+              <div className="flex flex-wrap gap-2">
+                <PianoButton variant="outline" size="sm" onClick={reload}>
+                  <RefreshCwIcon data-icon="inline-start" />
+                  Reload preview
+                </PianoButton>
+                <PianoButton asChild variant="outline" size="sm">
+                  <a href={url} target="_blank" rel="noopener noreferrer">
+                    Open in new tab
+                    <ExternalLinkIcon data-icon="inline-end" />
+                  </a>
+                </PianoButton>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
     </SurfaceFrame>
   );
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientCommand, ServerMessage, SessionPreview, SessionState } from "../shared/wire.ts";
 import { createPreviewObservation } from "../web/src/lib/previewObservation.ts";
-import { selectedPreview } from "../web/src/lib/sessionPreview.ts";
+import { previewFrameUrl, selectedPreview } from "../web/src/lib/sessionPreview.ts";
 import type { SendDisposition } from "../web/src/lib/ws.ts";
 import { type AppState, initialState, reduce } from "../web/src/store.ts";
 
@@ -31,6 +31,42 @@ const page = (state: Partial<SessionState> = {}, hosted = true): AppState => ({
     messages: [],
     dialogs: [],
   },
+});
+
+test("embedding admits only the registered ready HTTP URL outside the control origin", () => {
+  const control = "http://localhost:7070";
+  assert.equal(previewFrameUrl(app, control), app.url);
+  assert.equal(
+    previewFrameUrl({ ...app, url: "https://vm.exe.xyz:9400/" }, "https://vm.exe.xyz"),
+    "https://vm.exe.xyz:9400/",
+  );
+  for (const url of [
+    control,
+    `${control}/app`,
+    "http://LOCALHOST:7070/",
+    "javascript:alert(1)",
+    "data:text/html,app",
+    "/app",
+    "https://user:secret@vm.exe.xyz:9400/",
+  ]) {
+    assert.equal(previewFrameUrl({ ...app, url }, control), null, url);
+  }
+  for (const state of [
+    "unknown",
+    "starting",
+    "stopping",
+    "failed",
+    "exited",
+    "not-loaded",
+  ] as const)
+    assert.equal(previewFrameUrl({ ...app, state }, control), null, state);
+  assert.equal(previewFrameUrl({ ...app, ready: false }, control), null);
+  assert.equal(previewFrameUrl({ ...app, url: null }, control), null);
+  assert.equal(previewFrameUrl(undefined, control), null);
+  assert.equal(
+    previewFrameUrl(selectedPreview({ ...page({ preview: app }), connected: false }), control),
+    null,
+  );
 });
 
 function fakeSource(initial: AppState, disposition: SendDisposition = "sent") {
