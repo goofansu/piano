@@ -975,11 +975,14 @@ export class PreviewAdapter {
     };
   }
 
+  /** `progress` hears what a start has already changed before it returns: the replaced instance
+   * once its stop is confirmed, then the new launch intent as starting, never yet ready. */
   async request(
     request: PreviewRequest,
     stateRoot: string,
     config: PreviewConfig,
     owner?: PreviewOwnerIdentity,
+    progress?: (result: unknown) => void,
   ) {
     // Unsupported hosts fail before locking or any launch intent, without affecting Piano.
     const supervisor = this.supervisor;
@@ -989,7 +992,7 @@ export class PreviewAdapter {
     const root = await realpath(stateRoot);
     const mutex = await lock(root);
     try {
-      return await this.handle(supervisor, request, root, config, owner);
+      return await this.handle(supervisor, request, root, config, owner, progress);
     } finally {
       unlock(mutex);
     }
@@ -1084,6 +1087,7 @@ export class PreviewAdapter {
     root: string,
     config: PreviewConfig,
     owner?: PreviewOwnerIdentity,
+    progress: (result: unknown) => void = () => {},
   ) {
     // Retained canonical identity also works after the checkout is removed.
     const workspace =
@@ -1173,6 +1177,9 @@ export class PreviewAdapter {
     if (record) {
       const stopped = await this.stop(supervisor, record, path, root, serviceId);
       replaced = stopped.instanceId;
+      // The old app is gone now, not when the replacement's readiness wait ends: its URL may
+      // soon reach the replacement on the same port.
+      progress(stopped);
     }
     const port = await choosePort(config, root, spec.origin);
     const instanceId = randomUUID().replaceAll("-", "");
@@ -1187,6 +1194,15 @@ export class PreviewAdapter {
       createdAt: Date.now() / 1000,
     };
     await save(path, record); // Durable intent BEFORE submission; never blindly replay it.
+    progress({
+      ...publicIntent(record),
+      state: "starting",
+      ready: false,
+      url: null,
+      detail: "Launching; waiting for its readiness check.",
+      externalAccess: loopbackOrigin.test(record.spec.origin) ? "same-host" : "unverified",
+      observedAt: Date.now() / 1000,
+    });
     try {
       try {
         await supervisor.submit(

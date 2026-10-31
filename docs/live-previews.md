@@ -26,8 +26,11 @@ IDs, and details are fenced to attachment, owner generation and instance. Discon
 read is unknown, not stopped; no external action remains usable from an uncertain observation. A read
 that client or session input capacity refuses is answered under its ID too: it ends the check and
 leaves the app unknown, without its frame or link, until **Check status** or **Refresh** reads again.
-After a failed start the owner reads the workspace again, so the rail drops an app already stopped
-and keeps one launched but not observable as unknown.
+A start also publishes what it has changed before it returns: a replacement drops the old app,
+with its frame and link, as soon as its stop is confirmed, and every new launch shows as starting,
+without a link, from its saved intent until its own readiness check succeeds. After a failed start
+the owner reads the workspace again, so the rail drops an app already stopped and keeps one
+launched but not observable as unknown.
 
 Stop asks for confirmation of the observed exact instance. A changed attachment, owner or instance
 invalidates that confirmation; server-side exact-instance reconciliation remains authoritative.
