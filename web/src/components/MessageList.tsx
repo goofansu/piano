@@ -808,9 +808,13 @@ function DispatchRow({
     >
       {detail && <p className="text-xs text-ink-3">{detail}</p>}
       {params && (
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-fill px-3 py-2 text-ink-2">
-          {clamp(params, 8000)}
-        </pre>
+        // The scroll container wraps the <pre>, as in PreviewDetailsDialog, where a scrollable
+        // <pre> broke drag selection in Firefox.
+        <div className="overflow-x-auto rounded-lg bg-fill">
+          <pre className="whitespace-pre-wrap break-words px-3 py-2 text-ink-2">
+            {clamp(params, 8000)}
+          </pre>
+        </div>
       )}
       {answer && <Markdown text={clamp(answer, 20000)} className="prose-chat" />}
     </FoldRow>
@@ -964,9 +968,11 @@ function Tool({
       ruled={false}
     >
       {details && (
-        <pre className="overflow-x-auto whitespace-pre rounded-lg bg-fill px-3 py-2 text-ink-2">
-          {clamp(details, 4000)}
-        </pre>
+        // The scroll container wraps the <pre>, as in PreviewDetailsDialog, where a scrollable
+        // <pre> broke drag selection in Firefox.
+        <div className="overflow-x-auto rounded-lg bg-fill">
+          <pre className="whitespace-pre px-3 py-2 text-ink-2">{clamp(details, 4000)}</pre>
+        </div>
       )}
       {output && (
         <div data-slot="tool-output" className={cn(details && "mt-1")}>
