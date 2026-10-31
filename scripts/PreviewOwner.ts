@@ -14,8 +14,9 @@ import {
  * saved, if any: it may be running. */
 export type PreviewOutcome = { result: unknown } | { error: unknown; attempted?: unknown };
 
-/** What each admitted request showed: its own outcome, or for a failed start, a status read of
- * what that start left behind. */
+/** What each admitted request showed: a start's progress (the app it replaced stopped, then its
+ * own launch starting), its own outcome, or for a failed start, a status read of what that start
+ * left behind. */
 export type PreviewObserver = (request: PreviewRequest, outcome: PreviewOutcome) => void;
 
 /** One Pi generation's admission gate and live connections. Browser/tool cancellation never
@@ -151,6 +152,9 @@ export class PreviewOwner {
           this.root,
           await this.config(),
           this.identity,
+          // A start publishes each change it has made as it makes it: a stopped app must not
+          // look ready while its replacement waits up to 30s for readiness.
+          (result) => this.observer?.(request, { result }),
         );
       try {
         const result = await run(request);

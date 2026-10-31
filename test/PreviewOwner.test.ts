@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer, get, type Server } from "node:http";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { type TestContext, test } from "node:test";
-import type { PreviewRequest } from "../scripts/PreviewAdapter.ts";
+import type { PreviewConfig, PreviewRequest } from "../scripts/PreviewAdapter.ts";
 import { ownerRequest } from "../scripts/PreviewClient.ts";
 import { PreviewOwner } from "../scripts/PreviewOwner.ts";
+import { projectPreview } from "../server/PreviewProjection.ts";
+import type { SessionPreview } from "../shared/wire.ts";
 import { type FakeHost, fakeAdapter, type Platform } from "./fixtures/preview-host.ts";
 
 for (const dead of [true, false])
@@ -60,7 +64,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       hangOnSubmit: false,
     };
     const { adapter, launched, stops } = fakeAdapter(platform, state, host);
-    const config = { origin: "http://localhost" };
+    const config: PreviewConfig = { origin: "http://localhost" };
     const owners: PreviewOwner[] = [];
     const open = async (sessionId = "session", cwd = workspace) => {
       const owner = await PreviewOwner.open({ cwd, sessionId }, `generation-${owners.length}`, {
@@ -423,5 +427,123 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       /owner is ending/,
     );
     assert.equal(first.owner.generation, owner.identity.generation);
+  });
+  test(`[${platform}] a replacement clears the old app once stopped and shows the new one starting`, async (t) => {
+    if (foreign) return t.skip("needs native process ownership");
+    const f = await fixture(t);
+    // A and B share one port, as when Piano reuses it; B answers 503 until it warms up.
+    const port = await freePort();
+    f.config.ports = [port];
+    const servers = new Set<Server>();
+    const serve = async (status: () => number, body: string) => {
+      const server = createHttpServer((_request, response) => {
+        response.statusCode = status();
+        response.end(body);
+      });
+      servers.add(server);
+      server.listen(port, "127.0.0.1");
+      await once(server, "listening");
+      return server;
+    };
+    const shut = (server: Server) =>
+      new Promise<void>((resolve) => {
+        servers.delete(server);
+        server.close(() => resolve());
+        server.closeAllConnections();
+      });
+    t.after(() => Promise.all([...servers].map(shut)));
+
+    // What the session's state shows after each owner publication, in order.
+    let shown: SessionPreview | undefined;
+    const published: (SessionPreview | undefined)[] = [];
+    f.owner.observe((request, outcome) => {
+      shown = projectPreview(shown, f.owner.identity.generation, request, outcome);
+      published.push(shown);
+    });
+
+    const a = await f.call();
+    f.host.phase = "running";
+    const appA = await serve(() => 200, "A");
+    const readyA = await f.call(f.owner, { action: "status" });
+    assert.equal(readyA.ready, true);
+    assert.equal(shown?.url, `http://localhost:${port}/`);
+
+    // Rejected before A stops: A and its ready link remain.
+    assert.equal((await f.call(f.owner, { replace: "stale-instance" })).status, "not-current");
+    await assert.rejects(
+      f.call(f.owner, {
+        replace: a.instanceId,
+        command: ["/usr/bin/python3", "-m", "http.server", "{port}"],
+      }),
+    );
+    assert.equal(shown?.instanceId, a.instanceId);
+    assert.equal(shown?.url, `http://localhost:${port}/`);
+    assert.equal(f.stops.length, 0);
+
+    let warm = false;
+    f.host.onStop = async () => {
+      await shut(appA);
+      f.host.phase = "gone";
+    };
+    f.host.afterSubmit = async () => {
+      f.host.phase = "running";
+      await serve(() => (warm ? 200 : 503), "B");
+    };
+    published.length = 0;
+    let settled = false;
+    const replacing = f.call(f.owner, { replace: a.instanceId, timeoutSeconds: 20 }).finally(() => {
+      settled = true;
+    });
+    const deadline = Date.now() + 10000;
+    while (!(shown && shown.instanceId !== a.instanceId) && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // B is held unready: the replacement has not completed, yet the state already moved on.
+    assert.equal(settled, false, "the replacement is still waiting for B's readiness");
+    assert.ok(
+      published.indexOf(undefined) >= 0 &&
+        published.indexOf(undefined) < published.findIndex((p) => p !== undefined),
+      "A is cleared as soon as its stop is confirmed",
+    );
+    assert.ok(shown, "B's launch intent is published");
+    assert.notEqual(shown.instanceId, a.instanceId);
+    assert.equal(shown.state, "starting");
+    assert.equal(shown.ready, false);
+    assert.equal(shown.url, null, "B has no ready URL before its own readiness check");
+    assert.equal(await statusAt(port), 503, "A's old URL now reaches unready B");
+
+    warm = true;
+    const b = await replacing;
+    assert.equal(b.ready, true);
+    assert.equal(b.replaced, a.instanceId);
+    assert.equal(shown?.instanceId, b.instanceId);
+    assert.equal(shown?.url, `http://localhost:${port}/`);
+
+    // A stale stop of A cannot target B.
+    assert.equal(
+      (await f.call(f.owner, { action: "stop", instanceId: a.instanceId })).status,
+      "not-current",
+    );
+    assert.equal(shown?.instanceId, b.instanceId);
+    assert.equal(shown?.ready, true);
+  });
+}
+
+async function freePort() {
+  const server = createServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return address.port;
+}
+
+function statusAt(port: number) {
+  return new Promise<number | undefined>((resolve, reject) => {
+    get({ host: "127.0.0.1", port, path: "/" }, (response) => {
+      response.resume();
+      resolve(response.statusCode);
+    }).on("error", reject);
   });
 }

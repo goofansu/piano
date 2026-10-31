@@ -2,7 +2,7 @@
 // model (no credentials).
 // node test/browser/preview.mjs [evidence-directory]
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -17,6 +17,7 @@ import { createServer } from "node:http";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { promisify } from "node:util";
 import { PreviewAdapter } from "../../scripts/PreviewAdapter.ts";
 import { run } from "./harness.mjs";
 
@@ -65,19 +66,32 @@ let held;
 let repo;
 let canonicalRepo;
 const env = { PIANO_PREVIEW_CONFIG: config, PIANO_PREVIEW_STATE: state };
+const helper = (ownerPreview) => ({
+  env: {
+    PATH: "/usr/bin:/bin",
+    ...env,
+    ...(ownerPreview && { PIANO_PREVIEW_OWNER: piFor(ownerPreview).endpoint }),
+  },
+  encoding: "utf8",
+  timeout: 120_000,
+});
 const request = (args, ownerPreview) =>
   JSON.parse(
     execFileSync(process.execPath, [join(ROOT, "scripts/preview.ts")], {
-      env: {
-        PATH: "/usr/bin:/bin",
-        ...env,
-        ...(ownerPreview && { PIANO_PREVIEW_OWNER: piFor(ownerPreview).endpoint }),
-      },
+      ...helper(ownerPreview),
       input: JSON.stringify({ ...args, workspace: repo }),
-      encoding: "utf8",
-      timeout: 120_000,
     }),
   );
+/** The same request, without blocking the journey while the owner works on it. */
+const requestLater = async (args, ownerPreview) => {
+  const pending = promisify(execFile)(
+    process.execPath,
+    [join(ROOT, "scripts/preview.ts")],
+    helper(ownerPreview),
+  );
+  pending.child.stdin.end(JSON.stringify({ ...args, workspace: repo }));
+  return JSON.parse((await pending).stdout);
+};
 const running = (pid) => {
   try {
     if (process.platform === "linux")
@@ -224,8 +238,13 @@ let count=0; document.querySelector('#count').onclick = e => { e.target.textCont
         `import { readFileSync } from 'node:fs';
 export default { plugins: [{ name: 'browser-boundary-fixture', configureServer(server) {
   server.middlewares.use((req, res, next) => {
-    if (req.headers['sec-fetch-dest'] !== 'iframe') return next();
     const mode = readFileSync(${JSON.stringify(browserMode)}, 'utf8');
+    if (mode === 'warming') {
+      // A replacement still warming up on the reused port: local readiness fails too.
+      res.writeHead(503, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
+      return res.end('Replacement warming up');
+    }
+    if (req.headers['sec-fetch-dest'] !== 'iframe') return next();
     if (mode === 'pending') return; // browser-only stall; local readiness still answers
     if (mode === 'denied') {
       res.writeHead(200, { 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "frame-ancestors 'none'", 'Cache-Control': 'no-store', 'Content-Type': 'text/html' });
@@ -940,40 +959,76 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("menuitem", "Stop preview");
         await page.see("Stop preview?");
         // A concurrent owner request replaces the app while the browser confirmation is open.
-        if (embeddedLocal) writeFileSync(browserMode, "pending");
-        const replacement = request(
-          { action: "start", replace: replacing.instanceId, command, env: appEnv },
+        // The replacement answers 503 until released, so its readiness wait is still running.
+        writeFileSync(browserMode, "warming");
+        let replacementSettled = false;
+        const pendingReplacement = requestLater(
+          {
+            action: "start",
+            replace: replacing.instanceId,
+            command,
+            env: appEnv,
+            timeoutSeconds: 30,
+          },
           replacing,
-        );
-        replacement.testPids = JSON.parse(readFileSync(join(repo, "app-processes.json"), "utf8"));
-        assert.notEqual(replacement.instanceId, replacing.instanceId);
+        ).finally(() => {
+          replacementSettled = true;
+        });
+        // Once the old app's stop is confirmed, its confirmation, frame and link are gone, and
+        // the open Preview shows the replacement starting, before its readiness check succeeds.
         await page.until(
           "[...document.querySelectorAll('[role=dialog] button')].find(b => b.textContent === 'Stop preview')?.disabled === true",
         );
+        await page.until(
+          "document.querySelector('section[aria-label=Preview]')?.textContent.includes('Starting')",
+        );
+        await noFrame();
+        // The old link would now reach the unready replacement on the reused port.
+        assert.equal(
+          await page.evaluate(
+            `[...document.querySelectorAll('[data-slot=session-rail] a, section[aria-label=Preview] a')].some(a => a.href === ${JSON.stringify(replacing.url)})`,
+          ),
+          false,
+          "no ready link while the replacement warms up",
+        );
+        // The account-wide lock is held for the readiness wait, so no status read here.
+        assert.equal(replacementSettled, false, "the replacement is still waiting for readiness");
+        await page.capture("3a-replacement-starting-unready");
+        if (embeddedLocal) writeFileSync(browserMode, "pending");
+        else writeFileSync(browserMode, "normal");
+        const replacement = await pendingReplacement;
+        replacement.testPids = JSON.parse(readFileSync(join(repo, "app-processes.json"), "utf8"));
+        assert.equal(replacement.ready, true);
+        assert.notEqual(replacement.instanceId, replacing.instanceId);
+        // Read the new frame at once, in one call: its loading feedback lasts only eight seconds.
+        if (embeddedLocal)
+          await page.until("!!document.querySelector('iframe[title=\"App preview\"]')");
+        const replacedFrame =
+          embeddedLocal &&
+          JSON.parse(
+            await page.evaluate(
+              "JSON.stringify({ same: window.previousPreviewFrame === document.querySelector('iframe[title=\"App preview\"]'), connected: window.previousPreviewFrame.isConnected, busy: document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') })",
+            ),
+          );
         await page.capture("3a-replacement-fences-confirmation");
         assert.equal(request({ action: "status" }).instanceId, replacement.instanceId);
         await page.click("button", "Cancel");
         if (embeddedLocal) {
-          assert.equal(await sameFrame(), false, "a replacement must dispose the old page");
+          assert.equal(replacedFrame.same, false, "a replacement must dispose the old page");
           // The new frame is still pending; the old instance's frame, and its load handler, are gone.
-          assert.equal(
-            await page.evaluate("window.previousPreviewFrame.isConnected"),
-            false,
-            "a replacement detaches the old page",
-          );
-          assert.equal(
-            await page.evaluate(
-              "document.querySelector('[aria-label=\"Reload preview\"]').getAttribute('aria-busy')",
-            ),
-            "true",
-          );
+          assert.equal(replacedFrame.connected, false, "a replacement detaches the old page");
+          assert.equal(replacedFrame.busy, "true");
           await page.capture("3b-replacement-pending-old-load-ignored");
           writeFileSync(browserMode, "normal");
           await page.click("button", "Reload preview");
           await frameReady();
         }
         await page.capture("3b-replacement-current-view");
-        observations.push({ replacement: replacement.instanceId, replaced: replacing.instanceId });
+        observations.push({
+          replacement: replacement.instanceId,
+          replaced: replacing.instanceId,
+          ports: [replacing.port, replacement.port],
+        });
         // Keep this owner active while inspecting a terminal app: this scratch instance's
         // two-second idle retirement deliberately releases failed/exited apps as well.
         await page.ab("fill", '[aria-label="Message"]', "hold");

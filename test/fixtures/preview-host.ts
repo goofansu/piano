@@ -21,6 +21,10 @@ export interface FakeHost {
   hangOnSubmit: boolean;
   /** Makes the supervisor unavailable once a submission succeeds. */
   unavailableAfterSubmit?: boolean;
+  /** Runs once the supervisor accepts a submission, as the app's process would start. */
+  afterSubmit?: () => void | Promise<void>;
+  /** Runs when the supervisor is asked to stop a unit, before it reports the unit's state. */
+  onStop?: () => void | Promise<void>;
 }
 
 const failure = (text: string, status: number) => Object.assign(new Error(text), { status });
@@ -71,9 +75,13 @@ export function fakeAdapter(platform: Platform, stateRoot: string, host: FakeHos
       await submitted((unit) => args.includes(`--unit=${unit}`));
       launched.push(args.join("\n"));
       if (host.unavailableAfterSubmit) host.unavailable = true;
+      await host.afterSubmit?.();
       return "";
     }
-    if (args.includes("stop")) stops.push(args);
+    if (args.includes("stop")) {
+      stops.push(args);
+      await host.onStop?.();
+    }
     if (args.includes("show")) {
       const fields =
         host.phase === "gone"
@@ -106,10 +114,12 @@ export function fakeAdapter(platform: Platform, stateRoot: string, host: FakeHos
       await writeFile(plist.replace(/\.plist$/, ".log"), host.journal);
       loaded.add(plist.slice(plist.lastIndexOf("/") + 1, -".plist".length));
       if (host.unavailableAfterSubmit) host.unavailable = true;
+      await host.afterSubmit?.();
       return "";
     }
     if (verb === "bootout") {
       stops.push(args);
+      await host.onStop?.();
       if (!loaded.delete(target.slice(target.lastIndexOf("/") + 1)))
         throw failure("Boot-out failed: 3: No such process", 3);
       return "";
