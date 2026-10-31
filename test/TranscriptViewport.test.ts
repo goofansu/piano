@@ -126,6 +126,39 @@ test("a shrinking container follows the bottom only while pinned", () => {
   assert.equal(reading.viewport.atBottom(), false);
 });
 
+/** The content shrinks; the browser keeps the reader within the new range, as a scroller does. */
+const shrinkContent = (el: FakeElement, scrollHeight: number) => {
+  const top = el.scrollTop;
+  el.scrollHeight = scrollHeight;
+  el.scrollTop = top;
+};
+
+test("content shrinking under a reader who scrolled up never pins them, even clamped to the end", () => {
+  // A windowed transcript measures rows above the reader smaller than it estimated. On iOS it
+  // shrinks the list before it can write the corrected position, so the browser clamps the
+  // reader to the new end in between; the correction then restores their row.
+  const { viewport, el } = setup();
+  scroll(el, viewport, 1200);
+  shrinkContent(el, 1500);
+  viewport.rendered();
+  assert.equal(el.scrollTop, 1000, "the clamp alone moves the reader");
+  viewport.correct(() => {
+    el.scrollTop = 700;
+  });
+  viewport.scrolled();
+  el.scrollHeight = 1900;
+  viewport.rendered();
+  assert.equal(el.scrollTop, 700, "new output leaves the restored reader where they were");
+  assert.equal(viewport.atBottom(), false);
+
+  const pinned = setup();
+  shrinkContent(pinned.el, 1500);
+  pinned.viewport.rendered();
+  pinned.el.scrollHeight = 1900;
+  pinned.viewport.rendered();
+  assert.equal(pinned.el.scrollTop, 1400, "a pinned reader still follows shrinking content");
+});
+
 test("atBottom subscribers hear only changes", () => {
   const { viewport, el } = setup();
   let heard = 0;

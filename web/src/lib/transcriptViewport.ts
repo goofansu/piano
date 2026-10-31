@@ -2,9 +2,10 @@
  * Where the reader is in the transcript, and whether it follows new output. One viewport per
  * transcript: the transcript reports its scrolls, renders and resizes, and the jump list asks
  * where the reader is and moves them. A reader who scrolled up, by however little, is never moved
- * by new output; a pinned reader stays on the bottom when content grows or the container shrinks,
- * and a jump to the end pins the reader there even if content grows afterwards. The DOM is read
- * only through `ViewportElement`, so the policy runs in Node.
+ * by new output, not even when content shrinking above them leaves them clamped at the end for a
+ * moment; a pinned reader stays on the bottom when content grows or the container shrinks, and a
+ * jump to the end pins the reader there even if content grows afterwards. The DOM is read only
+ * through `ViewportElement`, so the policy runs in Node.
  */
 import { type JumpEntry, messageAnchorId } from "./transcript.ts";
 
@@ -126,6 +127,7 @@ export function createTranscriptViewport(): TranscriptViewport {
   let stick = true;
   let bottom = true;
   let lastTop = 0;
+  let lastHeight = 0;
   const listeners = new Set<() => void>();
 
   const near = (el: ViewportElement) =>
@@ -136,13 +138,18 @@ export function createTranscriptViewport(): TranscriptViewport {
     bottom = value;
     for (const listener of listeners) listener();
   };
+  /** The position and content height the next scroll report is compared with. */
+  const note = (el: ViewportElement) => {
+    lastTop = el.scrollTop;
+    lastHeight = el.scrollHeight;
+  };
   const follow = (el: ViewportElement) => {
     // Rendering or resize can precede a native scroll's event. Read that movement before
     // following output overwrites it; growth alone leaves scrollTop unchanged.
     if (el.scrollTop !== lastTop) scrolled();
     if (!stick) return;
     el.scrollTop = el.scrollHeight;
-    lastTop = el.scrollTop;
+    note(el);
   };
 
   // A scroll reported at the position already decided on (the browser's own event after a
@@ -152,9 +159,15 @@ export function createTranscriptViewport(): TranscriptViewport {
     if (!element) return;
     const top = element.scrollTop;
     if (top !== lastTop) {
-      stick = atEnd(element) || (near(element) && top >= lastTop);
+      // Content shrinking under a reader (rows above them measured smaller than estimated) can
+      // leave them clamped at the new end, moved up by the browser rather than down by their own
+      // hand. That is not reaching the end: a windowed transcript restores their row next, and
+      // following output would instead drag them to the bottom.
+      const clamped = element.scrollHeight < lastHeight && top < lastTop && atEnd(element);
+      if (!clamped) stick = atEnd(element) || (near(element) && top >= lastTop);
       lastTop = top;
     }
+    lastHeight = element.scrollHeight;
     setBottom(near(element));
   };
 
@@ -163,7 +176,7 @@ export function createTranscriptViewport(): TranscriptViewport {
       element = el;
       if (!el) return;
       stick = true;
-      lastTop = el.scrollTop;
+      note(el);
       setBottom(true);
     },
     scrolled,
@@ -173,7 +186,7 @@ export function createTranscriptViewport(): TranscriptViewport {
       scrolled();
       move();
       if (!element) return;
-      lastTop = element.scrollTop;
+      note(element);
       setBottom(near(element));
     },
     wheel: (deltaY, deltaMode) => {
@@ -207,7 +220,7 @@ export function createTranscriptViewport(): TranscriptViewport {
       stick = entry.kind === "bottom"; // Unpin before mounting an earlier destination.
       const found = moveTo(el, entry, options?.animate ?? false);
       if (!found) stick = previous;
-      lastTop = el.scrollTop;
+      note(el);
       setBottom(near(el));
       return found;
     },
