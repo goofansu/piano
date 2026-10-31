@@ -1,34 +1,23 @@
 /**
- * The selected session's managed app, as the session rail, Preview, palette and Archive/Delete show it.
+ * The selected session's managed app: which one the store records, and how inspection names it;
+ * what the page shows of it is `seenPreview` (previewObservation).
  * An app belongs to one live Pi generation (ADR 0003): a saved, closed or peeked session has none,
  * and its old links in the transcript are not a running preview. Nothing here starts Pi or an app.
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand, SessionPreview } from "../../../shared/wire.ts";
 import { type AppState, isSession } from "../store.ts";
-import { hostOf, type SessionRef, sessionReady } from "./sessionContext.ts";
+import { hostOf, type SessionRef } from "./sessionContext.ts";
 
 /**
- * The selected session's app while its live generation owns one. `unconfirmed` names an app whose
- * last status read went unanswered (see previewObservation); like a lost attachment, that leaves
- * it unknown, without its frame or link, until a read answers.
+ * The app the selected session's live generation owns, as the store last recorded it. Only for
+ * its identity (which instance, whether there is one): its status may be one this page cannot
+ * vouch for. What the page shows of the app is `seenPreview` (previewObservation).
  */
-export function selectedPreview(
-  state: AppState,
-  unconfirmed: string | null = null,
-): SessionPreview | undefined {
+export function hostedPreview(state: AppState): SessionPreview | undefined {
   const session = state.session;
   if (!session?.hosted || !session.sessionId || session.state.closure) return undefined;
-  const preview = session.state.preview;
-  if (!preview || (sessionReady(state) && preview.instanceId !== unconfirmed)) return preview;
-  // Neither says anything about the server-owned app's lifetime: it is not stopped.
-  return {
-    ...preview,
-    state: "unknown",
-    ready: false,
-    url: null,
-    detail: "",
-  };
+  return session.state.preview;
 }
 
 /** Hosts browsers treat as potentially trustworthy, so an HTTPS page may still frame them. */
@@ -67,7 +56,7 @@ export function previewFrameUrl(
 /** Ending this session's Pi would stop an app it owns: the selected one, or a background host. */
 export function sessionHasPreview(state: AppState, target: SessionRef): boolean {
   const session = state.session;
-  if (isSession(session, target)) return !!selectedPreview(state);
+  if (isSession(session, target)) return !!hostedPreview(state);
   return !!hostOf(state, target)?.preview;
 }
 

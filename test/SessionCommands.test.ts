@@ -360,8 +360,10 @@ const app = (preview: Partial<SessionPreview> = {}): SessionPreview => ({
   observedAt: 0,
   ...preview,
 });
+/** This page has observed nothing that withholds the app's status. */
+const seen = { previewObservation: { unconfirmed: null } };
 const previewIds = (state: AppState) =>
-  sessionCommands(state)
+  sessionCommands(state, undefined, seen)
     .filter((c) => c.id.includes("preview"))
     .map((c) => [c.id, c.enabled]);
 
@@ -374,19 +376,28 @@ test("preview commands exist only while the selected session's live Pi owns an a
     ["preview-details", true],
     ["stop-preview", true],
   ]);
-  const open = sessionCommands(running).find((c) => c.id === "open-preview");
+  assert.ok(
+    !sessionCommands(running).some((c) => c.id.includes("preview")),
+    "without the page's observation, no app status is claimed",
+  );
+  const open = sessionCommands(running, undefined, seen).find((c) => c.id === "open-preview");
   assert.deepEqual(open?.intent, { kind: "open-url", url: "http://localhost:5173/" });
   assert.equal(open?.detail, "localhost:5173");
-  assert.deepEqual(sessionCommands(running).find((c) => c.id === "stop-preview")?.intent, {
-    kind: "stop-preview",
-    instanceId: "i1",
-    selectionId: running.selectionId,
-    generation: null,
-    host: "localhost:5173",
-  });
+  assert.deepEqual(
+    sessionCommands(running, undefined, seen).find((c) => c.id === "stop-preview")?.intent,
+    {
+      kind: "stop-preview",
+      instanceId: "i1",
+      selectionId: running.selectionId,
+      generation: null,
+      host: "localhost:5173",
+    },
+  );
   // Preview lives in the rail/Surface, never in the header menu.
   assert.ok(
-    !headerIds(sessionHeaderMenu(sessionCommands(running))).some((id) => id.includes("preview")),
+    !headerIds(sessionHeaderMenu(sessionCommands(running, undefined, seen))).some((id) =>
+      id.includes("preview"),
+    ),
   );
 
   // An app that is not answering has nothing to open, but can still be inspected and stopped.
@@ -418,7 +429,7 @@ test("preview commands exist only while the selected session's live Pi owns an a
   assert.deepEqual(previewIds({ ...base, session: peek }), []);
   // Another session's commands never offer this session's app.
   assert.deepEqual(
-    sessionCommands(running, other).filter((c) => c.id.includes("preview")),
+    sessionCommands(running, other, seen).filter((c) => c.id.includes("preview")),
     [],
   );
 });

@@ -49,7 +49,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Item, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
-import { previewObservation } from "@/lib/previewObservation";
+import { previewObservation, seenPreview } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
   type PreviewTone,
@@ -57,7 +57,6 @@ import {
   previewFace,
   previewFrameUrl,
   previewHost,
-  selectedPreview,
 } from "@/lib/sessionPreview";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
@@ -74,9 +73,9 @@ function usePreviewObservation() {
   return useSyncExternalStore(previewObservation.subscribe, previewObservation.getState);
 }
 
-/** The selected session's app as this page last observed it; see `selectedPreview`. */
-export function useSelectedPreview(state: AppState) {
-  return selectedPreview(state, usePreviewObservation().unconfirmed);
+/** The selected session's app as this page sees it; see `seenPreview`. */
+export function useSeenPreview(state: AppState) {
+  return seenPreview(state, usePreviewObservation());
 }
 
 async function copyLink(url: string) {
@@ -182,7 +181,7 @@ export function PreviewPanel() {
   }, [shownTab, surfaceRequest]);
   const { state } = useCommands();
   const observed = usePreviewObservation();
-  const preview = selectedPreview(state, observed.unconfirmed);
+  const preview = seenPreview(state, observed);
   const commands = usePreviewCommands();
   // Only a view that actually inspected this app can retain its confirmed stop. Closing the
   // tab discards this identity; browser memory never restores a Preview tab.
@@ -408,7 +407,7 @@ export function PreviewDetailsDialog({
   const commands = usePreviewCommands();
   const observed = usePreviewObservation();
   const openRef = useRef<HTMLAnchorElement>(null);
-  const preview = selectedPreview(state, observed.unconfirmed);
+  const preview = seenPreview(state, observed);
   const session = state.session;
   const details =
     preview &&

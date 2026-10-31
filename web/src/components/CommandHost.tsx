@@ -51,7 +51,7 @@ import {
   sessionCommands,
 } from "@/lib/sessionCommands";
 import { openLink } from "@/lib/sessionLinks";
-import { selectedPreview } from "@/lib/sessionPreview";
+import { hostedPreview } from "@/lib/sessionPreview";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
@@ -118,17 +118,14 @@ export function useCommands() {
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
   const { state, run, messagesOnly, changesWrap, radiusSignedIn, layout } = useCommands();
-  const { unconfirmed } = useSyncExternalStore(
-    previewObservation.subscribe,
-    previewObservation.getState,
-  );
+  const observed = useSyncExternalStore(previewObservation.subscribe, previewObservation.getState);
   return {
     commands: sessionCommands(state, target, {
       messagesOnly,
       changesWrap,
       radiusSignedIn,
       layout,
-      previewUnconfirmed: unconfirmed,
+      previewObservation: observed,
     }),
     run,
     messagesOnly,
@@ -270,7 +267,7 @@ export function CommandHost({
     },
     openUrl: openLink,
     openPreviewDetails: () => {
-      const preview = selectedPreview(state);
+      const preview = hostedPreview(state);
       setPreviewDetails(
         preview
           ? {

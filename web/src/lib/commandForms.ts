@@ -26,7 +26,7 @@ import {
 import { inSidebarGroups, sessionCatalog, sessionLabel } from "./sessionCatalog.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
 import { sessionMutable, sessionReady, sessionWorking, workspaceFor } from "./sessionContext.ts";
-import { selectedPreview, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
+import { hostedPreview, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
 export interface FormAnswer {
@@ -74,7 +74,7 @@ export function answerForm(
   const text = typeof input === "string" ? input : "";
   switch (form.kind) {
     case "stop-preview": {
-      const preview = selectedPreview(state);
+      const preview = hostedPreview(state);
       if (
         !sessionReady(state) ||
         state.selectionId !== form.selectionId ||

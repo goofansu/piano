@@ -92,7 +92,9 @@ test("preview confirmation stays on its exact attachment, generation and instanc
     observedAt: 0,
   };
   let current = { ...online, session: { ...session, state: { ...session.state, preview } } };
-  const form = sessionCommands(current).find((c) => c.id === "stop-preview")!.intent;
+  const form = sessionCommands(current, undefined, {
+    previewObservation: { unconfirmed: null },
+  }).find((c) => c.id === "stop-preview")!.intent;
   assert.equal(form.kind, "stop-preview");
   if (form.kind !== "stop-preview") throw new Error("expected confirmation");
   const sent: ClientCommand[] = [];
