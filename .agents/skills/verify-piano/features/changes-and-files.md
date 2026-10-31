@@ -61,13 +61,15 @@ The palette (Mod+K) searches neither outputs nor links.
   rail", turns the session rail on or off; it stays on
   across sessions and reloads, hides while a Surface tab shows, and returns when the last one
   closes; turned on over open tabs, it hides them until the rail goes off. It is offered even
-  without Git. Narrow, neither the "Changes" icon nor the rail nor its
-  toggle shows; widening again brings the rail back if it was on.
+  without Git. Narrow, the same header and palette controls open a transient sheet with the
+  same content; Escape or Hide session rail dismisses it and restores focus to the header button.
+  Opening a file dismisses it and selects the file tab. Resizing or switching sessions closes
+  the sheet; widening restores the desktop switch without changing its preference.
 - `environment`: the rail's "Environment" rows are menu buttons named `Folder: repo`, `Branch:
   main` (field names are screen-reader only in the visible text), and, when a pull request is
   linked, a "Pull request" row showing its number without a hash (`222` on the seed). The Folder
   row's menu has "Copy working directory" (a Repository row's also "Copy repository name"), the
-  Branch row's "Copy branch name" (a detached commit's "Copy commit SHA"), each with "Open … on
+  Branch row's "Copy git branch" (a detached commit's "Copy commit SHA"), each with "Open … on
   GitHub" once the repository is known. The rail shows no row for the working directory itself.
 - `files-list`: The rail's "Outputs" lists files written in the session by name only, and its
   "Links" (heading "Links <n>") lists the conversation's first five web links, each with "Jump to
@@ -118,7 +120,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     Folder / Branch / Pull request labels are screen-reader only, and `222` is the seed's linked
     PR): bordered lists of icon rows; each heading folds its section, and folds are remembered
     across reloads. Capture `03-rail`.
-    `ab find role button click --name "Branch: main" --exact` opens a menu of `Copy branch name`
+    `ab find role button click --name "Branch: main" --exact` opens a menu of `Copy git branch`
     and "Folder: repo" one of `Copy working directory` (Escape each). Then
     `ab find role button click --name "answer.ts" --exact; ab wait '[aria-label="Close answer.ts"]'`
     opens a tab `answer.ts` with toolbar `src/answer.ts`, the file's current contents and "Close
@@ -128,8 +130,16 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     it, and the rail gains `Links` / `1` / `example.com/docs/guide` with "Jump to message".
     Capture `04-links`.
   - Narrow: with Changes open, `ab set viewport 700 800`: tablist "Session views" reads `Agent |
-    Changes`, "Hide changes" sits in the Changes toolbar, and `[data-slot=session-rail]` and
-    "Show session rail" are absent. Capture `05-narrow`.
+    Changes`; the header still offers Changes and Show session rail.
+    `ab find role button click --name "Show session rail" --exact` opens dialog "Session rail"
+    with the same sections. Capture `05-narrow-rail`. Open `answer.ts`: the sheet disappears and
+    the file tab is selected. Capture `06-narrow-file`. Choose tab Agent and confirm the draft
+    and attachments remain. Reopen the sheet, press Escape and verify focus is on Show session
+    rail (not the composer). Also exercise the palette's Show / Hide session rail, then widen
+    while the sheet is open: no sheet overlay remains and only the desktop presentation is active.
+    Narrow again and switch sessions through the palette while the sheet is open: it closes and
+    reopening shows only the selected session's content. Phone viewport evidence is emulation,
+    not a real-device keyboard, safe-area or touch-scroll check.
 
 ## Gotchas
 

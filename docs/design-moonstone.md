@@ -177,7 +177,7 @@ rail shows, the list icon is "Show session rail" or "Hide session rail", and the
 carries the same name; the Changes icon after it, last in the header, toggles Changes the same
 way, "Changes" or "Hide changes" and filled while Changes shows.
 
-The session rail is like Claude Code's: one switch for every session, remembered by
+The desktop session rail is like Claude Code's: one switch for every session, remembered by
 the browser, so switching sessions shows the next session's rail in the same place. Beside the
 Agent area it stands at its right, 320px wide and as tall as the transcript and composer
 together, with no hairline or fill of its own (unlike the Surface area, it is part of the session, not a second pane;
@@ -188,8 +188,8 @@ wheel over it scrolls the rail alone. The transcript, its notices and the compos
 clear of the rail (`--rail-inset`), and its first section sits level with the transcript's first
 row. It and the Surface area share the session's right side: whichever came in last shows. Opening a Surface tab hides the rail;
 closing the last one brings it back; turning the rail on while tabs are open hides them until a
-tab is shown again or the rail goes off. The rail has no header or toolbar: its folding sections are
-Workspace (folder, worktree, branch, working directory), Outputs, the files Pi wrote or edited,
+tab is shown again or the rail goes off. The desktop rail has no header or toolbar: its folding sections are
+Environment (folder or repository, branch or detached commit, linked pull request), Outputs, the files Pi wrote or edited,
 and Links, the web links the conversation mentions, the last two only once they have a row.
 Links shows its count and five most recently mentioned URLs, each once, with its title and domain
 (or its bare URL); Jump to message is revealed on hover or keyboard focus and stays visible on
@@ -205,9 +205,15 @@ shrinks first, down to 400px. Below 849px of session width (measured after the s
 viewport) the areas take turns, each at full width, under tabs that show only while something is
 open beside the Agent area: Agent, then the open tabs ("Agent | README.md"), drawn as the same
 strip tabs without Close (each view closes from its toolbar). With nothing open the bar is left
-out to save its row; Changes opens from the palette. There neither the Changes icon
-nor the session rail shows: the rail has no room, its toggle and palette row are unavailable, and its
-switch waits for the session to be wide again.
+out to save its row; Changes opens from the header or palette. The Session rail control also
+stays available at every width. Narrow, it opens a right-hand sheet with the same Environment,
+Outputs and Links, a Session rail title and Hide session rail close action. The sheet scrolls
+independently, with safe-area padding; opening a file dismisses it and selects the file tab.
+Links still open in a new browser tab; Jump to message dismisses the sheet and reveals Agent.
+Browsing all links focuses Back rather than Search, so it does not request the software keyboard.
+Escape or dismissal restores focus to the header button, not the composer. Sheet openness is
+transient: switching sessions or crossing the layout breakpoint closes it, without changing the
+desktop switch or its covered tabs. The transcript, composer draft and attachments remain mounted.
 
 ## Linear
 

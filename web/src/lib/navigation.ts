@@ -66,7 +66,7 @@ export type SessionArea = "agent" | "surface";
  * The session's layout: which of its areas show, and whether the session rail does. Side by
  * side, the Agent area always, and on its right either the Surface area, while it has tabs and
  * the rail does not cover it, or the rail, while it is on: whichever came in last. One area at a
- * time, the one the user moved to last, and never the rail, which has no room there; Agent is
+ * time, the one the user moved to last, with the rail in a transient sheet over it; Agent is
  * then a tab while something is open beside it.
  */
 export interface SessionLayout {
@@ -81,11 +81,17 @@ export interface SessionLayout {
 
 /** The one derivation of the layout from what navigation holds. */
 function sessionLayout(
-  state: Pick<NavigationState, "surface" | "area" | "single" | "rail" | "covered">,
+  state: Pick<NavigationState, "surface" | "area" | "single" | "rail" | "railSheet" | "covered">,
 ): SessionLayout {
   if (state.single) {
     const surface = !!state.surface && state.area === "surface";
-    return { single: true, agent: !surface, surface, rail: false, agentTab: !!state.surface };
+    return {
+      single: true,
+      agent: !surface,
+      surface,
+      rail: state.railSheet,
+      agentTab: !!state.surface,
+    };
   }
   const surface = !!state.surface && !state.covered;
   return { single: false, agent: true, surface, rail: state.rail && !surface, agentTab: false };
@@ -125,6 +131,8 @@ export interface NavigationState {
    * by side it shows on the Agent area's right whenever the Surface area does not.
    */
   rail: boolean;
+  /** Narrow-layout sheet, never persisted or carried across sessions or layout changes. */
+  railSheet: boolean;
   /** Side by side, whether the rail, turned on after the Surface area, hides it; its tabs wait. */
   covered: boolean;
   /**
@@ -202,11 +210,12 @@ export interface Navigation {
   openChanges: () => void;
   /**
    * Shows the session rail on the Agent area's right, or hides it, for every session: on hides
-   * the Surface area until a tab is shown again or the rail goes off. Side by side only: one area
-   * at a time the rail has no room, so the `session-rail` command is not offered there, and the
-   * switch keeps for when the session is wide again.
+   * the Surface area until a tab is shown again or the rail goes off. One area at a time toggles
+   * a transient sheet instead, leaving the desktop preference and covered tabs unchanged.
    */
   toggleRail: () => void;
+  /** Dismisses only the narrow sheet, leaving the underlying area and desktop switch alone. */
+  closeRailSheet: () => void;
   /**
    * Shows a file's tab, opening it at the end if needed; an open file, however spelled, is read
    * again. `from` is the area the link was in, which closing the file returns to, even when it was
@@ -428,6 +437,7 @@ export function createNavigation({
   const fields = {
     surface: null,
     rail: railPreference?.get() ?? false,
+    railSheet: false,
     covered: false,
     area: "agent" as const,
     single: false,
@@ -504,6 +514,7 @@ export function createNavigation({
     const next = { ...state, ...patch };
     // Settings covers the session, and with it the pull request dialog, which does not come back.
     if (next.settings) next.pullRequest = false;
+    if (next.settings || next.pullRequest || next.single !== state.single) next.railSheet = false;
     const derived = sessionLayout(next);
     const layout = sameLayout(derived, state.layout) ? state.layout : derived;
     state = { ...next, layout, shownTab: shownTab(next, layout) };
@@ -562,6 +573,7 @@ export function createNavigation({
           surface: back?.surface ?? null,
           area: back?.area ?? "agent",
           covered: !!back?.covered && state.rail,
+          railSheet: false,
           pullRequest: false,
         });
       }
@@ -620,6 +632,7 @@ export function createNavigation({
         surface,
         area: "surface",
         covered: false,
+        railSheet: false,
         surfaceRequest: state.surfaceRequest + 1,
       });
       moved();
@@ -629,7 +642,7 @@ export function createNavigation({
    * it leaves Settings, which would otherwise hide what the move changed. */
   const moveArea = (patch: Partial<NavigationState>) =>
     batch(() => {
-      set({ ...patch, settings: null });
+      set({ settings: null, railSheet: false, ...patch });
       moved();
     });
 
@@ -699,7 +712,9 @@ export function createNavigation({
       }),
     closeSettings,
     openChanges: () => openView("changes"),
-    toggleRail: () => setRail(!state.layout.rail),
+    toggleRail: () =>
+      state.single ? moveArea({ railSheet: !state.railSheet }) : setRail(!state.layout.rail),
+    closeRailSheet: () => batch(() => set({ railSheet: false })),
     openFile: (spelled, from = state.layout.agent ? "agent" : "surface") => {
       const path = filePath(spelled, client.getState().session?.cwd);
       const tabs = state.surface?.tabs ?? [];

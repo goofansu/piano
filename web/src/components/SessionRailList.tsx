@@ -13,7 +13,7 @@ export function RailList({ className, ...props }: ComponentProps<typeof Settings
 }
 
 /** The classes an `Item` takes to sit in a `RailList`. */
-export const railRow = "flex-nowrap gap-2.5 rounded-none px-3 py-2 text-xs";
+export const railRow = "flex-nowrap gap-2.5 rounded-none px-3 py-2 text-xs pointer-coarse:min-h-11";
 
 /** A row's text in the panel's weight and size: a block, so `truncate` ellipsizes it, which the title's own flex clamp would not. */
 export function RailRowTitle({ className, ...props }: ComponentProps<typeof ItemTitle>) {

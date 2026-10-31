@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { ListIcon, MoreHorizontalIcon } from "lucide-react";
+import { ListIcon, MoreHorizontalIcon, XIcon } from "lucide-react";
 import { useRef } from "react";
 import {
   CommandIcon,
@@ -20,10 +20,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
-import { Sheet, SheetTrigger } from "@/components/PianoSheet";
+import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
 import { SessionPreviewControl } from "@/components/SessionPreview";
 import { type PullRequestControl, PullRequestLinkDialog } from "@/components/SessionPullRequest";
+import { SessionRail } from "@/components/SessionRail";
 import { surfaceTabNames } from "@/components/SurfaceArea";
 import {
   Breadcrumb,
@@ -58,8 +59,6 @@ export function SessionHeader({
   const { title, sessionId, cwd } = sessionContext(state);
   const { commands, run } = useSessionCommands();
   const menu = sessionHeaderMenu(commands);
-  // The session rail's switch is offered only side by side, where the Agent area has a right side.
-  const sideBySide = !!commands.find((c) => c.id === "session-rail")?.enabled;
   const projectMenu = useSessionProjectMenu();
   const openProject = projectMenu?.open;
   const { display } = menu;
@@ -191,7 +190,7 @@ export function SessionHeader({
         {/* Ghost controls: the group pulls out so the last one's content ends on the gutter. */}
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           <SessionPreviewControl />
-          {sideBySide && <SessionRailToggle />}
+          <SessionRailToggle state={state} />
           <ChangesToggle />
           {mobile && sessionMenu}
         </div>
@@ -203,24 +202,59 @@ export function SessionHeader({
 
 /**
  * The session rail's toggle, at the header's end beside the Agent area, over where the rail shows:
- * the rail on or off for every session, its name ("Show session rail", "Hide session rail") saying
- * which, and filled while the rail shows, as Changes' Wrap toggle is while on.
+ * the saved column side by side, a transient sheet one area at a time. Both share content and
+ * commands; only one presentation is mounted. The trigger is a button, never the composer.
  */
-function SessionRailToggle() {
+function SessionRailToggle({ state }: { state: AppState }) {
   const { commands, run } = useSessionCommands();
-  const shown = useNavigation().layout.rail;
+  const navigation = useNavigation();
+  const { single, railSheet, surfaceRequest, closeRailSheet } = navigation;
+  const shown = navigation.layout.rail;
+  const trigger = useRef<HTMLButtonElement>(null);
   const command = commands.find((c) => c.id === "session-rail");
   if (!command) return null;
   return (
-    <IconButton
-      size="header"
-      label={command.label}
-      aria-pressed={shown}
-      onClick={() => run(command)}
-      className="aria-pressed:bg-muted"
-    >
-      <ListIcon />
-    </IconButton>
+    <>
+      <IconButton
+        ref={trigger}
+        size="header"
+        label={command.label}
+        aria-pressed={shown}
+        aria-haspopup={single ? "dialog" : undefined}
+        aria-expanded={single ? railSheet : undefined}
+        onClick={() => run(command)}
+        className="aria-pressed:bg-muted"
+      >
+        <ListIcon />
+      </IconButton>
+      <Sheet open={single && railSheet} onOpenChange={(open) => !open && closeRailSheet()}>
+        {single && railSheet && (
+          <SheetContent
+            side="right"
+            showCloseButton={false}
+            aria-describedby={undefined}
+            className="gap-0 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              // A Surface destination owns focus after navigation. Dismissal (including resize)
+              // returns to this stable button even when the sheet was opened from the palette.
+              if (navigation.getState().surfaceRequest === surfaceRequest)
+                trigger.current?.focus({ preventScroll: true });
+            }}
+          >
+            <div className="flex shrink-0 items-center justify-between px-3 py-2">
+              <SheetTitle>Session rail</SheetTitle>
+              <SheetClose asChild>
+                <IconButton size="header" label="Hide session rail">
+                  <XIcon />
+                </IconButton>
+              </SheetClose>
+            </div>
+            <SessionRail state={state} sheet />
+          </SheetContent>
+        )}
+      </Sheet>
+    </>
   );
 }
 
