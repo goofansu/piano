@@ -458,7 +458,8 @@ export function PreviewDetailsDialog({
       onOpenChange={(o) => !o && close()}
     >
       <DialogContent
-        className="sm:max-w-xl"
+        // Bounded to the viewport so Close and the footer stay reachable on a short screen.
+        className="max-h-[85dvh] overflow-y-auto sm:max-w-xl"
         // Land on the safe action, never Stop: opening the app, else the dialog itself.
         onOpenAutoFocus={(event) => {
           event.preventDefault();
@@ -496,7 +497,7 @@ export function PreviewDetailsDialog({
               </div>
               {details?.error && <p className="text-sm text-err">{details.error}</p>}
               {/* Plain preformatted output has no dedicated UI primitive. */}
-              <pre className="max-h-64 min-h-16 overflow-auto rounded-md border border-line bg-fill p-3 font-mono text-xs whitespace-pre-wrap break-words">
+              <pre className="max-h-[min(16rem,40dvh)] min-h-16 overflow-auto rounded-md border border-line bg-fill p-3 font-mono text-xs whitespace-pre-wrap break-words">
                 {details?.logs.trim() ||
                   (observed.refreshing || !details ? "Reading output…" : "No output yet.")}
               </pre>
