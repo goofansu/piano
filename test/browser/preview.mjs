@@ -31,6 +31,7 @@ const origin =
   previewConfig.origin ?? (local ? "http://localhost" : `https://${hostname()}.exe.xyz`);
 // Vite allows localhost already; a remote origin's hostname must be allowed explicitly.
 const appEnv = local ? {} : { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname };
+const embeddedLocal = ["localhost", "127.0.0.1"].includes(new URL(origin).hostname);
 const evidence = resolve(process.argv[2] ?? ".scratch/browser/preview");
 mkdirSync(evidence, { recursive: true });
 const scratch = mkdtempSync(join(tmpdir(), "piano-preview-model-"));
@@ -43,8 +44,18 @@ writeFileSync(
     ports: Array.from({ length: 80 }, (_, i) => 9400 + i),
   }),
 );
+const browserMode = join(scratch, "browser-mode");
+writeFileSync(browserMode, "normal");
 let command;
-const observations = [];
+const observations = [
+  {
+    origin,
+    platform: process.platform,
+    embeddedLocal,
+    authenticatedHttps:
+      "unverified — requires a signed-in browser; no credentials or access policy changed",
+  },
+];
 let app;
 let held;
 let repo;
@@ -107,7 +118,11 @@ const model = createServer(async (req, res) => {
   }
   const tool = body.messages.slice(lastUser).find((message) => message.role === "tool");
   let delta;
-  if (!tool) {
+  if (prompt === "Revise the app heading") {
+    // Deterministic revision through the ordinary composer; no paid model or new feedback path.
+    writeFileSync(join(repo, "heading.js"), 'export default "Preview journey v2 HMR";');
+    delta = { role: "assistant", content: "APP_UPDATED" };
+  } else if (!tool) {
     assert.ok(body.tools.some((tool) => tool.function.name === "piano_preview"));
     delta = {
       role: "assistant",
@@ -186,11 +201,36 @@ try {
       );
       writeFileSync(
         join(repo, "index.html"),
-        '<h1>Preview journey v1</h1><button id="count">Count: 0</button><script type="module" src="/src.js"></script>',
+        '<h1>Preview journey v1</h1><button id="count">Count: 0</button><form><label>App draft<input name="draft" aria-label="App draft"></label><button>Save draft</button></form><a href="#route">App route</a><p id="route">Route: entry</p><p id="scroll">Scroll: top</p><p style="margin-top:1200px">End of app</p><script type="module" src="/src.js"></script>',
       );
       writeFileSync(
         join(repo, "src.js"),
-        'let count=0; document.querySelector("#count").onclick = e => { e.target.textContent = "Count: " + ++count; };',
+        `import heading from './heading.js';
+const update = text => document.querySelector('h1').textContent = text;
+update(heading);
+if (import.meta.hot) import.meta.hot.accept('./heading.js', m => update(m.default));
+if (location.search) document.querySelector('#route').textContent = 'Route: ' + location.search;
+addEventListener('hashchange', () => document.querySelector('#route').textContent = 'Route: ' + location.hash);
+addEventListener('scroll', () => document.querySelector('#scroll').textContent = scrollY > 0 ? 'Scroll: moved' : 'Scroll: top');
+let count=0; document.querySelector('#count').onclick = e => { e.target.textContent = 'Count: ' + ++count; };`,
+      );
+      writeFileSync(join(repo, "heading.js"), 'export default "Preview journey v1";');
+      writeFileSync(
+        join(repo, "vite.config.mjs"),
+        `import { readFileSync } from 'node:fs';
+export default { plugins: [{ name: 'browser-boundary-fixture', configureServer(server) {
+  server.middlewares.use((req, res, next) => {
+    if (req.headers['sec-fetch-dest'] !== 'iframe') return next();
+    const mode = readFileSync(${JSON.stringify(browserMode)}, 'utf8');
+    if (mode === 'pending') return; // browser-only stall; local readiness still answers
+    if (mode === 'denied') {
+      res.writeHead(200, { 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "frame-ancestors 'none'", 'Cache-Control': 'no-store', 'Content-Type': 'text/html' });
+      return res.end('<h1>Framing denied fixture</h1>');
+    }
+    if (mode === 'login') { res.writeHead(401, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' }); return res.end('<h1>Sign in required</h1>'); }
+    next();
+  });
+} }] };`,
       );
       assert.equal(
         JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).scripts.dev,
@@ -283,6 +323,40 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
             "!!document.querySelector('[data-slot=surface-area]:not([inert]) section[aria-label=Preview]')",
           );
         };
+        // Cross-origin content is observed through the browser's accessibility tree, not a
+        // production DOM bridge. CLI frame-scoped CSS/eval is not supported by this release.
+        const appSee = async (text) => {
+          const deadline = Date.now() + 15000;
+          while (!(await page.ab("snapshot")).includes(text)) {
+            assert.ok(Date.now() < deadline, `app did not show ${text}`);
+            await delay(100);
+          }
+        };
+        const appAct = async (name, action, ...args) => {
+          const snapshot = await page.ab("snapshot");
+          const line = snapshot
+            .split("\n")
+            .find((line) => line.includes(`"${name}"`) && line.includes("[ref="));
+          const ref = line?.match(/ref=(e\d+)/)?.[1];
+          assert.ok(ref, `${name} is accessible in the app`);
+          if (action === "click") {
+            // Native CLI pointer hit-testing double-counts some iframe offsets; keyboard
+            // activation still exercises the app control without a DOM .click().
+            await page.ab("focus", `@${ref}`);
+            await page.press("Enter");
+          } else await page.ab(action, `@${ref}`, ...args);
+        };
+        const frameReady = () => appSee("Count: 0");
+        const rememberFrame = () =>
+          page.evaluate(
+            "!!(window.previousPreviewFrame = document.querySelector('iframe[title=\"App preview\"]'))",
+          );
+        const sameFrame = () =>
+          page.evaluate(
+            "window.previousPreviewFrame === document.querySelector('iframe[title=\"App preview\"]')",
+          );
+        const noFrame = () =>
+          page.until("!document.querySelector('iframe[title=\"App preview\"]')");
         const more = async () => {
           await page.until("!document.querySelector('[data-sonner-toast]')");
           await page.click("button", "More preview actions");
@@ -328,6 +402,13 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.capture("1b-app-folded");
         await page.click("button", "App");
         await page.click("button", "Show preview");
+        if (embeddedLocal) {
+          await frameReady();
+          await appAct("Count: 0", "click");
+          await appAct("App draft", "fill", "Keep app state");
+          await appAct("App route", "click");
+          await rememberFrame();
+        }
         await page.capture("1c-preview-surface");
         await page.click("link", "Open in new tab");
         await page.capture("1c-toolbar-external-answer");
@@ -344,6 +425,25 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("button", "Show session rail");
         await page.capture("1c-rail-covers-tabs");
         await page.click("button", "Show preview");
+        if (embeddedLocal) {
+          assert.equal(
+            await sameFrame(),
+            true,
+            "Changes, file and rail switches preserve the frame node",
+          );
+          await appSee("Count: 1");
+          await appSee("Keep app state");
+          await appSee("Route: #route");
+          await page.capture("1c-preserved-page");
+          await page.click("button", "Reload preview");
+          await frameReady();
+          assert.equal(await sameFrame(), false, "Reload replaces only the browsing context");
+          assert.equal(request({ action: "status" }).instanceId, identity);
+          await appSee("Route: entry");
+          assert.ok(!(await page.ab("snapshot")).includes("Keep app state"));
+          await page.capture("1c-reload-answer");
+          await rememberFrame();
+        }
         assert.equal(
           await page.evaluate("document.querySelector('[aria-label=Message]').value"),
           "Keep my draft",
@@ -375,6 +475,8 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           "document.querySelector('[role=dialog] button[aria-busy]')?.getAttribute('aria-busy') === 'false'",
         );
         await page.capture("1d-preview-details");
+        if (embeddedLocal)
+          assert.equal(await sameFrame(), true, "Details/status refresh does not reload");
         await page.click("link", "Open in new tab");
         await page.capture("1d-details-external-answer");
         await page.ab("tab", "close");
@@ -425,6 +527,89 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.capture("1g-palette-stop-answer");
         await page.click("button", "Cancel");
 
+        if (embeddedLocal) {
+          // Browser failures are independent of local readiness. The fixture changes only its
+          // iframe response, never Piano's headers, credentials or allowed control origins.
+          writeFileSync(browserMode, "pending");
+          await page.click("button", "Reload preview");
+          await page.until(
+            "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'true'",
+          );
+          await page.capture("1g-frame-loading");
+          await page.click("link", "Open in new tab");
+          await page.see("Preview journey v1");
+          await page.capture("1g-open-while-loading");
+          await page.ab("tab", "close");
+          await page.until(
+            "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'false'",
+          );
+          assert.equal(request({ action: "status" }).instanceId, identity);
+          await page.click("button", "Preview not appearing?");
+          await page.capture("1g-recovery-answer");
+          await page.ab("click", "[data-slot=popover-content] button");
+          await page.until("!document.querySelector('[data-radix-popper-content-wrapper]')");
+          await rememberFrame();
+          await page.click("button", "Reload preview");
+          await page.evaluate("window.previousPreviewFrame.dispatchEvent(new Event('load'))");
+          assert.equal(
+            await page.evaluate(
+              "document.querySelector('[aria-label=\"Reload preview\"]').getAttribute('aria-busy')",
+            ),
+            "true",
+            "old page load cannot finish a new reload",
+          );
+          await page.until(
+            "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'false'",
+          );
+          await page.capture("1g-bounded-loading");
+          writeFileSync(browserMode, "denied");
+          await page.click("button", "Reload preview");
+          const denied = await fetch(app.url, { headers: { "sec-fetch-dest": "iframe" } });
+          assert.equal(denied.headers.get("x-frame-options"), "DENY");
+          assert.equal(denied.headers.get("content-security-policy"), "frame-ancestors 'none'");
+          await page.until(
+            "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'false'",
+          );
+          await page.click("button", "Preview not appearing?");
+          await page.capture("1g-framing-denied-recovery");
+          await page.ab("click", "[data-slot=popover-content] a");
+          await page.see("Preview journey v1");
+          await page.capture("1g-recovery-external-answer");
+          await page.ab("tab", "close");
+          await page.press("Escape");
+          writeFileSync(browserMode, "login");
+          await page.click("button", "Reload preview");
+          await appSee("Sign in required");
+          await page.capture("1g-login-gated-frame");
+          assert.equal(
+            request({ action: "status" }).ready,
+            true,
+            "browser login is not service readiness",
+          );
+          writeFileSync(browserMode, "normal");
+          await page.click("button", "Reload preview");
+          await frameReady();
+          // Native keyboard traversal enters and leaves the frame; no bridge intercepts keys.
+          await page.ab("focus", '[aria-label="More preview actions"]');
+          await page.press("Tab");
+          await page.until("document.activeElement?.tagName === 'IFRAME'");
+          await page.press("Shift+Tab");
+          await page.until(
+            "document.activeElement?.getAttribute('aria-label') === 'More preview actions'",
+          );
+          await page.press("Shift+Tab");
+          await page.until("document.activeElement?.textContent.includes('Open in new tab')");
+          await page.press("Shift+Tab");
+          await page.until(
+            "document.activeElement?.getAttribute('aria-label') === 'Reload preview'",
+          );
+          await page.capture("1g-keyboard-frame-return");
+          observations.push({
+            frameFallbacks: ["bounded pending", "DENY + frame-ancestors", "401 login"],
+            keyboardFrameTraversal: true,
+          });
+        }
+
         // An unreadable scratch intent is an observation/stop error, not absence. The service
         // still belongs to its live owner. Restore the external boundary before any cleanup.
         const intentPath = join(state, first.serviceId + ".json");
@@ -434,6 +619,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await more();
           await page.click("menuitem", "Details");
           await page.see("Status unavailable");
+          await noFrame();
           await page.capture("1h-unknown-details");
           await page.press("Escape");
           await page.click("button", "Check status");
@@ -453,6 +639,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
 
         // Another session in this same checkout cannot discover or adopt the owner's app.
         await page.open("/new");
+        await noFrame();
         await page.ab("fill", '[aria-label="First message"]', "status");
         await page.until("document.querySelector('[aria-label=Send]')?.disabled === false");
         await page.click("button", "Send");
@@ -469,9 +656,23 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.ab("tab", "new", local ? app.url : `http://127.0.0.1:${app.port}/`);
         await page.see("Preview journey v1");
         await page.capture("2-app-load");
-        writeFileSync(join(repo, "index.html"), "<h1>Preview journey v2 HMR</h1>");
+        await page.ab("tab", "close");
+        if (embeddedLocal) {
+          await appAct("Count: 0", "click");
+          await rememberFrame();
+        }
+        await page.ab("fill", '[aria-label="Message"]', "Revise the app heading");
+        await page.click("button", "Send");
+        await page.see("APP_UPDATED");
+        if (embeddedLocal) {
+          await appSee("Preview journey v2 HMR");
+          await appSee("Count: 1");
+          assert.equal(await sameFrame(), true, "HMR updates the app without reloading it");
+          await page.capture("3-embedded-hot-reload");
+        }
+        await page.ab("tab", "new", local ? app.url : `http://127.0.0.1:${app.port}/`);
         await page.see("Preview journey v2 HMR");
-        await page.capture("3-hot-reload");
+        await page.capture("3-revised-app-load");
         await page.ab("tab", "close");
         await page.ab("fill", '[aria-label="Message"]', "hold");
         await page.click("button", "Send");
@@ -500,6 +701,87 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("button", "Show preview");
         await page.until("!document.querySelector('[role=dialog]')");
         await page.capture("2b-narrow-preview");
+        if (embeddedLocal) {
+          await frameReady();
+          await appAct("Count: 0", "click");
+          await appAct("App draft", "fill", "Narrow draft");
+          await rememberFrame();
+          await page.click("tab", "Agent");
+          await page.click("button", "Changes");
+          await page.click("tab", "Preview");
+          await showRail();
+          await page.click("button", "Show preview");
+          assert.equal(await sameFrame(), true, "narrow Agent/Changes/rail preserve the page");
+          await appSee("Count: 1");
+          await appSee("Narrow draft");
+          await page.capture("2b-narrow-preserved-page");
+          await page.click("button", "Reload preview");
+          await frameReady();
+          assert.equal(request({ action: "status" }).instanceId, identity);
+          await page.capture("2b-narrow-reload-answer");
+          await appAct("App draft", "fill", "Saved");
+          await appAct("Save draft", "click");
+          await appSee("Route: ?draft=Saved");
+          await page.capture("2b-narrow-form-submit");
+          // Native browser input only: no device emulation or app-side scrolling helper.
+          const socket = new WebSocket(await page.ab("get", "cdp-url"));
+          let id = 0;
+          const cdp = (method, params = {}, sessionId) =>
+            new Promise((resolve, reject) => {
+              const request = ++id;
+              const timer = setTimeout(() => {
+                socket.removeEventListener("message", receive);
+                reject(new Error(`CDP ${method} timed out`));
+              }, 10000);
+              const receive = ({ data }) => {
+                const m = JSON.parse(data);
+                if (m.id !== request) return;
+                clearTimeout(timer);
+                socket.removeEventListener("message", receive);
+                if (m.error) reject(new Error(JSON.stringify(m.error)));
+                else resolve(m.result);
+              };
+              socket.addEventListener("message", receive);
+              socket.send(JSON.stringify({ id: request, method, params, sessionId }));
+            });
+          try {
+            await new Promise((resolve, reject) => {
+              socket.addEventListener("open", resolve, { once: true });
+              socket.addEventListener("error", reject, { once: true });
+            });
+            const url = await page.ab("get", "url");
+            const { targetInfos } = await cdp("Target.getTargets");
+            const target = targetInfos.find((t) => t.type === "page" && t.url === url);
+            assert.ok(target);
+            const { sessionId } = await cdp("Target.attachToTarget", {
+              targetId: target.targetId,
+              flatten: true,
+            });
+            await cdp(
+              "Input.dispatchTouchEvent",
+              { type: "touchStart", touchPoints: [{ x: 190, y: 600 }] },
+              sessionId,
+            );
+            for (let y = 580; y >= 200; y -= 20) {
+              await cdp(
+                "Input.dispatchTouchEvent",
+                { type: "touchMove", touchPoints: [{ x: 190, y }] },
+                sessionId,
+              );
+              await delay(16);
+            }
+            await cdp("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }, sessionId);
+            await appSee("Scroll: moved");
+            await page.capture("2b-narrow-touch-scroll");
+            observations.push({
+              touch: "Chromium synthetic touch scroll at 390×844; not real phone evidence",
+            });
+          } finally {
+            socket.close();
+          }
+          await page.click("tab", "Changes");
+          await page.click("button", "Hide changes");
+        }
         await page.click("link", "Open in new tab");
         await page.capture("2b-narrow-external-answer");
         await page.ab("tab", "close");
@@ -522,6 +804,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.until(
           "document.querySelector('section[aria-label=Preview]')?.textContent.includes('Preview stopped')",
         );
+        await noFrame();
         await page.capture("2b-narrow-stopped");
         await page.until("!document.querySelector('[data-sonner-toast]')");
         await page.click("button", "Close preview");
@@ -563,10 +846,15 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         };
         const replacing = await launch();
         await showPreview();
+        if (embeddedLocal) {
+          await frameReady();
+          await rememberFrame();
+        }
         await more();
         await page.click("menuitem", "Stop preview");
         await page.see("Stop preview?");
         // A concurrent owner request replaces the app while the browser confirmation is open.
+        if (embeddedLocal) writeFileSync(browserMode, "pending");
         const replacement = request(
           { action: "start", replace: replacing.instanceId, command, env: appEnv },
           replacing,
@@ -579,6 +867,21 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.capture("3a-replacement-fences-confirmation");
         assert.equal(request({ action: "status" }).instanceId, replacement.instanceId);
         await page.click("button", "Cancel");
+        if (embeddedLocal) {
+          assert.equal(await sameFrame(), false, "a replacement must dispose the old page");
+          // The new frame is still pending. A delayed old-instance event cannot finish it.
+          await page.evaluate("window.previousPreviewFrame.dispatchEvent(new Event('load'))");
+          assert.equal(
+            await page.evaluate(
+              "document.querySelector('[aria-label=\"Reload preview\"]').getAttribute('aria-busy')",
+            ),
+            "true",
+          );
+          await page.capture("3b-replacement-pending-old-load-ignored");
+          writeFileSync(browserMode, "normal");
+          await page.click("button", "Reload preview");
+          await frameReady();
+        }
         await page.capture("3b-replacement-current-view");
         observations.push({ replacement: replacement.instanceId, replaced: replacing.instanceId });
         // Keep this owner active while inspecting a terminal app: this scratch instance's
@@ -591,6 +894,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await gone(replacement, "application failure cleans its children");
         request({ action: "status" }, replacement);
         await page.see("Failed");
+        await noFrame();
         await page.capture("3c-failed-preview");
         await page.click("button", "Check status");
         await more();
@@ -608,9 +912,17 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         held?.end();
         const ended = await launch();
         await showPreview();
+        if (embeddedLocal) {
+          await frameReady();
+          await appAct("Count: 0", "click");
+          await page.until("document.activeElement?.tagName === 'IFRAME'");
+        }
         process.kill(piFor(ended).pid, "SIGKILL");
         await gone(ended, "owner exit while Preview stays open");
         await page.see("Preview unavailable");
+        await noFrame();
+        if (embeddedLocal)
+          await page.until("document.activeElement?.getAttribute('role') === 'tabpanel'");
         await page.capture("3f-owner-ended-open-view");
         assert.equal(await railPreview(), false);
         const killed = await launch();
@@ -701,6 +1013,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
       }
     },
     {
+      agentBrowser: "agent-browser@0.39.1",
       backendEnv: {
         ...env,
         PIANO_PI_CLI: shim,
