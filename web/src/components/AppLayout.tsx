@@ -41,7 +41,7 @@ export function AppLayout({
     // The layout ends the drag on release, a collapse or a breakpoint change; listeners go with it.
     layout.startResize(
       startWidth,
-      trackPointerDrag(event.pointerId, {
+      trackPointerDrag(event.currentTarget, event.pointerId, {
         move: (event) => layout.resizeTo(startWidth + event.clientX - startX),
         finish: () => layout.finishResize(),
         cancel: () => layout.cancelResize(),

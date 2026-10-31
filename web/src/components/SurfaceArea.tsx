@@ -130,7 +130,7 @@ export function SurfaceColumn({
     const startX = event.clientX;
     let last = startWidth;
     setResizing(true);
-    const release = trackPointerDrag(event.pointerId, {
+    const release = trackPointerDrag(event.currentTarget, event.pointerId, {
       move: (event) => {
         last = clampPanelWidth(startWidth - (event.clientX - startX));
         setWidth(last);
