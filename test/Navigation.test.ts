@@ -958,7 +958,7 @@ test("a reload keeps the session rail over the tabs it covered, unless it was tu
   assert.equal(rightSide(off.navigation), "surface", "nothing is covered by a rail that is off");
 });
 
-test("one area at a time the session rail never shows, and comes back once the session is wide", () => {
+test("narrowing does not auto-open the rail sheet, and widening restores the desktop rail", () => {
   const p = page("/s/a");
   p.registry();
   p.selected("a");
@@ -976,6 +976,75 @@ test("one area at a time the session rail never shows, and comes back once the s
 
   p.navigation.setSingle(false);
   assert.equal(rightSide(p.navigation), "rail", "the switch was kept");
+});
+
+test("the narrow rail is transient: dismissals and resizes leave desktop preference and covered tabs alone", () => {
+  for (const enabled of [false, true]) {
+    const storage = railStorage();
+    const memory = tabMemory();
+    const p = page("/s/a", memory, railPreference(storage));
+    p.registry();
+    p.selected("a");
+    p.navigation.openChanges();
+    if (enabled) p.navigation.toggleRail();
+    const saved = storage.read("rail");
+    const kept = memory.read();
+    const sent = p.sent.length;
+    p.navigation.setSingle(true);
+    p.navigation.toggleRail();
+    assert.equal(p.navigation.getState().layout.rail, true);
+    p.navigation.setSingle(true);
+    assert.equal(p.navigation.getState().railSheet, true, "repeated measurements do not dismiss");
+    p.navigation.toggleRail();
+    assert.equal(p.navigation.getState().layout.rail, false);
+    p.navigation.toggleRail();
+    p.navigation.closeRailSheet();
+    p.navigation.closeRailSheet();
+    assert.equal(p.navigation.getState().layout.rail, false);
+    p.navigation.toggleRail();
+    p.navigation.setSingle(false);
+    assert.equal(p.navigation.getState().railSheet, false);
+    assert.equal(rightSide(p.navigation), enabled ? "rail" : "surface");
+    p.navigation.setSingle(true);
+    assert.equal(p.navigation.getState().layout.rail, false, "widening discarded the sheet");
+    assert.equal(p.navigation.getState().rail, enabled, "the desktop switch is unchanged");
+    assert.equal(storage.read("rail"), saved, "no desktop preference writes");
+    assert.equal(memory.read(), kept, "the sheet is not Surface memory");
+    assert.equal(p.sent.length, sent, "rail navigation sends no process actions (INV-02)");
+  }
+});
+
+test("a narrow rail destination dismisses the sheet, and session changes discard it (INV-07)", () => {
+  const p = page("/s/a");
+  p.registry();
+  p.selected("a");
+  p.navigation.setSingle(true);
+  p.navigation.openChanges();
+  p.navigation.showAgent();
+  p.navigation.toggleRail();
+  p.navigation.openFile("src/answer.ts", "agent");
+  assert.equal(p.navigation.getState().railSheet, false);
+  assert.equal(p.navigation.getState().shownTab, "file:src/answer.ts");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["changes", "file:src/answer.ts"]);
+  p.navigation.closeTab("file:src/answer.ts");
+  assert.equal(p.navigation.getState().layout.agent, true);
+  p.navigation.toggleRail();
+  p.navigation.selectTab("changes");
+  assert.equal(p.navigation.getState().railSheet, false);
+  p.navigation.toggleRail();
+  p.navigation.showAgent();
+  assert.equal(p.navigation.getState().railSheet, false, "Jump to message reveals Agent");
+  p.navigation.toggleRail();
+  p.navigation.openSettings();
+  assert.equal(p.navigation.getState().railSheet, false, "Settings dismisses the sheet");
+  p.navigation.toggleRail();
+  assert.equal(p.navigation.getState().settings, null, "the palette rail command leaves Settings");
+  assert.equal(p.navigation.getState().railSheet, true);
+  p.navigation.select("/scratch", "b");
+  assert.equal(p.navigation.getState().railSheet, false, "closed as selection starts");
+  p.selected("b");
+  assert.equal(p.navigation.getState().surface, null);
+  assert.equal(p.navigation.getState().layout.rail, false);
 });
 
 test("a reload drops a the session rail tab kept by an older Piano and keeps the other tabs", () => {

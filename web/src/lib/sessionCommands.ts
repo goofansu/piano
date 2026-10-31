@@ -106,8 +106,7 @@ export interface SessionCommand {
   destructive?: true;
   /**
    * Not offered on this screen at all, so the palette leaves it out instead of greying it: a
-   * command only one layout has (the session rail side by side, Agent one area at a
-   * time). Always with `enabled` false; a command disabled for a reason the user can act on stays.
+   * command only one layout has (Agent one area at a time). Always with `enabled` false; a command disabled for a reason the user can act on stays.
    */
   hidden?: boolean;
   /** A display toggle that is currently on. */
@@ -227,9 +226,8 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
- * - session rail: the session is laid out side by side, the only layout with room for it (its
- *   facts need neither Git nor a live Pi); "Hide session rail" while it shows, else "Show session
- *   rail".
+ * - session rail: available at every width (its facts need neither Git nor a live Pi);
+ *   "Hide session rail" while the column or narrow sheet shows, else "Show session rail".
  * - agent: the session is laid out one area at a time and the Agent tab shows, beside an open
  *   Surface tab.
  * - pull request, copy session ID: the selected session has a Pi session ID; a pull request is
@@ -261,7 +259,7 @@ export function sessionCommands(
   const commands: SessionCommand[] = [];
   if (selected && session) {
     const messagesOnly = options.messagesOnly ?? false;
-    const { single, agentTab, rail } = options.layout ?? AGENT_ONLY;
+    const { agentTab, rail } = options.layout ?? AGENT_ONLY;
     const sessionPath = session.state.sessionFile;
     const linked = !!ctx.pullRequest;
     const pullRequest = pullRequestView({ link: ctx.pullRequest ?? null, pullRequest: null });
@@ -351,9 +349,7 @@ export function sessionCommands(
         id: "session-rail",
         label: rail ? "Hide session rail" : "Show session rail",
         icon: "list",
-        // The rail has no room one area at a time: the one place that decides it.
-        enabled: !single,
-        hidden: single,
+        enabled: true,
         keywords: ["details", "info", "outputs", "files", "links", "branch"],
         intent: { kind: "session-rail" },
       },

@@ -86,8 +86,8 @@ export function SessionView({ state, send }: Props) {
     return () => observer.disconnect();
   }, [setSingle]);
   const agentHidden = !navigation.layout.agent;
-  // The rail, only ever side by side, is pinned inside the transcript's scroller.
-  const railInside = navigation.layout.rail;
+  // The wide rail is pinned beside the transcript; the narrow sheet lives at its header trigger.
+  const railInside = !single && navigation.layout.rail;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
@@ -288,8 +288,8 @@ export function SessionView({ state, send }: Props) {
 /**
  * One area at a time, the tabs between them while something is open beside the Agent area:
  * Agent, then the open tabs in opening order ("Agent | README.md"). Without one the bar is left
- * out, saving its row; Changes opens from the palette and becomes a tab. The session rail has no
- * room here and no tab. Choosing Agent never focuses the composer, so a phone keeps its keyboard
+ * out, saving its row; Changes opens from the header or palette and becomes a tab. The session
+ * rail opens in a sheet, not a tab. Choosing Agent never focuses the composer, so a phone keeps its keyboard
  * down; choosing a view shows it as it was left. A tab closes from its view's toolbar.
  */
 function AreaTabs() {

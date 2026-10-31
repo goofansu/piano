@@ -95,10 +95,6 @@ test("a disabled command does nothing, whichever surface offers it", () => {
     assignProjectCommand(offline, other, "p1"),
     folderCommands(offline, folder).close,
     ...sessionCommands(offline, other),
-    // One area at a time the session rail has no room: the command, not navigation, refuses it.
-    ...sessionCommands(selected, undefined, {
-      layout: { single: true, agent: true, surface: false, rail: false, agentTab: false },
-    }).filter((c) => c.id === "session-rail"),
   ];
   for (const command of disabled) {
     assert.equal(command.enabled, false, command.label);
@@ -160,6 +156,15 @@ test("enabled commands reach the effect their intent names", () => {
     ],
     [byId(sessionCommands(selected), "changes"), ["openChanges"]],
     [byId(sessionCommands(selected), "session-rail"), ["toggleRail"]],
+    [
+      byId(
+        sessionCommands(selected, undefined, {
+          layout: { single: true, agent: true, surface: false, rail: false, agentTab: false },
+        }),
+        "session-rail",
+      ),
+      ["toggleRail"],
+    ],
     [byId(sessionCommands(selected), "pull-request"), ["openPullRequest"]],
     [byId(sessionCommands(linked), "pull-request"), ["openChanges"]],
   ];

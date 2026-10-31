@@ -428,7 +428,7 @@ test("archiving a session that owns an app asks first, from the header or its si
   assert.equal((archive(background, other) as { confirm: boolean }).confirm, true);
 });
 
-test("view commands follow the session's layout: the session rail side by side, Agent one at a time beside an open tab", () => {
+test("view commands offer the rail at every width, Agent one at a time beside an open tab", () => {
   const ofLayout = (layout: SessionLayout, state = base) =>
     Object.fromEntries(
       sessionCommands(state, undefined, { layout })
@@ -448,14 +448,24 @@ test("view commands follow the session's layout: the session rail side by side, 
   });
   assert.deepEqual(
     ofLayout({ single: true, agent: false, surface: true, rail: false, agentTab: true }),
-    { changes: true, "session-rail": false, agent: true },
+    { changes: true, "session-rail": true, agent: true },
   );
-  // Nothing open: Agent needs no tab even where Changes could open, and the session rail has no
-  // room one area at a time.
+  // Nothing open: Agent needs no tab; the rail still opens its sheet.
   assert.deepEqual(
     ofLayout({ single: true, agent: true, surface: false, rail: false, agentTab: false }),
-    { changes: true, "session-rail": false, agent: false },
+    { changes: true, "session-rail": true, agent: false },
   );
+});
+
+test("the narrow rail palette command follows sheet visibility", () => {
+  for (const rail of [false, true]) {
+    const command = sessionCommands(base, undefined, {
+      layout: { single: true, agent: true, surface: false, rail, agentTab: false },
+    }).find((c) => c.id === "session-rail")!;
+    assert.equal(command.label, rail ? "Hide session rail" : "Show session rail");
+    assert.equal(command.enabled, true);
+    assert.ok(!command.hidden);
+  }
 });
 
 test("a pull request, linked or not, opens only where Changes can, and says why not", () => {

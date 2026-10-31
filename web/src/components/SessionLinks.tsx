@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
 import { displayUrl, type SessionLink } from "@/lib/sessionLinks";
 import { jumpEntries, revealEntries, transcriptRows } from "@/lib/transcript";
+import { useNavigation } from "@/lib/useNavigation";
 import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
 interface Props {
@@ -27,12 +28,15 @@ interface Props {
  */
 export function SessionLinks({ links, messages, working = false }: Props) {
   const viewport = useTranscriptViewport();
+  const navigation = useNavigation();
   // Fallback destinations, from the rows the transcript renders, like the jump list's entries.
   const entries = useMemo(
     () => jumpEntries(transcriptRows(messages, { working })),
     [messages, working],
   );
   const reveal = (link: SessionLink, animate: boolean) => {
+    // A narrow rail covers the conversation; reveal the destination before jumping to it.
+    if (navigation.single) navigation.showAgent();
     for (const entry of revealEntries(messages, entries, link.messageId))
       if (viewport?.jump(entry, { animate })) return;
   };
@@ -56,7 +60,7 @@ export function SessionLinks({ links, messages, working = false }: Props) {
             target="_blank"
             rel="noopener noreferrer"
             title={link.url}
-            className="flex min-w-0 flex-1 items-center gap-2.5 outline-none"
+            className="flex min-w-0 flex-1 items-center gap-2.5 outline-none pointer-coarse:min-h-11"
           >
             <ItemMedia variant="icon" className="text-ink-3">
               <LinkIcon />
@@ -107,16 +111,19 @@ export function SessionLinksBrowser({
   messages,
   working,
   onBack,
-}: Props & { onBack: () => void }) {
+  focusSearch = true,
+}: Props & { onBack: () => void; focusSearch?: boolean }) {
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const backRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   // Keep the order the user opened. Newly mentioned URLs append, and repeated mentions update
   // their destination without moving the row under someone's pointer or keyboard focus.
   const [order, setOrder] = useState(() => links.map((link) => link.url));
   useEffect(() => {
-    searchRef.current?.focus();
-  }, []);
+    // Browsing the narrow sheet is not a request to type: keep the software keyboard down.
+    (focusSearch ? searchRef.current : backRef.current)?.focus();
+  }, [focusSearch]);
   useEffect(() => {
     setOrder((previous) => {
       const known = new Set(previous);
@@ -134,7 +141,7 @@ export function SessionLinksBrowser({
     <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pt-3">
       {/* No shadcn primitive is a rail header: back navigation, then title and count. */}
       <div className="flex min-h-8 shrink-0 items-center gap-2 pointer-coarse:min-h-11">
-        <IconButton size="header" label="Back to overview" onClick={onBack}>
+        <IconButton ref={backRef} size="header" label="Back to overview" onClick={onBack}>
           <ChevronLeftIcon />
         </IconButton>
         <h2 className="flex flex-1 items-center gap-2 text-sm font-medium">
@@ -145,6 +152,7 @@ export function SessionLinksBrowser({
         ref={searchRef}
         type="search"
         aria-label="Search links"
+        className="pointer-coarse:h-11"
         placeholder="Search links"
         value={query}
         onChange={(event) => {

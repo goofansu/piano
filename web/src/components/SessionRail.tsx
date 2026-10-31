@@ -61,15 +61,20 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
  * scrollbar stays at the pane's edge, and the transcript, notices and composer keep clear of it
  * through `--rail-inset`. While it fits, the wheel over it scrolls the conversation as anywhere in
  * the area; taller, the wheel over it scrolls the rail alone and never runs on into the
- * conversation. It shows only side by side, while the rail is on and the Surface area is not, and
- * follows the selected session. Hand-written: no shadcn component is a pinned side column.
+ * conversation. Narrow layouts use the same content in a sheet, with its own scroller and no
+ * wheel handoff. Both follow the selected session. Hand-written: no shadcn component is a pinned side column.
  */
-export function SessionRail({ state }: { state: AppState }) {
-  if (!state.session) return null;
-  return <SessionRailContent key={sessionKey(state.session)} state={state} />;
+interface RailProps {
+  state: AppState;
+  sheet?: boolean;
 }
 
-function SessionRailContent({ state }: { state: AppState }) {
+export function SessionRail({ state, sheet = false }: RailProps) {
+  if (!state.session) return null;
+  return <SessionRailContent key={sessionKey(state.session)} state={state} sheet={sheet} />;
+}
+
+function SessionRailContent({ state, sheet }: RailProps) {
   const [browseLinks, setBrowseLinks] = useState(false);
   const railRef = useRef<HTMLElement | null>(null);
   const overviewScroll = useRef(0);
@@ -101,17 +106,21 @@ function SessionRailContent({ state }: { state: AppState }) {
       ref={attachRail}
       data-slot="session-rail"
       aria-label="Session rail"
-      onWheel={browseLinks ? undefined : onWheel}
+      onWheel={sheet || browseLinks ? undefined : onWheel}
       // Clear of the scrollbar at the area's edge; its first section level with the transcript's
       // first row. Overflow fades at either edge; the last row clears the fade at the scroll end.
       // It scrolls without a scrollbar, as the tab strips do.
       className={cn(
-        "absolute inset-y-0 right-3 z-10 flex w-[calc(var(--rail-inset)-0.75rem)] scrollbar-none flex-col overscroll-y-contain pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pt-5",
+        "flex scrollbar-none flex-col overscroll-y-contain pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+        sheet
+          ? "min-h-0 flex-1"
+          : "absolute inset-y-0 right-3 z-10 w-[calc(var(--rail-inset)-0.75rem)] pt-3 md:pt-5",
         browseLinks ? "overflow-hidden" : "overflow-y-auto",
       )}
     >
       {browseLinks ? (
         <SessionLinksBrowser
+          focusSearch={!sheet}
           links={links}
           messages={messages}
           working={working}
@@ -258,7 +267,13 @@ function RailSections({
           {...group("links")}
           action={
             links.length > 5 && (
-              <Button ref={showAllRef} variant="ghost" size="sm" onClick={onShowLinks}>
+              <Button
+                ref={showAllRef}
+                variant="ghost"
+                size="sm"
+                className="pointer-coarse:min-h-11"
+                onClick={onShowLinks}
+              >
                 Show all
               </Button>
             )
