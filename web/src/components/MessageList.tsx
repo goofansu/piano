@@ -480,9 +480,9 @@ function FoldRow({
         data-sidebar-swipe="true"
         className={cn(
           disclosureRow,
-          // Match the tool stack's gap-3 rhythm in every state, including while pinned.
+          // Keep the original header's 4px padding in flow, including while pinned.
           // The gutter and padding belong to the button too; output stays outside it.
-          toolOutput && "m-0 w-full px-0 py-3",
+          toolOutput && "m-0 w-full px-0 py-1",
           action && "w-auto flex-1",
           !toolOutput && headerClassName,
         )}
@@ -548,7 +548,7 @@ function FoldRow({
           {glyph === undefined ? (
             <div className="pt-2">{body}</div>
           ) : (
-            <Row glyph={null} className={toolOutput ? undefined : "pt-2"}>
+            <Row glyph={null} className="pt-2">
               {body}
             </Row>
           )}
