@@ -461,9 +461,19 @@ function FoldRow({
         viewport?.scrolled();
       }
     }
-    // Closing removes the bottom shortcut. Keep focus on the persistent header disclosure,
-    // without a browser scrollIntoView.
-    if (toolOutput) restoreFocus.current = true;
+    // Closing removes the bottom shortcut: when it held focus, move focus to the persistent
+    // header disclosure, without a browser scrollIntoView. A header that was activated keeps
+    // the focus it has; focusing it again from script would paint a focus ring in browsers
+    // whose clicks do not focus buttons (WebKit).
+    const active = document.activeElement;
+    if (
+      toolOutput &&
+      active instanceof HTMLElement &&
+      root.current?.contains(active) &&
+      active !== heading.current?.querySelector("button")
+    ) {
+      restoreFocus.current = true;
+    }
     setOpen(next);
   };
   // A horizontal drag that starts on a header still opens the mobile sidebar; a tap folds.
@@ -480,9 +490,10 @@ function FoldRow({
         data-sidebar-swipe="true"
         className={cn(
           disclosureRow,
-          // Keep the original header's 4px padding in flow, including while pinned.
-          // The gutter and padding belong to the button too; output stays outside it.
-          toolOutput && "m-0 w-full px-0 py-1",
+          // Keep the original header's 4px padding in flow, including while pinned. The gutter
+          // and padding belong to the button too; output stays outside it. The chevron keeps
+          // its 8px inset from the content edge, where the out-of-flow header left it.
+          toolOutput && "m-0 w-full py-1 pr-2 pl-0",
           action && "w-auto flex-1",
           !toolOutput && headerClassName,
         )}
