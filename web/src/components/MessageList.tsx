@@ -202,7 +202,9 @@ export function MessageList({
                         data-index={item.index}
                         className="absolute left-0 top-0 flex w-full flex-col gap-6"
                         style={{
-                          transform: `translateY(${item.start - virtual.options.scrollMargin}px)`,
+                          // Layout coordinates keep a tool's sticky top at the scrollport;
+                          // a transform would translate the sticky header's pinning line too.
+                          top: item.start - virtual.options.scrollMargin,
                           paddingBottom: gap,
                         }}
                       >
@@ -391,6 +393,7 @@ function FoldRow({
   data,
   onClick,
   action,
+  toolOutput = false,
   children,
 }: {
   stateKey?: string;
@@ -411,22 +414,82 @@ function FoldRow({
   onClick?: React.MouseEventHandler<HTMLDivElement>;
   /** A control beside the header, outside the button that folds the row. */
   action?: React.ReactNode;
+  /** One disclosure for a tool's entire output; only tall, top-level tools pin their header. */
+  toolOutput?: boolean;
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = useTranscriptDisclosure(stateKey ?? label, defaultOpen);
+  const root = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLDivElement>(null);
+  const restoreFocus = useRef(false);
+  const [tall, setTall] = useState(false);
+  const viewport = useTranscriptViewport();
+  useLayoutEffect(() => {
+    const el = root.current;
+    const scroller = el?.closest<HTMLElement>('[data-slot="transcript"]');
+    if (!toolOutput || !open || !el || !scroller) return;
+    const measure = () => setTall(el.offsetHeight > scroller.clientHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [toolOutput, open]);
+  useLayoutEffect(() => {
+    if (!restoreFocus.current) return;
+    restoreFocus.current = false;
+    heading.current?.querySelector("button")?.focus({ preventScroll: true });
+  });
+  const changeOpen = (next: boolean) => {
+    if (toolOutput && open && !next) {
+      const el = root.current;
+      const head = heading.current;
+      const scroller = el?.closest<HTMLElement>('[data-slot="transcript"]');
+      if (el && head && scroller) {
+        // Move the natural header to its visible position BEFORE removing the body. This also
+        // expresses reading intent when collapsing from the bottom, rather than following the
+        // shrinking transcript to its end. Never scroll ancestors (notably main on phones).
+        const top = Math.max(
+          head.getBoundingClientRect().top,
+          scroller.getBoundingClientRect().top,
+        );
+        scroller.scrollTop += el.getBoundingClientRect().top - top;
+        viewport?.scrolled();
+      }
+    }
+    // Opening swaps the title disclosure for Collapse; closing removes the bottom shortcut.
+    // Keep keyboard focus on the header in both cases, without a browser scrollIntoView.
+    if (toolOutput) restoreFocus.current = true;
+    setOpen(next);
+  };
   // A horizontal drag that starts on a header still opens the mobile sidebar; a tap folds.
-  const trigger = (
-    <CollapsibleTrigger asChild disabled={!canOpen}>
-      <button
-        type="button"
-        data-sidebar-swipe="true"
-        className={cn(disclosureRow, action && "w-auto flex-1", headerClassName)}
-      >
+  const trigger =
+    toolOutput && open ? (
+      <div className={cn("flex min-w-0 flex-1 items-center gap-2", headerClassName)}>
         {header}
-        {canOpen && <DisclosureChevron open={open} className="ml-auto" />}
-      </button>
-    </CollapsibleTrigger>
-  );
+        <CollapsibleTrigger asChild>
+          <Button
+            variant="ghost"
+            size="xs"
+            data-sidebar-swipe="true"
+            className="-my-1 ml-auto shrink-0"
+          >
+            Collapse
+          </Button>
+        </CollapsibleTrigger>
+      </div>
+    ) : (
+      <CollapsibleTrigger asChild disabled={!canOpen}>
+        <button
+          type="button"
+          data-sidebar-swipe="true"
+          className={cn(disclosureRow, action && "w-auto flex-1", headerClassName)}
+        >
+          {header}
+          {canOpen && <DisclosureChevron open={open} className="ml-auto" />}
+        </button>
+      </CollapsibleTrigger>
+    );
   const head = action ? (
     <div className="flex min-w-0 items-center gap-1">
       {trigger}
@@ -438,21 +501,43 @@ function FoldRow({
   const body = (
     <div className={cn(ruled && "border-l-2 border-line pl-3 text-ink-2", bodyClassName)}>
       {children}
+      {toolOutput && tall && (
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="xs" className="mt-2 -ml-2 self-start">
+            Collapse
+          </Button>
+        </CollapsibleTrigger>
+      )}
     </div>
   );
+  const headerRow = glyph === undefined ? head : <Row glyph={glyph}>{head}</Row>;
   return (
     <Collapsible
+      ref={root}
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={changeOpen}
       role="group"
       aria-label={label}
       className="text-sm"
       onClick={onClick}
       {...data}
     >
-      {glyph === undefined ? head : <Row glyph={glyph}>{head}</Row>}
+      {toolOutput ? (
+        // A normal-flow header bounded by this Collapsible, not a floating overlay. Nested
+        // tool details are plain content and never acquire their own sticky header.
+        <div
+          ref={heading}
+          data-slot="tool-header"
+          className={cn("py-1", open && tall && "sticky top-0 z-10 bg-conversation")}
+        >
+          {headerRow}
+        </div>
+      ) : (
+        headerRow
+      )}
       {canOpen && (
-        <CollapsibleContent className="disclosure-content">
+        // Tool collapse is immediate so virtual-row measurement cannot chase an exit animation.
+        <CollapsibleContent className={toolOutput ? undefined : "disclosure-content"}>
           {glyph === undefined ? (
             <div className="pt-2">{body}</div>
           ) : (
@@ -708,6 +793,7 @@ function DispatchRow({
       }
       label={`Dispatched session: ${title}`}
       stateKey={stateKey}
+      toolOutput
       canOpen={!!(params || answer || detail)}
       bodyClassName="flex flex-col gap-3"
       data={{ "data-slot": "dispatch-row", "data-session-id": sessionId ?? undefined }}
@@ -719,7 +805,7 @@ function DispatchRow({
           {clamp(params, 8000)}
         </pre>
       )}
-      {answer && <FoldedOutput stateKey={stateKey} text={answer} markdown failed={false} />}
+      {answer && <Markdown text={clamp(answer, 20000)} className="prose-chat" />}
     </FoldRow>
   );
 }
@@ -776,68 +862,6 @@ function ParentLink({ sessionId, cwd, label }: SessionDestination) {
     >
       {label}
     </a>
-  );
-}
-
-const PREVIEW_LINES = 5;
-
-/** Output folded to its first lines, with the rest on demand: a tool's text as it came, or a
- * session's answer as Markdown. */
-function FoldedOutput({
-  stateKey,
-  text,
-  markdown,
-  failed,
-  className,
-}: {
-  stateKey: string;
-  text: string;
-  markdown: boolean;
-  failed: boolean;
-  className?: string;
-}) {
-  const [all, setAll] = useTranscriptDisclosure(`${stateKey}:output`);
-  const lines = text.split("\n");
-  const shown = all ? lines : lines.slice(0, PREVIEW_LINES);
-  const hidden = lines.length - shown.length;
-  const visible = clamp(shown.join("\n"), all ? 20000 : 2000);
-  // A block, never a fragment: inside a flex column the fold button would stretch and centre.
-  return (
-    <div>
-      {markdown ? (
-        <Markdown text={visible} className={cn("prose-chat", className)} />
-      ) : (
-        <pre
-          className={cn(
-            "whitespace-pre-wrap break-all",
-            failed ? "text-err" : "text-ink-2",
-            className,
-          )}
-        >
-          {visible}
-        </pre>
-      )}
-      {hidden > 0 && (
-        <Button
-          variant="link"
-          size="xs"
-          onClick={() => setAll(true)}
-          className="mt-0.5 h-auto px-0 text-ink-3"
-        >
-          … {hidden} more {hidden === 1 ? "line" : "lines"}
-        </Button>
-      )}
-      {all && lines.length > PREVIEW_LINES && (
-        <Button
-          variant="link"
-          size="xs"
-          onClick={() => setAll(false)}
-          className="mt-0.5 h-auto px-0 text-ink-3"
-        >
-          Show less
-        </Button>
-      )}
-    </div>
   );
 }
 
@@ -929,6 +953,7 @@ function Tool({
       }
       label={`${call.name} tool call`}
       stateKey={call.id}
+      toolOutput
       ruled={false}
     >
       {details && (
@@ -938,13 +963,14 @@ function Tool({
       )}
       {output && (
         <div data-slot="tool-output" className={cn(details && "mt-1")}>
-          <FoldedOutput
-            stateKey={call.id}
-            text={output}
-            markdown={false}
-            failed={failed}
-            className="border-l-2 border-line py-1 pl-3"
-          />
+          <pre
+            className={cn(
+              "whitespace-pre-wrap break-all border-l-2 border-line py-1 pl-3",
+              failed ? "text-err" : "text-ink-2",
+            )}
+          >
+            {clamp(output, 20000)}
+          </pre>
         </div>
       )}
       {nested.map((child) => (
