@@ -748,10 +748,12 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
               Effect.match({
                 onSuccess: (result): SessionActionResult => ({
                   _tag: "preview_observed",
+                  ...(action.requestId !== undefined && { requestId: action.requestId }),
                   ...previewLogs(result, generation),
                 }),
                 onFailure: (error): SessionActionResult => ({
                   _tag: "preview_observed",
+                  ...(action.requestId !== undefined && { requestId: action.requestId }),
                   instanceId: observedPreview?.instanceId ?? null,
                   logs: "",
                   error: error.detail,

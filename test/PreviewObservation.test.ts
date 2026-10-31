@@ -58,7 +58,9 @@ function fakeSource(initial: AppState, disposition: SendDisposition = "sent") {
     },
   };
   const notices: { message: string; level: string }[] = [];
+  let requests = 0;
   const observation = createPreviewObservation({
+    newRequestId: () => `r${++requests}`,
     environment: {
       onFocus: (listener) => {
         focus = listener;
@@ -84,6 +86,16 @@ function fakeSource(initial: AppState, disposition: SendDisposition = "sent") {
       for (const listener of updates) listener();
     },
     deliver: (m: ServerMessage) => {
+      // The server echoes the request being answered; callers can supply an obsolete ID.
+      const latest = sent.at(-1);
+      if (
+        m._tag === "action_result" &&
+        m.result._tag === "preview_observed" &&
+        m.result.requestId === undefined &&
+        latest?._tag === "act" &&
+        latest.action._tag === "preview_status"
+      )
+        m = { ...m, result: { ...m.result, requestId: latest.action.requestId } };
       for (const listener of messages) listener(m);
     },
     focus: (at: number) => {
@@ -93,7 +105,7 @@ function fakeSource(initial: AppState, disposition: SendDisposition = "sent") {
   };
 }
 
-const STATUS = { _tag: "act", action: { _tag: "preview_status" } };
+const STATUS = { _tag: "act", action: { _tag: "preview_status", requestId: "r1" } };
 const observed = (instanceId: string | null = "i1", logs = "ready in 200ms"): ServerMessage => ({
   _tag: "action_result",
   cwd: "/repo",
@@ -122,6 +134,21 @@ test("an attachment observes once; changed session state does not poll; reattach
   f.set({ ...page({ preview: app }), selectionId: "sel-2" });
   assert.equal(f.sent.length, 2);
   assert.equal(f.observation.getState().details, null);
+});
+
+test("a late same-instance reply cannot settle a newer attachment's read", () => {
+  const f = fakeSource(page({ preview: app }));
+  f.set({ ...page({ preview: app }), selectionId: "sel-2" });
+  f.deliver({
+    _tag: "action_result",
+    cwd: "/repo",
+    sessionId: "s1",
+    result: { _tag: "preview_observed", requestId: "r1", instanceId: "i1", logs: "obsolete" },
+  });
+  assert.equal(f.observation.getState().refreshing, true);
+  assert.equal(f.observation.getState().details, null);
+  f.deliver(observed("i1", "current"));
+  assert.equal(f.observation.getState().details?.logs, "current");
 });
 
 test("nothing is observed without an app, for a peek, a closed session or while resyncing", () => {

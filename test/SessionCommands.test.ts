@@ -369,6 +369,7 @@ test("preview commands exist only while the selected session's live Pi owns an a
   assert.deepEqual(previewIds(base), []);
   const running = { ...base, session: session("/work/repo.feature", { preview: app() }) };
   assert.deepEqual(previewIds(running), [
+    ["show-preview", true],
     ["open-preview", true],
     ["preview-details", true],
     ["stop-preview", true],
@@ -377,10 +378,13 @@ test("preview commands exist only while the selected session's live Pi owns an a
   assert.deepEqual(open?.intent, { kind: "open-url", url: "http://localhost:5173/" });
   assert.equal(open?.detail, "localhost:5173");
   assert.deepEqual(sessionCommands(running).find((c) => c.id === "stop-preview")?.intent, {
-    kind: "send",
-    command: { _tag: "act", action: { _tag: "preview_stop", instanceId: "i1" } },
+    kind: "stop-preview",
+    instanceId: "i1",
+    selectionId: running.selectionId,
+    generation: null,
+    host: "localhost:5173",
   });
-  // The header's preview control offers open and stop itself; the menu does not repeat them.
+  // Preview lives in the rail/Surface, never in the header menu.
   assert.ok(
     !headerIds(sessionHeaderMenu(sessionCommands(running))).some((id) => id.includes("preview")),
   );
@@ -393,6 +397,7 @@ test("preview commands exist only while the selected session's live Pi owns an a
     }),
   };
   assert.deepEqual(previewIds(failed), [
+    ["show-preview", true],
     ["open-preview", false],
     ["preview-details", true],
     ["stop-preview", true],

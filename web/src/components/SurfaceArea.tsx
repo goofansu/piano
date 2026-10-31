@@ -24,7 +24,9 @@ const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 export function surfaceTabNames(tab: SurfaceTab) {
   return tab === "changes"
     ? { name: "Changes", close: "Hide changes", region: "Changes" }
-    : { name: fileName(tab.path), close: `Close ${fileName(tab.path)}`, region: "File viewer" };
+    : tab === "preview"
+      ? { name: "Preview", close: "Close preview", region: "Preview" }
+      : { name: fileName(tab.path), close: `Close ${fileName(tab.path)}`, region: "File viewer" };
 }
 
 /**

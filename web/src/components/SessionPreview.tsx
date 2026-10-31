@@ -1,15 +1,17 @@
 import type { SessionPreview } from "@shared/wire";
+import { cn } from "cn";
 import {
-  AppWindowIcon,
   CopyIcon,
   ExternalLinkIcon,
+  MoreHorizontalIcon,
   RefreshCwIcon,
   ScrollTextIcon,
   SquareIcon,
 } from "lucide-react";
-import { useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { useCommands, useSessionCommands } from "@/components/CommandHost";
+import { IconButton } from "@/components/IconButton";
 import { PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
@@ -24,14 +26,22 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
+import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
+import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Button } from "@/components/ui/button";
-import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Item, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
@@ -41,6 +51,7 @@ import {
   previewHost,
   selectedPreview,
 } from "@/lib/sessionPreview";
+import { useNavigation } from "@/lib/useNavigation";
 
 /** The app's state in the status dot's vocabulary; work in progress breathes. */
 const dotTone: Record<PreviewTone, StatusTone> = {
@@ -48,12 +59,6 @@ const dotTone: Record<PreviewTone, StatusTone> = {
   pending: "busy",
   problem: "err",
   idle: "muted",
-};
-const iconColor: Record<PreviewTone, string> = {
-  ready: "text-ok",
-  pending: "text-busy",
-  problem: "text-err",
-  idle: "text-ink-3",
 };
 
 function usePreviewObservation() {
@@ -82,7 +87,7 @@ function usePreviewCommands() {
   };
 }
 
-/** The dot and the word for the app's state, as the header, the menu and the details show it. */
+/** The dot and the word for the app's state, in Preview and its details. */
 function PreviewStatus({ preview, className }: { preview: SessionPreview; className?: string }) {
   const face = previewFace(preview);
   return (
@@ -93,76 +98,172 @@ function PreviewStatus({ preview, className }: { preview: SessionPreview; classN
   );
 }
 
-/**
- * The session header's preview control, shown only while the selected session's live Pi owns an
- * app: the app icon in the state's colour, breathing while the app starts or stops, and on desktop
- * the app's host (or its state while there is no link). It always opens the menu: status, Open,
- * Copy link, Details and Stop. Opening the menu re-observes the app.
- */
-export function SessionPreviewControl() {
-  const mobile = useIsMobile();
-  const { state } = useCommands();
-  const commands = usePreviewCommands();
-  const preview = selectedPreview(state);
-  if (!preview) return null;
+/** One owned app in the rail; opening externally is a sibling, never row activation. */
+export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
+  const navigation = useNavigation();
   const face = previewFace(preview);
-  const label = preview.url ? previewHost(preview.url) : face.label;
   return (
-    <DropdownMenu modal={false} onOpenChange={(open) => open && previewObservation.refresh()}>
-      <Tooltip>
-        <DropdownMenuTrigger asChild>
-          <TooltipTrigger asChild>
+    <RailList aria-label="App">
+      <Item
+        size="sm"
+        data-row
+        role="listitem"
+        className={cn(
+          railRow,
+          rowActionsWidth.list[preview.url ? 1 : 0],
+          "relative hover:bg-fill-hover focus-within:bg-fill-hover",
+        )}
+      >
+        <button
+          type="button"
+          aria-label="Show preview"
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left outline-none pointer-coarse:min-h-11"
+          onClick={() => {
+            navigation.openPreview();
+            previewObservation.refresh();
+          }}
+        >
+          <ItemMedia variant="icon">
+            <StatusDot tone={dotTone[face.tone]} pulse={face.tone === "pending"} />
+          </ItemMedia>
+          <ItemContent data-motion="yield" className="min-w-0 gap-0">
+            <RailRowTitle>Preview</RailRowTitle>
+            <ItemDescription className="line-clamp-none block truncate font-mono text-xs text-ink-3">
+              {preview.url ? previewHost(preview.url) : face.status}
+            </ItemDescription>
+          </ItemContent>
+        </button>
+        {preview.url && (
+          <RowActions className="top-1/2 right-1 -translate-y-1/2">
             <PianoButton
+              asChild
               variant="ghost"
-              size={mobile ? "icon-sm" : "sm"}
-              trailing
-              className={mobile ? "size-11" : "max-w-48"}
-              aria-label={`Preview: ${face.status}. Status and actions`}
+              size="list"
+              aria-label="Open preview in new tab"
+              title="Open preview in new tab"
             >
-              {/* The PR trigger's size and colour beside it; mono, as every host and branch is. */}
-              <AppWindowIcon
-                data-icon={mobile ? undefined : "inline-start"}
-                className={iconColor[face.tone]}
-                data-motion={face.tone === "pending" ? "pulse" : undefined}
-                aria-hidden
-              />
-              {!mobile && <span className="truncate font-mono">{label}</span>}
+              <a href={preview.url} target="_blank" rel="noopener noreferrer">
+                <ExternalLinkIcon />
+              </a>
             </PianoButton>
-          </TooltipTrigger>
-        </DropdownMenuTrigger>
-        <TooltipContent>Preview: {face.status}</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent align="end" collisionPadding={16} className="w-72">
-        <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <PreviewStatus preview={preview} className="flex items-center gap-2 text-foreground" />
-          <span className="truncate font-mono font-normal text-muted-foreground">
-            {preview.url ? preview.url : preview.detail || "No link until the app answers"}
-          </span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          {preview.url && (
-            <>
-              <DropdownMenuItem asChild>
+          </RowActions>
+        )}
+      </Item>
+    </RailList>
+  );
+}
+
+/** An app inspector, not an embedded browser. Navigation never owns the service lifetime. */
+export function PreviewPanel() {
+  const { shownTab, surfaceRequest } = useNavigation();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: repeated requests to show Preview are explicit observations too.
+  useEffect(() => {
+    if (shownTab === "preview") previewObservation.refresh();
+  }, [shownTab, surfaceRequest]);
+  const { state } = useCommands();
+  const preview = selectedPreview(state);
+  const commands = usePreviewCommands();
+  const observed = usePreviewObservation();
+  // Only a view that actually inspected this app can retain its confirmed stop. Closing the
+  // tab discards this identity; browser memory never restores a Preview tab.
+  const [viewedInstance, setViewedInstance] = useState(preview?.instanceId ?? null);
+  if (preview && preview.instanceId !== viewedInstance) setViewedInstance(preview.instanceId);
+  const stopped =
+    !preview &&
+    observed.terminal?.instanceId === viewedInstance &&
+    observed.terminal?.cwd === state.session?.cwd &&
+    observed.terminal?.sessionId === state.session?.sessionId;
+  return (
+    <SurfaceFrame
+      tab="preview"
+      actions={
+        preview && (
+          <>
+            {preview.url && (
+              <PianoButton asChild variant="ghost" size="sm">
                 <a href={preview.url} target="_blank" rel="noopener noreferrer">
-                  <ExternalLinkIcon aria-hidden /> Open preview
+                  Open in new tab
+                  <ExternalLinkIcon data-icon="inline-end" />
                 </a>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void copyLink(preview.url!)}>
-                <CopyIcon aria-hidden /> Copy link
-              </DropdownMenuItem>
+              </PianoButton>
+            )}
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <IconButton size="header" label="More preview actions">
+                  <MoreHorizontalIcon />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  {preview.url && (
+                    <DropdownMenuItem onSelect={() => void copyLink(preview.url!)}>
+                      <CopyIcon />
+                      Copy link
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onSelect={commands.details}>
+                    <ScrollTextIcon />
+                    Details
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={!commands.canStop}
+                    onSelect={commands.stop}
+                  >
+                    <SquareIcon className="fill-current" />
+                    Stop preview
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        )
+      }
+    >
+      <Empty>
+        <EmptyHeader>
+          {preview ? (
+            <>
+              <EmptyTitle>
+                <PreviewStatus
+                  preview={preview}
+                  className="flex items-center justify-center gap-2"
+                />
+              </EmptyTitle>
+              {preview.url && (
+                <EmptyDescription className="break-all font-mono">
+                  {previewHost(preview.url)}
+                </EmptyDescription>
+              )}
             </>
+          ) : (
+            <EmptyDescription>
+              {stopped ? "Preview stopped" : "Preview unavailable"}
+            </EmptyDescription>
           )}
-          <DropdownMenuItem onSelect={commands.details}>
-            <ScrollTextIcon aria-hidden /> Details
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={!commands.canStop} onSelect={commands.stop}>
-          <SquareIcon className="fill-current" aria-hidden /> Stop preview
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </EmptyHeader>
+        {preview && !preview.url && (
+          <EmptyContent>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={observed.refreshing || !sessionReady(state)}
+              aria-busy={observed.refreshing}
+              onClick={previewObservation.refresh}
+            >
+              <RefreshCwIcon
+                data-icon="inline-start"
+                className={observed.refreshing ? "animate-spin" : undefined}
+              />
+              Check status
+            </Button>
+          </EmptyContent>
+        )}
+      </Empty>
+    </SurfaceFrame>
   );
 }
 
@@ -196,6 +297,7 @@ function PreviewFacts({ preview }: { preview: SessionPreview }) {
         )}
       </Fact>
       {preview.url && <Fact label="Access">{previewAccess(preview)}</Fact>}
+      <Fact label="Observed">{new Date(preview.observedAt * 1000).toLocaleString()}</Fact>
       {preview.detail && <Fact label="Last check">{preview.detail}</Fact>}
       {preview.command.length > 0 && (
         <Fact label="Command">
@@ -290,7 +392,7 @@ export function PreviewDetailsDialog({
           {preview?.url && (
             <Button asChild>
               <a ref={openRef} href={preview.url} target="_blank" rel="noopener noreferrer">
-                Open preview
+                Open in new tab
                 <ExternalLinkIcon data-icon="inline-end" aria-hidden />
               </a>
             </Button>

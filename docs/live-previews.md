@@ -5,18 +5,34 @@ one app in that session's canonical workspace. The agent reads repository script
 reports local readiness and returns an ordinary preview link. **That live Pi process owns the app.**
 No service manifest, skill collection or Stop session control is required.
 
-While it owns an app, the session header shows an app icon in the state's colour, breathing while
-the app starts or stops, with the app's host beside it on desktop (its state while there is no
-link). It opens a menu with the status,
-**Open preview**, **Copy link**, **Details** and **Stop preview**; the command palette offers Open
-preview, Preview details and Stop preview. Piano reads the app's status
-from that session's owner, without starting Pi or launching anything: once per page attachment, when
-the person returns to the page and when the menu or details open. There is no polling. A failed read
-shows the status as unknown, not as stopped. After a failed start the owner reads the workspace
-again, so the header drops an app the start had already stopped and shows one it launched but could
-not observe as unknown. Stop names the exact instance it observed, so it can
-never stop a replacement. A saved, closed or restarted session shows no preview, even if its
-transcript still links one. Archive and Delete ask before stopping a session that owns an app.
+While the selected live session owns an app, its **session rail** has an **App** section. The
+**Preview** row shows a StatusDot and ready hostname, or its non-ready state. The row opens one
+**Preview** Surface tab beside Changes and files; its separate external-link action opens only a
+new browser tab. On narrow screens the same rail opens in a sheet, and selecting Preview dismisses
+it. The header has no separate app control. A newly appearing app never opens anything or steals focus.
+
+Preview is an app inspector, not an embedded browser. Its toolbar offers **Open in new tab** and
+**More preview actions**: **Copy link**, **Details**, then destructive **Stop preview**. Details holds
+the command, URL/access, observation time and bounded output; **Refresh** reads it again. Non-ready
+states offer **Check status**. The palette distinguishes **Show preview**, **Open preview in new tab**,
+**Preview details** and **Stop preview**. Embedding and Reload are separate work (PIN-96).
+
+Piano reads status from the session's owner without starting Pi or an app: on attachment/reconnect,
+return to the page, opening Preview/Details and explicit checks. Concurrent reads coalesce, focus
+reads retain their ten-second throttle, and there is no polling. Requests carry echoed observation
+IDs, and details are fenced to attachment, owner generation and instance. Disconnection or a failed
+read is unknown, not stopped; no external action remains usable from an uncertain observation.
+After a failed start the owner reads the workspace again, so the rail drops an app already stopped
+and keeps one launched but not observable as unknown.
+
+Stop asks for confirmation of the observed exact instance. A changed attachment, owner or instance
+invalidates that confirmation; server-side exact-instance reconciliation remains authoritative.
+Cancellation has no effect. Success removes the App row and answers once with a toast; an already-open
+Preview tab shows **Preview stopped**, without the old link. Failed stop keeps inspection available
+and reports the error. Closing a tab chooses its neighbour or returns to Agent and the enabled rail;
+showing the rail preserves covered tabs. Browser memory deliberately does not restore Preview tabs
+or disposable stopped state. A saved, closed or restarted session has no live row even if its
+transcript links an old app. Archive and Delete ask before stopping a session that owns an app.
 
 | Event | Outcome |
 | --- | --- |
@@ -96,7 +112,16 @@ after checkout deletion, without `realpath` of the missing directory.
 
 ## Agent recipe and helper
 
-1. Inspect repository instructions/scripts. Choose a foreground command with strict `127.0.0.1`
+1. Inspect the selected checkout's instructions, scripts and configuration, and identify its actual
+   application development/start entry point before launching. An app package within this checkout's
+   monorepo is supported; sibling checkouts, unrelated directories and temporary document directories
+   are not. Fixed cwd alone does not establish that a command runs the checkout's application.
+   This is not artifact publication or generic file hosting: never manufacture a listener for
+   standalone generated HTML, reports or other files, including an inline custom server or a package
+   script wrapping one. Use [file previews](file-previews.md) or artifact delivery instead; never
+   fall back to a shell server. Python applications and repository-native frontend dev servers are
+   supported—service purpose, not language, determines suitability.
+   Choose a foreground command with strict `127.0.0.1`
    binding, not a daemon or detached process. `command` is argv, not shell syntax; the executable
    may be absolute or a bare name resolved on the app PATH. `{port}` is substituted and `PORT`
    injected. For example:
@@ -144,6 +169,29 @@ Intent precedes supervisor submission. An interrupted observation never cancels 
 Absent never-observed submissions retain a 120-second reconciliation grace, because submission may
 still land; this is not an app expiry. Account-wide lock waits are bounded at 65s and the client
 observation at 120s. A disconnected client leaves work owned by its Pi generation.
+
+### Launch admission and trust limits
+
+The existing adapter's launch-validation seam rejects identifiable unsupported launches before
+supervisor submission and, for replacement, before stopping the current instance:
+
+- Direct `http-server`, `serve`, `static-server`, `live-server` invocations, including recognized
+  npx/npm-exec/pnpm-dlx/yarn-exec/bun-x and Node node_modules entry forms; Python's
+  `http.server`, `SimpleHTTPServer` and `CGIHTTPServer` module forms.
+- Explicit root arguments `--cwd`, `--prefix`, `--dir`, `--directory`, `--root`, `--app-dir`,
+  `--app`, `--chdir`, `-C`, recognized Vite/Next/Astro positional roots, and direct Node/Python
+  application-file arguments resolving outside the canonical checkout. Existing ancestors are
+  resolved too, so outward symlinks and missing paths beneath them cannot bypass these checks.
+
+An unsupported replacement leaves the existing instance running. Status, commandless reuse and
+exact-instance stop remain available for already-owned apps, including launches that no longer pass
+admission; restarting such a launch must pass today's checks.
+
+These are bounded recognition rules, not semantic proof of arbitrary argv or an execution sandbox.
+They do not inspect script bodies, certify entry-point provenance, or detect every wrapper/inline
+server. Agent instructions govern application selection, including wrapped generic hosting. Fixture
+tests prove enforced rules and lifecycle behavior, not arbitrary model compliance. No caller-selected
+cwd/owner, language allowlist or generic manifest framework is introduced.
 
 ## Ownership and death cleanup
 

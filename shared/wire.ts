@@ -431,7 +431,10 @@ export const SessionAction = Schema.Union([
     cancelled: Schema.optional(Schema.Boolean),
   }),
   /** Re-observe this generation's app without starting Pi or launching anything. */
-  Schema.TaggedStruct("preview_status", {}),
+  Schema.TaggedStruct("preview_status", {
+    /** Echoed in the observation so a late read cannot answer a newer attachment. */
+    requestId: Schema.optional(Schema.String),
+  }),
   /** Stop exactly this instance of this generation's app; Pi stays available. */
   Schema.TaggedStruct("preview_stop", { instanceId: Schema.String }),
 ]);
@@ -446,6 +449,7 @@ export const SessionActionResult = Schema.Union([
   /** Bounded, redacted logs of the app the observation found; empty when it found none. A failed
    * observation is `error`, never an absent app: the state then shows the preview as unknown. */
   Schema.TaggedStruct("preview_observed", {
+    requestId: Schema.optional(Schema.String),
     instanceId: Schema.NullOr(Schema.String),
     logs: Schema.String,
     error: Schema.optional(Schema.String),

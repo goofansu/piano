@@ -50,10 +50,14 @@ let held;
 let repo;
 let canonicalRepo;
 const env = { PIANO_PREVIEW_CONFIG: config, PIANO_PREVIEW_STATE: state };
-const request = (args) =>
+const request = (args, ownerPreview) =>
   JSON.parse(
     execFileSync(process.execPath, [join(ROOT, "scripts/preview.ts")], {
-      env: { PATH: "/usr/bin:/bin", ...env },
+      env: {
+        PATH: "/usr/bin:/bin",
+        ...env,
+        ...(ownerPreview && { PIANO_PREVIEW_OWNER: piFor(ownerPreview).endpoint }),
+      },
       input: JSON.stringify({ ...args, workspace: repo }),
       encoding: "utf8",
       timeout: 120_000,
@@ -133,7 +137,7 @@ const model = createServer(async (req, res) => {
     delta = {
       role: "assistant",
       content: app.ready
-        ? `PREVIEW_READY: [Open preview](${app.url})\nInstance ${app.instanceId}`
+        ? `PREVIEW_READY: [Open preview](${app.url})\nInstance ${app.instanceId}\n[App source](app.mjs)`
         : app.stopped
           ? "PREVIEW_STOPPED"
           : `PREVIEW_FAILED: ${tool.content}`,
@@ -168,8 +172,31 @@ try {
     ({ repository, root }) => {
       repo = repository("app");
       canonicalRepo = realpathSync(repo);
-      writeFileSync(join(repo, "index.html"), "<h1>Preview journey v1</h1>");
-      command = [process.execPath, join(repo, "app.mjs"), "{port}"];
+      // A checkout-native frontend application with an inspected dev entry point, not a
+      // generated report hosted just to obtain a URL. The scripted model tests tool plumbing,
+      // not whether an arbitrary model follows launch guidance.
+      writeFileSync(
+        join(repo, "package.json"),
+        JSON.stringify({
+          name: "preview-journey-app",
+          private: true,
+          type: "module",
+          scripts: { dev: "node app.mjs" },
+        }),
+      );
+      writeFileSync(
+        join(repo, "index.html"),
+        '<h1>Preview journey v1</h1><button id="count">Count: 0</button><script type="module" src="/src.js"></script>',
+      );
+      writeFileSync(
+        join(repo, "src.js"),
+        'let count=0; document.querySelector("#count").onclick = e => { e.target.textContent = "Count: " + ++count; };',
+      );
+      assert.equal(
+        JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).scripts.dev,
+        "node app.mjs",
+      );
+      command = [process.execPath, "app.mjs", "{port}"];
       writeFileSync(
         join(repo, "app.mjs"),
         `
@@ -239,47 +266,203 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         );
         assert.ok(link.includes(app.url), link);
         assert.ok(link.includes('target="_blank"'), link);
-        // The session header names the app's state and offers it without reading the transcript.
-        const RUNNING = "Preview: Running. Status and actions";
-        const headerPreview = () =>
+        const railPreview = () =>
           page.evaluate(
-            "document.querySelector('header button[aria-label^=\"Preview:\"]')?.getAttribute('aria-label') ?? null",
+            "!!document.querySelector('[data-slot=session-rail] button[aria-label=\"Show preview\"]')",
           );
-        const menuLink = () =>
-          page.evaluate(
-            "(a => a && { href: a.href, target: a.target })([...document.querySelectorAll('[role=menu] a')].find(a => a.textContent.includes('Open preview')))",
+        const showRail = async () => {
+          if (!(await railPreview())) await page.click("button", "Show session rail");
+          await page.until(
+            "!!document.querySelector('[data-slot=session-rail] button[aria-label=\"Show preview\"]')",
           );
-        await page.until("!!document.querySelector('header button[aria-label^=\"Preview:\"]')");
-        assert.equal(await headerPreview(), RUNNING);
-        await page.capture("1b-header-preview");
-        await page.click("button", RUNNING);
-        await page.see("Details");
-        assert.deepEqual(await menuLink(), { href: app.url, target: "_blank" });
+        };
+        const showPreview = async () => {
+          await showRail();
+          await page.click("button", "Show preview");
+          await page.until(
+            "!!document.querySelector('[data-slot=surface-area]:not([inert]) section[aria-label=Preview]')",
+          );
+        };
+        const more = async () => {
+          await page.until("!document.querySelector('[data-sonner-toast]')");
+          await page.click("button", "More preview actions");
+        };
+        assert.equal(
+          await page.evaluate(
+            "!!document.querySelector('header button[aria-label^=\"Preview:\"]')",
+          ),
+          false,
+        );
+        assert.equal(
+          await page.evaluate("!!document.querySelector('[data-slot=surface-area]:not([inert])')"),
+          false,
+          "appearing app never opens Surface",
+        );
+        await showRail();
+        assert.equal(
+          await page.evaluate(
+            "document.querySelector('[data-slot=session-rail] a[aria-label=\"Open preview in new tab\"]')?.target",
+          ),
+          "_blank",
+        );
+        await page.ab("fill", '[aria-label="Message"]', "Keep my draft");
+        await page.ab("upload", 'input[type="file"]', join(evidence, "1-settled-preview-link.png"));
+        await page.capture("1b-rail-preview");
+        // Sibling keyboard targets: the row inspects, its link only opens a browser tab.
+        await page.ab("focus", '[data-slot=session-rail] button[aria-label="Show preview"]');
+        await page.press("Tab");
+        assert.equal(
+          await page.evaluate("document.activeElement?.getAttribute('aria-label')"),
+          "Open preview in new tab",
+        );
+        await page.press("Enter");
+        await page.capture("1b-external-row-answer");
+        observations.push({ externalRowTabs: await page.ab("tab", "list") });
+        await page.ab("tab", "close");
+        assert.equal(
+          await page.evaluate("!!document.querySelector('[data-slot=surface-area]:not([inert])')"),
+          false,
+          "external row action never selects Preview",
+        );
+        await page.click("button", "App");
+        await page.capture("1b-app-folded");
+        await page.click("button", "App");
+        await page.click("button", "Show preview");
+        await page.capture("1c-preview-surface");
+        await page.click("link", "Open in new tab");
+        await page.capture("1c-toolbar-external-answer");
+        await page.ab("tab", "close");
+        await page.click("button", "Changes");
+        await page.click("button", "App source");
+        await page.press("Mod+K");
+        await page.ab("fill", "[cmdk-input]", "Show preview");
+        await page.until(
+          "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
+        );
+        await page.click("option", "Show preview");
+        await page.capture("1c-preview-and-changes");
+        await page.click("button", "Show session rail");
+        await page.capture("1c-rail-covers-tabs");
+        await page.click("button", "Show preview");
+        assert.equal(
+          await page.evaluate("document.querySelector('[aria-label=Message]').value"),
+          "Keep my draft",
+        );
+        assert.ok(
+          await page.evaluate(
+            "!!document.querySelector('[aria-label=\"Remove 1-settled-preview-link.png\"]')",
+          ),
+        );
+        await page.click("button", "Remove 1-settled-preview-link.png");
+        await page.ab("fill", '[aria-label="Message"]', "");
+        await page.click("button", "Close app.mjs");
+        await page.click("button", "Hide changes");
+        await page.until(
+          "document.activeElement?.getAttribute('role') === 'tab' && document.activeElement.textContent.includes('Preview')",
+        );
+        await more();
         await page.capture("1c-preview-menu");
         await page.click("menuitem", "Details");
         await page.see("Output");
-        // Enter in the details opens the app; it never stops it.
         await page.until(
-          "document.activeElement?.tagName === 'A' && document.activeElement.textContent.includes('Open preview')",
+          "document.activeElement?.tagName === 'A' && document.activeElement.textContent.includes('Open in new tab')",
         );
-        // Re-observed on opening: the app's own output, not the agent's transcript.
         await page.until(
           "/VITE|ready in/i.test(document.querySelector('[role=dialog] pre')?.textContent ?? '')",
         );
+        await page.click("button", "Refresh");
+        await page.until(
+          "document.querySelector('[role=dialog] button[aria-busy]')?.getAttribute('aria-busy') === 'false'",
+        );
         await page.capture("1d-preview-details");
+        await page.click("link", "Open in new tab");
+        await page.capture("1d-details-external-answer");
+        await page.ab("tab", "close");
         await page.press("Escape");
         await page.until("!document.querySelector('[role=dialog]')");
+        await more();
+        await page.click("menuitem", "Copy link");
+        await page.see("Preview link copied");
+        await page.capture("1e-copy-feedback");
+        await more();
+        await page.click("menuitem", "Stop preview");
+        await page.see("Stop preview?");
+        await page.capture("1f-stop-confirmation");
+        await page.click("button", "Cancel");
+        assert.equal(request({ action: "status" }).instanceId, identity);
         await page.press("Mod+K");
         await page.ab("fill", "[cmdk-input]", "preview");
         await page.until(
           "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
         );
-        for (const label of ["Open preview", "Preview details", "Stop preview"])
+        for (const label of [
+          "Show preview",
+          "Open preview in new tab",
+          "Preview details",
+          "Stop preview",
+        ])
           await page.until(
             `[...document.querySelectorAll('[cmdk-item]')].some(o => o.textContent.includes(${JSON.stringify(label)}))`,
           );
-        await page.capture("1e-palette-preview-commands");
+        await page.capture("1g-palette-preview-commands");
+        await page.click("option", "Preview details");
+        await page.see("Output");
+        await page.capture("1g-palette-details-answer");
         await page.press("Escape");
+        const previewCommand = async (label) => {
+          await page.press("Mod+K");
+          await page.ab("fill", "[cmdk-input]", label);
+          await page.until(
+            "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
+          );
+          await page.ab("find", "role", "option", "click", "--name", label);
+        };
+        await previewCommand("Open preview in new tab");
+        await page.capture("1g-palette-external-answer");
+        await page.ab("tab", "close");
+        await previewCommand("Stop preview");
+        await page.see("Stop preview?");
+        await page.capture("1g-palette-stop-answer");
+        await page.click("button", "Cancel");
+
+        // An unreadable scratch intent is an observation/stop error, not absence. The service
+        // still belongs to its live owner. Restore the external boundary before any cleanup.
+        const intentPath = join(state, first.serviceId + ".json");
+        const intent = readFileSync(intentPath, "utf8");
+        try {
+          writeFileSync(intentPath, "unreadable scratch intent");
+          await more();
+          await page.click("menuitem", "Details");
+          await page.see("Status unavailable");
+          await page.capture("1h-unknown-details");
+          await page.press("Escape");
+          await page.click("button", "Check status");
+          await page.capture("1h-check-status");
+          await more();
+          await page.click("menuitem", "Stop preview");
+          await page.click("button", "Stop preview");
+          await page.until("!!document.querySelector('[data-sonner-toast][data-type=error]')");
+          await page.capture("1h-failed-stop");
+          await page.until("!document.querySelector('[data-sonner-toast]')");
+          assert.ok(running(first.testPids[0]), "failed stop keeps app inspectable and alive");
+        } finally {
+          writeFileSync(intentPath, intent);
+        }
+        await page.click("button", "Check status");
+        await page.until("!!document.querySelector('section[aria-label=Preview] a')");
+
+        // Another session in this same checkout cannot discover or adopt the owner's app.
+        await page.open("/new");
+        await page.ab("fill", '[aria-label="First message"]', "status");
+        await page.until("document.querySelector('[aria-label=Send]')?.disabled === false");
+        await page.click("button", "Send");
+        await page.see("PREVIEW_READY");
+        // The transcript can link the workspace app; it is still not this session's live row.
+        assert.equal(await railPreview(), false);
+        await page.capture("1i-non-owning-session");
+        await page.open(sessionPath);
+        await showPreview();
+        app = first;
 
         // On a Mac the link itself is opened. External exe.dev login is intentionally not bypassed:
         // there, local browser load is a separate claim.
@@ -307,18 +490,50 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.open(sessionPath);
         await page.until("!!document.querySelector('[aria-label=Message]')");
         // A reload while the owner lives finds the same instance, without launching another.
-        await page.until("!!document.querySelector('header button[aria-label^=\"Preview:\"]')");
-        assert.equal(await headerPreview(), RUNNING);
+        await showPreview();
         assert.equal(request({ action: "status" }).instanceId, identity);
-        await page.click("button", RUNNING);
-        await page.see("Details");
-        assert.deepEqual(await menuLink(), { href: first.url, target: "_blank" });
         await page.capture("2b-reload-same-preview");
+        await page.ab("set", "viewport", "390", "844");
+        await page.click("button", "Close preview");
+        await showRail();
+        await page.capture("2b-narrow-rail");
+        await page.click("button", "Show preview");
+        await page.until("!document.querySelector('[role=dialog]')");
+        await page.capture("2b-narrow-preview");
+        await page.click("link", "Open in new tab");
+        await page.capture("2b-narrow-external-answer");
+        await page.ab("tab", "close");
+        await more();
+        await page.click("menuitem", "Details");
+        await page.capture("2b-narrow-details");
+        await page.press("Escape");
+        await more();
+        await page.click("menuitem", "Copy link");
+        await page.see("Preview link copied");
+        await page.capture("2b-narrow-copy");
+        await more();
+        await page.capture("2b-narrow-menu");
         await page.click("menuitem", "Stop preview");
+        await page.see("Stop preview?");
+        await page.capture("2b-narrow-stop-confirmation");
+        await page.click("button", "Stop preview");
         await page.see("Preview stopped");
-        await gone(first, "explicit Stop preview in the session header");
-        await page.until("!document.querySelector('header button[aria-label^=\"Preview:\"]')");
-        assert.equal(observations.filter((o) => o.ready).length, 1, "Stop never relaunches");
+        await gone(first, "confirmed Stop preview in narrow Surface");
+        await page.until(
+          "document.querySelector('section[aria-label=Preview]')?.textContent.includes('Preview stopped')",
+        );
+        await page.capture("2b-narrow-stopped");
+        await page.until("!document.querySelector('[data-sonner-toast]')");
+        await page.click("button", "Close preview");
+        await page.until("document.activeElement?.hasAttribute('data-rail-trigger')");
+        await page.capture("2b-narrow-agent");
+        await page.ab("set", "viewport", "1280", "900");
+        await page.until("!document.querySelector('section[aria-label=Preview] a')");
+        assert.equal(
+          new Set(observations.filter((o) => o.ready).map((o) => o.instanceId)).size,
+          1,
+          "Stop never relaunches",
+        );
         // Pi stays available: the composer is still live and the session still answers.
         await page.ab("fill", '[aria-label="Message"]', "status");
         await page.click("button", "Send");
@@ -346,6 +561,58 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           );
           return app;
         };
+        const replacing = await launch();
+        await showPreview();
+        await more();
+        await page.click("menuitem", "Stop preview");
+        await page.see("Stop preview?");
+        // A concurrent owner request replaces the app while the browser confirmation is open.
+        const replacement = request(
+          { action: "start", replace: replacing.instanceId, command, env: appEnv },
+          replacing,
+        );
+        replacement.testPids = JSON.parse(readFileSync(join(repo, "app-processes.json"), "utf8"));
+        assert.notEqual(replacement.instanceId, replacing.instanceId);
+        await page.until(
+          "[...document.querySelectorAll('[role=dialog] button')].find(b => b.textContent === 'Stop preview')?.disabled === true",
+        );
+        await page.capture("3a-replacement-fences-confirmation");
+        assert.equal(request({ action: "status" }).instanceId, replacement.instanceId);
+        await page.click("button", "Cancel");
+        await page.capture("3b-replacement-current-view");
+        observations.push({ replacement: replacement.instanceId, replaced: replacing.instanceId });
+        // Keep this owner active while inspecting a terminal app: this scratch instance's
+        // two-second idle retirement deliberately releases failed/exited apps as well.
+        await page.ab("fill", '[aria-label="Message"]', "hold");
+        await page.click("button", "Send");
+        await page.until("!!document.querySelector('[aria-label=Stop]')");
+        // Native nonzero app termination remains inspectable rather than disappearing.
+        process.kill(replacement.testPids[0], "SIGKILL");
+        await gone(replacement, "application failure cleans its children");
+        request({ action: "status" }, replacement);
+        await page.see("Failed");
+        await page.capture("3c-failed-preview");
+        await page.click("button", "Check status");
+        await more();
+        await page.click("menuitem", "Details");
+        await page.capture("3d-failed-details");
+        await page.press("Escape");
+        await more();
+        await page.click("menuitem", "Stop preview");
+        await page.click("button", "Stop preview");
+        await page.until(
+          "document.querySelector('section[aria-label=Preview]')?.textContent.includes('Preview stopped')",
+        );
+        await page.capture("3e-desktop-stopped");
+        await page.click("button", "Stop");
+        held?.end();
+        const ended = await launch();
+        await showPreview();
+        process.kill(piFor(ended).pid, "SIGKILL");
+        await gone(ended, "owner exit while Preview stays open");
+        await page.see("Preview unavailable");
+        await page.capture("3f-owner-ended-open-view");
+        assert.equal(await railPreview(), false);
         const killed = await launch();
         assert.notEqual(killed.owner.generation, first.owner.generation);
         await page.ab("close");
@@ -373,7 +640,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           true,
           "reopen never adopts/relaunches",
         );
-        assert.equal(await headerPreview(), null, "a restarted Piano shows no stale preview");
+        assert.equal(await railPreview(), false, "a restarted Piano shows no stale preview");
         await page.capture("4-reopened-without-preview");
 
         const chooseCommand = async (label) => {

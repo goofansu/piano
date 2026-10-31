@@ -114,7 +114,8 @@ test("the tool's app reaches the session state; the browser re-observes and stop
 
       // Unavailable supervision is unknown: not stopped, and not openable.
       f.host.unavailable = true;
-      const failed = yield* session.act({ _tag: "preview_status" });
+      const failed = yield* session.act({ _tag: "preview_status", requestId: "failed-read" });
+      assert.equal(failed?._tag === "preview_observed" && failed.requestId, "failed-read");
       assert.equal(failed?._tag === "preview_observed" && failed.instanceId, app.instanceId);
       assert.match((failed?._tag === "preview_observed" && failed.error) || "", /unavailable/);
       const unknown = (yield* session.state).preview;
@@ -123,8 +124,16 @@ test("the tool's app reaches the session state; the browser re-observes and stop
       f.host.unavailable = false;
 
       assert.deepEqual(
-        { ...(yield* session.act({ _tag: "preview_status" })), logs: "" },
-        { _tag: "preview_observed", instanceId: app.instanceId, logs: "" },
+        {
+          ...(yield* session.act({ _tag: "preview_status", requestId: "current-read" })),
+          logs: "",
+        },
+        {
+          _tag: "preview_observed",
+          requestId: "current-read",
+          instanceId: app.instanceId,
+          logs: "",
+        },
       );
       assert.equal((yield* session.state).preview?.state, "failed");
 

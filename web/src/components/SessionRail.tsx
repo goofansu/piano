@@ -21,6 +21,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { SessionLinks, SessionLinksBrowser } from "@/components/SessionLinks";
 import { SessionOutputs } from "@/components/SessionOutputs";
+import { PreviewRailRow } from "@/components/SessionPreview";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -30,6 +31,7 @@ import { pullRequestView } from "@/lib/pullRequestView";
 import { type EnvironmentRowKind, environmentRowMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { type SessionLink, sessionLinks } from "@/lib/sessionLinks";
+import { selectedPreview } from "@/lib/sessionPreview";
 import type { TranscriptViewport } from "@/lib/transcriptViewport";
 import { usePreference } from "@/lib/usePreference";
 import { useSessionFiles } from "@/lib/useSessionFiles";
@@ -37,8 +39,8 @@ import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { type AppState, sessionKey } from "@/store";
 
 /** The rail's sections, each folding on its own. */
-type RailSectionName = "workspace" | "outputs" | "links";
-const SECTIONS: readonly RailSectionName[] = ["workspace", "outputs", "links"];
+type RailSectionName = "workspace" | "app" | "outputs" | "links";
+const SECTIONS: readonly RailSectionName[] = ["workspace", "app", "outputs", "links"];
 
 /** The sections the user folded, remembered across sessions and reloads; every section starts
  * open. The key predates the rail's name. */
@@ -187,6 +189,7 @@ function RailSections({
   showAllRef: React.Ref<HTMLButtonElement>;
 }) {
   const session = state.session;
+  const preview = selectedPreview(state);
   const { cwd, branch, detachedHead, githubRepo, branchUrl, pullRequest } = sessionContext(state);
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;
@@ -255,6 +258,11 @@ function RailSections({
           )}
         </RailList>
       </RailSection>
+      {preview && (
+        <RailSection title="App" {...group("app")}>
+          <PreviewRailRow preview={preview} />
+        </RailSection>
+      )}
       {files.length > 0 && (
         <RailSection title="Outputs" {...group("outputs")}>
           <SessionOutputs files={files} cwd={cwd} />

@@ -18,7 +18,7 @@ import {
   sessionWorking,
   workspaceFor,
 } from "./sessionContext.ts";
-import { previewHost, selectedPreview, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
+import { previewHost, selectedPreview, sessionHasPreview } from "./sessionPreview.ts";
 
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
@@ -44,6 +44,7 @@ export type SessionCommandId =
   | "agent"
   | "wrap-changes"
   | "pull-request"
+  | "show-preview"
   | "open-preview"
   | "preview-details"
   | "stop-preview"
@@ -89,6 +90,14 @@ export type SessionCommandIntent =
   | { kind: "pull-request"; linked: boolean }
   /** Open the app in a new tab. */
   | { kind: "open-url"; url: string }
+  | {
+      kind: "stop-preview";
+      instanceId: string;
+      selectionId: string | null;
+      generation: string | null;
+      host: string;
+    }
+  | { kind: "show-preview" }
   | { kind: "preview-details" }
   /** Turn Messages only on or off. */
   | { kind: "messages-only"; on: boolean }
@@ -478,8 +487,16 @@ function previewCommands(state: AppState): SessionCommand[] {
   if (!preview) return [];
   return [
     {
+      id: "show-preview",
+      label: "Show preview",
+      icon: "preview",
+      enabled: true,
+      keywords: ["app", "inspect"],
+      intent: { kind: "show-preview" },
+    },
+    {
       id: "open-preview",
-      label: "Open preview",
+      label: "Open preview in new tab",
       icon: "preview",
       enabled: !!preview.url,
       keywords: ["app", "run", "localhost"],
@@ -500,7 +517,13 @@ function previewCommands(state: AppState): SessionCommand[] {
       icon: "stop",
       enabled: sessionReady(state),
       keywords: ["app", "kill"],
-      intent: { kind: "send", command: stopPreview(preview) },
+      intent: {
+        kind: "stop-preview",
+        instanceId: preview.instanceId,
+        selectionId: state.selectionId,
+        generation: state.session?.cursor?.generation ?? null,
+        host: preview.url ? previewHost(preview.url) : "this app",
+      },
     },
   ];
 }

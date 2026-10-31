@@ -8,7 +8,7 @@ import type { ClientCommand, ServerMessage } from "../../../shared/wire.ts";
 import { type AppState, isSession } from "../store.ts";
 import { browserEnvironment, type ObservationEnvironment } from "./observation.ts";
 import { sessionReady } from "./sessionContext.ts";
-import { PREVIEW_STATUS, selectedPreview } from "./sessionPreview.ts";
+import { previewStatus, selectedPreview } from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
 /** The last details answer for one session's app. */
@@ -62,9 +62,11 @@ const empty = (): PreviewObservationState => ({ refreshing: false, details: null
 export function createPreviewObservation({
   environment = browserEnvironment,
   now = () => Date.now(),
+  newRequestId = () => crypto.randomUUID(),
 }: {
   environment?: Pick<ObservationEnvironment, "onFocus">;
   now?: () => number;
+  newRequestId?: () => string;
 } = {}): PreviewObservation {
   let state = empty();
   const listeners = new Set<() => void>();
@@ -91,7 +93,7 @@ export function createPreviewObservation({
       let instanceId: string | null = null;
       // A stop publishes the preview-less session state before its caller-only result arrives.
       let lastInstance: string | null = null;
-      let pending: object | null = null;
+      let pending: string | null = null;
       let focusedAt = Number.NEGATIVE_INFINITY;
       const notified = new Set<string>();
 
@@ -134,10 +136,10 @@ export function createPreviewObservation({
         reconcile();
         if (!attachment || !instanceId || pending || state.terminal) return;
         // Claim before sending: send may synchronously disconnect or deliver its answer.
-        const request = {};
+        const request = newRequestId();
         pending = request;
         set({ ...state, refreshing: true });
-        if (followed.send(PREVIEW_STATUS) === "not-sent" && pending === request) {
+        if (followed.send(previewStatus(request)) === "not-sent" && pending === request) {
           pending = null;
           set({ ...state, refreshing: false });
         }
@@ -156,10 +158,16 @@ export function createPreviewObservation({
         reconcile();
         const onScreen = attachment !== null && isSession(followed.getState().session, m);
         if (m.result._tag === "preview_observed") {
-          // Results carry no selection, generation or request ID. Exact current app identity and
-          // an outstanding read are necessary; same-instance replies across reattachment remain
-          // indistinguishable until the wire carries the originating attachment/request identity.
-          if (!onScreen || !pending || !instanceId || m.result.instanceId !== instanceId) return;
+          // Both the exact app and the outstanding read must match: a same-instance answer
+          // from an earlier attachment must not settle this attachment's newer read.
+          if (
+            !onScreen ||
+            !pending ||
+            m.result.requestId !== pending ||
+            !instanceId ||
+            m.result.instanceId !== instanceId
+          )
+            return;
           pending = null;
           const { logs, error } = m.result;
           set({
