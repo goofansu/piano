@@ -40,7 +40,7 @@ const sessions = [
   session("/beta-2", "c1", "Carol", 7),
 ];
 
-test("sidebar view: date sections use inclusive calendar boundaries, omit empties and lose no unknown dates", () => {
+test("sidebar view: each of the last seven days is its own section, named by date; the rest is Older", () => {
   const previousTZ = process.env.TZ;
   process.env.TZ = "America/New_York";
   try {
@@ -52,10 +52,12 @@ test("sidebar view: date sections use inclusive calendar boundaries, omit emptie
       ],
       [
         datedSession("two", "2026-03-29T23:59:59-04:00"),
-        datedSession("seven", "2026-03-24T00:00:00-04:00"),
-        datedSession("eight", "2026-03-23T23:59:59-04:00"),
+        datedSession("two early", "2026-03-29T00:00:00-04:00"),
+        datedSession("four", "2026-03-27T12:00:00-04:00"),
+        datedSession("six", "2026-03-25T00:00:00-04:00"),
+        datedSession("seven", "2026-03-24T23:59:59-04:00"),
         datedSession("thirty", "2026-03-01T00:00:00-05:00"),
-        datedSession("older", "2026-02-28T23:59:59-05:00"),
+        datedSession("last year", "2025-03-31T12:00:00-04:00"),
         datedSession("missing"),
         datedSession("invalid", "not a date"),
         datedSession("empty", ""),
@@ -63,15 +65,17 @@ test("sidebar view: date sections use inclusive calendar boundaries, omit emptie
     ];
     const result = dateGroups(input.flat(), "recent", new Date("2026-03-31T00:05:00-04:00"));
     assert.deepEqual(
-      result.map((g) => [g.label, titles(g.sessions)]),
+      result.map((g) => [g.key, g.label, titles(g.sessions)]),
       [
-        ["Today", ["future", "today"]],
-        ["Yesterday", ["yesterday"]],
-        ["Previous 7 days", ["two", "seven"]],
-        ["Previous 30 days", ["eight", "thirty"]],
-        ["Older", ["older"]],
-        ["Unknown date", ["invalid", "empty", "missing"]],
+        ["Today", "Today", ["future", "today"]],
+        ["Yesterday", "Yesterday", ["yesterday"]],
+        ["2026-03-29", "Mar 29", ["two", "two early"]],
+        ["2026-03-27", "Mar 27", ["four"]],
+        ["2026-03-25", "Mar 25", ["six"]],
+        ["Older", "Older", ["seven", "thirty", "last year"]],
+        ["Unknown date", "Unknown date", ["invalid", "empty", "missing"]],
       ],
+      "a day without sessions (Mar 28, Mar 26) has no section; the seventh day back is already Older",
     );
     assert.equal(result.flatMap((g) => g.sessions).length, input.flat().length);
     assert.deepEqual(
@@ -90,8 +94,17 @@ test("sidebar view: date sections use inclusive calendar boundaries, omit emptie
       "empty buckets are omitted and Name sorts within, not across, sections",
     );
     const byName = dateGroups(input.flat(), "name", new Date("2026-03-31T12:00:00-04:00"));
-    assert.deepEqual(titles(byName[2]!.sessions), ["seven", "two"]);
+    assert.deepEqual(titles(byName[2]!.sessions), ["two", "two early"]);
     assert.equal(input[0]![0]!.title, "today", "input order is preserved");
+    // A day heading crosses a month or year boundary like any other calendar day.
+    assert.deepEqual(
+      dateGroups(
+        [datedSession("new year's eve", "2026-12-31T20:00:00-05:00")],
+        "recent",
+        new Date("2027-01-02T09:00:00-05:00"),
+      ).map((g) => [g.key, g.label]),
+      [["2026-12-31", "Dec 31"]],
+    );
   } finally {
     if (previousTZ === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZ;
@@ -113,7 +126,7 @@ test("sidebar view: local midnight and both DST transitions are calendar days, n
       ]),
       [
         ["Yesterday", ["early Sunday"]],
-        ["Previous 7 days", ["late Saturday"]],
+        ["Mar 7", ["late Saturday"]],
       ],
       "a time less than 24 hours ago can be two calendar days ago at spring-forward",
     );

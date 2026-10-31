@@ -738,7 +738,7 @@ test("sidebar list: date sections roll over at local midnight and after the page
   time.jump(new Date(2026, 9, 6, 9));
   assert.deepEqual(labels(), ["date:Yesterday"]);
   time.resume();
-  assert.deepEqual(labels(), ["date:Previous 7 days"]);
+  assert.deepEqual(labels(), ["date:2026-10-02"], "a day group is keyed by its calendar date");
   const settled = changes();
   time.resume();
   assert.equal(changes(), settled, "a wake on the same day changes nothing");
@@ -747,5 +747,5 @@ test("sidebar list: date sections roll over at local midnight and after the page
   assert.equal(time.pendingAt(), null, "stopping cancels the timer");
   time.jump(new Date(2026, 10, 30));
   time.resume();
-  assert.deepEqual(labels(), ["date:Previous 7 days"], "and no longer follows the clock");
+  assert.deepEqual(labels(), ["date:2026-10-02"], "and no longer follows the clock");
 });

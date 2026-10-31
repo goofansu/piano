@@ -16,8 +16,8 @@ import {
 import { folderFor, inSidebarGroups, type SessionEntry, sessionCatalog } from "./sessionCatalog.ts";
 import { sessionReference } from "./sessionContext.ts";
 import {
+  dateGroup,
   dateGroups,
-  dateLabel,
   folderGroups,
   projectGroups,
   type SidebarView,
@@ -143,7 +143,7 @@ const NO_SESSIONS = "No sessions yet. Start one and it appears here.";
 
 /** Project groups share the open set with folders, keyed apart from paths; the empty id is the No project group. */
 const projectKey = (id: string) => `project:${id}`;
-const dateKey = (label: string) => `date:${label}`;
+const dateKey = (group: string) => `date:${group}`;
 const isDateKey = (key: string) => key.startsWith("date:");
 const localMidnight = (date: Date, days = 0) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
@@ -166,7 +166,7 @@ function startingKey(state: AppState, cwd: string, view: SidebarView, today: Dat
     case "folder":
       return folderFor(state, cwd)?.path;
     case "date":
-      return dateKey(dateLabel(today.toISOString(), today));
+      return dateKey(dateGroup(today.toISOString(), today).key);
     default:
       return undefined;
   }
@@ -251,8 +251,8 @@ function buildList(
       const groups = dateGroups(listed, view.sortBy, today);
       if (groups.length === 0) return empty(NO_SESSIONS);
       return sections(
-        groups.map(({ label, sessions }) => {
-          const key = dateKey(label);
+        groups.map(({ key: group, label, sessions }) => {
+          const key = dateKey(group);
           const details = rowDetails(view, sessions);
           return { kind: "date", key, open: isOpen(key), label, sessions, details };
         }),

@@ -60,6 +60,8 @@ Let `D` be today's local midnight and `asOf` the captured current instant:
 | Older | Before `D − 30 calendar days`, limited to retained history |
 | Unknown date | Usage with no valid attributable date; separate from dated totals |
 
+> **Superseded on 2026-10-31:** the sidebar now names each of the last seven local calendar days (Today, Yesterday, then "Oct 29" and so on) and files the rest under Older; see `dateGroups` in `sidebarView.ts`. A usage board should follow those day groups, not the table above.
+
 Keep these labels and boundaries. Put exact dates and timezone on demand; do not silently interpret Previous 7 days as today plus the last six days. Preserve DST-aware calendar arithmetic and one timezone/asOf across the whole board. Future-dated records should be treated as a data anomaly, not counted beyond asOf.
 
 **Critical distinction:** Sessions puts each session in one group by its latest `updatedAt`. Usage must place each usage event by its persisted timestamp. A session used yesterday and today contributes to both usage groups; only today's recorded usage goes into Today. Reopening or renaming it must not relocate historical spend. Sidebar counts and usage counts therefore need not agree. [L1, L2]
