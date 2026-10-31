@@ -205,6 +205,46 @@ for (const [platform, name] of supervisors) {
   );
 
   contract(
+    "launch admission follows a symlink before `..`, as the launched process does",
+    async (t) => {
+      const f = await fixture(t);
+      const sub = join(f.root, "sibling", "sub");
+      await mkdir(sub, { recursive: true });
+      await writeFile(join(f.workspace, "app.py"), "checkout\n");
+      await writeFile(join(f.root, "sibling", "app.py"), "sibling\n");
+      await symlink("../sibling/sub", join(f.workspace, "apps"));
+      // The kernel resolves `apps` before `..`: this spelling opens the sibling's file.
+      assert.equal(await readFile(`${f.workspace}/apps/../app.py`, "utf8"), "sibling\n");
+      const rejected = [
+        ["/usr/bin/python3", "apps/../app.py"],
+        ["/usr/bin/python3", `${f.workspace}/apps/../app.py`],
+        ["/usr/bin/python3", "apps/../missing.py"],
+        ["/usr/bin/python3", "missing/../app.py"],
+        [process.execPath, "apps/../app.js"],
+        ["/usr/bin/npm", "--prefix", "apps/..", "run", "dev"],
+      ];
+      for (const command of rejected)
+        await assert.rejects(f.call({ command }), /Unsupported preview launch/, command.join(" "));
+      assert.equal(f.launched.length, 0);
+      await f.call({ command: ["/usr/bin/python3", "app.py"] });
+      f.host.phase = "running";
+      const first = observation(await f.call({ action: "status" }));
+      for (const command of rejected) {
+        await assert.rejects(
+          f.call({ command, replace: first.instanceId }),
+          /Unsupported preview launch/,
+          command.join(" "),
+        );
+        const current = observation(await f.call({ action: "status" }));
+        assert.equal(current.instanceId, first.instanceId);
+        assert.equal(current.state, "running");
+      }
+      assert.equal(f.stops.length, 0);
+      assert.equal(f.launched.length, 1);
+    },
+  );
+
+  contract(
     "launch admission accepts checkout apps, monorepo roots and Python entry points",
     async (t) => {
       const f = await fixture(t);
@@ -222,6 +262,7 @@ for (const [platform, name] of supervisors) {
         [process.execPath, "/opt/node_modules/vite/bin/vite.js", "apps/web"],
         ["/usr/bin/python3", "apps/web/app.py"],
         ["/usr/bin/python3", "-u", "apps/web/app.py"],
+        ["/usr/bin/python3", "web/../web/app.py"],
         ["/usr/bin/python3", "-m", "uvicorn", "app:app", "--app-dir", "apps/web"],
         ["/usr/bin/flask", "--app", "apps/web/app.py", "run"],
         ["/usr/bin/gunicorn", "--chdir", "apps/web", "app:app"],
