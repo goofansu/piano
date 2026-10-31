@@ -16,6 +16,7 @@ import {
 import {
   createContext,
   memo,
+  useCallback,
   useContext,
   useDeferredValue,
   useEffect,
@@ -26,6 +27,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
 import { BranchLabel } from "@/components/BranchLabel";
@@ -81,6 +83,11 @@ export const SessionDestinationContext = createContext<
 // Initial prompt measurements run together in the parent's layout effect, after every
 // Markdown child has finished writing its DOM and before initial scroll pinning.
 const PromptMeasurementsContext = createContext<Set<() => void> | null>(null);
+/** Re-measures a transcript row now, so a fold that changed its height in this commit moves the
+ * rows below it before the browser paints; the virtualizer's own ResizeObserver lands a frame
+ * later, which paints the old spacing once: a gap under a collapsed tool, an overlap under an
+ * opened one. */
+const TranscriptMeasure = createContext<((row: HTMLElement) => void) | null>(null);
 
 interface Props {
   workspaceId?: string;
@@ -136,6 +143,19 @@ export function MessageList({
     [messages, pending, tools, showTools, working],
   );
   const { virtual, jumping } = useVirtualTranscript(rows, ref, list, viewport);
+  const measureRow = useCallback(
+    (row: HTMLElement) => {
+      // After the commit that asked: Radix removes closed content in a nested commit right after
+      // it. flushSync re-renders the rows' positions in this task, before the browser paints.
+      // `resizeItem`, not `measureElement`: without a ResizeObserver entry the latter answers
+      // from its cache.
+      queueMicrotask(() => {
+        if (!row.isConnected) return;
+        flushSync(() => virtual.resizeItem(virtual.indexFromElement(row), row.offsetHeight));
+      });
+    },
+    [virtual],
+  );
   const window = virtual.getVirtualItems();
   // Geometry stays urgent; mounting fresh Markdown can yield between rows. During a fast
   // thumb drag, height-preserving placeholders cover the new window rather than blank space.
@@ -173,65 +193,67 @@ export function MessageList({
                 <UserMessage text={submittedInput.text} attachments={submittedInput.attachments} />
               )}
               <TranscriptDisclosures value={disclosures}>
-                {/* Custom geometry hosts: shadcn has no variable-height virtual transcript.
+                <TranscriptMeasure value={measureRow}>
+                  {/* Custom geometry hosts: shadcn has no variable-height virtual transcript.
                     A row taller than its estimate is clipped until measured: its overflow would
                     grow the scroll height, a pinned view would follow it, and the scroll would
                     unmount the row again, a loop Firefox never leaves. The margin keeps focus
                     rings and the jump highlight (6px) whole; Chromium honours it only when both
                     axes clip. */}
-                <div
-                  ref={list}
-                  className="relative overflow-clip [overflow-clip-margin:6px]"
-                  style={{ height: virtual.getTotalSize() }}
-                >
-                  {window.map((item) => {
-                    const row = rows[item.index];
-                    const next = rows[item.index + 1];
-                    const adjacentTools =
-                      row.kind === "reply" &&
-                      row.tools.length > 0 &&
-                      next?.kind === "reply" &&
-                      !next.text &&
-                      next.tools.length > 0;
-                    const ready = jumping || !virtual.isScrolling || readyKeys.has(item.key);
-                    const gap = next ? (adjacentTools ? 12 : 24) : 0;
-                    return (
-                      <div
-                        key={item.key}
-                        ref={ready ? virtual.measureElement : undefined}
-                        data-index={item.index}
-                        className="absolute left-0 top-0 flex w-full flex-col gap-6"
-                        style={{
-                          // Layout coordinates keep a tool's sticky top at the scrollport;
-                          // a transform would translate the sticky header's pinning line too.
-                          top: item.start - virtual.options.scrollMargin,
-                          paddingBottom: gap,
-                        }}
-                      >
-                        {ready ? (
-                          <TranscriptRowKey value={row.key}>
-                            <TranscriptRowView row={row} workspaceId={workspaceId} />
-                          </TranscriptRowKey>
-                        ) : (
-                          <div
-                            data-slot="transcript-placeholder"
-                            aria-hidden
-                            style={{ height: Math.max(0, item.size - gap), overflow: "hidden" }}
-                          >
-                            <Row
-                              className="h-full"
-                              glyph={<Skeleton className="size-1.5 rounded-full" />}
+                  <div
+                    ref={list}
+                    className="relative overflow-clip [overflow-clip-margin:6px]"
+                    style={{ height: virtual.getTotalSize() }}
+                  >
+                    {window.map((item) => {
+                      const row = rows[item.index];
+                      const next = rows[item.index + 1];
+                      const adjacentTools =
+                        row.kind === "reply" &&
+                        row.tools.length > 0 &&
+                        next?.kind === "reply" &&
+                        !next.text &&
+                        next.tools.length > 0;
+                      const ready = jumping || !virtual.isScrolling || readyKeys.has(item.key);
+                      const gap = next ? (adjacentTools ? 12 : 24) : 0;
+                      return (
+                        <div
+                          key={item.key}
+                          ref={ready ? virtual.measureElement : undefined}
+                          data-index={item.index}
+                          className="absolute left-0 top-0 flex w-full flex-col gap-6"
+                          style={{
+                            // Layout coordinates keep a tool's sticky top at the scrollport;
+                            // a transform would translate the sticky header's pinning line too.
+                            top: item.start - virtual.options.scrollMargin,
+                            paddingBottom: gap,
+                          }}
+                        >
+                          {ready ? (
+                            <TranscriptRowKey value={row.key}>
+                              <TranscriptRowView row={row} workspaceId={workspaceId} />
+                            </TranscriptRowKey>
+                          ) : (
+                            <div
+                              data-slot="transcript-placeholder"
+                              aria-hidden
+                              style={{ height: Math.max(0, item.size - gap), overflow: "hidden" }}
                             >
-                              {/* Fill even a measured, very tall row: its first lines may already
+                              <Row
+                                className="h-full"
+                                glyph={<Skeleton className="size-1.5 rounded-full" />}
+                              >
+                                {/* Fill even a measured, very tall row: its first lines may already
                                   be above the viewport during a fast scroll. */}
-                              <Skeleton className="h-full w-[88%] rounded-none [mask-image:repeating-linear-gradient(to_bottom,black_0,black_1rem,transparent_1rem,transparent_1.75rem)]" />
-                            </Row>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                                <Skeleton className="h-full w-[88%] rounded-none [mask-image:repeating-linear-gradient(to_bottom,black_0,black_1rem,transparent_1rem,transparent_1.75rem)]" />
+                              </Row>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </TranscriptMeasure>
               </TranscriptDisclosures>
             </PromptMeasurementsContext>
             {activity && (
@@ -428,6 +450,15 @@ function FoldRow({
   const restoreFocus = useRef(false);
   const [tall, setTall] = useState(false);
   const viewport = useTranscriptViewport();
+  const measureRow = useContext(TranscriptMeasure);
+  const wasOpen = useRef(open);
+  // A tool fold changes height without an animation: move the rows below before the paint.
+  useLayoutEffect(() => {
+    if (!toolOutput || wasOpen.current === open) return;
+    wasOpen.current = open;
+    const row = root.current?.closest<HTMLElement>("[data-index]");
+    if (row) measureRow?.(row);
+  }, [toolOutput, open, measureRow]);
   useLayoutEffect(() => {
     const el = root.current;
     const scroller = el?.closest<HTMLElement>('[data-slot="transcript"]');

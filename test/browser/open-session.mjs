@@ -330,6 +330,28 @@ await run(
       "one disclosure opens the tool's entire output",
     );
     await page.capture("10-expanded-tool");
+    // A tool fold changes height without an animation, so the rows below it move before the
+    // first frame paints: the previous spacing would paint once as a gap under a collapsed tool
+    // or an overlap under an opened one.
+    assert.equal(
+      await page.evaluate(`(async () => {
+        const tool = document.querySelector('${tool}');
+        const row = tool.closest('[data-index]');
+        const next = row.parentElement.querySelector('[data-index="' + (Number(row.dataset.index) + 1) + '"]');
+        const button = tool.querySelector('[data-slot="collapsible-trigger"]');
+        const frame = () => new Promise((done) => requestAnimationFrame(() => done()));
+        const out = [];
+        for (const step of ["close", "open"]) {
+          button.click();
+          await frame();
+          const spacing = parseFloat(next.style.top) - parseFloat(row.style.top);
+          out.push(step + (spacing === row.offsetHeight ? " ok" : " lags (" + spacing + " vs " + row.offsetHeight + ")"));
+        }
+        return out.join(", ");
+      })()`),
+      "close ok, open ok",
+      "the rows below a toggled tool move before the first frame paints",
+    );
     await page.click("button", "Scroll to bottom");
     await page.until(`!document.querySelector('${tool}')`);
     await jump("You said Question 31: why does login fail?");
