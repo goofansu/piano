@@ -67,8 +67,8 @@ test("sidebar view: each of the last seven days is its own section, named by dat
     assert.deepEqual(
       result.map((g) => [g.key, g.label, titles(g.sessions)]),
       [
-        ["Today", "Today", ["future", "today"]],
-        ["Yesterday", "Yesterday", ["yesterday"]],
+        ["2026-03-31", "Today", ["future", "today"]],
+        ["2026-03-30", "Yesterday", ["yesterday"]],
         ["2026-03-29", "Mar 29", ["two", "two early"]],
         ["2026-03-27", "Mar 27", ["four"]],
         ["2026-03-25", "Mar 25", ["six"]],
