@@ -147,6 +147,118 @@ for (const [platform, name] of supervisors) {
     assert.equal(status.instanceId, third.instanceId);
   });
 
+  contract(
+    "launch admission rejects generic hosting and unrelated roots without replacing an app",
+    async (t) => {
+      const f = await fixture(t);
+      const sibling = join(f.root, "workspace-other");
+      await mkdir(sibling);
+      await symlink(sibling, join(f.workspace, "outside"));
+      const rejected = [
+        ["/usr/bin/python3", "-m", "http.server", "{port}"],
+        ["/usr/bin/python3", "-u", "-m", "http.server", "{port}"],
+        ["/usr/bin/python3.12", "-mhttp.server", "{port}"],
+        ["/usr/bin/python", "-m", "SimpleHTTPServer"],
+        ["/usr/bin/http-server", "."],
+        ["/usr/bin/serve", "."],
+        ["/usr/bin/npx", "--yes", "serve@14", "."],
+        ["/usr/bin/npm", "exec", "--", "http-server", "."],
+        ["/usr/bin/pnpm", "dlx", "live-server", "."],
+        [process.execPath, "node_modules/serve/build/main.js", "."],
+        ["/usr/bin/npm", "--prefix", sibling, "run", "dev"],
+        ["/usr/bin/pnpm", "--dir=../workspace-other", "dev"],
+        ["/usr/bin/yarn", "--cwd", "outside", "dev"],
+        ["/usr/bin/npm", "--prefix", "outside/missing", "run", "dev"],
+        ["/usr/bin/vite", "--root", sibling],
+        [process.execPath, "/opt/node_modules/vite/bin/vite.js", sibling],
+        ["/usr/bin/uvicorn", "app:app", "--app-dir", sibling],
+        ["/usr/bin/flask", "--app", join(sibling, "app.py"), "run"],
+        ["/usr/bin/gunicorn", "--chdir", "../workspace-other", "app:app"],
+        ["/usr/bin/vite", sibling, "--host", "127.0.0.1"],
+        ["/usr/bin/next", "dev", "../workspace-other"],
+        [process.execPath, join(sibling, "app.js")],
+        ["/usr/bin/python3", "../workspace-other/app.py"],
+      ];
+      for (const command of rejected) {
+        await assert.rejects(f.call({ command }), /Unsupported preview launch/, command.join(" "));
+        const status = await f.call({ action: "status" });
+        assert.ok("status" in status && status.status === "absent");
+      }
+      assert.equal(f.launched.length, 0);
+      await f.call();
+      f.host.phase = "running";
+      const first = observation(await f.call({ action: "status" }));
+      assert.equal(first.state, "running");
+      for (const command of rejected) {
+        await assert.rejects(
+          f.call({ command, replace: first.instanceId }),
+          /Unsupported preview launch/,
+          command.join(" "),
+        );
+        const current = observation(await f.call({ action: "status" }));
+        assert.equal(current.instanceId, first.instanceId);
+        assert.equal(current.state, first.state);
+      }
+      assert.equal(f.stops.length, 0);
+      assert.equal(f.launched.length, 1);
+    },
+  );
+
+  contract(
+    "launch admission accepts checkout apps, monorepo roots and Python entry points",
+    async (t) => {
+      const f = await fixture(t);
+      const app = join(f.workspace, "apps", "web");
+      await mkdir(app, { recursive: true });
+      await symlink(app, join(f.workspace, "web"));
+      for (const command of [
+        ["/usr/bin/npm", "run", "dev"],
+        ["/usr/bin/npm", "--prefix", app, "run", "dev"],
+        ["/usr/bin/pnpm", "--dir=apps/web", "dev"],
+        ["/usr/bin/yarn", "--cwd", "web", "dev"],
+        ["/usr/bin/vite", "apps/web", "--host", "127.0.0.1"],
+        ["/usr/bin/next", "dev", "apps/web"],
+        [process.execPath, "apps/web/server.js"],
+        [process.execPath, "/opt/node_modules/vite/bin/vite.js", "apps/web"],
+        ["/usr/bin/python3", "apps/web/app.py"],
+        ["/usr/bin/python3", "-u", "apps/web/app.py"],
+        ["/usr/bin/python3", "-m", "uvicorn", "app:app", "--app-dir", "apps/web"],
+        ["/usr/bin/flask", "--app", "apps/web/app.py", "run"],
+        ["/usr/bin/gunicorn", "--chdir", "apps/web", "app:app"],
+      ]) {
+        const result = observation(await f.call({ command }));
+        assert.equal(result.workspace, f.workspace);
+        assert.deepEqual(result.spec.command, command);
+        assert.equal(result.owner?.generation, f.owner.generation);
+        assert.equal(
+          stopped(await f.call({ action: "stop", instanceId: result.instanceId })),
+          true,
+        );
+      }
+    },
+  );
+
+  contract(
+    "older owned launches remain observable and exactly stoppable, not restartable",
+    async (t) => {
+      const f = await fixture(t);
+      const first = observation(await f.call());
+      const path = join(f.stateRoot, `${first.serviceId}.json`);
+      const record = JSON.parse(await readFile(path, "utf8"));
+      record.spec.command = ["/usr/bin/python3", "-m", "http.server", "{port}"];
+      await writeFile(path, JSON.stringify(record));
+      assert.equal(observation(await f.call({ action: "status" })).instanceId, first.instanceId);
+      assert.equal(observation(await f.call({ command: undefined })).instanceId, first.instanceId);
+      await assert.rejects(
+        f.call({ command: undefined, replace: first.instanceId }),
+        /Unsupported preview launch/,
+      );
+      assert.equal(f.stops.length, 0);
+      assert.equal(stopped(await f.call({ action: "stop", instanceId: "stale" })), false);
+      assert.equal(stopped(await f.call({ action: "stop", instanceId: first.instanceId })), true);
+    },
+  );
+
   contract("an invalid replacement timeout leaves the current instance untouched", async (t) => {
     const f = await fixture(t);
     const first = observation(await f.call());
