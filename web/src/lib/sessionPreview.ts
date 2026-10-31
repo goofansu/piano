@@ -24,7 +24,15 @@ export function selectedPreview(state: AppState): SessionPreview | undefined {
   };
 }
 
+/** Hosts browsers treat as potentially trustworthy, so an HTTPS page may still frame them. */
+const loopback = (hostname: string) =>
+  hostname === "localhost" ||
+  hostname.endsWith(".localhost") ||
+  hostname === "[::1]" ||
+  /^127(\.\d{1,3}){3}$/.test(hostname);
+
 /** Only a registered, ready HTTP page on a different origin may be embedded (INV-11).
+ * An HTTPS Piano never frames a plain-HTTP remote app: the browser would block it as mixed content.
  * This is a browser policy check, not a hostile-code sandbox or proof of framing/authentication.
  */
 export function previewFrameUrl(
@@ -34,10 +42,14 @@ export function previewFrameUrl(
   if (!preview?.ready || preview.state !== "running" || !preview.url) return null;
   try {
     const url = new URL(preview.url);
+    const control = new URL(controlOrigin);
+    const mixed =
+      control.protocol === "https:" && url.protocol === "http:" && !loopback(url.hostname);
     return (url.protocol === "http:" || url.protocol === "https:") &&
       !url.username &&
       !url.password &&
-      url.origin !== new URL(controlOrigin).origin
+      !mixed &&
+      url.origin !== control.origin
       ? preview.url
       : null;
   } catch {

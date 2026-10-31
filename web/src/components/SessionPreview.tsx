@@ -289,6 +289,9 @@ export function PreviewPanel() {
   );
 }
 
+/** Ends one page's loading feedback, leaving a later page's alone. */
+const settled = (page: number) => (current: number | null) => (current === page ? null : current);
+
 /** One registered page. Reload replaces only its browsing context, never its managed process. */
 function EmbeddedPreview({
   url,
@@ -308,16 +311,13 @@ function EmbeddedPreview({
     setLoadingPage(page + 1);
     setPage(page + 1);
   };
-  // An old iframe's queued load/error must not settle a later reload.
-  const finish = () => setLoadingPage((current) => (current === page ? null : current));
+  // An old iframe's queued load must not settle a later reload.
+  const finish = () => setLoadingPage(settled(page));
   const [recovery, setRecovery] = useState(false);
   useEffect(() => {
-    // A load/error can be an opaque blocked/login page. Neither it nor this deadline says
+    // A load can be an opaque blocked/login page. Neither it nor this deadline says
     // anything about service health or successful embedding; just end the bounded feedback.
-    const timer = setTimeout(
-      () => setLoadingPage((current) => (current === page ? null : current)),
-      8_000,
-    );
+    const timer = setTimeout(() => setLoadingPage(settled(page)), 8_000);
     return () => clearTimeout(timer);
   }, [page]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: each page is a different iframe DOM node.
@@ -352,7 +352,6 @@ function EmbeddedPreview({
           sandbox="allow-scripts allow-same-origin allow-forms"
           referrerPolicy="no-referrer"
           onLoad={finish}
-          onError={finish}
           className="min-h-0 w-full flex-1 border-0 bg-white"
         />
         <div className="flex shrink-0 items-center justify-between gap-2 border-t border-line pr-2 pl-4">

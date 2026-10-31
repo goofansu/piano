@@ -40,6 +40,13 @@ test("embedding admits only the registered ready HTTP URL outside the control or
     previewFrameUrl({ ...app, url: "https://vm.exe.xyz:9400/" }, "https://vm.exe.xyz"),
     "https://vm.exe.xyz:9400/",
   );
+  // An HTTPS Piano cannot frame a plain-HTTP remote app (mixed content); loopback stays eligible.
+  assert.equal(
+    previewFrameUrl({ ...app, url: "http://vm.exe.xyz:9400/" }, "https://vm.exe.xyz"),
+    null,
+  );
+  for (const url of ["http://localhost:5173/", "http://127.0.0.1:5173/", "http://[::1]:5173/"])
+    assert.equal(previewFrameUrl({ ...app, url }, "https://vm.exe.xyz"), url, url);
   for (const url of [
     control,
     `${control}/app`,

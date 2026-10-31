@@ -61,8 +61,8 @@ An unchanged successful refresh does not reload the page. Browser frame events n
 health or establish authentication, usable embedding or HMR.
 
 **Reload preview** replaces only the page, never the process. It returns to the registered entry
-URL, not a claimed cross-origin current route. Its spinner ends on a frame load/error or after eight
-seconds; none of these establishes success. **Preview not appearing?** opens recovery actions on
+URL, not a claimed cross-origin current route. Its spinner ends on a frame load or after eight
+seconds (browsers fire no iframe error event); none of these establishes success. **Preview not appearing?** opens recovery actions on
 demand without a persistent warning over the app. **Open in new tab** stays available while loading,
 after the deadline and on opaque framing/login failures. It is a normal user-activated external link
 with `noopener noreferrer`, not a second Surface tab. Keyboard Tab/Shift+Tab traverses the tested
@@ -72,7 +72,8 @@ returns focus to its containing view; closing the tab uses the existing Surface 
 ### Permissions and access boundary
 
 Only absolute HTTP(S) registered ready URLs without embedded credentials, on a distinct origin,
-are eligible. Other URLs remain externally inspectable without an iframe. No arbitrary address
+are eligible. An HTTPS Piano does not embed a plain-HTTP app on a non-loopback host, because the
+browser would block it as mixed content; Preview shows its status and **Open in new tab** instead. Other URLs remain externally inspectable without an iframe. No arbitrary address
 input, HTML proxy, credential forwarding or relaxation of `PIANO_ALLOWED_ORIGINS` is involved.
 The browser loads the original app URL, so upstream `X-Frame-Options` and CSP `frame-ancestors`
 remain authoritative, as do private exe.dev authentication and browser cookie rules. A login or

@@ -32,6 +32,10 @@ const origin =
 // Vite allows localhost already; a remote origin's hostname must be allowed explicitly.
 const appEnv = local ? {} : { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname };
 const embeddedLocal = ["localhost", "127.0.0.1"].includes(new URL(origin).hostname);
+if (!embeddedLocal)
+  console.warn(
+    `Embedded-page checks skipped: ${origin} is not loopback. See docs/testing.md to enable them.`,
+  );
 const evidence = resolve(process.argv[2] ?? ".scratch/browser/preview");
 mkdirSync(evidence, { recursive: true });
 const scratch = mkdtempSync(join(tmpdir(), "piano-preview-model-"));
@@ -550,13 +554,21 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.until("!document.querySelector('[data-radix-popper-content-wrapper]')");
           await rememberFrame();
           await page.click("button", "Reload preview");
-          await page.evaluate("window.previousPreviewFrame.dispatchEvent(new Event('load'))");
+          // The old page's load handler goes with its detached frame; only the new page can
+          // finish this reload. (An event dispatched on a detached node reaches no React handler.)
+          assert.equal(
+            await page.evaluate(
+              "window.previousPreviewFrame.isConnected === false && !!document.querySelector('iframe[title=\"App preview\"]')",
+            ),
+            true,
+            "reload detaches the old page",
+          );
           assert.equal(
             await page.evaluate(
               "document.querySelector('[aria-label=\"Reload preview\"]').getAttribute('aria-busy')",
             ),
             "true",
-            "old page load cannot finish a new reload",
+            "a pending new page keeps the reload busy",
           );
           await page.until(
             "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'false'",
@@ -869,8 +881,12 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("button", "Cancel");
         if (embeddedLocal) {
           assert.equal(await sameFrame(), false, "a replacement must dispose the old page");
-          // The new frame is still pending. A delayed old-instance event cannot finish it.
-          await page.evaluate("window.previousPreviewFrame.dispatchEvent(new Event('load'))");
+          // The new frame is still pending; the old instance's frame, and its load handler, are gone.
+          assert.equal(
+            await page.evaluate("window.previousPreviewFrame.isConnected"),
+            false,
+            "a replacement detaches the old page",
+          );
           assert.equal(
             await page.evaluate(
               "document.querySelector('[aria-label=\"Reload preview\"]').getAttribute('aria-busy')",
