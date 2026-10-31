@@ -75,6 +75,13 @@ test("provider links keep compact names, destinations, custom formatting and bra
     "https://user@github.com/a/b",
     "https://linear.app:8080/x",
     "https://linear.app@evil.test/x",
+    "https://radius.earendil.com.evil.test/x",
+    "https://sub.radius.earendil.com/x",
+    "https://radius.earendil.com@evil.test/x",
+    "https://user@radius.earendil.com/x",
+    "https://user:password@radius.earendil.com/x",
+    "https://radius.earendil.com:8080/x",
+    "https://earendil.com/x",
   ]) {
     assert.ok(!renderMarkdown(url).includes("<a "), url);
     assert.ok(!renderMarkdown(`[label](${url})`).includes("brand-link"), url);
@@ -83,6 +90,40 @@ test("provider links keep compact names, destinations, custom formatting and bra
     renderMarkdown("**https://github.com/a/b/pull/7**"),
     /<strong><a [\s\S]*?b#7<\/a><\/strong>/,
   );
+});
+
+test("Radius links share provider branding without changing labels, titles or navigation", () => {
+  for (const url of [
+    "https://radius.earendil.com/artifacts/example?revision=2#section",
+    "http://radius.earendil.com/docs",
+    "https://RADIUS.EARENDIL.COM:443/docs",
+    "http://radius.earendil.com:80/docs",
+  ]) {
+    for (const source of [url, `<${url}>`, `[**Report**](${url} "Supplied title")`]) {
+      const html = renderMarkdown(source);
+      assert.ok(html.includes(`href="${url}"`), source);
+      assert.ok(html.includes('class="brand-link"'), source);
+      assert.ok(html.includes('target="_blank" rel="noreferrer"'), source);
+      assert.ok(html.includes('href="/provider-logos/radius.svg#logo"'), source);
+      assert.equal((html.match(/<svg /g) ?? []).length, 1, "only the brand icon, no arrow");
+      assert.ok(html.includes('aria-hidden="true" focusable="false"'), source);
+      if (source.startsWith("[")) {
+        assert.ok(html.includes("<strong>Report</strong></a>"));
+        assert.ok(html.includes('title="Supplied title"'));
+      } else {
+        assert.ok(html.includes(`>${url}</a>`));
+        assert.ok(html.includes(`title="${url}"`));
+      }
+    }
+  }
+  for (const url of ["ftp://radius.earendil.com/x", "//radius.earendil.com/x"]) {
+    assert.ok(!renderMarkdown(`[Report](${url})`).includes("<a "), url);
+  }
+  for (const url of ["https://github.com/a/b", "https://linear.app/team/issue/ENG-42"]) {
+    assert.ok(
+      renderMarkdown(`[Report](${url} "Supplied title")`).includes('title="Supplied title"'),
+    );
+  }
 });
 
 test("local links are preview actions, never native filesystem URLs", () => {

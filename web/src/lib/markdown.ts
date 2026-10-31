@@ -25,10 +25,18 @@ export function githubLabel(href: string): string | undefined {
 }
 
 export function isLinearLink(href: string): boolean {
+  return isWebLinkTo(href, "linear.app");
+}
+
+export function isRadiusLink(href: string): boolean {
+  return isWebLinkTo(href, "radius.earendil.com");
+}
+
+function isWebLinkTo(href: string, hostname: string): boolean {
   try {
     const url = new URL(href);
     return (
-      url.hostname === "linear.app" &&
+      url.hostname === hostname &&
       !url.username &&
       !url.password &&
       !url.port &&
