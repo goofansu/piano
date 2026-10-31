@@ -408,7 +408,7 @@ test("sidebar list: a pinned session shows only under Pinned, even when its fold
     sections: [["/repo", ["Unfiled"]]],
   });
   assert.deepEqual(rows("none").sections, [["list", ["Unfiled"]]]);
-  assert.deepEqual(rows("date").sections, [["date:Yesterday", ["Unfiled"]]]);
+  assert.deepEqual(rows("date").sections, [["date:2026-10-01", ["Unfiled"]]]);
 });
 
 test("sidebar list: folder and branch adds a line only where a row has something to show", () => {
@@ -675,36 +675,78 @@ test("sidebar list: date sections start open, remember a collapse per browser, a
   });
   const state: AppState = { ...registry, sessionReferences: [today, earlier] };
   const chosen = view("date");
+  const TODAY = "date:2026-10-02";
+  const YESTERDAY = "date:2026-10-01";
   assert.deepEqual(openness(model.list(state, chosen)), [
-    ["date:Today", true],
-    ["date:Yesterday", true],
+    [TODAY, true],
+    [YESTERDAY, true],
   ]);
 
-  model.toggle("date:Yesterday", false);
+  model.toggle(YESTERDAY, false);
   assert.deepEqual(openness(model.list(state, chosen)), [
-    ["date:Today", true],
-    ["date:Yesterday", false],
+    [TODAY, true],
+    [YESTERDAY, false],
   ]);
   const reloaded = sidebar(Object.fromEntries(items), new Date(2026, 9, 2, 12)).model;
-  assert.equal(isOpen(reloaded.list(state, chosen), "date:Yesterday"), false, "the next load");
+  assert.equal(isOpen(reloaded.list(state, chosen), YESTERDAY), false, "the next load");
   // Collapsing a date group leaves folders and projects as they were.
   assert.deepEqual(JSON.parse(items.get("piano.openProjects") ?? "[]"), []);
 
   // Selecting a session in a collapsed date group opens it; the same selection again does not.
   const selected = selecting(state, "/repo", "earlier");
   model.sync(selected, chosen);
-  assert.equal(isOpen(model.list(selected, chosen), "date:Yesterday"), true);
-  model.toggle("date:Yesterday", false);
+  assert.equal(isOpen(model.list(selected, chosen), YESTERDAY), true);
+  model.toggle(YESTERDAY, false);
   const seen = changes();
   model.sync({ ...selected, sessionReferences: [today, earlier] }, chosen);
-  assert.equal(isOpen(model.list(selected, chosen), "date:Yesterday"), false, "a refresh");
+  assert.equal(isOpen(model.list(selected, chosen), YESTERDAY), false, "a refresh");
   assert.equal(changes(), seen);
 
   // A session not yet in the registry (a new one) belongs to Today.
-  model.toggle("date:Today", false);
+  model.toggle(TODAY, false);
   const fresh = selecting(state, "/repo", null);
   model.sync(fresh, chosen);
-  assert.equal(isOpen(model.list(fresh, chosen), "date:Today"), true);
+  assert.equal(isOpen(model.list(fresh, chosen), TODAY), true);
+});
+
+test("sidebar list: a collapsed day stays collapsed after midnight renames it, and the new Today starts open", () => {
+  const { model, time } = sidebar({}, new Date(2026, 9, 2, 23, 0));
+  const state: AppState = {
+    ...loaded,
+    folders: [folder("/repo")],
+    sessionReferences: [
+      sessionReference("/repo", "late", {
+        title: "Late",
+        updatedAt: new Date(2026, 9, 2, 22, 30).toISOString(),
+      }),
+    ],
+  };
+  const chosen = view("date");
+  const stop = model.start();
+  model.toggle("date:2026-10-02", false);
+
+  time.advance(new Date(2026, 9, 3, 0, 5));
+  const morning: AppState = {
+    ...state,
+    sessionReferences: [
+      ...state.sessionReferences,
+      sessionReference("/repo", "early", {
+        title: "Early",
+        updatedAt: new Date(2026, 9, 3, 0, 1).toISOString(),
+      }),
+    ],
+  };
+  const list = model.list(morning, chosen);
+  assert.deepEqual(
+    list.body?.kind === "sections"
+      ? list.body.sections.map((s) => s.kind === "date" && [s.label, s.open, titles(s.sessions)])
+      : list.body,
+    [
+      ["Today", true, ["Early"]],
+      ["Yesterday", false, ["Late"]],
+    ],
+  );
+  stop();
 });
 
 test("sidebar list: date sections roll over at local midnight and after the page wakes", () => {
@@ -724,21 +766,30 @@ test("sidebar list: date sections roll over at local midnight and after the page
     const list = model.list(state, chosen);
     return list.body?.kind === "sections" ? list.body.sections.map((s) => s.key) : [];
   };
+  const headings = () => {
+    const list = model.list(state, chosen);
+    return list.body?.kind === "sections"
+      ? list.body.sections.map((s) => s.kind === "date" && s.label)
+      : [];
+  };
   const stop = model.start();
-  assert.deepEqual(labels(), ["date:Today"]);
+  assert.deepEqual(labels(), ["date:2026-10-02"], "a day group is keyed by its calendar date");
+  assert.deepEqual(headings(), ["Today"]);
   assert.equal(time.pendingAt(), new Date(2026, 9, 3).getTime(), "wakes at the next midnight");
 
   const seen = changes();
   time.advance(new Date(2026, 9, 3, 0, 0));
-  assert.deepEqual(labels(), ["date:Yesterday"]);
+  assert.deepEqual(headings(), ["Yesterday"]);
+  assert.deepEqual(labels(), ["date:2026-10-02"], "the same day keeps its key under a new name");
   assert.equal(changes(), seen + 1, "the rollover re-renders once");
   assert.equal(time.pendingAt(), new Date(2026, 9, 4).getTime(), "and waits for the next one");
 
   // A sleeping laptop misses its timer; coming back catches up.
   time.jump(new Date(2026, 9, 6, 9));
-  assert.deepEqual(labels(), ["date:Yesterday"]);
+  assert.deepEqual(headings(), ["Yesterday"]);
   time.resume();
-  assert.deepEqual(labels(), ["date:2026-10-02"], "a day group is keyed by its calendar date");
+  assert.deepEqual(headings(), ["Oct 2"]);
+  assert.deepEqual(labels(), ["date:2026-10-02"]);
   const settled = changes();
   time.resume();
   assert.equal(changes(), settled, "a wake on the same day changes nothing");

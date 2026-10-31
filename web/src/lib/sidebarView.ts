@@ -142,12 +142,12 @@ const UNKNOWN: DateGroup = { key: "Unknown date", label: "Unknown date" };
 
 /** Group `bucket`: one per named day back from today, then Older, then Unknown date. */
 function groupAt(now: Date, bucket: number): DateGroup {
-  if (bucket === 0) return { key: "Today", label: "Today" };
-  if (bucket === 1) return { key: "Yesterday", label: "Yesterday" };
   if (bucket === NAMED_DAYS) return OLDER;
   if (bucket > NAMED_DAYS) return UNKNOWN;
   const day = localMidnight(now, bucket);
-  return { key: isoDay(day), label: dayFormat.format(day) };
+  // Today and Yesterday too: a collapse belongs to the day, not to the name it has today.
+  const label = bucket === 0 ? "Today" : bucket === 1 ? "Yesterday" : dayFormat.format(day);
+  return { key: isoDay(day), label };
 }
 
 /** The bucket of a session last touched at `updatedAt`: days before `now`, or the Older or Unknown date bucket. */
