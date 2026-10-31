@@ -61,6 +61,7 @@ import {
   type TranscriptRow,
   transcriptRows,
 } from "@/lib/transcript";
+import { domFoldEdges } from "@/lib/transcriptViewport";
 import { useMarkdownImages } from "@/lib/useMarkdownImages";
 import { NavigationContext } from "@/lib/useNavigation";
 import {
@@ -476,25 +477,14 @@ function FoldRow({
     heading.current?.querySelector("button")?.focus({ preventScroll: true });
   });
   const changeOpen = (next: boolean) => {
-    // Opening expresses reading intent: the output grows under the header the reader clicked. A
-    // view following the bottom (a transcript that fits its window is at the bottom) would
-    // otherwise follow the growth and show the output's tail.
-    if (toolOutput && !open && next) viewport?.hold();
-    if (toolOutput && open && !next) {
-      const el = root.current;
-      const head = heading.current;
-      const scroller = el?.closest<HTMLElement>('[data-slot="transcript"]');
-      if (el && head && scroller) {
-        // Move the natural header to its visible position BEFORE removing the body. This also
-        // expresses reading intent when collapsing from the bottom, rather than following the
-        // shrinking transcript to its end. Never scroll ancestors (notably main on phones).
-        const top = Math.max(
-          head.getBoundingClientRect().top,
-          scroller.getBoundingClientRect().top,
-        );
-        scroller.scrollTop += el.getBoundingClientRect().top - top;
-        viewport?.scrolled();
-      }
+    // Opening holds the view on the header the reader clicked; collapsing keeps that header where
+    // they see it. The viewport decides both, before the fold changes height.
+    if (toolOutput && open !== next) {
+      viewport?.fold(next, () => {
+        const el = root.current;
+        const head = heading.current;
+        return el && head ? domFoldEdges(el, head) : undefined;
+      });
     }
     // Closing removes the bottom shortcut: when it held focus, move focus to the persistent
     // header disclosure, without a browser scrollIntoView. A header that was activated keeps

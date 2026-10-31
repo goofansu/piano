@@ -38,6 +38,14 @@ export interface ViewportElement {
   jumpToEdge?: (edge: "top" | "bottom") => void;
 }
 
+/** A fold's edges relative to the container's top edge, measured before it changes. */
+export interface FoldEdges {
+  /** The fold's top edge, where its header sits in the flow. */
+  top: number;
+  /** Its header's top edge; below `top` only while the header sticks to the container's edge. */
+  header: number;
+}
+
 export interface TranscriptViewport {
   /** The transcript's container mounted (a fresh view starts pinned) or unmounted (`null`). */
   attach: (element: ViewportElement | null) => void;
@@ -57,11 +65,16 @@ export interface TranscriptViewport {
    */
   wheel: (deltaY: number, deltaMode: number) => void;
   /**
-   * The reader opened something to read where it is: the view stops following output, so what
-   * opens grows below the header they clicked instead of scrolling past them to its end. Reaching
-   * the end again pins the view, as any scroll does.
+   * The reader opened or collapsed a fold, before it changes height. Opening is reading where it
+   * is: the view stops following output, so what opens grows below the header they clicked instead
+   * of scrolling past them to its end; reaching the end again pins the view, as any scroll does.
+   * Collapsing keeps the header where the reader sees it: a header stuck to the container's edge
+   * (or scrolled out above it) is brought there in the flow before the body goes, as a
+   * programmatic correction. When that moves the view off the end it stops following, so the
+   * shrinking transcript does not drag the reader past the header to its end. `edges` is read
+   * only on collapse; `undefined` leaves the view alone.
    */
-  hold: () => void;
+  fold: (open: boolean, edges: () => FoldEdges | undefined) => void;
   /** The transcript re-rendered: a pinned view follows the bottom. */
   rendered: () => void;
   /**
@@ -85,6 +98,17 @@ export interface TranscriptViewport {
   landed: (messageId: string) => boolean;
   /** The entry the reader is looking at: bottom when there, top near the top, else the message under the top edge. */
   current: (entries: ReadonlyArray<JumpEntry>) => string;
+}
+
+/** The DOM fold behind `FoldEdges`, measured against the transcript container it sits in. */
+export function domFoldEdges(fold: HTMLElement, header: HTMLElement): FoldEdges | undefined {
+  const container = fold.closest<HTMLElement>('[data-slot="transcript"]');
+  if (!container) return undefined;
+  const edge = container.getBoundingClientRect().top;
+  return {
+    top: fold.getBoundingClientRect().top - edge,
+    header: header.getBoundingClientRect().top - edge,
+  };
 }
 
 /** The DOM container behind the seam; messages are found by their anchor id in its document. */
@@ -202,12 +226,25 @@ export function createTranscriptViewport(): TranscriptViewport {
       element.scrollTop = element.scrollTop + deltaY * unit;
       scrolled();
     },
-    hold: () => {
-      if (!element) return;
+    fold: (open, edges) => {
+      const el = element;
+      if (!el) return;
       // Consume older reader movement first, as a jump does, so a queued scroll event cannot
-      // rediscover that move and re-pin the view afterwards.
+      // rediscover that move and re-pin the view, or be mistaken for this correction.
       scrolled();
-      stick = false;
+      if (open) {
+        stick = false;
+        return;
+      }
+      const fold = edges();
+      if (!fold) return;
+      const from = el.scrollTop;
+      // Never scroll ancestors (notably main on phones): only the container moves.
+      el.scrollTop = from + fold.top - Math.max(fold.header, 0);
+      // A move up off the end is the reader's choice to stay on this header, as a scroll up is.
+      if (el.scrollTop !== from) stick = atEnd(el);
+      note(el);
+      setBottom(near(el));
     },
     rendered: () => {
       if (element) follow(element);
