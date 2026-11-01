@@ -21,6 +21,7 @@ import {
 import { useTheme } from "next-themes";
 import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
+import { promptEditor, skillEditor } from "@/components/DraftDialogs";
 import {
   Dialog,
   DialogContent,
@@ -56,11 +57,9 @@ import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
-import { promptEditor } from "@/lib/usePromptEditor";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
-import { skillEditor } from "@/lib/useSkillEditor";
 import { webhookEditor } from "@/lib/useWebhookEditor";
 import type { SendDisposition } from "@/lib/ws";
 import type { AppState } from "@/store";

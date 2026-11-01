@@ -1,21 +1,11 @@
-import { checkDraft, DRAFT_FIELDS, type DraftField, NAME_RULE } from "@shared/drafts";
 import type { UserSkill } from "@shared/skills";
-import { cn } from "cn";
 import { MoreHorizontalIcon, SparklesIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
-import { CopyButton } from "@/components/CopyButton";
+import { DraftFileView, NewDraftDialog, skillEditor } from "@/components/DraftDialogs";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { PianoButton } from "@/components/PianoButton";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/PianoDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,25 +25,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { ApiError, createUserSkill, listUserSkills, removeUserSkill } from "@/lib/api";
+import { createUserSkill, listUserSkills, removeUserSkill } from "@/lib/api";
 import { pageCommands } from "@/lib/globalCommands";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
-import { skillEditor, useSkillEditor } from "@/lib/useSkillEditor";
 
 /** Skills created in Piano, kept in Piano's skills folder: create one, or delete one. */
 export function UserSkillSettings() {
   const observed = useObservation("skills", (signal) => listUserSkills({ signal }));
   // New skill comes from `pageCommands`, which the palette lists too; both open this editor.
   const { state, run, global } = useCommands();
-  const editing = useSkillEditor();
+  const editing = skillEditor.useOpen();
   const actions = useSetupActions<UserSkill>({
     refresh: () => void observed.refresh(),
     success: (text) => toast.success(text),
@@ -71,7 +57,15 @@ export function UserSkillSettings() {
       ))}
       dialogs={
         <>
-          {viewing && <SkillViewer skill={viewing} close={() => setViewing(null)} />}
+          {viewing && (
+            <DraftFileView
+              kind="skill"
+              name={viewing.name}
+              file={viewing.file}
+              fileLabel="SKILL.md"
+              close={() => setViewing(null)}
+            />
+          )}
           {editing && (
             <SkillEditor close={skillEditor.close} refresh={() => void observed.refresh()} />
           )}
@@ -190,204 +184,25 @@ function SkillRow({
   );
 }
 
-function SkillEditor({
-  close,
-  refresh,
-}: {
-  close: () => void;
-  /** Re-reads the list once a create settles. */
-  refresh: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [instructions, setInstructions] = useState("");
+/** New skill: the shared draft, and whether only `/skill:<name>` loads it. */
+function SkillEditor({ close, refresh }: { close: () => void; refresh: () => void }) {
   const [disableModelInvocation, setDisableModelInvocation] = useState(false);
-  // A refused create stays in the open dialog, on its field; a created one closes it with a toast.
-  const actions = useSetupActions({
-    refresh,
-    success: (text) => toast.success(text),
-    failure: "keep",
-  });
-  const busy = actions.running !== undefined;
-  // The same rule the server applies: Create skill stays off until every field is filled and in bounds.
-  const check = checkDraft({ name, description, instructions });
-  // A character the rule never allows answers as it is typed; a misplaced hyphen waits until the
-  // field is left, so typing "release-" on the way to "release-notes" is not an error. Whether the
-  // name is free, only the server can say.
-  const [nameLeft, setNameLeft] = useState(false);
-  const nameError = check.malformedName && (nameLeft || /[^a-z0-9-]/.test(name.trim()));
-  const [errorField, setErrorField] = useState<DraftField | undefined>();
-  const errorAt = (field: DraftField | undefined) =>
-    actions.error && errorField === field ? actions.error : undefined;
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!check.saved) return;
-    const created = await actions.run({
-      id: "create",
-      run: () =>
-        createUserSkill({ name, description, instructions, disableModelInvocation }).catch(
-          (cause: unknown) => {
-            const field = cause instanceof ApiError ? cause.field : undefined;
-            setErrorField(DRAFT_FIELDS.find((known) => known === field));
-            throw cause;
-          },
-        ),
-      done: "Skill created",
-      fallback: "Could not create skill.",
-    });
-    if (created) close();
-  };
-  const field = (
-    id: DraftField,
-    label: string,
-    control: (invalid: boolean) => React.ReactNode,
-    counted = false,
-  ) => {
-    const error = id === "name" && nameError ? NAME_RULE : errorAt(id);
-    return (
-      <Field data-invalid={!!error}>
-        <FieldLabel htmlFor={`skill-${id}`}>{label}</FieldLabel>
-        {control(!!error || check[id].over)}
-        {/* The count, as New project's instructions: it counts the trimmed text, and over the limit
-         * (a paste into Instructions, which takes no maxLength) it turns red and Create skill stays off. */}
-        {counted && (
-          <FieldDescription
-            id={`skill-${id}-count`}
-            className={cn(
-              "text-right text-xs tabular-nums",
-              check[id].over ? "text-err" : "text-ink-3",
-            )}
-          >
-            {count.format(check[id].length)} / {count.format(check[id].max)}
-          </FieldDescription>
-        )}
-        {error && <FieldError role="alert">{error}</FieldError>}
-      </Field>
-    );
-  };
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !busy) close();
-      }}
-    >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>New skill</DialogTitle>
-          <DialogDescription>
-            Saved in Piano. Sessions started from now can use it.
-          </DialogDescription>
-        </DialogHeader>
-        <form className="flex flex-col gap-6" onSubmit={(e) => void submit(e)}>
-          <FieldGroup>
-            {field("name", "Name", (invalid) => (
-              <Input
-                id="skill-name"
-                required
-                autoFocus
-                autoComplete="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                maxLength={check.name.max}
-                className="font-mono"
-                value={name}
-                aria-invalid={invalid}
-                onChange={(e) => setName(e.target.value)}
-                onBlur={() => setNameLeft(true)}
-              />
-            ))}
-            {field(
-              "description",
-              "Description",
-              (invalid) => (
-                <Textarea
-                  id="skill-description"
-                  required
-                  rows={3}
-                  aria-describedby="skill-description-count"
-                  value={description}
-                  aria-invalid={invalid}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              ),
-              true,
-            )}
-            {field(
-              "instructions",
-              "Instructions",
-              (invalid) => (
-                <Textarea
-                  id="skill-instructions"
-                  required
-                  aria-describedby="skill-instructions-count"
-                  className="max-h-[50dvh] min-h-48 font-mono"
-                  value={instructions}
-                  aria-invalid={invalid}
-                  onChange={(e) => setInstructions(e.target.value)}
-                />
-              ),
-              true,
-            )}
-            <Field orientation="horizontal" className="items-center gap-2.5">
-              <Switch
-                id="skill-disable-model-invocation"
-                checked={disableModelInvocation}
-                onCheckedChange={setDisableModelInvocation}
-              />
-              <FieldLabel htmlFor="skill-disable-model-invocation">
-                Disable model invocation
-              </FieldLabel>
-            </Field>
-            {errorAt(undefined) && <FieldError role="alert">{errorAt(undefined)}</FieldError>}
-          </FieldGroup>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={close}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy || !check.saved}>
-              {busy && <Spinner data-icon="inline-start" />}
-              Create skill
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <NewDraftDialog
+      kind="skill"
+      create={(draft) => createUserSkill({ ...draft, disableModelInvocation })}
+      extra={
+        <Field orientation="horizontal" className="items-center gap-2.5">
+          <Switch
+            id="skill-disable-model-invocation"
+            checked={disableModelInvocation}
+            onCheckedChange={setDisableModelInvocation}
+          />
+          <FieldLabel htmlFor="skill-disable-model-invocation">Disable model invocation</FieldLabel>
+        </Field>
+      }
+      close={close}
+      refresh={refresh}
+    />
   );
 }
-
-/** One skill, read-only: its SKILL.md exactly as saved, to read and copy. */
-function SkillViewer({ skill, close }: { skill: UserSkill; close: () => void }) {
-  return (
-    <Dialog open onOpenChange={(open) => !open && close()}>
-      <DialogContent
-        className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
-        aria-describedby={undefined}
-      >
-        <DialogHeader>
-          <DialogTitle className="truncate font-mono">{skill.name}</DialogTitle>
-        </DialogHeader>
-        <div className="relative">
-          <Textarea
-            readOnly
-            aria-label={`${skill.name} SKILL.md`}
-            spellCheck={false}
-            className="max-h-[50dvh] min-h-48 pr-10 font-mono"
-            value={skill.file}
-          />
-          <CopyButton
-            text={skill.file}
-            label="Copy skill"
-            copiedLabel="Skill copied"
-            failure="Couldn’t copy. Select the skill text to copy it."
-            variant="ghost"
-            className="absolute top-2 right-2"
-          />
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** Characters as the browser counts them (UTF-16 code units), grouped for reading: "20,000". */
-const count = new Intl.NumberFormat();
