@@ -1130,10 +1130,9 @@ test("a file opens as one tab however its path is spelled", () => {
   p.navigation.openFile("README.md");
   p.navigation.openFile("/scratch/README.md");
   p.navigation.openFile("./README.md");
-  p.navigation.openFile("docs/../README.md");
   p.navigation.openFile("docs//guide.md");
+  p.navigation.openFile("/scratch/./docs/guide.md");
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:docs/guide.md"]);
-  p.navigation.openFile("/elsewhere/../scratch/docs/guide.md");
   p.navigation.openFile("/scratchpad/notes.md");
   p.navigation.openFile("../outside.md");
   assert.deepEqual(
@@ -1150,6 +1149,19 @@ test("a file opens as one tab however its path is spelled", () => {
     },
     "a path outside the session's directory keeps its own spelling",
   );
+});
+
+test("a path through `..` keeps its spelling: the directory before it may be a symlink", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("README.md");
+  // With `alias -> ../sibling/sub`, `alias/../README.md` is sibling/README.md, as the server
+  // reads it: only the server can tell, so the tab names the path as the link wrote it.
+  p.navigation.openFile("alias/../README.md");
+  p.navigation.openFile("/scratch/alias/../README.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:alias/../README.md"]);
 });
 
 test("one area at a time, closing a file opened from the Agent area returns there", () => {

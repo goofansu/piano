@@ -34,22 +34,18 @@ export interface Surface {
 }
 
 /**
- * A file's one spelling, so each file opens one tab: `.`, `..` and repeated slashes resolved, and
- * a path inside the session's directory relative to it, as a link in its transcript names it.
- * A directory reached through a symlink still has a spelling of its own; only the server sees it.
+ * A file's one spelling, so each file opens one tab: `.` and repeated slashes dropped, and a path
+ * inside the session's directory relative to it, as a link in its transcript names it. `..` stays
+ * as written: the directory before it may be a symlink, which only the server can follow (the
+ * kernel resolves `link/..` through `link`), so cancelling it here could name another file.
  */
 function filePath(path: string, cwd: string | undefined): string {
   const absolute = path.startsWith("/");
-  const parts: string[] = [];
-  for (const part of path.split("/")) {
-    if (part === "" || part === ".") continue;
-    if (part === ".." && parts.length && parts.at(-1) !== "..") parts.pop();
-    else if (part !== ".." || !absolute) parts.push(part);
-  }
-  const resolved = (absolute ? "/" : "") + parts.join("/");
-  if (!absolute || !cwd) return resolved || ".";
+  const parts = path.split("/").filter((part) => part !== "" && part !== ".");
+  const spelled = (absolute ? "/" : "") + parts.join("/");
+  if (!absolute || !cwd) return spelled || ".";
   const root = cwd.endsWith("/") ? cwd.slice(0, -1) : cwd;
-  return resolved.startsWith(`${root}/`) ? resolved.slice(root.length + 1) : resolved;
+  return spelled.startsWith(`${root}/`) ? spelled.slice(root.length + 1) : spelled;
 }
 
 /** A tab's identity: one per view, and one tab per file path. */
