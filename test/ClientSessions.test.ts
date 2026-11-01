@@ -386,6 +386,115 @@ test("INV-02: a pick reaches a session another client started after this one sho
   );
 });
 
+/** The turns one selection's view holds: its last live snapshot, then the frames after it. */
+const liveTurns = (sent: ServerMessage[], selectionId: string) => {
+  const mine = sent.filter((m) => "selectionId" in m && m.selectionId === selectionId);
+  const from = mine.findLastIndex((m) => m._tag === "selected" && m.hosted);
+  const snapshot = mine[from];
+  if (snapshot?._tag !== "selected") return [];
+  return [
+    ...snapshot.snapshot.messages.map((m) => m.role),
+    ...mine
+      .slice(from + 1)
+      .flatMap((m) =>
+        m._tag === "session" && m.event._tag === "message_end" ? [m.event.message.role] : [],
+      ),
+  ];
+};
+
+test("INV-02/05: a session shown stopped follows another client's resume and shows its turn once", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const id = (yield* started()).spec.sessionId;
+      yield* hosts.release(cwd, id);
+      const a = yield* client,
+        b = yield* client;
+      yield* yield* a.sessions.select({ cwd, sessionId: id, selectionId: "A" });
+      yield* yield* b.sessions.select({ cwd, sessionId: id, selectionId: "B" });
+      for (const { next } of [a, b]) {
+        const shown = yield* next((m) => m._tag === "selected");
+        assert.ok(shown._tag === "selected" && !shown.hosted);
+      }
+      assert.deepEqual(yield* hosts.list, [], "watching a stopped session starts no Pi");
+
+      yield* b.sessions.act("B", { _tag: "prompt", text: "from B" }, {});
+      // A neither selects nor acts again.
+      yield* a.next(
+        (m) =>
+          m._tag === "session" &&
+          m.event._tag === "message_end" &&
+          m.event.message.role === "assistant",
+      );
+      yield* b.next(
+        (m) =>
+          m._tag === "session" &&
+          m.event._tag === "message_end" &&
+          m.event.message.role === "assistant",
+      );
+      assert.deepEqual(liveTurns(a.sent, "A"), ["user", "assistant"], "A shows the turn once");
+      assert.deepEqual(liveTurns(b.sent, "B"), ["user", "assistant"]);
+      const generation = (sent: ServerMessage[]) => {
+        const m = sent.findLast((m) => m._tag === "selected" && m.hosted);
+        return m?._tag === "selected" ? m.cursor?.generation : undefined;
+      };
+      assert.equal(generation(a.sent), generation(b.sent), "A attached to B's Pi");
+      assert.equal((yield* hosts.list).length, 1, "B's Pi stays the only one");
+    }),
+  );
+});
+
+test("INV-05: a session resumed elsewhere after this client selected another shows nothing here", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const first = (yield* started()).spec.sessionId,
+        second = (yield* started()).spec.sessionId;
+      yield* hosts.release(cwd, first);
+      yield* hosts.release(cwd, second);
+      const a = yield* client,
+        b = yield* client;
+      yield* yield* a.sessions.select({ cwd, sessionId: first, selectionId: "first" });
+      yield* a.next((m) => m._tag === "selected");
+      yield* yield* b.sessions.select({ cwd, sessionId: first, selectionId: "B" });
+      // A claims the second session; its lookup has not run when B resumes the first.
+      const showSecond = yield* a.sessions.select({
+        cwd,
+        sessionId: second,
+        selectionId: "second",
+      });
+      yield* b.sessions.act("B", { _tag: "prompt", text: "from B" }, {});
+      yield* b.next(
+        (m) =>
+          m._tag === "session" &&
+          m.event._tag === "message_end" &&
+          m.event.message.role === "assistant",
+      );
+      yield* showSecond;
+      const shown = yield* a.next((m) => m._tag === "selected");
+      assert.ok(shown._tag === "selected");
+      assert.deepEqual([shown.selectionId, shown.sessionId], ["second", second]);
+      assert.deepEqual(
+        a.sent.filter((m) => "selectionId" in m && m.selectionId === "first").map((m) => m._tag),
+        ["selected"],
+        "nothing from the first session reaches A after its read-only view",
+      );
+
+      // The newer selection still follows its own resume.
+      yield* yield* b.sessions.select({ cwd, sessionId: second, selectionId: "B2" });
+      yield* b.sessions.act("B2", { _tag: "prompt", text: "second from B" }, {});
+      yield* a.next(
+        (m) =>
+          m._tag === "session" &&
+          m.selectionId === "second" &&
+          m.event._tag === "message_end" &&
+          m.event.message.role === "assistant",
+      );
+      assert.deepEqual(liveTurns(a.sent, "second"), ["user", "assistant"]);
+    }),
+  );
+});
+
 test("a saved session's view follows its checkout going and coming back", async () => {
   await run(
     Effect.gen(function* () {
