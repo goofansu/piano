@@ -59,8 +59,8 @@ and `--skill`; Pi run outside Piano does not. Each page lists its folder only: p
 in Pi's own folders, `~/.agents/skills` or a repository stay theirs, and a new name Pi already
 loads from one of them is refused. Both follow one draft rule (`shared/drafts.ts`): a name in the
 Agent Skills form (at most 64 lowercase letters, numbers and single hyphens, not at the start or
-end), a description of at most 1,024 characters and text of at most 20,000. A prompt adds an optional
-argument hint; a skill, Disable model invocation.
+end), a description of at most 1,024 characters and instructions of at most 20,000. A skill adds
+Disable model invocation.
 See [prompts](prompts.md).
 
 ## Session dispatch

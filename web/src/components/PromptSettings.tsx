@@ -135,7 +135,7 @@ export function PromptSettings() {
   );
 }
 
-/** One prompt: its command as typed in the composer, its argument hint and description. */
+/** One prompt: its name and description, as a skill is shown. */
 function PromptRow({
   prompt,
   disabled,
@@ -152,9 +152,6 @@ function PromptRow({
       <ItemContent className="min-w-0 gap-0.5">
         <ItemTitle className="font-mono">
           <span className="truncate">{prompt.name}</span>
-          {prompt.argumentHint && (
-            <span className="truncate font-normal text-ink-3">{prompt.argumentHint}</span>
-          )}
         </ItemTitle>
         <ItemDescription>{prompt.description}</ItemDescription>
       </ItemContent>
@@ -228,7 +225,6 @@ function PromptEditor({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [argumentHint, setArgumentHint] = useState("");
   const [instructions, setInstructions] = useState("");
   // A refused create stays in the open dialog, on its field; a created one closes it with a toast.
   const actions = useSetupActions({
@@ -237,7 +233,7 @@ function PromptEditor({
     failure: "keep",
   });
   const busy = actions.running !== undefined;
-  const check = checkPromptDraft({ name, description, argumentHint, instructions });
+  const check = checkPromptDraft({ name, description, instructions });
   // As New skill: a character the rule never allows answers as it is typed; a misplaced hyphen
   // waits until the field is left. Whether the name is free, only the server can say.
   const [nameLeft, setNameLeft] = useState(false);
@@ -264,7 +260,7 @@ function PromptEditor({
   };
   const field = (
     id: PromptField,
-    label: React.ReactNode,
+    label: string,
     control: (invalid: boolean) => React.ReactNode,
     counted = false,
   ) => {
@@ -290,11 +286,6 @@ function PromptEditor({
       </Field>
     );
   };
-  const optional = (text: string) => (
-    <>
-      {text} <span className="font-normal text-ink-3">Optional</span>
-    </>
-  );
   return (
     <Dialog
       open
@@ -343,18 +334,6 @@ function PromptEditor({
               ),
               true,
             )}
-            {field("argumentHint", optional("Argument hint"), (invalid) => (
-              <Input
-                id="prompt-argumentHint"
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={check.argumentHint.max}
-                className="font-mono"
-                value={argumentHint}
-                aria-invalid={invalid}
-                onChange={(e) => setArgumentHint(e.target.value)}
-              />
-            ))}
             {field(
               "instructions",
               "Instructions",

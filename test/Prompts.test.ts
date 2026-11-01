@@ -45,15 +45,13 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       const review = yield* prompts.create({
         name: "review",
         description: "Review staged git changes",
-        argumentHint: "[focus]",
         instructions,
       });
       const expected = {
         name: "review",
         description: "Review staged git changes",
-        argumentHint: "[focus]",
         // The file as saved, front matter included, as View shows and copies it.
-        file: `---\ndescription: "Review staged git changes"\nargument-hint: "[focus]"\n---\n${instructions}\n`,
+        file: `---\ndescription: "Review staged git changes"\n---\n${instructions}\n`,
       };
       assert.deepEqual(review, expected);
       // Instructions that start like front matter stay the instructions: the description keeps them out of the header.

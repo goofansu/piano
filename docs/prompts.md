@@ -2,15 +2,14 @@
 
 Open **Settings → Prompts**, or choose **New prompt** from Mod+K on that page. A prompt is a
 [Pi prompt template](https://pi.dev/docs/latest/prompt-templates): its name becomes a `/name`
-command in the composer, its description shows in completion and its argument hint follows the
-name. Its instructions take Pi's substitutions (`$1`, `$@`, `${1:-default}`, …), expanded by Pi.
+command in the composer and its description shows in completion. Its instructions take Pi's substitutions (`$1`, `$@`, `${1:-default}`, …), expanded by Pi.
 
-- **New prompt** stays off until the name and prompt are filled and every field is within its
-  limit, the same check the server applies (`checkPromptDraft`). It saves `<name>.md` in Piano's
+- **New prompt** stays off until the name, description and instructions are filled and within their
+  limits, the same check the server applies (`checkPromptDraft`). It saves `<name>.md` in Piano's
   prompts folder, `prompts/` beside the [registry database](configuration.md#environment-variables)
   (`~/.local/share/piano/prompts/` by default). Names, descriptions and instructions follow the
-  [draft rule Settings › Skills shares](configuration.md#pianos-prompts-and-skills); the argument
-  hint is optional. An existing name is refused, never overwritten.
+  [draft rule Settings › Skills shares](configuration.md#pianos-prompts-and-skills). Piano writes no
+  argument hint: Pi does not pass it to the composer. An existing name is refused, never overwritten.
 - **View** shows the template file exactly as saved, front matter included, with a copy button.
 - **Delete** removes that file, after confirmation.
 - The page lists that folder only. Prompts in Pi's own folders (`~/.pi/agent/prompts/`, a

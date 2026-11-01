@@ -60,11 +60,9 @@ const readPrompt = (name: string, text: string): Prompt => {
       ? frontmatter.description
       : // Pi's fallback: the first non-empty line, cut at 60 characters.
         `${first.slice(0, 60)}${first.length > 60 ? "..." : ""}`;
-  const hint = frontmatter["argument-hint"];
   return {
     name,
     description,
-    ...(typeof hint === "string" && hint ? { argumentHint: hint } : {}),
     file: text,
   };
 };
@@ -73,11 +71,9 @@ const readPrompt = (name: string, text: string): Prompt => {
  * always has a description, so the front matter is never empty and instructions starting with `---`
  * stay the instructions. */
 const templateText = (input: PromptCreate) => {
-  const hint = input.argumentHint?.trim();
   return [
     "---",
     `description: ${JSON.stringify(input.description.trim())}`,
-    ...(hint ? [`argument-hint: ${JSON.stringify(hint)}`] : []),
     "---",
     `${input.instructions.trim()}\n`,
   ].join("\n");

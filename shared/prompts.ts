@@ -6,29 +6,25 @@
 import { Schema } from "effect";
 import { checkDraft, type FieldCheck, REQUEST_FIELD_MAX } from "./drafts.ts";
 
-/** A prompt as Pi reads it: its command name, description and argument hint. */
+/** A prompt as Pi reads it: its command name and description. */
 export const Prompt = Schema.Struct({
   name: Schema.String,
   /** The front matter's description or, as Pi falls back, the body's first non-empty line cut at 60 characters. */
   description: Schema.String,
-  argumentHint: Schema.optional(Schema.String),
   /** The template file exactly as saved, front matter included: View shows and copies it. */
   file: Schema.String,
 });
 export type Prompt = typeof Prompt.Type;
 
-export const PROMPT_ARGUMENT_HINT_MAX = 200;
-
 export const PromptCreate = Schema.Struct({
   name: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
   description: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
-  argumentHint: Schema.optional(Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX))),
   instructions: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
 });
 export type PromptCreate = typeof PromptCreate.Type;
 
 /** The editor fields a refused create can belong to; a refusal without one is about the create as a whole. */
-export const PROMPT_FIELDS = ["name", "description", "argumentHint", "instructions"] as const;
+export const PROMPT_FIELDS = ["name", "description", "instructions"] as const;
 export type PromptField = (typeof PROMPT_FIELDS)[number];
 
 /** What `checkPromptDraft` decides: each field against its limit, and what creating it saves. */
@@ -41,44 +37,24 @@ export interface PromptDraftCheck extends Record<PromptField, FieldCheck> {
   saved: PromptCreate | undefined;
 }
 
-/** The shared draft rule (`checkDraft`), plus the argument hint. */
+/** The shared draft rule (`checkDraft`), with a prompt's field names. */
 export function checkPromptDraft(draft: PromptCreate): PromptDraftCheck {
   const check = checkDraft(
     { name: draft.name, description: draft.description, text: draft.instructions },
     { textLabel: "instructions" },
   );
-  const hint = draft.argumentHint?.trim() ?? "";
-  const argumentHint: FieldCheck = {
-    length: hint.length,
-    max: PROMPT_ARGUMENT_HINT_MAX,
-    over: hint.length > PROMPT_ARGUMENT_HINT_MAX,
-  };
-  const problem: PromptDraftCheck["problem"] = check.problem
-    ? {
-        ...check.problem,
-        field: check.problem.field === "text" ? "instructions" : check.problem.field,
-      }
-    : argumentHint.over
-      ? {
-          field: "argumentHint",
-          detail: `Keep it to ${PROMPT_ARGUMENT_HINT_MAX.toLocaleString("en")} characters.`,
-        }
-      : undefined;
-  const { trimmed } = check;
+  const { trimmed, problem } = check;
   return {
     name: check.name,
     description: check.description,
-    argumentHint,
     instructions: check.text,
     malformedName: check.malformedName,
-    problem,
+    problem: problem && {
+      ...problem,
+      field: problem.field === "text" ? "instructions" : problem.field,
+    },
     saved: problem
       ? undefined
-      : {
-          name: trimmed.name,
-          description: trimmed.description,
-          instructions: trimmed.text,
-          ...(hint ? { argumentHint: hint } : {}),
-        },
+      : { name: trimmed.name, description: trimmed.description, instructions: trimmed.text },
   };
 }
