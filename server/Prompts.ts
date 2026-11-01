@@ -73,8 +73,8 @@ const readPrompt = (name: string, text: string): Prompt => {
   };
 };
 
-/** The template file: front matter (JSON strings are YAML strings), then the body. Front matter is
- * always written, so a body that itself starts with `---` is never read as front matter. */
+/** The template file: front matter (JSON strings are YAML strings), then the body. Without fields
+ * the body stands alone, unless it starts with `---`: empty front matter then keeps it the body. */
 const templateText = (input: PromptCreate) => {
   const description = input.description?.trim();
   const hint = input.argumentHint?.trim();
@@ -82,7 +82,9 @@ const templateText = (input: PromptCreate) => {
     ...(description ? [`description: ${JSON.stringify(description)}`] : []),
     ...(hint ? [`argument-hint: ${JSON.stringify(hint)}`] : []),
   ];
-  return `---\n${lines.map((line) => `${line}\n`).join("")}---\n${input.body.trim()}\n`;
+  const body = `${input.body.trim()}\n`;
+  if (!lines.length && !body.startsWith("---")) return body;
+  return `---\n${lines.map((line) => `${line}\n`).join("")}---\n${body}`;
 };
 
 export const PromptsLive = Layer.effect(

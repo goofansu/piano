@@ -68,7 +68,7 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
         {
           name: "triage",
           description: cut,
-          file: `---\n---\n${long}\nThen list the next steps.\n`,
+          file: `${long}\nThen list the next steps.\n`,
         },
       ]);
 
