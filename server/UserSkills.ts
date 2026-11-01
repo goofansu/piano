@@ -74,7 +74,8 @@ function piano(root: string, name: string): UserSkill | undefined {
   const file = join(dir, "SKILL.md");
   try {
     if (!lstatSync(file).isFile()) return undefined;
-    const { frontmatter, body } = parseFrontmatter(readFileSync(file, "utf8"));
+    const text = readFileSync(file, "utf8");
+    const { frontmatter } = parseFrontmatter(text);
     const { description } = frontmatter;
     // Pi's own rule: a name that is not a string (`name: 123` reads as a number) falls back to the
     // directory's, so such a skill is still the one Pi loads as `name`.
@@ -83,7 +84,7 @@ function piano(root: string, name: string): UserSkill | undefined {
     return {
       name,
       description,
-      instructions: body.trim(),
+      file: text,
       disableModelInvocation: frontmatter["disable-model-invocation"] === true,
     };
   } catch {
@@ -169,7 +170,12 @@ export const UserSkillsLive = Layer.effect(
             rmSync(dir, { recursive: true, force: true });
             throw cause;
           }
-          return saved;
+          return {
+            name,
+            description: saved.description,
+            file: fileOf(saved),
+            disableModelInvocation: saved.disableModelInvocation,
+          };
         },
         catch: (cause) =>
           cause instanceof UserSkillError ? cause : refused("Could not save the skill."),

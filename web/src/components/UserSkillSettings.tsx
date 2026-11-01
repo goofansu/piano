@@ -361,33 +361,30 @@ function SkillEditor({
   );
 }
 
-/**
- * One skill, read-only: Piano does not edit a skill, so its instructions are here to read and copy
- * (into a new skill, or the user's own repository).
- */
+/** One skill, read-only: its SKILL.md exactly as saved, to read and copy. */
 function SkillViewer({ skill, close }: { skill: UserSkill; close: () => void }) {
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+      <DialogContent
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className="font-mono">{skill.name}</span>
-            {skill.disableModelInvocation && (
-              <Badge variant="outline">Disable model invocation</Badge>
-            )}
-          </DialogTitle>
-          <DialogDescription>{skill.description}</DialogDescription>
+          <DialogTitle className="truncate font-mono">{skill.name}</DialogTitle>
         </DialogHeader>
-        {/* Hand-written: no shadcn component shows a read-only block of source text. */}
         <div className="relative">
-          <pre className="max-h-[50dvh] overflow-auto rounded-md border border-line py-2 pr-10 pl-3 font-mono text-sm whitespace-pre-wrap">
-            {skill.instructions}
-          </pre>
+          <Textarea
+            readOnly
+            aria-label={`${skill.name} SKILL.md`}
+            spellCheck={false}
+            className="max-h-[50dvh] min-h-48 pr-10 font-mono"
+            value={skill.file}
+          />
           <CopyButton
-            text={skill.instructions}
-            label="Copy instructions"
-            copiedLabel="Instructions copied"
-            failure="Couldn’t copy. Select the instructions to copy them."
+            text={skill.file}
+            label="Copy skill"
+            copiedLabel="Skill copied"
+            failure="Couldn’t copy. Select the skill text to copy it."
             variant="ghost"
             className="absolute top-2 right-2"
           />

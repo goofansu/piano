@@ -9,8 +9,8 @@ export type UserSkillField = (typeof USER_SKILL_FIELDS)[number];
 export const UserSkill = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
-  /** The SKILL.md body, shown read-only for copying: Piano does not edit a skill. */
-  instructions: Schema.String,
+  /** SKILL.md exactly as saved, front matter included: View shows and copies it. */
+  file: Schema.String,
   /** `disable-model-invocation`: Pi loads the skill only for `/skill:<name>`, never on its own. */
   disableModelInvocation: Schema.Boolean,
 });

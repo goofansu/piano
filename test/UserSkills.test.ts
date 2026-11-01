@@ -95,9 +95,16 @@ test("a created skill is one Pi loads as written, and is listed with its instruc
   assert.match(file, /Read PRs\.\n$/);
   assert.doesNotMatch(file, /created-by/, "Piano's folder marks its skills; the file need not");
   const listed = await run((skills) => skills.list);
+  // Each skill comes with its SKILL.md exactly as saved, which View shows and copies.
+  const saved = (name: string) => readFileSync(join(directory, name, "SKILL.md"), "utf8");
   assert.deepEqual(listed._tag === "Success" && listed.success, [
-    { name: "deploy", description, instructions, disableModelInvocation: true },
-    { name: "release-notes", description, instructions, disableModelInvocation: false },
+    { name: "deploy", description, file: saved("deploy"), disableModelInvocation: true },
+    {
+      name: "release-notes",
+      description,
+      file: saved("release-notes"),
+      disableModelInvocation: false,
+    },
   ]);
 });
 
