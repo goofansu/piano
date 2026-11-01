@@ -73,11 +73,20 @@ placed the session in as `cwd`, the created `worktree` (`{ "path", "branch" }`, 
 requested `model` / `thinkingLevel` (`null` when omitted, not the resolved defaults). It does not wait for
 the agent to finish. The handle can be passed unchanged to the existing `piano_wait_sessions` tool.
 
+`creation: "refused"` with `submission: "not_sent"` means no session exists: Piano refused the
+start (the reason is in `detail`) or never received it, because its WebSocket did not open (a wrong
+port, Piano not running, a connection timeout) or the start was cancelled before the creation
+request was sent. Address `detail` and dispatch again. Once the request may have been sent, a lost
+connection, deadline or cancellation reports `uncertain` instead, and the client never sends it a
+second time.
+
 The optional output file is reserved exclusively before network side effects, including against
 concurrent invocations, and kept once creation is attempted, even if the run was interrupted and
-left it empty. An existing or empty output file is **not proof of success**. Inspect Piano before
-retrying an uncertain dispatch; never blindly delete the file and resend. Without an output file
-there is no file-based duplicate-dispatch guard.
+left it empty. An existing or empty output file is **not proof of success**. A file holding a
+`refused` result records that nothing was started: remove it, or use a fresh path, to dispatch
+again. Inspect Piano before retrying an uncertain dispatch, or one whose file is empty; never
+blindly delete that file and resend. Without an output file there is no file-based
+duplicate-dispatch guard.
 
 ## Links between sessions
 

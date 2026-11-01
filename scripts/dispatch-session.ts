@@ -44,6 +44,8 @@ status prints one session's status JSON; list prints one status JSON object per 
 Exit codes: 0 result reported (inspect creation/submission), 1 unexpected failure,
 2 invalid input/configuration (including a session or project Piano does not list),
 3 output already exists.
+creation "refused" with submission "not_sent" started nothing (including when Piano could not
+be reached); its out-file records that, and may be removed before dispatching again.
 Never automatically retry an uncertain dispatch or follow-up; inspect Piano first.`;
 
 class CliError extends Error {
@@ -213,7 +215,8 @@ async function main() {
     if (output !== undefined) writeFileSync(output, `${json}\n`);
     console.log(json);
   } finally {
-    // Once creation was attempted, even an empty file is a guard against blind retry.
+    // Once creation was attempted, even an empty file is a guard against blind retry. A refused
+    // start's file holds that result, which says nothing was started.
     if (output !== undefined) closeSync(output);
   }
 }

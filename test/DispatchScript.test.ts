@@ -262,6 +262,29 @@ test("explicit flags override env, save full JSON exclusively and forward model/
   );
 });
 
+test("a Piano that cannot be reached reports and records a start that was not sent", async (t) => {
+  const f = fixture(t);
+  // A loopback port nothing listens on: the WebSocket never opens.
+  const closed = createServer();
+  await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
+  const port = (closed.address() as { port: number }).port;
+  await new Promise<void>((resolve) => closed.close(() => resolve()));
+  const out = join(f.dir, "start.json");
+  const result = await run([f.prompt, f.cwd, out], `ws://127.0.0.1:${port}/ws`);
+  assert.equal(result.code, 0, result.stderr);
+  const json = JSON.parse(result.stdout);
+  assert.deepEqual(
+    [json.creation, json.submission, json.handle, json.link],
+    ["refused", "not_sent", null, null],
+  );
+  assert.match(json.detail, /not sent/);
+  assert.deepEqual(
+    JSON.parse(readFileSync(out, "utf8")),
+    json,
+    "the file records the same outcome",
+  );
+});
+
 test("invalid configuration and input fail before network side effects and reserve no output file", async (t) => {
   const f = fixture(t);
   const p = await peer(t);
