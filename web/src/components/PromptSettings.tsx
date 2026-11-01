@@ -1,10 +1,5 @@
-import {
-  checkPromptDraft,
-  PROMPT_FIELDS,
-  PROMPT_NAME_RULE,
-  type Prompt,
-  type PromptField,
-} from "@shared/prompts";
+import { NAME_RULE } from "@shared/drafts";
+import { checkPromptDraft, PROMPT_FIELDS, type Prompt, type PromptField } from "@shared/prompts";
 import { cn } from "cn";
 import { MoreHorizontalIcon, SquareSlashIcon } from "lucide-react";
 import { useState } from "react";
@@ -80,7 +75,7 @@ export function PromptSettings() {
           <RemovalDialog
             open={!!removing}
             title="Delete prompt?"
-            description={`New sessions no longer offer /${removing?.name ?? ""}.`}
+            description={`${removing?.name ?? "This prompt"} is removed. Sessions started from now no longer load it.`}
             action="Delete"
             progress="Deleting…"
             busy={busy}
@@ -140,7 +135,7 @@ export function PromptSettings() {
   );
 }
 
-/** One prompt: its command as typed in the composer, its argument hint and description. */
+/** One prompt: its name and description, as a skill is shown. */
 function PromptRow({
   prompt,
   disabled,
@@ -152,19 +147,13 @@ function PromptRow({
   view: () => void;
   remove: () => void;
 }) {
-  const command = `/${prompt.name}`;
   return (
     <Item className={settingsRow}>
       <ItemContent className="min-w-0 gap-0.5">
-        <ItemTitle className="min-w-0 font-mono">
-          <span className="truncate">{command}</span>
-          {prompt.argumentHint && (
-            <span className="truncate font-normal text-ink-3">{prompt.argumentHint}</span>
-          )}
+        <ItemTitle className="font-mono">
+          <span className="truncate">{prompt.name}</span>
         </ItemTitle>
-        {prompt.description && (
-          <ItemDescription className="truncate">{prompt.description}</ItemDescription>
-        )}
+        <ItemDescription>{prompt.description}</ItemDescription>
       </ItemContent>
       <ItemActions className="shrink-0">
         <DropdownMenu>
@@ -172,7 +161,7 @@ function PromptRow({
             <PianoButton
               variant="ghost"
               size="list"
-              aria-label={`Prompt actions ${command}`}
+              aria-label={`Prompt actions ${prompt.name}`}
               disabled={disabled}
             >
               <MoreHorizontalIcon />
@@ -191,30 +180,27 @@ function PromptRow({
   );
 }
 
-/**
- * One prompt, read-only: Piano does not edit a prompt, so its text is here to read and copy. Laid
- * out as Settings › Skills shows a skill.
- */
+/** One prompt, read-only: its template file exactly as saved, to read and copy. */
 function PromptView({ prompt, close }: { prompt: Prompt; close: () => void }) {
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+      <DialogContent
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
-          <DialogTitle className="flex min-w-0 gap-2 font-mono">
-            <span className="truncate">/{prompt.name}</span>
-            {prompt.argumentHint && (
-              <span className="truncate font-normal text-ink-3">{prompt.argumentHint}</span>
-            )}
-          </DialogTitle>
-          <DialogDescription>{prompt.description}</DialogDescription>
+          <DialogTitle className="truncate font-mono">{prompt.name}</DialogTitle>
         </DialogHeader>
-        {/* Hand-written: no shadcn component shows a read-only block of source text. */}
         <div className="relative">
-          <pre className="max-h-[50dvh] overflow-auto rounded-md border border-line py-2 pr-10 pl-3 font-mono text-sm whitespace-pre-wrap">
-            {prompt.body}
-          </pre>
+          <Textarea
+            readOnly
+            aria-label={`${prompt.name} file`}
+            spellCheck={false}
+            className="max-h-[50dvh] min-h-48 pr-10 font-mono"
+            value={prompt.file}
+          />
           <CopyButton
-            text={prompt.body}
+            text={prompt.file}
             label="Copy prompt"
             copiedLabel="Prompt copied"
             failure="Couldn’t copy. Select the prompt text to copy it."
@@ -239,8 +225,7 @@ function PromptEditor({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [argumentHint, setArgumentHint] = useState("");
-  const [body, setBody] = useState("");
+  const [instructions, setInstructions] = useState("");
   // A refused create stays in the open dialog, on its field; a created one closes it with a toast.
   const actions = useSetupActions({
     refresh,
@@ -248,7 +233,7 @@ function PromptEditor({
     failure: "keep",
   });
   const busy = actions.running !== undefined;
-  const check = checkPromptDraft({ name, description, argumentHint, body });
+  const check = checkPromptDraft({ name, description, instructions });
   // As New skill: a character the rule never allows answers as it is typed; a misplaced hyphen
   // waits until the field is left. Whether the name is free, only the server can say.
   const [nameLeft, setNameLeft] = useState(false);
@@ -275,11 +260,11 @@ function PromptEditor({
   };
   const field = (
     id: PromptField,
-    label: React.ReactNode,
+    label: string,
     control: (invalid: boolean) => React.ReactNode,
     counted = false,
   ) => {
-    const error = id === "name" && nameError ? PROMPT_NAME_RULE : errorAt(id);
+    const error = id === "name" && nameError ? NAME_RULE : errorAt(id);
     return (
       <Field data-invalid={!!error}>
         <FieldLabel htmlFor={`prompt-${id}`}>{label}</FieldLabel>
@@ -301,11 +286,6 @@ function PromptEditor({
       </Field>
     );
   };
-  const optional = (text: string) => (
-    <>
-      {text} <span className="font-normal text-ink-3">Optional</span>
-    </>
-  );
   return (
     <Dialog
       open
@@ -340,10 +320,11 @@ function PromptEditor({
             ))}
             {field(
               "description",
-              optional("Description"),
+              "Description",
               (invalid) => (
                 <Textarea
                   id="prompt-description"
+                  required
                   rows={3}
                   aria-describedby="prompt-description-count"
                   value={description}
@@ -353,30 +334,18 @@ function PromptEditor({
               ),
               true,
             )}
-            {field("argumentHint", optional("Argument hint"), (invalid) => (
-              <Input
-                id="prompt-argumentHint"
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={check.argumentHint.max}
-                className="font-mono"
-                value={argumentHint}
-                aria-invalid={invalid}
-                onChange={(e) => setArgumentHint(e.target.value)}
-              />
-            ))}
             {field(
-              "body",
-              "Prompt",
+              "instructions",
+              "Instructions",
               (invalid) => (
                 <Textarea
-                  id="prompt-body"
+                  id="prompt-instructions"
                   required
-                  aria-describedby="prompt-body-count"
+                  aria-describedby="prompt-instructions-count"
                   className="max-h-[50dvh] min-h-48 font-mono"
-                  value={body}
+                  value={instructions}
                   aria-invalid={invalid}
-                  onChange={(e) => setBody(e.target.value)}
+                  onChange={(e) => setInstructions(e.target.value)}
                 />
               ),
               true,

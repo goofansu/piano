@@ -49,10 +49,19 @@ module beside it, such as `piano-dispatch/SessionDispatch.ts`, is a supporting m
 separately discovered extension. They stay bundled with Piano and use the application's existing
 dependencies and shared protocol.
 
-## Piano's prompts
+## Piano's prompts and skills
 
-Every Pi child also loads Piano's prompts folder, `prompts/` beside the registry database, through
-`--prompt-template`. See [prompts](prompts.md).
+What Settings › Prompts and Settings › Skills create lives in Piano's own folders beside the
+registry database (`server/PianoFolders.ts`): `prompts/` and `skills/`, so
+`~/.local/share/piano/prompts/` and `~/.local/share/piano/skills/` by default, and a scratch
+`PIANO_DB_PATH` brings its own. Every Pi child Piano starts loads them through `--prompt-template`
+and `--skill`; Pi run outside Piano does not. Each page lists its folder only: prompts and skills
+in Pi's own folders, `~/.agents/skills` or a repository stay theirs, and a new name Pi already
+loads from one of them is refused. Both follow one draft rule (`shared/drafts.ts`): a name in the
+Agent Skills form (at most 64 lowercase letters, numbers and single hyphens, not at the start or
+end), a description of at most 1,024 characters and instructions of at most 20,000. A skill adds
+Disable model invocation.
+See [prompts](prompts.md).
 
 ## Session dispatch
 

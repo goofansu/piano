@@ -18,6 +18,8 @@ export interface PiCliConfig {
   readonly extensions?: ReadonlyArray<string>;
   /** Absolute `--prompt-template` paths loaded by every spawned Pi: Piano's prompts folder. */
   readonly promptTemplates?: ReadonlyArray<string>;
+  /** Absolute `--skill` paths loaded by every spawned Pi: Piano's skills folder. */
+  readonly skills?: ReadonlyArray<string>;
   /** Launch variables every child gets, such as this instance's session endpoint. */
   readonly env?: Readonly<LaunchEnv>;
 }

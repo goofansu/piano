@@ -39,31 +39,41 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       const sessions = yield* PiSessions;
       assert.deepEqual(yield* prompts.list, [], "no folder yet reads as no prompts");
 
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Pi's argument syntax, not JavaScript's.
+      const instructions =
+        "Review the staged changes. Focus on ${1:-correctness, security, and error handling}.";
       const review = yield* prompts.create({
         name: "review",
         description: "Review staged git changes",
-        argumentHint: "[focus]",
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: Pi's argument syntax, not JavaScript's.
-        body: "Review the staged changes. Focus on ${1:-correctness, security, and error handling}.",
+        instructions,
       });
       const expected = {
         name: "review",
         description: "Review staged git changes",
-        argumentHint: "[focus]",
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: Pi's argument syntax, not JavaScript's.
-        body: "Review the staged changes. Focus on ${1:-correctness, security, and error handling}.",
+        // The file as saved, front matter included, as View shows and copies it.
+        file: `---\ndescription: "Review staged git changes"\n---\n${instructions}\n`,
       };
       assert.deepEqual(review, expected);
-      // A body that starts like front matter stays the body; no description falls back as Pi's does.
-      yield* prompts.create({ name: "rule", body: "---\nKeep it short." });
-      // Without a description Pi cuts the first line at 60 characters; the list says the same.
+      // Instructions that start like front matter stay the instructions: the description keeps them out of the header.
+      yield* prompts.create({
+        name: "rule",
+        description: "House rule",
+        instructions: "---\nKeep it short.",
+      });
+      // A file put in the folder by hand, without a description: Pi cuts the first line at 60
+      // characters, and the list says the same.
       const long = `${"Summarize the open pull requests ".repeat(3)}by risk.`;
-      yield* prompts.create({ name: "triage", body: `\n${long}\nThen list the next steps.` });
+      const triage = `${long}\nThen list the next steps.\n`;
+      writeFileSync(join(dir, "triage.md"), triage);
       const cut = `${long.slice(0, 60)}...`;
       assert.deepEqual(yield* prompts.list, [
         expected,
-        { name: "rule", description: "---", body: "---\nKeep it short." },
-        { name: "triage", description: cut, body: `${long}\nThen list the next steps.` },
+        {
+          name: "rule",
+          description: "House rule",
+          file: '---\ndescription: "House rule"\n---\n---\nKeep it short.\n',
+        },
+        { name: "triage", description: cut, file: triage },
       ]);
 
       const commands = (yield* sessions.probe(root)).commands.filter((c) => c.source === "prompt");
@@ -72,14 +82,19 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
         [
           ["personal", "Personal prompt"],
           ["review", "Review staged git changes"],
-          ["rule", "---"],
+          ["rule", "House rule"],
           ["triage", cut],
         ],
         "Pi offers Piano's prompts beside its own",
       );
 
-      const taken = yield* failure(prompts.create({ name: "review", body: "Other" }));
-      assert.deepEqual([taken.field, taken.detail], ["name", "/review already exists."]);
+      const taken = yield* failure(
+        prompts.create({ name: "review", description: "D.", instructions: "Other" }),
+      );
+      assert.deepEqual(
+        [taken.field, taken.detail],
+        ["name", "A prompt named review already exists."],
+      );
       for (const name of [
         "",
         "../escape",
@@ -92,10 +107,18 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
         "skill:x",
         "a".repeat(65),
       ])
-        assert.equal((yield* failure(prompts.create({ name, body: "x" }))).field, "name", name);
-      assert.equal((yield* failure(prompts.create({ name: "blank", body: "  \n" }))).field, "body");
+        assert.equal(
+          (yield* failure(prompts.create({ name, description: "D.", instructions: "x" }))).field,
+          "name",
+          name,
+        );
+      assert.equal(
+        (yield* failure(prompts.create({ name: "blank", description: "D.", instructions: "  \n" })))
+          .field,
+        "instructions",
+      );
       const tooLong = yield* failure(
-        prompts.create({ name: "long", description: "d".repeat(1025), body: "x" }),
+        prompts.create({ name: "long", description: "d".repeat(1025), instructions: "x" }),
       );
       assert.deepEqual(
         [tooLong.field, tooLong.detail],

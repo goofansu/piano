@@ -2,17 +2,15 @@
 
 Open **Settings → Prompts**, or choose **New prompt** from Mod+K on that page. A prompt is a
 [Pi prompt template](https://pi.dev/docs/latest/prompt-templates): its name becomes a `/name`
-command in the composer, its description shows in completion and its argument hint follows the
-name. The body takes Pi's substitutions (`$1`, `$@`, `${1:-default}`, …), expanded by Pi.
+command in the composer and its description shows in completion. Its instructions take Pi's substitutions (`$1`, `$@`, `${1:-default}`, …), expanded by Pi.
 
-- **New prompt** stays off until the name and prompt are filled and every field is within its
-  limit, the same check the server applies (`checkPromptDraft`). It saves `<name>.md` in Piano's
+- **New prompt** stays off until the name, description and instructions are filled and within their
+  limits, the same check the server applies (`checkPromptDraft`). It saves `<name>.md` in Piano's
   prompts folder, `prompts/` beside the [registry database](configuration.md#environment-variables)
-  (`~/.local/share/piano/prompts/` by default). Names follow a skill's rule and limit, shared with
-  Settings › Skills: at most 64 lowercase letters, numbers and single hyphens, not at the start or
-  end. A description holds at most 1024 characters and the prompt 20,000. An existing name is
-  refused, never overwritten.
-- **View** shows the prompt as saved, with a copy button.
+  (`~/.local/share/piano/prompts/` by default). Names, descriptions and instructions follow the
+  [draft rule Settings › Skills shares](configuration.md#pianos-prompts-and-skills). Piano writes no
+  argument hint: Pi does not pass it to the composer. An existing name is refused, never overwritten.
+- **View** shows the template file exactly as saved, front matter included, with a copy button.
 - **Delete** removes that file, after confirmation.
 - The page lists that folder only. Prompts in Pi's own folders (`~/.pi/agent/prompts/`, a
   project's `.pi/prompts/`) stay Pi's: the composer still offers them, Settings does not list them.
@@ -24,8 +22,8 @@ Piano is not loaded by Pi run outside Piano.
 ## Boundaries
 
 `server/Prompts.ts` owns the folder (INV-01). Pi parses and expands templates (INV-12): the list
-reads front matter with Pi's `parseFrontmatter` and falls back to the body's first line as Pi does.
-The list sends each prompt's text with it, so View opens without another request; prompts are
+reads front matter with Pi's `parseFrontmatter` and falls back to the instructions' first line as Pi does.
+The list sends each prompt's file with it, so View opens without another request; prompts are
 text the person wrote in Piano, so they leave without display redaction, as project instructions do.
 No registry records are added.
 
