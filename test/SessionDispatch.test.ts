@@ -466,9 +466,11 @@ test(
     const h = world();
     const start = startSession({ cwd: asked, prompt: "hi" }, h.env);
     h.last().accept();
+    // The acknowledgement is lost after the creation frame was sent.
     h.last().serverClose(1006);
     const result = await start;
     assert.equal(result.creation, "uncertain");
+    assert.equal(result.submission, "uncertain");
     assert.equal(result.handle, null);
     // Give the transport every chance to reconnect and repeat the mutation.
     h.advance(10_000);
@@ -482,6 +484,82 @@ test(
     assert.equal(h.pendingTimers(), 0);
   },
 );
+
+// The send boundary: before the creation frame reaches an open socket nothing can exist, so the
+// start says so; once it may have been sent, only uncertainty is honest.
+const unsentStarts: ReadonlyArray<{
+  readonly name: string;
+  readonly run: (h: ReturnType<typeof world>) => {
+    readonly signal?: AbortSignal;
+    readonly after: () => void;
+  };
+}> = [
+  {
+    name: "a refused connection",
+    run: (h) => ({ after: () => h.last().serverClose(1006) }),
+  },
+  // The transport gives a socket stuck connecting 10 seconds.
+  {
+    name: "a connection timeout",
+    run: (h) => ({ after: () => h.advance(10_000) }),
+  },
+  {
+    name: "an already-aborted signal",
+    run: () => ({ signal: AbortSignal.abort(), after: () => {} }),
+  },
+  {
+    name: "a cancellation while connecting",
+    run: () => {
+      const controller = new AbortController();
+      return { signal: controller.signal, after: () => controller.abort() };
+    },
+  },
+];
+for (const { name, run } of unsentStarts) {
+  test(
+    `${name} before the creation is sent reports no session and nothing sent`,
+    bounded,
+    async () => {
+      const h = world();
+      const { signal, after } = run(h);
+      const start = startSession({ cwd: asked, prompt: "hi" }, h.env, signal);
+      after();
+      const result = await start;
+      assert.deepEqual(
+        {
+          creation: result.creation,
+          submission: result.submission,
+          handle: result.handle,
+        },
+        { creation: "refused", submission: "not_sent", handle: null },
+      );
+      assert.match(result.detail ?? "", /not sent/);
+      h.advance(60_000);
+      assert.equal(h.sentOf("create_session").length, 0);
+      assert.ok(h.sockets.length <= 1, "it does not keep reconnecting");
+      assert.equal(h.pendingTimers(), 0);
+    },
+  );
+}
+
+test("a start abandoned after the creation was sent stays uncertain", bounded, async () => {
+  const h = world();
+  const controller = new AbortController();
+  const start = startSession({ cwd: asked, prompt: "hi" }, h.env, controller.signal);
+  h.last().accept();
+  controller.abort();
+  const result = await start;
+  assert.deepEqual(
+    {
+      creation: result.creation,
+      submission: result.submission,
+      handle: result.handle,
+    },
+    { creation: "uncertain", submission: "uncertain", handle: null },
+  );
+  assert.equal(h.sentOf("create_session").length, 1);
+  assert.equal(h.pendingTimers(), 0);
+});
 
 test("a loss after Pi names the session only re-selects, by Piano's cwd", bounded, async () => {
   const h = world();

@@ -43,7 +43,12 @@ import {
   type ThinkingLevel,
   WORKTREE_CREATION_MS,
 } from "../../shared/wire.ts";
-import { type Connection, openConnection, type SocketEnvironment } from "../../web/src/lib/ws.ts";
+import {
+  type Connection,
+  openConnection,
+  type SendDisposition,
+  type SocketEnvironment,
+} from "../../web/src/lib/ws.ts";
 
 // ── Public vocabulary ───────────────────────────────────────────────────────
 
@@ -110,7 +115,8 @@ const oversized = (snapshot: Snapshot): boolean =>
 
 /** What an observation may do while it runs. Timers and the socket belong to `observe`. */
 interface Link {
-  readonly send: (message: ClientMessage) => void;
+  /** `not-sent` only when the socket was checked non-open: the frame never left this process. */
+  readonly send: (message: ClientMessage) => SendDisposition;
   readonly nonce: () => string;
   readonly after: (ms: number, run: () => void) => unknown;
   readonly cancel: (timer: unknown) => void;
@@ -143,7 +149,7 @@ function observe<T>(
     let done = false;
     const timers = new Set<unknown>();
     const link: Link = {
-      send: (message) => connection?.send(message),
+      send: (message) => connection?.send(message) ?? "not-sent",
       nonce: () => environment.nonce(),
       after: (ms, run) => {
         const timer = environment.setTimeout(() => {
@@ -235,7 +241,8 @@ const dispositionOf = (
  * handling of that input is known — including when Pi answers with a dialog, which it cannot
  * resolve on its own. `create_session` is sent exactly once: a connection lost before the session
  * is named leaves creation uncertain rather than creating a second session, and a loss after it
- * only re-attaches by identity.
+ * only re-attaches by identity. Until the frame is handed to an open socket nothing can exist, so
+ * a socket that never opens, a deadline or an abort before then reports `refused` / `not_sent`.
  */
 export function startSession(
   request: StartRequest,
@@ -271,6 +278,9 @@ export function startSession(
         detail,
       });
       const unnamed = (detail: string) => result("uncertain", "uncertain", detail);
+      /** Before the creation request left this process: no session, nothing to inspect. */
+      const unsent = (detail: string) =>
+        result("refused", "not_sent", `${detail} The creation request was not sent.`);
       const mine = (message: ServerMessage) =>
         selectionId !== null && selectionOf(message) === selectionId;
       /** Settles once this input's handling is known (`dispositionOf`). */
@@ -315,10 +325,10 @@ export function startSession(
       return {
         connected: () => {
           if (!requested) {
-            requested = true;
             selectionId = link.nonce();
             inputId = selectionId;
-            link.send({
+            // A send that throws may have reached Piano; only a socket found closed did not.
+            const sent = link.send({
               _tag: "create_session",
               selectionId,
               cwd,
@@ -326,6 +336,8 @@ export function startSession(
               ...(worktree ? { worktree } : {}),
               text: prompt,
             });
+            if (sent === "not-sent") settle(unsent("The connection closed before it could send."));
+            else requested = true;
             return;
           }
           // Only an identity may be re-sent. Creating again would start a second session for
@@ -343,7 +355,8 @@ export function startSession(
           });
         },
         disconnected: (fatal) => {
-          if (!handle)
+          if (!requested) settle(unsent("Piano could not be reached."));
+          else if (!handle)
             settle(
               unnamed(
                 fatal
@@ -490,21 +503,25 @@ export function startSession(
           }
         },
         deadline: () =>
-          handle
-            ? result(
-                "created",
-                "uncertain",
-                "Pi did not acknowledge this input before the start deadline.",
-              )
-            : unnamed("Piano did not answer before the start deadline."),
+          !requested
+            ? unsent("Piano could not be reached before the start deadline.")
+            : handle
+              ? result(
+                  "created",
+                  "uncertain",
+                  "Pi did not acknowledge this input before the start deadline.",
+                )
+              : unnamed("Piano did not answer before the start deadline."),
         aborted: () =>
-          handle
-            ? result(
-                "created",
-                "uncertain",
-                "Observation was abandoned; the session was left running.",
-              )
-            : unnamed("Observation was abandoned before Pi named the session."),
+          !requested
+            ? unsent("The start was abandoned before it was sent.")
+            : handle
+              ? result(
+                  "created",
+                  "uncertain",
+                  "Observation was abandoned; the session was left running.",
+                )
+              : unnamed("Observation was abandoned before Pi named the session."),
       };
     },
   );
