@@ -48,9 +48,22 @@ export interface ImageDraft {
 /** The draft has something to send: visible text or an image. */
 export const hasContent = (draft: { text: string; images: Pick<ImageDraft, "items"> }) =>
   draft.text.trim().length > 0 || draft.images.items.length > 0;
-/** The draft has content and no image is still being read. */
+const TOO_MANY = "Attach up to 4 images per message.";
+const TOO_LARGE = "Images must total 20 MiB or less.";
+/**
+ * Why `items` cannot be sent as one message, or "" when they can. A draft can hold more than the
+ * limits allow (refused input returned while images were added): it stays editable until an image
+ * is removed.
+ */
+const overLimit = (items: readonly Attachment[]) =>
+  items.length > MAX_ATTACHMENTS
+    ? TOO_MANY
+    : items.reduce((n, a) => n + base64Bytes(a.data), 0) > MAX_ATTACHMENT_BYTES
+      ? TOO_LARGE
+      : "";
+/** The draft has content, no image is still being read, and its images fit in one message. */
 export const sendable = (draft: { text: string; images: Pick<ImageDraft, "items" | "busy"> }) =>
-  !draft.images.busy && hasContent(draft);
+  !draft.images.busy && hasContent(draft) && !overLimit(draft.images.items);
 
 /** What a file says about itself before it is read in full: its first bytes are enough to recognize it. */
 export interface ImageCandidate {
@@ -77,13 +90,12 @@ export function checkImages(
   current: readonly Attachment[],
   files: readonly ImageCandidate[],
 ): ImageCheck {
-  if (current.length + files.length > MAX_ATTACHMENTS)
-    return { ok: false, reason: "Attach up to 4 images per message." };
+  if (current.length + files.length > MAX_ATTACHMENTS) return { ok: false, reason: TOO_MANY };
   if (
     current.reduce((n, a) => n + base64Bytes(a.data), 0) + files.reduce((n, f) => n + f.size, 0) >
     MAX_ATTACHMENT_BYTES
   )
-    return { ok: false, reason: "Images must total 20 MiB or less." };
+    return { ok: false, reason: TOO_LARGE };
   const mimeTypes: Attachment["mimeType"][] = [];
   for (const file of files) {
     if (!file.size || file.size > MAX_IMAGE_BYTES)
@@ -200,21 +212,33 @@ export interface Drafts {
 /**
  * `submitted` back in a draft that holds `now`, typed since: the submitted text, then the newer
  * paragraph; its images and quotes before the newer ones. A newer image still being read keeps
- * `now`'s busy state, and its reader appends to whatever the draft holds when it finishes.
+ * `now`'s busy state, and its reader appends to whatever the draft holds when it finishes. Images
+ * past the limits stay, with the reason the draft cannot be sent.
  */
-const restore = (submitted: Draft, now: Draft): Draft => ({
-  text: now.text.trim() ? appendParagraph(submitted.text, now.text) : submitted.text,
-  images: {
-    ...now.images,
-    items: [...submitted.images.items, ...now.images.items],
-  },
-  quotes: [...submitted.quotes, ...now.quotes.filter((q) => !submitted.quotes.includes(q))],
-});
+const restore = (submitted: Draft, now: Draft): Draft => {
+  const items = [...submitted.images.items, ...now.images.items];
+  return {
+    text: now.text.trim() ? appendParagraph(submitted.text, now.text) : submitted.text,
+    images: { ...now.images, items, error: overLimit(items) || now.images.error },
+    quotes: [...submitted.quotes, ...now.quotes.filter((q) => !submitted.quotes.includes(q))],
+  };
+};
+
+/**
+ * A prefix no other page's drafts share: every tab attached to a session hears Pi's receipts for
+ * all of their input, so an `inputId` must name one tab's submission. `crypto.randomUUID` needs a
+ * secure context; `getRandomValues` does not.
+ */
+const inputPrefix = () =>
+  Array.from(globalThis.crypto.getRandomValues(new Uint8Array(8)), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
 
 export function createDrafts(): Drafts {
   const drafts = new Map<DraftKey, Draft>();
   /** Session input sent but not yet reported by Pi or refused, by the `inputId` it was sent with. */
   const unconfirmed = new Map<string, { key: DraftKey; draft: Draft }>();
+  const prefix = inputPrefix();
   let inputs = 0;
   const listeners = new Set<() => void>();
   const get = (key: DraftKey | null): Draft => (key && drafts.get(key)) || EMPTY_DRAFT;
@@ -274,7 +298,8 @@ export function createDrafts(): Drafts {
             data: await encode(file),
           });
         // Refused input may have come back meanwhile; the check counted the images before it.
-        setImages(key, { items: [...get(key).images.items, ...added], busy: false, error: "" });
+        const items = [...get(key).images.items, ...added];
+        setImages(key, { items, busy: false, error: overLimit(items) });
       } catch (e) {
         setImages(key, {
           ...get(key).images,
@@ -285,8 +310,11 @@ export function createDrafts(): Drafts {
     },
     removeImage(key, index) {
       const { images } = get(key);
-      if (key && !images.busy)
-        setImages(key, { ...images, items: images.items.filter((_, i) => i !== index) });
+      if (!key || images.busy) return;
+      const items = images.items.filter((_, i) => i !== index);
+      // A limit's reason goes once the draft fits again; a refused addition's stays.
+      const error = overLimit(items) || (overLimit(images.items) ? "" : images.error);
+      setImages(key, { ...images, items, error });
     },
     addQuote(key, selected) {
       const quote = quoteText(selected);
@@ -301,7 +329,7 @@ export function createDrafts(): Drafts {
     submit(key, deliver) {
       const draft = get(key);
       if (!key || !isSendable(draft)) return false;
-      const inputId = `input-${++inputs}`;
+      const inputId = `input-${prefix}-${++inputs}`;
       if (deliver(draftMessage(draft), inputId) === "not-sent") return false;
       if (key !== NEW_SESSION_DRAFT) unconfirmed.set(inputId, { key, draft });
       update(key, () => EMPTY_DRAFT);

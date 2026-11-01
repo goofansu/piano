@@ -1149,67 +1149,81 @@ test("every change ends with one toast naming it after it succeeds; a failed cha
  * real client, drafts and transport-level sends meet the real dispatch; only the socket is
  * replaced by direct delivery.
  */
-const archiveRace = Effect.gen(function* () {
-  const session = yield* registered(`pin-132-${++databases}`);
-  const { sessionId } = session.spec;
-  const requests: ClientMessage[] = [];
-  let handlers: ConnectionHandlers | undefined;
-  const browser = createClient({
-    initial: initialState,
-    connect: (h) => {
-      handlers = h;
-      return {
-        send: (m) => {
-          requests.push(m);
-          return "sent";
-        },
-        close: () => {},
-      };
-    },
-    notify: () => {},
-  });
-  browser.start();
-  handlers!.onStatus(true);
-  const a = yield* makeClientDispatch({
-    send: (m) => Effect.sync(() => handlers!.onMessage(m)),
-    overflow: (e) => Effect.die(e),
-  });
-  const b = yield* makeClientDispatch({ send: () => Effect.void, overflow: (e) => Effect.die(e) });
-  const drafts = createDrafts();
-  drafts.follow(browser);
-  const key = sessionDraftKey({ cwd, sessionId });
-  browser.select(cwd, sessionId);
-  yield* yield* a.receive(requests.find((m) => m._tag === "select")!);
-  assert.equal(browser.getState().session?.sessionId, sessionId);
-  const until = (ready: () => boolean) =>
-    Effect.gen(function* () {
-      while (!ready()) yield* Effect.sleep("5 millis");
+const archiveRace = (options: { startsClosingHost?: boolean } = {}) =>
+  Effect.gen(function* () {
+    const session = yield* registered(`pin-132-${++databases}`);
+    const { sessionId } = session.spec;
+    const requests: ClientMessage[] = [];
+    let handlers: ConnectionHandlers | undefined;
+    const browser = createClient({
+      initial: initialState,
+      connect: (h) => {
+        handlers = h;
+        return {
+          send: (m) => {
+            requests.push(m);
+            return "sent";
+          },
+          close: () => {},
+        };
+      },
+      notify: () => {},
     });
-  /** Composer-style send; returns the act the browser handed its socket. */
-  const send = () => {
-    const before = requests.length;
-    assert.equal(
-      drafts.submit(key, (message, inputId) =>
-        browser.send(messageCommand("follow-up", message, {}, inputId)),
+    browser.start();
+    handlers!.onStatus(true);
+    const hosts = yield* SessionHosts;
+    const a = yield* makeClientDispatch({
+      send: (m) => Effect.sync(() => handlers!.onMessage(m)),
+      overflow: (e) => Effect.die(e),
+    }).pipe(
+      // A's start resolves the live host just before B's archive takes the session's lock, so
+      // A's input reaches a host that is closing.
+      Effect.provideService(
+        SessionHosts,
+        options.startsClosingHost
+          ? { ...hosts, start: () => Effect.succeed({ session, launched: false }) }
+          : hosts,
       ),
-      true,
-      "the transport accepted the send",
     );
-    const act = requests.slice(before).find((m) => m._tag === "act");
-    assert.ok(act?._tag === "act");
-    return act;
-  };
-  const archive = Effect.gen(function* () {
-    yield* yield* b.receive({ _tag: "archive_session", cwd, sessionId });
-    yield* until(() => browser.getState().sessionReferences.some((r) => r.archived));
+    const b = yield* makeClientDispatch({
+      send: () => Effect.void,
+      overflow: (e) => Effect.die(e),
+    });
+    const drafts = createDrafts();
+    drafts.follow(browser);
+    const key = sessionDraftKey({ cwd, sessionId });
+    browser.select(cwd, sessionId);
+    yield* yield* a.receive(requests.find((m) => m._tag === "select")!);
+    assert.equal(browser.getState().session?.sessionId, sessionId);
+    const until = (ready: () => boolean) =>
+      Effect.gen(function* () {
+        while (!ready()) yield* Effect.sleep("5 millis");
+      });
+    /** Composer-style send; returns the act the browser handed its socket. */
+    const send = () => {
+      const before = requests.length;
+      assert.equal(
+        drafts.submit(key, (message, inputId) =>
+          browser.send(messageCommand("follow-up", message, {}, inputId)),
+        ),
+        true,
+        "the transport accepted the send",
+      );
+      const act = requests.slice(before).find((m) => m._tag === "act");
+      assert.ok(act?._tag === "act");
+      return act;
+    };
+    const archive = Effect.gen(function* () {
+      yield* yield* b.receive({ _tag: "archive_session", cwd, sessionId });
+      yield* until(() => browser.getState().sessionReferences.some((r) => r.archived));
+    });
+    return { browser, a, drafts, key, send, archive, requests: () => requests };
   });
-  return { browser, a, drafts, key, send, archive };
-});
 
 test("PIN-132: once a browser hears its session is archived, it keeps the draft and sends nothing", async () => {
   await run(
     Effect.gen(function* () {
-      const { browser, drafts, key, archive } = yield* archiveRace;
+      const { browser, drafts, key, archive } = yield* archiveRace();
       drafts.setText(key, "Keep me");
       assert.equal(sessionPane(browser.getState()).composerDisabled, false);
       yield* archive;
@@ -1223,7 +1237,7 @@ test("PIN-132: once a browser hears its session is archived, it keeps the draft 
 test("PIN-132: a follow-up refused as archived after the socket took it returns to the draft ahead of newer edits", async () => {
   await run(
     Effect.gen(function* () {
-      const { browser, a, drafts, key, send, archive } = yield* archiveRace;
+      const { browser, a, drafts, key, send, archive } = yield* archiveRace();
       drafts.setText(key, "Submitted");
       drafts.addQuote(key, "Quoted");
       const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
@@ -1254,13 +1268,52 @@ test("PIN-132: a follow-up refused as archived after the socket took it returns 
 test("PIN-132: a follow-up Piano accepts clears its draft and never comes back", async () => {
   await run(
     Effect.gen(function* () {
-      const { browser, a, drafts, key, send } = yield* archiveRace;
+      const { browser, a, drafts, key, send } = yield* archiveRace();
       drafts.setText(key, "Reply with exactly: X");
       const act = send();
       yield* yield* a.receive(act);
       assert.ok(act.action._tag === "prompt" && act.action.inputId);
       assert.equal(browser.getState().session?.state.submission?.inputId, act.action.inputId);
       assert.deepEqual(drafts.get(key), EMPTY_DRAFT);
+    }),
+  );
+});
+
+test("PIN-132: a follow-up its host refuses while another browser archives the session returns to the draft", async () => {
+  await run(
+    Effect.gen(function* () {
+      const { browser, a, drafts, key, send, archive, requests } = yield* archiveRace({
+        startsClosingHost: true,
+      });
+      drafts.setText(key, "Submitted");
+      const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+      yield* Effect.promise(() =>
+        drafts.addImages(key, [new File([png], "shot.png", { type: "image/png" })], async () =>
+          Buffer.from(png).toString("base64"),
+        ),
+      );
+      const act = send();
+      drafts.setText(key, "Typed while waiting");
+      const errors: ServerMessage[] = [];
+      const stop = browser.listen((m) => {
+        if (m._tag === "error") errors.push(m);
+      });
+      yield* archive;
+      yield* yield* a.receive(act);
+      stop();
+      assert.ok(act.action._tag === "prompt");
+      assert.deepEqual(
+        errors.map((m) => m._tag === "error" && m.inputId),
+        [act.action.inputId],
+        "the host refused the input before Pi saw it, naming it",
+      );
+      assert.equal(drafts.get(key).text, "Submitted\n\nTyped while waiting");
+      assert.deepEqual(
+        drafts.get(key).images.items.map((i) => i.name),
+        ["shot.png"],
+      );
+      assert.equal(sessionPane(browser.getState()).composerDisabled, true);
+      assert.equal(requests().filter((m) => m._tag === "act").length, 1, "nothing is sent again");
     }),
   );
 });

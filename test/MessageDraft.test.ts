@@ -278,6 +278,9 @@ function source() {
         listeners.delete(listener);
       };
     },
+    emit: (message: ServerMessage) => {
+      for (const listener of listeners) listener(message);
+    },
     restore: (
       session: { cwd: string; sessionId: string },
       messages: { kind: "steering" | "follow-up"; text: string }[],
@@ -348,4 +351,91 @@ test("text added to a draft starts a new paragraph only after visible text; typi
     "from Changes\n\nfrom an extension!",
     "typed characters join the text as they are",
   );
+});
+
+/** What every tab attached to the session hears: Pi's receipt for some tab's input, or a refusal. */
+const receipt = (inputId: string) =>
+  ({
+    _tag: "session",
+    selectionId: "any",
+    cursor: 1,
+    event: { _tag: "submission", submission: { inputId } },
+  }) as unknown as ServerMessage;
+const refusal = (inputId: string) =>
+  ({ _tag: "error", message: "This session is archived.", inputId }) as ServerMessage;
+
+test("PIN-132: two tabs' first sends carry distinct input IDs, so one tab's receipt never settles the other's", () => {
+  const page = source();
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "two-tabs" });
+  const [a, b] = [createDrafts(), createDrafts()];
+  a.follow(page);
+  b.follow(page);
+  const sent: string[] = [];
+  for (const [drafts, text] of [
+    [a, "from A"],
+    [b, "from B"],
+  ] as const) {
+    drafts.setText(key, text);
+    assert.equal(
+      drafts.submit(key, (_, inputId) => {
+        sent.push(inputId);
+        return "sent";
+      }),
+      true,
+    );
+  }
+  assert.notEqual(sent[0], sent[1]);
+  for (const message of [receipt(sent[1]!), refusal(sent[0]!)]) page.emit(message);
+  assert.equal(a.get(key).text, "from A", "A's refused input comes back to A");
+  assert.equal(b.get(key), EMPTY_DRAFT, "B's accepted input stays sent");
+});
+
+test("PIN-132: refused images returned while another is added stay editable past the limit, never sent", async () => {
+  const page = source();
+  const drafts = createDrafts();
+  drafts.follow(page);
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "five-images" });
+  drafts.setText(key, "four shots");
+  await drafts.addImages(
+    key,
+    ["1", "2", "3", "4"].map((n) => pngFile(`${n}.png`)),
+    encode,
+  );
+  let inputId = "";
+  assert.equal(
+    drafts.submit(key, (_, id) => {
+      inputId = id;
+      return "sent";
+    }),
+    true,
+  );
+  // The writer adds a fifth while the server's refusal is on its way; the check sees one image.
+  let finish!: () => void;
+  const reading = drafts.addImages(key, [pngFile("5.png")], async (file) => {
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    return encode(file);
+  });
+  while (!finish) await new Promise((resolve) => setImmediate(resolve));
+  drafts.setText(key, "and one more");
+  page.emit(refusal(inputId));
+  finish();
+  await reading;
+  const draft = drafts.get(key);
+  assert.equal(draft.text, "four shots\n\nand one more");
+  assert.deepEqual(
+    draft.images.items.map((a) => a.name),
+    ["1.png", "2.png", "3.png", "4.png", "5.png"],
+  );
+  assert.match(draft.images.error, /up to 4 images/);
+  assert.equal(drafts.sendable(key), false);
+  assert.equal(
+    drafts.submit(key, () => assert.fail("a message over the limit is not delivered")),
+    false,
+  );
+  assert.equal(drafts.get(key), draft, "the draft is kept whole");
+  drafts.removeImage(key, 4);
+  assert.equal(drafts.get(key).images.error, "");
+  assert.equal(drafts.sendable(key), true);
 });

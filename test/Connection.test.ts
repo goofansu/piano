@@ -317,3 +317,24 @@ test("close() stops timers, network listeners and reconnects, and ignores the ol
   assert.deepEqual(h.statuses, [[true]]);
   assert.deepEqual(h.delivered(), []);
 });
+
+test("PIN-132: a message the wire cannot encode is not sent and keeps the socket", () => {
+  const h = harness();
+  h.last().accept();
+  const image = { kind: "image", name: "a.png", mimeType: "image/png", data: "iVBORw0KGgo=" };
+  const act = (images: number) =>
+    ({
+      _tag: "act",
+      selectionId: "s",
+      action: {
+        _tag: "prompt",
+        text: "shots",
+        attachments: Array(images).fill(image),
+        inputId: "a-1",
+      },
+    }) as ClientMessage;
+  assert.equal(h.connection.send(act(5)), "not-sent");
+  assert.ok(!h.last().sent.some((m) => m._tag === "act"));
+  assert.ok(!h.last().closed, "the socket stays up");
+  assert.equal(h.connection.send(act(4)), "sent", "the same message within the limit goes");
+});

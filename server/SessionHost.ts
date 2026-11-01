@@ -6,7 +6,13 @@
 import { Clock, Deferred, Effect, Exit, Fiber, Scope, Semaphore, Stream } from "effect";
 import { applySessionEvent } from "../shared/sessionProjection.ts";
 import { workUnderWay } from "../shared/sessionStatus.ts";
-import type { HostInfo, SessionClosure, SessionState, Snapshot } from "../shared/wire.ts";
+import type {
+  HostInfo,
+  SessionAction,
+  SessionClosure,
+  SessionState,
+  Snapshot,
+} from "../shared/wire.ts";
 import {
   type PiSession,
   PiSessionError,
@@ -45,6 +51,9 @@ export interface CloseHow {
 
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 const stopped = () => rejected("Pi is closing or has stopped. Refresh before sending new input.");
+/** A refusal before Pi saw the action, so its sender may take the input back. */
+const notSent = (error: PiSessionError) =>
+  new PiSessionError({ reason: error.reason, detail: error.detail, notSent: true });
 
 /** What the hosts list says of a running session. The host announces a change whenever these
  * facts differ from those it last announced, whichever event changed them. */
@@ -118,7 +127,8 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
     });
   });
 
-  const act: PiSession["act"] = Effect.fn("SessionHost.act")(function* (action) {
+  // Every refusal before `raw.act` is one Pi never saw.
+  const admit = Effect.fn("SessionHost.admit")(function* (action: SessionAction) {
     if (closing)
       return yield* rejected("Pi is closing. Wait for shutdown before reopening history.");
     // Outside the ownership lock, like the work itself: the reference and its project already
@@ -137,6 +147,10 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
         .touchSession(raw.spec.cwd, raw.spec.sessionId, "text" in action ? action.text : undefined)
         .pipe(Effect.mapError((e) => rejected(e.detail)));
     }
+  });
+
+  const act: PiSession["act"] = Effect.fn("SessionHost.act")(function* (action) {
+    yield* admit(action).pipe(Effect.mapError(notSent));
     // Admit an action atomically against retirement, but don't hold the lock while awaiting a
     // command whose dialog another action must answer.
     const fiber = yield* Semaphore.withPermits(
@@ -144,9 +158,9 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
       1,
     )(
       Effect.gen(function* () {
-        if (closing) return yield* stopped();
+        if (closing) return yield* Effect.fail(notSent(stopped()));
         if (sessionActionPolicy[action._tag].needsCheckout)
-          yield* references.requireCheckout(raw.spec.cwd);
+          yield* references.requireCheckout(raw.spec.cwd).pipe(Effect.mapError(notSent));
         actions++;
         lastActivity = yield* Clock.currentTimeMillis;
         return yield* raw.act(action).pipe(

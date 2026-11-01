@@ -25,6 +25,8 @@ import type { PiExchange, PiReadback, PiRecord } from "./PiRecords.ts";
 export class PiSessionError extends Data.TaggedError("PiSessionError")<{
   readonly reason: "spawn" | "exited" | "protocol" | "rejected" | "timeout" | "transport";
   readonly detail: string;
+  /** Refused before Pi saw the action (a closing host, a missing checkout): never delivered. */
+  readonly notSent?: true;
 }> {}
 
 /** Host acknowledgement deadline, not a deadline for model work or extension execution. */

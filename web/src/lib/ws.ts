@@ -14,7 +14,8 @@ import {
 } from "../../../shared/wire.ts";
 
 /** Local disposition only: `sent` is socket acceptance, not a server or Pi receipt.
- * A throwing send is uncertain; only a socket checked non-open is known not to have sent. */
+ * A throwing send is uncertain; only a message the wire cannot encode, or a socket checked
+ * non-open, is known not to have sent. */
 export type SendDisposition = "not-sent" | "sent" | "uncertain";
 
 export interface Connection {
@@ -206,12 +207,20 @@ export function openConnection(
   return {
     send: (m) => {
       const ws = socket.current;
+      let data: string;
+      try {
+        // A message the wire refuses (five images, say) never reaches the socket.
+        data = encodeClientMessage(m);
+      } catch (err) {
+        console.warn("unencodable client message", err);
+        return "not-sent";
+      }
       try {
         if (!ws?.isOpen()) {
           recover.current();
           return "not-sent";
         }
-        ws.send(encodeClientMessage(m));
+        ws.send(data);
         return "sent";
       } catch {
         recover.current();
