@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/empty";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -235,7 +234,10 @@ function PromptEditor({
         if (!open && !busy) close();
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto" aria-describedby={undefined}>
+      <DialogContent
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>New prompt</DialogTitle>
         </DialogHeader>
@@ -243,19 +245,16 @@ function PromptEditor({
           <FieldGroup>
             <Field data-invalid={!!nameError}>
               <FieldLabel htmlFor="prompt-name">Name</FieldLabel>
-              <InputGroup>
-                <InputGroupAddon className="font-mono">/</InputGroupAddon>
-                <InputGroupInput
-                  id="prompt-name"
-                  required
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="font-mono"
-                  value={name}
-                  aria-invalid={!!nameError}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </InputGroup>
+              <Input
+                id="prompt-name"
+                required
+                autoComplete="off"
+                spellCheck={false}
+                className="font-mono"
+                value={name}
+                aria-invalid={!!nameError}
+                onChange={(e) => setName(e.target.value)}
+              />
               {nameError && <FieldError role="alert">{nameError}</FieldError>}
             </Field>
             <Field>
