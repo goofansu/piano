@@ -97,6 +97,8 @@ interface FakeSocket {
   readonly isClosed: () => boolean;
   /** The next send of this frame is enqueued, then throws. */
   readonly failAfterSending: (tag: ClientMessage["_tag"]) => void;
+  /** The socket closes while the client handles the next frame: its answer finds it closed. */
+  readonly closeWhileHandling: () => void;
   /** The selection the client is currently awaiting a reply for. */
   readonly selection: () => string;
 }
@@ -115,6 +117,7 @@ function world() {
       let closed = false;
       let delivered = 0;
       let failing: ClientMessage["_tag"] | null = null;
+      let closing = false;
       const sent: ClientMessage[] = [];
       const frame = (message: ServerMessage) => {
         if (!open || closed) return;
@@ -135,6 +138,9 @@ function world() {
         failAfterSending: (tag) => {
           failing = tag;
         },
+        closeWhileHandling: () => {
+          closing = true;
+        },
         selection: () => {
           const last = [...sent]
             .reverse()
@@ -144,7 +150,15 @@ function world() {
         },
       });
       return {
-        isOpen: () => open && !closed,
+        isOpen: () => {
+          const now = open && !closed;
+          // Open for the check that delivers the frame, closed for anything after it.
+          if (closing && now) {
+            closing = false;
+            open = false;
+          }
+          return now;
+        },
         send: (data) => {
           // A closed WebSocket drops what it is handed; only sending before OPEN is an error.
           if (closed) return;
@@ -2025,6 +2039,41 @@ test(
     assert.equal(g.pendingTimers(), 0);
   },
 );
+
+test(
+  "a follow-up whose message finds the socket closed reports it not sent and never resends it",
+  bounded,
+  async () => {
+    const h = world();
+    const sent = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
+    h.last().accept();
+    const socket = h.last();
+    socket.closeWhileHandling();
+    socket.frame(selected(socket.selection(), running()));
+    // Every chance to reconnect and send the message again.
+    await h.advanceAsync(60_000);
+    const result = await sent;
+    assert.equal(result.submission, "not_sent", JSON.stringify(result));
+    assert.match(result.detail ?? "", /closed before it could send/);
+    assert.equal(h.sentOf("act").length, 0, "the message never left this process");
+    assert.equal(h.sockets.length, 1, "it does not reconnect to send it again");
+    assert.equal(h.pendingTimers(), 0);
+  },
+);
+
+test("a follow-up whose send throws after enqueueing stays uncertain", bounded, async () => {
+  const h = world();
+  const sent = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
+  h.last().accept();
+  const socket = h.last();
+  socket.failAfterSending("act");
+  socket.frame(selected(socket.selection(), running()));
+  await h.advanceAsync(60_000);
+  const result = await sent;
+  assert.equal(result.submission, "uncertain", JSON.stringify(result));
+  assert.equal(h.sentOf("act").length, 1, "a message Pi may hold is never sent twice");
+  assert.equal(h.pendingTimers(), 0);
+});
 
 test("a refused selection sends nothing", bounded, async () => {
   const h = world();
