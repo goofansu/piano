@@ -251,21 +251,28 @@ for (const [platform, name] of supervisors) {
       const app = join(f.workspace, "apps", "web");
       await mkdir(app, { recursive: true });
       await symlink(app, join(f.workspace, "web"));
+      // Admission reads the program name; the start still needs each to be a runnable file.
+      const bin = join(f.root, "bin");
+      await mkdir(bin);
+      const tool = async (name: string) => {
+        await writeFile(join(bin, name), "#!/bin/sh\n", { mode: 0o755 });
+        return join(bin, name);
+      };
       for (const command of [
-        ["/usr/bin/npm", "run", "dev"],
-        ["/usr/bin/npm", "--prefix", app, "run", "dev"],
-        ["/usr/bin/pnpm", "--dir=apps/web", "dev"],
-        ["/usr/bin/yarn", "--cwd", "web", "dev"],
-        ["/usr/bin/vite", "apps/web", "--host", "127.0.0.1"],
-        ["/usr/bin/next", "dev", "apps/web"],
+        [await tool("npm"), "run", "dev"],
+        [await tool("npm"), "--prefix", app, "run", "dev"],
+        [await tool("pnpm"), "--dir=apps/web", "dev"],
+        [await tool("yarn"), "--cwd", "web", "dev"],
+        [await tool("vite"), "apps/web", "--host", "127.0.0.1"],
+        [await tool("next"), "dev", "apps/web"],
         [process.execPath, "apps/web/server.js"],
         [process.execPath, "/opt/node_modules/vite/bin/vite.js", "apps/web"],
-        ["/usr/bin/python3", "apps/web/app.py"],
-        ["/usr/bin/python3", "-u", "apps/web/app.py"],
-        ["/usr/bin/python3", "web/../web/app.py"],
-        ["/usr/bin/python3", "-m", "uvicorn", "app:app", "--app-dir", "apps/web"],
-        ["/usr/bin/flask", "--app", "apps/web/app.py", "run"],
-        ["/usr/bin/gunicorn", "--chdir", "apps/web", "app:app"],
+        [await tool("python3"), "apps/web/app.py"],
+        [await tool("python3"), "-u", "apps/web/app.py"],
+        [await tool("python3"), "web/../web/app.py"],
+        [await tool("python3"), "-m", "uvicorn", "app:app", "--app-dir", "apps/web"],
+        [await tool("flask"), "--app", "apps/web/app.py", "run"],
+        [await tool("gunicorn"), "--chdir", "apps/web", "app:app"],
       ]) {
         const result = observation(await f.call({ command }));
         assert.equal(result.workspace, f.workspace);
@@ -313,6 +320,64 @@ for (const [platform, name] of supervisors) {
     assert.equal(current.instanceId, first.instanceId);
     assert.equal(current.state, first.state);
   });
+
+  contract(
+    "a replacement naming an unrunnable absolute file keeps the healthy app running",
+    async (t) => {
+      const f = await fixture(t);
+      const server = createHttpServer((_request, response) => response.end("app"));
+      t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+      server.listen(0, "127.0.0.1");
+      await once(server, "listening");
+      const address = server.address();
+      assert.ok(address && typeof address !== "string");
+      const started = observation(await f.call());
+      await bindTo(f, started.serviceId, address.port);
+      f.host.phase = "running";
+      const healthy = observation(await f.call({ action: "status" }));
+      assert.equal(healthy.ready, true);
+      const notExecutable = join(f.root, "not-executable");
+      await writeFile(notExecutable, "#!/bin/sh\n", { mode: 0o644 });
+      for (const missing of [join(f.root, "no-such-executable"), f.workspace, notExecutable]) {
+        await assert.rejects(
+          f.call({ command: [missing], replace: healthy.instanceId }),
+          /is not an executable file\. No running preview was stopped/,
+        );
+        assert.equal(f.stops.length, 0);
+        assert.equal(f.launched.length, 1);
+        const current = observation(await f.call({ action: "status" }));
+        assert.equal(current.instanceId, healthy.instanceId);
+        assert.equal(current.state, "running");
+        assert.equal(current.url, healthy.url);
+      }
+      // A runnable absolute file still replaces, and only the exact current instance.
+      f.host.onStop = async () => {
+        f.host.phase = "failed";
+      };
+      assert.deepEqual(await f.call({ command: ["/bin/true"], replace: "stale" }), {
+        serviceId: healthy.serviceId,
+        status: "not-current",
+        replaced: false,
+      });
+      const replaced = observation(
+        await f.call({ command: ["/bin/true"], replace: healthy.instanceId }),
+      );
+      assert.ok("replaced" in replaced && replaced.replaced === healthy.instanceId);
+      assert.equal(f.stops.length, 1);
+      assert.equal(f.launched.length, 2);
+      // A bare name still resolves on the app's PATH under the same exact-instance check.
+      f.config.path = "/usr/bin:/bin";
+      assert.deepEqual(await f.call({ command: ["true"], replace: healthy.instanceId }), {
+        serviceId: healthy.serviceId,
+        status: "not-current",
+        replaced: false,
+      });
+      const bare = observation(await f.call({ command: ["true"], replace: replaced.instanceId }));
+      assert.equal(bare.spec.command[0], "/usr/bin/true");
+      assert.equal(f.stops.length, 2);
+      assert.equal(f.launched.length, 3);
+    },
+  );
 
   contract(
     "a bare executable resolves on the app's PATH; an unknown one launches nothing",

@@ -324,6 +324,15 @@ async function choosePort(config: PreviewConfig, root: string, origin: string) {
   );
 }
 
+async function runnableFile(path: string) {
+  try {
+    await access(path, constants.X_OK);
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /** A bare name resolves against the app's own PATH, so the saved launch names an absolute file. */
 async function executable(name: string, path: string) {
   if (name.includes("/")) {
@@ -332,14 +341,18 @@ async function executable(name: string, path: string) {
   }
   for (const directory of path.split(":").filter(isAbsolute)) {
     const candidate = join(directory, name);
-    try {
-      await access(candidate, constants.X_OK);
-      if ((await stat(candidate)).isFile()) return candidate;
-    } catch {
-      /* Not in this directory. */
-    }
+    if (await runnableFile(candidate)) return candidate;
   }
   throw new Error(`command[0] "${name}" is not an executable on the app's PATH (${path})`);
+}
+
+/** A launch Piano is about to submit must name a runnable file, checked before anything stops.
+ * Reuse skips this: a running app keeps its launch even if the file has since changed. */
+async function checkRunnable(command: string[]) {
+  if (!(await runnableFile(command[0])))
+    throw new Error(
+      `command[0] "${command[0]}" is not an executable file. No running preview was stopped.`,
+    );
 }
 
 async function launchSpec(
@@ -1186,6 +1199,7 @@ export class PreviewAdapter {
     }
     const spec = await launchSpec(requested, config, this.platform);
     await admitLaunch(spec.command, workspace);
+    await checkRunnable(spec.command);
     const timeout = request.timeoutSeconds ?? 15;
     if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 1 || timeout > 30)
       throw new Error("timeoutSeconds must be between 1 and 30");
