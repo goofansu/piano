@@ -14,6 +14,7 @@ import { test } from "node:test";
 import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { UserSkills, UserSkillsEnvironment, UserSkillsLive } from "../server/UserSkills.ts";
+import { SKILL_INSTRUCTIONS_MAX } from "../shared/skills.ts";
 
 /** A throwaway home: the skills directory Piano writes and Pi's own user skills directory. */
 function home(t: { after: (fn: () => void) => void }) {
@@ -105,6 +106,11 @@ test("a create names the field it refuses and never overwrites a skill", async (
   assert.equal(refusal(await create("pi-own")).field, "name", "a name Pi already loads");
   assert.equal(refusal(await create("ok", "  ")).field, "description");
   assert.equal(refusal(await create("ok", "D.", "\n")).field, "instructions");
+  const max = "x".repeat(SKILL_INSTRUCTIONS_MAX);
+  assert.equal(refusal(await create("ok", "D.", `${max}x`)).field, "instructions");
+  assert.equal(refusal(await create("ok", "d".repeat(1025))).field, "description");
   assert.match(readFileSync(join(directory, "taken", "SKILL.md"), "utf8"), /Original\./);
+  // The limit counts what is saved: surrounding whitespace does not push a body over it.
+  assert.equal((await create("at-limit", "D.", `\n${max}\n\n`))._tag, "Success");
   assert.equal(existsSync(join(directory, "ok")), false);
 });

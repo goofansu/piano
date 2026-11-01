@@ -12,8 +12,9 @@ import { join } from "node:path";
 import { loadSkillsFromDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
 import {
+  checkSkillDraft,
   SKILL_NAME,
-  SKILL_NAME_MAX,
+  USER_SKILL_FIELDS,
   type UserSkill,
   type UserSkillCreate,
   type UserSkillField,
@@ -124,17 +125,22 @@ export const UserSkillsLive = Layer.effect(
       );
 
     const create = Effect.fn("UserSkills.create")(function* (request: UserSkillCreate) {
-      const name = request.name.trim();
-      const description = request.description.trim();
-      const instructions = request.instructions.trim();
-      if (!name) return yield* refused("Enter a name.", "name");
-      if (name.length > SKILL_NAME_MAX || !SKILL_NAME.test(name))
+      const check = checkSkillDraft(request);
+      const label = { name: "a name", description: "a description", instructions: "instructions" };
+      for (const field of USER_SKILL_FIELDS) {
+        if (!check[field].length) return yield* refused(`Enter ${label[field]}.`, field);
+        if (check[field].over)
+          return yield* refused(
+            `Keep it to ${check[field].max.toLocaleString("en")} characters.`,
+            field,
+          );
+      }
+      const { name, description, instructions } = check.saved!;
+      if (!SKILL_NAME.test(name))
         return yield* refused(
           "Use lowercase letters and digits, with hyphens between them.",
           "name",
         );
-      if (!description) return yield* refused("Enter a description.", "description");
-      if (!instructions) return yield* refused("Enter instructions.", "instructions");
       const dir = join(root(), name);
       return yield* Effect.try({
         try: () => {

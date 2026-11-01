@@ -1,4 +1,10 @@
-import { USER_SKILL_FIELDS, type UserSkill, type UserSkillField } from "@shared/skills";
+import {
+  checkSkillDraft,
+  USER_SKILL_FIELDS,
+  type UserSkill,
+  type UserSkillField,
+} from "@shared/skills";
+import { cn } from "cn";
 import { MoreHorizontalIcon, SparklesIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -35,7 +41,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -194,11 +200,14 @@ function SkillEditor({
     failure: "keep",
   });
   const busy = actions.running !== undefined;
+  // The same rule the server applies: Create skill stays off until every field is filled and in bounds.
+  const check = checkSkillDraft({ name, description, instructions });
   const [errorField, setErrorField] = useState<UserSkillField | undefined>();
   const errorAt = (field: UserSkillField | undefined) =>
     actions.error && errorField === field ? actions.error : undefined;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!check.saved) return;
     const created = await actions.run({
       id: "create",
       run: () =>
@@ -216,12 +225,26 @@ function SkillEditor({
     id: UserSkillField,
     label: string,
     control: (invalid: boolean) => React.ReactNode,
+    counted = false,
   ) => {
     const error = errorAt(id);
     return (
       <Field data-invalid={!!error}>
         <FieldLabel htmlFor={`skill-${id}`}>{label}</FieldLabel>
-        {control(!!error)}
+        {control(!!error || check[id].over)}
+        {/* The count, not a maxLength, as New project's instructions: a paste over the limit stays
+         * visible and the count says so, and Create skill stays off. It counts the trimmed text. */}
+        {counted && (
+          <FieldDescription
+            id={`skill-${id}-count`}
+            className={cn(
+              "text-right text-xs tabular-nums",
+              check[id].over ? "text-err" : "text-ink-3",
+            )}
+          >
+            {count.format(check[id].length)} / {count.format(check[id].max)}
+          </FieldDescription>
+        )}
         {error && <FieldError role="alert">{error}</FieldError>}
       </Field>
     );
@@ -233,7 +256,7 @@ function SkillEditor({
         if (!open && !busy) close();
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>New skill</DialogTitle>
           <DialogDescription>
@@ -250,7 +273,7 @@ function SkillEditor({
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}
-                maxLength={64}
+                maxLength={check.name.max}
                 className="font-mono"
                 value={name}
                 aria-invalid={invalid}
@@ -262,30 +285,35 @@ function SkillEditor({
                 id="skill-description"
                 required
                 rows={3}
-                maxLength={1024}
+                maxLength={check.description.max}
                 value={description}
                 aria-invalid={invalid}
                 onChange={(e) => setDescription(e.target.value)}
               />
             ))}
-            {field("instructions", "Instructions", (invalid) => (
-              <Textarea
-                id="skill-instructions"
-                required
-                rows={8}
-                className="max-h-80 font-mono text-xs"
-                value={instructions}
-                aria-invalid={invalid}
-                onChange={(e) => setInstructions(e.target.value)}
-              />
-            ))}
+            {field(
+              "instructions",
+              "Instructions",
+              (invalid) => (
+                <Textarea
+                  id="skill-instructions"
+                  required
+                  aria-describedby="skill-instructions-count"
+                  className="max-h-[50dvh] min-h-48 font-mono"
+                  value={instructions}
+                  aria-invalid={invalid}
+                  onChange={(e) => setInstructions(e.target.value)}
+                />
+              ),
+              true,
+            )}
             {errorAt(undefined) && <FieldError role="alert">{errorAt(undefined)}</FieldError>}
           </FieldGroup>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busy} onClick={close}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || !check.saved}>
               {busy && <Spinner data-icon="inline-start" />}
               Create skill
             </Button>
@@ -295,3 +323,6 @@ function SkillEditor({
     </Dialog>
   );
 }
+
+/** Characters as the browser counts them (UTF-16 code units), grouped for reading: "20,000". */
+const count = new Intl.NumberFormat();
