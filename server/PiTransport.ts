@@ -25,9 +25,14 @@ import type { PiExchange, PiReadback, PiRecord } from "./PiRecords.ts";
 export class PiSessionError extends Data.TaggedError("PiSessionError")<{
   readonly reason: "spawn" | "exited" | "protocol" | "rejected" | "timeout" | "transport";
   readonly detail: string;
-  /** Refused before Pi saw the action (a closing host, a missing checkout): never delivered. */
+  /** Refused before Pi saw the action (a closing host, a missing checkout, Stop in progress, full
+   * input capacity, an exited Pi): never delivered. Build it with `refusedUnsent`. */
   readonly notSent?: true;
 }> {}
+
+/** A refusal before Pi saw the action, so its sender may take the input back. */
+export const refusedUnsent = (reason: PiSessionError["reason"], detail: string) =>
+  new PiSessionError({ reason, detail, notSent: true });
 
 /** Host acknowledgement deadline, not a deadline for model work or extension execution. */
 export const PiRequestTimeoutMs = Context.Reference<number>("piano/PiRequestTimeoutMs", {
@@ -420,11 +425,10 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     const done = yield* Deferred.make<void, PiSessionError>();
     const release = writeCapacity.acquire(size, options.lane === "control");
     if (!release)
-      return yield* new PiSessionError({
-        reason: "rejected",
-        detail:
-          "Pi input capacity is full. Nothing was sent; wait for pending work before trying again.",
-      });
+      return yield* refusedUnsent(
+        "rejected",
+        "Pi input capacity is full. Nothing was sent; wait for pending work before trying again.",
+      );
     writes.set(done, release);
     if (!Queue.offerUnsafe(stdin, { bytes: encoder.encode(text), done })) {
       release();
@@ -469,11 +473,10 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     const release = requestCapacity.acquire(size, lane === "control");
     if (!release) {
       if (dispatched) yield* Deferred.succeed(dispatched, undefined);
-      return yield* new PiSessionError({
-        reason: "rejected",
-        detail:
-          "Pi command capacity is full. Nothing was sent; wait for pending work before trying again.",
-      });
+      return yield* refusedUnsent(
+        "rejected",
+        "Pi command capacity is full. Nothing was sent; wait for pending work before trying again.",
+      );
     }
     seq += 1;
     const id = `q${seq}`;
