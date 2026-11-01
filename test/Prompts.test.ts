@@ -40,27 +40,27 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       assert.deepEqual(yield* prompts.list, [], "no folder yet reads as no prompts");
 
       // biome-ignore lint/suspicious/noTemplateCurlyInString: Pi's argument syntax, not JavaScript's.
-      const body =
+      const instructions =
         "Review the staged changes. Focus on ${1:-correctness, security, and error handling}.";
       const review = yield* prompts.create({
         name: "review",
         description: "Review staged git changes",
         argumentHint: "[focus]",
-        body,
+        instructions,
       });
       const expected = {
         name: "review",
         description: "Review staged git changes",
         argumentHint: "[focus]",
         // The file as saved, front matter included, as View shows and copies it.
-        file: `---\ndescription: "Review staged git changes"\nargument-hint: "[focus]"\n---\n${body}\n`,
+        file: `---\ndescription: "Review staged git changes"\nargument-hint: "[focus]"\n---\n${instructions}\n`,
       };
       assert.deepEqual(review, expected);
-      // A body that starts like front matter stays the body: the description keeps it out of the header.
+      // Instructions that start like front matter stay the instructions: the description keeps them out of the header.
       yield* prompts.create({
         name: "rule",
         description: "House rule",
-        body: "---\nKeep it short.",
+        instructions: "---\nKeep it short.",
       });
       // A file put in the folder by hand, without a description: Pi cuts the first line at 60
       // characters, and the list says the same.
@@ -91,7 +91,7 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       );
 
       const taken = yield* failure(
-        prompts.create({ name: "review", description: "D.", body: "Other" }),
+        prompts.create({ name: "review", description: "D.", instructions: "Other" }),
       );
       assert.deepEqual(
         [taken.field, taken.detail],
@@ -110,16 +110,17 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
         "a".repeat(65),
       ])
         assert.equal(
-          (yield* failure(prompts.create({ name, description: "D.", body: "x" }))).field,
+          (yield* failure(prompts.create({ name, description: "D.", instructions: "x" }))).field,
           "name",
           name,
         );
       assert.equal(
-        (yield* failure(prompts.create({ name: "blank", description: "D.", body: "  \n" }))).field,
-        "body",
+        (yield* failure(prompts.create({ name: "blank", description: "D.", instructions: "  \n" })))
+          .field,
+        "instructions",
       );
       const tooLong = yield* failure(
-        prompts.create({ name: "long", description: "d".repeat(1025), body: "x" }),
+        prompts.create({ name: "long", description: "d".repeat(1025), instructions: "x" }),
       );
       assert.deepEqual(
         [tooLong.field, tooLong.detail],

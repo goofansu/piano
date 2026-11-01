@@ -246,7 +246,7 @@ test("skills and prompts share one draft rule", () => {
   const skill = (description: string) =>
     checkSkillDraft({ name: "same", description, instructions: "Text." });
   const prompt = (description: string) =>
-    checkPromptDraft({ name: "same", description, body: "Text." });
+    checkPromptDraft({ name: "same", description, instructions: "Text." });
   for (const check of [skill(""), prompt("")])
     assert.deepEqual(check.problem, { field: "description", detail: "Enter a description." });
   for (const [name, description, text] of [
@@ -258,12 +258,8 @@ test("skills and prompts share one draft rule", () => {
     ["ok", "D.", "  "],
   ] as const) {
     const s = checkSkillDraft({ name, description, instructions: text }).problem;
-    const p = checkPromptDraft({ name, description, body: text }).problem;
-    assert.ok(s && p, name);
-    assert.deepEqual(
-      [s.field === "instructions" ? "text" : s.field, s.detail.replace("instructions", "_")],
-      [p.field === "body" ? "text" : p.field, p.detail.replace("the prompt", "_")],
-      `${name}: one rule, one answer`,
-    );
+    const p = checkPromptDraft({ name, description, instructions: text }).problem;
+    assert.ok(s, name);
+    assert.deepEqual(p, s, `${name}: one rule, one answer`);
   }
 });

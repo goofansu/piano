@@ -229,7 +229,7 @@ function PromptEditor({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [argumentHint, setArgumentHint] = useState("");
-  const [body, setBody] = useState("");
+  const [instructions, setInstructions] = useState("");
   // A refused create stays in the open dialog, on its field; a created one closes it with a toast.
   const actions = useSetupActions({
     refresh,
@@ -237,7 +237,7 @@ function PromptEditor({
     failure: "keep",
   });
   const busy = actions.running !== undefined;
-  const check = checkPromptDraft({ name, description, argumentHint, body });
+  const check = checkPromptDraft({ name, description, argumentHint, instructions });
   // As New skill: a character the rule never allows answers as it is typed; a misplaced hyphen
   // waits until the field is left. Whether the name is free, only the server can say.
   const [nameLeft, setNameLeft] = useState(false);
@@ -356,17 +356,17 @@ function PromptEditor({
               />
             ))}
             {field(
-              "body",
-              "Prompt",
+              "instructions",
+              "Instructions",
               (invalid) => (
                 <Textarea
-                  id="prompt-body"
+                  id="prompt-instructions"
                   required
-                  aria-describedby="prompt-body-count"
+                  aria-describedby="prompt-instructions-count"
                   className="max-h-[50dvh] min-h-48 font-mono"
-                  value={body}
+                  value={instructions}
                   aria-invalid={invalid}
-                  onChange={(e) => setBody(e.target.value)}
+                  onChange={(e) => setInstructions(e.target.value)}
                 />
               ),
               true,

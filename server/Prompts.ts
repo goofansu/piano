@@ -69,8 +69,9 @@ const readPrompt = (name: string, text: string): Prompt => {
   };
 };
 
-/** The template file: front matter (JSON strings are YAML strings), then the body. A prompt always
- * has a description, so the front matter is never empty and a body starting with `---` stays the body. */
+/** The template file: front matter (JSON strings are YAML strings), then the instructions. A prompt
+ * always has a description, so the front matter is never empty and instructions starting with `---`
+ * stay the instructions. */
 const templateText = (input: PromptCreate) => {
   const hint = input.argumentHint?.trim();
   return [
@@ -78,7 +79,7 @@ const templateText = (input: PromptCreate) => {
     `description: ${JSON.stringify(input.description.trim())}`,
     ...(hint ? [`argument-hint: ${JSON.stringify(hint)}`] : []),
     "---",
-    `${input.body.trim()}\n`,
+    `${input.instructions.trim()}\n`,
   ].join("\n");
 };
 
