@@ -36,13 +36,7 @@ import {
   settingsRow,
 } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
@@ -126,9 +120,6 @@ export function PromptSettings() {
               <SquareSlashIcon />
             </EmptyMedia>
             <EmptyTitle className="text-base">No prompts</EmptyTitle>
-            <EmptyDescription>
-              Create one to use it as a / command in the composer.
-            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
@@ -205,7 +196,12 @@ function PromptView({ prompt, close }: { prompt: Prompt; close: () => void }) {
     <Dialog open onOpenChange={(open) => !open && close()}>
       <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle className="font-mono">/{prompt.name}</DialogTitle>
+          <DialogTitle className="flex min-w-0 gap-2 font-mono">
+            <span className="truncate">/{prompt.name}</span>
+            {prompt.argumentHint && (
+              <span className="truncate font-normal text-ink-3">{prompt.argumentHint}</span>
+            )}
+          </DialogTitle>
         </DialogHeader>
         {/* A plain block, not Markdown: the text is shown and copied exactly as saved. */}
         <div className="relative">
