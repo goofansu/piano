@@ -267,12 +267,12 @@ export const WorkspaceChangesLive = Layer.effect(
     } as const;
     return WorkspaceChanges.of({
       preview: (workspace, options = {}) =>
-        observeCheckout(workspace, changes, (checkout) =>
-          preview(checkout, options, options.path, true),
+        observeCheckout(workspace, changes, async (checkout) =>
+          preview(await checkout.withUserExcludes(), options, options.path, true),
         ),
       summary: (workspace, options = {}) =>
-        observeCheckout(workspace, changes, (checkout) =>
-          preview(checkout, options, undefined, false),
+        observeCheckout(workspace, changes, async (checkout) =>
+          preview(await checkout.withUserExcludes(), options, undefined, false),
         ),
       written: (workspace, paths) =>
         observeCheckout(
@@ -282,7 +282,7 @@ export const WorkspaceChangesLive = Layer.effect(
             limit: 1024 * 1024,
             messages: { root: "Files requires the Git checkout root." },
           },
-          (checkout) => written(checkout, workspace, paths),
+          async (checkout) => written(await checkout.withUserExcludes(), workspace, paths),
         ),
     });
   }),

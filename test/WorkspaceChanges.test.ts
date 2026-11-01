@@ -615,3 +615,106 @@ test("INV-01: Changes reads the pull request from the branch where its own workt
   assert.equal(await fromBranch("me/fork"), true);
   assert.equal(await fromBranch("up/repo"), false, "origin's same-named branch is another");
 });
+
+test("INV-06: Changes honors the user's global core.excludesFile and nothing else from their config or inherited GIT_*", async (t) => {
+  const { repo, git, preview } = fixture(t);
+  writeFileSync(join(repo, "tracked"), "base\n");
+  writeFileSync(join(repo, "secret.tracked"), "base\n");
+  git("add", ".");
+  git("commit", "-qm", "base");
+  const index = readFileSync(join(repo, ".git/index"));
+
+  // An isolated HOME whose global config points core.excludesFile at a custom path (through `~`)
+  // and also carries traps the hardened reads must not pick up.
+  const home = mkdtempSync(join(tmpdir(), "piano-excludes-home-"));
+  const decoy = mkdtempSync(join(tmpdir(), "piano-excludes-decoy-"));
+  execFileSync("git", ["init", "-q", decoy]);
+  mkdirSync(join(home, "custom"));
+  writeFileSync(join(home, "custom/ignore"), "credentials.local\nsecret.tracked\n");
+  writeFileSync(
+    join(home, ".gitconfig"),
+    [
+      "[core]",
+      "\texcludesFile = ~/custom/ignore",
+      `\thooksPath = ${join(home, "hooks")}`,
+      '[filter "trap"]',
+      `\tclean = touch ${join(repo, "GLOBAL_FILTER_RAN")}; cat`,
+      "\trequired = true",
+      "[diff]",
+      `\texternal = touch ${join(repo, "EXTERNAL_DIFF_RAN")}`,
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(join(home, "redirect.gitconfig"), "[core]\n\texcludesFile = /dev/null\n");
+  const inherited = {
+    HOME: home,
+    XDG_CONFIG_HOME: join(home, "config"),
+    GIT_DIR: join(decoy, ".git"),
+    GIT_WORK_TREE: decoy,
+    GIT_INDEX_FILE: join(decoy, ".git/index"),
+    GIT_CONFIG_GLOBAL: join(home, "redirect.gitconfig"),
+  };
+  const saved = Object.fromEntries(Object.keys(inherited).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, inherited);
+  t.after(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(home, { recursive: true, force: true });
+    rmSync(decoy, { recursive: true, force: true });
+  });
+  writeFileSync(join(repo, ".git/info/attributes"), "* filter=trap\n");
+
+  // Git itself, with that HOME and none of the inherited overrides, ignores the file.
+  const userGit = (...args: string[]) =>
+    execFileSync("git", ["-C", repo, ...args], {
+      encoding: "utf8",
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+      ),
+    });
+  writeFileSync(join(repo, "credentials.local"), "token=synthetic-not-a-secret\n");
+  assert.equal(userGit("check-ignore", "credentials.local"), "credentials.local\n");
+  assert.equal(
+    userGit(
+      "-c",
+      "filter.trap.required=false",
+      "-c",
+      "filter.trap.clean=",
+      "status",
+      "--porcelain",
+    ),
+    "",
+  );
+
+  const quiet = ready(await preview());
+  assert.deepEqual(quiet.files, []);
+  assert.doesNotMatch(quiet.diff, /synthetic-not-a-secret/);
+  assert.equal(quiet.local.uncommitted, false);
+  const observation = await Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* (yield* WorkspaceChanges).written({ id: "scratch", folder: repo, path: repo }, [
+        "credentials.local",
+      ]);
+    }).pipe(Effect.provide(WorkspaceChangesLive)),
+  );
+  assert.deepEqual(observation.result, {
+    status: "ready",
+    files: [{ path: "credentials.local", verdict: "ignored", placed: "credentials.local" }],
+  });
+
+  // An ordinary untracked file still appears; a tracked file the rule matches still shows edits.
+  writeFileSync(join(repo, "notes.txt"), "ordinary\n");
+  writeFileSync(join(repo, "secret.tracked"), "changed\n");
+  const busy = ready(await preview());
+  assert.deepEqual(busy.files.map((file) => file.path).sort(), ["notes.txt", "secret.tracked"]);
+  assert.match(busy.diff, /\+changed/);
+  assert.doesNotMatch(busy.diff, /synthetic-not-a-secret/);
+  assert.equal(busy.local.uncommitted, true);
+
+  for (const marker of ["GLOBAL_FILTER_RAN", "EXTERNAL_DIFF_RAN"])
+    assert.equal(existsSync(join(repo, marker)), false);
+  assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
+  assert.equal(execFileSync("git", ["-C", decoy, "ls-files"], { encoding: "utf8", env: {} }), "");
+});

@@ -4,7 +4,8 @@
  * Source-local repository config is still read by Git; an observation that writes (an index)
  * declares `writes: "index"` and this module disables hooks and filter drivers. A read whose answer the user's Git config defines
  * (a remote URL after `url.<base>.insteadOf`) opts back into global and system config with
- * `userConfig`; inherited GIT_* state stays cleared. Output is bounded, UTF-8 checked and NUL lists
+ * `userConfig`; inherited GIT_* state stays cleared. Which untracked files Git ignores comes from
+ * the user's `core.excludesFile` alone (`withUserExcludes`), never the rest of their config. Output is bounded, UTF-8 checked and NUL lists
  * must be complete; repository paths must be relative and stay out of embedded repositories.
  * `observeGit` is the one answer to "is this path a Git checkout, and of what branch",
  * `Upstream` to "where does that branch's work go", and `BranchHome` to "where does it live".
@@ -437,6 +438,10 @@ export interface Checkout {
   readonly remoteUrl: (name: string) => Promise<string | null>;
   /** Where `branch` lives (`BranchHome`), as this checkout's config answers. */
   readonly home: (branch: string | null) => Promise<BranchHome>;
+  /** The same checkout answering ignore questions as the user's Git does: with the
+   * `core.excludesFile` their config sets (repository-local over global and system, `~`
+   * expanded) passed as `-c`. That one key comes back; the rest of user config stays out. */
+  readonly withUserExcludes: () => Promise<Checkout>;
   /** The same checkout with added `-c` config or environment (a disposable GIT_INDEX_FILE). */
   readonly with: (extra: {
     readonly config?: readonly string[];
@@ -521,6 +526,14 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
             [branch],
           )
         ).get(branch)!,
+      withUserExcludes: async () => {
+        const result = await run(["config", "--path", "--get", "core.excludesFile"], {
+          userConfig: true,
+          okCodes: [0, 1],
+        });
+        const file = result.code === 0 ? decode(result.stdout).replace(/\n$/, "") : "";
+        return file ? make([...config, "-c", `core.excludesFile=${file}`], env) : make(config, env);
+      },
       with: (extra) => make([...config, ...(extra.config ?? [])], { ...env, ...extra.env }),
     };
   };
