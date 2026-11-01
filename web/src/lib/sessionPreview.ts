@@ -85,8 +85,11 @@ export function previewFace(preview: SessionPreview): PreviewFace {
       return { label: "Starting…", tone: "pending", status: "Starting" };
     case "stopping":
       return { label: "Stopping…", tone: "pending", status: "Stopping" };
-    // Its process runs, but the local check got no usable answer from the app.
+    // Its process runs and has not answered yet; Piano keeps checking.
     case "running":
+      if (preview.warming)
+        return { label: "Warming up…", tone: "pending", status: "Running, warming up" };
+      // Its process runs, but the local check got no usable answer within its warm-up window.
       return { label: "Not ready", tone: "problem", status: "Running, not answering" };
     case "failed":
       return { label: "Failed", tone: "problem", status: "Failed" };

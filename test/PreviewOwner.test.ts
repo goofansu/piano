@@ -527,6 +527,56 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.equal(shown?.instanceId, b.instanceId);
     assert.equal(shown?.ready, true);
   });
+
+  test(`[${platform}] keeps checking a warming app after the start's deadline and shows it once it answers`, async (t) => {
+    if (foreign) return t.skip("needs native process ownership");
+    const f = await fixture(t);
+    const port = await freePort();
+    f.config.ports = [port];
+    let warm = false;
+    let requests = 0;
+    const server = createHttpServer((_request, response) => {
+      requests++;
+      response.statusCode = warm ? 200 : 500;
+      response.end();
+    });
+    t.after(
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        }),
+    );
+    f.host.afterSubmit = async () => {
+      f.host.phase = "running";
+      server.listen(port, "127.0.0.1");
+      await once(server, "listening");
+    };
+    let shown: SessionPreview | undefined;
+    f.owner.observe((request, outcome) => {
+      shown = projectPreview(shown, f.owner.identity.generation, request, outcome);
+    });
+
+    const cold = await f.call(f.owner, { command: ["/bin/true"], timeoutSeconds: 1 });
+    assert.equal(cold.warming, true);
+    assert.equal(shown?.warming, true, "the session shows it warming up, not failed");
+    assert.equal(shown?.url, null);
+
+    // Nobody asks again: the owner's own checks find it ready.
+    warm = true;
+    const deadline = Date.now() + 10000;
+    while (!shown?.ready && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(shown?.ready, true);
+    assert.equal(shown?.warming, false);
+    assert.equal(shown?.instanceId, cold.instanceId);
+    assert.equal(shown?.url, `http://localhost:${port}/`);
+
+    // Once it answered, checking stops.
+    const answered = requests;
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    assert.equal(requests, answered);
+  });
 }
 
 async function freePort() {

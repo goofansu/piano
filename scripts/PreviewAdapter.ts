@@ -23,6 +23,12 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { outcomeFailed, outcomePath, readOutcome } from "./PreviewOutcome.ts";
+import {
+  READY_INTERVAL_MS,
+  READY_REQUEST_TIMEOUT_MS,
+  START_TIMEOUT_SECONDS,
+  WARMUP_SECONDS,
+} from "./PreviewReadiness.ts";
 
 export interface PreviewRequest {
   action: "start" | "status" | "stop";
@@ -67,6 +73,8 @@ interface Intent {
   invocation?: string;
   /** Retained for launchd's asynchronous bootout confirmation; never used to signal a PID. */
   processGroup?: number;
+  /** When readiness was first observed: an app that answered once is no longer warming up. */
+  readyAt?: number;
 }
 /** The app's lifecycle in the same words on every supervisor. */
 export type PreviewState = "starting" | "running" | "exited" | "failed" | "stopping" | "not-loaded";
@@ -118,7 +126,13 @@ const publicIntent = (record: Intent) => ({
  * this host, exactly where readiness was observed.
  */
 const observation = <
-  Rest extends { state: string; ready: boolean; url: string | null; detail: string },
+  Rest extends {
+    state: string;
+    ready: boolean;
+    warming: boolean;
+    url: string | null;
+    detail: string;
+  },
 >(
   record: Intent,
   rest: Rest,
@@ -248,7 +262,12 @@ function unlock(database: DatabaseSync) {
 }
 
 /** Sends the Host a browser sends through the preview URL, so a framework's host check is seen. */
-function httpStatus(port: number, path: string, host: string): Promise<number> {
+function httpStatus(
+  port: number,
+  path: string,
+  host: string,
+  timeout = READY_REQUEST_TIMEOUT_MS,
+): Promise<number> {
   return new Promise((resolve, reject) => {
     // Absolute wall deadline, not a socket inactivity timeout (a slow responder must not extend it).
     const request = httpRequest(
@@ -258,7 +277,10 @@ function httpStatus(port: number, path: string, host: string): Promise<number> {
         response.destroy();
       },
     );
-    const timer = setTimeout(() => request.destroy(new Error("readiness timed out")), 1000);
+    const timer = setTimeout(
+      () => request.destroy(new Error(`no answer within ${Math.ceil(timeout / 1000)}s`)),
+      timeout,
+    );
     request.on("error", reject);
     request.on("close", () => clearTimeout(timer));
     request.end();
@@ -951,6 +973,8 @@ export class PreviewAdapter {
     path: string,
     root: string,
     withLogs = true,
+    /** Caps this observation's readiness request, e.g. at a start's remaining wait. */
+    requestTimeout = READY_REQUEST_TIMEOUT_MS,
   ) {
     const state = await this.current(supervisor, record, path);
     // Only reconcile after native termination, never while the supervisor is still cleaning
@@ -974,11 +998,12 @@ export class PreviewAdapter {
     let ready = false;
     let detail =
       "No owned loopback listener at the selected port. Inspect logs; stop this instance before retrying.";
-    if (await supervisor.ownsListener(record, state)) {
+    const listening = await supervisor.ownsListener(record, state);
+    if (listening) {
       try {
         const hostname = new URL(record.spec.origin).hostname;
         const host = `${hostname}:${record.port}`;
-        const status = await httpStatus(record.port, record.spec.readyPath, host);
+        const status = await httpStatus(record.port, record.spec.readyPath, host, requestTimeout);
         const after = await supervisor.state(record);
         ready =
           status >= 200 &&
@@ -989,14 +1014,28 @@ export class PreviewAdapter {
         if ((status === 403 || status === 421) && !loopback)
           detail += `. The app may reject the preview hostname; allow ${hostname} in its host check (Vite: env __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS).`;
       } catch (error) {
-        detail = `Local readiness: ${message(error)}`;
+        detail = `Local GET ${record.spec.readyPath}: ${message(error)}`;
       }
     }
+    if (ready && !record.readyAt) {
+      record.readyAt = Date.now() / 1000;
+      await save(path, record);
+    }
+    // Running, never answered yet, and young: a cold start, not a failure.
+    const warming =
+      !ready &&
+      !record.readyAt &&
+      ["starting", "running"].includes(terminalState) &&
+      Date.now() / 1000 < record.createdAt + WARMUP_SECONDS;
+    if (warming && !listening) detail = `Not listening on port ${record.port} yet.`;
+    if (warming)
+      detail = `Warming up; Piano keeps checking until ${new Date((record.createdAt + WARMUP_SECONDS) * 1000).toISOString()}. ${detail}`;
     return observation(record, {
       state: terminalState,
       termination,
       supervisor: state.raw,
       ready,
+      warming,
       detail,
       binding: ready ? "127.0.0.1" : null,
       url: ready ? `${record.spec.origin}:${record.port}/` : null,
@@ -1012,6 +1051,8 @@ export class PreviewAdapter {
     config: PreviewConfig,
     owner?: PreviewOwnerIdentity,
     progress?: (result: unknown) => void,
+    /** False for a status read that only needs the app's state, not its recent output. */
+    logs = true,
   ) {
     // Unsupported hosts fail before locking or any launch intent, without affecting Piano.
     const supervisor = this.supervisor;
@@ -1021,7 +1062,7 @@ export class PreviewAdapter {
     const root = await realpath(stateRoot);
     const mutex = await lock(root);
     try {
-      return await this.handle(supervisor, request, root, config, owner, progress);
+      return await this.handle(supervisor, request, root, config, owner, progress, logs);
     } finally {
       unlock(mutex);
     }
@@ -1117,6 +1158,7 @@ export class PreviewAdapter {
     config: PreviewConfig,
     owner?: PreviewOwnerIdentity,
     progress: (result: unknown) => void = () => {},
+    logs = true,
   ) {
     // Retained canonical identity also works after the checkout is removed.
     const workspace =
@@ -1137,7 +1179,7 @@ export class PreviewAdapter {
     }
     if (request.action === "status")
       return record
-        ? this.observe(supervisor, record, path, root)
+        ? this.observe(supervisor, record, path, root, logs)
         : { serviceId, workspace, status: "absent" };
     if (record && record.owner?.generation !== owner?.generation) {
       // A restart may clear a *confirmed dead* generation, never adopt its app. Legacy records
@@ -1200,9 +1242,16 @@ export class PreviewAdapter {
     const spec = await launchSpec(requested, config, this.platform);
     await admitLaunch(spec.command, workspace);
     await checkRunnable(spec.command);
-    const timeout = request.timeoutSeconds ?? 15;
-    if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 1 || timeout > 30)
-      throw new Error("timeoutSeconds must be between 1 and 30");
+    const timeout = request.timeoutSeconds ?? START_TIMEOUT_SECONDS.default;
+    if (
+      typeof timeout !== "number" ||
+      !Number.isFinite(timeout) ||
+      timeout < START_TIMEOUT_SECONDS.min ||
+      timeout > START_TIMEOUT_SECONDS.max
+    )
+      throw new Error(
+        `timeoutSeconds must be between ${START_TIMEOUT_SECONDS.min} and ${START_TIMEOUT_SECONDS.max}`,
+      );
     let replaced: string | undefined;
     if (record) {
       const stopped = await this.stop(supervisor, record, path, root, serviceId);
@@ -1228,6 +1277,7 @@ export class PreviewAdapter {
       observation(record, {
         state: "starting",
         ready: false,
+        warming: true,
         url: null,
         detail: "Launching; waiting for its readiness check.",
       }),
@@ -1257,8 +1307,18 @@ export class PreviewAdapter {
       }
       const deadline = performance.now() + timeout * 1000;
       for (;;) {
-        // Logs are read once, for the observation returned, not on every poll.
-        const result = await this.observe(supervisor, record, path, root, false);
+        const probed = performance.now();
+        // Logs are read once, for the observation returned, not on every poll. One slow request
+        // never stretches the start's own deadline.
+        const remaining = Math.max(1000, deadline - probed);
+        const result = await this.observe(
+          supervisor,
+          record,
+          path,
+          root,
+          false,
+          Math.min(READY_REQUEST_TIMEOUT_MS, remaining),
+        );
         if (
           result.ready ||
           ["exited", "failed", "not-loaded"].includes(result.state) ||
@@ -1266,11 +1326,14 @@ export class PreviewAdapter {
         )
           return {
             ...result,
+            ...(result.warming && {
+              detail: `Running, not ready after ${timeout}s: still warming up, not a failed start. The app keeps running; do not replace or restart it. Read status for readiness; the preview link appears once it answers. ${result.detail}`,
+            }),
             logs: await this.logs(supervisor, record, root),
             reused: false,
             ...(replaced && { replaced }),
           };
-        await delay(100);
+        await delay(Math.max(0, READY_INTERVAL_MS - (performance.now() - probed)));
       }
     } catch (error) {
       throw new PreviewStartError(error, record);
