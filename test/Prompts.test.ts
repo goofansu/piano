@@ -39,19 +39,21 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       const sessions = yield* PiSessions;
       assert.deepEqual(yield* prompts.list, [], "no folder yet reads as no prompts");
 
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Pi's argument syntax, not JavaScript's.
+      const body =
+        "Review the staged changes. Focus on ${1:-correctness, security, and error handling}.";
       const review = yield* prompts.create({
         name: "review",
         description: "Review staged git changes",
         argumentHint: "[focus]",
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: Pi's argument syntax, not JavaScript's.
-        body: "Review the staged changes. Focus on ${1:-correctness, security, and error handling}.",
+        body,
       });
       const expected = {
         name: "review",
         description: "Review staged git changes",
         argumentHint: "[focus]",
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: Pi's argument syntax, not JavaScript's.
-        body: "Review the staged changes. Focus on ${1:-correctness, security, and error handling}.",
+        // The file as saved, front matter included, as View shows and copies it.
+        file: `---\ndescription: "Review staged git changes"\nargument-hint: "[focus]"\n---\n${body}\n`,
       };
       assert.deepEqual(review, expected);
       // A body that starts like front matter stays the body; no description falls back as Pi's does.
@@ -62,8 +64,12 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       const cut = `${long.slice(0, 60)}...`;
       assert.deepEqual(yield* prompts.list, [
         expected,
-        { name: "rule", description: "---", body: "---\nKeep it short." },
-        { name: "triage", description: cut, body: `${long}\nThen list the next steps.` },
+        { name: "rule", description: "---", file: "---\n---\n---\nKeep it short.\n" },
+        {
+          name: "triage",
+          description: cut,
+          file: `---\n---\n${long}\nThen list the next steps.\n`,
+        },
       ]);
 
       const commands = (yield* sessions.probe(root)).commands.filter((c) => c.source === "prompt");

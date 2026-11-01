@@ -191,14 +191,14 @@ function PromptRow({
   );
 }
 
-/**
- * One prompt, read-only: Piano does not edit a prompt, so its text is here to read and copy. Laid
- * out as Settings › Skills shows a skill.
- */
+/** One prompt, read-only: its template file exactly as saved, to read and copy. */
 function PromptView({ prompt, close }: { prompt: Prompt; close: () => void }) {
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+      <DialogContent
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle className="flex min-w-0 gap-2 font-mono">
             <span className="truncate">/{prompt.name}</span>
@@ -206,15 +206,17 @@ function PromptView({ prompt, close }: { prompt: Prompt; close: () => void }) {
               <span className="truncate font-normal text-ink-3">{prompt.argumentHint}</span>
             )}
           </DialogTitle>
-          <DialogDescription>{prompt.description}</DialogDescription>
         </DialogHeader>
-        {/* Hand-written: no shadcn component shows a read-only block of source text. */}
         <div className="relative">
-          <pre className="max-h-[50dvh] overflow-auto rounded-md border border-line py-2 pr-10 pl-3 font-mono text-sm whitespace-pre-wrap">
-            {prompt.body}
-          </pre>
+          <Textarea
+            readOnly
+            aria-label={`/${prompt.name} file`}
+            spellCheck={false}
+            className="max-h-[50dvh] min-h-48 pr-10 font-mono"
+            value={prompt.file}
+          />
           <CopyButton
-            text={prompt.body}
+            text={prompt.file}
             label="Copy prompt"
             copiedLabel="Prompt copied"
             failure="Couldn’t copy. Select the prompt text to copy it."

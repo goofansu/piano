@@ -23,8 +23,8 @@ export const Prompt = Schema.Struct({
   /** The front matter's description or, as Pi falls back, the body's first non-empty line cut at 60 characters. */
   description: Schema.String,
   argumentHint: Schema.optional(Schema.String),
-  /** The prompt itself, after the front matter, as Pi expands it. */
-  body: Schema.String,
+  /** The template file exactly as saved, front matter included: View shows and copies it. */
+  file: Schema.String,
 });
 export type Prompt = typeof Prompt.Type;
 
