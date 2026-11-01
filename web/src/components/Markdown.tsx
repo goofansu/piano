@@ -1,4 +1,3 @@
-import { CheckIcon, CopyIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
   Component,
@@ -10,9 +9,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
 import { type Components, type ExtraProps, Streamdown, useIsCodeFenceIncomplete } from "streamdown";
-import { IconButton } from "@/components/IconButton";
+import { CopyButton } from "@/components/CopyButton";
 import { MarkdownWebLink } from "@/components/MarkdownWebLink";
 import { LOCAL_PATH, markdownPlugins, markdownWithinBudget } from "@/lib/markdown";
 
@@ -22,31 +20,16 @@ const ImagesContext = createContext<ReadonlyMap<string, string> | undefined>(und
 const DiagramsContext = createContext(true);
 
 function CopyCode({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
   return (
-    <IconButton
-      label={copied ? "Code copied" : "Copy code"}
+    <CopyButton
+      text={text}
+      label="Copy code"
+      copiedLabel="Code copied"
+      failure="Couldn’t copy. Select the code text to copy it."
       variant="outline-solid"
-      size="inline"
-      data-motion="reveal"
-      data-copied={copied ? "" : undefined}
+      reveal
       className="absolute top-4 right-2"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-        } catch {
-          toast.error("Couldn’t copy. Select the code text to copy it.");
-        }
-      }}
-    >
-      {copied ? <CheckIcon /> : <CopyIcon />}
-    </IconButton>
+    />
   );
 }
 

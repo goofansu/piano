@@ -10,6 +10,7 @@ import { MoreHorizontalIcon, SquareSlashIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
+import { CopyButton } from "@/components/CopyButton";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { PianoButton } from "@/components/PianoButton";
 import {
@@ -23,6 +24,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
@@ -59,6 +61,7 @@ export function PromptSettings() {
   // New prompt comes from `pageCommands`, which the palette lists too; both open this editor.
   const { state, run, global } = useCommands();
   const editing = usePromptEditor();
+  const [viewing, setViewing] = useState<Prompt>();
   const actions = useSetupActions<Prompt>({
     refresh: () => void observed.refresh(),
     success: (text) => toast.success(text),
@@ -75,6 +78,7 @@ export function PromptSettings() {
       ))}
       dialogs={
         <>
+          {viewing && <PromptView prompt={viewing} close={() => setViewing(undefined)} />}
           {editing && (
             <PromptEditor close={promptEditor.close} refresh={() => void observed.refresh()} />
           )}
@@ -134,6 +138,7 @@ export function PromptSettings() {
               key={prompt.name}
               prompt={prompt}
               disabled={busy}
+              view={() => setViewing(prompt)}
               remove={() => actions.confirm(prompt)}
             />
           ))}
@@ -147,10 +152,12 @@ export function PromptSettings() {
 function PromptRow({
   prompt,
   disabled,
+  view,
   remove,
 }: {
   prompt: Prompt;
   disabled: boolean;
+  view: () => void;
   remove: () => void;
 }) {
   const command = `/${prompt.name}`;
@@ -180,6 +187,8 @@ function PromptRow({
             </PianoButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={view}>View</DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={remove}>
               Delete
             </DropdownMenuItem>
@@ -187,6 +196,33 @@ function PromptRow({
         </DropdownMenu>
       </ItemActions>
     </Item>
+  );
+}
+
+/** A prompt's text as Pi expands it, with its copy control always shown. */
+function PromptView({ prompt, close }: { prompt: Prompt; close: () => void }) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && close()}>
+      <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle className="font-mono">/{prompt.name}</DialogTitle>
+        </DialogHeader>
+        {/* A plain block, not Markdown: the text is shown and copied exactly as saved. */}
+        <div className="relative">
+          <pre className="max-h-[60dvh] overflow-auto rounded-lg border border-line bg-fill py-3 pr-10 pl-3.5 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
+            {prompt.body}
+          </pre>
+          <CopyButton
+            text={prompt.body}
+            label="Copy prompt"
+            copiedLabel="Prompt copied"
+            failure="Couldn’t copy. Select the prompt text to copy it."
+            variant="ghost"
+            className="absolute top-2 right-2"
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -50,6 +50,8 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
         name: "review",
         description: "Review staged git changes",
         argumentHint: "[focus]",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Pi's argument syntax, not JavaScript's.
+        body: "Review the staged changes. Focus on ${1:-correctness, security, and error handling}.",
       };
       assert.deepEqual(review, expected);
       // A body that starts like front matter stays the body; no description falls back as Pi's does.
@@ -60,8 +62,8 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       const cut = `${long.slice(0, 60)}...`;
       assert.deepEqual(yield* prompts.list, [
         expected,
-        { name: "rule", description: "---" },
-        { name: "triage", description: cut },
+        { name: "rule", description: "---", body: "---\nKeep it short." },
+        { name: "triage", description: cut, body: `${long}\nThen list the next steps.` },
       ]);
 
       const commands = (yield* sessions.probe(root)).commands.filter((c) => c.source === "prompt");

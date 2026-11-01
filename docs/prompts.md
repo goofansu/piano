@@ -10,6 +10,7 @@ name. The body takes Pi's substitutions (`$1`, `$@`, `${1:-default}`, …), expa
   default). Names follow a skill's rule: at most 64 lowercase letters, numbers and hyphens, not starting
   or ending with a hyphen. A description holds at most 1024 characters and the prompt 20,000. An
   existing name is refused, never overwritten.
+- **View** shows the prompt as saved, with a copy button.
 - **Delete** removes that file, after confirmation.
 - The page lists that folder only. Prompts in Pi's own folders (`~/.pi/agent/prompts/`, a
   project's `.pi/prompts/`) stay Pi's: the composer still offers them, Settings does not list them.
@@ -22,6 +23,8 @@ Piano is not loaded by Pi run outside Piano.
 
 `server/Prompts.ts` owns the folder (INV-01). Pi parses and expands templates (INV-12): the list
 reads front matter with Pi's `parseFrontmatter` and falls back to the body's first line as Pi does.
+The list sends each prompt's text with it, so View opens without another request; prompts are
+text the person wrote in Piano, so they leave without display redaction, as project instructions do.
 No registry records are added.
 
 ## Verification

@@ -411,6 +411,8 @@ export const Endpoints = {
     response: Schema.Array(Prompt),
     noStore: true,
     refused: 400,
+    // Text the person wrote in Piano (DisplayProjection's authored-text rule): View copies it as saved.
+    redact: false,
     fallback: "Could not load prompts.",
   }),
   createPrompt: endpoint({
@@ -421,6 +423,8 @@ export const Endpoints = {
     response: Prompt,
     noStore: true,
     refused: 400,
+    // Text the person wrote in Piano (DisplayProjection's authored-text rule): View copies it as saved.
+    redact: false,
     fallback: "Could not save prompt.",
   }),
   removePrompt: endpoint({

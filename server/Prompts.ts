@@ -62,7 +62,12 @@ const readPrompt = (name: string, text: string): Prompt => {
       : // Pi's fallback: the first non-empty line, cut at 60 characters.
         `${first.slice(0, 60)}${first.length > 60 ? "..." : ""}`;
   const hint = frontmatter["argument-hint"];
-  return { name, description, ...(typeof hint === "string" && hint ? { argumentHint: hint } : {}) };
+  return {
+    name,
+    description,
+    ...(typeof hint === "string" && hint ? { argumentHint: hint } : {}),
+    body,
+  };
 };
 
 /** The template file: front matter (JSON strings are YAML strings), then the body. Front matter is
