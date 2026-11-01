@@ -103,7 +103,7 @@ Piano launch.
 
 The child defaults to the parent's checkout, with a fresh conversation—not a transcript fork.
 The optional `cwd` selects an existing directory through Piano's ordinary creation and registration
-checks. The root of a linked Git worktree is listed under its main checkout's folder, which Piano
+checks; a relative `cwd` is read from the parent's checkout, never from where Piano's server runs. The root of a linked Git worktree is listed under its main checkout's folder, which Piano
 adds when it is not a folder yet; any other directory, including a subdirectory of a checkout,
 becomes a folder of its own, as on the New page. A checkout Git cannot read refuses creation.
 
