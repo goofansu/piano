@@ -141,14 +141,10 @@ export async function run(name, setup, journey, options = {}) {
   const browser = `piano-${name}-${process.pid}`;
   const ab = async (...args) => {
     const result = await new Promise((done, fail) => {
-      const child = spawn(
-        "npx",
-        [options.agentBrowser ?? "agent-browser", "--session", browser, ...args],
-        {
-          env: { ...process.env, AGENT_BROWSER_DEFAULT_TIMEOUT: "15000" },
-          stdio: ["ignore", "pipe", "pipe"],
-        },
-      );
+      const child = spawn("agent-browser", ["--session", browser, ...args], {
+        env: { ...process.env, AGENT_BROWSER_DEFAULT_TIMEOUT: "15000" },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
       let stdout = "";
       let stderr = "";
       child.stdout.on("data", (d) => (stdout += d));
@@ -196,6 +192,7 @@ export async function run(name, setup, journey, options = {}) {
     /** Open a picker, pick one option, and wait until the picker has closed. */
     choose: async (picker, option) => {
       await ab("find", "role", "combobox", "click", "--name", picker, "--exact");
+      await ab("wait", "--text", option);
       await ab("find", "role", "option", "click", "--name", option, "--exact");
       await ab("wait", "--fn", "!document.querySelector('[data-radix-popper-content-wrapper]')");
     },

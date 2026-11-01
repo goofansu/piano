@@ -30,7 +30,7 @@ and a separate Vite development process as [the `verify-piano` skill](../.agents
 ```bash
 HOST=127.0.0.1 PIANO_ALLOWED_ORIGINS=http://127.0.0.1:7172,http://localhost:7172 PIANO_DB_PATH=<scratch-path>/piano.db PORT=7171 node server/main.ts
 PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort
-npx agent-browser open http://127.0.0.1:7172
+agent-browser open http://127.0.0.1:7172
 ```
 
 Use fake Pi for deterministic checks without credentials/model credits. Retain output

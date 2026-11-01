@@ -12,11 +12,6 @@ SKILL_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 ROOT=$(cd "$SKILL_DIR/../../.." && pwd)
 SCRATCH_ROOT=${VERIFY_SCRATCH:-/tmp/verify-piano}
 
-# The one agent-browser version every script runs, through npx (never installed globally).
-# Bump it here after checking the new release with a proof run; VERIFY_AB_VERSION overrides it
-# for a single run.
-AB_VERSION="${VERIFY_AB_VERSION:-0.39.1}"
-
 die() {
   echo "verify-piano: $*" >&2
   exit 1

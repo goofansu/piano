@@ -122,6 +122,7 @@ await run(
   },
   async (page) => {
     await page.open("/");
+    await page.see("Fix the login bug");
     await page.click("button", "Fix the login bug");
     await page.see("Answer 6.");
     await page.capture("1-transcript");
@@ -298,10 +299,13 @@ await run(
     const expanded = await promptSize();
     assert.equal(expanded.height, expanded.content, "expanded prompt shows all its text");
     await page.click("button", "Show less");
+    await page.see("Show more");
     const collapsed = await promptSize();
     assert.ok(collapsed.height < collapsed.content, "collapsed prompt is capped again");
     await page.ab("set", "viewport", "800", "900");
+    await page.see("Show more");
     await page.click("button", "Show more");
+    await page.see("Show less");
     const resized = await promptSize();
     assert.equal(resized.height, resized.content, "prompt still expands after resizing");
     const copyOpacity = () =>
@@ -519,6 +523,7 @@ await run(
     // take it into the composer. Wide, the header toggles the side-by-side rail; narrow, it
     // opens the rail sheet. Both times the unsent draft stays byte-for-byte.
     await page.open("/s/login-bug");
+    await page.see("echo: Add a regression test");
     const draft = "Keep  this draft ";
     await page.ab("fill", '[aria-label="Message"]', draft);
     const railKey = async (width, key) => {
@@ -559,6 +564,7 @@ await run(
     // An extension can pause the session for an inline answer. Form keys must not be stolen
     // by the composer's type-anywhere shortcut, and selecting must not submit prematurely.
     await page.open("/s/login-bug");
+    await page.see("echo: Add a regression test");
     await page.ab("fill", '[aria-label="Message"]', "question");
     await page.press("Enter");
     await page.see("Which checks?");

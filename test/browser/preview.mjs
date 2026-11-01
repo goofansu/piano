@@ -1189,7 +1189,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
       }
     },
     {
-      agentBrowser: "agent-browser@0.39.1",
       backendEnv: {
         ...env,
         PIANO_PI_CLI: shim,

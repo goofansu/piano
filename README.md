@@ -83,6 +83,16 @@ variable, the origin policy, and backup steps, see
 
 ## Develop
 
+In addition to the requirements above, development requires `agent-browser` **0.41.0** on
+`PATH` and its Chromium browser. Install both before running browser checks:
+
+```bash
+npm install --global agent-browser@0.41.0
+agent-browser install
+```
+
+The browser harness and verification scripts use this installed CLI directly.
+
 1. Install dependencies. `npm install` also installs the pre-commit hook that runs lint.
 2. Start the backend and the UI together:
 

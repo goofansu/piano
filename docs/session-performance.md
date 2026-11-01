@@ -1,7 +1,8 @@
 # Session page performance baseline
 
 Run the opt-in diagnostic from the checkout (Node 24, installed dependencies and Chromium for
-agent-browser). It uses `agent-browser@0.38.1` through npx; Critical paths CI is unchanged.
+agent-browser). It uses the installed `agent-browser` from [development setup](../README.md#develop);
+Critical paths CI is unchanged.
 
 ```sh
 node test/browser/session-perf.mjs .scratch/browser/session-perf
