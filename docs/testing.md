@@ -99,8 +99,9 @@ a different purpose.
 ## Browser tests
 
 Browser evidence for a change is an observation through `agent-browser` on a scratch instance,
-kept in the PR; it does not become a committed script. The committed browser tests are only the
-critical paths, which must keep working on every change and run in CI:
+kept in the PR; it does not become a committed script. Install agent-browser and Chromium as
+specified in [Develop](../README.md#develop); journeys use the CLI on `PATH`. The committed browser
+tests are only the critical paths, which must keep working on every change and run in CI:
 
 - `test/browser/start-session.mjs`: choose a folder, model, effort and project; send the first
   message; see the reply; reload without resending.
@@ -215,7 +216,7 @@ warm observations do not reuse completed projections. This is evidence, not a CI
 
 ```sh
 npm ci
-npx agent-browser install
+agent-browser install
 node test/performance-sidebar-sessions.mjs .scratch/sidebar-performance
 # Override the session counts for a narrower comparison:
 node test/performance-sidebar-sessions.mjs .scratch/sidebar-performance 2000 5000

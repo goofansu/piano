@@ -158,6 +158,7 @@ await run(
     // Bounded mounting and offscreen remounting are covered by open-session and session-perf.
     await page.ab("set", "viewport", "1280", "4000");
     await page.open("/");
+    await page.see("Every row kind");
     await page.click("button", "Every row kind");
     await page.see("Done: every row kind is above.");
     await page.see("Which database?");

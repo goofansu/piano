@@ -97,7 +97,7 @@ Start the development UI separately, pointing it only at that scratch backend:
 PIANO_DEV_BACKEND=http://127.0.0.1:7171 npm run dev:web -- --host 127.0.0.1 --port 7172 --strictPort
 ```
 
-Observe `http://127.0.0.1:7172` through `npx agent-browser`, retaining output. The systemd
+Observe `http://127.0.0.1:7172` through the installed `agent-browser`, retaining output. The systemd
 instance serves the built UI for daily use; it is not the browser-verification target. See
 [the hosted workflow](hosted-development.md) for deliberate build/deploy steps.
 Run both scratch processes in dedicated terminals and retain their PIDs if backgrounding;

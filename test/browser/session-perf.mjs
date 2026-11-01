@@ -266,5 +266,4 @@ for (let repeat = 0; repeat < repeats; repeat++)
           save();
         }
       },
-      { agentBrowser: "agent-browser@0.38.1" },
     );

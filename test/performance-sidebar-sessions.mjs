@@ -22,7 +22,7 @@ const report = {
     cpu: cpus()[0]?.model,
     cores: cpus().length,
     mode: "Vite development; 1280x900; no CPU/network throttling",
-    agentBrowser: execFileSync("npx", ["agent-browser", "--version"], {
+    agentBrowser: execFileSync("agent-browser", ["--version"], {
       encoding: "utf8",
     }).trim(),
   },
