@@ -54,9 +54,15 @@ no duplicate class patch is needed.
 
 ### Stock sidebar shortcut
 
-There are no intentional patches left in `ui/`. Keep Sidebar's built-in Mod+B listener alongside
-Piano's Mod+K command palette. Its controlled `open` prop connects the shortcut to Piano's desktop
-sidebar, including the saved collapsed preference. Piano's separate mobile reveal still uses its
+`ui/sidebar.tsx` carries the one intentional patch in `ui/`, marked `Piano patch` in its source:
+the built-in shortcut toggles on ⌘B alone. Upstream also takes Ctrl+B, which on macOS moves the
+caret back a character in text fields and elsewhere is the browser's or a field's own, and takes
+⌘ chords with Shift or Alt, which belong to the browser (the latter is
+[shadcn-ui/ui#11418](https://github.com/shadcn-ui/ui/pull/11418), still open). Other platforms toggle
+the sidebar from the palette or its button. Reapply the patch on every sidebar upgrade until upstream
+carries it; drop the #11418 part once that merges. The listener sits alongside Piano's Mod+K command
+palette. Its controlled `open` prop connects the shortcut to Piano's desktop sidebar, including the
+saved collapsed preference. Piano's separate mobile reveal still uses its
 layout controls; stock `openMobile` is not connected to that reveal. It composes the same Radix
 modal primitive as Sheet, but exposes stationary navigation under a translated live page rather
 than moving a sheet over it. The sidebar occupies 75% of the mobile viewport; only a claimed
@@ -73,8 +79,17 @@ and navigation. Cancellation discards pending frames and returns the surfaces to
 1. From `web/`, preview `npx shadcn@latest add <component> --dry-run`, then
    `npx shadcn@latest add <component> --dry-run --diff <file>`. Include transitive components,
    dependency and CSS changes in the review.
-2. Take reviewed upstream source changes without carrying local component patches. Avoid
+2. Take reviewed upstream source changes without carrying local component patches, except the
+   [sidebar shortcut patch](#stock-sidebar-shortcut). Avoid
    overwriting `index.css`, app wrappers or unrelated dependencies as a side effect.
+   The `--diff` for `sidebar.tsx` always shows that patch as a hunk in `handleKeyDown` replacing
+   the `// Piano patch` comment and its `event.metaKey && !event.ctrlKey && !event.shiftKey &&
+   !event.altKey` condition with `(event.metaKey || event.ctrlKey)`. That hunk is the overwrite
+   reverting Piano, not an upstream change: after writing the file, restore the patched condition
+   and its comment, then check `git diff web/src/components/ui/sidebar.tsx` no longer touches
+   `handleKeyDown`. If the upstream condition already excludes Shift and Alt (#11418 merged), keep
+   only the Ctrl+B exclusion and update [the shortcut section](#stock-sidebar-shortcut). If it
+   excludes Ctrl+B too, drop the patch and its comment.
 3. Check changed props, slots and internal composition against app wrappers. In particular,
    upstream composites import their own `ui/` children: they do not automatically use Piano
    wrappers. `PianoCommand` composes its own dialog, and `PianoSidebarMenuButton` its own tooltip.
@@ -83,7 +98,7 @@ and navigation. Cancellation discards pending frames and returns the surfaces to
    session menu, palette, settings, phone layout, light and dark). After it, run the repository
    gates and `npm run test:browser`, capture again into a second directory and compare the pairs.
    Then observe the rest through `agent-browser` on a scratch instance: pointer and keyboard
-   focus, Mod+K and Mod+B, touch focus, the mobile sidebar reveal and finger tracking,
+   focus, Mod+K, ⌘B (and Ctrl+B, ⌘⇧B, ⌘⌥B leaving the sidebar alone), touch focus, the mobile sidebar reveal and finger tracking,
    cancellation and dismissal. Physical Safari browser-edge navigation still
    requires a device check.
 

@@ -97,7 +97,12 @@ function SidebarProvider({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-        (event.metaKey || event.ctrlKey)
+        // Piano patch: Cmd+B only. Ctrl+B is left to text fields and the
+        // browser, and Shift/Alt chords to the browser (shadcn-ui/ui#11418).
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey
       ) {
         event.preventDefault()
         toggleSidebar()

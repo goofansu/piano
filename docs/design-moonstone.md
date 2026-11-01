@@ -320,7 +320,7 @@ need not hold their content for the exit. Menus and selects exit live, showing t
 | Delivery picker and queued messages (`fade`) | 150ms fade in | they appear beside and above the composer as you send |
 | Transcript, streaming output, fold content, loading placeholder, jumps | none | the transcript never moves under the reader; a jump always lands the message 16px under the top |
 | Phone sidebar (`drawer`) | follows the finger 1:1; on release it settles at the finger's speed into a stop (120–420ms); a tap opens or closes it over 300ms on `--ease-drawer` `cubic-bezier(0.32, 0.72, 0, 1)` | a gesture should finish the way it was moving; a tap gets the iOS drawer feel |
-| Desktop sidebar collapse (Mod+B or its button), sidebar rows, right sidebar | none | a keyboard shortcut and frequent navigation should answer at once |
+| Desktop sidebar collapse (⌘B or its button), sidebar rows, right sidebar | none | a keyboard shortcut and frequent navigation should answer at once |
 | Status dot while in progress (`pulse`) | opacity 1 → 0.3 → 1 on the keys' 1.2s `--ease-in-out` loop; still under reduced motion | the one in-progress sign the preview control and deliveries share; opacity alone stays on the compositor |
 | Refresh while reading | the control's own icon turns (`animate-spin`) | the answer arrives where the question was asked, with no second spinner |
 | Settings: section switches, loading placeholders giving way to content, notices that replace them, the sign-in dialog's steps | none | navigation and content arriving answer at once, as in the transcript; Settings' folds share the turning chevron and its dialogs the overlay motion |
