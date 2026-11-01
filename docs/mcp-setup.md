@@ -18,7 +18,11 @@ lists the servers Piano offers:
   the redirect to Pi's loopback callback may fail to load; paste that page's address into the
   dialog. Piano checks the pasted address against the attempt, so a wrong paste asks again.
 - **Sign out** deletes the stored tokens. **Uninstall** removes the entry and its sign-in,
-  after confirmation, and only if the entry is unchanged since the page was read.
+  after confirmation, and only if the entry is unchanged since the page was read. The sign-in
+  stored for the entry's name and endpoint is cleared whatever the entry authenticates with now,
+  so an entry switched to an Authorization header after signing in does not reinstall signed in.
+  The sign-in is cleared before the entry; if that fails, the entry stays and uninstall can be
+  retried. Other servers' sign-ins are kept.
 
 Start a **new session** after a change; running Pi children are not reloaded.
 
@@ -43,7 +47,10 @@ Start a **new session** after a change; running Pi children are not reloaded.
 
 - `test/McpSetup.test.ts` runs Pi's real sign-in against a loopback OAuth + MCP server:
   install preserving unrelated config, pasted-redirect sign-in (including a rejected paste),
-  stored-token reuse, sign-out, stale-removal rejection, uninstall and name conflicts.
+  stored-token reuse, sign-out, stale-removal rejection, uninstall and name conflicts. With
+  synthetic tokens in a temporary `mcp-auth.json`, it also covers uninstalling after a switch to
+  an Authorization header, an unreadable credential store failing and then retrying, and keeping
+  another server's sign-in.
   Paper coverage checks local-command installation without OAuth, renamed entries, duplicates,
   configuration preservation and guarded removal.
 - Browser check on scratch 7171/7172 with an isolated `PI_CODING_AGENT_DIR`: install, sign-in
