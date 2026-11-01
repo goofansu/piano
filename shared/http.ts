@@ -13,6 +13,7 @@ import { McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { API_KEY_INVALID, ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
+import { UserSkill, UserSkillCreate } from "./skills.ts";
 import { Webhook, WebhookDelivery, WebhookSave } from "./webhooks.ts";
 import {
   ChangesScope,
@@ -359,6 +360,36 @@ export const Endpoints = {
     noStore: true,
     refused: 400,
     fallback: "Could not delete webhook.",
+  }),
+  userSkills: endpoint({
+    method: "GET",
+    path: "/api/settings/skills",
+    response: Schema.Array(UserSkill),
+    noStore: true,
+    // The user's own words, shown and kept as they wrote them.
+    redact: false,
+    fallback: "Could not load skills.",
+  }),
+  createUserSkill: endpoint({
+    method: "POST",
+    path: "/api/settings/skills",
+    body: UserSkillCreate,
+    invalid: "Enter a name, a description and instructions.",
+    response: UserSkill,
+    noStore: true,
+    refused: 400,
+    redact: false,
+    fallback: "Could not create skill.",
+  }),
+  removeUserSkill: endpoint({
+    method: "POST",
+    path: "/api/settings/skills/remove",
+    body: Schema.Struct({ name: Schema.String }),
+    invalid: "Skill name required.",
+    response: Schema.Struct({ ok: Schema.Literal(true) }),
+    noStore: true,
+    refused: 400,
+    fallback: "Could not delete skill.",
   }),
   testWebhook: endpoint({
     method: "POST",

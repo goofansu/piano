@@ -197,6 +197,24 @@ test("on the Projects index the palette offers New project, which opens the New 
   );
 });
 
+test("on Settings › Skills the palette offers New skill, which opens the skill editor", () => {
+  const newSkill = (settings: GlobalCommandContext["settings"]) =>
+    globalCommands(onNewPage, { ...ctx, settings }).find((c) => c.label === "New skill");
+  const create = newSkill("skills");
+  assert.ok(create);
+  const calls: unknown[][] = [];
+  const effects = new Proxy({} as CommandEffects, {
+    get:
+      (_, name) =>
+      (...args: unknown[]) => {
+        calls.push([name, ...args]);
+      },
+  });
+  assert.equal(runCommand(create, effects), true);
+  assert.deepEqual(calls, [["newSkill"]]);
+  assert.equal(newSkill("webhooks"), undefined, "another Settings page offers none");
+});
+
 test("on Settings › Webhooks the palette offers Add webhook, which opens the webhook editor", () => {
   const addWebhook = (settings: GlobalCommandContext["settings"], state = onNewPage) =>
     globalCommands(state, { ...ctx, settings }).find((c) => c.label === "Add webhook");

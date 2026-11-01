@@ -248,7 +248,8 @@ test("search uses direct command synonyms, not related topics or opposite displa
       .filter((c) => paletteFilter(c.label, query, c.keywords ? [...c.keywords] : undefined) > 0)
       .map((c) => c.id);
   assert.ok(commands.some((c) => c.label === "Untrust folder"));
-  assert.deepEqual(matches("skill"), []);
+  // Settings › Skills matches by its label; Trust folder, a related topic, does not.
+  assert.deepEqual(matches("skill"), ["settings-skills"]);
   assert.ok(!matches("settings").includes("trust"));
   assert.ok(!matches("session").includes("home"));
   assert.deepEqual(matches("messages"), ["messages-only"]);

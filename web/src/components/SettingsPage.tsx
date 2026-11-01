@@ -19,6 +19,7 @@ import {
   SettingsSkeleton,
   settingsRow,
 } from "@/components/SettingsSectionFrame";
+import { UserSkillSettings } from "@/components/UserSkillSettings";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -114,6 +115,7 @@ export function SettingsPage({
       <ProvidersSettings revealRadius={section === "radius" ? request : undefined} />
     ),
     mcp: () => <McpSettings />,
+    skills: () => <UserSkillSettings />,
     webhooks: () => <WebhookSettings />,
   };
   return pages[page]();
