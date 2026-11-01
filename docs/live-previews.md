@@ -230,8 +230,11 @@ checkout has disappeared. Do not copy an old endpoint into a new session.
 
 Intent precedes supervisor submission. An interrupted observation never cancels admitted work.
 Absent never-observed submissions retain a 120-second reconciliation grace, because submission may
-still land; this is not an app expiry. Account-wide lock waits are bounded at 65s and the client
-observation at 120s. A disconnected client leaves work owned by its Pi generation.
+still land; this is not an app expiry. The account-wide lock is held for one bounded step at a
+time, never across a start's readiness wait, and lock waits are bounded at 65s. The client
+observation waits 185s: a start's lock wait, its longest readiness wait and its steps. A
+disconnected client leaves work owned by its Pi generation. `scripts/PreviewReadiness.ts` holds
+these budgets.
 
 ### Launch admission and trust limits
 

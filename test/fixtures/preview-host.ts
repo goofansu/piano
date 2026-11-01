@@ -48,7 +48,13 @@ async function selfGroup(platform: Platform) {
 }
 
 /** `launched` holds each submission as text: systemd-run argv or the launchd plist. */
-export function fakeAdapter(platform: Platform, stateRoot: string, host: FakeHost) {
+export function fakeAdapter(
+  platform: Platform,
+  stateRoot: string,
+  host: FakeHost,
+  /** Shortens the account-wide lock wait, so a busy lock is reached in test time. */
+  lockWait?: number,
+) {
   const launched: string[] = [];
   const stops: string[][] = [];
   const submitted = async (unitInArgs: (unit: string) => boolean) => {
@@ -142,6 +148,7 @@ export function fakeAdapter(platform: Platform, stateRoot: string, host: FakeHos
     // The fake job has no real processes, so a stopped job's process group is always gone.
     groupAlive: () => false,
     run: platform === "linux" ? systemd : launchd,
+    lockWait,
   });
   return { adapter, launched, stops };
 }

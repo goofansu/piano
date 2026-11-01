@@ -4,6 +4,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   PreviewAdapter,
+  PreviewBusyError,
   type PreviewConfig,
   type PreviewOwnerIdentity,
   type PreviewRequest,
@@ -19,6 +20,22 @@ export type PreviewOutcome = { result: unknown } | { error: unknown; attempted?:
  * own launch starting), its own outcome, or for a failed start, a status read of what that start
  * left behind. */
 export type PreviewObserver = (request: PreviewRequest, outcome: PreviewOutcome) => void;
+
+/** An adapter result's app, when it is `generation`'s own; undefined for any other result (a
+ * stop, an absent record, another owner's app). */
+export function generationApp(
+  result: unknown,
+  generation: string,
+): (Record<string, unknown> & { instanceId: string }) | undefined {
+  if (typeof result !== "object" || result === null) return undefined;
+  const app = result as Record<string, unknown>;
+  const owner = app.owner as Record<string, unknown> | null | undefined;
+  return typeof app.instanceId === "string" &&
+    typeof owner === "object" &&
+    owner?.generation === generation
+    ? (app as Record<string, unknown> & { instanceId: string })
+    : undefined;
+}
 
 /** One Pi generation's admission gate and live connections. Browser/tool cancellation never
  * closes it. The service runner must connect before it can spawn, including a late submission
@@ -147,20 +164,18 @@ export class PreviewOwner {
    * warm-up window ends: a start's deadline ends only its caller's wait, never the checking. */
   private publish(request: PreviewRequest, outcome: PreviewOutcome) {
     this.observer?.(request, outcome);
-    const result = "result" in outcome ? outcome.result : undefined;
-    const instanceId =
-      result && typeof result === "object" && "instanceId" in result
-        ? (result as { instanceId: unknown }).instanceId
-        : undefined;
-    const warming =
-      typeof instanceId === "string" &&
-      (result as { warming?: unknown }).warming === true &&
-      (result as { owner?: { generation?: unknown } }).owner?.generation ===
-        this.identity.generation;
-    if (warming && this.warming?.instanceId === instanceId) return;
+    const app =
+      "result" in outcome ? generationApp(outcome.result, this.identity.generation) : undefined;
+    const instanceId = app?.warming === true ? app.instanceId : undefined;
+    if (instanceId && this.warming?.instanceId === instanceId) return;
     if (this.warming) clearTimeout(this.warming.timer);
     this.warming = undefined;
-    if (!warming || this.ending) return;
+    if (!instanceId || this.ending) return;
+    const next = () => {
+      this.warming = { instanceId, timer: setTimeout(check, READY_INTERVAL_MS) };
+      // A pending check never keeps a process alive by itself.
+      this.warming.timer.unref();
+    };
     const check = () => {
       if (this.ending || this.warming?.instanceId !== instanceId) return;
       const status: PreviewRequest = { action: "status", workspace: this.identity.workspace };
@@ -181,14 +196,14 @@ export class PreviewOwner {
           this.publish(status, { result });
         } catch (error) {
           if (this.warming?.instanceId !== instanceId) return;
+          // A busy lock observed nothing: the app is as warm as it was, so check again later.
+          if (error instanceof PreviewBusyError) return next();
           this.warming = undefined;
           this.observer?.(status, { error });
         }
       });
     };
-    this.warming = { instanceId, timer: setTimeout(check, READY_INTERVAL_MS) };
-    // A pending check never keeps a process alive by itself.
-    this.warming.timer.unref();
+    next();
   }
 
   request(request: PreviewRequest) {

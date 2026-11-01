@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { outcomeFailed, outcomePath, readOutcome } from "./PreviewOutcome.ts";
 import {
+  LOCK_WAIT_MS,
   READY_INTERVAL_MS,
   READY_REQUEST_TIMEOUT_MS,
   START_TIMEOUT_SECONDS,
@@ -232,9 +233,16 @@ async function close(server: Server) {
   if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
 }
 
+/** The account-wide lock stayed held past its wait: nothing was observed or attempted. */
+export class PreviewBusyError extends Error {
+  constructor() {
+    super("Preview operation busy. Re-observe status before retrying; no launch attempted.");
+  }
+}
+
 /** An exclusive SQLite transaction is a kernel file lock on Linux and macOS alike: released on
  * exit or SIGKILL, with no stale file or PID-reuse race. All helpers share one state root. */
-async function lock(root: string, wait = 65000) {
+async function lock(root: string, wait: number) {
   const deadline = performance.now() + wait;
   const database = new DatabaseSync(join(root, "lock.sqlite"));
   for (;;) {
@@ -245,9 +253,7 @@ async function lock(root: string, wait = 65000) {
       if (!/database is locked/.test(message(error)) || performance.now() >= deadline) {
         database.close();
         if (!/database is locked/.test(message(error))) throw error;
-        throw new Error(
-          "Preview operation busy. Re-observe status before retrying; no launch attempted.",
-        );
+        throw new PreviewBusyError();
       }
       await delay(100);
     }
@@ -915,6 +921,7 @@ export class PreviewAdapter {
   private readonly platform: string;
   private readonly uid: number;
   private readonly supervisor: Supervisor | undefined;
+  private readonly lockWait: number;
   constructor(
     host: {
       run?: Run;
@@ -922,9 +929,12 @@ export class PreviewAdapter {
       uid?: number;
       callerGroup?: () => Promise<string>;
       groupAlive?: (group: number) => boolean;
+      /** How long to wait for the account-wide lock; tests shorten it. */
+      lockWait?: number;
     } = {},
   ) {
     this.platform = host.platform ?? process.platform;
+    this.lockWait = host.lockWait ?? LOCK_WAIT_MS;
     this.uid = host.uid ?? process.getuid?.() ?? -1;
     const run = host.run ?? hostRun(this.platform);
     if (this.platform === "linux")
@@ -1060,11 +1070,19 @@ export class PreviewAdapter {
     await supervisor.check();
     await mkdir(stateRoot, { recursive: true, mode: 0o700 });
     const root = await realpath(stateRoot);
-    const mutex = await lock(root);
+    let mutex: DatabaseSync | undefined = await lock(root, this.lockWait);
+    // A start releases the lock while it waits between readiness checks, so its wait never
+    // holds up another workspace's operations, nor its lock wait depend on a start's budget.
+    const pause = async (ms: number) => {
+      if (mutex) unlock(mutex);
+      mutex = undefined;
+      await delay(ms);
+      mutex = await lock(root, this.lockWait);
+    };
     try {
-      return await this.handle(supervisor, request, root, config, owner, progress, logs);
+      return await this.handle(supervisor, request, root, config, owner, progress, logs, pause);
     } finally {
-      unlock(mutex);
+      if (mutex) unlock(mutex);
     }
   }
 
@@ -1077,7 +1095,7 @@ export class PreviewAdapter {
       const root = await realpath(stateRoot);
       // Idle asks while holding its session's ownership: a busy lock is not idle, and the next
       // sweep asks again. Explicit cleanup waits its turn.
-      mutex = await lock(root, idle ? 0 : undefined);
+      mutex = await lock(root, idle ? 0 : this.lockWait);
       const serviceId = `piano-preview-${hash(owner.workspace).slice(0, 24)}`;
       const path = join(root, `${serviceId}.json`);
       let record: Intent;
@@ -1159,6 +1177,8 @@ export class PreviewAdapter {
     owner?: PreviewOwnerIdentity,
     progress: (result: unknown) => void = () => {},
     logs = true,
+    /** Waits between readiness checks without the account-wide lock, then holds it again. */
+    pause: (ms: number) => Promise<void> = delay,
   ) {
     // Retained canonical identity also works after the checkout is removed.
     const workspace =
@@ -1333,7 +1353,21 @@ export class PreviewAdapter {
             reused: false,
             ...(replaced && { replaced }),
           };
-        await delay(Math.max(0, READY_INTERVAL_MS - (performance.now() - probed)));
+        await pause(Math.max(0, READY_INTERVAL_MS - (performance.now() - probed)));
+        // Unlocked, the record may have changed: another observer saved what it saw, or a
+        // reopened generation cleared this launch after its owner ended.
+        const saved: Intent | undefined = await readFile(path, "utf8").then(
+          (text) => JSON.parse(text),
+          (error) => {
+            if (code(error) === "ENOENT") return undefined;
+            throw error;
+          },
+        );
+        if (!saved || saved.instanceId !== record.instanceId)
+          throw new Error(
+            "This launch was stopped or replaced while it waited for readiness; read status.",
+          );
+        record = saved;
       }
     } catch (error) {
       throw new PreviewStartError(error, record);
