@@ -9,12 +9,14 @@
  * returns only once the snapshot is delivered, so a fast first prompt is observed. Only `create`
  * creates a session: SessionHosts registers the folder, the reference and its project first, and
  * records each prompt's activity before Pi sees it (INV-01). `act` may restart an existing
- * session; SessionHosts keeps one child per session (INV-02).
+ * session; SessionHosts keeps one child per session (INV-02). A selected session shown stopped
+ * attaches once another client starts it, without starting Pi itself.
  */
 import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import {
   type Attachment,
+  type HostInfo,
   type ServerMessage,
   type SessionAction,
   type StartOptions,
@@ -215,7 +217,12 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     yield* navigate(
       Effect.gen(function* () {
         if (!current(selection)) return;
-        if (view._tag === "live") return yield* attachTo(view.session, selection);
+        if (view._tag === "live") {
+          // An act that started this session, or a follow, may have attached it already.
+          if (attachment?.selectionId === selectionId && attachment.session === view.session)
+            return;
+          return yield* attachTo(view.session, selection);
+        }
         yield* detach;
         shown = sessionId
           ? { selectionId, cwd: view.cwd, checkoutMissing: !!view.snapshot.state.checkoutMissing }
@@ -232,6 +239,32 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       }),
     );
   });
+
+  // Another client may start the session this one shows stopped. Its live frames arrive only
+  // through an attachment, so attach once it is running: reading never starts Pi (INV-02), and
+  // `show` drops the result if the selection changed meanwhile. Runs one change at a time, so a
+  // burst of changes attaches once.
+  const follow = Effect.fn("ClientSessions.follow")(function* (running: ReadonlyArray<HostInfo>) {
+    const selection = selected;
+    const view = shown;
+    if (!selection?.sessionId || view?.selectionId !== selection.selectionId) return;
+    if (attachment?.selectionId === selection.selectionId) return;
+    const { sessionId } = selection;
+    if (!running.some((h) => sameSession(h, { cwd: view.cwd, sessionId }))) return;
+    yield* show(selection);
+  });
+  yield* hosts.subscribe.pipe(
+    Effect.flatMap(
+      Stream.runForEach((running) =>
+        follow(running).pipe(
+          Effect.catchTag("PiSessionError", (e) =>
+            Effect.logWarning(`Could not follow the selected session: ${e.detail}`),
+          ),
+        ),
+      ),
+    ),
+    Effect.forkScoped,
+  );
 
   // Draft choices travel with the input. Pi took them as launch arguments if this request
   // launched it; a session that was already running, here or in another tab, takes them as
