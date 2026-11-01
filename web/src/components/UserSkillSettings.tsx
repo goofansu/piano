@@ -38,13 +38,7 @@ import {
   settingsRow,
 } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
@@ -130,7 +124,6 @@ export function UserSkillSettings() {
               <SparklesIcon />
             </EmptyMedia>
             <EmptyTitle className="text-base">No skills</EmptyTitle>
-            <EmptyDescription>Create one for Pi to load when a task matches it.</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
