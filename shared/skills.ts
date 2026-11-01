@@ -23,7 +23,7 @@ export const UserSkill = Schema.Struct({
   /** The SKILL.md body, shown read-only for copying: Piano does not edit a skill. */
   instructions: Schema.String,
   /** `disable-model-invocation`: Pi loads the skill only for `/skill:<name>`, never on its own. */
-  onlyWhenNamed: Schema.Boolean,
+  disableModelInvocation: Schema.Boolean,
 });
 export type UserSkill = typeof UserSkill.Type;
 
@@ -31,7 +31,7 @@ export const UserSkillCreate = Schema.Struct({
   name: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
   description: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
   instructions: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
-  onlyWhenNamed: Schema.optional(Schema.Boolean),
+  disableModelInvocation: Schema.optional(Schema.Boolean),
 });
 export type UserSkillCreate = typeof UserSkillCreate.Type;
 
@@ -77,6 +77,8 @@ export function checkSkillDraft(draft: UserSkillCreate): SkillDraftCheck {
   const malformedName = !!trimmed.name && !SKILL_NAME.test(trimmed.name);
   const savable =
     !malformedName && USER_SKILL_FIELDS.every((field) => trimmed[field] && !checks[field].over);
-  const saved = savable ? { ...trimmed, onlyWhenNamed: draft.onlyWhenNamed === true } : undefined;
+  const saved = savable
+    ? { ...trimmed, disableModelInvocation: draft.disableModelInvocation === true }
+    : undefined;
   return { ...checks, malformedName, saved };
 }

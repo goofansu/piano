@@ -51,14 +51,19 @@ test("a created skill is one Pi loads as written, and is listed with its instruc
   // Quotes, a colon and a newline would break a hand-written YAML scalar.
   const description = 'Writes "release notes": use when asked.\nAlso changelogs.';
   const instructions = "# Notes\n\nRead PRs.";
-  for (const [name, onlyWhenNamed] of [
+  for (const [name, disableModelInvocation] of [
     ["release-notes", false],
     ["deploy", true],
   ] as const)
     assert.equal(
       (
         await run((skills) =>
-          skills.create({ name, description, instructions: `${instructions}\n`, onlyWhenNamed }),
+          skills.create({
+            name,
+            description,
+            instructions: `${instructions}\n`,
+            disableModelInvocation,
+          }),
         )
       )._tag,
       "Success",
@@ -77,13 +82,13 @@ test("a created skill is one Pi loads as written, and is listed with its instruc
       { name: "deploy", description, disableModelInvocation: true },
       { name: "release-notes", description, disableModelInvocation: false },
     ],
-    "Only when named is Pi's disable-model-invocation",
+    "the flag is written as Pi's disable-model-invocation",
   );
   assert.match(readFileSync(join(directory, "release-notes", "SKILL.md"), "utf8"), /Read PRs\.\n$/);
   const listed = await run((skills) => skills.list);
   assert.deepEqual(listed._tag === "Success" && listed.success, [
-    { name: "deploy", description, instructions, onlyWhenNamed: true },
-    { name: "release-notes", description, instructions, onlyWhenNamed: false },
+    { name: "deploy", description, instructions, disableModelInvocation: true },
+    { name: "release-notes", description, instructions, disableModelInvocation: false },
   ]);
 });
 

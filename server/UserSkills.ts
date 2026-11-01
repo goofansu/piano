@@ -86,7 +86,7 @@ function piano(root: string, name: string): UserSkill | undefined {
       name,
       description,
       instructions: body.trim(),
-      onlyWhenNamed: frontmatter["disable-model-invocation"] === true,
+      disableModelInvocation: frontmatter["disable-model-invocation"] === true,
     };
   } catch {
     return undefined;
@@ -97,13 +97,18 @@ function piano(root: string, name: string): UserSkill | undefined {
  * Double-quoted YAML scalars accept JSON string syntax, so the name and description stay strings:
  * unquoted, a name such as `123` or `true` would read back as a number or a boolean.
  */
-const fileOf = ({ name, description, instructions, onlyWhenNamed }: Required<UserSkillCreate>) =>
+const fileOf = ({
+  name,
+  description,
+  instructions,
+  disableModelInvocation,
+}: Required<UserSkillCreate>) =>
   [
     "---",
     `name: ${JSON.stringify(name)}`,
     `description: ${JSON.stringify(description)}`,
     // Pi's default is to let the model load the skill, so only the exception is written.
-    ...(onlyWhenNamed ? ["disable-model-invocation: true"] : []),
+    ...(disableModelInvocation ? ["disable-model-invocation: true"] : []),
     "metadata:",
     `  ${MARKER_KEY}: ${MARKER}`,
     "---",

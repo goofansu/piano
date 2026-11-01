@@ -37,6 +37,7 @@ import {
   SettingsSkeleton,
   settingsRow,
 } from "@/components/SettingsSectionFrame";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -159,8 +160,10 @@ function SkillRow({
       <ItemContent className="min-w-0 gap-0.5">
         <ItemTitle className="font-mono">
           <span className="truncate">{skill.name}</span>
-          {skill.onlyWhenNamed && (
-            <span className="font-sans text-xs font-normal text-ink-3">Only when named</span>
+          {skill.disableModelInvocation && (
+            <Badge variant="outline" className="font-sans">
+              Disable model invocation
+            </Badge>
           )}
         </ItemTitle>
         <ItemDescription>{skill.description}</ItemDescription>
@@ -203,7 +206,7 @@ function SkillEditor({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [onlyWhenNamed, setOnlyWhenNamed] = useState(false);
+  const [disableModelInvocation, setDisableModelInvocation] = useState(false);
   // A refused create stays in the open dialog, on its field; a created one closes it with a toast.
   const actions = useSetupActions({
     refresh,
@@ -212,7 +215,7 @@ function SkillEditor({
   });
   const busy = actions.running !== undefined;
   // The same rule the server applies: Create skill stays off until every field is filled and in bounds.
-  const check = checkSkillDraft({ name, description, instructions, onlyWhenNamed });
+  const check = checkSkillDraft({ name, description, instructions, disableModelInvocation });
   // A character the rule never allows answers as it is typed; a misplaced hyphen waits until the
   // field is left, so typing "release-" on the way to "release-notes" is not an error. Whether the
   // name is free, only the server can say.
@@ -227,7 +230,7 @@ function SkillEditor({
     const created = await actions.run({
       id: "create",
       run: () =>
-        createUserSkill({ name, description, instructions, onlyWhenNamed }).catch(
+        createUserSkill({ name, description, instructions, disableModelInvocation }).catch(
           (cause: unknown) => {
             const field = cause instanceof ApiError ? cause.field : undefined;
             setErrorField(USER_SKILL_FIELDS.find((known) => known === field));
@@ -333,11 +336,13 @@ function SkillEditor({
             )}
             <Field orientation="horizontal" className="items-center gap-2.5">
               <Switch
-                id="skill-only-when-named"
-                checked={onlyWhenNamed}
-                onCheckedChange={setOnlyWhenNamed}
+                id="skill-disable-model-invocation"
+                checked={disableModelInvocation}
+                onCheckedChange={setDisableModelInvocation}
               />
-              <FieldLabel htmlFor="skill-only-when-named">Only when named</FieldLabel>
+              <FieldLabel htmlFor="skill-disable-model-invocation">
+                Disable model invocation
+              </FieldLabel>
             </Field>
             {errorAt(undefined) && <FieldError role="alert">{errorAt(undefined)}</FieldError>}
           </FieldGroup>
@@ -367,8 +372,8 @@ function SkillViewer({ skill, close }: { skill: UserSkill; close: () => void }) 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="font-mono">{skill.name}</span>
-            {skill.onlyWhenNamed && (
-              <span className="text-xs font-normal text-ink-3">Only when named</span>
+            {skill.disableModelInvocation && (
+              <Badge variant="outline">Disable model invocation</Badge>
             )}
           </DialogTitle>
           <DialogDescription>{skill.description}</DialogDescription>
