@@ -115,8 +115,16 @@ const oversized = (snapshot: Snapshot): boolean =>
 
 /** What an observation may do while it runs. Timers and the socket belong to `observe`. */
 interface Link {
-  /** `not-sent` only when the socket was checked non-open: the frame never left this process. */
-  readonly send: (message: ClientMessage) => SendDisposition;
+  /** A frame that changes nothing in Pi, such as a selection; it may be sent again after a loss. */
+  readonly send: (message: ClientMessage) => void;
+  /**
+   * Sends this observation's one mutation, at most once. `false` only when the socket was checked
+   * non-open: the frame never left this process. A send that throws on an open socket may already
+   * have enqueued it, so it counts as possibly sent.
+   */
+  readonly commit: (message: ClientMessage) => boolean;
+  /** Whether the mutation may have left this process: Pi may hold it, so it is never resent. */
+  readonly committed: () => boolean;
   readonly nonce: () => string;
   readonly after: (ms: number, run: () => void) => unknown;
   readonly cancel: (timer: unknown) => void;
@@ -152,20 +160,32 @@ function observe<T>(
     // whether the frame may have left. Hold that report until the send returns its disposition.
     let sending = false;
     let heldLoss: (() => void) | null = null;
+    const send = (message: ClientMessage): SendDisposition => {
+      if (!connection) return "not-sent";
+      sending = true;
+      try {
+        return connection.send(message);
+      } finally {
+        sending = false;
+        const loss = heldLoss;
+        heldLoss = null;
+        // After the caller has seen the disposition; deferred so it reads that state.
+        if (loss) queueMicrotask(loss);
+      }
+    };
+    let mutation: "unsent" | "attempted" | "committed" = "unsent";
     const link: Link = {
       send: (message) => {
-        if (!connection) return "not-sent";
-        sending = true;
-        try {
-          return connection.send(message);
-        } finally {
-          sending = false;
-          const loss = heldLoss;
-          heldLoss = null;
-          // After the caller has seen the disposition; deferred so it reads that state.
-          if (loss) queueMicrotask(loss);
-        }
+        send(message);
       },
+      commit: (message) => {
+        if (mutation !== "unsent") throw new Error("An observation sends one mutation.");
+        mutation = "attempted";
+        if (send(message) === "not-sent") return false;
+        mutation = "committed";
+        return true;
+      },
+      committed: () => mutation === "committed",
       nonce: () => environment.nonce(),
       after: (ms, run) => {
         const timer = environment.setTimeout(() => {
@@ -274,7 +294,6 @@ export function startSession(
     (link, settle) => {
       let selectionId: string | null = null;
       let inputId: string | null = null;
-      let requested = false;
       let handle: SessionHandle | null = null;
       let snapshot: Snapshot | null = null;
       let sequence = 0;
@@ -342,11 +361,10 @@ export function startSession(
       };
       return {
         connected: () => {
-          if (!requested) {
+          if (!link.committed()) {
             selectionId = link.nonce();
             inputId = selectionId;
-            // A send that throws may have reached Piano; only a socket found closed did not.
-            const sent = link.send({
+            const sent = link.commit({
               _tag: "create_session",
               selectionId,
               cwd,
@@ -354,8 +372,7 @@ export function startSession(
               ...(worktree ? { worktree } : {}),
               text: prompt,
             });
-            if (sent === "not-sent") settle(unsent("The connection closed before it could send."));
-            else requested = true;
+            if (!sent) settle(unsent("The connection closed before it could send."));
             return;
           }
           // Only an identity may be re-sent. Creating again would start a second session for
@@ -373,7 +390,7 @@ export function startSession(
           });
         },
         disconnected: (fatal) => {
-          if (!requested) settle(unsent("Piano could not be reached."));
+          if (!link.committed()) settle(unsent("Piano could not be reached."));
           else if (!handle)
             settle(
               unnamed(
@@ -521,7 +538,7 @@ export function startSession(
           }
         },
         deadline: () =>
-          !requested
+          !link.committed()
             ? unsent("Piano could not be reached before the start deadline.")
             : handle
               ? result(
@@ -531,7 +548,7 @@ export function startSession(
                 )
               : unnamed("Piano did not answer before the start deadline."),
         aborted: () =>
-          !requested
+          !link.committed()
             ? unsent("The start was abandoned before it was sent.")
             : handle
               ? result(
@@ -1034,8 +1051,9 @@ const FAILURE_GRACE_MS = 1_000;
 /**
  * Sends `text` to an existing session the way the composer does: select it, then one `act`
  * (starting a stopped Pi, with the session's own model and effort). The `act` is sent at most
- * once. A loss before it re-selects; a loss after it reports `uncertain` and never resends, since
- * Pi may already hold the message (INV-02).
+ * once. A loss before it re-selects; an `act` that finds the socket closed reports `not_sent`; a
+ * loss after it reports `uncertain` and never resends, since Pi may already hold the message
+ * (INV-02).
  */
 export function sendFollowUp(
   request: FollowUpRequest,
@@ -1067,7 +1085,7 @@ export function sendFollowUp(
         result("uncertain", `${detail} Read the session's status before sending again.`);
       /** Before the act, nothing reached Piano; after it, Pi may hold the message. */
       const ended = (before: string, after: string) =>
-        inputId === null ? unsent(before) : unconfirmed(after);
+        link.committed() ? unconfirmed(after) : unsent(before);
       /** Settles once this message's handling is known (`dispositionOf`), from a frame's own
        * submission and the dialogs it shows. */
       const apply = (next: PromptSubmission | undefined, dialogs: ReadonlyArray<Dialog> = []) => {
@@ -1078,7 +1096,7 @@ export function sendFollowUp(
       };
       return {
         connected: () => {
-          if (inputId !== null) {
+          if (link.committed()) {
             settle(unconfirmed("The connection was lost after the message was sent."));
             return;
           }
@@ -1102,7 +1120,7 @@ export function sendFollowUp(
                 // The selection is a claim on this connection; the act must reuse it.
                 inputId = selectionId;
                 opened = new Set(message.snapshot.dialogs.map((d) => d.id));
-                link.send({
+                const sent = link.commit({
                   _tag: "act",
                   selectionId,
                   action: {
@@ -1112,6 +1130,7 @@ export function sendFollowUp(
                   },
                   start: {},
                 });
+                if (!sent) settle(unsent("The connection closed before it could send."));
                 return;
               }
               // A stopped session started by the act is shown again under this selection.
@@ -1129,7 +1148,7 @@ export function sendFollowUp(
             case "selection_rejected":
             case "selection_failed":
             case "error":
-              if (inputId === null) {
+              if (!link.committed()) {
                 settle(unsent(message.message));
                 return;
               }
