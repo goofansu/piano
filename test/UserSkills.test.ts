@@ -242,13 +242,13 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
   assert.deepEqual(await skillCommands([]), [], "a Pi run without Piano's folder does not load it");
 });
 
-test("skills and prompts share one draft rule, except that a prompt's description is optional", () => {
+test("skills and prompts share one draft rule", () => {
   const skill = (description: string) =>
     checkSkillDraft({ name: "same", description, instructions: "Text." });
   const prompt = (description: string) =>
     checkPromptDraft({ name: "same", description, body: "Text." });
-  assert.deepEqual(skill("").problem, { field: "description", detail: "Enter a description." });
-  assert.ok(prompt("").saved, "a prompt needs no description");
+  for (const check of [skill(""), prompt("")])
+    assert.deepEqual(check.problem, { field: "description", detail: "Enter a description." });
   for (const [name, description, text] of [
     ["Bad", "D.", "T."],
     ["a--b", "D.", "T."],

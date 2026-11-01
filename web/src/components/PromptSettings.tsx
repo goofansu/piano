@@ -75,7 +75,7 @@ export function PromptSettings() {
           <RemovalDialog
             open={!!removing}
             title="Delete prompt?"
-            description={`New sessions no longer offer /${removing?.name ?? ""}.`}
+            description={`${removing?.name ?? "This prompt"} is removed. Sessions started from now no longer load it.`}
             action="Delete"
             progress="Deleting…"
             busy={busy}
@@ -147,19 +147,16 @@ function PromptRow({
   view: () => void;
   remove: () => void;
 }) {
-  const command = `/${prompt.name}`;
   return (
     <Item className={settingsRow}>
       <ItemContent className="min-w-0 gap-0.5">
-        <ItemTitle className="min-w-0 font-mono">
-          <span className="truncate">{command}</span>
+        <ItemTitle className="font-mono">
+          <span className="truncate">{prompt.name}</span>
           {prompt.argumentHint && (
             <span className="truncate font-normal text-ink-3">{prompt.argumentHint}</span>
           )}
         </ItemTitle>
-        {prompt.description && (
-          <ItemDescription className="truncate">{prompt.description}</ItemDescription>
-        )}
+        <ItemDescription>{prompt.description}</ItemDescription>
       </ItemContent>
       <ItemActions className="shrink-0">
         <DropdownMenu>
@@ -167,7 +164,7 @@ function PromptRow({
             <PianoButton
               variant="ghost"
               size="list"
-              aria-label={`Prompt actions ${command}`}
+              aria-label={`Prompt actions ${prompt.name}`}
               disabled={disabled}
             >
               <MoreHorizontalIcon />
@@ -195,17 +192,12 @@ function PromptView({ prompt, close }: { prompt: Prompt; close: () => void }) {
         aria-describedby={undefined}
       >
         <DialogHeader>
-          <DialogTitle className="flex min-w-0 gap-2 font-mono">
-            <span className="truncate">/{prompt.name}</span>
-            {prompt.argumentHint && (
-              <span className="truncate font-normal text-ink-3">{prompt.argumentHint}</span>
-            )}
-          </DialogTitle>
+          <DialogTitle className="truncate font-mono">{prompt.name}</DialogTitle>
         </DialogHeader>
         <div className="relative">
           <Textarea
             readOnly
-            aria-label={`/${prompt.name} file`}
+            aria-label={`${prompt.name} file`}
             spellCheck={false}
             className="max-h-[50dvh] min-h-48 pr-10 font-mono"
             value={prompt.file}
@@ -337,10 +329,11 @@ function PromptEditor({
             ))}
             {field(
               "description",
-              optional("Description"),
+              "Description",
               (invalid) => (
                 <Textarea
                   id="prompt-description"
+                  required
                   rows={3}
                   aria-describedby="prompt-description-count"
                   value={description}

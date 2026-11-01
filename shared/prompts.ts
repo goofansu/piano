@@ -21,7 +21,7 @@ export const PROMPT_ARGUMENT_HINT_MAX = 200;
 
 export const PromptCreate = Schema.Struct({
   name: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
-  description: Schema.optional(Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX))),
+  description: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
   argumentHint: Schema.optional(Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX))),
   body: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
 });
@@ -41,11 +41,11 @@ export interface PromptDraftCheck extends Record<PromptField, FieldCheck> {
   saved: PromptCreate | undefined;
 }
 
-/** The shared draft rule (`checkDraft`) with the description optional, plus the argument hint. */
+/** The shared draft rule (`checkDraft`), plus the argument hint. */
 export function checkPromptDraft(draft: PromptCreate): PromptDraftCheck {
   const check = checkDraft(
-    { name: draft.name, description: draft.description ?? "", text: draft.body },
-    { textLabel: "the prompt", descriptionOptional: true },
+    { name: draft.name, description: draft.description, text: draft.body },
+    { textLabel: "the prompt" },
   );
   const hint = draft.argumentHint?.trim() ?? "";
   const argumentHint: FieldCheck = {
@@ -73,8 +73,8 @@ export function checkPromptDraft(draft: PromptCreate): PromptDraftCheck {
       ? undefined
       : {
           name: trimmed.name,
+          description: trimmed.description,
           body: trimmed.text,
-          ...(trimmed.description ? { description: trimmed.description } : {}),
           ...(hint ? { argumentHint: hint } : {}),
         },
   };

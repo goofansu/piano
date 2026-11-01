@@ -69,18 +69,17 @@ const readPrompt = (name: string, text: string): Prompt => {
   };
 };
 
-/** The template file: front matter (JSON strings are YAML strings), then the body. Without fields
- * the body stands alone, unless it starts with `---`: empty front matter then keeps it the body. */
+/** The template file: front matter (JSON strings are YAML strings), then the body. A prompt always
+ * has a description, so the front matter is never empty and a body starting with `---` stays the body. */
 const templateText = (input: PromptCreate) => {
-  const description = input.description?.trim();
   const hint = input.argumentHint?.trim();
-  const lines = [
-    ...(description ? [`description: ${JSON.stringify(description)}`] : []),
+  return [
+    "---",
+    `description: ${JSON.stringify(input.description.trim())}`,
     ...(hint ? [`argument-hint: ${JSON.stringify(hint)}`] : []),
-  ];
-  const body = `${input.body.trim()}\n`;
-  if (!lines.length && !body.startsWith("---")) return body;
-  return `---\n${lines.map((line) => `${line}\n`).join("")}---\n${body}`;
+    "---",
+    `${input.body.trim()}\n`,
+  ].join("\n");
 };
 
 export const PromptsLive = Layer.effect(
@@ -128,7 +127,7 @@ export const PromptsLive = Layer.effect(
           ),
         catch: (cause) =>
           code(cause) === "EEXIST"
-            ? new PromptError({ detail: `/${name} already exists.`, field: "name" })
+            ? new PromptError({ detail: `A prompt named ${name} already exists.`, field: "name" })
             : new PromptError({ detail: "Could not save prompt." }),
       });
       return readPrompt(name, text);

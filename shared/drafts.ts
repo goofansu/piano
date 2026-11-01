@@ -1,7 +1,7 @@
 /**
  * The one rule a skill and a prompt created in Piano share: a name in the Agent Skills form, a
  * description and the text itself (a skill's instructions, a prompt's body), each trimmed and within
- * its limit. A prompt's description alone is optional. The New skill and New prompt dialogs enable
+ * its limit. The New skill and New prompt dialogs enable
  * Create by this check, and the server refuses by it; only whether a name is free is left to the
  * server.
  */
@@ -51,7 +51,6 @@ export function checkDraft(
   options: {
     /** What a blank text is called in "Enter …": "instructions", "the prompt". */
     textLabel: string;
-    descriptionOptional?: boolean;
   },
 ): DraftCheck {
   const trimmed = {
@@ -65,14 +64,14 @@ export function checkDraft(
     text: fieldCheck(trimmed.text, TEXT_MAX),
   };
   const malformedName = !!trimmed.name && !NAME.test(trimmed.name);
-  const missing: Record<DraftField, string | undefined> = {
+  const missing: Record<DraftField, string> = {
     name: "Enter a name.",
-    description: options.descriptionOptional ? undefined : "Enter a description.",
+    description: "Enter a description.",
     text: `Enter ${options.textLabel}.`,
   };
   const problem = (["name", "description", "text"] as const)
     .map((field) => {
-      if (!trimmed[field]) return missing[field] && { field, detail: missing[field] };
+      if (!trimmed[field]) return { field, detail: missing[field] };
       if (checks[field].over)
         return {
           field,

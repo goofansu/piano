@@ -9,8 +9,8 @@ name. The body takes Pi's substitutions (`$1`, `$@`, `${1:-default}`, …), expa
   limit, the same check the server applies (`checkPromptDraft`). It saves `<name>.md` in Piano's
   prompts folder, `prompts/` beside the [registry database](configuration.md#environment-variables)
   (`~/.local/share/piano/prompts/` by default). Names, descriptions and the prompt follow the
-  [draft rule Settings › Skills shares](configuration.md#pianos-prompts-and-skills), except that a
-  description is optional. An existing name is refused, never overwritten.
+  [draft rule Settings › Skills shares](configuration.md#pianos-prompts-and-skills); the argument
+  hint is optional. An existing name is refused, never overwritten.
 - **View** shows the template file exactly as saved, front matter included, with a copy button.
 - **Delete** removes that file, after confirmation.
 - The page lists that folder only. Prompts in Pi's own folders (`~/.pi/agent/prompts/`, a
