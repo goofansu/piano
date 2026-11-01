@@ -45,6 +45,7 @@ export type GlobalCommandId =
   | "projects"
   | "new-project"
   | "add-webhook"
+  | "new-skill"
   | "project-settings"
   | "delete-project"
   | "trust"
@@ -91,6 +92,8 @@ export type GlobalCommandIntent =
   | ProjectCommandIntent
   /** Open the webhook editor on a new webhook, as the Webhooks page's header does. */
   | { kind: "add-webhook" }
+  /** Open the skill editor on a new skill, as the Skills page's header does. */
+  | { kind: "new-skill" }
   /** Send this registry or Pi change. */
   | { kind: "send"; command: ClientCommand }
   | { kind: "toggle-sidebar" }
@@ -167,7 +170,7 @@ const PROJECT_MENU_IDS = {
 
 /**
  * What the open page offers in its header, as the page's own commands describe it: on Settings ›
- * Webhooks, Add webhook; on the Projects index, New project; on a project's home, its menu
+ * Webhooks, Add webhook; on Settings › Skills, New skill; on the Projects index, New project; on a project's home, its menu
  * (`projectMenu`), manage rows then destructive (the home itself starts sessions). An open Settings
  * page covers the page beneath it, so only its own actions count. The palette lists exactly these,
  * so a page or menu that adds a header action gets its row, named as its button is, by construction.
@@ -176,19 +179,32 @@ export function pageCommands(
   state: AppState,
   settings: SettingsSection | null = null,
 ): GlobalCommand[] {
-  if (settings)
-    return settingsPage(settings) === "webhooks"
-      ? [
-          {
-            id: "add-webhook",
-            label: "Add webhook",
-            icon: "new",
-            group: "navigate",
-            enabled: true,
-            intent: { kind: "add-webhook" },
-          },
-        ]
-      : [];
+  if (settings) {
+    const page = settingsPage(settings);
+    if (page === "webhooks")
+      return [
+        {
+          id: "add-webhook",
+          label: "Add webhook",
+          icon: "new",
+          group: "navigate",
+          enabled: true,
+          intent: { kind: "add-webhook" },
+        },
+      ];
+    if (page === "skills")
+      return [
+        {
+          id: "new-skill",
+          label: "New skill",
+          icon: "new",
+          group: "navigate",
+          enabled: true,
+          intent: { kind: "new-skill" },
+        },
+      ];
+    return [];
+  }
   const row = (id: GlobalCommandId, c: ProjectCommand): GlobalCommand => ({
     id,
     label: c.label,

@@ -27,6 +27,7 @@ import { SessionPullRequests } from "./SessionPullRequests.ts";
 import { SessionSharing } from "./SessionSharing.ts";
 import { SidebarView } from "./SidebarView.ts";
 import type { SignInError, SignInLane, SignInState } from "./SignInAttempts.ts";
+import { UserSkills } from "./UserSkills.ts";
 import { Webhooks } from "./Webhooks.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { downloadWorkspaceFile, readWorkspaceFile } from "./WorkspaceFiles.ts";
@@ -328,6 +329,16 @@ export const AppRouter = HttpRouter.use((router) =>
     );
     yield* serve(Endpoints.testWebhook, ({ body }) =>
       Effect.flatMap(Webhooks, (hooks) => hooks.test(body.id)),
+    );
+
+    yield* serve(Endpoints.userSkills, () => Effect.flatMap(UserSkills, (skills) => skills.list));
+    yield* serve(Endpoints.createUserSkill, ({ body }) =>
+      Effect.flatMap(UserSkills, (skills) => skills.create(body)),
+    );
+    yield* serve(Endpoints.removeUserSkill, ({ body }) =>
+      Effect.flatMap(UserSkills, (skills) => skills.remove(body.name)).pipe(
+        Effect.as({ ok: true as const }),
+      ),
     );
 
     yield* serve(Endpoints.saveDefaults, ({ body }) =>

@@ -59,6 +59,7 @@ import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
+import { skillEditor } from "@/lib/useSkillEditor";
 import { webhookEditor } from "@/lib/useWebhookEditor";
 import type { SendDisposition } from "@/lib/ws";
 import type { AppState } from "@/store";
@@ -280,6 +281,7 @@ export function CommandHost({
       previewObservation.refresh();
     },
     addWebhook: () => webhookEditor.open("new"),
+    newSkill: () => skillEditor.open(),
   };
   const run = (command: Command) => {
     runCommand(command, effects);

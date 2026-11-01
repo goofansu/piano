@@ -33,6 +33,11 @@ export const listWebhooks = (options?: RequestOptions) => call(Endpoints.webhook
 export const saveWebhook = (body: import("../../../shared/webhooks.ts").WebhookSave) =>
   call(Endpoints.saveWebhook, { body });
 export const removeWebhook = (id: string) => call(Endpoints.removeWebhook, { body: { id } });
+export const listUserSkills = (options?: RequestOptions) => call(Endpoints.userSkills, {}, options);
+export const createUserSkill = (body: import("../../../shared/skills.ts").UserSkillCreate) =>
+  call(Endpoints.createUserSkill, { body });
+export const removeUserSkill = (name: string) =>
+  call(Endpoints.removeUserSkill, { body: { name } });
 export const testWebhook = (id: string) => call(Endpoints.testWebhook, { body: { id } });
 
 /**
