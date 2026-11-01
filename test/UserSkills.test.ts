@@ -150,3 +150,23 @@ test("the New skill rule accepts only a filled, well-formed, in-bounds draft", (
     "every field is required",
   );
 });
+
+test("a name YAML would read as a number is written and listed as the skill's name", async (t) => {
+  const { directory, run } = home(t);
+  const created = await run((skills) =>
+    skills.create({ name: "123", description: "456", instructions: "456" }),
+  );
+  assert.equal(created._tag, "Success");
+  assert.deepEqual(
+    loadSkillsFromDir({ dir: directory, source: "user" }).skills.map((skill) => skill.name),
+    ["123"],
+  );
+  // A skill written before names were quoted: Pi falls back to the directory's name, and so does Piano.
+  write(directory, "2024", 'name: 2024\ndescription: "D."\nmetadata:\n  created-by: piano');
+  const listed = await run((skills) => skills.list);
+  assert.deepEqual(listed._tag === "Success" && listed.success.map((skill) => skill.name), [
+    "123",
+    "2024",
+  ]);
+  assert.equal((await run((skills) => skills.remove("2024")))._tag, "Success");
+});

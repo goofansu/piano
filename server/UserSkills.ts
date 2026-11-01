@@ -66,7 +66,7 @@ const isDirectory = (path: string) => {
 
 /**
  * The skill named `name` if Piano wrote it: a real directory (not a link) of that name whose own
- * SKILL.md carries the marker and still declares that name.
+ * SKILL.md carries the marker and still declares that name, as Pi reads it.
  */
 function piano(root: string, name: string): UserSkill | undefined {
   const dir = join(root, name);
@@ -78,7 +78,10 @@ function piano(root: string, name: string): UserSkill | undefined {
     const metadata = frontmatter.metadata as Record<string, unknown> | undefined;
     if (metadata?.[MARKER_KEY] !== MARKER) return undefined;
     const { description } = frontmatter;
-    if (frontmatter.name !== name || typeof description !== "string") return undefined;
+    // Pi's own rule: a name that is not a string (`name: 123` reads as a number) falls back to the
+    // directory's, so such a skill is still the one Pi loads as `name`.
+    const declared = typeof frontmatter.name === "string" ? frontmatter.name : name;
+    if (declared !== name || typeof description !== "string") return undefined;
     return {
       name,
       description,
@@ -90,11 +93,14 @@ function piano(root: string, name: string): UserSkill | undefined {
   }
 }
 
-/** Double-quoted YAML scalars accept JSON string syntax, so any description stays one value. */
+/**
+ * Double-quoted YAML scalars accept JSON string syntax, so the name and description stay strings:
+ * unquoted, a name such as `123` or `true` would read back as a number or a boolean.
+ */
 const fileOf = ({ name, description, instructions, onlyWhenNamed }: Required<UserSkillCreate>) =>
   [
     "---",
-    `name: ${name}`,
+    `name: ${JSON.stringify(name)}`,
     `description: ${JSON.stringify(description)}`,
     // Pi's default is to let the model load the skill, so only the exception is written.
     ...(onlyWhenNamed ? ["disable-model-invocation: true"] : []),
