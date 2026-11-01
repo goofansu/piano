@@ -9,7 +9,7 @@ import { EXE_GITHUB, type GitHubHost, pullRequestIdentity } from "../shared/pull
 import type { PullRequest } from "../shared/wire.ts";
 import { childEnvironment } from "./ChildEnvironment.ts";
 import { type BranchHome, observeGit } from "./GitCheckout.ts";
-import { GhCommand, run as runProcess } from "./Subprocess.ts";
+import { GhCommand, run as runProcess, type SubprocessError } from "./Subprocess.ts";
 
 export class PullRequestError extends Data.TaggedError("PullRequestError")<{
   readonly detail: string;
@@ -88,7 +88,8 @@ export const isFromBranch = (
   branch: BranchHead,
 ): boolean => pr.head === branch.name && pr.headRepo === branch.repo;
 
-/** One pull request as `gh pr view/list --json` returns it. */
+/** One pull request as `gh pr view/list --json` returns it. `statusCheckRollup` is absent when
+ * the token could not read checks and the pull request was read without them. */
 export const GitHubPullRequest = Schema.Struct({
   url: Schema.String,
   number: Schema.Number,
@@ -96,14 +97,16 @@ export const GitHubPullRequest = Schema.Struct({
   state: Schema.Literals(["OPEN", "MERGED", "CLOSED"]),
   isDraft: Schema.Boolean,
   reviewDecision: Schema.NullOr(Schema.String),
-  statusCheckRollup: Schema.NullOr(
-    Schema.Array(
-      Schema.Struct({
-        __typename: Schema.optional(Schema.String),
-        status: Schema.optional(Schema.String),
-        conclusion: Schema.optional(Schema.NullOr(Schema.String)),
-        state: Schema.optional(Schema.String),
-      }),
+  statusCheckRollup: Schema.optional(
+    Schema.NullOr(
+      Schema.Array(
+        Schema.Struct({
+          __typename: Schema.optional(Schema.String),
+          status: Schema.optional(Schema.String),
+          conclusion: Schema.optional(Schema.NullOr(Schema.String)),
+          state: Schema.optional(Schema.String),
+        }),
+      ),
     ),
   ),
   author: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
@@ -118,13 +121,76 @@ export const GitHubPullRequest = Schema.Struct({
   closedAt: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type GitHubPullRequest = typeof GitHubPullRequest.Type;
-const fields =
-  "url,number,title,state,isDraft,reviewDecision,statusCheckRollup,author,headRefName,baseRefName,headRepository,headRepositoryOwner,additions,deletions,changedFiles,updatedAt,closedAt";
+const fieldsWithoutChecks =
+  "url,number,title,state,isDraft,reviewDecision,author,headRefName,baseRefName,headRepository,headRepositoryOwner,additions,deletions,changedFiles,updatedAt,closedAt";
+const fields = `${fieldsWithoutChecks},statusCheckRollup`;
+
+/** GitHub's GraphQL errors as gh prints them: `GraphQL: <message> (<path>), …`. */
+function graphqlErrors(stderr: string): { message: string; path: string }[] {
+  const body = stderr.match(/GraphQL: (.*)/)?.[1] ?? "";
+  return [...body.matchAll(/\s*([^,(]+?)\s*\(([\w.]+)\)/g)].map((m) => ({
+    message: m[1]!,
+    path: m[2]!,
+  }));
+}
+const refused = (message: string) => /^Resource not accessible by /i.test(message);
+
+/** Whether gh failed only because the token may not read check results: the pull request itself
+ * is readable without them. */
+export function onlyChecksRefused(stderr: string): boolean {
+  const errors = graphqlErrors(stderr);
+  return (
+    errors.length > 0 &&
+    errors.every((e) => refused(e.message) && e.path.split(".").includes("statusCheckRollup"))
+  );
+}
+
+/** What went wrong, from gh's failure, in words a user can act on. Only fixed phrases and GraphQL
+ * field names reach the message: never stderr itself, which can name paths or tokens. */
+export function ghFailureDetail(
+  error: Pick<SubprocessError, "reason" | "stderr">,
+  host: GitHubHost,
+): string {
+  const exe = host === EXE_GITHUB;
+  if (error.reason === "timeout") return "GitHub did not answer within 15 seconds. Retry.";
+  if (error.reason === "start") return "Could not run gh. Check that the GitHub CLI is installed.";
+  const stderr = error.stderr;
+  const denied = graphqlErrors(stderr).filter((e) => refused(e.message));
+  if (denied.length || /Resource not accessible by /i.test(stderr)) {
+    const names = [
+      ...new Set(
+        denied.map((e) => e.path.split(".").findLast((p) => !/^\d+$/.test(p) && p !== "nodes")!),
+      ),
+    ];
+    const what = names.length ? names.join(", ") : "this resource";
+    return exe
+      ? `GitHub refused this VM's GitHub integration access to ${what}. Grant it access, then retry.`
+      : `GitHub refused the gh token access to ${what}. Grant the token that permission, then retry.`;
+  }
+  if (/gh auth login|not logged in|HTTP 401|Bad credentials|authentication required/i.test(stderr))
+    return exe
+      ? "GitHub did not accept this VM's GitHub integration. Check the integration, then retry."
+      : `gh is not logged in to ${host}. Run gh auth login, then retry.`;
+  if (/Could not resolve to a (Repository|PullRequest)|HTTP 404/i.test(stderr))
+    return "GitHub found no such repository or pull request, or this token cannot see it.";
+  if (/HTTP 403|rate limit/i.test(stderr))
+    return /rate limit/i.test(stderr)
+      ? "GitHub's rate limit was reached. Retry later."
+      : "GitHub refused the request. Check the token's repository access, then retry.";
+  if (
+    /could not connect|dial tcp|no such host|connection refused|ETIMEDOUT|EAI_AGAIN/i.test(stderr)
+  )
+    return `Could not reach ${host}. Check the network, then retry.`;
+  return exe
+    ? "Could not read GitHub through exe.dev. Check that this VM's GitHub integration can access the repository, then retry."
+    : "Could not read GitHub. Check gh authentication and repository access, then retry.";
+}
 
 /** Map GitHub's response into wire facts. Throws when the URL is not a pull request URL or
  * disagrees with the number. */
 export function facts(raw: GitHubPullRequest): PullRequest {
   const checks = raw.statusCheckRollup ?? [];
+  const unread = raw.statusCheckRollup === undefined;
   const failed = checks.some((c) =>
     c.__typename === "StatusContext"
       ? c.state === "FAILURE" || c.state === "ERROR"
@@ -157,7 +223,15 @@ export function facts(raw: GitHubPullRequest): PullRequest {
           : raw.isDraft
             ? "draft"
             : "open",
-    checks: failed ? "failure" : pending ? "pending" : checks.length ? "success" : "none",
+    checks: unread
+      ? "unknown"
+      : failed
+        ? "failure"
+        : pending
+          ? "pending"
+          : checks.length
+            ? "success"
+            : "none",
     review:
       raw.reviewDecision === "APPROVED"
         ? "approved"
@@ -239,15 +313,16 @@ export const GitHubPullRequestsLive = Layer.effect(
         env: { ...childEnvironment(), GH_HOST: host, GH_REPO: undefined },
         timeout: 15000,
         limit: 4 * 1024 * 1024,
-      }).pipe(
-        Effect.map((result) => result.stdout.toString().trim()),
-        Effect.mapError(() =>
-          failure(
-            host === EXE_GITHUB
-              ? "Could not read GitHub through exe.dev. Check that this VM's GitHub integration can access the repository, then retry."
-              : "Could not read GitHub. Check gh authentication and repository access, then retry.",
-          ),
+      }).pipe(Effect.map((result) => result.stdout.toString().trim()));
+    /** Reads with `--json <fields>` (the last argument). A token that may read the pull request
+     * but not its checks gets it again without them: the checks are then unknown. */
+    const ghJson = (cwd: string, args: string[], host: GitHubHost) =>
+      gh(cwd, [...args, fields], host).pipe(
+        Effect.catchIf(
+          (error) => error.reason === "exit" && onlyChecksRefused(error.stderr),
+          () => gh(cwd, [...args, fieldsWithoutChecks], host),
         ),
+        Effect.mapError((error) => failure(ghFailureDetail(error, host))),
       );
     return GitHubPullRequests.of({
       link: Effect.fn("GitHubPullRequests.link")(function* (url, cwd) {
@@ -262,17 +337,9 @@ export const GitHubPullRequestsLive = Layer.effect(
         const host = link.apiHost ?? (yield* checkoutHost(cwd));
         // A public URL overrides GH_HOST in gh. Use number + explicit API repository instead.
         // Neither this lookup nor a saved integration route needs the checkout to still exist.
-        const output = yield* gh(
+        const output = yield* ghJson(
           process.cwd(),
-          [
-            "pr",
-            "view",
-            String(identity.number),
-            "--repo",
-            `${host}/${identity.repo}`,
-            "--json",
-            fields,
-          ],
+          ["pr", "view", String(identity.number), "--repo", `${host}/${identity.repo}`, "--json"],
           host,
         );
         return yield* Effect.try({
@@ -285,7 +352,7 @@ export const GitHubPullRequestsLive = Layer.effect(
         // Normal remotes let gh select the base repository (including fork parents).
         // Integration remotes name the authorized repository explicitly. Match the head
         // repository too: unrelated forks often have identically named branches.
-        const output = yield* gh(
+        const output = yield* ghJson(
           cwd,
           [
             "pr",
@@ -296,9 +363,8 @@ export const GitHubPullRequestsLive = Layer.effect(
             "open",
             "--limit",
             "100",
-            "--json",
-            fields,
             ...(host === EXE_GITHUB ? ["--repo", `${EXE_GITHUB}/${repo}`] : []),
+            "--json",
           ],
           host,
         );

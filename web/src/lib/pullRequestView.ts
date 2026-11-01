@@ -34,6 +34,7 @@ export interface PullRequestView {
 
 const STATE_LABELS = { open: "Open", draft: "Draft", merged: "Merged", closed: "Closed" } as const;
 const SIGNAL_LABELS: Record<SignalOutcome, string> = {
+  unknown: "Checks unavailable",
   pending: "Checks running",
   success: "Checks passed",
   failure: "Checks failed",

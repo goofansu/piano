@@ -30,6 +30,11 @@ if (fixture.malformed) {
 }
 // Like gh, return only requested fields so translation tests catch missing --json selections.
 const fields = args[args.indexOf("--json") + 1].split(",");
+// A token that may read pull requests but not their checks: GitHub refuses only that field.
+if (fixture.checksError && fields.includes("statusCheckRollup")) {
+  console.error(fixture.checksError);
+  process.exit(1);
+}
 const selected = (pr) =>
   Object.fromEntries(Object.entries(pr).filter(([key]) => fields.includes(key)));
 if (list)

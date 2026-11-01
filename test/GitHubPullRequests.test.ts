@@ -158,7 +158,7 @@ async function routing(t: TestContext, remote: string) {
   });
   const github = await runtime.runPromise(GitHubPullRequests);
   /** Serve one open pull request, answering only through `host`. */
-  const serve = (host: string) =>
+  const serve = (host: string, extra: Record<string, unknown> = {}) =>
     writeFileSync(
       forge,
       JSON.stringify({
@@ -171,6 +171,7 @@ async function routing(t: TestContext, remote: string) {
         ],
         expectedHost: host,
         expectedRepo: `${host}/example/repo`,
+        ...extra,
       }),
     );
   const run = <A, E>(effect: Effect.Effect<A, E>) => runtime.runPromise(effect);
@@ -194,7 +195,7 @@ test("routing: a saved apiHost wins over the checkout; without one the remote im
   const viewed = await f.run(f.github.view({ url, apiHost: exe }, f.repo));
   assert.equal(viewed.number, 42);
   assert.deepEqual([viewed.headRepo, viewed.baseRepo], ["example/repo", "example/repo"]);
-  await assert.rejects(f.run(f.github.view({ url }, f.repo)), /gh authentication/);
+  await assert.rejects(f.run(f.github.view({ url }, f.repo)), /could not read github/i);
   const g = await routing(t, `https://${exe}/example/repo.git`);
   g.serve(exe);
   assert.deepEqual(await g.run(g.github.link(url, g.repo)), { url, apiHost: exe });
@@ -214,4 +215,60 @@ test("routing: github.com is the default when neither a checkout nor a GitHub re
     assert.deepEqual(await f.run(f.github.link(url, cwd)), { url }, cwd);
     assert.equal((await f.run(f.github.view({ url }, cwd))).number, 42, cwd);
   }
+});
+
+const checksRefused =
+  "GraphQL: Resource not accessible by personal access token (repository.pullRequest.statusCheckRollup)";
+
+test("a token that cannot read checks still links the pull request, its checks unknown", async (t) => {
+  const f = await routing(t, "git@github.com:example/repo.git");
+  // On github.com, gh resolves the repository from the checkout: openForHead names none.
+  f.serve("github.com", {
+    expectedRepo: undefined,
+    checksError: `${checksRefused}, Resource not accessible by personal access token (repository.pullRequest.commits.nodes.0.commit.statusCheckRollup)`,
+  });
+  const viewed = await f.run(f.github.view({ url }, f.repo));
+  assert.equal(viewed.number, 42);
+  assert.equal(viewed.checks, "unknown");
+  const [found] = await f.run(
+    f.github.openForHead(f.repo, "feature", "example/repo", "github.com"),
+  );
+  assert.equal(found?.pullRequest.checks, "unknown");
+});
+
+test("any other gh failure reaches the user as its cause, without paths or tokens", async (t) => {
+  const f = await routing(t, "git@github.com:example/repo.git");
+  const failsWith = async (error: string, expected: RegExp) => {
+    f.serve("github.com", { expectedRepo: undefined, error });
+    for (const read of [
+      f.github.view({ url }, f.repo) as Effect.Effect<unknown, unknown>,
+      f.github.openForHead(f.repo, "feature", "example/repo", "github.com"),
+    ])
+      await assert.rejects(f.run(read), (e: Error) => {
+        assert.match(e.message, expected, error);
+        assert.doesNotMatch(e.message, /\/home|\/tmp|ghp_|github_pat_/, error);
+        return true;
+      });
+  };
+  await failsWith(
+    "GraphQL: Resource not accessible by personal access token (repository.pullRequest)",
+    /refused the gh token access to pullRequest/,
+  );
+  await failsWith(
+    `${checksRefused}, Something else (repository.pullRequest.title)`,
+    /access to statusCheckRollup/,
+  );
+  await failsWith(
+    "To get started with GitHub CLI, please run:  gh auth login\nAlternatively, populate GH_TOKEN",
+    /not logged in to github.com/,
+  );
+  await failsWith(
+    "HTTP 401: Bad credentials (https://api.github.com/graphql) ghp_secret",
+    /not logged in/,
+  );
+  await failsWith(
+    "GraphQL: Could not resolve to a Repository with the name 'example/repo'. (repository)",
+    /no such repository or pull request/,
+  );
+  await failsWith("open /home/me/.config/gh/hosts.yml: permission denied", /Could not read GitHub/);
 });

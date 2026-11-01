@@ -91,6 +91,13 @@ test("a draft is still active work", () => {
   );
 });
 
+test("checks a token cannot read are named unavailable; a pull request with no checks shows none", () => {
+  const labels = (checks: PullRequest["checks"]) =>
+    pullRequestView(linked(pr({ checks, review: "none" })), now)?.signals.map((s) => s.label);
+  assert.deepEqual(labels("unknown"), ["Checks unavailable"]);
+  assert.deepEqual(labels("none"), []);
+});
+
 test("merged and closed PRs drop checks and reviews and show when they were disposed", () => {
   for (const [state, label] of [
     ["merged", "Merged"],

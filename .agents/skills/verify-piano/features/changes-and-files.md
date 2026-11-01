@@ -34,10 +34,12 @@ The palette (Mod+K) searches neither outputs nor links.
   brings the button back. Keyboard dismissal returns focus to the visible PR control.
 - `pull-request-row`: region "Pull request" under the toolbar, only while the session has a
   linked pull request: `<n> <title>` (a link to GitHub; the number without a hash, as the
-  session rail and project home show it), the state badge, "Checks running|passed|failed",
-  "Approved" / "Changes requested" / "Review required", "<n> commits not pushed", "Edits not
+  session rail and project home show it), the state badge, "Checks
+  running|passed|failed|unavailable" (unavailable: the token reads the pull request but not its
+  checks), "Approved" / "Changes requested" / "Review required", "<n> commits not pushed", "Edits not
   committed", and `head → base` only when the head is not the inspected branch; "Status
-  unavailable" when GitHub cannot be read (the seed's `#222` without a `gh`). Its "Pull request
+  unavailable" when GitHub cannot be read (the seed's `#222` without a `gh`), with gh's cause in
+  the error toast. Its "Pull request
   actions" menu: Open pull request, Change link…, Find from branch, Remove link
   (toasts "Pull request linked" / "Pull request link removed"). PR linking is absent from both
   session menus. The palette's "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL

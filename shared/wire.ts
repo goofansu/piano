@@ -780,7 +780,8 @@ export const PullRequest = Schema.Struct({
   number: Schema.Number,
   title: Schema.String,
   state: Schema.Literals(["open", "draft", "merged", "closed"]),
-  checks: Schema.Literals(["none", "pending", "success", "failure"]),
+  /** `unknown`: the token may read the pull request but not its checks; `none`: it has none. */
+  checks: Schema.Literals(["none", "unknown", "pending", "success", "failure"]),
   review: Schema.Literals(["none", "approved", "changes_requested", "review_required"]),
   author: Schema.optional(Schema.String),
   head: Schema.optional(Schema.String),
