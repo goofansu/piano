@@ -996,6 +996,7 @@ test("model switch and child crash", async () => {
     "output already read before exit is not discarded",
   );
   assert.equal(result.failed.reason, "exited");
+  assert.equal(result.failed.notSent, true, "an exited Pi never saw the action");
 });
 
 test("a write failing as Pi crashes closes with the exit, not a transport failure", async () => {
@@ -1184,7 +1185,10 @@ for (const mode of ["success", "abort-failure", "abort-exit", "clear-failure", "
             { _tag: "steer", text: "racing input" },
             { _tag: "prompt", text: "racing input" },
           ] as const) {
-            assert.equal((yield* session.act(action).pipe(Effect.flip)).reason, "rejected");
+            const refused = yield* session.act(action).pipe(Effect.flip);
+            assert.equal(refused.reason, "rejected");
+            // Refused before Pi saw it, so a sender may take its input back (PIN-132).
+            assert.equal(refused.notSent, true, action._tag);
           }
           yield* session.commands; // release the held clear acknowledgement
         }

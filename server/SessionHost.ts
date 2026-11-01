@@ -18,6 +18,7 @@ import {
   PiSessionError,
   type PiSessionSpec,
   PiSessions,
+  refusedUnsent,
   sessionActionPolicy,
 } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
@@ -51,9 +52,7 @@ export interface CloseHow {
 
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 const stopped = () => rejected("Pi is closing or has stopped. Refresh before sending new input.");
-/** A refusal before Pi saw the action, so its sender may take the input back. */
-const notSent = (error: PiSessionError) =>
-  new PiSessionError({ reason: error.reason, detail: error.detail, notSent: true });
+const notSent = (error: PiSessionError) => refusedUnsent(error.reason, error.detail);
 
 /** What the hosts list says of a running session. The host announces a change whenever these
  * facts differ from those it last announced, whichever event changed them. */

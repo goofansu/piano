@@ -116,6 +116,7 @@ test("INV-04: a readback stays ordinary work at Pi's command capacity", async ()
       assert.equal(read._tag, "Failure", "a readback must not borrow the control reserve");
       assert.equal(read.failure.reason, "rejected");
       assert.match(read.failure.detail, /Pi command capacity is full.*Nothing was sent/);
+      assert.equal(read.failure.notSent, true);
       assert.ok(dialog);
       yield* session.act({
         _tag: "answer",
@@ -169,6 +170,7 @@ test("INV-04: an answer stays live while ordinary input fills Pi's stdin", async
         const excess = yield* session.act({ _tag: "set_name", name: "excess" }).pipe(Effect.flip);
         assert.equal(excess.reason, "rejected");
         assert.match(excess.detail, /input capacity is full.*Nothing was sent/);
+        assert.equal(excess.notSent, true, "a sender may take refused input back");
         // Admitted, so it waits behind the input Pi has not read and times out undelivered.
         const answer = yield* session
           .act({ _tag: "answer", id: dialog.id, generation: dialog.generation, value: "release" })

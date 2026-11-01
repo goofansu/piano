@@ -59,7 +59,7 @@ import {
   sessionArgs,
   stateFactsOf,
 } from "./PiRecords.ts";
-import { type PiLane, PiSessionError, PiTransport } from "./PiTransport.ts";
+import { type PiLane, PiSessionError, PiTransport, refusedUnsent } from "./PiTransport.ts";
 import { previewLogs, projectPreview } from "./PreviewProjection.ts";
 import { makeSessionDialogs } from "./SessionDialogs.ts";
 import { makeSessionPublication } from "./SessionPublication.ts";
@@ -280,7 +280,7 @@ const exchangeOf = <A>(
 // The saved-history types `history` speaks in.
 export type { HistoryLocation, PiHistory } from "./PiHistory.ts";
 // Preserve the public configuration/error imports; transport details stay internal.
-export { PiRequestTimeoutMs, PiSessionError } from "./PiTransport.ts";
+export { PiRequestTimeoutMs, PiSessionError, refusedUnsent } from "./PiTransport.ts";
 
 /** Bounded recovery for dialogs whose extension-owned cancellation is invisible over RPC. */
 export const PiDialogRecoveryMs = Context.Reference<number>("piano/PiDialogRecoveryMs", {
@@ -302,7 +302,12 @@ const displayed = <A>(effect: Effect.Effect<A, PiSessionError>) =>
   effect.pipe(
     Effect.map(projectDisplay),
     Effect.mapError(
-      (error) => new PiSessionError({ reason: error.reason, detail: projectDisplay(error.detail) }),
+      (error) =>
+        new PiSessionError({
+          reason: error.reason,
+          detail: projectDisplay(error.detail),
+          ...(error.notSent ? { notSent: true } : {}),
+        }),
     ),
   );
 
@@ -591,11 +596,10 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
 
     let stopping = false;
     const exited = () =>
-      new PiSessionError({
-        reason: "exited",
-        detail:
-          "Pi has stopped. Reopen history before sending new input; interrupted operations do not resume.",
-      });
+      refusedUnsent(
+        "exited",
+        "Pi has stopped. Reopen history before sending new input; interrupted operations do not resume.",
+      );
     const act = (
       action: SessionAction,
     ): Effect.Effect<SessionActionResult | undefined, PiSessionError> =>
@@ -815,10 +819,10 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
             // start new work as soon as Stop completes. Answers must remain available.
             if (stopping && sessionActionPolicy[action._tag].blockedWhileStopping) {
               return Effect.fail(
-                new PiSessionError({
-                  reason: "rejected",
-                  detail: "Stop is in progress. Wait before sending input or changing the queue.",
-                }),
+                refusedUnsent(
+                  "rejected",
+                  "Stop is in progress. Wait before sending input or changing the queue.",
+                ),
               );
             }
             const release = actionCapacity.acquire(
@@ -827,11 +831,10 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
             );
             if (!release)
               return Effect.fail(
-                new PiSessionError({
-                  reason: "rejected",
-                  detail:
-                    "Session input capacity is full. Nothing was sent; wait for pending work before trying again.",
-                }),
+                refusedUnsent(
+                  "rejected",
+                  "Session input capacity is full. Nothing was sent; wait for pending work before trying again.",
+                ),
               );
             // Admission follows session-owned work, not the lifetime of a browser join.
             return act(action).pipe(
