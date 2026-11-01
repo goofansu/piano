@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rename, rm, symlink, truncate, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -174,6 +184,55 @@ test("placement resolves directory aliases but preserves leaf symlinks and bound
     await assert.rejects(read("alias"), /regular file/);
     await assert.rejects(read("."), /regular file/);
   }
+});
+
+test("a symlink before `..` is followed as the OS follows it, for preview, download and placement", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "piano-climb-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const repo = join(root, "repo");
+  const sibling = join(root, "sibling");
+  await mkdir(join(repo, "src/deep"), { recursive: true });
+  await mkdir(join(sibling, "sub"), { recursive: true });
+  await writeFile(join(repo, "report.md"), "checkout copy\n");
+  await writeFile(join(sibling, "report.md"), "sibling copy\n");
+  await writeFile(join(repo, "src/a.ts"), "export const a = 1;\n");
+  await symlink(join(sibling, "sub"), join(repo, "alias"));
+  await symlink("src/deep", join(repo, "inner"));
+  await symlink("a.ts", join(repo, "src/leaf.ts"));
+  const real = await realpath(sibling);
+  const workspace = { id: "scratch", folder: repo, path: repo };
+  const read = (path: string) =>
+    Effect.runPromise(
+      readWorkspaceFile(workspace, path).pipe(Effect.mapError((error) => new Error(error.detail))),
+    );
+  const download = async (path: string) =>
+    new TextDecoder().decode(
+      (await Effect.runPromise(downloadWorkspaceFile(workspace, path))).bytes,
+    );
+
+  // What the OS opens is the sibling's file, so Piano previews and downloads that and names it.
+  // Spelled by hand: `join` and `resolve` would collapse `alias/..` themselves.
+  const absolute = `${repo}/alias/../report.md`;
+  assert.equal(await readFile(absolute, "utf8"), "sibling copy\n");
+  for (const path of ["alias/../report.md", absolute]) {
+    assert.equal(await place(workspace, path), undefined, path);
+    const preview = await read(path);
+    assert.equal(preview.path, join(real, "report.md"));
+    assert.ok("content" in preview);
+    assert.equal(preview.content, "sibling copy\n");
+    assert.equal(await download(path), "sibling copy\n");
+  }
+  // An alias that climbs back into the checkout stays inside, under the real name.
+  assert.equal(await place(workspace, "inner/../a.ts"), "src/a.ts");
+  assert.equal(await download("inner/../a.ts"), "export const a = 1;\n");
+  assert.equal(await place(workspace, "inner/../leaf.ts"), "src/leaf.ts");
+  assert.equal((await read("inner/../leaf.ts")).path, "src/leaf.ts");
+  assert.equal(await place(workspace, "inner/../not-yet.ts"), "src/not-yet.ts");
+  assert.equal(await place(workspace, "inner/.."), "src");
+  // Without a symlink, `..` stays lexical; the explicit external path still reads.
+  assert.equal(await place(workspace, "src/../report.md"), "report.md");
+  assert.equal(await download("src/../report.md"), "checkout copy\n");
+  assert.equal(await download("../sibling/report.md"), "sibling copy\n");
 });
 
 test("formats the previews promise are accepted under the detector's MIME variants", async () => {

@@ -59,6 +59,11 @@ test("written files: internal directory aliases share identity without poisoning
   mkdirSync(join(repo, "src"));
   writeFileSync(join(repo, "src/a.ts"), "export const a = 1;\n");
   symlinkSync("src", join(repo, "alias"));
+  const sibling = `${repo}-sibling`;
+  mkdirSync(join(sibling, "sub"), { recursive: true });
+  t.after(() => rmSync(sibling, { recursive: true, force: true }));
+  writeFileSync(join(sibling, "a.ts"), "sibling\n");
+  symlinkSync(join(sibling, "sub"), join(repo, "away"));
   writeFileSync(join(repo, ".gitignore"), "*.log\n");
   writeFileSync(join(repo, "build.log"), "ignored output\n");
   const observation = await Effect.runPromise(
@@ -68,6 +73,9 @@ test("written files: internal directory aliases share identity without poisoning
         "alias/a.ts",
         "build.log",
         "src/removed.ts",
+        // The OS follows `away` first, so this is the sibling's file, not `src/../a.ts`.
+        "away/../a.ts",
+        "alias/../src/a.ts",
       ]);
     }).pipe(Effect.provide(WorkspaceChangesLive)),
   );
@@ -78,6 +86,8 @@ test("written files: internal directory aliases share identity without poisoning
       { path: "alias/a.ts", verdict: "listed", placed: "src/a.ts" },
       { path: "build.log", verdict: "ignored", placed: "build.log" },
       { path: "src/removed.ts", verdict: "missing", placed: "src/removed.ts" },
+      { path: "away/../a.ts", verdict: "outside" },
+      { path: "alias/../src/a.ts", verdict: "listed", placed: "src/a.ts" },
     ],
   });
 });

@@ -126,15 +126,34 @@ async function physical(target: string): Promise<string> {
 }
 
 /**
+ * `path` (relative to the workspace, or absolute) as the kernel spells it: unnormalized, so a
+ * read or `lstat` of it follows `link/..` through `link` as the OS does. `resolve` collapses
+ * `link/..` lexically and would name a different file.
+ */
+export const spell = (workspace: Workspace, path: string): string =>
+  isAbsolute(path) ? path : `${resolve(workspace.path)}${sep}${path}`;
+
+/**
+ * An absolute name for the same file as `spell`, with the leaf kept: the lexical one when the
+ * spelling has no `..` (dropping `.` and repeated separators cannot change the file), otherwise
+ * its parent resolved as the kernel resolves it.
+ */
+async function name(spelled: string): Promise<string> {
+  if (!spelled.split(sep).includes("..")) return resolve(spelled);
+  return join(await physical(dirname(spelled)), basename(spelled));
+}
+
+/**
  * Where `path` (as a session's tool calls named it: relative to the workspace, or absolute) sits
  * in the workspace: its name relative to the workspace's real root, or `undefined` outside it.
- * Resolve directory aliases (including the workspace root) before naming the file. Preserve the
- * leaf: Git tracks a leaf symlink itself, not its target. Missing descendants retain their names.
+ * Resolve directory aliases (including the workspace root) before naming the file, and follow a
+ * symlink before the `..` after it, as the kernel does. Preserve the leaf: Git tracks a leaf
+ * symlink itself, not its target. Missing descendants retain their names.
  * Placement is Git identity, not permission to read: previews may also open files outside it.
  */
 export async function place(workspace: Workspace, path: string): Promise<string | undefined> {
   const logical = resolve(workspace.path);
-  const target = resolve(logical, path);
+  const target = await name(spell(workspace, path));
   const root = await realpath(logical);
   if (target === logical || target === root) return "";
   const real = join(await physical(dirname(target)), basename(target));
@@ -159,10 +178,11 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
   await access(workspace.path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") refuse("Checkout removed");
   });
-  const requested = resolve(workspace.path, path);
+  const spelled = spell(workspace, path);
+  const requested = await name(spelled);
   // Keep workspace names stable; external files need their full path for nested links.
-  const name = (await place(workspace, path)) ?? requested;
-  const target = await realpath(requested);
+  const shown = (await place(workspace, path)) ?? requested;
+  const target = await realpath(spelled);
   // Nonblocking prevents special files (notably FIFOs) from hanging the request.
   const file = await open(target, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
   try {
@@ -208,7 +228,7 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
     if (length > limit) tooLarge();
     if (length !== stat.size) refuse("This file changed while reading. Try the link again.");
     const data = bytes.subarray(0, length);
-    const identity = { workspaceId: workspace.id, path: name };
+    const identity = { workspaceId: workspace.id, path: shown };
     if (binary) {
       const actual = mimeBase(await fileTypeFromBuffer(data).catch(() => undefined));
       if (!actual || binaryTypes.get(actual) !== binary)
