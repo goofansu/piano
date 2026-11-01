@@ -69,7 +69,7 @@ const readPrompt = (name: string, text: string): Prompt => {
     name,
     description,
     ...(typeof hint === "string" && hint ? { argumentHint: hint } : {}),
-    body,
+    file: text,
   };
 };
 
