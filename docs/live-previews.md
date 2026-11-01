@@ -21,7 +21,8 @@ composer. Request revisions there as usual; app HMR, when supported, updates the
 
 Piano reads status from the session's owner without starting Pi or an app: on attachment/reconnect,
 return to the page, opening Preview/Details and explicit checks. Concurrent reads coalesce, focus
-reads retain their ten-second throttle, and there is no polling. Requests carry echoed observation
+reads retain their ten-second throttle, and the browser does not poll. The owner alone checks a
+warming-up app, below. Requests carry echoed observation
 IDs, and details are fenced to attachment, owner generation and instance. Disconnection or a failed
 read is unknown, not stopped; no external action remains usable from an uncertain observation. A read
 that client or session input capacity refuses is answered under its ID too: it ends the check and
@@ -31,6 +32,15 @@ with its frame and link, as soon as its stop is confirmed, and every new launch 
 without a link, from its saved intent until its own readiness check succeeds. After a failed start
 the owner reads the workspace again, so the rail drops an app already stopped and keeps one
 launched but not observable as unknown.
+
+A cold app (migrations, asset compilation) may answer errors, or nothing, for minutes before its
+first good answer. Readiness follows Kamal's proxy healthcheck: one GET every second, each request
+with its own 5s timeout, separate from how long a start waits. While the app's process runs and it
+has never answered 2xx/3xx, within ten minutes of launch, it is **warming up**, not failed: a start
+whose wait ends then returns `warming: true` with its recent logs and leaves the app running, and
+the owner keeps checking until the app answers, exits or the window ends, publishing each check.
+The rail shows **Running, warming up** and gains the link once the app answers. An app that has
+answered once is no longer warming up; a later bad answer shows **Running, not answering**.
 
 Stop asks for confirmation of the observed exact instance. A changed attachment, owner or instance
 invalidates that confirmation; server-side exact-instance reconciliation remains authoritative.
@@ -184,7 +194,7 @@ after checkout deletion, without `realpath` of the missing directory.
      "command": ["node", "node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "{port}", "--strictPort"],
      "env": {"__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS": "<vm>.exe.xyz"},
      "readyPath": "/",
-     "timeoutSeconds": 15
+     "timeoutSeconds": 30
    }
    ```
 
@@ -193,10 +203,11 @@ after checkout deletion, without `realpath` of the missing directory.
    The application gets only PATH, PORT and explicit `env`; add HOME only when required. Never pass
    Piano credentials. Environment values are saved privately and omitted/redacted in observations;
    commands and logs are not secret storage.
-2. Check `ready`, `detail`, `state` and bounded `logs`, not just tool success. Startup waits 1–30s
+2. Check `ready`, `detail`, `state` and bounded `logs`, not just tool success. Startup waits 1–90s (default 30)
    for an owned loopback listener and a 2xx/3xx GET at `readyPath`, with the preview hostname as Host
    and without redirects. Host rejection (often 403), bind/exec failure and wrong ports remain
-   unready with identity/logs. States: starting, running, exited, failed, stopping, not-loaded.
+   unready with identity/logs. `warming: true` is a running app that has not answered yet: report
+   its logs, do not replace it, and read status later. States: starting, running, exited, failed, stopping, not-loaded.
    Supervisor details are diagnostic, not a second status model.
 3. Report observed local readiness and Markdown `url`. On exe.dev, external authenticated access
    stays `unverified` until actually observed; on macOS the URL opens on the observed host
@@ -204,7 +215,7 @@ after checkout deletion, without `realpath` of the missing directory.
 4. Lost/aborted output: read `status`, never blindly repeat a launch. `start` without command returns
    **this generation's** existing app, even if unhealthy. A changed request returns `specChanged`
    without restarting. Use `replace: "<exact instanceId>"` only for a user-requested change/restart
-   or a failed/never-ready app. It stops that instance then launches the supplied command, or the
+   or a failed app, or one no longer warming up and still unready. It stops that instance then launches the supplied command, or the
    same command if omitted. A stale ID returns `not-current`. Another live owner's app is an
    ownership conflict, not reuse or a transfer. Different workspaces remain independent.
 5. User-authorized stop: `{"action":"stop","instanceId":"<exact returned ID>"}`. Never kill by

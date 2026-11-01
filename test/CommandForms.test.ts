@@ -84,6 +84,7 @@ test("preview confirmation stays on its exact attachment, generation and instanc
     instanceId: "i1",
     state: "running" as const,
     ready: true,
+    warming: false,
     url: "http://localhost:4000/",
     port: 4000,
     command: ["npm", "run", "dev"],

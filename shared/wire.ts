@@ -255,6 +255,9 @@ export const SessionPreview = Schema.Struct({
   state: Schema.Literals([...PREVIEW_STATES, "unknown"]),
   /** Local HTTP readiness through the preview hostname, not authenticated external access. */
   ready: Schema.Boolean,
+  /** Running and never answered yet, within its warm-up window: a cold start, not a failure. The
+   * owner keeps checking readiness and publishes the app once it answers. */
+  warming: Schema.Boolean,
   /** Present only while ready. */
   url: Schema.NullOr(Schema.String),
   port: Schema.Number,

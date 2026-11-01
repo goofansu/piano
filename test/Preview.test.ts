@@ -94,6 +94,7 @@ for (const [platform, name] of supervisors) {
     const first = observation(await f.call());
     assert.equal(first.ready, false);
     assert.equal(first.state, "failed");
+    assert.equal(first.warming, false, "a failed app is not warming up");
     const second = observation(await f.call());
     assert.equal(second.instanceId, first.instanceId);
     assert.ok("reused" in second && second.reused);
@@ -312,7 +313,7 @@ for (const [platform, name] of supervisors) {
     const first = observation(await f.call());
     await assert.rejects(
       f.call({ replace: first.instanceId, timeoutSeconds: 0 }),
-      /timeoutSeconds must be between 1 and 30/,
+      /timeoutSeconds must be between 1 and 90/,
     );
     assert.equal(f.stops.length, 0);
     assert.equal(f.launched.length, 1);
@@ -426,6 +427,68 @@ for (const [platform, name] of supervisors) {
     assert.equal(accepted.state, "running");
     assert.equal(accepted.url, `${origin}:${address.port}/`);
     assert.equal(accepted.externalAccess, platform === "darwin" ? "same-host" : "unverified");
+  });
+
+  contract("a cold app is warming up, not failed, until it first answers", async (t) => {
+    const f = await fixture(t);
+    const port = await freePort();
+    f.config.ports = [port];
+    f.host.journal = "Compiling assets…";
+    // Each mode is one way a cold app answers: not at all, slower than a second, or an error.
+    let mode: "hang" | "slow" | "error" = "hang";
+    const server = createHttpServer((_request, response) => {
+      if (mode === "hang") return;
+      if (mode === "error") {
+        response.statusCode = 500;
+        response.end();
+        return;
+      }
+      setTimeout(() => response.end("app"), 2000);
+    });
+    t.after(
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        }),
+    );
+    f.host.afterSubmit = async () => {
+      f.host.phase = "running";
+      server.listen(port, "127.0.0.1");
+      await once(server, "listening");
+    };
+
+    // The start's own deadline bounds its wait, whatever one request's timeout is.
+    const began = performance.now();
+    const cold = observation(await f.call({ command: ["/bin/true"], timeoutSeconds: 1 }));
+    assert.ok(performance.now() - began < 3000, "the start returns at its deadline");
+    assert.equal(cold.state, "running");
+    assert.equal(cold.ready, false);
+    assert.equal(cold.warming, true);
+    assert.equal(cold.url, null);
+    assert.match(cold.detail, /not ready after 1s: still warming up, not a failed start/);
+    assert.match(cold.detail, /The app keeps running; do not replace or restart it/);
+    assert.ok("logs" in cold && cold.logs === "Compiling assets…", "recent output is shown");
+    assert.equal(f.stops.length, 0, "a slow start never stops the app");
+
+    mode = "error";
+    const erring = observation(await f.call({ action: "status" }));
+    assert.equal(erring.warming, true, "an error answer before the first good one is warm-up");
+    assert.match(erring.detail, /^Warming up; Piano keeps checking until .*HTTP 500$/);
+
+    // A request slower than a second still counts: each check has its own timeout.
+    mode = "slow";
+    const warm = observation(await f.call({ action: "status" }));
+    assert.equal(warm.ready, true);
+    assert.equal(warm.warming, false);
+    assert.equal(warm.url, `${origin}:${port}/`);
+
+    // Once it has answered, a later error is a problem, not warm-up.
+    mode = "error";
+    const broken = observation(await f.call({ action: "status" }));
+    assert.equal(broken.ready, false);
+    assert.equal(broken.warming, false);
+    assert.equal(broken.state, "running");
   });
 
   contract("an unrelated listener cannot establish readiness", async (t) => {
@@ -708,3 +771,19 @@ test("the tool is offered only where a supervisor can own the app", () => {
   assert.deepEqual(offered("linux", {}), []);
   assert.deepEqual(offered("win32", {}), []);
 });
+
+/** A free port in the range every preview origin supports. */
+async function freePort() {
+  for (;;) {
+    const port = 3000 + Math.floor(Math.random() * 7000);
+    const server = createServer();
+    const listening = await new Promise<boolean>((resolve) => {
+      server.once("error", () => resolve(false));
+      server.listen(port, "127.0.0.1", () => resolve(true));
+    });
+    if (listening) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      return port;
+    }
+  }
+}

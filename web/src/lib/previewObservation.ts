@@ -52,7 +52,7 @@ export function seenPreview(
   const preview = hostedPreview(page);
   if (!preview || (sessionReady(page) && preview.instanceId !== observed.unconfirmed))
     return preview;
-  return { ...preview, state: "unknown", ready: false, url: null, detail: "" };
+  return { ...preview, state: "unknown", ready: false, warming: false, url: null, detail: "" };
 }
 
 /** Whether a record was taken for the session the page shows now: same checkout, same session. */

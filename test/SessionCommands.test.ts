@@ -352,6 +352,7 @@ const app = (preview: Partial<SessionPreview> = {}): SessionPreview => ({
   instanceId: "i1",
   state: "running",
   ready: true,
+  warming: false,
   url: "http://localhost:5173/",
   port: 5173,
   command: ["npm", "run", "dev"],

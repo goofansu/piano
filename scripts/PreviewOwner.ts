@@ -9,6 +9,7 @@ import {
   type PreviewRequest,
   PreviewStartError,
 } from "./PreviewAdapter.ts";
+import { READY_INTERVAL_MS } from "./PreviewReadiness.ts";
 
 /** An adapter outcome. A failed observation after a failed start carries the instance that start
  * saved, if any: it may be running. */
@@ -35,6 +36,8 @@ export class PreviewOwner {
   private ending = false;
   private disposed?: Promise<void>;
   private observer?: PreviewObserver;
+  /** The warming-up app whose readiness this owner keeps checking, and its next check. */
+  private warming?: { instanceId: string; timer: NodeJS.Timeout };
 
   private constructor(
     identity: PreviewOwnerIdentity,
@@ -134,9 +137,58 @@ export class PreviewOwner {
     return next;
   }
 
-  /** Hear every admitted request's outcome in order, the session's tool and the browser alike. */
+  /** Hear every admitted request's outcome in order, the session's tool and the browser alike,
+   * and each readiness check of a warming-up app. */
   observe(observer: PreviewObserver) {
     this.observer = observer;
+  }
+
+  /** Publish an outcome, and keep checking a warming-up app until it answers, fails or its
+   * warm-up window ends: a start's deadline ends only its caller's wait, never the checking. */
+  private publish(request: PreviewRequest, outcome: PreviewOutcome) {
+    this.observer?.(request, outcome);
+    const result = "result" in outcome ? outcome.result : undefined;
+    const instanceId =
+      result && typeof result === "object" && "instanceId" in result
+        ? (result as { instanceId: unknown }).instanceId
+        : undefined;
+    const warming =
+      typeof instanceId === "string" &&
+      (result as { warming?: unknown }).warming === true &&
+      (result as { owner?: { generation?: unknown } }).owner?.generation ===
+        this.identity.generation;
+    if (warming && this.warming?.instanceId === instanceId) return;
+    if (this.warming) clearTimeout(this.warming.timer);
+    this.warming = undefined;
+    if (!warming || this.ending) return;
+    const check = () => {
+      if (this.ending || this.warming?.instanceId !== instanceId) return;
+      const status: PreviewRequest = { action: "status", workspace: this.identity.workspace };
+      void this.serial(async () => {
+        if (this.ending || this.warming?.instanceId !== instanceId) return;
+        try {
+          const result = await this.adapter.request(
+            status,
+            this.root,
+            await this.config(),
+            this.identity,
+            undefined,
+            false,
+          );
+          // Another request may have replaced or stopped the app while this one waited.
+          if (this.warming?.instanceId !== instanceId) return;
+          this.warming = undefined;
+          this.publish(status, { result });
+        } catch (error) {
+          if (this.warming?.instanceId !== instanceId) return;
+          this.warming = undefined;
+          this.observer?.(status, { error });
+        }
+      });
+    };
+    this.warming = { instanceId, timer: setTimeout(check, READY_INTERVAL_MS) };
+    // A pending check never keeps a process alive by itself.
+    this.warming.timer.unref();
   }
 
   request(request: PreviewRequest) {
@@ -153,26 +205,26 @@ export class PreviewOwner {
           await this.config(),
           this.identity,
           // A start publishes each change it has made as it makes it: a stopped app must not
-          // look ready while its replacement waits up to 30s for readiness.
-          (result) => this.observer?.(request, { result }),
+          // look ready while its replacement waits for readiness.
+          (result) => this.publish(request, { result }),
         );
       try {
         const result = await run(request);
-        this.observer?.(request, { result });
+        this.publish(request, { result });
         return result;
       } catch (error) {
         if (request.action !== "start") {
-          this.observer?.(request, { error });
+          this.publish(request, { error });
           throw error;
         }
         // A failed start may already have stopped the app it replaced, or launched one it could
         // not observe. Only the adapter can tell, so read the workspace before the next request.
         const status: PreviewRequest = { action: "status", workspace: this.identity.workspace };
         try {
-          this.observer?.(status, { result: await run(status) });
+          this.publish(status, { result: await run(status) });
         } catch (statusError) {
           const attempted = error instanceof PreviewStartError ? error.instance : undefined;
-          this.observer?.(status, { error: statusError, attempted });
+          this.publish(status, { error: statusError, attempted });
         }
         throw error;
       }
@@ -184,6 +236,8 @@ export class PreviewOwner {
   /** Called at transport exit, before waiting for adapter locks or supervisor commands. */
   disconnect() {
     this.ending = true;
+    if (this.warming) clearTimeout(this.warming.timer);
+    this.warming = undefined;
     if (!this.disposed) {
       for (const socket of this.sockets) socket.destroy();
       this.disposed = new Promise<void>((resolve) => this.server.close(() => resolve())).then(() =>
