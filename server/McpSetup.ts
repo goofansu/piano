@@ -268,12 +268,13 @@ export const McpSetupLive = Layer.effect(
                 if (attempts.busy(request.server)) throw new Error("Sign-in in progress.");
                 return catalog(request.server);
               }).pipe(
-                Effect.flatMap((server) => entries.remove(server, request.removalKey)),
                 // Stored tokens without a configuration have no other place in Piano to be removed.
-                Effect.flatMap((entry) =>
-                  Effect.try(() => {
-                    const url = oauthUrl(entry);
-                    if (url) credentials.remove(entry.name, url);
+                // They are keyed by name and endpoint, whatever the entry authenticates with now: an
+                // entry switched to a header after signing in keeps them, and a reinstall would reuse
+                // them. They go first, so a failure leaves the entry installed to uninstall again.
+                Effect.flatMap((server) =>
+                  entries.remove(server, request.removalKey, (entry) => {
+                    if ("url" in entry.config) credentials.remove(entry.name, entry.config.url);
                   }),
                 ),
               ),
