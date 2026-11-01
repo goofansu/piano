@@ -312,9 +312,8 @@ export function SlashTextarea({
             >
               <span className="flex items-center gap-3">
                 <span className="min-w-0 flex-1 truncate">/{command.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {command.source === "prompt" ? "template" : command.source}
-                </span>
+                {/* Pi's source, as Settings names it: prompt, skill or extension. */}
+                <span className="text-xs text-muted-foreground">{command.source}</span>
               </span>
               {command.description && (
                 <span className="line-clamp-2 text-xs text-muted-foreground">
