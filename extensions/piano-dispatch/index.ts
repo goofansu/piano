@@ -1,4 +1,5 @@
 /** Bundled Pi extension: dispatch work through Piano, never launch or own another Pi process. */
+import { isAbsolute, resolve } from "node:path";
 import { type JsonValue, type Static, type TSchema, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
@@ -19,6 +20,16 @@ import {
 } from "../../shared/dispatch.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
 import { readStatus, startSession, waitSessions, withLinks } from "./SessionDispatch.ts";
+
+/**
+ * The directory a start names, read from the parent session's checkout: Piano's server runs
+ * elsewhere, so a relative path it resolved would land in the server's own checkout. Absolute and
+ * home-relative paths pass through unchanged for Piano to spell.
+ */
+const dispatchDirectory = (requested: string | undefined, parent: string): string =>
+  requested === undefined || isAbsolute(requested) || /^~(?=$|\/)/.test(requested)
+    ? (requested ?? parent)
+    : resolve(parent, requested);
 
 /** The schema one of these literals has. */
 type LiteralSchema<Value> = Value extends string ? ReturnType<typeof Type.Literal<Value>> : never;
@@ -209,7 +220,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
         "piano_session_status only reads: use it whenever you need to know what a Piano session is doing, dispatched or not.",
       ],
       description:
-        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there. A missing cwd, a non-Git cwd or a branch that exists refuses the start and creates no session. Worktrunk hooks are skipped unless worktree.hooks is true; then an unapproved hook refuses the start, and a failed hook may leave the new checkout on disk (see detail). Always uses normal new-session model and effort defaults, not the parent's settings. Returns creation (created; refused, when no session exists; or uncertain, when one may), submission (what Pi did with the brief: started, queued, handled, needs_input, rejected, not_sent or uncertain), a handle to pass unchanged to piano_wait_sessions, the created worktree, and an Open session link. Creation/admission is not completion. On uncertain creation or delivery inspect Piano before trying again: never automatically repeat dispatch.",
+        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout; a relative cwd is resolved from this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there. A missing cwd, a non-Git cwd or a branch that exists refuses the start and creates no session. Worktrunk hooks are skipped unless worktree.hooks is true; then an unapproved hook refuses the start, and a failed hook may leave the new checkout on disk (see detail). Always uses normal new-session model and effort defaults, not the parent's settings. Returns creation (created; refused, when no session exists; or uncertain, when one may), submission (what Pi did with the brief: started, queued, handled, needs_input, rejected, not_sent or uncertain), a handle to pass unchanged to piano_wait_sessions, the created worktree, and an Open session link. Creation/admission is not completion. On uncertain creation or delivery inspect Piano before trying again: never automatically repeat dispatch.",
       parameters: StartParameters,
       outputSchema: StartOutput,
       async execute(_id, params, signal, _update, ctx) {
@@ -219,7 +230,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
           const result = await startSession(
             {
               prompt: params.prompt,
-              cwd: params.cwd ?? ctx.cwd,
+              cwd: dispatchDirectory(params.cwd, ctx.cwd),
               worktree: params.worktree,
               dispatchedFrom: ctx.sessionManager.getSessionId(),
             },

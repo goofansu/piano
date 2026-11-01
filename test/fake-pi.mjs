@@ -1,7 +1,7 @@
 // A scripted stand-in for `pi --mode rpc`: speaks the JSONL protocol well enough to
 // exercise PiSessions through its interface. Behaviour is driven by the prompt text.
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, readdirSync } from "node:fs";
+import { closeSync, existsSync, readdirSync, writeFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 const args = process.argv.slice(2);
@@ -447,6 +447,9 @@ function handle(cmd) {
       return;
     }
     case "prompt": {
+      // A child's edit, made where the child actually runs, before Pi admits the prompt.
+      if (cmd.message.startsWith("write marker "))
+        writeFileSync(`${process.cwd()}/${cmd.message.slice(13)}`, `${sessionId}\n`);
       // Stands in for the piano_preview tool: the request rides this generation's owner socket.
       if (cmd.message.startsWith("preview ")) {
         respond(cmd, { disposition: "handled" });
