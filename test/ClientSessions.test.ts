@@ -1148,3 +1148,32 @@ test("INV-01/02/07: an interrupted creation keeps its project membership and sen
     "membership survives reopening SQLite",
   );
 });
+
+test("PIN-132: a prompt its host refuses because another client archived the session names its input", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const live = yield* started();
+      const { sessionId } = live.spec;
+      // This client's start resolved the live host just before another client's archive took
+      // the session's lock; the prompt then reaches a host that is closing.
+      const { sessions } = yield* client.pipe(
+        Effect.provideService(SessionHosts, {
+          ...hosts,
+          start: () => Effect.succeed({ session: live, launched: false }),
+        }),
+      );
+      yield* yield* sessions.select({ cwd, sessionId, selectionId: "A" });
+      yield* hosts.archive(cwd, sessionId);
+      const prompt = { _tag: "prompt", text: "follow-up", inputId: "a-1" } as const;
+      const refused = yield* Effect.flip(sessions.act("A", prompt, {}));
+      assert.deepEqual(
+        [refused._tag, refused._tag === "InputNotSent" && refused.inputId],
+        ["InputNotSent", "a-1"],
+      );
+      // An action without input stays an ordinary failure.
+      const plain = yield* Effect.flip(sessions.act("A", restoreQueue, {}));
+      assert.equal(plain._tag, "PiSessionError");
+    }),
+  );
+});

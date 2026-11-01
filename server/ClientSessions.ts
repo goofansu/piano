@@ -339,7 +339,17 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         inputId === undefined ? cause : new InputNotSent({ inputId, detail: cause.detail, cause }),
       ),
     );
-    const result = yield* session.act(action);
+    // A host that refuses the input before Pi sees it (closing for an archive another client
+    // asked for, a checkout that went) names it too.
+    const result = yield* session
+      .act(action)
+      .pipe(
+        Effect.mapError((cause) =>
+          inputId !== undefined && cause.notSent
+            ? new InputNotSent({ inputId, detail: cause.detail, cause })
+            : cause,
+        ),
+      );
     if (result)
       yield* send({
         _tag: "action_result",
