@@ -115,7 +115,9 @@ export function Composer({
     const kind = control.delivery(alt);
     if (!kind) return;
     choice.submit((start) =>
-      editor.submit((message) => sendCommand(messageCommand(kind, message, start))),
+      editor.submit((message, inputId) =>
+        sendCommand(messageCommand(kind, message, start, inputId)),
+      ),
     );
   };
   const figures = contextFigures(usage?.context, catalog, model);

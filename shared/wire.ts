@@ -1099,6 +1099,9 @@ export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("error", {
     message: Schema.String,
     selectionId: Schema.optional(Schema.String),
+    /** The `inputId` of a prompt or steer this error refused before Pi saw it: never delivered,
+     * so the browser returns it to its draft. */
+    inputId: Schema.optional(Schema.String),
   }),
   /** A notice for the person; `level` picks the icon. */
   Schema.TaggedStruct("toast", {

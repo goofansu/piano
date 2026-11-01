@@ -35,9 +35,15 @@ export const messageCommand = (
   kind: DeliveryMode,
   message: DraftMessage,
   start: StartOptions,
+  inputId?: string,
 ): ClientCommand => ({
   _tag: "act",
-  action: { _tag: deliveryAction(kind), text: message.text, attachments: message.attachments },
+  action: {
+    _tag: deliveryAction(kind),
+    text: message.text,
+    attachments: message.attachments,
+    ...(inputId === undefined ? {} : { inputId }),
+  },
   start,
 });
 

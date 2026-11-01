@@ -570,9 +570,17 @@ await run(
     await page.see("Which checks?");
     assert.equal(await page.evaluate("!!document.querySelector('[role=dialog]')"), false);
     const answers = () => page.received().filter((r) => r.command === "extension_ui_response");
+    // Radix checks a radio that arrow focus reaches only while the key is still down, and
+    // agent-browser releases it before that deferred focus: wait for each key's own effect, and
+    // let Space, which belongs to the focused radio, make the choice.
+    const radio = (name, checked) =>
+      `[...document.querySelectorAll('[role=radio]')].some((r) => r === document.activeElement && r.getAttribute('aria-checked') === '${checked}' && document.querySelector('label[for="' + r.id + '"]')?.innerText.trim() === ${JSON.stringify(name)})`;
     await page.click("radio", "Quick checks");
+    await page.until(radio("Quick checks", true));
     await page.press("ArrowDown");
+    await page.until(`${radio("Full suite", false)} || ${radio("Full suite", true)}`);
     await page.press("Space");
+    await page.until(radio("Full suite", true));
     assert.equal(
       await page.evaluate("document.activeElement?.getAttribute('role')"),
       "radio",

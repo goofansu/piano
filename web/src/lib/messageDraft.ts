@@ -2,7 +2,8 @@
  * A message the user has not sent yet, on the New page or for one session: its text, its images
  * and its quotes from the transcript, all kept here under one draft key. This module decides the
  * keys, which images a draft accepts, how text is appended as a paragraph, how quotes join the
- * message, when a draft can be sent, and that sending empties all three parts at once.
+ * message, when a draft can be sent, that sending empties all three parts at once, and that input
+ * the server refuses before Pi sees it comes back to its draft.
  * Drafts live in browser memory for this page load only; image bytes never go to localStorage or
  * the registry (INV-01). Nothing here depends on React.
  */
@@ -148,7 +149,7 @@ export const draftMessage = (draft: Draft): DraftMessage => ({
   attachments: draft.images.items,
 });
 
-/** The client to follow for restored queues; the page's `Client` is one. */
+/** The client to follow for restored queues and refused input; the page's `Client` is one. */
 export interface DraftSource {
   listen: (listener: (message: ServerMessage) => void) => () => void;
 }
@@ -178,17 +179,43 @@ export interface Drafts {
   addQuote: (key: DraftKey | null, selected: string) => void;
   removeQuote: (key: DraftKey | null, index: number) => void;
   /**
-   * Hands the draft to `deliver`. Known-unsent input stays intact and returns false, as does
-   * an unsendable draft. Otherwise consumes all parts and returns true, even when delivery is
-   * uncertain: socket acceptance is not remote acceptance, and input must never auto-replay.
+   * Hands the draft to `deliver` with a fresh `inputId` to send with it. Known-unsent input stays
+   * intact and returns false, as does an unsendable draft. Otherwise consumes all parts and
+   * returns true, even when delivery is uncertain: socket acceptance is not remote acceptance,
+   * and input must never auto-replay. A session draft's input is held until Pi reports it or the
+   * server refuses it (see `follow`).
    */
-  submit: (key: DraftKey | null, deliver: (message: DraftMessage) => SendDisposition) => boolean;
-  /** Appends each queue Pi hands back to its own session's draft as a paragraph; returns the stop function. */
+  submit: (
+    key: DraftKey | null,
+    deliver: (message: DraftMessage, inputId: string) => SendDisposition,
+  ) => boolean;
+  /**
+   * Appends each queue Pi hands back to its own session's draft as a paragraph, and returns input
+   * the server refused before Pi saw it to its draft, ahead of anything typed since; returns the
+   * stop function. Nothing is sent again.
+   */
   follow: (source: DraftSource) => () => void;
 }
 
+/**
+ * `submitted` back in a draft that holds `now`, typed since: the submitted text, then the newer
+ * paragraph; its images and quotes before the newer ones. A newer image still being read keeps
+ * `now`'s busy state, and its reader appends to whatever the draft holds when it finishes.
+ */
+const restore = (submitted: Draft, now: Draft): Draft => ({
+  text: now.text.trim() ? appendParagraph(submitted.text, now.text) : submitted.text,
+  images: {
+    ...now.images,
+    items: [...submitted.images.items, ...now.images.items],
+  },
+  quotes: [...submitted.quotes, ...now.quotes.filter((q) => !submitted.quotes.includes(q))],
+});
+
 export function createDrafts(): Drafts {
   const drafts = new Map<DraftKey, Draft>();
+  /** Session input sent but not yet reported by Pi or refused, by the `inputId` it was sent with. */
+  const unconfirmed = new Map<string, { key: DraftKey; draft: Draft }>();
+  let inputs = 0;
   const listeners = new Set<() => void>();
   const get = (key: DraftKey | null): Draft => (key && drafts.get(key)) || EMPTY_DRAFT;
   const update = (key: DraftKey | null, change: (draft: Draft) => Draft) => {
@@ -246,11 +273,11 @@ export function createDrafts(): Drafts {
             mimeType: check.mimeTypes[i],
             data: await encode(file),
           });
-        // Nothing removes or sends images while they are read, so `before` is still the draft's.
-        setImages(key, { items: [...before.items, ...added], busy: false, error: "" });
+        // Refused input may have come back meanwhile; the check counted the images before it.
+        setImages(key, { items: [...get(key).images.items, ...added], busy: false, error: "" });
       } catch (e) {
         setImages(key, {
-          ...before,
+          ...get(key).images,
           busy: false,
           error: e instanceof Error ? e.message : "Could not read images.",
         });
@@ -274,15 +301,31 @@ export function createDrafts(): Drafts {
     submit(key, deliver) {
       const draft = get(key);
       if (!key || !isSendable(draft)) return false;
-      if (deliver(draftMessage(draft)) === "not-sent") return false;
+      const inputId = `input-${++inputs}`;
+      if (deliver(draftMessage(draft), inputId) === "not-sent") return false;
+      if (key !== NEW_SESSION_DRAFT) unconfirmed.set(inputId, { key, draft });
       update(key, () => EMPTY_DRAFT);
       return true;
     },
     follow: (source) =>
       source.listen((m) => {
-        if (m._tag !== "action_result" || m.result._tag !== "queue_restored") return;
-        const restored = m.result.messages.map((message) => message.text).join("\n\n");
-        if (restored) paragraph(sessionDraftKey(m), restored);
+        if (m._tag === "error" && m.inputId) {
+          const refused = unconfirmed.get(m.inputId);
+          unconfirmed.delete(m.inputId);
+          if (refused) update(refused.key, (now) => restore(refused.draft, now));
+        } else if (m._tag === "session" || m._tag === "selected") {
+          // Pi has the input: from here on, its outcome is Pi's submission receipt.
+          const submission =
+            m._tag === "selected"
+              ? m.snapshot.state.submission
+              : m.event._tag === "submission"
+                ? m.event.submission
+                : undefined;
+          if (submission?.inputId) unconfirmed.delete(submission.inputId);
+        } else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
+          const restored = m.result.messages.map((message) => message.text).join("\n\n");
+          if (restored) paragraph(sessionDraftKey(m), restored);
+        }
       }),
   };
 }

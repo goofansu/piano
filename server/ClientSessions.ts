@@ -57,6 +57,17 @@ const refused = {
   not_running: "Session is not running; start it first.",
   no_session: "No session is selected. Create a session before sending to it.",
 } as const;
+/**
+ * A prompt or steer refused before Pi saw it (stale selection, archived or unregistered session,
+ * a start that failed): never delivered, so its sender may return it to the draft. `detail` is
+ * the refusal's own.
+ */
+export class InputNotSent extends Data.TaggedError("InputNotSent")<{
+  readonly inputId: string;
+  readonly detail: string;
+  readonly cause: ActRefused | PiSessionError;
+}> {}
+
 const refuse = (reason: ActRefused["reason"], detail: string = refused[reason]) =>
   Effect.fail(new ActRefused({ reason, detail }));
 
@@ -81,7 +92,7 @@ interface ClientSessions {
     selectionId: string,
     action: SessionAction,
     start?: StartOptions,
-  ) => Effect.Effect<void, ActRefused | PiSessionError>;
+  ) => Effect.Effect<void, ActRefused | PiSessionError | InputNotSent>;
   /**
    * Shows the selected session again when its checkout has since gone or come back: no Pi watches
    * a saved session's checkout, and a live one's Pi keeps running without it, so its view would
@@ -285,9 +296,15 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   ) {
     // An action its policy forbids from starting Pi ignores start options, even when an old or
     // malformed client sends them.
+    // Until `session.act`, Pi has not seen the input: a refusal before it names the input.
+    const inputId = "inputId" in action ? action.inputId : undefined;
     const session = yield* target(
       selectionId,
       sessionActionPolicy[action._tag].startsPi ? start : undefined,
+    ).pipe(
+      Effect.mapError((cause) =>
+        inputId === undefined ? cause : new InputNotSent({ inputId, detail: cause.detail, cause }),
+      ),
     );
     const result = yield* session.act(action);
     if (result)

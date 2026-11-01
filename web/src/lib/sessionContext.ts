@@ -349,11 +349,25 @@ export function sessionActivity(state: AppState, messagesOnly: boolean): Session
             ? "Loading"
             : checkoutMissingAt(state, t.cwd)
               ? "Read-only"
-              : t.state.closure
-                ? "Exited"
-                : activity || (working ? "Working" : t.hosted ? "Ready" : "Not running");
+              : sessionArchived(state)
+                ? "Archived"
+                : t.state.closure
+                  ? "Exited"
+                  : activity || (working ? "Working" : t.hosted ? "Ready" : "Not running");
   return { status, replyActivity };
 }
+
+/**
+ * The selected session is archived, as the registry last told this browser: another tab may
+ * archive it while it is open. Piano refuses its input, so the composer keeps the draft but sends
+ * nothing.
+ */
+const sessionArchived = (state: AppState): boolean => {
+  const t = state.session;
+  return (
+    !!t?.sessionId && !!sessionReference(state, { cwd: t.cwd, sessionId: t.sessionId })?.archived
+  );
+};
 
 export interface SessionPane {
   /** The transcript is mounted: the selected session's, or a first message shown before it. */
@@ -390,6 +404,7 @@ export function sessionPane(state: AppState): SessionPane {
     list: !!t || !!input,
     skeleton: !input && !state.selectionFailure && !(t && (hasContent || !onItsWay)),
     placeholder: t && !input && !hasContent && !onItsWay ? "No messages yet." : undefined,
-    composerDisabled: !sessionReady(state) || !t || input?.outcome === "starting",
+    composerDisabled:
+      !sessionReady(state) || !t || input?.outcome === "starting" || sessionArchived(state),
   };
 }
