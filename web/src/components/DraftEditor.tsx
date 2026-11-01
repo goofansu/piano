@@ -50,7 +50,8 @@ export function useDraftEditor(key: DraftKey | null) {
     setText: (value: string) => drafts.setText(key, value),
     append,
     /** Consumes the draft unless delivery is known-unsent; see `Drafts.submit`. */
-    submit: (deliver: (message: DraftMessage) => SendDisposition) => drafts.submit(key, deliver),
+    submit: (deliver: (message: DraftMessage, inputId: string) => SendDisposition) =>
+      drafts.submit(key, deliver),
   };
 }
 export type DraftEditorState = ReturnType<typeof useDraftEditor>;

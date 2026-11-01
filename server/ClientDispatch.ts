@@ -8,7 +8,7 @@
  */
 import { Cause, Effect, Stream } from "effect";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
-import { type ClientOutput, makeClientSessions } from "./ClientSessions.ts";
+import { type ClientOutput, InputNotSent, makeClientSessions } from "./ClientSessions.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
@@ -192,7 +192,17 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
               requestId: action.requestId,
               message: unansweredText(reason),
             }
-          : { _tag: "error", message: unansweredText(reason), selectionId },
+          : {
+              _tag: "error",
+              message: unansweredText(reason),
+              selectionId,
+              // Refused at admission or before Pi saw it: the input was never delivered.
+              ...("inputId" in action &&
+              action.inputId !== undefined &&
+              (reason._tag === "refused" || reason.error instanceof InputNotSent)
+                ? { inputId: action.inputId }
+                : {}),
+            },
       confirmed: null,
     },
     registry: {

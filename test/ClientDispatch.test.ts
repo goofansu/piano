@@ -25,8 +25,11 @@ import type {
   WorktreeDiscovery,
 } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
+import { messageCommand } from "../web/src/lib/composerControl.ts";
+import { createDrafts, EMPTY_DRAFT, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import { createPreviewObservation, seenPreview } from "../web/src/lib/previewObservation.ts";
+import { sessionActivity, sessionPane } from "../web/src/lib/sessionContext.ts";
 import {
   createWorktreeOperation,
   type WorktreeOperation,
@@ -1137,6 +1140,127 @@ test("every change ends with one toast naming it after it succeeds; a failed cha
           ["archived", undefined, undefined, true],
         ],
       );
+    }),
+  );
+});
+
+/**
+ * PIN-132: one browser (A) composes a follow-up to a session another browser (B) archives. A's
+ * real client, drafts and transport-level sends meet the real dispatch; only the socket is
+ * replaced by direct delivery.
+ */
+const archiveRace = Effect.gen(function* () {
+  const session = yield* registered(`pin-132-${++databases}`);
+  const { sessionId } = session.spec;
+  const requests: ClientMessage[] = [];
+  let handlers: ConnectionHandlers | undefined;
+  const browser = createClient({
+    initial: initialState,
+    connect: (h) => {
+      handlers = h;
+      return {
+        send: (m) => {
+          requests.push(m);
+          return "sent";
+        },
+        close: () => {},
+      };
+    },
+    notify: () => {},
+  });
+  browser.start();
+  handlers!.onStatus(true);
+  const a = yield* makeClientDispatch({
+    send: (m) => Effect.sync(() => handlers!.onMessage(m)),
+    overflow: (e) => Effect.die(e),
+  });
+  const b = yield* makeClientDispatch({ send: () => Effect.void, overflow: (e) => Effect.die(e) });
+  const drafts = createDrafts();
+  drafts.follow(browser);
+  const key = sessionDraftKey({ cwd, sessionId });
+  browser.select(cwd, sessionId);
+  yield* yield* a.receive(requests.find((m) => m._tag === "select")!);
+  assert.equal(browser.getState().session?.sessionId, sessionId);
+  const until = (ready: () => boolean) =>
+    Effect.gen(function* () {
+      while (!ready()) yield* Effect.sleep("5 millis");
+    });
+  /** Composer-style send; returns the act the browser handed its socket. */
+  const send = () => {
+    const before = requests.length;
+    assert.equal(
+      drafts.submit(key, (message, inputId) =>
+        browser.send(messageCommand("follow-up", message, {}, inputId)),
+      ),
+      true,
+      "the transport accepted the send",
+    );
+    const act = requests.slice(before).find((m) => m._tag === "act");
+    assert.ok(act?._tag === "act");
+    return act;
+  };
+  const archive = Effect.gen(function* () {
+    yield* yield* b.receive({ _tag: "archive_session", cwd, sessionId });
+    yield* until(() => browser.getState().sessionReferences.some((r) => r.archived));
+  });
+  return { browser, a, drafts, key, send, archive };
+});
+
+test("PIN-132: once a browser hears its session is archived, it keeps the draft and sends nothing", async () => {
+  await run(
+    Effect.gen(function* () {
+      const { browser, drafts, key, archive } = yield* archiveRace;
+      drafts.setText(key, "Keep me");
+      assert.equal(sessionPane(browser.getState()).composerDisabled, false);
+      yield* archive;
+      assert.equal(sessionPane(browser.getState()).composerDisabled, true);
+      assert.equal(sessionActivity(browser.getState(), false).status, "Archived");
+      assert.equal(drafts.get(key).text, "Keep me");
+    }),
+  );
+});
+
+test("PIN-132: a follow-up refused as archived after the socket took it returns to the draft ahead of newer edits", async () => {
+  await run(
+    Effect.gen(function* () {
+      const { browser, a, drafts, key, send, archive } = yield* archiveRace;
+      drafts.setText(key, "Submitted");
+      drafts.addQuote(key, "Quoted");
+      const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+      yield* Effect.promise(() =>
+        drafts.addImages(key, [new File([png], "shot.png", { type: "image/png" })], async () =>
+          Buffer.from(png).toString("base64"),
+        ),
+      );
+      const images = drafts.get(key).images.items;
+      assert.equal(images.length, 1);
+      const act = send();
+      assert.equal(drafts.sendable(key), false, "the composer clears on transport acceptance");
+      drafts.setText(key, "Typed while waiting");
+      drafts.addQuote(key, "Quoted later");
+      yield* archive;
+      yield* yield* a.receive(act);
+      assert.deepEqual(
+        [drafts.get(key).text, drafts.get(key).quotes],
+        ["Submitted\n\nTyped while waiting", ["Quoted", "Quoted later"]],
+      );
+      assert.equal(sessionPane(browser.getState()).composerDisabled, true);
+      yield* yield* a.receive(act);
+      assert.equal(drafts.get(key).text, "Submitted\n\nTyped while waiting", "restored once");
+    }),
+  );
+});
+
+test("PIN-132: a follow-up Piano accepts clears its draft and never comes back", async () => {
+  await run(
+    Effect.gen(function* () {
+      const { browser, a, drafts, key, send } = yield* archiveRace;
+      drafts.setText(key, "Reply with exactly: X");
+      const act = send();
+      yield* yield* a.receive(act);
+      assert.ok(act.action._tag === "prompt" && act.action.inputId);
+      assert.equal(browser.getState().session?.state.submission?.inputId, act.action.inputId);
+      assert.deepEqual(drafts.get(key), EMPTY_DRAFT);
     }),
   );
 });
