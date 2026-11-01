@@ -1,4 +1,5 @@
 import { createConnection } from "node:net";
+import { OBSERVATION_TIMEOUT_MS } from "./PreviewReadiness.ts";
 
 /** Losing a client reply never cancels the admitted operation or the owner's connection. */
 export function ownerRequest(
@@ -9,7 +10,7 @@ export function ownerRequest(
   return new Promise((resolve, reject) => {
     const socket = createConnection({ path: endpoint, signal });
     socket.setEncoding("utf8");
-    socket.setTimeout(120_000, () =>
+    socket.setTimeout(OBSERVATION_TIMEOUT_MS, () =>
       socket.destroy(new Error("Preview observation timed out; read status.")),
     );
     let output = "";

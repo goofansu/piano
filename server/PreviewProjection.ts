@@ -4,7 +4,7 @@
  * from the browser, into the last observation. Internal to PiSessions.
  */
 import type { PreviewRequest } from "../scripts/PreviewAdapter.ts";
-import type { PreviewOutcome } from "../scripts/PreviewOwner.ts";
+import { generationApp, type PreviewOutcome } from "../scripts/PreviewOwner.ts";
 import { PREVIEW_STATES, type SessionPreview } from "../shared/wire.ts";
 
 const text = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -13,12 +13,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /** An app observation that belongs to `generation`, or undefined for any other result. A launch
  * intent without an observation is in an `unknown` state. */
-function observed(result: unknown, generation: string): SessionPreview | undefined {
-  if (!isRecord(result) || typeof result.instanceId !== "string") return undefined;
+function observed(app: unknown, generation: string): SessionPreview | undefined {
+  const result = generationApp(app, generation);
+  if (!result) return undefined;
   const state = [...PREVIEW_STATES, "unknown" as const].find((s) => s === result.state);
-  const owner = isRecord(result.owner) ? result.owner : undefined;
   const spec = isRecord(result.spec) ? result.spec : undefined;
-  if (!state || owner?.generation !== generation) return undefined;
+  if (!state) return undefined;
   const ready = result.ready === true;
   return {
     instanceId: result.instanceId,

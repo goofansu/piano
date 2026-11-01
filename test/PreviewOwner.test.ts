@@ -49,7 +49,7 @@ for (const dead of [true, false])
   });
 
 for (const platform of ["linux", "darwin"] as Platform[]) {
-  async function fixture(t: TestContext) {
+  async function fixture(t: TestContext, lockWait?: number) {
     const root = await mkdtemp(join(tmpdir(), "preview-owner-test-"));
     const workspace = join(root, "checkout");
     const state = join(root, "state");
@@ -63,7 +63,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       lostReply: false,
       hangOnSubmit: false,
     };
-    const { adapter, launched, stops } = fakeAdapter(platform, state, host);
+    const { adapter, launched, stops } = fakeAdapter(platform, state, host, lockWait);
     const config: PreviewConfig = { origin: "http://localhost" };
     const owners: PreviewOwner[] = [];
     const open = async (sessionId = "session", cwd = workspace) => {
@@ -576,6 +576,103 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     const answered = requests;
     await new Promise((resolve) => setTimeout(resolve, 2500));
     assert.equal(requests, answered);
+  });
+
+  test(`[${platform}] another workspace's start waiting for readiness never stalls a warming app's checks`, async (t) => {
+    if (foreign) return t.skip("needs native process ownership");
+    const f = await fixture(t);
+    const [port, silent] = [await freePort(), await freePort()];
+    f.config.ports = [port, silent];
+    let warm = false;
+    const server = createHttpServer((_request, response) => {
+      response.statusCode = warm ? 200 : 500;
+      response.end();
+    });
+    t.after(
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        }),
+    );
+    f.host.afterSubmit = async () => {
+      f.host.phase = "running";
+      server.listen(port, "127.0.0.1");
+      await once(server, "listening");
+    };
+    let shown: SessionPreview | undefined;
+    f.owner.observe((request, outcome) => {
+      shown = projectPreview(shown, f.owner.identity.generation, request, outcome);
+    });
+    const cold = await f.call(f.owner, { command: ["/bin/true"], timeoutSeconds: 1 });
+    assert.equal(cold.port, port);
+    assert.equal(shown?.warming, true);
+
+    // Another session starts an app that never answers and waits out its whole readiness window.
+    f.host.afterSubmit = undefined;
+    const elsewhere = join(f.root, "elsewhere");
+    await mkdir(elsewhere);
+    const other = await f.open("elsewhere", elsewhere);
+    let otherDone = false;
+    const waiting = f
+      .call(other, { command: ["/bin/true"], timeoutSeconds: 8 })
+      .finally(() => (otherDone = true));
+
+    // Meanwhile the first app answers: its owner's own checks show it while the other start waits.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    warm = true;
+    while (!shown?.ready && !otherDone) await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(otherDone, false, "the other start's readiness wait held up this app's checks");
+    assert.equal(shown?.ready, true);
+    assert.equal(shown?.instanceId, cold.instanceId);
+    const late = await waiting;
+    assert.equal(late.port, silent);
+    assert.equal(late.warming, true, "the other app is still warming up, not failed");
+  });
+
+  test(`[${platform}] a busy lock delays a warming app's checks but never ends them`, async (t) => {
+    if (foreign) return t.skip("needs native process ownership");
+    const f = await fixture(t, 500);
+    const port = await freePort();
+    f.config.ports = [port];
+    let warm = false;
+    const server = createHttpServer((_request, response) => {
+      response.statusCode = warm ? 200 : 500;
+      response.end();
+    });
+    t.after(
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        }),
+    );
+    f.host.afterSubmit = async () => {
+      f.host.phase = "running";
+      server.listen(port, "127.0.0.1");
+      await once(server, "listening");
+    };
+    let shown: SessionPreview | undefined;
+    f.owner.observe((request, outcome) => {
+      shown = projectPreview(shown, f.owner.identity.generation, request, outcome);
+    });
+    const cold = await f.call(f.owner, { command: ["/bin/true"], timeoutSeconds: 1 });
+    assert.equal(shown?.warming, true);
+
+    // Another helper holds the account-wide lock longer than a check waits for it.
+    const holder = new DatabaseSync(join(f.state, "lock.sqlite"));
+    holder.exec("BEGIN EXCLUSIVE");
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    assert.equal(shown?.warming, true, "a busy lock says nothing about the app");
+    holder.exec("ROLLBACK");
+    holder.close();
+
+    warm = true;
+    const deadline = Date.now() + 10000;
+    while (!shown?.ready && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(shown?.ready, true, "the owner kept checking once the lock was free");
+    assert.equal(shown?.instanceId, cold.instanceId);
   });
 }
 
