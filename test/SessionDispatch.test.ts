@@ -95,6 +95,8 @@ interface FakeSocket {
   readonly frame: (message: ServerMessage) => void;
   readonly serverClose: (code: number) => void;
   readonly isClosed: () => boolean;
+  /** The next send of this frame is enqueued, then throws. */
+  readonly failAfterSending: (tag: ClientMessage["_tag"]) => void;
   /** The selection the client is currently awaiting a reply for. */
   readonly selection: () => string;
 }
@@ -112,6 +114,7 @@ function world() {
       let open = false;
       let closed = false;
       let delivered = 0;
+      let failing: ClientMessage["_tag"] | null = null;
       const sent: ClientMessage[] = [];
       const frame = (message: ServerMessage) => {
         if (!open || closed) return;
@@ -129,6 +132,9 @@ function world() {
           events.close(code);
         },
         isClosed: () => closed,
+        failAfterSending: (tag) => {
+          failing = tag;
+        },
         selection: () => {
           const last = [...sent]
             .reverse()
@@ -147,6 +153,10 @@ function world() {
           sent.push(message);
           // Answered on the next clock step, never inside the client's own send.
           if (message._tag === "ping") pending.push({ nonce: message.nonce, deliver: frame });
+          if (message._tag === failing) {
+            failing = null;
+            throw new Error("send failed after enqueueing the frame");
+          }
         },
         close: () => {
           closed = true;
@@ -541,6 +551,26 @@ for (const { name, run } of unsentStarts) {
     },
   );
 }
+
+test("a creation send that throws after enqueueing stays uncertain", bounded, async () => {
+  const h = world();
+  const start = startSession({ cwd: asked, prompt: "hi" }, h.env);
+  h.last().failAfterSending("create_session");
+  h.last().accept();
+  const result = await start;
+  assert.deepEqual(
+    {
+      creation: result.creation,
+      submission: result.submission,
+      handle: result.handle,
+    },
+    { creation: "uncertain", submission: "uncertain", handle: null },
+  );
+  h.advance(60_000);
+  assert.equal(h.sentOf("create_session").length, 1);
+  assert.equal(h.sockets.length, 1, "it does not reconnect to send it again");
+  assert.equal(h.pendingTimers(), 0);
+});
 
 test("a start abandoned after the creation was sent stays uncertain", bounded, async () => {
   const h = world();
