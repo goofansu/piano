@@ -46,24 +46,44 @@ const refusal = (result: { _tag: string; failure?: unknown }) => {
   return result.failure as { detail: string; field?: string };
 };
 
-test("a created skill is one Pi loads, with its description intact, and is listed", async (t) => {
+test("a created skill is one Pi loads as written, and is listed with its instructions", async (t) => {
   const { directory, run } = home(t);
   // Quotes, a colon and a newline would break a hand-written YAML scalar.
   const description = 'Writes "release notes": use when asked.\nAlso changelogs.';
-  const created = await run((skills) =>
-    skills.create({ name: "release-notes", description, instructions: "# Notes\n\nRead PRs.\n" }),
-  );
-  assert.equal(created._tag, "Success");
+  const instructions = "# Notes\n\nRead PRs.";
+  for (const [name, onlyWhenNamed] of [
+    ["release-notes", false],
+    ["deploy", true],
+  ] as const)
+    assert.equal(
+      (
+        await run((skills) =>
+          skills.create({ name, description, instructions: `${instructions}\n`, onlyWhenNamed }),
+        )
+      )._tag,
+      "Success",
+    );
   const loaded = loadSkillsFromDir({ dir: directory, source: "user" });
   assert.deepEqual(loaded.diagnostics, []);
   assert.deepEqual(
-    loaded.skills.map(({ name, description }) => ({ name, description })),
-    [{ name: "release-notes", description }],
+    loaded.skills
+      .map(({ name, description, disableModelInvocation }) => ({
+        name,
+        description,
+        disableModelInvocation,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [
+      { name: "deploy", description, disableModelInvocation: true },
+      { name: "release-notes", description, disableModelInvocation: false },
+    ],
+    "Only when named is Pi's disable-model-invocation",
   );
   assert.match(readFileSync(join(directory, "release-notes", "SKILL.md"), "utf8"), /Read PRs\.\n$/);
   const listed = await run((skills) => skills.list);
   assert.deepEqual(listed._tag === "Success" && listed.success, [
-    { name: "release-notes", description },
+    { name: "deploy", description, instructions, onlyWhenNamed: true },
+    { name: "release-notes", description, instructions, onlyWhenNamed: false },
   ]);
 });
 

@@ -6,11 +6,12 @@ import {
   type UserSkillField,
 } from "@shared/skills";
 import { cn } from "cn";
-import { MoreHorizontalIcon, SparklesIcon } from "lucide-react";
-import { useState } from "react";
+import { CheckIcon, CopyIcon, MoreHorizontalIcon, SparklesIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
+import { IconButton } from "@/components/IconButton";
 import { PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
@@ -23,7 +24,9 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
@@ -47,6 +50,7 @@ import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, createUserSkill, listUserSkills, removeUserSkill } from "@/lib/api";
 import { pageCommands } from "@/lib/globalCommands";
@@ -65,6 +69,7 @@ export function UserSkillSettings() {
     success: (text) => toast.success(text),
   });
   const removing = actions.confirmation;
+  const [viewing, setViewing] = useState<UserSkill | null>(null);
   const busy = actions.running !== undefined;
   return (
     <SettingsSectionFrame
@@ -76,6 +81,7 @@ export function UserSkillSettings() {
       ))}
       dialogs={
         <>
+          {viewing && <SkillViewer skill={viewing} close={() => setViewing(null)} />}
           {editing && (
             <SkillEditor close={skillEditor.close} refresh={() => void observed.refresh()} />
           )}
@@ -134,6 +140,7 @@ export function UserSkillSettings() {
               key={skill.name}
               skill={skill}
               disabled={busy}
+              view={() => setViewing(skill)}
               remove={() => actions.confirm(skill)}
             />
           ))}
@@ -146,10 +153,12 @@ export function UserSkillSettings() {
 function SkillRow({
   skill,
   disabled,
+  view,
   remove,
 }: {
   skill: UserSkill;
   disabled: boolean;
+  view: () => void;
   remove: () => void;
 }) {
   return (
@@ -157,6 +166,9 @@ function SkillRow({
       <ItemContent className="min-w-0 gap-0.5">
         <ItemTitle className="font-mono">
           <span className="truncate">{skill.name}</span>
+          {skill.onlyWhenNamed && (
+            <span className="font-sans text-xs font-normal text-ink-3">Only when named</span>
+          )}
         </ItemTitle>
         <ItemDescription>{skill.description}</ItemDescription>
       </ItemContent>
@@ -173,6 +185,10 @@ function SkillRow({
             </PianoButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
+              <DropdownMenuItem onSelect={view}>View</DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={remove}>
               Delete
             </DropdownMenuItem>
@@ -194,6 +210,7 @@ function SkillEditor({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [onlyWhenNamed, setOnlyWhenNamed] = useState(false);
   // A refused create stays in the open dialog, on its field; a created one closes it with a toast.
   const actions = useSetupActions({
     refresh,
@@ -202,7 +219,7 @@ function SkillEditor({
   });
   const busy = actions.running !== undefined;
   // The same rule the server applies: Create skill stays off until every field is filled and in bounds.
-  const check = checkSkillDraft({ name, description, instructions });
+  const check = checkSkillDraft({ name, description, instructions, onlyWhenNamed });
   // A character the rule never allows answers as it is typed; a misplaced hyphen waits until the
   // field is left, so typing "release-" on the way to "release-notes" is not an error. Whether the
   // name is free, only the server can say.
@@ -217,11 +234,13 @@ function SkillEditor({
     const created = await actions.run({
       id: "create",
       run: () =>
-        createUserSkill({ name, description, instructions }).catch((cause: unknown) => {
-          const field = cause instanceof ApiError ? cause.field : undefined;
-          setErrorField(USER_SKILL_FIELDS.find((known) => known === field));
-          throw cause;
-        }),
+        createUserSkill({ name, description, instructions, onlyWhenNamed }).catch(
+          (cause: unknown) => {
+            const field = cause instanceof ApiError ? cause.field : undefined;
+            setErrorField(USER_SKILL_FIELDS.find((known) => known === field));
+            throw cause;
+          },
+        ),
       done: "Skill created",
       fallback: "Could not create skill.",
     });
@@ -319,6 +338,14 @@ function SkillEditor({
               ),
               true,
             )}
+            <Field orientation="horizontal" className="items-center gap-2.5">
+              <Switch
+                id="skill-only-when-named"
+                checked={onlyWhenNamed}
+                onCheckedChange={setOnlyWhenNamed}
+              />
+              <FieldLabel htmlFor="skill-only-when-named">Only when named</FieldLabel>
+            </Field>
             {errorAt(undefined) && <FieldError role="alert">{errorAt(undefined)}</FieldError>}
           </FieldGroup>
           <DialogFooter>
@@ -333,6 +360,63 @@ function SkillEditor({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * One skill, read-only: Piano does not edit a skill, so its instructions are here to read and copy
+ * (into a new skill, or the user's own repository).
+ */
+function SkillViewer({ skill, close }: { skill: UserSkill; close: () => void }) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && close()}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="font-mono">{skill.name}</span>
+            {skill.onlyWhenNamed && (
+              <span className="text-xs font-normal text-ink-3">Only when named</span>
+            )}
+          </DialogTitle>
+          <DialogDescription>{skill.description}</DialogDescription>
+        </DialogHeader>
+        {/* Hand-written: no shadcn component shows a read-only block of source text. */}
+        <div className="relative">
+          <pre className="max-h-[50dvh] overflow-auto rounded-md border border-line py-2 pr-10 pl-3 font-mono text-sm whitespace-pre-wrap">
+            {skill.instructions}
+          </pre>
+          <CopyInstructions text={skill.instructions} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** A session code block's copy button, ghost and always shown: the dialog exists to read and copy. */
+function CopyInstructions({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <IconButton
+      label={copied ? "Instructions copied" : "Copy instructions"}
+      size="inline"
+      data-copied={copied ? "" : undefined}
+      className="absolute top-2 right-2"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+        } catch {
+          toast.error("Couldn’t copy. Select the instructions to copy them.");
+        }
+      }}
+    >
+      {copied ? <CheckIcon /> : <CopyIcon />}
+    </IconButton>
   );
 }
 

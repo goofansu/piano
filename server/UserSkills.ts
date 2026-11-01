@@ -74,23 +74,30 @@ function piano(root: string, name: string): UserSkill | undefined {
   const file = join(dir, "SKILL.md");
   try {
     if (!lstatSync(file).isFile()) return undefined;
-    const { frontmatter } = parseFrontmatter(readFileSync(file, "utf8"));
+    const { frontmatter, body } = parseFrontmatter(readFileSync(file, "utf8"));
     const metadata = frontmatter.metadata as Record<string, unknown> | undefined;
     if (metadata?.[MARKER_KEY] !== MARKER) return undefined;
     const { description } = frontmatter;
     if (frontmatter.name !== name || typeof description !== "string") return undefined;
-    return { name, description };
+    return {
+      name,
+      description,
+      instructions: body.trim(),
+      onlyWhenNamed: frontmatter["disable-model-invocation"] === true,
+    };
   } catch {
     return undefined;
   }
 }
 
 /** Double-quoted YAML scalars accept JSON string syntax, so any description stays one value. */
-const fileOf = ({ name, description, instructions }: UserSkillCreate) =>
+const fileOf = ({ name, description, instructions, onlyWhenNamed }: Required<UserSkillCreate>) =>
   [
     "---",
     `name: ${name}`,
     `description: ${JSON.stringify(description)}`,
+    // Pi's default is to let the model load the skill, so only the exception is written.
+    ...(onlyWhenNamed ? ["disable-model-invocation: true"] : []),
     "metadata:",
     `  ${MARKER_KEY}: ${MARKER}`,
     "---",
@@ -138,7 +145,8 @@ export const UserSkillsLive = Layer.effect(
       }
       if (check.malformedName) return yield* refused(SKILL_NAME_RULE, "name");
 
-      const { name, description, instructions } = check.saved!;
+      const saved = check.saved!;
+      const { name } = saved;
       const dir = join(root(), name);
       return yield* Effect.try({
         try: () => {
@@ -153,14 +161,14 @@ export const UserSkillsLive = Layer.effect(
             throw cause;
           }
           try {
-            writeFileSync(join(dir, "SKILL.md"), fileOf({ name, description, instructions }), {
+            writeFileSync(join(dir, "SKILL.md"), fileOf(saved), {
               flag: "wx",
             });
           } catch (cause) {
             rmSync(dir, { recursive: true, force: true });
             throw cause;
           }
-          return { name, description };
+          return saved;
         },
         catch: (cause) =>
           cause instanceof UserSkillError ? cause : refused("Could not save the skill."),

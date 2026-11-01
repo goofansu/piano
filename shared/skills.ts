@@ -20,6 +20,10 @@ export type UserSkillField = (typeof USER_SKILL_FIELDS)[number];
 export const UserSkill = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
+  /** The SKILL.md body, shown read-only for copying: Piano does not edit a skill. */
+  instructions: Schema.String,
+  /** `disable-model-invocation`: Pi loads the skill only for `/skill:<name>`, never on its own. */
+  onlyWhenNamed: Schema.Boolean,
 });
 export type UserSkill = typeof UserSkill.Type;
 
@@ -27,6 +31,7 @@ export const UserSkillCreate = Schema.Struct({
   name: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
   description: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
   instructions: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
+  onlyWhenNamed: Schema.optional(Schema.Boolean),
 });
 export type UserSkillCreate = typeof UserSkillCreate.Type;
 
@@ -44,7 +49,7 @@ export interface SkillDraftCheck {
   /** The name is filled but breaks `SKILL_NAME`. */
   malformedName: boolean;
   /** The trimmed draft, when every field is filled and within its limit and the name is well formed. */
-  saved: UserSkillCreate | undefined;
+  saved: Required<UserSkillCreate> | undefined;
 }
 
 const fieldCheck = (saved: string, max: number): SkillFieldCheck => ({
@@ -72,5 +77,6 @@ export function checkSkillDraft(draft: UserSkillCreate): SkillDraftCheck {
   const malformedName = !!trimmed.name && !SKILL_NAME.test(trimmed.name);
   const savable =
     !malformedName && USER_SKILL_FIELDS.every((field) => trimmed[field] && !checks[field].over);
-  return { ...checks, malformedName, saved: savable ? trimmed : undefined };
+  const saved = savable ? { ...trimmed, onlyWhenNamed: draft.onlyWhenNamed === true } : undefined;
+  return { ...checks, malformedName, saved };
 }
