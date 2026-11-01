@@ -78,7 +78,8 @@ start (the reason is in `detail`) or never received it, because its WebSocket di
 port, Piano not running, a connection timeout) or the start was cancelled before the creation
 request was sent. Address `detail` and dispatch again. Once the request may have been sent, a lost
 connection, deadline or cancellation reports `uncertain` instead, and the client never sends it a
-second time.
+second time. A send that fails on an open socket counts as possibly sent: the socket may already
+have taken the frame.
 
 The optional output file is reserved exclusively before network side effects, including against
 concurrent invocations, and kept once creation is attempted, even if the run was interrupted and

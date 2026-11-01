@@ -148,8 +148,24 @@ function observe<T>(
     let connection: Connection | null = null;
     let done = false;
     const timers = new Set<unknown>();
+    // A send that throws reports the loss from inside the send, before the observer learns
+    // whether the frame may have left. Hold that report until the send returns its disposition.
+    let sending = false;
+    let heldLoss: (() => void) | null = null;
     const link: Link = {
-      send: (message) => connection?.send(message) ?? "not-sent",
+      send: (message) => {
+        if (!connection) return "not-sent";
+        sending = true;
+        try {
+          return connection.send(message);
+        } finally {
+          sending = false;
+          const loss = heldLoss;
+          heldLoss = null;
+          // After the caller has seen the disposition; deferred so it reads that state.
+          if (loss) queueMicrotask(loss);
+        }
+      },
       nonce: () => environment.nonce(),
       after: (ms, run) => {
         const timer = environment.setTimeout(() => {
@@ -192,6 +208,7 @@ function observe<T>(
         onStatus: (connected, reason) => {
           if (done) return;
           if (connected) observer.connected();
+          else if (sending) heldLoss = () => !done && observer.disconnected(reason === "too-large");
           else observer.disconnected(reason === "too-large");
         },
       },
@@ -243,6 +260,7 @@ const dispositionOf = (
  * is named leaves creation uncertain rather than creating a second session, and a loss after it
  * only re-attaches by identity. Until the frame is handed to an open socket nothing can exist, so
  * a socket that never opens, a deadline or an abort before then reports `refused` / `not_sent`.
+ * A send that throws on an open socket may already have enqueued the frame: that is `uncertain`.
  */
 export function startSession(
   request: StartRequest,
