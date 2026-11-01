@@ -82,6 +82,14 @@ and navigation. Cancellation discards pending frames and returns the surfaces to
 2. Take reviewed upstream source changes without carrying local component patches, except the
    [sidebar shortcut patch](#stock-sidebar-shortcut). Avoid
    overwriting `index.css`, app wrappers or unrelated dependencies as a side effect.
+   The `--diff` for `sidebar.tsx` always shows that patch as a hunk in `handleKeyDown` replacing
+   the `// Piano patch` comment and its `event.metaKey && !event.ctrlKey && !event.shiftKey &&
+   !event.altKey` condition with `(event.metaKey || event.ctrlKey)`. That hunk is the overwrite
+   reverting Piano, not an upstream change: after writing the file, restore the patched condition
+   and its comment, then check `git diff web/src/components/ui/sidebar.tsx` no longer touches
+   `handleKeyDown`. If the upstream condition already excludes Shift and Alt (#11418 merged), keep
+   only the Ctrl+B exclusion and update [the shortcut section](#stock-sidebar-shortcut). If it
+   excludes Ctrl+B too, drop the patch and its comment.
 3. Check changed props, slots and internal composition against app wrappers. In particular,
    upstream composites import their own `ui/` children: they do not automatically use Piano
    wrappers. `PianoCommand` composes its own dialog, and `PianoSidebarMenuButton` its own tooltip.
