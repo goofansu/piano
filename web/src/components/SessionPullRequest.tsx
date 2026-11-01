@@ -2,6 +2,7 @@ import type { LocalWork } from "@shared/wire";
 import {
   ArrowRightIcon,
   CheckIcon,
+  CircleHelpIcon,
   ClockIcon,
   ExternalLinkIcon,
   GitBranchIcon,
@@ -49,6 +50,7 @@ export const pullRequestStates = {
 } as const;
 
 const signalIcons: Record<SignalOutcome, { Icon: LucideIcon; color: string }> = {
+  unknown: { Icon: CircleHelpIcon, color: "text-muted-foreground" },
   pending: { Icon: ClockIcon, color: "text-muted-foreground" },
   success: { Icon: CheckIcon, color: "text-ok" },
   failure: { Icon: XCircleIcon, color: "text-err" },
