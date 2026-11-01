@@ -6,6 +6,9 @@ import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
 import { Effect, Layer } from "effect";
+// The credential store McpSetup uses, so synthetic tokens are saved under Pi's own keys.
+import { FileAuthStorageBackend } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js";
+import { McpOAuthCredentialStore } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/runtime.js";
 import { DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { McpSetup, McpSetupEnvironment, McpSetupLive } from "../server/McpSetup.ts";
 import { PiSessions } from "../server/PiSessions.ts";
@@ -207,6 +210,73 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
         mcpServers: { other: { command: "do-not-run" } },
       });
       assert.equal((yield* linear(setup)).status, "missing");
+    }),
+  );
+});
+
+test("INV-01/12: uninstall clears the endpoint's sign-in after a switch to a header, keeps other servers' and can be retried", async () => {
+  await fixture((setup, directory, url) =>
+    Effect.gen(function* () {
+      const file = join(directory, "mcp.json");
+      const auth = join(directory, "mcp-auth.json");
+      const store = new McpOAuthCredentialStore(new FileAuthStorageBackend(auth), directory);
+      const signIn = (name: string, endpoint: string, token: string) =>
+        store.forServer(name, endpoint).save({
+          serverUrl: endpoint,
+          tokens: { access_token: token, refresh_token: `${token}-refresh`, token_type: "Bearer" },
+        });
+      const notes = "http://127.0.0.1:9/notes";
+      save(file, { mcpServers: { notes: { url: notes } } });
+      signIn("notes", notes, "synthetic-notes");
+
+      yield* setup.change({ action: "install", server: "linear" });
+      signIn("linear", url, "synthetic-linear");
+      assert.equal((yield* linear(setup)).signedIn, true);
+
+      // The user switches the same endpoint to a header in Pi; the old sign-in is still stored.
+      save(file, {
+        mcpServers: {
+          notes: { url: notes },
+          linear: { url, headers: { Authorization: "Bearer synthetic-header" } },
+        },
+      });
+      const switched = yield* linear(setup);
+      assert.deepEqual([switched.status, switched.oauth], ["ready", false]);
+      assert.ok(store.tokens("linear", url), "the earlier sign-in survives the switch");
+
+      const stale = yield* Effect.flip(
+        setup.change({ action: "uninstall", server: "linear", removalKey: "stale" }),
+      );
+      assert.match(stale.detail, /changed since|Refresh/);
+      assert.ok(store.tokens("linear", url), "a stale removal keeps the credentials");
+
+      // An unreadable credential store fails the uninstall and leaves the entry to retry.
+      const stored = readFileSync(auth, "utf8");
+      writeFileSync(auth, "{ not json");
+      const failed = yield* Effect.flip(
+        setup.change({ action: "uninstall", server: "linear", removalKey: switched.removalKey! }),
+      );
+      assert.match(failed.detail, /Could not uninstall/);
+      assert.equal((yield* linear(setup)).status, "ready");
+      assert.ok(json(file).mcpServers.linear, "the entry is kept for a retry");
+
+      writeFileSync(auth, stored);
+      yield* setup.change({
+        action: "uninstall",
+        server: "linear",
+        removalKey: (yield* linear(setup)).removalKey!,
+      });
+      assert.deepEqual(json(file), { mcpServers: { notes: { url: notes } } });
+      assert.equal(store.tokens("linear", url), undefined);
+      assert.equal(store.tokens("notes", notes)?.access_token, "synthetic-notes");
+      assert.doesNotMatch(readFileSync(auth, "utf8"), /synthetic-linear/);
+
+      yield* setup.change({ action: "install", server: "linear" });
+      const reinstalled = yield* linear(setup);
+      assert.deepEqual(
+        [reinstalled.status, reinstalled.oauth, reinstalled.signedIn],
+        ["ready", true, false],
+      );
     }),
   );
 });

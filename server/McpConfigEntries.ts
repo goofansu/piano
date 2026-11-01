@@ -113,10 +113,12 @@ export interface McpConfigEntries {
     catalog: McpCatalogTarget,
     configure: (existing: McpServerEntry | undefined) => McpServerConfig | undefined,
   ) => Effect.Effect<void, McpConfigEntryError>;
-  /** Removes the entry only when it still matches the reviewed `removalKey`, and checks it is gone. */
+  /** Removes the entry only when it still matches the reviewed `removalKey`, and checks it is gone.
+   * `before` runs on the confirmed entry ahead of the write; when it throws, the entry stays. */
   readonly remove: (
     catalog: McpCatalogTarget,
     removalKey: string,
+    before?: (entry: McpServerEntry) => void,
   ) => Effect.Effect<McpServerEntry, McpConfigEntryError>;
 }
 
@@ -221,11 +223,12 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
         if (config) write(() => addMcpServerConfig(file, existing?.name ?? catalog.id, config));
         if (observe(catalog).status !== "ready") throw new Error("Configuration was not saved.");
       }, "Could not save the MCP configuration."),
-    remove: (catalog, key) =>
+    remove: (catalog, key, before) =>
       writing((write) => {
         const entry = find(catalog);
         if (!entry || removalKey(entry) !== key)
           throw new Error("Configuration changed since confirmation.");
+        before?.(entry);
         write(() => removeMcpServerConfig(file, entry.name));
         if (find(catalog)) throw new Error("Removal not verified.");
         return entry;
