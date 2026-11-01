@@ -14,6 +14,7 @@ import { Context, Data, Effect, Layer } from "effect";
 import {
   checkSkillDraft,
   SKILL_NAME,
+  SKILL_NAME_RULE,
   USER_SKILL_FIELDS,
   type UserSkill,
   type UserSkillCreate,
@@ -135,12 +136,9 @@ export const UserSkillsLive = Layer.effect(
             field,
           );
       }
+      if (check.malformedName) return yield* refused(SKILL_NAME_RULE, "name");
+
       const { name, description, instructions } = check.saved!;
-      if (!SKILL_NAME.test(name))
-        return yield* refused(
-          "Use lowercase letters and digits, with hyphens between them.",
-          "name",
-        );
       const dir = join(root(), name);
       return yield* Effect.try({
         try: () => {

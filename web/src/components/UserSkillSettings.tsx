@@ -1,5 +1,6 @@
 import {
   checkSkillDraft,
+  SKILL_NAME_RULE,
   USER_SKILL_FIELDS,
   type UserSkill,
   type UserSkillField,
@@ -202,6 +203,11 @@ function SkillEditor({
   const busy = actions.running !== undefined;
   // The same rule the server applies: Create skill stays off until every field is filled and in bounds.
   const check = checkSkillDraft({ name, description, instructions });
+  // A character the rule never allows answers as it is typed; a misplaced hyphen waits until the
+  // field is left, so typing "release-" on the way to "release-notes" is not an error. Whether the
+  // name is free, only the server can say.
+  const [nameLeft, setNameLeft] = useState(false);
+  const nameError = check.malformedName && (nameLeft || /[^a-z0-9-]/.test(name.trim()));
   const [errorField, setErrorField] = useState<UserSkillField | undefined>();
   const errorAt = (field: UserSkillField | undefined) =>
     actions.error && errorField === field ? actions.error : undefined;
@@ -227,13 +233,13 @@ function SkillEditor({
     control: (invalid: boolean) => React.ReactNode,
     counted = false,
   ) => {
-    const error = errorAt(id);
+    const error = id === "name" && nameError ? SKILL_NAME_RULE : errorAt(id);
     return (
       <Field data-invalid={!!error}>
         <FieldLabel htmlFor={`skill-${id}`}>{label}</FieldLabel>
         {control(!!error || check[id].over)}
-        {/* The count, not a maxLength, as New project's instructions: a paste over the limit stays
-         * visible and the count says so, and Create skill stays off. It counts the trimmed text. */}
+        {/* The count, as New project's instructions: it counts the trimmed text, and over the limit
+         * (a paste into Instructions, which takes no maxLength) it turns red and Create skill stays off. */}
         {counted && (
           <FieldDescription
             id={`skill-${id}-count`}
@@ -278,19 +284,25 @@ function SkillEditor({
                 value={name}
                 aria-invalid={invalid}
                 onChange={(e) => setName(e.target.value)}
+                onBlur={() => setNameLeft(true)}
               />
             ))}
-            {field("description", "Description", (invalid) => (
-              <Textarea
-                id="skill-description"
-                required
-                rows={3}
-                maxLength={check.description.max}
-                value={description}
-                aria-invalid={invalid}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            ))}
+            {field(
+              "description",
+              "Description",
+              (invalid) => (
+                <Textarea
+                  id="skill-description"
+                  required
+                  rows={3}
+                  aria-describedby="skill-description-count"
+                  value={description}
+                  aria-invalid={invalid}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              ),
+              true,
+            )}
             {field(
               "instructions",
               "Instructions",

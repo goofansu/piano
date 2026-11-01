@@ -14,7 +14,7 @@ import { test } from "node:test";
 import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { UserSkills, UserSkillsEnvironment, UserSkillsLive } from "../server/UserSkills.ts";
-import { SKILL_INSTRUCTIONS_MAX } from "../shared/skills.ts";
+import { checkSkillDraft, SKILL_INSTRUCTIONS_MAX } from "../shared/skills.ts";
 
 /** A throwaway home: the skills directory Piano writes and Pi's own user skills directory. */
 function home(t: { after: (fn: () => void) => void }) {
@@ -113,4 +113,20 @@ test("a create names the field it refuses and never overwrites a skill", async (
   // The limit counts what is saved: surrounding whitespace does not push a body over it.
   assert.equal((await create("at-limit", "D.", `\n${max}\n\n`))._tag, "Success");
   assert.equal(existsSync(join(directory, "ok")), false);
+});
+
+test("the New skill rule accepts only a filled, well-formed, in-bounds draft", () => {
+  const draft = (name: string) => checkSkillDraft({ name, description: "D.", instructions: "I." });
+  for (const name of ["a", "release-notes", "v2-api", "x".repeat(64)])
+    assert.ok(draft(name).saved, name);
+  for (const name of ["-a", "a-", "a--b", "A", "a b", "a_b", "x".repeat(65)])
+    assert.equal(draft(name).saved, undefined, name);
+  assert.equal(draft("Release").malformedName, true);
+  assert.equal(draft("").malformedName, false, "a blank name is missing, not malformed");
+  assert.equal(draft("  ok  ").saved?.name, "ok", "the saved draft is trimmed");
+  assert.equal(
+    checkSkillDraft({ name: "ok", description: "D.", instructions: " " }).saved,
+    undefined,
+    "every field is required",
+  );
 });

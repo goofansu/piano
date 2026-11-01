@@ -3,6 +3,9 @@ import { Schema } from "effect";
 /** The Agent Skills name rule Pi checks: lowercase letters, digits and single hyphens between them. */
 export const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const SKILL_NAME_MAX = 64;
+/** Why a name breaks `SKILL_NAME`, as the New skill dialog and the server both say it. */
+export const SKILL_NAME_RULE =
+  "Use lowercase letters, numbers and single hyphens, not at the start or end.";
 export const SKILL_DESCRIPTION_MAX = 1024;
 /** As project instructions: a SKILL.md body is read whole each time Pi loads the skill. */
 export const SKILL_INSTRUCTIONS_MAX = 20_000;
@@ -38,7 +41,9 @@ export interface SkillDraftCheck {
   name: SkillFieldCheck;
   description: SkillFieldCheck;
   instructions: SkillFieldCheck;
-  /** The trimmed draft, when every field is filled and within its limit; otherwise undefined. */
+  /** The name is filled but breaks `SKILL_NAME`. */
+  malformedName: boolean;
+  /** The trimmed draft, when every field is filled and within its limit and the name is well formed. */
   saved: UserSkillCreate | undefined;
 }
 
@@ -50,8 +55,8 @@ const fieldCheck = (saved: string, max: number): SkillFieldCheck => ({
 
 /**
  * The one rule for creating a skill, as the New skill dialog enables Create skill and the server
- * accepts it: every field trimmed, none blank, none over its limit. The name's format is the
- * server's to refuse, with its reason on the field.
+ * accepts it: every field trimmed, none blank, none over its limit, and the name in Agent Skills
+ * form. Only whether the name is free is left to the server.
  */
 export function checkSkillDraft(draft: UserSkillCreate): SkillDraftCheck {
   const trimmed = {
@@ -64,6 +69,8 @@ export function checkSkillDraft(draft: UserSkillCreate): SkillDraftCheck {
     description: fieldCheck(trimmed.description, SKILL_DESCRIPTION_MAX),
     instructions: fieldCheck(trimmed.instructions, SKILL_INSTRUCTIONS_MAX),
   };
-  const savable = USER_SKILL_FIELDS.every((field) => trimmed[field] && !checks[field].over);
-  return { ...checks, saved: savable ? trimmed : undefined };
+  const malformedName = !!trimmed.name && !SKILL_NAME.test(trimmed.name);
+  const savable =
+    !malformedName && USER_SKILL_FIELDS.every((field) => trimmed[field] && !checks[field].over);
+  return { ...checks, malformedName, saved: savable ? trimmed : undefined };
 }
