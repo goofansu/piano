@@ -3,7 +3,7 @@
  */
 import { copyFile, lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { Context, Effect, Layer, Semaphore } from "effect";
 import {
   CHANGES_FILE_PATCH_BYTES,
@@ -23,7 +23,7 @@ import {
   type TargetHints,
 } from "./ComparisonBase.ts";
 import { type Checkout, type CheckoutObservation, observeCheckout } from "./GitCheckout.ts";
-import { place } from "./WorkspaceFiles.ts";
+import { place, spell } from "./WorkspaceFiles.ts";
 
 type Ready = Extract<Observation["result"], { readonly status: "ready" }>;
 type Unavailable = Extract<Observation["result"], { readonly status: "unavailable" }>;
@@ -208,7 +208,7 @@ async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<
 /** Whether `path` (relative to the workspace, or absolute) names something on disk; a dangling
  * symlink does. Fails on anything but the path's absence. */
 export const exists = (workspace: Workspace, path: string): Promise<boolean> =>
-  lstat(resolve(workspace.path, path)).then(
+  lstat(spell(workspace, path)).then(
     () => true,
     (error: NodeJS.ErrnoException) => {
       if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
