@@ -1,11 +1,11 @@
 import {
-  PROMPT_BODY_MAX,
-  PROMPT_DESCRIPTION_MAX,
+  checkPromptDraft,
   PROMPT_FIELDS,
-  PROMPT_NAME_MAX,
+  PROMPT_NAME_RULE,
   type Prompt,
   type PromptField,
 } from "@shared/prompts";
+import { cn } from "cn";
 import { MoreHorizontalIcon, SquareSlashIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import { PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -37,7 +38,7 @@ import {
 } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -190,11 +191,14 @@ function PromptRow({
   );
 }
 
-/** A prompt's text as Pi expands it, with its copy control always shown. */
+/**
+ * One prompt, read-only: Piano does not edit a prompt, so its text is here to read and copy. Laid
+ * out as Settings › Skills shows a skill.
+ */
 function PromptView({ prompt, close }: { prompt: Prompt; close: () => void }) {
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
-      <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex min-w-0 gap-2 font-mono">
             <span className="truncate">/{prompt.name}</span>
@@ -202,10 +206,11 @@ function PromptView({ prompt, close }: { prompt: Prompt; close: () => void }) {
               <span className="truncate font-normal text-ink-3">{prompt.argumentHint}</span>
             )}
           </DialogTitle>
+          <DialogDescription>{prompt.description}</DialogDescription>
         </DialogHeader>
-        {/* A plain block, not Markdown: the text is shown and copied exactly as saved. */}
+        {/* Hand-written: no shadcn component shows a read-only block of source text. */}
         <div className="relative">
-          <pre className="max-h-[60dvh] overflow-auto rounded-lg border border-line bg-fill py-3 pr-10 pl-3.5 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
+          <pre className="max-h-[50dvh] overflow-auto rounded-md border border-line py-2 pr-10 pl-3 font-mono text-sm whitespace-pre-wrap">
             {prompt.body}
           </pre>
           <CopyButton
@@ -222,6 +227,8 @@ function PromptView({ prompt, close }: { prompt: Prompt; close: () => void }) {
   );
 }
 
+/** Laid out as New skill: the same rule the server applies keeps Create prompt off until the name
+ * and prompt are filled and every field is within its limit. */
 function PromptEditor({
   close,
   refresh,
@@ -234,38 +241,71 @@ function PromptEditor({
   const [description, setDescription] = useState("");
   const [argumentHint, setArgumentHint] = useState("");
   const [body, setBody] = useState("");
-  // A failed create stays in the open dialog, on its field; a created one closes it with a toast.
+  // A refused create stays in the open dialog, on its field; a created one closes it with a toast.
   const actions = useSetupActions({
     refresh,
     success: (text) => toast.success(text),
     failure: "keep",
   });
   const busy = actions.running !== undefined;
+  const check = checkPromptDraft({ name, description, argumentHint, body });
+  // As New skill: a character the rule never allows answers as it is typed; a misplaced hyphen
+  // waits until the field is left. Whether the name is free, only the server can say.
+  const [nameLeft, setNameLeft] = useState(false);
+  const nameError = check.malformedName && (nameLeft || /[^a-z0-9-]/.test(name.trim()));
   const [errorField, setErrorField] = useState<PromptField | undefined>();
   const errorAt = (field: PromptField | undefined) =>
     actions.error && errorField === field ? actions.error : undefined;
-  const nameError = errorAt("name");
-  const bodyError = errorAt("body");
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    const saved = check.saved;
+    if (!saved) return;
     const created = await actions.run({
       id: "create",
       run: () =>
-        createPrompt({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          argumentHint: argumentHint.trim() || undefined,
-          body,
-        }).catch((cause: unknown) => {
+        createPrompt(saved).catch((cause: unknown) => {
           const field = cause instanceof ApiError ? cause.field : undefined;
           setErrorField(PROMPT_FIELDS.find((known) => known === field));
           throw cause;
         }),
       done: "Prompt created",
-      fallback: "Could not save prompt.",
+      fallback: "Could not create prompt.",
     });
     if (created) close();
   };
+  const field = (
+    id: PromptField,
+    label: React.ReactNode,
+    control: (invalid: boolean) => React.ReactNode,
+    counted = false,
+  ) => {
+    const error = id === "name" && nameError ? PROMPT_NAME_RULE : errorAt(id);
+    return (
+      <Field data-invalid={!!error}>
+        <FieldLabel htmlFor={`prompt-${id}`}>{label}</FieldLabel>
+        {control(!!error || check[id].over)}
+        {/* The count, as New skill's: it counts the trimmed text, and over the limit (a paste into
+         * a field that takes no maxLength) it turns red and Create prompt stays off. */}
+        {counted && (
+          <FieldDescription
+            id={`prompt-${id}-count`}
+            className={cn(
+              "text-right text-xs tabular-nums",
+              check[id].over ? "text-err" : "text-ink-3",
+            )}
+          >
+            {count.format(check[id].length)} / {count.format(check[id].max)}
+          </FieldDescription>
+        )}
+        {error && <FieldError role="alert">{error}</FieldError>}
+      </Field>
+    );
+  };
+  const optional = (text: string) => (
+    <>
+      {text} <span className="font-normal text-ink-3">Optional</span>
+    </>
+  );
   return (
     <Dialog
       open
@@ -273,75 +313,81 @@ function PromptEditor({
         if (!open && !busy) close();
       }}
     >
-      <DialogContent
-        className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
-        aria-describedby={undefined}
-      >
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>New prompt</DialogTitle>
+          <DialogDescription>
+            Saved in Piano. Sessions started from now can use it.
+          </DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-6" onSubmit={(e) => void submit(e)}>
           <FieldGroup>
-            <Field data-invalid={!!nameError}>
-              <FieldLabel htmlFor="prompt-name">Name</FieldLabel>
+            {field("name", "Name", (invalid) => (
               <Input
                 id="prompt-name"
-                maxLength={PROMPT_NAME_MAX}
                 required
+                autoFocus
                 autoComplete="off"
+                autoCapitalize="none"
                 spellCheck={false}
+                maxLength={check.name.max}
                 className="font-mono"
                 value={name}
-                aria-invalid={!!nameError}
+                aria-invalid={invalid}
                 onChange={(e) => setName(e.target.value)}
+                onBlur={() => setNameLeft(true)}
               />
-              {nameError && <FieldError role="alert">{nameError}</FieldError>}
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="prompt-description">
-                Description <span className="font-normal text-ink-3">Optional</span>
-              </FieldLabel>
+            ))}
+            {field(
+              "description",
+              optional("Description"),
+              (invalid) => (
+                <Textarea
+                  id="prompt-description"
+                  rows={3}
+                  aria-describedby="prompt-description-count"
+                  value={description}
+                  aria-invalid={invalid}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              ),
+              true,
+            )}
+            {field("argumentHint", optional("Argument hint"), (invalid) => (
               <Input
-                id="prompt-description"
-                maxLength={PROMPT_DESCRIPTION_MAX}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="prompt-argument-hint">
-                Argument hint <span className="font-normal text-ink-3">Optional</span>
-              </FieldLabel>
-              <Input
-                id="prompt-argument-hint"
+                id="prompt-argumentHint"
                 autoComplete="off"
                 spellCheck={false}
+                maxLength={check.argumentHint.max}
                 className="font-mono"
                 value={argumentHint}
+                aria-invalid={invalid}
                 onChange={(e) => setArgumentHint(e.target.value)}
               />
-            </Field>
-            <Field data-invalid={!!bodyError}>
-              <FieldLabel htmlFor="prompt-body">Prompt</FieldLabel>
-              <Textarea
-                id="prompt-body"
-                maxLength={PROMPT_BODY_MAX}
-                required
-                rows={6}
-                className="max-h-80 font-mono"
-                value={body}
-                aria-invalid={!!bodyError}
-                onChange={(e) => setBody(e.target.value)}
-              />
-              {bodyError && <FieldError role="alert">{bodyError}</FieldError>}
-            </Field>
+            ))}
+            {field(
+              "body",
+              "Prompt",
+              (invalid) => (
+                <Textarea
+                  id="prompt-body"
+                  required
+                  aria-describedby="prompt-body-count"
+                  className="max-h-[50dvh] min-h-48 font-mono"
+                  value={body}
+                  aria-invalid={invalid}
+                  onChange={(e) => setBody(e.target.value)}
+                />
+              ),
+              true,
+            )}
             {errorAt(undefined) && <FieldError role="alert">{errorAt(undefined)}</FieldError>}
           </FieldGroup>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busy} onClick={close}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || !check.saved}>
               {busy && <Spinner data-icon="inline-start" />}
               Create prompt
             </Button>
@@ -351,3 +397,6 @@ function PromptEditor({
     </Dialog>
   );
 }
+
+/** Characters as the browser counts them (UTF-16 code units), grouped for reading: "20,000". */
+const count = new Intl.NumberFormat();

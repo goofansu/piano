@@ -86,6 +86,7 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
         "has space",
         "-dash",
         "dash-",
+        "double--hyphen",
         "Review",
         "snake_case",
         "skill:x",
@@ -93,6 +94,13 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       ])
         assert.equal((yield* failure(prompts.create({ name, body: "x" }))).field, "name", name);
       assert.equal((yield* failure(prompts.create({ name: "blank", body: "  \n" }))).field, "body");
+      const tooLong = yield* failure(
+        prompts.create({ name: "long", description: "d".repeat(1025), body: "x" }),
+      );
+      assert.deepEqual(
+        [tooLong.field, tooLong.detail],
+        ["description", "Keep it to 1,024 characters."],
+      );
       assert.equal(
         (yield* failure(prompts.remove("../agent/prompts/personal"))).detail,
         "Prompt not found.",

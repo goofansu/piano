@@ -5,11 +5,13 @@ Open **Settings → Prompts**, or choose **New prompt** from Mod+K on that page.
 command in the composer, its description shows in completion and its argument hint follows the
 name. The body takes Pi's substitutions (`$1`, `$@`, `${1:-default}`, …), expanded by Pi.
 
-- **New prompt** saves `<name>.md` in Piano's prompts folder, `prompts/` beside the
-  [registry database](configuration.md#environment-variables) (`~/.local/share/piano/prompts/` by
-  default). Names follow a skill's rule: at most 64 lowercase letters, numbers and hyphens, not starting
-  or ending with a hyphen. A description holds at most 1024 characters and the prompt 20,000. An
-  existing name is refused, never overwritten.
+- **New prompt** stays off until the name and prompt are filled and every field is within its
+  limit, the same check the server applies (`checkPromptDraft`). It saves `<name>.md` in Piano's
+  prompts folder, `prompts/` beside the [registry database](configuration.md#environment-variables)
+  (`~/.local/share/piano/prompts/` by default). Names follow a skill's rule and limit, shared with
+  Settings › Skills: at most 64 lowercase letters, numbers and single hyphens, not at the start or
+  end. A description holds at most 1024 characters and the prompt 20,000. An existing name is
+  refused, never overwritten.
 - **View** shows the prompt as saved, with a copy button.
 - **Delete** removes that file, after confirmation.
 - The page lists that folder only. Prompts in Pi's own folders (`~/.pi/agent/prompts/`, a

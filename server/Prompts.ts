@@ -11,7 +11,10 @@ import { dirname, join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
 import {
-  PROMPT_NAME,
+  checkPromptDraft,
+  isPromptName,
+  PROMPT_FIELDS,
+  PROMPT_NAME_RULE,
   type Prompt,
   type PromptCreate,
   type PromptField,
@@ -113,16 +116,25 @@ export const PromptsLive = Layer.effect(
     });
 
     const create = Effect.fn("Prompts.create")(function* (input: PromptCreate) {
-      const name = input.name.trim();
-      if (!PROMPT_NAME.test(name))
-        return yield* new PromptError({
-          detail:
-            "Use lowercase letters, numbers and hyphens, not starting or ending with a hyphen.",
-          field: "name",
-        });
-      if (!input.body.trim())
-        return yield* new PromptError({ detail: "Enter the prompt.", field: "body" });
-      const text = templateText(input);
+      const check = checkPromptDraft(input);
+      if (check.malformedName)
+        return yield* new PromptError({ detail: PROMPT_NAME_RULE, field: "name" });
+      for (const field of PROMPT_FIELDS) {
+        if ((field === "name" || field === "body") && !check[field].length)
+          return yield* new PromptError({
+            detail: field === "name" ? "Enter a name." : "Enter the prompt.",
+            field,
+          });
+        if (check[field].over)
+          return yield* new PromptError({
+            detail: `Keep it to ${check[field].max.toLocaleString("en")} characters.`,
+            field,
+          });
+      }
+      const saved = check.saved;
+      if (!saved) return yield* new PromptError({ detail: "Could not save prompt." });
+      const name = saved.name;
+      const text = templateText(saved);
       yield* Effect.tryPromise({
         // `wx` refuses an existing file, so two creates of one name never overwrite each other.
         try: () =>
@@ -139,7 +151,7 @@ export const PromptsLive = Layer.effect(
 
     const remove = Effect.fn("Prompts.remove")(function* (name: string) {
       // Only a name a prompt could have, so a request never reaches outside the folder.
-      if (!PROMPT_NAME.test(name)) return yield* new PromptError({ detail: "Prompt not found." });
+      if (!isPromptName(name)) return yield* new PromptError({ detail: "Prompt not found." });
       yield* Effect.tryPromise({
         try: () => unlink(file(name)),
         catch: (cause) => cause,
