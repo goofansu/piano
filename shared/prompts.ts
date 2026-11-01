@@ -5,23 +5,29 @@
  */
 import { Schema } from "effect";
 
-/** The command name: the file's name without `.md`, typed after `/` in the composer. */
-export const PROMPT_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-/** The longest prompt body Piano saves, in characters. */
-export const PROMPT_BODY_MAX = 64 * 1024;
+/**
+ * The command name: the file's name without `.md`, typed after `/` in the composer. A skill's name
+ * rule: at most 64 lowercase letters, numbers and hyphens, not starting or ending with a hyphen.
+ */
+export const PROMPT_NAME = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+export const PROMPT_NAME_MAX = 64;
+/** A skill's description limit, in characters. */
+export const PROMPT_DESCRIPTION_MAX = 1024;
+/** The longest prompt Piano saves, in characters; Pi sets no limit. */
+export const PROMPT_BODY_MAX = 20_000;
 
 /** A prompt as Pi reads it: its command name, description and argument hint. */
 export const Prompt = Schema.Struct({
   name: Schema.String,
-  /** The front matter's description or, as Pi falls back, the body's first non-empty line. */
+  /** The front matter's description or, as Pi falls back, the body's first non-empty line cut at 60 characters. */
   description: Schema.String,
   argumentHint: Schema.optional(Schema.String),
 });
 export type Prompt = typeof Prompt.Type;
 
 export const PromptCreate = Schema.Struct({
-  name: Schema.String.check(Schema.isMaxLength(64)),
-  description: Schema.optional(Schema.String.check(Schema.isMaxLength(1000))),
+  name: Schema.String.check(Schema.isMaxLength(PROMPT_NAME_MAX)),
+  description: Schema.optional(Schema.String.check(Schema.isMaxLength(PROMPT_DESCRIPTION_MAX))),
   argumentHint: Schema.optional(Schema.String.check(Schema.isMaxLength(200))),
   body: Schema.String.check(Schema.isMaxLength(PROMPT_BODY_MAX)),
 });

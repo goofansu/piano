@@ -1,4 +1,11 @@
-import { PROMPT_FIELDS, type Prompt, type PromptField } from "@shared/prompts";
+import {
+  PROMPT_BODY_MAX,
+  PROMPT_DESCRIPTION_MAX,
+  PROMPT_FIELDS,
+  PROMPT_NAME_MAX,
+  type Prompt,
+  type PromptField,
+} from "@shared/prompts";
 import { MoreHorizontalIcon, SquareSlashIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -247,6 +254,7 @@ function PromptEditor({
               <FieldLabel htmlFor="prompt-name">Name</FieldLabel>
               <Input
                 id="prompt-name"
+                maxLength={PROMPT_NAME_MAX}
                 required
                 autoComplete="off"
                 spellCheck={false}
@@ -263,6 +271,7 @@ function PromptEditor({
               </FieldLabel>
               <Input
                 id="prompt-description"
+                maxLength={PROMPT_DESCRIPTION_MAX}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
@@ -284,6 +293,7 @@ function PromptEditor({
               <FieldLabel htmlFor="prompt-body">Prompt</FieldLabel>
               <Textarea
                 id="prompt-body"
+                maxLength={PROMPT_BODY_MAX}
                 required
                 rows={6}
                 className="max-h-80 font-mono"

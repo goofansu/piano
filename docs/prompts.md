@@ -7,7 +7,9 @@ name. The body takes Pi's substitutions (`$1`, `$@`, `${1:-default}`, …), expa
 
 - **New prompt** saves `<name>.md` in Piano's prompts folder, `prompts/` beside the
   [registry database](configuration.md#environment-variables) (`~/.local/share/piano/prompts/` by
-  default). Names are letters, digits, `-` and `_`; an existing name is refused, never overwritten.
+  default). Names follow a skill's rule: at most 64 lowercase letters, numbers and hyphens, not starting
+  or ending with a hyphen. A description holds at most 1024 characters and the prompt 20,000. An
+  existing name is refused, never overwritten.
 - **Delete** removes that file, after confirmation.
 - The page lists that folder only. Prompts in Pi's own folders (`~/.pi/agent/prompts/`, a
   project's `.pi/prompts/`) stay Pi's: the composer still offers them, Settings does not list them.

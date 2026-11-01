@@ -46,7 +46,7 @@ export class Prompts extends Context.Service<
 const code = (cause: unknown) =>
   cause && typeof cause === "object" && "code" in cause ? cause.code : undefined;
 
-/** The prompt Pi reads from `text`: front matter's description, else the first non-empty line. */
+/** The prompt Pi reads from `text`: front matter's description, else Pi's first-line fallback. */
 const readPrompt = (name: string, text: string): Prompt => {
   let frontmatter: Record<string, unknown> = {};
   let body = text;
@@ -55,10 +55,12 @@ const readPrompt = (name: string, text: string): Prompt => {
   } catch {
     // Pi skips a file whose front matter does not parse; list it by name so it can be deleted.
   }
+  const first = body.split("\n").find((line) => line.trim()) ?? "";
   const description =
     typeof frontmatter.description === "string" && frontmatter.description
       ? frontmatter.description
-      : (body.split("\n").find((line) => line.trim()) ?? "").trim();
+      : // Pi's fallback: the first non-empty line, cut at 60 characters.
+        `${first.slice(0, 60)}${first.length > 60 ? "..." : ""}`;
   const hint = frontmatter["argument-hint"];
   return { name, description, ...(typeof hint === "string" && hint ? { argumentHint: hint } : {}) };
 };
@@ -109,7 +111,8 @@ export const PromptsLive = Layer.effect(
       const name = input.name.trim();
       if (!PROMPT_NAME.test(name))
         return yield* new PromptError({
-          detail: "Use letters, numbers, - and _, starting with a letter or number.",
+          detail:
+            "Use lowercase letters, numbers and hyphens, not starting or ending with a hyphen.",
           field: "name",
         });
       if (!input.body.trim())

@@ -54,7 +54,15 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       assert.deepEqual(review, expected);
       // A body that starts like front matter stays the body; no description falls back as Pi's does.
       yield* prompts.create({ name: "rule", body: "---\nKeep it short." });
-      assert.deepEqual(yield* prompts.list, [expected, { name: "rule", description: "---" }]);
+      // Without a description Pi cuts the first line at 60 characters; the list says the same.
+      const long = `${"Summarize the open pull requests ".repeat(3)}by risk.`;
+      yield* prompts.create({ name: "triage", body: `\n${long}\nThen list the next steps.` });
+      const cut = `${long.slice(0, 60)}...`;
+      assert.deepEqual(yield* prompts.list, [
+        expected,
+        { name: "rule", description: "---" },
+        { name: "triage", description: cut },
+      ]);
 
       const commands = (yield* sessions.probe(root)).commands.filter((c) => c.source === "prompt");
       assert.deepEqual(
@@ -63,13 +71,24 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
           ["personal", "Personal prompt"],
           ["review", "Review staged git changes"],
           ["rule", "---"],
+          ["triage", cut],
         ],
         "Pi offers Piano's prompts beside its own",
       );
 
       const taken = yield* failure(prompts.create({ name: "review", body: "Other" }));
       assert.deepEqual([taken.field, taken.detail], ["name", "/review already exists."]);
-      for (const name of ["", "../escape", "has space", "-dash", "skill:x"])
+      for (const name of [
+        "",
+        "../escape",
+        "has space",
+        "-dash",
+        "dash-",
+        "Review",
+        "snake_case",
+        "skill:x",
+        "a".repeat(65),
+      ])
         assert.equal((yield* failure(prompts.create({ name, body: "x" }))).field, "name", name);
       assert.equal((yield* failure(prompts.create({ name: "blank", body: "  \n" }))).field, "body");
       assert.equal(
@@ -81,7 +100,7 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       yield* prompts.remove("review");
       assert.deepEqual(
         (yield* prompts.list).map((p) => p.name),
-        ["rule"],
+        ["rule", "triage"],
       );
       const after = (yield* sessions.probe(root)).commands.map((c) => c.name);
       assert.ok(!after.includes("review"), "a deleted prompt is not offered to new sessions");
