@@ -5,8 +5,8 @@ Open **Settings → Prompts**, or choose **New prompt** from Mod+K on that page.
 command in the composer and its description shows in completion. Its instructions take Pi's substitutions (`$1`, `$@`, `${1:-default}`, …), expanded by Pi.
 
 - **New prompt** stays off until the name, description and instructions are filled and within their
-  limits, the same check the server applies (`checkPromptDraft`). It saves `<name>.md` in Piano's
-  prompts folder, `prompts/` beside the [registry database](configuration.md#environment-variables)
+  limits, the same check the server applies (`checkDraft` in `shared/drafts.ts`). It saves
+  `<name>.md` in Piano's prompts folder, `prompts/` beside the [registry database](configuration.md#environment-variables)
   (`~/.local/share/piano/prompts/` by default). Names, descriptions and instructions follow the
   [draft rule Settings › Skills shares](configuration.md#pianos-prompts-and-skills). Piano writes no
   argument hint: Pi does not pass it to the composer. An existing name is refused, never overwritten.

@@ -18,9 +18,7 @@ import { Effect } from "effect";
 import { defaultPiCli, PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import { UserSkills, UserSkillsEnvironment, UserSkillsLive } from "../server/UserSkills.ts";
-import { TEXT_MAX } from "../shared/drafts.ts";
-import { checkPromptDraft } from "../shared/prompts.ts";
-import { checkSkillDraft } from "../shared/skills.ts";
+import { checkDraft, TEXT_MAX } from "../shared/drafts.ts";
 
 /** A throwaway home: Piano's skills folder, and the folders Pi loads user skills from besides it. */
 function home(t: { after: (fn: () => void) => void }) {
@@ -167,7 +165,7 @@ test("a create names the field it refuses and never overwrites a skill", async (
 });
 
 test("the New skill rule accepts only a filled, well-formed, in-bounds draft", () => {
-  const draft = (name: string) => checkSkillDraft({ name, description: "D.", instructions: "I." });
+  const draft = (name: string) => checkDraft({ name, description: "D.", instructions: "I." });
   for (const name of ["a", "release-notes", "v2-api", "x".repeat(64)])
     assert.ok(draft(name).saved, name);
   for (const name of ["-a", "a-", "a--b", "A", "a b", "a_b", "x".repeat(65)])
@@ -176,7 +174,7 @@ test("the New skill rule accepts only a filled, well-formed, in-bounds draft", (
   assert.equal(draft("").malformedName, false, "a blank name is missing, not malformed");
   assert.equal(draft("  ok  ").saved?.name, "ok", "the saved draft is trimmed");
   assert.equal(
-    checkSkillDraft({ name: "ok", description: "D.", instructions: " " }).saved,
+    checkDraft({ name: "ok", description: "D.", instructions: " " }).saved,
     undefined,
     "every field is required",
   );
@@ -240,26 +238,4 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
     );
   assert.deepEqual(await skillCommands([directory]), [["skill:release-notes", "Writes notes."]]);
   assert.deepEqual(await skillCommands([]), [], "a Pi run without Piano's folder does not load it");
-});
-
-test("skills and prompts share one draft rule", () => {
-  const skill = (description: string) =>
-    checkSkillDraft({ name: "same", description, instructions: "Text." });
-  const prompt = (description: string) =>
-    checkPromptDraft({ name: "same", description, instructions: "Text." });
-  for (const check of [skill(""), prompt("")])
-    assert.deepEqual(check.problem, { field: "description", detail: "Enter a description." });
-  for (const [name, description, text] of [
-    ["Bad", "D.", "T."],
-    ["a--b", "D.", "T."],
-    ["x".repeat(65), "D.", "T."],
-    ["ok", "d".repeat(1025), "T."],
-    ["ok", "D.", "t".repeat(TEXT_MAX + 1)],
-    ["ok", "D.", "  "],
-  ] as const) {
-    const s = checkSkillDraft({ name, description, instructions: text }).problem;
-    const p = checkPromptDraft({ name, description, instructions: text }).problem;
-    assert.ok(s, name);
-    assert.deepEqual(p, s, `${name}: one rule, one answer`);
-  }
 });

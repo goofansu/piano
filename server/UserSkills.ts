@@ -12,13 +12,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadSkillsFromDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
-import { isName } from "../shared/drafts.ts";
-import {
-  checkSkillDraft,
-  type UserSkill,
-  type UserSkillCreate,
-  type UserSkillField,
-} from "../shared/skills.ts";
+import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
+import type { UserSkill, UserSkillCreate } from "../shared/skills.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 import { agentDir } from "./PiEnv.ts";
 
@@ -40,9 +35,9 @@ export const UserSkillsEnvironment = Context.Reference<{
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
 export class UserSkillError extends Data.TaggedError("UserSkillError")<{
   readonly detail: string;
-  readonly field?: UserSkillField;
+  readonly field?: DraftField;
 }> {}
-const refused = (detail: string, field?: UserSkillField) =>
+const refused = (detail: string, field?: DraftField) =>
   new UserSkillError(field ? { detail, field } : { detail });
 
 export class UserSkills extends Context.Service<
@@ -141,13 +136,16 @@ export const UserSkillsLive = Layer.effect(
       );
 
     const create = Effect.fn("UserSkills.create")(function* (request: UserSkillCreate) {
-      const check = checkSkillDraft(request);
+      const check = checkDraft(request);
       if (!check.saved)
         return yield* refused(
           check.problem?.detail ?? "Could not save the skill.",
           check.problem?.field,
         );
-      const saved = check.saved;
+      const saved = {
+        ...check.saved,
+        disableModelInvocation: request.disableModelInvocation === true,
+      };
       const { name } = saved;
       const dir = join(root(), name);
       return yield* Effect.try({

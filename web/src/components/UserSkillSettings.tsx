@@ -1,10 +1,5 @@
-import { NAME_RULE } from "@shared/drafts";
-import {
-  checkSkillDraft,
-  USER_SKILL_FIELDS,
-  type UserSkill,
-  type UserSkillField,
-} from "@shared/skills";
+import { checkDraft, DRAFT_FIELDS, type DraftField, NAME_RULE } from "@shared/drafts";
+import type { UserSkill } from "@shared/skills";
 import { cn } from "cn";
 import { MoreHorizontalIcon, SparklesIcon } from "lucide-react";
 import { useState } from "react";
@@ -215,14 +210,14 @@ function SkillEditor({
   });
   const busy = actions.running !== undefined;
   // The same rule the server applies: Create skill stays off until every field is filled and in bounds.
-  const check = checkSkillDraft({ name, description, instructions, disableModelInvocation });
+  const check = checkDraft({ name, description, instructions });
   // A character the rule never allows answers as it is typed; a misplaced hyphen waits until the
   // field is left, so typing "release-" on the way to "release-notes" is not an error. Whether the
   // name is free, only the server can say.
   const [nameLeft, setNameLeft] = useState(false);
   const nameError = check.malformedName && (nameLeft || /[^a-z0-9-]/.test(name.trim()));
-  const [errorField, setErrorField] = useState<UserSkillField | undefined>();
-  const errorAt = (field: UserSkillField | undefined) =>
+  const [errorField, setErrorField] = useState<DraftField | undefined>();
+  const errorAt = (field: DraftField | undefined) =>
     actions.error && errorField === field ? actions.error : undefined;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -233,7 +228,7 @@ function SkillEditor({
         createUserSkill({ name, description, instructions, disableModelInvocation }).catch(
           (cause: unknown) => {
             const field = cause instanceof ApiError ? cause.field : undefined;
-            setErrorField(USER_SKILL_FIELDS.find((known) => known === field));
+            setErrorField(DRAFT_FIELDS.find((known) => known === field));
             throw cause;
           },
         ),
@@ -243,7 +238,7 @@ function SkillEditor({
     if (created) close();
   };
   const field = (
-    id: UserSkillField,
+    id: DraftField,
     label: string,
     control: (invalid: boolean) => React.ReactNode,
     counted = false,

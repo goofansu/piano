@@ -1,5 +1,5 @@
-import { NAME_RULE } from "@shared/drafts";
-import { checkPromptDraft, PROMPT_FIELDS, type Prompt, type PromptField } from "@shared/prompts";
+import { checkDraft, DRAFT_FIELDS, type DraftField, NAME_RULE } from "@shared/drafts";
+import type { Prompt } from "@shared/prompts";
 import { cn } from "cn";
 import { MoreHorizontalIcon, SquareSlashIcon } from "lucide-react";
 import { useState } from "react";
@@ -233,13 +233,13 @@ function PromptEditor({
     failure: "keep",
   });
   const busy = actions.running !== undefined;
-  const check = checkPromptDraft({ name, description, instructions });
+  const check = checkDraft({ name, description, instructions });
   // As New skill: a character the rule never allows answers as it is typed; a misplaced hyphen
   // waits until the field is left. Whether the name is free, only the server can say.
   const [nameLeft, setNameLeft] = useState(false);
   const nameError = check.malformedName && (nameLeft || /[^a-z0-9-]/.test(name.trim()));
-  const [errorField, setErrorField] = useState<PromptField | undefined>();
-  const errorAt = (field: PromptField | undefined) =>
+  const [errorField, setErrorField] = useState<DraftField | undefined>();
+  const errorAt = (field: DraftField | undefined) =>
     actions.error && errorField === field ? actions.error : undefined;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -250,7 +250,7 @@ function PromptEditor({
       run: () =>
         createPrompt(saved).catch((cause: unknown) => {
           const field = cause instanceof ApiError ? cause.field : undefined;
-          setErrorField(PROMPT_FIELDS.find((known) => known === field));
+          setErrorField(DRAFT_FIELDS.find((known) => known === field));
           throw cause;
         }),
       done: "Prompt created",
@@ -259,7 +259,7 @@ function PromptEditor({
     if (created) close();
   };
   const field = (
-    id: PromptField,
+    id: DraftField,
     label: string,
     control: (invalid: boolean) => React.ReactNode,
     counted = false,

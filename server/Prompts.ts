@@ -10,19 +10,14 @@ import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
-import { isName } from "../shared/drafts.ts";
-import {
-  checkPromptDraft,
-  type Prompt,
-  type PromptCreate,
-  type PromptField,
-} from "../shared/prompts.ts";
+import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
+import type { Prompt, PromptCreate } from "../shared/prompts.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
 export class PromptError extends Data.TaggedError("PromptError")<{
   readonly detail: string;
-  readonly field?: PromptField;
+  readonly field?: DraftField;
 }> {}
 
 /** Piano's prompts folder, beside its database. */
@@ -110,7 +105,7 @@ export const PromptsLive = Layer.effect(
     });
 
     const create = Effect.fn("Prompts.create")(function* (input: PromptCreate) {
-      const check = checkPromptDraft(input);
+      const check = checkDraft(input);
       const saved = check.saved;
       if (!saved)
         return yield* new PromptError(check.problem ?? { detail: "Could not save prompt." });
