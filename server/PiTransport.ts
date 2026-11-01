@@ -129,6 +129,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       // Before the session arguments, so a `-e` in PIANO_PI_ARGS adds to Piano's own extensions
       // rather than being shadowed by them.
       ...(cli.extensions ?? []).flatMap((path) => ["--extension", path]),
+      ...(cli.promptTemplates ?? []).flatMap((path) => ["--prompt-template", path]),
       ...args,
       ...cli.extraArgs,
     ],

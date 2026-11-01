@@ -18,6 +18,7 @@ import { GitHubPullRequestsLive } from "./GitHubPullRequests.ts";
 import { McpSetupLive } from "./McpSetup.ts";
 import { PiSessionsLive } from "./PiSessions.ts";
 import { PiSettingsLive } from "./PiSettings.ts";
+import { PromptsLive } from "./Prompts.ts";
 import { ProviderLoginLive } from "./ProviderLogin.ts";
 import { RadiusArtifactsLive } from "./RadiusArtifacts.ts";
 import { RadiusSetupLive } from "./RadiusSetup.ts";
@@ -61,6 +62,7 @@ export const PianoServicesLive = (options: PianoServicesOptions) =>
     RadiusSetupLive,
     McpSetupLive,
     UserSkillsLive,
+    PromptsLive,
     SessionStatusLive,
     SessionChangesLive,
     SessionPullRequestsLive,

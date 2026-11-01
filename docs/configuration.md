@@ -49,6 +49,11 @@ module beside it, such as `piano-dispatch/SessionDispatch.ts`, is a supporting m
 separately discovered extension. They stay bundled with Piano and use the application's existing
 dependencies and shared protocol.
 
+## Piano's prompts
+
+Every Pi child also loads Piano's prompts folder, `prompts/` beside the registry database, through
+`--prompt-template`. See [prompts](prompts.md).
+
 ## Session dispatch
 
 Piano sets two variables in each Pi child's environment, from the running server instance

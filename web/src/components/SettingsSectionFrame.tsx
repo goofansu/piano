@@ -7,6 +7,7 @@ import {
   RadiusIcon,
   ServerIcon,
   SparklesIcon,
+  SquareSlashIcon,
   WebhookIcon,
 } from "lucide-react";
 import { PaneHeader } from "@/components/Pane";
@@ -20,6 +21,7 @@ const ICONS: Record<SettingsSectionIconName, LucideIcon> = {
   radius: RadiusIcon,
   server: ServerIcon,
   skill: SparklesIcon,
+  prompt: SquareSlashIcon,
   webhook: WebhookIcon,
 };
 

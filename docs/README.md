@@ -57,6 +57,8 @@ publishes only a browser emulator, weighs a PTY-backed sidebar terminal against 
 and sets gates for either; it is a recommendation, not a shipped terminal.
 [MCP setup](mcp-setup.md) describes the Settings section that installs catalog MCP servers
 (Linear first) and signs in to them through Pi's MCP OAuth.
+[Prompts](prompts.md) describes the Settings page that creates and deletes Pi prompt templates
+kept in Piano's own folder.
 
 Changes to these decisions belong in a new or superseding ADR, with the affected invariant IDs
 and verification consequences made explicit. Routine implementation choices remain within the

@@ -10,6 +10,7 @@
 import { Schema } from "effect";
 import { FileDownload, FilePreview } from "./files.ts";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
+import { Prompt, PromptCreate } from "./prompts.ts";
 import { API_KEY_INVALID, ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
@@ -402,6 +403,35 @@ export const Endpoints = {
     // The receiver URL is the user's own and is edited and saved back: redacting it would overwrite it.
     redact: false,
     fallback: "Could not test webhook.",
+  }),
+
+  prompts: endpoint({
+    method: "GET",
+    path: "/api/settings/prompts",
+    response: Schema.Array(Prompt),
+    noStore: true,
+    refused: 400,
+    fallback: "Could not load prompts.",
+  }),
+  createPrompt: endpoint({
+    method: "POST",
+    path: "/api/settings/prompts",
+    body: PromptCreate,
+    invalid: "Enter a name and the prompt.",
+    response: Prompt,
+    noStore: true,
+    refused: 400,
+    fallback: "Could not save prompt.",
+  }),
+  removePrompt: endpoint({
+    method: "POST",
+    path: "/api/settings/prompts/remove",
+    body: Schema.Struct({ name: Schema.String }),
+    invalid: "Prompt name required.",
+    response: Schema.Struct({ ok: Schema.Literal(true) }),
+    noStore: true,
+    refused: 400,
+    fallback: "Could not delete prompt.",
   }),
 
   saveDefaults: endpoint({

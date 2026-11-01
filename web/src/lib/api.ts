@@ -39,6 +39,10 @@ export const createUserSkill = (body: import("../../../shared/skills.ts").UserSk
 export const removeUserSkill = (name: string) =>
   call(Endpoints.removeUserSkill, { body: { name } });
 export const testWebhook = (id: string) => call(Endpoints.testWebhook, { body: { id } });
+export const listPrompts = (options?: RequestOptions) => call(Endpoints.prompts, {}, options);
+export const createPrompt = (body: import("../../../shared/prompts.ts").PromptCreate) =>
+  call(Endpoints.createPrompt, { body });
+export const removePrompt = (name: string) => call(Endpoints.removePrompt, { body: { name } });
 
 /**
  * Every failed request: the server's own `error` message when it sent one, otherwise the

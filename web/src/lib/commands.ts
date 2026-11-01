@@ -75,6 +75,8 @@ export interface CommandEffects {
   addWebhook: () => void;
   /** Opens the skill editor on a new skill. */
   newSkill: () => void;
+  /** Opens the prompt editor on a new prompt. */
+  newPrompt: () => void;
 }
 
 /** Carry out `command`'s intent. A disabled command does nothing; the result says whether it ran. */
@@ -158,6 +160,9 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "new-skill":
       effects.newSkill();
+      break;
+    case "new-prompt":
+      effects.newPrompt();
       break;
     case "messages-only":
       effects.setMessagesOnly(intent.on);

@@ -18,6 +18,7 @@ import { legacyIgnoredFiles, projectLegacyIgnoredFiles } from "./LegacyIgnoredFi
 import { McpSetup } from "./McpSetup.ts";
 import { AllowedOrigins, hostAllowed } from "./OriginPolicy.ts";
 import { PiSettings } from "./PiSettings.ts";
+import { Prompts } from "./Prompts.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { RadiusSetup } from "./RadiusSetup.ts";
 import { Registry, type SessionEntry } from "./Registry.ts";
@@ -337,6 +338,16 @@ export const AppRouter = HttpRouter.use((router) =>
     );
     yield* serve(Endpoints.removeUserSkill, ({ body }) =>
       Effect.flatMap(UserSkills, (skills) => skills.remove(body.name)).pipe(
+        Effect.as({ ok: true as const }),
+      ),
+    );
+
+    yield* serve(Endpoints.prompts, () => Effect.flatMap(Prompts, (prompts) => prompts.list));
+    yield* serve(Endpoints.createPrompt, ({ body }) =>
+      Effect.flatMap(Prompts, (prompts) => prompts.create(body)),
+    );
+    yield* serve(Endpoints.removePrompt, ({ body }) =>
+      Effect.flatMap(Prompts, (prompts) => prompts.remove(body.name)).pipe(
         Effect.as({ ok: true as const }),
       ),
     );
