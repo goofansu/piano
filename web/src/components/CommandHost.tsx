@@ -56,6 +56,7 @@ import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
+import { promptEditor } from "@/lib/usePromptEditor";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -282,6 +283,7 @@ export function CommandHost({
     },
     addWebhook: () => webhookEditor.open("new"),
     newSkill: () => skillEditor.open(),
+    newPrompt: () => promptEditor.open(),
   };
   const run = (command: Command) => {
     runCommand(command, effects);

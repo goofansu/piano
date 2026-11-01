@@ -215,6 +215,24 @@ test("on Settings › Skills the palette offers New skill, which opens the skill
   assert.equal(newSkill("webhooks"), undefined, "another Settings page offers none");
 });
 
+test("on Settings › Prompts the palette offers New prompt, which opens the prompt editor", () => {
+  const newPrompt = (settings: GlobalCommandContext["settings"]) =>
+    globalCommands(onNewPage, { ...ctx, settings }).find((c) => c.label === "New prompt");
+  const create = newPrompt("prompts");
+  assert.ok(create);
+  const calls: unknown[][] = [];
+  const effects = new Proxy({} as CommandEffects, {
+    get:
+      (_, name) =>
+      (...args: unknown[]) => {
+        calls.push([name, ...args]);
+      },
+  });
+  assert.equal(runCommand(create, effects), true);
+  assert.deepEqual(calls, [["newPrompt"]]);
+  assert.equal(newPrompt("webhooks"), undefined, "another Settings page offers none");
+});
+
 test("on Settings › Webhooks the palette offers Add webhook, which opens the webhook editor", () => {
   const addWebhook = (settings: GlobalCommandContext["settings"], state = onNewPage) =>
     globalCommands(state, { ...ctx, settings }).find((c) => c.label === "Add webhook");

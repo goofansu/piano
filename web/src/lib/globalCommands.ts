@@ -46,6 +46,7 @@ export type GlobalCommandId =
   | "new-project"
   | "add-webhook"
   | "new-skill"
+  | "new-prompt"
   | "project-settings"
   | "delete-project"
   | "trust"
@@ -94,6 +95,8 @@ export type GlobalCommandIntent =
   | { kind: "add-webhook" }
   /** Open the skill editor on a new skill, as the Skills page's header does. */
   | { kind: "new-skill" }
+  /** Open the prompt editor on a new prompt, as the Prompts page's header does. */
+  | { kind: "new-prompt" }
   /** Send this registry or Pi change. */
   | { kind: "send"; command: ClientCommand }
   | { kind: "toggle-sidebar" }
@@ -170,7 +173,7 @@ const PROJECT_MENU_IDS = {
 
 /**
  * What the open page offers in its header, as the page's own commands describe it: on Settings ›
- * Webhooks, Add webhook; on Settings › Skills, New skill; on the Projects index, New project; on a project's home, its menu
+ * Webhooks, Add webhook; on Settings › Skills, New skill; on Settings › Prompts, New prompt; on the Projects index, New project; on a project's home, its menu
  * (`projectMenu`), manage rows then destructive (the home itself starts sessions). An open Settings
  * page covers the page beneath it, so only its own actions count. The palette lists exactly these,
  * so a page or menu that adds a header action gets its row, named as its button is, by construction.
@@ -201,6 +204,17 @@ export function pageCommands(
           group: "navigate",
           enabled: true,
           intent: { kind: "new-skill" },
+        },
+      ];
+    if (page === "prompts")
+      return [
+        {
+          id: "new-prompt",
+          label: "New prompt",
+          icon: "new",
+          group: "navigate",
+          enabled: true,
+          intent: { kind: "new-prompt" },
         },
       ];
     return [];

@@ -7,6 +7,7 @@ import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoButton } from "@/components/PianoButton";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
+import { PromptSettings } from "@/components/PromptSettings";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RadiusSection } from "@/components/RadiusSection";
 import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
@@ -116,6 +117,7 @@ export function SettingsPage({
     ),
     mcp: () => <McpSettings />,
     skills: () => <UserSkillSettings />,
+    prompts: () => <PromptSettings />,
     webhooks: () => <WebhookSettings />,
   };
   return pages[page]();

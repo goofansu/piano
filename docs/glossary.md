@@ -29,6 +29,7 @@ SQLite, UI and documentation. Some describe the target model in
 | Approval | A human or authorized policy decision permitting a specific action on a specific candidate, subject to its recorded conditions. |
 | Integration | Applying the approved candidate to a target. Local branch integration and forge PR merge are distinct actions. |
 | Registry | Piano's SQLite store of folders, projects, workspace identities, session references and preferences; not a transcript or evidence database. |
+| Prompt | A Pi prompt template created in Piano, offered as a `/name` command in the composer. Settings lists only these; Pi's own prompt templates stay Pi's. |
 | Skill | Agent instructions for a method or discipline, loaded by Pi; skill use does not by itself constitute evidence. |
 | Control plane | Piano's coordination of workspaces, execution lifecycle, observations and guarded actions. It does not prescribe a development methodology. |
 

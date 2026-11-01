@@ -9,7 +9,7 @@ import {
 } from "../web/src/lib/routes.ts";
 
 test("settings URLs preserve each section and accept the Providers alias", () => {
-  for (const section of ["providers", "radius", "mcp", "skills", "webhooks"] as const) {
+  for (const section of ["providers", "radius", "mcp", "skills", "prompts", "webhooks"] as const) {
     const route = { kind: "settings", section } as const;
     assert.equal(routePath(route), `/settings/${section}`);
     assert.deepEqual(parseRoute({ pathname: `/settings/${section}` }), route);
@@ -33,7 +33,7 @@ test("the Projects index has an address of its own beside each project's home", 
 test("Radius addresses the Providers page, and is offered once in navigation", () => {
   assert.deepEqual(
     SETTINGS_PAGES.map((page) => page.id),
-    ["providers", "mcp", "skills", "webhooks"],
+    ["providers", "mcp", "skills", "prompts", "webhooks"],
     "navigation lists one row per page, so Radius is not a row of its own",
   );
   assert.ok(

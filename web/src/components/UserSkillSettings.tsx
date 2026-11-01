@@ -6,12 +6,12 @@ import {
   type UserSkillField,
 } from "@shared/skills";
 import { cn } from "cn";
-import { CheckIcon, CopyIcon, MoreHorizontalIcon, SparklesIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { MoreHorizontalIcon, SparklesIcon } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
+import { CopyButton } from "@/components/CopyButton";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
-import { IconButton } from "@/components/IconButton";
 import { PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
@@ -383,38 +383,17 @@ function SkillViewer({ skill, close }: { skill: UserSkill; close: () => void }) 
           <pre className="max-h-[50dvh] overflow-auto rounded-md border border-line py-2 pr-10 pl-3 font-mono text-sm whitespace-pre-wrap">
             {skill.instructions}
           </pre>
-          <CopyInstructions text={skill.instructions} />
+          <CopyButton
+            text={skill.instructions}
+            label="Copy instructions"
+            copiedLabel="Instructions copied"
+            failure="Couldn’t copy. Select the instructions to copy them."
+            variant="ghost"
+            className="absolute top-2 right-2"
+          />
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** A session code block's copy button, ghost and always shown: the dialog exists to read and copy. */
-function CopyInstructions({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-  return (
-    <IconButton
-      label={copied ? "Instructions copied" : "Copy instructions"}
-      size="inline"
-      data-copied={copied ? "" : undefined}
-      className="absolute top-2 right-2"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-        } catch {
-          toast.error("Couldn’t copy. Select the instructions to copy them.");
-        }
-      }}
-    >
-      {copied ? <CheckIcon /> : <CopyIcon />}
-    </IconButton>
   );
 }
 
