@@ -130,6 +130,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       // rather than being shadowed by them.
       ...(cli.extensions ?? []).flatMap((path) => ["--extension", path]),
       ...(cli.promptTemplates ?? []).flatMap((path) => ["--prompt-template", path]),
+      ...(cli.skills ?? []).flatMap((path) => ["--skill", path]),
       ...args,
       ...cli.extraArgs,
     ],

@@ -1,10 +1,5 @@
-import {
-  checkPromptDraft,
-  PROMPT_FIELDS,
-  PROMPT_NAME_RULE,
-  type Prompt,
-  type PromptField,
-} from "@shared/prompts";
+import { NAME_RULE } from "@shared/drafts";
+import { checkPromptDraft, PROMPT_FIELDS, type Prompt, type PromptField } from "@shared/prompts";
 import { cn } from "cn";
 import { MoreHorizontalIcon, SquareSlashIcon } from "lucide-react";
 import { useState } from "react";
@@ -281,7 +276,7 @@ function PromptEditor({
     control: (invalid: boolean) => React.ReactNode,
     counted = false,
   ) => {
-    const error = id === "name" && nameError ? PROMPT_NAME_RULE : errorAt(id);
+    const error = id === "name" && nameError ? NAME_RULE : errorAt(id);
     return (
       <Field data-invalid={!!error}>
         <FieldLabel htmlFor={`prompt-${id}`}>{label}</FieldLabel>

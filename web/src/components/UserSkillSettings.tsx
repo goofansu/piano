@@ -1,6 +1,6 @@
+import { NAME_RULE } from "@shared/drafts";
 import {
   checkSkillDraft,
-  SKILL_NAME_RULE,
   USER_SKILL_FIELDS,
   type UserSkill,
   type UserSkillField,
@@ -53,7 +53,7 @@ import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 import { skillEditor, useSkillEditor } from "@/lib/useSkillEditor";
 
-/** Skills created in Piano, kept in ~/.agents/skills: create one, or delete one Piano created. */
+/** Skills created in Piano, kept in Piano's skills folder: create one, or delete one. */
 export function UserSkillSettings() {
   const observed = useObservation("skills", (signal) => listUserSkills({ signal }));
   // New skill comes from `pageCommands`, which the palette lists too; both open this editor.
@@ -83,7 +83,7 @@ export function UserSkillSettings() {
           <RemovalDialog
             open={!!removing}
             title="Delete skill?"
-            description={`${removing?.name ?? "This skill"} and its folder in ~/.agents/skills are removed. Sessions started from now no longer load it.`}
+            description={`${removing?.name ?? "This skill"} is removed. Sessions started from now no longer load it.`}
             action="Delete"
             progress="Deleting…"
             busy={busy}
@@ -248,7 +248,7 @@ function SkillEditor({
     control: (invalid: boolean) => React.ReactNode,
     counted = false,
   ) => {
-    const error = id === "name" && nameError ? SKILL_NAME_RULE : errorAt(id);
+    const error = id === "name" && nameError ? NAME_RULE : errorAt(id);
     return (
       <Field data-invalid={!!error}>
         <FieldLabel htmlFor={`skill-${id}`}>{label}</FieldLabel>
@@ -281,7 +281,7 @@ function SkillEditor({
         <DialogHeader>
           <DialogTitle>New skill</DialogTitle>
           <DialogDescription>
-            Saved in ~/.agents/skills. Sessions started from now can use it.
+            Saved in Piano. Sessions started from now can use it.
           </DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-6" onSubmit={(e) => void submit(e)}>

@@ -11,16 +11,23 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
+import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
+import { defaultPiCli, PiCli } from "../server/PiCli.ts";
+import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import { UserSkills, UserSkillsEnvironment, UserSkillsLive } from "../server/UserSkills.ts";
-import { checkSkillDraft, SKILL_INSTRUCTIONS_MAX } from "../shared/skills.ts";
+import { TEXT_MAX } from "../shared/drafts.ts";
+import { checkPromptDraft } from "../shared/prompts.ts";
+import { checkSkillDraft } from "../shared/skills.ts";
 
-/** A throwaway home: the skills directory Piano writes and Pi's own user skills directory. */
+/** A throwaway home: Piano's skills folder, and the folders Pi loads user skills from besides it. */
 function home(t: { after: (fn: () => void) => void }) {
   const root = mkdtempSync(join(tmpdir(), "piano-skills-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const directory = join(root, ".agents", "skills");
+  const directory = join(root, "piano", "skills");
+  const agentsDirectory = join(root, ".agents", "skills");
   const piDirectory = join(root, ".pi", "agent", "skills");
   const run = <A, E>(f: (skills: UserSkills["Service"]) => Effect.Effect<A, E>) =>
     Effect.runPromise(
@@ -28,12 +35,12 @@ function home(t: { after: (fn: () => void) => void }) {
         Effect.provide(UserSkillsLive),
         Effect.provideService(UserSkillsEnvironment, {
           directory: () => directory,
-          piDirectory: () => piDirectory,
+          others: () => [agentsDirectory, piDirectory],
         }),
         Effect.result,
       ),
     );
-  return { directory, piDirectory, run };
+  return { directory, agentsDirectory, piDirectory, run };
 }
 
 const write = (dir: string, name: string, frontmatter: string, body = "Do it.") => {
@@ -84,7 +91,9 @@ test("a created skill is one Pi loads as written, and is listed with its instruc
     ],
     "the flag is written as Pi's disable-model-invocation",
   );
-  assert.match(readFileSync(join(directory, "release-notes", "SKILL.md"), "utf8"), /Read PRs\.\n$/);
+  const file = readFileSync(join(directory, "release-notes", "SKILL.md"), "utf8");
+  assert.match(file, /Read PRs\.\n$/);
+  assert.doesNotMatch(file, /created-by/, "Piano's folder marks its skills; the file need not");
   const listed = await run((skills) => skills.list);
   assert.deepEqual(listed._tag === "Success" && listed.success, [
     { name: "deploy", description, instructions, disableModelInvocation: true },
@@ -92,35 +101,44 @@ test("a created skill is one Pi loads as written, and is listed with its instruc
   ]);
 });
 
-test("only skills Piano created are listed or deleted", async (t) => {
-  const { directory, run } = home(t);
-  write(directory, "installed", "name: installed\ndescription: From a repository.");
-  // A linked directory is the user's repository, even if it carries the marker.
-  const elsewhere = mkdtempSync(join(tmpdir(), "piano-skills-repo-"));
-  t.after(() => rmSync(elsewhere, { recursive: true, force: true }));
-  write(elsewhere, "linked", "name: linked\ndescription: Linked.\nmetadata:\n  created-by: piano");
-  symlinkSync(join(elsewhere, "linked"), join(directory, "linked"));
+test("only skills in Piano's folder are listed or deleted", async (t) => {
+  const { directory, agentsDirectory, run } = home(t);
+  // A skill in another folder Pi loads, even one an earlier Piano marked, is not Piano's to list.
+  write(
+    agentsDirectory,
+    "elsewhere",
+    "name: elsewhere\ndescription: Not here.\nmetadata:\n  created-by: piano",
+  );
+  // A linked directory in Piano's folder is the user's repository.
+  const repo = mkdtempSync(join(tmpdir(), "piano-skills-repo-"));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  write(repo, "linked", "name: linked\ndescription: Linked.");
+  mkdirSync(directory, { recursive: true });
+  symlinkSync(join(repo, "linked"), join(directory, "linked"));
+  // Written by hand into Piano's folder: no marker, still Piano's.
+  write(directory, "by-hand", "name: by-hand\ndescription: By hand.");
   await run((skills) => skills.create({ name: "mine", description: "Mine.", instructions: "Go." }));
 
   const listed = await run((skills) => skills.list);
-  assert.deepEqual(listed._tag === "Success" && listed.success.map((s) => s.name), ["mine"]);
+  assert.deepEqual(listed._tag === "Success" && listed.success.map((s) => s.name), [
+    "by-hand",
+    "mine",
+  ]);
 
-  for (const name of ["installed", "linked", "../installed"])
-    assert.equal(
-      refusal(await run((skills) => skills.remove(name))).detail,
-      "Piano did not create this skill.",
-    );
-  assert.ok(existsSync(join(directory, "installed", "SKILL.md")));
-  assert.ok(existsSync(join(elsewhere, "linked", "SKILL.md")));
+  for (const name of ["elsewhere", "linked", "../elsewhere"])
+    assert.equal(refusal(await run((skills) => skills.remove(name))).detail, "Skill not found.");
+  assert.ok(existsSync(join(agentsDirectory, "elsewhere", "SKILL.md")));
+  assert.ok(existsSync(join(repo, "linked", "SKILL.md")));
 
   assert.equal((await run((skills) => skills.remove("mine")))._tag, "Success");
   assert.equal(existsSync(join(directory, "mine")), false);
 });
 
 test("a create names the field it refuses and never overwrites a skill", async (t) => {
-  const { directory, piDirectory, run } = home(t);
+  const { directory, agentsDirectory, piDirectory, run } = home(t);
   write(directory, "taken", "name: taken\ndescription: Already here.", "Original.");
   write(piDirectory, "pi-own", "name: pi-own\ndescription: Pi's own.");
+  write(agentsDirectory, "agents-own", "name: agents-own\ndescription: Shared.");
   const create = (name: string, description = "D.", instructions = "I.") =>
     run((skills) => skills.create({ name, description, instructions }));
 
@@ -129,9 +147,10 @@ test("a create names the field it refuses and never overwrites a skill", async (
   const taken = refusal(await create("taken"));
   assert.deepEqual([taken.detail, taken.field], ["A skill named taken already exists.", "name"]);
   assert.equal(refusal(await create("pi-own")).field, "name", "a name Pi already loads");
+  assert.equal(refusal(await create("agents-own")).field, "name", "a name Pi loads from ~/.agents");
   assert.equal(refusal(await create("ok", "  ")).field, "description");
   assert.equal(refusal(await create("ok", "D.", "\n")).field, "instructions");
-  const max = "x".repeat(SKILL_INSTRUCTIONS_MAX);
+  const max = "x".repeat(TEXT_MAX);
   assert.equal(refusal(await create("ok", "D.", `${max}x`)).field, "instructions");
   assert.equal(refusal(await create("ok", "d".repeat(1025))).field, "description");
   assert.match(readFileSync(join(directory, "taken", "SKILL.md"), "utf8"), /Original\./);
@@ -174,4 +193,70 @@ test("a name YAML would read as a number is written and listed as the skill's na
     "2024",
   ]);
   assert.equal((await run((skills) => skills.remove("2024")))._tag, "Success");
+});
+
+test("Pi loads the skills in Piano's folder through --skill, and only Piano's Pi does", async (t) => {
+  const { directory, run } = home(t);
+  await run((skills) =>
+    skills.create({ name: "release-notes", description: "Writes notes.", instructions: "Go." }),
+  );
+  const root = mkdtempSync(join(tmpdir(), "piano-skills-pi-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  // A Pi isolated from this machine's settings, credentials and network.
+  const shim = join(root, "cli.mjs");
+  writeFileSync(
+    shim,
+    `for (const key of Object.keys(process.env)) if (key !== "PATH") delete process.env[key];
+process.env.HOME = ${JSON.stringify(root)};
+process.env.PI_CODING_AGENT_DIR = ${JSON.stringify(join(root, "agent"))};
+process.env.PI_SKIP_VERSION_CHECK = "1";
+process.env.PI_TELEMETRY = "0";
+globalThis.fetch = () => Promise.resolve(new Response("offline", { status: 404 }));
+await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
+  );
+  const skillCommands = (skills: readonly string[]) =>
+    Effect.runPromise(
+      Effect.flatMap(PiSessions, (sessions) => sessions.probe(root)).pipe(
+        Effect.map((probe) =>
+          probe.commands.filter((c) => c.source === "skill").map((c) => [c.name, c.description]),
+        ),
+        Effect.provide(PiSessionsLive),
+        Effect.provide(NodeServices.layer),
+        Effect.provideService(PiCli, {
+          node: process.execPath,
+          cli: shim,
+          extraArgs: ["--no-extensions"],
+          skills,
+        }),
+        Effect.timeout("40 seconds"),
+      ),
+    );
+  assert.deepEqual(await skillCommands([directory]), [["skill:release-notes", "Writes notes."]]);
+  assert.deepEqual(await skillCommands([]), [], "a Pi run without Piano's folder does not load it");
+});
+
+test("skills and prompts share one draft rule, except that a prompt's description is optional", () => {
+  const skill = (description: string) =>
+    checkSkillDraft({ name: "same", description, instructions: "Text." });
+  const prompt = (description: string) =>
+    checkPromptDraft({ name: "same", description, body: "Text." });
+  assert.deepEqual(skill("").problem, { field: "description", detail: "Enter a description." });
+  assert.ok(prompt("").saved, "a prompt needs no description");
+  for (const [name, description, text] of [
+    ["Bad", "D.", "T."],
+    ["a--b", "D.", "T."],
+    ["x".repeat(65), "D.", "T."],
+    ["ok", "d".repeat(1025), "T."],
+    ["ok", "D.", "t".repeat(TEXT_MAX + 1)],
+    ["ok", "D.", "  "],
+  ] as const) {
+    const s = checkSkillDraft({ name, description, instructions: text }).problem;
+    const p = checkPromptDraft({ name, description, body: text }).problem;
+    assert.ok(s && p, name);
+    assert.deepEqual(
+      [s.field === "instructions" ? "text" : s.field, s.detail.replace("instructions", "_")],
+      [p.field === "body" ? "text" : p.field, p.detail.replace("the prompt", "_")],
+      `${name}: one rule, one answer`,
+    );
+  }
 });

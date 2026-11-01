@@ -1,39 +1,39 @@
 /**
- * Skills the user creates in Piano, kept where Pi and other Agent Skills tools find them for every
- * project: `~/.agents/skills/<name>/SKILL.md`. Pi owns loading (INV-12); this module only writes a
- * new skill's file and removes one it wrote. A skill it writes carries `metadata.created-by: piano`
- * in its frontmatter, and only such a skill is listed or deleted, so skills installed by other tools
- * or kept in the user's own repositories in the same directory are never touched. Nothing here
- * changes a running session: one started from now loads the new set, and a running one on `/reload`.
+ * Skills the user creates in Piano, kept in Piano's own skills folder beside its database
+ * (`<name>/SKILL.md`); every Pi child Piano starts loads that folder with `--skill` (main.ts), so
+ * they are Piano's only, as prompts are. Pi owns loading (INV-12); this module writes a new skill's
+ * file, lists the folder and removes a skill from it. Skills elsewhere (`~/.agents/skills`, Pi's own
+ * folder, a repository's) are never listed or touched, only read to refuse a name Pi already loads.
+ * Nothing here changes a running session: one started from now loads the new set, and a running
+ * one on `/reload`.
  */
 import { lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadSkillsFromDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
+import { isName } from "../shared/drafts.ts";
 import {
   checkSkillDraft,
-  SKILL_NAME,
-  SKILL_NAME_RULE,
-  USER_SKILL_FIELDS,
   type UserSkill,
   type UserSkillCreate,
   type UserSkillField,
 } from "../shared/skills.ts";
+import { pianoFolder } from "./PianoFolders.ts";
 import { agentDir } from "./PiEnv.ts";
 
-const MARKER_KEY = "created-by";
-const MARKER = "piano";
-
 export const UserSkillsEnvironment = Context.Reference<{
-  /** Where Piano writes skills; Pi reads the same directory as `$HOME/.agents/skills`. */
+  /** Piano's skills folder, where it writes skills and which every Pi child loads. */
   directory: () => string;
-  /** Pi's own user skills directory, read only to refuse a name Pi already loads from there. */
-  piDirectory: () => string;
+  /** The other folders Pi loads user skills from, read only to refuse a name Pi already loads. */
+  others: () => readonly string[];
 }>("piano/UserSkillsEnvironment", {
   defaultValue: () => ({
-    directory: () => join(process.env.HOME || homedir(), ".agents", "skills"),
-    piDirectory: () => join(agentDir(), "skills"),
+    directory: () => pianoFolder("skills"),
+    others: () => [
+      join(process.env.HOME || homedir(), ".agents", "skills"),
+      join(agentDir(), "skills"),
+    ],
   }),
 });
 
@@ -65,8 +65,8 @@ const isDirectory = (path: string) => {
 };
 
 /**
- * The skill named `name` if Piano wrote it: a real directory (not a link) of that name whose own
- * SKILL.md carries the marker and still declares that name, as Pi reads it.
+ * The skill named `name` in Piano's folder: a real directory (not a link) of that name whose own
+ * SKILL.md declares that name, as Pi reads it.
  */
 function piano(root: string, name: string): UserSkill | undefined {
   const dir = join(root, name);
@@ -75,8 +75,6 @@ function piano(root: string, name: string): UserSkill | undefined {
   try {
     if (!lstatSync(file).isFile()) return undefined;
     const { frontmatter, body } = parseFrontmatter(readFileSync(file, "utf8"));
-    const metadata = frontmatter.metadata as Record<string, unknown> | undefined;
-    if (metadata?.[MARKER_KEY] !== MARKER) return undefined;
     const { description } = frontmatter;
     // Pi's own rule: a name that is not a string (`name: 123` reads as a number) falls back to the
     // directory's, so such a skill is still the one Pi loads as `name`.
@@ -109,8 +107,6 @@ const fileOf = ({
     `description: ${JSON.stringify(description)}`,
     // Pi's default is to let the model load the skill, so only the exception is written.
     ...(disableModelInvocation ? ["disable-model-invocation: true"] : []),
-    "metadata:",
-    `  ${MARKER_KEY}: ${MARKER}`,
     "---",
     "",
     `${instructions.trimEnd()}\n`,
@@ -138,25 +134,19 @@ export const UserSkillsLive = Layer.effect(
     /** Names Pi loads from either user directory, so a new skill never loses a name collision. */
     const loaded = () =>
       new Set(
-        [root(), environment.piDirectory()].flatMap((dir) =>
+        [root(), ...environment.others()].flatMap((dir) =>
           loadSkillsFromDir({ dir, source: "user" }).skills.map((skill) => skill.name),
         ),
       );
 
     const create = Effect.fn("UserSkills.create")(function* (request: UserSkillCreate) {
       const check = checkSkillDraft(request);
-      const label = { name: "a name", description: "a description", instructions: "instructions" };
-      for (const field of USER_SKILL_FIELDS) {
-        if (!check[field].length) return yield* refused(`Enter ${label[field]}.`, field);
-        if (check[field].over)
-          return yield* refused(
-            `Keep it to ${check[field].max.toLocaleString("en")} characters.`,
-            field,
-          );
-      }
-      if (check.malformedName) return yield* refused(SKILL_NAME_RULE, "name");
-
-      const saved = check.saved!;
+      if (!check.saved)
+        return yield* refused(
+          check.problem?.detail ?? "Could not save the skill.",
+          check.problem?.field,
+        );
+      const saved = check.saved;
       const { name } = saved;
       const dir = join(root(), name);
       return yield* Effect.try({
@@ -188,8 +178,7 @@ export const UserSkillsLive = Layer.effect(
 
     const remove = Effect.fn("UserSkills.remove")(function* (name: string) {
       // The name rule keeps the path inside the skills directory.
-      if (!SKILL_NAME.test(name) || !piano(root(), name))
-        return yield* refused("Piano did not create this skill.");
+      if (!isName(name) || !piano(root(), name)) return yield* refused("Skill not found.");
       yield* Effect.try({
         try: () => rmSync(join(root(), name), { recursive: true }),
         catch: () => refused("Could not delete the skill."),

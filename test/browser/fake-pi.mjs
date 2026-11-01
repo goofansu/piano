@@ -15,6 +15,14 @@ const promptCommands = args
   .flatMap((a, i) => (a === "--prompt-template" && existsSync(args[i + 1]) ? [args[i + 1]] : []))
   .flatMap((dir) => readdirSync(dir).filter((name) => name.endsWith(".md")))
   .map((name) => ({ name: name.slice(0, -3), source: "prompt" }));
+// Skills as Pi offers them from each `--skill` folder: one directory with a SKILL.md per skill.
+const skillCommands = args
+  .flatMap((a, i) => (a === "--skill" && existsSync(args[i + 1]) ? [args[i + 1]] : []))
+  .flatMap((dir) =>
+    readdirSync(dir)
+      .filter((name) => existsSync(join(dir, name, "SKILL.md")))
+      .map((name) => ({ name: `skill:${name}`, source: "skill" })),
+  );
 const sessionId = entries[0]?.id ?? arg("--session-id") ?? "probe";
 const sessionFile =
   file ?? join(process.env.PI_CODING_AGENT_SESSION_DIR ?? process.cwd(), `${sessionId}.jsonl`);
@@ -122,7 +130,7 @@ function handle(cmd) {
         },
       });
     case "get_commands":
-      return respond(cmd, { commands: promptCommands });
+      return respond(cmd, { commands: [...promptCommands, ...skillCommands] });
     case "get_available_models":
       return respond(cmd, {
         models: [

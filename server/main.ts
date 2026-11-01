@@ -15,10 +15,10 @@ import {
   SessionLinkOrigin,
   sessionLinkOrigin,
 } from "./OriginPolicy.ts";
+import { ensurePianoFolders, pianoFolder } from "./PianoFolders.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "./PianoServices.ts";
 import { defaultPiCli, PiCli } from "./PiCli.ts";
 import { agentDir } from "./PiEnv.ts";
-import { PromptsDir } from "./Prompts.ts";
 import { RegistryDatabasePath } from "./Registry.ts";
 import { AppRouter } from "./Router.ts";
 import { sessionEndpoint, sessionEnvironment } from "./SessionEndpoint.ts";
@@ -30,11 +30,13 @@ const listener = { host: HOST, port: PORT };
 const origins = configuredOrigins(PORT, process.env.PIANO_ALLOWED_ORIGINS);
 const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
-// Every Pi child loads Piano's extensions and prompts and is told how to reach this instance.
+// Every Pi child loads Piano's extensions, prompts and skills and is told how to reach this instance.
 const endpoint = sessionEndpoint(listener, origins);
+ensurePianoFolders();
 const Launch = Layer.succeed(PiCli, {
   ...defaultPiCli(),
-  promptTemplates: [PromptsDir.defaultValue()],
+  promptTemplates: [pianoFolder("prompts")],
+  skills: [pianoFolder("skills")],
   ...(endpoint ? { env: sessionEnvironment(endpoint) } : {}),
 });
 

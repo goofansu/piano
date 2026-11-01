@@ -7,19 +7,17 @@
  * started, so a change reaches sessions started from then on.
  */
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
+import { isName } from "../shared/drafts.ts";
 import {
   checkPromptDraft,
-  isPromptName,
-  PROMPT_FIELDS,
-  PROMPT_NAME_RULE,
   type Prompt,
   type PromptCreate,
   type PromptField,
 } from "../shared/prompts.ts";
-import { RegistryDatabasePath } from "./Registry.ts";
+import { pianoFolder } from "./PianoFolders.ts";
 
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
 export class PromptError extends Data.TaggedError("PromptError")<{
@@ -27,11 +25,9 @@ export class PromptError extends Data.TaggedError("PromptError")<{
   readonly field?: PromptField;
 }> {}
 
-/** Piano's prompts folder for a database: beside it, so a scratch database has its own. */
-export const promptsDirFor = (databasePath: string) => join(dirname(databasePath), "prompts");
-
+/** Piano's prompts folder, beside its database. */
 export const PromptsDir = Context.Reference<string>("piano/PromptsDir", {
-  defaultValue: () => promptsDirFor(RegistryDatabasePath.defaultValue()),
+  defaultValue: () => pianoFolder("prompts"),
 });
 
 export class Prompts extends Context.Service<
@@ -119,22 +115,9 @@ export const PromptsLive = Layer.effect(
 
     const create = Effect.fn("Prompts.create")(function* (input: PromptCreate) {
       const check = checkPromptDraft(input);
-      if (check.malformedName)
-        return yield* new PromptError({ detail: PROMPT_NAME_RULE, field: "name" });
-      for (const field of PROMPT_FIELDS) {
-        if ((field === "name" || field === "body") && !check[field].length)
-          return yield* new PromptError({
-            detail: field === "name" ? "Enter a name." : "Enter the prompt.",
-            field,
-          });
-        if (check[field].over)
-          return yield* new PromptError({
-            detail: `Keep it to ${check[field].max.toLocaleString("en")} characters.`,
-            field,
-          });
-      }
       const saved = check.saved;
-      if (!saved) return yield* new PromptError({ detail: "Could not save prompt." });
+      if (!saved)
+        return yield* new PromptError(check.problem ?? { detail: "Could not save prompt." });
       const name = saved.name;
       const text = templateText(saved);
       yield* Effect.tryPromise({
@@ -153,7 +136,7 @@ export const PromptsLive = Layer.effect(
 
     const remove = Effect.fn("Prompts.remove")(function* (name: string) {
       // Only a name a prompt could have, so a request never reaches outside the folder.
-      if (!isPromptName(name)) return yield* new PromptError({ detail: "Prompt not found." });
+      if (!isName(name)) return yield* new PromptError({ detail: "Prompt not found." });
       yield* Effect.tryPromise({
         try: () => unlink(file(name)),
         catch: (cause) => cause,
