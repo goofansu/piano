@@ -7,14 +7,19 @@
  * Nothing here changes a running session: one started from now loads the new set, and a running
  * one on `/reload`.
  */
-import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
 import { checkDraft, type DraftField } from "../shared/drafts.ts";
 import { skillFile as fileOf } from "../shared/library.ts";
-import type { UserSkill, UserSkillCreate, UserSkillUpdate } from "../shared/skills.ts";
+import type {
+  UserSkill,
+  UserSkillCreate,
+  UserSkillProposal,
+  UserSkillUpdate,
+} from "../shared/skills.ts";
 import * as LibraryFile from "./LibraryFile.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 import { agentDir } from "./PiEnv.ts";
@@ -47,6 +52,12 @@ export class UserSkills extends Context.Service<
   {
     /** The skills Pi loads from Piano's folder, by the name Pi loads each as. */
     readonly list: Effect.Effect<ReadonlyArray<UserSkill>>;
+    /** What saving `request` would do, refused as the save would refuse it; writes nothing. A
+     * skill Piano created is updated, keeping its Disable model invocation unless the draft sets
+     * it; any other name is created, unless Pi already loads a skill of that name. */
+    readonly propose: (
+      request: UserSkillCreate,
+    ) => Effect.Effect<UserSkillProposal, UserSkillError>;
     readonly create: (request: UserSkillCreate) => Effect.Effect<UserSkill, UserSkillError>;
     /** Replaces the SKILL.md of a skill Piano created; any other name is refused, so a skill in
      * another folder Pi loads, or a repository's, is never written over. With `previous`, only
@@ -127,6 +138,32 @@ export const UserSkillsLive = Layer.effect(
           loadSkillsFromDir({ dir, source: "user" }).skills.map((skill) => skill.name),
         ),
       );
+
+    const propose = Effect.fn("UserSkills.propose")(function* (request: UserSkillCreate) {
+      const check = checkDraft(request);
+      if (!check.saved)
+        return yield* refused(
+          check.problem?.detail ?? "Could not save the skill.",
+          check.problem?.field,
+        );
+      const { name } = check.saved;
+      const current = pianoSkills(root()).get(name);
+      const disableModelInvocation =
+        request.disableModelInvocation ?? current?.skill.disableModelInvocation ?? false;
+      const file = fileOf({ ...check.saved, disableModelInvocation });
+      if (current)
+        return {
+          change: "update" as const,
+          name,
+          file,
+          previous: current.skill.file,
+          disableModelInvocation,
+        };
+      // The refusals create gives: a name Pi loads anywhere, or a directory of that name.
+      if (loaded().has(name) || existsSync(join(root(), name)))
+        return yield* refused(`A skill named ${name} already exists.`, "name");
+      return { change: "create" as const, name, file, disableModelInvocation };
+    });
 
     const create = Effect.fn("UserSkills.create")(function* (request: UserSkillCreate) {
       const check = checkDraft(request);
@@ -216,6 +253,6 @@ export const UserSkillsLive = Layer.effect(
       }).pipe(LibraryFile.alone);
     });
 
-    return UserSkills.of({ list, create, update, remove });
+    return UserSkills.of({ list, propose, create, update, remove });
   }),
 );

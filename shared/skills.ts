@@ -27,3 +27,15 @@ export const UserSkillUpdate = Schema.Struct({
   previous: Schema.String,
 });
 export type UserSkillUpdate = typeof UserSkillUpdate.Type;
+
+/** What saving a draft would do, before anyone is asked: make a new skill or replace the SKILL.md
+ * of one Piano created (`previous`), and the file it would write. Disable model invocation is the
+ * draft's, else the saved skill's. A draft the save would refuse gets the save's refusal instead. */
+export const UserSkillProposal = Schema.Struct({
+  change: Schema.Literals(["create", "update"]),
+  name: Schema.String,
+  file: Schema.String,
+  previous: Schema.optional(Schema.String),
+  disableModelInvocation: Schema.Boolean,
+});
+export type UserSkillProposal = typeof UserSkillProposal.Type;

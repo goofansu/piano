@@ -15,13 +15,14 @@ const scratch = mkdtempSync(join(tmpdir(), "piano-library-folders-"));
 const skills = join(scratch, "piano", "skills");
 const prompts = join(scratch, "piano", "prompts");
 const elsewhere = join(scratch, ".agents", "skills");
+const promptsElsewhere = join(scratch, ".pi", "agent", "prompts");
 let server: RouterFixture;
 before(async () => {
   server = await startRouter(
     "piano-library-",
     Layer.mergeAll(
       Layer.succeed(UserSkillsEnvironment, { directory: () => skills, others: () => [elsewhere] }),
-      Layer.succeed(PromptsEnvironment, { directory: prompts, others: () => [] }),
+      Layer.succeed(PromptsEnvironment, { directory: prompts, others: () => [promptsElsewhere] }),
     ),
   );
 });
@@ -141,7 +142,7 @@ test("a malformed draft is refused with its field before any dialog", async () =
   );
 });
 
-test("a skill is saved after approval, and a name Pi loads from another folder is refused", async () => {
+test("a skill is saved after approval, and a name Pi loads from another folder is refused unasked", async () => {
   const approved = user(() => true);
   const saved = await saveToLibrary(
     "skill",
@@ -178,10 +179,11 @@ test("a skill is saved after approval, and a name Pi loads from another folder i
     join(elsewhere, "shared", "SKILL.md"),
     "---\nname: shared\ndescription: Theirs.\n---\n\nTheirs.\n",
   );
+  // Refused before the user is asked: a Save the server would refuse is never offered.
   const refused = await saveToLibrary(
     "skill",
     { name: "shared", description: "Mine.", instructions: "Mine." },
-    user(() => true).deps,
+    user(() => assert.fail("no dialog for a name Pi already loads")).deps,
     undefined,
   );
   assert.deepEqual(refused, {
@@ -192,6 +194,25 @@ test("a skill is saved after approval, and a name Pi loads from another folder i
     detail: "A skill named shared already exists.",
   });
   assert.match(readFileSync(join(elsewhere, "shared", "SKILL.md"), "utf8"), /Theirs\./);
+});
+
+test("a prompt name Pi loads from its own folder is refused before the user is asked", async () => {
+  mkdirSync(promptsElsewhere, { recursive: true });
+  writeFileSync(join(promptsElsewhere, "standup.md"), "Theirs\n");
+  const refused = await saveToLibrary(
+    "prompt",
+    { name: "standup", description: "Mine.", instructions: "Mine." },
+    user(() => assert.fail("no dialog for a name Pi already loads")).deps,
+    undefined,
+  );
+  assert.deepEqual(refused, {
+    status: "refused",
+    kind: "prompt",
+    name: "standup",
+    field: "name",
+    detail: "A prompt named standup already exists.",
+  });
+  assert.equal(existsSync(join(prompts, "standup.md")), false);
 });
 
 test("of two sessions updating one skill from the same file, the second Save is refused", async () => {
