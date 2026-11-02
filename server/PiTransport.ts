@@ -409,19 +409,15 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     record: Record<string, unknown>,
     options: { readonly lane: PiLane },
   ) {
-    if (inputClosure)
-      return yield* new PiSessionError({
-        reason: "exited",
-        detail: inputClosure.detail,
-      });
+    if (inputClosure) return yield* refusedUnsent("exited", inputClosure.detail);
     if (transportError) return yield* transportError;
     const text = `${JSON.stringify(record)}\n`;
     const size = Buffer.byteLength(text);
     if (size > inboundLimits.rpcLineBytes)
-      return yield* new PiSessionError({
-        reason: "rejected",
-        detail: "Input exceeds the Pi RPC byte limit. Nothing was sent.",
-      });
+      return yield* refusedUnsent(
+        "rejected",
+        "Input exceeds the Pi RPC byte limit. Nothing was sent.",
+      );
     const done = yield* Deferred.make<void, PiSessionError>();
     const release = writeCapacity.acquire(size, options.lane === "control");
     if (!release)
@@ -433,10 +429,10 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     if (!Queue.offerUnsafe(stdin, { bytes: encoder.encode(text), done })) {
       release();
       writes.delete(done);
-      return yield* new PiSessionError({
-        reason: "rejected",
-        detail: "Pi input queue is closed or full. Nothing was sent.",
-      });
+      return yield* refusedUnsent(
+        "rejected",
+        "Pi input queue is closed or full. Nothing was sent.",
+      );
     }
     yield* Deferred.await(done).pipe(
       Effect.timeoutOrElse({

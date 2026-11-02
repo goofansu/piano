@@ -245,7 +245,7 @@ const selectionOf = (message: ServerMessage): string | undefined =>
 
 /** Pi's handling of one input, once it is known. */
 interface InputDisposition {
-  readonly submission: Exclude<SessionSubmission, "not_sent">;
+  readonly submission: SessionSubmission;
   readonly detail: string | undefined;
 }
 
@@ -704,7 +704,7 @@ function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): R
   if (attributed.mismatch) return { status: "unknown", terminal: true, detail: attributed.detail };
   if (state.closure) return closureReading(state.closure, completed);
   const submission = state.submission;
-  if (submission?.outcome === "rejected")
+  if (submission?.outcome === "rejected" || submission?.outcome === "not_sent")
     return {
       status: "failed",
       terminal: true,

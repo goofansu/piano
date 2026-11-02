@@ -36,6 +36,8 @@ const PI_PHASE = {
   queued: "submitted",
   handled: "handled",
   rejected: "rejected",
+  // Refused before Pi saw it: the draft is back in the composer and the detail says nothing was sent.
+  not_sent: "rejected",
   uncertain: "uncertain",
 } as const satisfies Record<string, SubmissionPhase>;
 

@@ -84,7 +84,7 @@ for (const control of ["answer", "abort", "stop", "restore_queue"] as const) {
 // Above, session admission rejects ordinary input before it reaches Pi's command lane. Here a
 // background usage readback that Pi holds takes one of those slots instead, so session admission
 // has room and a readback must be refused by Pi's command lane itself.
-test("INV-04: a readback stays ordinary work at Pi's command capacity", async () => {
+test("INV-03/04: a readback stays ordinary work at Pi's command capacity; a refused prompt reads not sent", async () => {
   await run(
     Effect.gen(function* () {
       const session = yield* (yield* PiSessions).open({
@@ -93,10 +93,17 @@ test("INV-04: a readback stays ordinary work at Pi's command capacity", async ()
       });
       const full = yield* Deferred.make<void>();
       let dialog: Dialog | undefined;
+      const refusedReceipts: Array<string> = [];
+      const refusedSettled = yield* Deferred.make<void>();
       const heard = yield* session.events.pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (event._tag === "dialog") dialog = event.dialog;
+            if (event._tag === "submission" && event.submission.inputId === "refused") {
+              refusedReceipts.push(event.submission.outcome);
+              if (event.submission.outcome !== "submitting")
+                yield* Deferred.succeed(refusedSettled, undefined);
+            }
             if (
               event._tag === "notice" &&
               event.message === `Capacity held: ${inboundLimits.requests.messages}`
@@ -117,6 +124,15 @@ test("INV-04: a readback stays ordinary work at Pi's command capacity", async ()
       assert.equal(read.failure.reason, "rejected");
       assert.match(read.failure.detail, /Pi command capacity is full.*Nothing was sent/);
       assert.equal(read.failure.notSent, true);
+      // Session admission has room for one more prompt; Pi's command lane refuses it unsent, and
+      // its receipt says so, so the composer can give the draft back.
+      const prompt = yield* session
+        .act({ _tag: "prompt", text: "must not execute", inputId: "refused" })
+        .pipe(Effect.flip);
+      assert.match(prompt.detail, /Pi command capacity is full.*Nothing was sent/);
+      assert.equal(prompt.notSent, true);
+      yield* Deferred.await(refusedSettled);
+      assert.deepEqual(refusedReceipts, ["submitting", "not_sent"]);
       assert.ok(dialog);
       yield* session.act({
         _tag: "answer",
@@ -244,6 +260,7 @@ test("oversized Pi input is rejected before delivery; fragmented UTF-8 records s
         .pipe(Effect.flip);
       assert.equal(error.reason, "rejected");
       assert.match(error.detail, /byte limit/);
+      assert.equal(error.notSent, true, "a sender may take refused input back");
       assert.equal((yield* session.state).sessionName, before);
       const notice = yield* session.events.pipe(
         Stream.filter((e) => e._tag === "notice" && e.message === "Fragmented € record"),

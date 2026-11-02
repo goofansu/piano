@@ -642,9 +642,14 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
               yield* child.request(exchange, { lane }).pipe(
                 Effect.flatMap((disposition) => submit(disposition)),
                 Effect.catchTag("PiSessionError", (error) =>
-                  submit(error.reason === "rejected" ? "rejected" : "uncertain", error.detail).pipe(
-                    Effect.andThen(Effect.fail(error)),
-                  ),
+                  submit(
+                    error.notSent
+                      ? "not_sent"
+                      : error.reason === "rejected"
+                        ? "rejected"
+                        : "uncertain",
+                    error.detail,
+                  ).pipe(Effect.andThen(Effect.fail(error))),
                 ),
               );
               yield* readbacks.refresh("state", operation);

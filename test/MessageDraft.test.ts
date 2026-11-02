@@ -354,12 +354,12 @@ test("text added to a draft starts a new paragraph only after visible text; typi
 });
 
 /** What every tab attached to the session hears: Pi's receipt for some tab's input, or a refusal. */
-const receipt = (inputId: string) =>
+const receipt = (inputId: string, outcome = "started") =>
   ({
     _tag: "session",
     selectionId: "any",
     cursor: 1,
-    event: { _tag: "submission", submission: { inputId } },
+    event: { _tag: "submission", submission: { id: 1, inputId, outcome } },
   }) as unknown as ServerMessage;
 const refusal = (inputId: string) =>
   ({ _tag: "error", message: "This session is archived.", inputId }) as ServerMessage;
@@ -438,4 +438,37 @@ test("PIN-132: refused images returned while another is added stay editable past
   drafts.removeImage(key, 4);
   assert.equal(drafts.get(key).images.error, "");
   assert.equal(drafts.sendable(key), true);
+});
+
+// INV-02/03: the session announces `submitting` before it asks Pi, so that first receipt must not
+// settle the draft; only the session's verdict does, and `not_sent` (Pi never saw it) gives it back.
+test("a follow-up its session refused before Pi saw it comes back to its draft, once", () => {
+  const page = source();
+  const drafts = createDrafts();
+  drafts.follow(page);
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "not-sent" });
+  const send = (text: string) => {
+    let inputId = "";
+    drafts.setText(key, text);
+    drafts.submit(key, (_, id) => {
+      inputId = id;
+      return "sent";
+    });
+    assert.equal(drafts.get(key), EMPTY_DRAFT);
+    return inputId;
+  };
+
+  const started = send("reached Pi");
+  for (const message of [receipt(started, "submitting"), receipt(started, "started")])
+    page.emit(message);
+  assert.equal(drafts.get(key), EMPTY_DRAFT, "input Pi took stays sent");
+
+  const refused = send("never reached Pi");
+  for (const message of [receipt(refused, "submitting"), receipt(refused, "not_sent")])
+    page.emit(message);
+  assert.equal(drafts.get(key).text, "never reached Pi");
+
+  // The session's error for the same input follows its receipt; the draft is not doubled.
+  page.emit(refusal(refused));
+  assert.equal(drafts.get(key).text, "never reached Pi");
 });
