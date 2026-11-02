@@ -45,7 +45,11 @@ for (const [platform, name] of supervisors) {
     const stateRoot = join(root, "state");
     await mkdir(workspace);
     const config: PreviewConfig = platform === "darwin" ? {} : { origin };
-    const request: PreviewRequest = { action: "start", workspace, command: ["/bin/false"] };
+    const request: PreviewRequest = {
+      action: "start",
+      workspace,
+      command: [process.execPath, "-e", "process.exit(1)"],
+    };
     const host: FakeHost = {
       phase: "failed",
       runs: 1,
@@ -99,7 +103,9 @@ for (const [platform, name] of supervisors) {
     assert.equal(second.instanceId, first.instanceId);
     assert.ok("reused" in second && second.reused);
     assert.equal(f.launched.length, 1);
-    const changed = observation(await f.call({ command: ["/bin/true"] }));
+    const changed = observation(
+      await f.call({ command: [process.execPath, "-e", "process.exit(0)"] }),
+    );
     assert.equal(changed.instanceId, first.instanceId);
     assert.ok("specChanged" in changed && changed.specChanged);
     assert.equal(f.launched.length, 1);
@@ -126,23 +132,31 @@ for (const [platform, name] of supervisors) {
   contract("replace stops only the exact current instance and launches once", async (t) => {
     const f = await fixture(t);
     const first = observation(await f.call());
-    assert.deepEqual(await f.call({ command: ["/bin/true"], replace: "stale" }), {
-      serviceId: first.serviceId,
-      status: "not-current",
-      replaced: false,
-    });
+    assert.deepEqual(
+      await f.call({ command: [process.execPath, "-e", "process.exit(0)"], replace: "stale" }),
+      {
+        serviceId: first.serviceId,
+        status: "not-current",
+        replaced: false,
+      },
+    );
     assert.equal(f.stops.length, 0);
     assert.equal(f.launched.length, 1);
-    const second = observation(await f.call({ command: ["/bin/true"], replace: first.instanceId }));
+    const second = observation(
+      await f.call({
+        command: [process.execPath, "-e", "process.exit(0)"],
+        replace: first.instanceId,
+      }),
+    );
     assert.notEqual(second.instanceId, first.instanceId);
     assert.ok("replaced" in second && second.replaced === first.instanceId);
-    assert.deepEqual(second.spec.command, ["/bin/true"]);
+    assert.deepEqual(second.spec.command, [process.execPath, "-e", "process.exit(0)"]);
     assert.equal(f.stops.length, 1);
     assert.equal(f.launched.length, 2);
     // Without a command, replace restarts the same launch.
     const third = observation(await f.call({ command: undefined, replace: second.instanceId }));
     assert.notEqual(third.instanceId, second.instanceId);
-    assert.deepEqual(third.spec.command, ["/bin/true"]);
+    assert.deepEqual(third.spec.command, [process.execPath, "-e", "process.exit(0)"]);
     assert.equal(f.launched.length, 3);
     const status = observation(await f.call({ action: "status" }));
     assert.equal(status.instanceId, third.instanceId);
@@ -355,13 +369,19 @@ for (const [platform, name] of supervisors) {
       f.host.onStop = async () => {
         f.host.phase = "failed";
       };
-      assert.deepEqual(await f.call({ command: ["/bin/true"], replace: "stale" }), {
-        serviceId: healthy.serviceId,
-        status: "not-current",
-        replaced: false,
-      });
+      assert.deepEqual(
+        await f.call({ command: [process.execPath, "-e", "process.exit(0)"], replace: "stale" }),
+        {
+          serviceId: healthy.serviceId,
+          status: "not-current",
+          replaced: false,
+        },
+      );
       const replaced = observation(
-        await f.call({ command: ["/bin/true"], replace: healthy.instanceId }),
+        await f.call({
+          command: [process.execPath, "-e", "process.exit(0)"],
+          replace: healthy.instanceId,
+        }),
       );
       assert.ok("replaced" in replaced && replaced.replaced === healthy.instanceId);
       assert.equal(f.stops.length, 1);
@@ -460,7 +480,9 @@ for (const [platform, name] of supervisors) {
 
     // The start's own deadline bounds its wait, whatever one request's timeout is.
     const began = performance.now();
-    const cold = observation(await f.call({ command: ["/bin/true"], timeoutSeconds: 1 }));
+    const cold = observation(
+      await f.call({ command: [process.execPath, "-e", "process.exit(0)"], timeoutSeconds: 1 }),
+    );
     assert.ok(performance.now() - began < 3000, "the start returns at its deadline");
     assert.equal(cold.state, "running");
     assert.equal(cold.ready, false);
@@ -528,7 +550,9 @@ for (const [platform, name] of supervisors) {
         workspace: first.workspace,
         status: "absent",
       });
-      const replacement = observation(await f.call({ command: ["/bin/true"] }));
+      const replacement = observation(
+        await f.call({ command: [process.execPath, "-e", "process.exit(0)"] }),
+      );
       assert.notEqual(replacement.instanceId, first.instanceId);
       assert.equal(f.launched.length, 2);
     },
@@ -717,7 +741,7 @@ test("[systemd] Linux without a configured origin launches nothing", {
   });
   await assert.rejects(
     adapter.request(
-      { action: "start", workspace: root, command: ["/bin/false"] },
+      { action: "start", workspace: root, command: [process.execPath, "-e", "process.exit(1)"] },
       stateRoot,
       {},
       { generation: "test", sessionId: "test", workspace: root, endpoint: "/unused" },
@@ -739,7 +763,7 @@ test("an unsupported platform refuses managed launch without side effects", asyn
   });
   await assert.rejects(
     adapter.request(
-      { action: "start", workspace: root, command: ["/bin/false"] },
+      { action: "start", workspace: root, command: [process.execPath, "-e", "process.exit(1)"] },
       join(root, "state"),
       {},
     ),

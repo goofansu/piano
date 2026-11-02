@@ -86,7 +86,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       JSON.parse(
         await ownerRequest(who.identity.endpoint, {
           action: "start",
-          command: ["/bin/false"],
+          command: [process.execPath, "-e", "process.exit(1)"],
           ...changes,
           workspace: "/untrusted-tool-workspace-is-ignored",
           owner: { sessionId: "forged", generation: "forged", workspace: "/" },
@@ -240,7 +240,11 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       app.instanceId,
     );
     await assert.rejects(
-      f.owner.request({ action: "start", workspace: f.workspace, command: ["/bin/true"] }),
+      f.owner.request({
+        action: "start",
+        workspace: f.workspace,
+        command: [process.execPath, "-e", "process.exit(0)"],
+      }),
       /owner is ending/,
     );
     f.host.unavailable = false;
@@ -282,7 +286,11 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.ok("stopped" in result && result.stopped);
     await assert.rejects(
       f.adapter.request(
-        { action: "start", workspace: f.workspace, command: ["/bin/true"] },
+        {
+          action: "start",
+          workspace: f.workspace,
+          command: [process.execPath, "-e", "process.exit(0)"],
+        },
         f.state,
         f.config,
       ),
@@ -322,7 +330,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     const starting = owner.request({
       action: "start",
       workspace: f.workspace,
-      command: ["/bin/false"],
+      command: [process.execPath, "-e", "process.exit(1)"],
       timeoutSeconds: 1,
     });
     await atConfig;
@@ -365,7 +373,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     const abort = new AbortController();
     const result = ownerRequest(
       owner.identity.endpoint,
-      { action: "start", command: ["/bin/false"] },
+      { action: "start", command: [process.execPath, "-e", "process.exit(1)"] },
       abort.signal,
     );
     await atConfig;
@@ -410,7 +418,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     const starting = owner.request({
       action: "start",
       workspace: f.workspace,
-      command: ["/bin/true"],
+      command: [process.execPath, "-e", "process.exit(0)"],
       replace: first.instanceId,
     });
     await atConfig;
@@ -557,7 +565,10 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       shown = projectPreview(shown, f.owner.identity.generation, request, outcome);
     });
 
-    const cold = await f.call(f.owner, { command: ["/bin/true"], timeoutSeconds: 1 });
+    const cold = await f.call(f.owner, {
+      command: [process.execPath, "-e", "process.exit(0)"],
+      timeoutSeconds: 1,
+    });
     assert.equal(cold.warming, true);
     assert.equal(shown?.warming, true, "the session shows it warming up, not failed");
     assert.equal(shown?.url, null);

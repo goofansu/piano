@@ -847,7 +847,10 @@ test("INV-02/05: input with start options that arrives while the attached Pi clo
       // A preview start makes this owner ask its adapter before release.
       yield* Effect.promise(() =>
         assert.rejects(
-          ownerRequest(first.previewOwner!, { action: "start", command: ["/bin/false"] }),
+          ownerRequest(first.previewOwner!, {
+            action: "start",
+            command: [process.execPath, "-e", "process.exit(1)"],
+          }),
         ),
       );
       const { sessions, sent, next } = yield* client;
@@ -980,7 +983,12 @@ test("INV-02: a refused archive leaves the selected session attached and control
       const id = (yield* started()).spec.sessionId;
       // A preview start makes this owner ask its adapter, which fails, before release.
       yield* Effect.promise(() =>
-        assert.rejects(ownerRequest(owner(), { action: "start", command: ["/bin/false"] })),
+        assert.rejects(
+          ownerRequest(owner(), {
+            action: "start",
+            command: [process.execPath, "-e", "process.exit(1)"],
+          }),
+        ),
       );
       const { sessions, sent, next } = yield* client;
       yield* yield* sessions.select({ cwd, sessionId: id, selectionId: "S" });
