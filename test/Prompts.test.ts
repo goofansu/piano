@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -8,7 +16,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { defaultPiCli, PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
-import { Prompts, PromptsDir, PromptsLive } from "../server/Prompts.ts";
+import { Prompts, PromptsEnvironment, PromptsLive } from "../server/Prompts.ts";
 
 const root = mkdtempSync(join(tmpdir(), "piano-prompts-"));
 after(() => rmSync(root, { recursive: true, force: true }));
@@ -166,7 +174,10 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
     }).pipe(
       Effect.provide(Layer.mergeAll(PromptsLive, PiSessionsLive)),
       Effect.provide(NodeServices.layer),
-      Effect.provideService(PromptsDir, dir),
+      Effect.provideService(PromptsEnvironment, {
+        directory: dir,
+        others: () => [join(agent, "prompts")],
+      }),
       Effect.provideService(PiCli, {
         node: process.execPath,
         cli: shim,
@@ -216,6 +227,45 @@ test("an update replaces only the prompt the person saw, and of two from one fil
       const before = readFileSync(path, "utf8");
       assert.equal((yield* failure(update("Five.", shown))).detail, loser?.detail, "stale");
       assert.equal(readFileSync(path, "utf8"), before, "a stale update writes nothing");
-    }).pipe(Effect.provide(PromptsLive), Effect.provideService(PromptsDir, dir)),
+    }).pipe(
+      Effect.provide(PromptsLive),
+      Effect.provideService(PromptsEnvironment, { directory: dir, others: () => [] }),
+    ),
+  );
+});
+
+test("a name Pi already loads from another prompts folder is refused, so Piano's never loses to it", async () => {
+  const dir = join(root, "taken", "piano", "prompts");
+  const theirs = join(root, "taken", "agent", "prompts");
+  mkdirSync(theirs, { recursive: true });
+  // Pi merges Piano's folder after its own and keeps the first prompt of each name.
+  writeFileSync(join(theirs, "review.md"), "Theirs\n");
+  writeFileSync(join(theirs, "target.md"), "Linked\n");
+  symlinkSync(join(theirs, "target.md"), join(theirs, "linked.md"));
+  // Pi skips a file whose front matter does not parse, so its name is free.
+  writeFileSync(join(theirs, "broken.md"), "---\ndescription: [\n---\nBroken\n");
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const prompts = yield* Prompts;
+      for (const name of ["review", "linked"]) {
+        const taken = yield* failure(
+          prompts.create({ name, description: "Mine", instructions: "Mine" }),
+        );
+        assert.deepEqual(
+          [taken.field, taken.detail],
+          ["name", `A prompt named ${name} already exists.`],
+        );
+      }
+      assert.equal(existsSync(join(dir, "review.md")), false, "a refused create writes nothing");
+      assert.equal(readFileSync(join(theirs, "review.md"), "utf8"), "Theirs\n");
+      yield* prompts.create({ name: "broken", description: "Mine", instructions: "Mine" });
+      assert.deepEqual(
+        (yield* prompts.list).map((p) => p.name),
+        ["broken"],
+      );
+    }).pipe(
+      Effect.provide(PromptsLive),
+      Effect.provideService(PromptsEnvironment, { directory: dir, others: () => [theirs] }),
+    ),
   );
 });
