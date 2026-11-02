@@ -176,7 +176,7 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       Effect.provide(NodeServices.layer),
       Effect.provideService(PromptsEnvironment, {
         directory: dir,
-        others: () => [join(agent, "prompts")],
+        agentDir: () => agent,
       }),
       Effect.provideService(PiCli, {
         node: process.execPath,
@@ -229,7 +229,10 @@ test("an update replaces only the prompt the person saw, and of two from one fil
       assert.equal(readFileSync(path, "utf8"), before, "a stale update writes nothing");
     }).pipe(
       Effect.provide(PromptsLive),
-      Effect.provideService(PromptsEnvironment, { directory: dir, others: () => [] }),
+      Effect.provideService(PromptsEnvironment, {
+        directory: dir,
+        agentDir: () => join(root, "precondition", "agent"),
+      }),
     ),
   );
 });
@@ -290,7 +293,48 @@ test("a name Pi already loads from another prompts folder is refused, so Piano's
       assert.equal(readFileSync(join(theirs, "deploy.md"), "utf8"), "Theirs\n");
     }).pipe(
       Effect.provide(PromptsLive),
-      Effect.provideService(PromptsEnvironment, { directory: dir, others: () => [theirs] }),
+      Effect.provideService(PromptsEnvironment, {
+        directory: dir,
+        agentDir: () => join(root, "taken", "agent"),
+      }),
+    ),
+  );
+});
+
+test("a name Pi loads from a folder its settings list is refused; one it turns off is free", async () => {
+  const dir = join(root, "settings", "piano", "prompts");
+  const agent = join(root, "settings", "agent");
+  const listed = join(root, "settings", "listed-prompts");
+  mkdirSync(listed, { recursive: true });
+  mkdirSync(join(agent, "prompts"), { recursive: true });
+  writeFileSync(join(listed, "listed.md"), "From settings\n");
+  writeFileSync(join(agent, "prompts", "off.md"), "Turned off\n");
+  writeFileSync(
+    join(agent, "settings.json"),
+    JSON.stringify({ prompts: [listed, "-prompts/off.md"] }),
+  );
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const prompts = yield* Prompts;
+      const draft = { name: "listed", description: "Mine", instructions: "Mine" };
+      for (const refused of [
+        yield* failure(prompts.propose(draft)),
+        yield* failure(prompts.create(draft)),
+      ])
+        assert.deepEqual(
+          [refused.field, refused.detail],
+          ["name", "A prompt named listed already exists."],
+        );
+      assert.equal(existsSync(join(dir, "listed.md")), false, "a refused create writes nothing");
+      yield* prompts.create({ name: "off", description: "Mine", instructions: "Mine" });
+      assert.deepEqual(
+        (yield* prompts.list).map((p) => p.name),
+        ["off"],
+        "Pi does not load a prompt its settings turn off",
+      );
+    }).pipe(
+      Effect.provide(PromptsLive),
+      Effect.provideService(PromptsEnvironment, { directory: dir, agentDir: () => agent }),
     ),
   );
 });

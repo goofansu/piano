@@ -15,14 +15,17 @@ const scratch = mkdtempSync(join(tmpdir(), "piano-library-folders-"));
 const skills = join(scratch, "piano", "skills");
 const prompts = join(scratch, "piano", "prompts");
 const elsewhere = join(scratch, ".agents", "skills");
-const promptsElsewhere = join(scratch, ".pi", "agent", "prompts");
+const agentDir = join(scratch, ".pi", "agent");
+const promptsElsewhere = join(agentDir, "prompts");
+// Pi reads `~/.agents/skills` from `HOME`.
+process.env.HOME = scratch;
 let server: RouterFixture;
 before(async () => {
   server = await startRouter(
     "piano-library-",
     Layer.mergeAll(
-      Layer.succeed(UserSkillsEnvironment, { directory: () => skills, others: () => [elsewhere] }),
-      Layer.succeed(PromptsEnvironment, { directory: prompts, others: () => [promptsElsewhere] }),
+      Layer.succeed(UserSkillsEnvironment, { directory: () => skills, agentDir: () => agentDir }),
+      Layer.succeed(PromptsEnvironment, { directory: prompts, agentDir: () => agentDir }),
     ),
   );
 });

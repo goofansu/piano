@@ -2,14 +2,14 @@
  * Skills the user creates in Piano, kept in Piano's own skills folder beside its database
  * (`<name>/SKILL.md`); every Pi child Piano starts loads that folder with `--skill` (main.ts), so
  * they are Piano's only, as prompts are. Pi owns loading (INV-12); this module writes a new skill's
- * file, replaces the file of one it created, lists the folder and removes a skill from it. Skills elsewhere (`~/.agents/skills`, Pi's own
- * folder, a repository's) are never listed or touched, only read to tell whether Pi loads a name
- * from them first.
+ * file, replaces the file of one it created, lists the folder and removes a skill from it. Skills
+ * anywhere else (`~/.agents/skills`, Pi's own folder, its settings and packages, a repository's)
+ * are never listed or touched, only read to tell whether Pi loads a name from them first
+ * (`PiLoads.ts`).
  * Nothing here changes a running session: one started from now loads the new set, and a running
  * one on `/reload`.
  */
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
@@ -24,20 +24,16 @@ import type {
 import * as LibraryFile from "./LibraryFile.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 import { agentDir } from "./PiEnv.ts";
+import { loadedBeforePiano } from "./PiLoads.ts";
 
 export const UserSkillsEnvironment = Context.Reference<{
   /** Piano's skills folder, where it writes skills and which every Pi child loads. */
   directory: () => string;
-  /** The other folders Pi loads user skills from, read only to refuse a name Pi already loads. */
-  others: () => readonly string[];
+  /** Pi's agent folder, whose settings, packages and skills Pi loads before Piano's folder; read
+   * only to refuse a name Pi already loads. */
+  agentDir: () => string;
 }>("piano/UserSkillsEnvironment", {
-  defaultValue: () => ({
-    directory: () => pianoFolder("skills"),
-    others: () => [
-      join(process.env.HOME || homedir(), ".agents", "skills"),
-      join(agentDir(), "skills"),
-    ],
-  }),
+  defaultValue: () => ({ directory: () => pianoFolder("skills"), agentDir }),
 });
 
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
@@ -135,30 +131,26 @@ export const UserSkillsLive = Layer.effect(
         .sort((a, b) => a.name.localeCompare(b.name)),
     );
 
-    /** Names Pi loads from the other user folders, which it loads before Piano's. */
-    const elsewhere = () =>
-      new Set(
-        environment
-          .others()
-          .flatMap((dir) =>
-            loadSkillsFromDir({ dir, source: "user" }).skills.map((skill) => skill.name),
-          ),
-      );
     /**
      * What a save of `name` meets: the skill Pi loads under that name from Piano's folder, if it
      * is in Piano's layout; whether Piano's folder loads that name at all, or holds a directory of
-     * it; and whether Pi loads that name from another folder first, which hides Piano's.
+     * it; and whether Pi loads that name from somewhere else first, which hides Piano's.
      */
-    const placeOf = (name: string) => {
-      const piano = pianoSkills(root());
-      return {
-        current: piano.get(name),
-        taken:
-          loadSkillsFromDir({ dir: root(), source: "user" }).skills.some((s) => s.name === name) ||
-          existsSync(join(root(), name)),
-        elsewhere: elsewhere().has(name),
-      };
-    };
+    const placeOf = (name: string) =>
+      Effect.tryPromise({
+        try: async () => {
+          const elsewhere = await loadedBeforePiano("skill", environment.agentDir(), root());
+          return {
+            current: pianoSkills(root()).get(name),
+            taken:
+              loadSkillsFromDir({ dir: root(), source: "user" }).skills.some(
+                (s) => s.name === name,
+              ) || existsSync(join(root(), name)),
+            elsewhere: elsewhere.has(name),
+          };
+        },
+        catch: () => refused("Could not save the skill."),
+      });
     const shadowed = (name: string) =>
       refused(`Pi loads another skill named ${name} instead of this one.`, "name");
 
@@ -170,7 +162,7 @@ export const UserSkillsLive = Layer.effect(
           check.problem?.field,
         );
       const { name } = check.saved;
-      const place = placeOf(name);
+      const place = yield* placeOf(name);
       const current = place.current;
       const disableModelInvocation =
         request.disableModelInvocation ?? current?.skill.disableModelInvocation ?? false;
@@ -203,11 +195,11 @@ export const UserSkillsLive = Layer.effect(
       };
       const { name } = saved;
       const dir = join(root(), name);
+      const place = yield* placeOf(name);
+      if (place.taken || place.elsewhere)
+        return yield* refused(`A skill named ${name} already exists.`, "name");
       return yield* Effect.try({
         try: () => {
-          const place = placeOf(name);
-          if (place.taken || place.elsewhere)
-            throw refused(`A skill named ${name} already exists.`, "name");
           mkdirSync(root(), { recursive: true });
           try {
             // Not recursive: an existing directory of that name, Piano's or not, refuses the create.
@@ -251,7 +243,7 @@ export const UserSkillsLive = Layer.effect(
       const { name } = saved;
       const text = fileOf(saved);
       // Only a skill in Piano's folder, found by the name Pi loads it as.
-      const place = placeOf(name);
+      const place = yield* placeOf(name);
       const current = place.current;
       if (!current) return yield* refused("Skill not found.", "name");
       if (place.elsewhere) return yield* shadowed(name);
