@@ -38,7 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
-import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
+import { RailList, RailRowTitle, railRow, useRailLeave } from "@/components/SessionRailList";
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
 import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Button } from "@/components/ui/button";
@@ -116,6 +116,7 @@ function PreviewStatus({ preview, className }: { preview: SessionPreview; classN
 /** One owned app in the rail; opening externally is a sibling, never row activation. */
 export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
   const navigation = useNavigation();
+  const leave = useRailLeave();
   const face = previewFace(preview);
   return (
     <RailList aria-label="App">
@@ -136,6 +137,7 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
           onClick={() => {
             navigation.openPreview();
             previewObservation.refresh();
+            leave();
           }}
         >
           {/* Keep the first-line box with the text, even inside the taller touch target. */}

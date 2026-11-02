@@ -520,23 +520,24 @@ await run(
     }
 
     // PIN-125: Space on a focused button activates it once; the type-anywhere shortcut must not
-    // take it into the composer. Wide, the header toggles the side-by-side rail; narrow, it
-    // opens the rail sheet. Both times the unsent draft stays byte-for-byte.
+    // take it into the composer. Wide, the header toggles the side-by-side rail; narrow, the
+    // session menu, which holds the rail's facts there, opens. The unsent draft stays byte-for-byte.
     await page.open("/s/login-bug");
     await page.see("echo: Add a regression test");
     const draft = "Keep  this draft ";
     await page.ab("fill", '[aria-label="Message"]', draft);
-    const railKey = async (width, key) => {
+    const headerKey = async (width, trigger, key) => {
       await page.ab("set", "viewport", String(width), "900");
-      await page.until("!!document.querySelector('[data-rail-trigger]')");
+      await page.until(`!!document.querySelector('${trigger}')`);
       const before = await page.evaluate(
-        "document.querySelector('[data-rail-trigger]').getAttribute('aria-pressed')",
+        `document.querySelector('${trigger}').getAttribute('aria-pressed')`,
       );
-      await page.ab("focus", "[data-rail-trigger]");
+      await page.ab("focus", trigger);
       await page.press(key);
       const after = await page.evaluate(`(() => ({
-        pressed: document.querySelector('[data-rail-trigger]')?.getAttribute('aria-pressed'),
-        sheet: !!document.querySelector('[role=dialog] [data-slot=session-rail]'),
+        pressed: document.querySelector('${trigger}')?.getAttribute('aria-pressed'),
+        sheet: !!document.querySelector('[role=dialog] [aria-label=Environment]'),
+        rail: !!document.querySelector('[data-rail-trigger]'),
         draft: document.querySelector('[aria-label="Message"]').value,
         focus: document.activeElement?.getAttribute('aria-label'),
       }))()`);
@@ -546,7 +547,7 @@ await run(
       return { before, after };
     };
     for (const key of ["Space", "Enter"]) {
-      const { before, after } = await railKey(1280, key);
+      const { before, after } = await headerKey(1280, "[data-rail-trigger]", key);
       assert.equal(
         after.pressed,
         before === "true" ? "false" : "true",
@@ -554,10 +555,16 @@ await run(
       );
     }
     for (const key of ["Space", "Enter"]) {
-      const { after } = await railKey(600, key);
-      assert.ok(after.sheet, `${key} opens the rail sheet`);
-      await page.click("button", "Hide session rail");
+      const { after } = await headerKey(600, "[data-session-menu]", key);
+      assert.ok(after.sheet, `${key} opens the session menu with the rail's Environment`);
+      assert.equal(after.rail, false, "one area at a time the header has no rail toggle");
+      await page.press("Escape");
       await page.until("!document.querySelector('[role=dialog]')");
+      assert.equal(
+        await page.evaluate("document.activeElement?.hasAttribute('data-session-menu')"),
+        true,
+        "Escape returns focus to the session menu's button",
+      );
     }
     await page.ab("set", "viewport", "1280", "900");
 

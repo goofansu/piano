@@ -135,7 +135,7 @@ test("a command only the other layout offers is left out, while an unavailable o
   assert.equal(wide["Show session rail"], true);
   assert.equal("Agent" in wide, false, "Agent is a narrow layout's tab");
   const narrow = rows(true);
-  assert.equal(narrow["Show session rail"], true, "the rail opens a narrow sheet");
+  assert.equal("Show session rail" in narrow, false, "the session menu holds the rail's facts");
   // Saved history has not named the session's file yet: a reason, so the row stays, greyed.
   assert.equal(narrow["Copy session path"], false);
 });

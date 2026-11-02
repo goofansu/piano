@@ -1,6 +1,6 @@
 import { cn } from "cn";
-import { ListIcon, MoreHorizontalIcon, XIcon } from "lucide-react";
-import { useRef } from "react";
+import { ListIcon, MoreHorizontalIcon } from "lucide-react";
+import { useRef, useState } from "react";
 import {
   CommandIcon,
   SessionCommandMenuItem,
@@ -20,10 +20,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
-import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/PianoSheet";
+import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
 import { type PullRequestControl, PullRequestLinkDialog } from "@/components/SessionPullRequest";
-import { SessionRail } from "@/components/SessionRail";
 import { surfaceTabNames } from "@/components/SurfaceArea";
 import {
   Breadcrumb,
@@ -53,6 +52,10 @@ export function SessionHeader({
   pullRequest: PullRequestControl;
 }) {
   const mobile = useIsMobile();
+  // One area at a time there is no rail, so the session menu is the sheet that holds its facts.
+  const { single } = useNavigation();
+  const sheet = mobile || single;
+  const [sheetOpen, setSheetOpen] = useState(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
   const { title, sessionId, cwd } = sessionContext(state);
@@ -67,6 +70,7 @@ export function SessionHeader({
       variant="ghost"
       size="header"
       aria-label="Session information and actions"
+      data-session-menu
       disabled={!session}
     >
       <MoreHorizontalIcon />
@@ -77,10 +81,14 @@ export function SessionHeader({
       {session ? title : "New session"}
     </h1>
   );
-  const sessionMenu = mobile ? (
-    <Sheet>
+  const sessionMenu = sheet ? (
+    <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger asChild>{menuButton}</SheetTrigger>
-      <MobileSessionSheet key={sessionId} />
+      <MobileSessionSheet
+        key={sessionId}
+        onLeave={() => setSheetOpen(false)}
+        onDismissFocus={menuTrigger}
+      />
     </Sheet>
   ) : (
     <DropdownMenu modal={false}>
@@ -140,7 +148,8 @@ export function SessionHeader({
     <>
       {/* Outside the transcript scroller: stays visible without an overlay or scroll listener.
        * One line: the project crumb and the title with its menu, then its controls at the end.
-       * Where the session runs is in the session rail and, when shown, the sidebar row. */}
+       * Where the session runs is in the session rail (one area at a time, the session menu) and,
+       * when shown, the sidebar row. */}
       <PaneHeader>
         {cwd ? (
           // Match header buttons by pointer capability: a landscape phone is wide but still touch.
@@ -188,7 +197,7 @@ export function SessionHeader({
         </span>
         {/* Ghost controls: the group pulls out so the last one's content ends on the gutter. */}
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
-          <SessionRailToggle state={state} />
+          <SessionRailToggle />
           <ChangesToggle />
           {mobile && sessionMenu}
         </div>
@@ -199,61 +208,26 @@ export function SessionHeader({
 }
 
 /**
- * The session rail's toggle, at the header's end beside the Agent area, over where the rail shows:
- * the saved column side by side, a transient sheet one area at a time. Both share content and
- * commands; only one presentation is mounted. The trigger is a button, never the composer.
+ * The session rail's toggle, at the header's end beside the Agent area, over where the rail shows.
+ * Side by side only: one area at a time its command is hidden and the session menu holds the
+ * rail's facts. The trigger is a button, never the composer.
  */
-function SessionRailToggle({ state }: { state: AppState }) {
+function SessionRailToggle() {
   const { commands, run } = useSessionCommands();
   const navigation = useNavigation();
-  const { single, railSheet, surfaceRequest, closeRailSheet } = navigation;
-  const shown = navigation.layout.rail;
-  const trigger = useRef<HTMLButtonElement>(null);
   const command = commands.find((c) => c.id === "session-rail");
-  if (!command) return null;
+  if (!command || command.hidden) return null;
   return (
-    <>
-      <IconButton
-        ref={trigger}
-        data-rail-trigger
-        size="header"
-        label={command.label}
-        aria-pressed={shown}
-        aria-haspopup={single ? "dialog" : undefined}
-        aria-expanded={single ? railSheet : undefined}
-        onClick={() => run(command)}
-        className="aria-pressed:bg-muted"
-      >
-        <ListIcon />
-      </IconButton>
-      <Sheet open={single && railSheet} onOpenChange={(open) => !open && closeRailSheet()}>
-        {single && railSheet && (
-          <SheetContent
-            side="right"
-            showCloseButton={false}
-            aria-describedby={undefined}
-            className="gap-0 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]"
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              // A Surface destination owns focus after navigation. Dismissal (including resize)
-              // returns to this stable button even when the sheet was opened from the palette.
-              if (navigation.getState().surfaceRequest === surfaceRequest)
-                trigger.current?.focus({ preventScroll: true });
-            }}
-          >
-            <div className="flex shrink-0 items-center justify-between px-3 py-2">
-              <SheetTitle>Session rail</SheetTitle>
-              <SheetClose asChild>
-                <IconButton size="header" label="Hide session rail">
-                  <XIcon />
-                </IconButton>
-              </SheetClose>
-            </div>
-            <SessionRail state={state} sheet />
-          </SheetContent>
-        )}
-      </Sheet>
-    </>
+    <IconButton
+      data-rail-trigger
+      size="header"
+      label={command.label}
+      aria-pressed={navigation.layout.rail}
+      onClick={() => run(command)}
+      className="aria-pressed:bg-muted"
+    >
+      <ListIcon />
+    </IconButton>
   );
 }
 

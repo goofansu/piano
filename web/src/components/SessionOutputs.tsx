@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
+import { RailList, RailRowTitle, railRow, useRailLeave } from "@/components/SessionRailList";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { FileTabIcon } from "@/components/WorkspaceFile";
 import { abbrevHome } from "@/lib/format";
@@ -20,6 +20,7 @@ interface Props {
  */
 export function SessionOutputs({ files, cwd }: Props) {
   const { openFile } = useNavigation();
+  const leave = useRailLeave();
   return (
     <RailList aria-label="Outputs">
       {files.map((file) => {
@@ -34,7 +35,14 @@ export function SessionOutputs({ files, cwd }: Props) {
               "cursor-pointer hover:bg-fill-hover focus-visible:bg-fill-hover",
             )}
           >
-            <button type="button" onClick={() => openFile(file.path)} title={shown}>
+            <button
+              type="button"
+              onClick={() => {
+                openFile(file.path);
+                leave();
+              }}
+              title={shown}
+            >
               <ItemMedia variant="icon" className="text-ink-3">
                 <FileTabIcon path={file.path} />
               </ItemMedia>

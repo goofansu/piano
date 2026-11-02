@@ -4,7 +4,7 @@ import { ChevronLeftIcon, LinkIcon, MessageSquareQuoteIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "@/components/IconButton";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
-import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
+import { RailList, RailRowTitle, railRow, useRailLeave } from "@/components/SessionRailList";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
@@ -29,14 +29,16 @@ interface Props {
 export function SessionLinks({ links, messages, working = false }: Props) {
   const viewport = useTranscriptViewport();
   const navigation = useNavigation();
+  const leave = useRailLeave();
   // Fallback destinations, from the rows the transcript renders, like the jump list's entries.
   const entries = useMemo(
     () => jumpEntries(transcriptRows(messages, { working })),
     [messages, working],
   );
   const reveal = (link: SessionLink, animate: boolean) => {
-    // A narrow rail covers the conversation; reveal the destination before jumping to it.
+    // One area at a time the conversation may be hidden; reveal it, and close the menu over it.
     if (navigation.single) navigation.showAgent();
+    leave();
     for (const entry of revealEntries(messages, entries, link.messageId))
       if (viewport?.jump(entry, { animate })) return;
   };
@@ -111,8 +113,9 @@ export function SessionLinksBrowser({
   messages,
   working,
   onBack,
+  backLabel = "Back to overview",
   focusSearch = true,
-}: Props & { onBack: () => void; focusSearch?: boolean }) {
+}: Props & { onBack: () => void; backLabel?: string; focusSearch?: boolean }) {
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement | null>(null);
   const backRef = useRef<HTMLButtonElement | null>(null);
@@ -121,7 +124,7 @@ export function SessionLinksBrowser({
   // their destination without moving the row under someone's pointer or keyboard focus.
   const [order, setOrder] = useState(() => links.map((link) => link.url));
   useEffect(() => {
-    // Browsing the narrow sheet is not a request to type: keep the software keyboard down.
+    // Browsing the phone session menu is not a request to type: keep the software keyboard down.
     (focusSearch ? searchRef.current : backRef.current)?.focus();
   }, [focusSearch]);
   useEffect(() => {
@@ -141,7 +144,7 @@ export function SessionLinksBrowser({
     <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pt-3">
       {/* No shadcn primitive is a rail header: back navigation, then title and count. */}
       <div className="flex min-h-8 shrink-0 items-center gap-2 pointer-coarse:min-h-11">
-        <IconButton ref={backRef} size="header" label="Back to overview" onClick={onBack}>
+        <IconButton ref={backRef} size="header" label={backLabel} onClick={onBack}>
           <ChevronLeftIcon />
         </IconButton>
         <h2 className="flex flex-1 items-center gap-2 text-sm font-medium">

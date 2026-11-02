@@ -52,6 +52,8 @@ One row in the 48px band, so Settings, the project home and the sidebar header s
 - **Controls at the end:** preview and pull request, each a state and a one-click action; Views
   joins them in slice 2. Controls never shrink.
 - **Phones:** the same row with 44px controls; the facts usually drop and the title keeps the row.
+  The session menu, a bottom sheet, carries what dropped: the session rail's Environment and App
+  rows on top, Outputs and Links as rows that push a pane.
 
 ### Tools area (slice 2)
 
