@@ -7,10 +7,11 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { type TestContext, test } from "node:test";
+import { mock, type TestContext, test } from "node:test";
 import type { PreviewConfig, PreviewRequest } from "../scripts/PreviewAdapter.ts";
 import { ownerRequest } from "../scripts/PreviewClient.ts";
 import { PreviewOwner } from "../scripts/PreviewOwner.ts";
+import { WARMUP_SECONDS } from "../scripts/PreviewReadiness.ts";
 import { projectPreview } from "../server/PreviewProjection.ts";
 import type { SessionPreview } from "../shared/wire.ts";
 import { type FakeHost, fakeAdapter, type Platform } from "./fixtures/preview-host.ts";
@@ -644,7 +645,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.equal(late.warming, true, "the other app is still warming up, not failed");
   });
 
-  test(`[${platform}] a busy lock delays a warming app's checks but never ends them`, async (t) => {
+  test(`[${platform}] a busy lock, in the owner's check or a browser read, never ends a warming app's checks`, async (t) => {
     if (foreign) return t.skip("needs native process ownership");
     const f = await fixture(t, 500);
     const port = await freePort();
@@ -681,6 +682,10 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     holder.exec("BEGIN EXCLUSIVE");
     await new Promise((resolve) => setTimeout(resolve, 3000));
     assert.equal(shown?.warming, true, "a busy lock says nothing about the app");
+    // A browser read (Refresh, a focus read) fails on the same lock: the app shows unknown, and
+    // its owner still checks it.
+    await assert.rejects(f.call(f.owner, { action: "status" }), /busy/);
+    assert.equal(shown?.ready, false);
     holder.exec("ROLLBACK");
     holder.close();
 
@@ -690,6 +695,56 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     assert.equal(shown?.ready, true, "the owner kept checking once the lock was free");
     assert.equal(shown?.instanceId, cold.instanceId);
+  });
+
+  test(`[${platform}] a failing read keeps a warming app checked, for its warm-up window only`, async (t) => {
+    if (foreign) return t.skip("needs native process ownership");
+    const f = await fixture(t);
+    const port = await freePort();
+    f.config.ports = [port];
+    const server = createHttpServer((_request, response) => {
+      response.statusCode = 500;
+      response.end();
+    });
+    t.after(
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        }),
+    );
+    f.host.afterSubmit = async () => {
+      f.host.phase = "running";
+      server.listen(port, "127.0.0.1");
+      await once(server, "listening");
+    };
+    let failures = 0;
+    f.owner.observe((_request, outcome) => {
+      if ("error" in outcome) failures++;
+    });
+    const cold = await f.call(f.owner, {
+      command: [process.execPath, "-e", "process.exit(0)"],
+      timeoutSeconds: 1,
+    });
+    assert.equal(cold.warming, true);
+
+    // The supervisor stops answering: each check fails and is shown, and checking goes on.
+    f.host.unavailable = true;
+    const deadline = Date.now() + 10000;
+    while (failures < 2 && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.ok(failures >= 2, "the owner checks again after a failed check");
+
+    // Past the warm-up window, a failing check is the last one.
+    mock.timers.enable({ apis: ["Date"], now: Date.now() + (WARMUP_SECONDS + 1) * 1000 });
+    t.after(() => mock.timers.reset());
+    const seen = failures;
+    for (let i = 0; failures === seen && i < 200; i++)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.ok(failures > seen, "the owner checked once past the window");
+    const last = failures;
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    assert.equal(failures, last, "checking stopped after the warm-up window");
   });
 }
 
