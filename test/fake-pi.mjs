@@ -709,6 +709,30 @@ function handle(cmd) {
         });
         return; // stays streaming until answered (see extension_ui_response below is fire-and-forget; finish on answer)
       }
+      if (cmd.message.startsWith("propose")) {
+        // A `piano-library` save proposal: "propose hidden" changes only a value Piano redacts.
+        // Imported here, not at startup, so every other fake Pi starts as fast as before.
+        const hidden = cmd.message === "propose hidden";
+        const files = hidden
+          ? ["Use api_key: staging-111 for $1", "Use api_key: production-999 for $1"]
+          : ["Deploy $1", "Deploy $1 to staging"];
+        const file = (body) => `---\ndescription: "Deploy"\n---\n${body}\n`;
+        import("../shared/library.ts").then(({ proposalDialog }) =>
+          out({
+            type: "extension_ui_request",
+            id: "p1",
+            method: "confirm",
+            ...proposalDialog({
+              kind: "prompt",
+              change: "update",
+              name: "deploy",
+              previous: file(files[0]),
+              file: file(files[1]),
+            }),
+          }),
+        );
+        return;
+      }
       if (cmd.message.startsWith("exit cleanly")) process.exit(0);
       if (cmd.message.startsWith("crash")) {
         process.stderr.write("boom\n");
