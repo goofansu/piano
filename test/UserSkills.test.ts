@@ -20,10 +20,18 @@ import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import { UserSkills, UserSkillsEnvironment, UserSkillsLive } from "../server/UserSkills.ts";
 import { checkDraft, TEXT_MAX } from "../shared/drafts.ts";
 
-/** A throwaway home: Piano's skills folder, and the folders Pi loads user skills from besides it. */
+/**
+ * A throwaway home: Piano's skills folder, and the folders Pi loads user skills from besides it.
+ * Pi reads `~/.agents/skills` from `HOME`, so the test's home is `HOME` until it ends.
+ */
 function home(t: { after: (fn: () => void) => void }) {
   const root = mkdtempSync(join(tmpdir(), "piano-skills-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const previousHome = process.env.HOME;
+  process.env.HOME = root;
+  t.after(() => {
+    process.env.HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  });
   const directory = join(root, "piano", "skills");
   const agentsDirectory = join(root, ".agents", "skills");
   const piDirectory = join(root, ".pi", "agent", "skills");
@@ -33,12 +41,12 @@ function home(t: { after: (fn: () => void) => void }) {
         Effect.provide(UserSkillsLive),
         Effect.provideService(UserSkillsEnvironment, {
           directory: () => directory,
-          others: () => [agentsDirectory, piDirectory],
+          agentDir: () => join(root, ".pi", "agent"),
         }),
         Effect.result,
       ),
     );
-  return { directory, agentsDirectory, piDirectory, run };
+  return { root, directory, agentsDirectory, piDirectory, run };
 }
 
 const write = (dir: string, name: string, frontmatter: string, body = "Do it.") => {
@@ -213,6 +221,38 @@ test("a Piano skill Pi loads another of first is refused an update and can still
   assert.equal((await run((skills) => skills.remove("deploy")))._tag, "Success");
   assert.equal(existsSync(join(directory, "deploy")), false);
   assert.ok(existsSync(join(agentsDirectory, "deploy", "SKILL.md")), "theirs is untouched");
+});
+
+test("a name Pi loads from a folder or package its settings list is refused; one it turns off is free", async (t) => {
+  const { root, directory, piDirectory, run } = home(t);
+  // Pi's settings add a folder and a package before Piano's, and turn off one of Pi's own skills.
+  const listed = join(root, "listed-skills");
+  write(listed, "listed", "name: listed\ndescription: From settings.");
+  const pkg = join(root, "a-package");
+  write(join(pkg, "skills"), "packaged", "name: packaged\ndescription: From a package.");
+  writeFileSync(
+    join(pkg, "package.json"),
+    JSON.stringify({ name: "a-package", pi: { skills: ["./skills"] } }),
+  );
+  write(piDirectory, "off", "name: off\ndescription: Turned off.");
+  writeFileSync(
+    join(root, ".pi", "agent", "settings.json"),
+    JSON.stringify({ skills: [listed, "-skills/off"], packages: [pkg] }),
+  );
+  for (const name of ["listed", "packaged"]) {
+    const draft = { name, description: "Mine.", instructions: "Go." };
+    for (const result of [await run((s) => s.propose(draft)), await run((s) => s.create(draft))])
+      assert.deepEqual(
+        [refusal(result).detail, refusal(result).field],
+        [`A skill named ${name} already exists.`, "name"],
+        name,
+      );
+    assert.equal(existsSync(join(directory, name)), false, "a refused create writes nothing");
+  }
+  const free = await run((s) =>
+    s.create({ name: "off", description: "Mine.", instructions: "Go." }),
+  );
+  assert.equal(free._tag, "Success", "Pi does not load a skill its settings turn off");
 });
 
 test("a create names the field it refuses and never overwrites a skill", async (t) => {
