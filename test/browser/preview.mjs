@@ -335,7 +335,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           );
         const showRail = async () => {
           // An open rail may not have drawn the app's row yet; open it only when it is closed. One
-          // area at a time there is no rail: the session menu holds its rows.
+          // area at a time there is no rail: the session menu holds the Preview row.
           if (!(await railPreview())) {
             if (
               await page.evaluate("!!document.querySelector('[aria-label=\"Show session rail\"]')")
@@ -486,7 +486,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
             const row = document.querySelector(':is([data-slot=session-rail],[role=dialog]) button[aria-label="Show preview"]');
             const dot = row.querySelector('[data-slot=status-dot]').getBoundingClientRect();
             const range = document.createRange();
-            range.selectNodeContents(row.querySelector('[data-slot=item-title]'));
+            range.selectNodeContents(row.querySelector('[data-slot=item-title], [data-slot=row-title]'));
             const line = range.getClientRects()[0];
             return (dot.top + dot.bottom - line.top - line.bottom) / 2;
           })()`);

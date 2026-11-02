@@ -19,6 +19,7 @@ import {
   sessionContext,
   sessionMutable,
   sessionPane,
+  sessionPlace,
   sessionReady,
   sessionWorking,
 } from "../web/src/lib/sessionContext.ts";
@@ -685,4 +686,36 @@ test("a missing checkout is decided once: Trust, New session here, Rename, the f
       `${c.name}: status`,
     );
   }
+});
+
+test("the phone header's place line: repository or folder, then branch or short commit", () => {
+  const none = {
+    cwd: undefined,
+    githubRepo: undefined,
+    branch: undefined,
+    detachedHead: undefined,
+  };
+  assert.deepEqual(
+    sessionPlace({
+      ...none,
+      cwd: "/work/repo.feature",
+      githubRepo: "goofansu/piano",
+      branch: "feature",
+    }),
+    { name: "goofansu/piano", ref: "feature" },
+  );
+  assert.deepEqual(sessionPlace({ ...none, cwd: "/work/notes/" }), {
+    name: "notes",
+    ref: undefined,
+  });
+  assert.deepEqual(
+    sessionPlace({
+      ...none,
+      cwd: "/repo",
+      githubRepo: "goofansu/piano",
+      detachedHead: "d4449bb7183bb577791acab4f6fc4f52f78d02b0",
+    }),
+    { name: "goofansu/piano", ref: "d4449bb718" },
+  );
+  assert.equal(sessionPlace(none), undefined, "no line before the session has a directory");
 });

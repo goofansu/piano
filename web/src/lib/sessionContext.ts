@@ -305,6 +305,33 @@ export function sessionContext(state: AppState): SessionContext {
   };
 }
 
+/** Where a session runs, in a line: its repository or folder, then its branch or short commit. */
+export interface SessionPlace {
+  /** The GitHub repository ("owner/name"), else the folder's name. */
+  name: string;
+  /** The branch, or the first ten characters of a detached commit; none for a non-Git folder. */
+  ref: string | undefined;
+}
+
+/**
+ * The phone header's second line: with no rail there, this is where the session says where it
+ * runs. None before the session has a directory.
+ */
+export function sessionPlace({
+  cwd,
+  githubRepo,
+  branch,
+  detachedHead,
+}: Pick<SessionContext, "cwd" | "githubRepo" | "branch" | "detachedHead">):
+  | SessionPlace
+  | undefined {
+  if (!cwd) return undefined;
+  return {
+    name: githubRepo ?? (cwd.split("/").filter(Boolean).at(-1) || cwd),
+    ref: branch ?? detachedHead?.slice(0, 10),
+  };
+}
+
 export type ReplyActivity = "starting" | "working";
 
 export interface SessionActivity {

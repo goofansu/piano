@@ -51,9 +51,10 @@ One row in the 48px band, so Settings, the project home and the sidebar header s
   and the session ID, so a dropped branch is one click away, beside "Copy git branch".
 - **Controls at the end:** preview and pull request, each a state and a one-click action; Views
   joins them in slice 2. Controls never shrink.
-- **Phones:** the same row with 44px controls; the facts usually drop and the title keeps the row.
-  The session menu, a bottom sheet, carries what dropped: the session rail's Environment and App
-  rows on top, Outputs and Links as rows that push a pane.
+- **Phones:** the same row with 44px controls. With no rail, where the session runs is a second
+  line under the title (repository or folder, then the branch shortened in the middle). The
+  session menu, a bottom sheet, holds the desktop menu's actions, the linked pull request and
+  Preview, and nothing of the rail's lists.
 
 ### Tools area (slice 2)
 

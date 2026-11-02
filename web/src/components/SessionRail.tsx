@@ -92,7 +92,8 @@ export type RailContents = ReturnType<typeof useRailContents>;
  * scrollbar stays at the pane's edge, and the transcript, notices and composer keep clear of it
  * through `--rail-inset`. While it fits, the wheel over it scrolls the conversation as anywhere in
  * the area; taller, the wheel over it scrolls the rail alone and never runs on into the
- * conversation. One area at a time there is no rail: the phone session menu holds its sections.
+ * conversation. One area at a time there is no rail: the phone header's second line says where
+ * the session runs, and the session menu holds Preview and the pull request.
  * It follows the selected session. Hand-written: no shadcn component is a pinned side column.
  */
 interface RailProps {
@@ -263,8 +264,7 @@ function RailSections({
 
 /**
  * Where the session runs: its repository or folder, its branch or detached commit, and its linked
- * pull request, each a row with its menu. The rail's first section, and the top of the phone
- * session menu.
+ * pull request, each a row with its menu. The rail's first section.
  */
 export function SessionEnvironment({ state }: { state: AppState }) {
   const { cwd, branch, detachedHead, githubRepo, branchUrl, pullRequest } = sessionContext(state);

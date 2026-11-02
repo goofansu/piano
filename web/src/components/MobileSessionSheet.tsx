@@ -1,10 +1,11 @@
+import type { SessionPreview } from "@shared/wire";
 import { cn } from "cn";
 import {
   ArrowLeftIcon,
   ChevronRightIcon,
-  FilesIcon,
+  ExternalLinkIcon,
   FolderInputIcon,
-  LinkIcon,
+  GitPullRequestIcon,
 } from "lucide-react";
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -13,52 +14,29 @@ import {
   useSessionCommands,
   useSessionProjectMenu,
 } from "@/components/CommandHost";
-import { PianoButton } from "@/components/PianoButton";
 import { SheetClose, SheetContent, SheetTitle } from "@/components/PianoSheet";
 import { ProjectCommandIconView } from "@/components/Projects";
-import { SessionLinks, SessionLinksBrowser } from "@/components/SessionLinks";
-import { SessionOutputs } from "@/components/SessionOutputs";
-import { PreviewRailRow } from "@/components/SessionPreview";
-import { SessionEnvironment, useRailContents } from "@/components/SessionRail";
-import { RailLeaveProvider } from "@/components/SessionRailList";
+import { dotTone, useSeenPreview } from "@/components/SessionPreview";
+import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { returnFocusForKeyboard } from "@/lib/pointerClose";
 import type { ProjectCommand } from "@/lib/projectCommands";
+import { pullRequestView } from "@/lib/pullRequestView";
 import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
+import { previewFace, previewHost } from "@/lib/sessionPreview";
 
-type Page = "actions" | "projects" | "outputs" | "links" | "all-links";
+type Page = "actions" | "projects";
 
 /** A full-width, 44px row with 16px icons, shared by buttons and the display switch's label. */
 const row =
   "h-11 w-full justify-start gap-3 border border-transparent px-3 text-base font-normal [&_svg]:size-4 [&_svg]:shrink-0";
 
-/** The selectable session ID, shared by the header menu and the phone sheet. */
-export function SessionDetails({
-  sessionId,
-  className,
-}: {
-  sessionId?: string;
-  className?: string;
-}) {
-  return (
-    // Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible.
-    <dl
-      className={cn(
-        "flex min-w-0 flex-1 select-text flex-col gap-1 py-2 font-mono text-xs",
-        className,
-      )}
-    >
-      <div className="min-w-0">
-        <dt className="sr-only">Session ID</dt>
-        <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
-      </div>
-    </dl>
-  );
-}
+/** A row's muted value after its label: the pull request's number, the preview's host. */
+const value = "truncate text-sm font-normal text-muted-foreground";
 
 /** A descriptor as a sheet row; running it closes the sheet, as choosing a menu item would. */
 function SessionCommandRow({
@@ -106,16 +84,14 @@ function ProjectCommandRow({
   );
 }
 
-/** A row that pushes a second pane: its icon and name, an optional count, then a chevron. */
+/** A row that pushes a second pane: its icon and name, then a chevron. */
 function PaneRow({
   icon,
-  count,
   onClick,
   disabled,
   children,
 }: {
   icon: ReactNode;
-  count?: number;
   onClick: () => void;
   disabled?: boolean;
   children: ReactNode;
@@ -123,24 +99,49 @@ function PaneRow({
   return (
     <Button variant="ghost" className={row} disabled={disabled} onClick={onClick}>
       {icon} {children}
-      {count !== undefined && <span className="text-sm text-muted-foreground">{count}</span>}
       <ChevronRightIcon className="ml-auto text-muted-foreground" />
     </Button>
   );
 }
 
-/** A pushed pane's header: Back, then its title, an optional count and an action at the end. */
-function PaneHeader({
-  title,
-  count,
-  onBack,
-  action,
+/** The linked pull request, opened on GitHub in a new tab: the sheet's one way out of Piano. */
+function PullRequestRow({
+  url,
+  number,
+  onOpen,
 }: {
-  title: string;
-  count?: number;
-  onBack: () => void;
-  action?: ReactNode;
+  url: string;
+  /** The pull request's number, once the link names one. */
+  number: string | undefined;
+  onOpen: () => void;
 }) {
+  return (
+    <Button asChild variant="ghost" className={row}>
+      <a href={url} target="_blank" rel="noreferrer" onClick={onOpen}>
+        <GitPullRequestIcon /> Pull request
+        {number && <span className={value}>#{number}</span>}
+        <ExternalLinkIcon data-icon="inline-end" className="ml-auto text-muted-foreground" />
+      </a>
+    </Button>
+  );
+}
+
+/** Show preview as a row: the app's state dot in the icon column, then its name and host. */
+function PreviewRow({ preview, onShow }: { preview: SessionPreview; onShow: () => void }) {
+  const face = previewFace(preview);
+  return (
+    <Button variant="ghost" className={row} aria-label="Show preview" onClick={onShow}>
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        <StatusDot tone={dotTone[face.tone]} pulse={face.tone === "pending"} />
+      </span>
+      <span data-slot="row-title">Preview</span>
+      <span className={value}>{preview.url ? previewHost(preview.url) : face.status}</span>
+    </Button>
+  );
+}
+
+/** A pushed pane's header: Back, then its title. */
+function PaneHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <div className="flex items-center gap-1">
       <Button
@@ -152,24 +153,18 @@ function PaneHeader({
       >
         <ArrowLeftIcon />
       </Button>
-      <SheetTitle className="flex min-w-0 flex-1 items-center gap-2 text-base">
-        <span className="truncate">{title}</span>
-        {count !== undefined && (
-          <span className="text-sm font-normal text-muted-foreground">{count}</span>
-        )}
-      </SheetTitle>
-      {action}
+      <SheetTitle className="min-w-0 flex-1 truncate text-base">{title}</SheetTitle>
     </div>
   );
 }
 
 /**
- * The phone session menu: a bottom sheet with every action on one level. On top, the session
- * rail's facts, which the header has no room for: Environment's rows and, while a preview is
- * known, App's; Outputs and Links push a pane of their own. Then the details and their copy
- * button, as the desktop menu has them, and the actions. The project picker also pushes a pane.
- * A rail row that goes elsewhere in the session (a file, Preview, a message) calls `onLeave`,
- * which closes the sheet and leaves focus to that destination.
+ * The phone session menu: a bottom sheet of the desktop "…" menu's actions, one level deep. The
+ * header's second line says where the session runs, and the rail's other facts (Outputs, Links,
+ * Environment's copy menus, the session ID) are desktop work that is not here. Before the
+ * actions, only what a phone acts on: the linked pull request, opened on GitHub, and Preview while
+ * a preview is known. Add to project pushes the project picker. A row that goes elsewhere in the
+ * session (Preview) calls `onLeave`, which closes the sheet and leaves focus to that destination.
  */
 export function MobileSessionSheet({
   onLeave,
@@ -181,10 +176,11 @@ export function MobileSessionSheet({
 }) {
   const { state } = useCommands();
   const { commands, run } = useSessionCommands();
-  const { sessionId } = sessionContext(state);
+  const { pullRequest } = sessionContext(state);
+  const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
+  const preview = useSeenPreview(state);
+  const showPreview = commands.find((c) => c.id === "show-preview");
   const projects = useSessionProjectMenu();
-  const { preview, files, links, recentLinks, showAllLinks, messages, working } =
-    useRailContents(state);
   const left = useRef(false);
   const dismissed = useRef(false);
   const leave = () => {
@@ -205,6 +201,7 @@ export function MobileSessionSheet({
   const { display } = menu;
   const rows = (section: SessionCommand[]) =>
     section.map((c) => <SessionCommandRow key={c.id} command={c} run={run} />);
+  const facts = !!pr || !!(preview && showPreview);
 
   return (
     <SheetContent
@@ -234,147 +231,75 @@ export function MobileSessionSheet({
         } else returnFocusForKeyboard(event);
       }}
     >
-      <RailLeaveProvider value={leave}>
-        <div ref={pane} className="flex flex-col">
-          {page === "actions" && (
-            <>
-              <SheetTitle className="sr-only">Session</SheetTitle>
-              {state.session && (
-                <div className="flex flex-col gap-2 p-1 pb-2">
-                  <SessionEnvironment state={state} />
-                  {preview && <PreviewRailRow preview={preview} />}
-                </div>
-              )}
-              {files.length > 0 && (
-                <PaneRow icon={<FilesIcon />} onClick={() => setPage("outputs")}>
-                  Outputs
-                </PaneRow>
-              )}
-              {links.length > 0 && (
-                <PaneRow icon={<LinkIcon />} count={links.length} onClick={() => setPage("links")}>
-                  Links
-                </PaneRow>
-              )}
-              {(files.length > 0 || links.length > 0) && <Separator className="my-1" />}
-              <div className="flex items-center gap-1 pl-3">
-                <SessionDetails sessionId={sessionId} />
-                {menu.details.map((c) => (
-                  <SheetClose asChild key={c.id}>
-                    <PianoButton
-                      variant="ghost"
-                      size="row"
-                      className="shrink-0"
-                      aria-label={c.label}
-                      disabled={!c.enabled}
-                      onClick={() => run(c)}
-                    >
-                      <CommandIcon icon={c.icon} />
-                    </PianoButton>
-                  </SheetClose>
-                ))}
-              </div>
-              <Separator className="my-1" />
-              {rows(menu.manage)}
-              {projects && (
-                <Button
-                  variant="ghost"
-                  className={row}
-                  disabled={!projects.entry.enabled}
-                  onClick={() => setPage("projects")}
-                >
-                  <FolderInputIcon /> {projects.entry.label}
-                  <ChevronRightIcon className="ml-auto text-muted-foreground" />
-                </Button>
-              )}
-              {display && (
-                <>
-                  <Separator className="my-1" />
-                  <Label className={cn(row, "flex justify-between rounded-md")}>
-                    <span className="flex items-center gap-3">
-                      <CommandIcon icon={display.icon} /> {display.label}
-                    </span>
-                    <Switch checked={!!display.checked} onCheckedChange={() => run(display)} />
-                  </Label>
-                </>
-              )}
-              <Separator className="my-1" />
-              {rows(menu.destructive)}
-            </>
-          )}
-          {page === "outputs" && (
-            <>
-              <PaneHeader title="Outputs" onBack={() => setPage("actions")} />
-              <Separator className="my-1" />
-              <div className="p-1">
-                <SessionOutputs files={files} cwd={state.session?.cwd} />
-              </div>
-            </>
-          )}
-          {page === "links" && (
-            <>
-              <PaneHeader
-                title="Links"
-                count={links.length}
-                onBack={() => setPage("actions")}
-                action={
-                  showAllLinks && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="min-h-11"
-                      onClick={() => setPage("all-links")}
-                    >
-                      Show all
-                    </Button>
-                  )
-                }
+      <div ref={pane} className="flex flex-col">
+        {page === "actions" && (
+          <>
+            <SheetTitle className="sr-only">Session</SheetTitle>
+            {/* The pull request opens in a browser tab, so the sheet closes as after an action. */}
+            {pr && (
+              <PullRequestRow url={pr.url} number={pr.reference && pr.name} onOpen={onLeave} />
+            )}
+            {preview && showPreview && (
+              <PreviewRow
+                preview={preview}
+                onShow={() => {
+                  run(showPreview);
+                  leave();
+                }}
               />
-              <Separator className="my-1" />
-              <div className="p-1">
-                <SessionLinks links={recentLinks} messages={messages} working={working} />
-              </div>
-            </>
-          )}
-          {page === "all-links" && (
-            <>
-              <SheetTitle className="sr-only">Links</SheetTitle>
-              <SessionLinksBrowser
-                links={links}
-                messages={messages}
-                working={working}
-                focusSearch={false}
-                backLabel="Back"
-                onBack={() => setPage("links")}
-              />
-            </>
-          )}
-          {page === "projects" && projects && (
-            <>
-              <PaneHeader title={projects.entry.label} onBack={() => setPage("actions")} />
-              <Separator className="my-1" />
-              {projects.current && (
-                <p className="truncate px-3 py-1 text-xs text-muted-foreground">
-                  {projects.current.name}
-                </p>
-              )}
-              {projects.remove && (
-                <>
-                  <ProjectCommandRow command={projects.remove} run={run} />
-                  <Separator className="my-1" />
-                </>
-              )}
-              <ProjectCommandRow command={projects.create} run={run}>
-                {projects.create.label}…
+            )}
+            {facts && <Separator className="my-1" />}
+            {rows(menu.manage)}
+            {projects && (
+              <PaneRow
+                icon={<FolderInputIcon />}
+                disabled={!projects.entry.enabled}
+                onClick={() => setPage("projects")}
+              >
+                {projects.entry.label}
+              </PaneRow>
+            )}
+            {display && (
+              <>
+                <Separator className="my-1" />
+                <Label className={cn(row, "flex justify-between rounded-md")}>
+                  <span className="flex items-center gap-3">
+                    <CommandIcon icon={display.icon} /> {display.label}
+                  </span>
+                  <Switch checked={!!display.checked} onCheckedChange={() => run(display)} />
+                </Label>
+              </>
+            )}
+            <Separator className="my-1" />
+            {rows(menu.destructive)}
+          </>
+        )}
+        {page === "projects" && projects && (
+          <>
+            <PaneHeader title={projects.entry.label} onBack={() => setPage("actions")} />
+            <Separator className="my-1" />
+            {projects.current && (
+              <p className="truncate px-3 py-1 text-xs text-muted-foreground">
+                {projects.current.name}
+              </p>
+            )}
+            {projects.remove && (
+              <>
+                <ProjectCommandRow command={projects.remove} run={run} />
+                <Separator className="my-1" />
+              </>
+            )}
+            <ProjectCommandRow command={projects.create} run={run}>
+              {projects.create.label}…
+            </ProjectCommandRow>
+            {projects.destinations.map((d) => (
+              <ProjectCommandRow key={d.project.id} command={d.command} run={run}>
+                <span className="truncate">{d.project.name}</span>
               </ProjectCommandRow>
-              {projects.destinations.map((d) => (
-                <ProjectCommandRow key={d.project.id} command={d.command} run={run}>
-                  <span className="truncate">{d.project.name}</span>
-                </ProjectCommandRow>
-              ))}
-            </>
-          )}
-        </div>
-      </RailLeaveProvider>
+            ))}
+          </>
+        )}
+      </div>
     </SheetContent>
   );
 }
