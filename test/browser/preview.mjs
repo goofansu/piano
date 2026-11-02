@@ -610,6 +610,10 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.until(
           "/VITE|ready in/i.test(document.querySelector('[role=dialog] pre')?.textContent ?? '')",
         );
+        // Opening Details reads the status; Refresh waits for that read, as a user would.
+        await page.until(
+          "document.querySelector('[role=dialog] button[aria-busy]')?.getAttribute('aria-busy') === 'false'",
+        );
         await page.click("button", "Refresh");
         await page.until(
           "document.querySelector('[role=dialog] button[aria-busy]')?.getAttribute('aria-busy') === 'false'",
