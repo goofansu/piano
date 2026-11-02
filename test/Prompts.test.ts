@@ -163,7 +163,11 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       assert.equal(existsSync(join(dir, "missing.md")), false, "an update never creates");
 
       yield* prompts.remove("review");
-      yield* prompts.remove("review");
+      assert.equal(
+        (yield* failure(prompts.remove("review"))).detail,
+        "Prompt not found.",
+        "one already gone is refused, as a skill is",
+      );
       assert.deepEqual(
         (yield* prompts.list).map((p) => p.name),
         ["rule", "triage"],
@@ -335,6 +339,35 @@ test("a name Pi loads from a folder its settings list is refused; one it turns o
     }).pipe(
       Effect.provide(PromptsLive),
       Effect.provideService(PromptsEnvironment, { directory: dir, agentDir: () => agent }),
+    ),
+  );
+});
+
+test("a prompt placed by hand under a name Piano would not create is listed and deleted as Pi loads it", async () => {
+  const dir = join(root, "by-hand", "prompts");
+  mkdirSync(dir, { recursive: true });
+  // Pi offers this as /Review; New prompt would refuse the name, but the file is Piano's to delete.
+  writeFileSync(join(dir, "Review.md"), "Review by hand\n");
+  writeFileSync(join(dir, "elsewhere-target.md"), "Linked\n");
+  symlinkSync(join(dir, "elsewhere-target.md"), join(dir, "link.md"));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const prompts = yield* Prompts;
+      assert.deepEqual(
+        (yield* prompts.list).map((p) => p.name),
+        ["elsewhere-target", "Review"],
+        "a link is not listed",
+      );
+      yield* prompts.remove("Review");
+      assert.equal(existsSync(join(dir, "Review.md")), false);
+      assert.equal((yield* failure(prompts.remove("link"))).detail, "Prompt not found.");
+      assert.ok(existsSync(join(dir, "link.md")), "a link is not deleted");
+    }).pipe(
+      Effect.provide(PromptsLive),
+      Effect.provideService(PromptsEnvironment, {
+        directory: dir,
+        agentDir: () => join(root, "by-hand", "agent"),
+      }),
     ),
   );
 });

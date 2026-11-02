@@ -66,7 +66,10 @@ is skipped, not installed. For the same reason a prompt or skill already in Pian
 updated once Pi loads one of its name from elsewhere: it stays listed so it can be deleted. A
 repository's is not checked, since which one applies depends on the session's folder. Settings › Skills lists each skill Pi loads from Piano's folder
 (a real `<directory>/SKILL.md`, not a link) under the name Pi loads it as, through Pi's own loader,
-so a SKILL.md renamed by hand is still listed and can be deleted. Both follow one draft rule (`shared/drafts.ts`): a name in the
+so a SKILL.md renamed by hand is still listed and can be deleted. Settings › Prompts lists each
+real `<name>.md` (not a link) by the name Pi loads it as, so one placed by hand under a name New
+prompt would refuse, such as `Review.md`, can still be deleted. Deleting one already gone is
+refused on both pages. Both follow one draft rule (`shared/drafts.ts`): a name in the
 Agent Skills form (at most 64 lowercase letters, numbers and single hyphens, not at the start or
 end), a description of at most 1,024 characters and instructions of at most 20,000. A skill adds
 Disable model invocation.
