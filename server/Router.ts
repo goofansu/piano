@@ -336,6 +336,9 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.createUserSkill, ({ body }) =>
       Effect.flatMap(UserSkills, (skills) => skills.create(body)),
     );
+    yield* serve(Endpoints.proposeUserSkill, ({ body }) =>
+      Effect.flatMap(UserSkills, (skills) => skills.propose(body)),
+    );
     yield* serve(Endpoints.updateUserSkill, ({ body }) =>
       Effect.flatMap(UserSkills, (skills) => skills.update(body)),
     );
@@ -348,6 +351,9 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.prompts, () => Effect.flatMap(Prompts, (prompts) => prompts.list));
     yield* serve(Endpoints.createPrompt, ({ body }) =>
       Effect.flatMap(Prompts, (prompts) => prompts.create(body)),
+    );
+    yield* serve(Endpoints.proposePrompt, ({ body }) =>
+      Effect.flatMap(Prompts, (prompts) => prompts.propose(body)),
     );
     yield* serve(Endpoints.updatePrompt, ({ body }) =>
       Effect.flatMap(Prompts, (prompts) => prompts.update(body)),

@@ -71,8 +71,11 @@ See [prompts](prompts.md).
 
 `piano-library` registers `piano_save_skill` and `piano_save_prompt`, model-callable tools and no
 slash command, and only when Piano gave the child its endpoint (`PIANO_SESSION_WS_URL`,
-`PIANO_SESSION_ORIGIN`, as for [dispatch](#session-dispatch)). A call checks the draft rule before
-anything is asked, then asks through a Pi `confirm` dialog whose title and message
+`PIANO_SESSION_ORIGIN`, as for [dispatch](#session-dispatch)). A call first asks Piano for the
+save's proposal (`POST /api/settings/skills/proposal` or `/api/settings/prompts/proposal`): the file
+it would write and, for one Piano created, the file it replaces, or the refusal the save itself
+would give (the draft rule, a name already taken), so the user is never asked to approve a save
+Piano would refuse. It then asks through a Pi `confirm` dialog whose title and message
 `shared/library.ts` writes; the browser shows it above the composer as a card: the file as it would
 be saved for a new one, a diff against the saved file for one Piano created. Only **Save** writes,
 through the same HTTP endpoints Settings uses (`PUT` replaces a skill or prompt Piano created and

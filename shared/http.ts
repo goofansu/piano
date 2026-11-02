@@ -10,11 +10,11 @@
 import { Schema } from "effect";
 import { FileDownload, FilePreview } from "./files.ts";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
-import { Prompt, PromptCreate, PromptUpdate } from "./prompts.ts";
+import { Prompt, PromptCreate, PromptProposal, PromptUpdate } from "./prompts.ts";
 import { API_KEY_INVALID, ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
-import { UserSkill, UserSkillCreate, UserSkillUpdate } from "./skills.ts";
+import { UserSkill, UserSkillCreate, UserSkillProposal, UserSkillUpdate } from "./skills.ts";
 import { Webhook, WebhookDelivery, WebhookSave } from "./webhooks.ts";
 import {
   ChangesScope,
@@ -393,6 +393,19 @@ export const Endpoints = {
     redact: false,
     fallback: "Could not create skill.",
   }),
+  /** What saving a skill draft would do; Piano's save tool shows it for the user's Save, and asks
+   * nothing when the save would be refused. Writes nothing. */
+  proposeUserSkill: endpoint({
+    method: "POST",
+    path: "/api/settings/skills/proposal",
+    body: UserSkillCreate,
+    invalid: "Enter a name, a description and instructions.",
+    response: UserSkillProposal,
+    noStore: true,
+    refused: 400,
+    redact: false,
+    fallback: "Could not save skill.",
+  }),
   /** Replaces a skill Piano created; Piano's save tool calls it after the user's Save, with the
    * file it showed as `previous` so a skill changed since is refused, not overwritten. */
   updateUserSkill: endpoint({
@@ -445,6 +458,20 @@ export const Endpoints = {
     body: PromptCreate,
     invalid: "Enter a name and the prompt.",
     response: Prompt,
+    noStore: true,
+    refused: 400,
+    // Text the person wrote in Piano (DisplayProjection's authored-text rule): View copies it as saved.
+    redact: false,
+    fallback: "Could not save prompt.",
+  }),
+  /** What saving a prompt draft would do; Piano's save tool shows it for the user's Save, and asks
+   * nothing when the save would be refused. Writes nothing. */
+  proposePrompt: endpoint({
+    method: "POST",
+    path: "/api/settings/prompts/proposal",
+    body: PromptCreate,
+    invalid: "Enter a name and the prompt.",
+    response: PromptProposal,
     noStore: true,
     refused: 400,
     // Text the person wrote in Piano (DisplayProjection's authored-text rule): View copies it as saved.

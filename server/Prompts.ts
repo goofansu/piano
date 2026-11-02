@@ -7,14 +7,14 @@
  * (INV-12). A running Pi loaded its templates when it
  * started, so a change reaches sessions started from then on.
  */
-import { readFileSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
 import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
 import { promptFile as templateText } from "../shared/library.ts";
-import type { Prompt, PromptCreate, PromptUpdate } from "../shared/prompts.ts";
+import type { Prompt, PromptCreate, PromptProposal, PromptUpdate } from "../shared/prompts.ts";
 import * as LibraryFile from "./LibraryFile.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 import { agentDir } from "./PiEnv.ts";
@@ -58,6 +58,10 @@ export class Prompts extends Context.Service<
   {
     /** Piano's prompts by name, as Pi reads them. */
     readonly list: Effect.Effect<readonly Prompt[], PromptError>;
+    /** What saving `input` would do, refused as the save would refuse it; writes nothing. A
+     * prompt Piano created is updated; any other name is created, unless Pi already loads a
+     * prompt of that name. */
+    readonly propose: (input: PromptCreate) => Effect.Effect<PromptProposal, PromptError>;
     /** Save a new prompt; a name already taken, in Piano's folder or one Pi loads before it, is
      * refused, never overwritten. */
     readonly create: (input: PromptCreate) => Effect.Effect<Prompt, PromptError>;
@@ -126,6 +130,39 @@ export const PromptsLive = Layer.effect(
       );
     });
 
+    const taken = (name: string) =>
+      new PromptError({ detail: `A prompt named ${name} already exists.`, field: "name" });
+    // A name Pi already loads from another folder would hide Piano's prompt behind it.
+    const loadedElsewhere = (name: string) =>
+      environment.others().some((other) => loadedFrom(other, name));
+
+    const propose = Effect.fn("Prompts.propose")(function* (input: PromptCreate) {
+      const check = checkDraft(input);
+      const saved = check.saved;
+      if (!saved)
+        return yield* new PromptError(check.problem ?? { detail: "Could not save prompt." });
+      const name = saved.name;
+      const text = templateText(saved);
+      const path = file(name);
+      const kind = (() => {
+        try {
+          return lstatSync(path).isFile() ? "file" : "other";
+        } catch {
+          return "none";
+        }
+      })();
+      // Only a regular file is replaced; anything else of that name refuses the create as well.
+      if (kind === "file") {
+        const previous = yield* Effect.tryPromise({
+          try: () => readFile(path, "utf8"),
+          catch: unreadable,
+        });
+        return { change: "update" as const, name, file: text, previous };
+      }
+      if (kind === "other" || loadedElsewhere(name)) return yield* taken(name);
+      return { change: "create" as const, name, file: text };
+    });
+
     const create = Effect.fn("Prompts.create")(function* (input: PromptCreate) {
       const check = checkDraft(input);
       const saved = check.saved;
@@ -133,10 +170,7 @@ export const PromptsLive = Layer.effect(
         return yield* new PromptError(check.problem ?? { detail: "Could not save prompt." });
       const name = saved.name;
       const text = templateText(saved);
-      const taken = () =>
-        new PromptError({ detail: `A prompt named ${name} already exists.`, field: "name" });
-      // A name Pi already loads from another folder would hide Piano's prompt behind it.
-      if (environment.others().some((other) => loadedFrom(other, name))) return yield* taken();
+      if (loadedElsewhere(name)) return yield* taken(name);
       yield* Effect.tryPromise({
         // `wx` refuses an existing file, so two creates of one name never overwrite each other.
         try: () =>
@@ -145,7 +179,7 @@ export const PromptsLive = Layer.effect(
           ),
         catch: (cause) =>
           code(cause) === "EEXIST"
-            ? taken()
+            ? taken(name)
             : new PromptError({ detail: "Could not save prompt." }),
       });
       return readPrompt(name, text);
@@ -188,6 +222,6 @@ export const PromptsLive = Layer.effect(
       );
     });
 
-    return { list: list(), create, update, remove };
+    return { list: list(), propose, create, update, remove };
   }),
 );
