@@ -4,7 +4,7 @@ import { ChevronLeftIcon, LinkIcon, MessageSquareQuoteIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "@/components/IconButton";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
-import { RailList, RailRowTitle, railRow, useRailLeave } from "@/components/SessionRailList";
+import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
@@ -29,16 +29,14 @@ interface Props {
 export function SessionLinks({ links, messages, working = false }: Props) {
   const viewport = useTranscriptViewport();
   const navigation = useNavigation();
-  const leave = useRailLeave();
   // Fallback destinations, from the rows the transcript renders, like the jump list's entries.
   const entries = useMemo(
     () => jumpEntries(transcriptRows(messages, { working })),
     [messages, working],
   );
   const reveal = (link: SessionLink, animate: boolean) => {
-    // One area at a time the conversation may be hidden; reveal it, and close the menu over it.
+    // One area at a time the conversation may be hidden; reveal it.
     if (navigation.single) navigation.showAgent();
-    leave();
     for (const entry of revealEntries(messages, entries, link.messageId))
       if (viewport?.jump(entry, { animate })) return;
   };
