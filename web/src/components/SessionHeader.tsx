@@ -100,7 +100,7 @@ export function SessionHeader({
           <>
             <span aria-hidden>·</span>
             <span className="min-w-0 flex-1">
-              <MiddleEllipsis text={place.ref} />
+              <MiddleEllipsis text={place.ref.name} />
             </span>
           </>
         )}
