@@ -258,8 +258,11 @@ export function SessionView({ state, send }: Props) {
                     <StatusLine key={n.id} notice={n} />
                   ),
                 )}
-              {answerReceipt && <AnsweredQuestion resolution={answerReceipt} />}
-              <InlineQuestion pending={pendingDialogs(state)} send={send} />
+              {/* Local file links in a question open the preview, as they do in the transcript. */}
+              <LocalFileContext value={(path) => openFile(path, "agent")}>
+                {answerReceipt && <AnsweredQuestion resolution={answerReceipt} />}
+                <InlineQuestion pending={pendingDialogs(state)} send={send} />
+              </LocalFileContext>
               <Composer
                 session={t}
                 draftKey={draftKey}

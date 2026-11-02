@@ -36,3 +36,9 @@ export const renderMarkdown = (
       }),
     ),
   );
+
+const { QuestionText } = (await vite.ssrLoadModule("/src/components/QuestionText.tsx")) as {
+  QuestionText: ComponentType<{ text: string }>;
+};
+export const renderQuestion = (text: string) =>
+  renderToStaticMarkup(createElement(TooltipProvider, null, createElement(QuestionText, { text })));

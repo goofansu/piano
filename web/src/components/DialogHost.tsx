@@ -56,8 +56,8 @@ function DialogView({
     <Dialog open={open} onOpenChange={(open) => !open && cancel()}>
       <DialogContent className="sm:max-w-lg" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription className="whitespace-pre-wrap">
+          <DialogTitle className="whitespace-pre-wrap break-words">{title}</DialogTitle>
+          <DialogDescription className="whitespace-pre-wrap break-words">
             {d.message && (
               <>
                 {d.message}

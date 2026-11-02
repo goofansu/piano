@@ -7,9 +7,10 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/PianoPopover";
+import { QuestionText } from "@/components/QuestionText";
 import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
-import { Item, ItemContent, ItemHeader, ItemTitle } from "@/components/ui/item";
+import { Item, ItemContent, ItemHeader } from "@/components/ui/item";
 import { answerReceipt, dialogTitle } from "@/lib/piDialogs";
 
 /** The latest submitted reply and its delivery problem, never an addition to Pi’s history. */
@@ -45,9 +46,7 @@ export function AnsweredQuestion({ resolution }: { resolution: DialogResolution 
           </ItemHeader>
         )}
         <ItemContent className="min-w-0">
-          <ItemTitle className="line-clamp-none whitespace-pre-wrap break-words">
-            {dialogTitle(answer.title)}
-          </ItemTitle>
+          <QuestionText text={dialogTitle(answer.title)} className="text-ink-2" />
           <p className="max-h-32 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words">
             {value || <span className="text-ink-2">Empty answer</span>}
           </p>
