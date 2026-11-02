@@ -305,8 +305,13 @@ test("an update replaces only a skill Piano created, and a new Pi loads the new 
       instructions: "Old.",
     }),
   );
+  // Each update replaces the file as it is on disk; a name with no Piano skill has none.
+  const shown = (name: string) => {
+    const path = join(directory, name, "SKILL.md");
+    return existsSync(path) ? readFileSync(path, "utf8") : "";
+  };
   const update = (name: string, description = "D.", instructions = "I.") =>
-    run((skills) => skills.update({ name, description, instructions }));
+    run((skills) => skills.update({ name, description, instructions, previous: shown(name) }));
 
   const updated = await update("notes", "Writes release notes.", "New.");
   assert.equal(updated._tag, "Success");

@@ -240,3 +240,28 @@ test("of two sessions updating one skill from the same file, the second Save is 
     "the agent reads why, and the user's approved diff is never applied to another file",
   );
 });
+
+test("an update that names no file it replaces is refused, for a skill and a prompt alike", async () => {
+  const draft = { name: "blind", description: "Blind update.", instructions: "One." };
+  for (const kind of ["skill", "prompt"] as const)
+    assert.equal(
+      (await saveToLibrary(kind, draft, user(() => true).deps, undefined)).status,
+      "saved",
+    );
+  const files = [join(skills, "blind", "SKILL.md"), join(prompts, "blind.md")];
+  const before = files.map((file) => readFileSync(file, "utf8"));
+
+  // Any caller of the endpoint, not only the extension: without `previous` nothing is written.
+  for (const path of ["/api/settings/skills", "/api/settings/prompts"]) {
+    const response = await server.handle(path, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...draft, instructions: "Overwritten." }),
+    });
+    assert.equal(response.status, 400, path);
+  }
+  assert.deepEqual(
+    files.map((file) => readFileSync(file, "utf8")),
+    before,
+  );
+});
