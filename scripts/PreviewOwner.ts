@@ -10,7 +10,7 @@ import {
   type PreviewRequest,
   PreviewStartError,
 } from "./PreviewAdapter.ts";
-import { READY_INTERVAL_MS } from "./PreviewReadiness.ts";
+import { READY_INTERVAL_MS, WARMUP_SECONDS } from "./PreviewReadiness.ts";
 
 /** An adapter outcome. A failed observation after a failed start carries the instance that start
  * saved, if any: it may be running. */
@@ -53,8 +53,9 @@ export class PreviewOwner {
   private ending = false;
   private disposed?: Promise<void>;
   private observer?: PreviewObserver;
-  /** The warming-up app whose readiness this owner keeps checking, and its next check. */
-  private warming?: { instanceId: string; timer: NodeJS.Timeout };
+  /** The warming-up app whose readiness this owner keeps checking, until when at the latest, and
+   * its scheduled or running check. */
+  private warming?: { instanceId: string; until: number; timer?: NodeJS.Timeout };
 
   private constructor(
     identity: PreviewOwnerIdentity,
@@ -160,50 +161,66 @@ export class PreviewOwner {
     this.observer = observer;
   }
 
-  /** Publish an outcome, and keep checking a warming-up app until it answers, fails or its
-   * warm-up window ends: a start's deadline ends only its caller's wait, never the checking. */
+  /** Publish an outcome to the observer, then let it decide the warming check. */
   private publish(request: PreviewRequest, outcome: PreviewOutcome) {
     this.observer?.(request, outcome);
-    const app =
-      "result" in outcome ? generationApp(outcome.result, this.identity.generation) : undefined;
-    const instanceId = app?.warming === true ? app.instanceId : undefined;
-    if (instanceId && this.warming?.instanceId === instanceId) return;
-    if (this.warming) clearTimeout(this.warming.timer);
-    this.warming = undefined;
-    if (!instanceId || this.ending) return;
-    const next = () => {
-      this.warming = { instanceId, timer: setTimeout(check, READY_INTERVAL_MS) };
-      // A pending check never keeps a process alive by itself.
-      this.warming.timer.unref();
-    };
-    const check = () => {
-      if (this.ending || this.warming?.instanceId !== instanceId) return;
+    this.follow(outcome);
+  }
+
+  /** The one rule for checking a warming-up app: only an observed app starts or ends the check;
+   * an error, busy or not, observed nothing, so the owner keeps checking the same app. A start's
+   * deadline ends only its caller's wait. The check ends once the app answers, exits or is
+   * replaced, and at the latest a warm-up window after it was first seen warming up, so a
+   * persistent error cannot keep it checking forever. */
+  private follow(outcome: PreviewOutcome) {
+    if (this.ending) return;
+    if ("result" in outcome) {
+      const app = generationApp(outcome.result, this.identity.generation);
+      const instanceId = app?.warming === true ? app.instanceId : undefined;
+      if (this.warming?.instanceId !== instanceId) {
+        clearTimeout(this.warming?.timer);
+        this.warming = instanceId
+          ? { instanceId, until: Date.now() + WARMUP_SECONDS * 1000 }
+          : undefined;
+      }
+    }
+    const warming = this.warming;
+    if (!warming || warming.timer) return;
+    if (Date.now() >= warming.until) {
+      this.warming = undefined;
+      return;
+    }
+    warming.timer = setTimeout(() => this.check(warming), READY_INTERVAL_MS);
+    // A pending check never keeps a process alive by itself.
+    warming.timer.unref();
+  }
+
+  private check(warming: NonNullable<PreviewOwner["warming"]>) {
+    void this.serial(async () => {
+      if (this.ending || this.warming !== warming) return;
       const status: PreviewRequest = { action: "status", workspace: this.identity.workspace };
-      void this.serial(async () => {
-        if (this.ending || this.warming?.instanceId !== instanceId) return;
-        try {
-          const result = await this.adapter.request(
+      let outcome: PreviewOutcome;
+      try {
+        outcome = {
+          result: await this.adapter.request(
             status,
             this.root,
             await this.config(),
             this.identity,
             undefined,
             false,
-          );
-          // Another request may have replaced or stopped the app while this one waited.
-          if (this.warming?.instanceId !== instanceId) return;
-          this.warming = undefined;
-          this.publish(status, { result });
-        } catch (error) {
-          if (this.warming?.instanceId !== instanceId) return;
-          // A busy lock observed nothing: the app is as warm as it was, so check again later.
-          if (error instanceof PreviewBusyError) return next();
-          this.warming = undefined;
-          this.observer?.(status, { error });
-        }
-      });
-    };
-    next();
+          ),
+        };
+      } catch (error) {
+        outcome = { error };
+      }
+      // Another request may have replaced or stopped the app while this one waited.
+      if (this.ending || this.warming !== warming) return;
+      warming.timer = undefined;
+      // A busy lock observed nothing worth showing: the app is as warm as it was.
+      if ("error" in outcome && outcome.error instanceof PreviewBusyError) this.follow(outcome);
+      else this.publish(status, outcome);
+    });
   }
 
   request(request: PreviewRequest) {
@@ -251,7 +268,7 @@ export class PreviewOwner {
   /** Called at transport exit, before waiting for adapter locks or supervisor commands. */
   disconnect() {
     this.ending = true;
-    if (this.warming) clearTimeout(this.warming.timer);
+    clearTimeout(this.warming?.timer);
     this.warming = undefined;
     if (!this.disposed) {
       for (const socket of this.sockets) socket.destroy();
