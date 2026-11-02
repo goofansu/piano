@@ -252,7 +252,6 @@ function WebhookRow({
       <ItemContent className="min-w-0 gap-0.5">
         <ItemTitle className={hook.active ? undefined : "text-ink-2"}>
           <span className="truncate">{name}</span>
-          {!hook.active && <span className="text-xs font-normal text-ink-3">Off</span>}
         </ItemTitle>
         <ItemDescription className="line-clamp-none font-mono text-xs">
           {hook.events.join(" · ")}
