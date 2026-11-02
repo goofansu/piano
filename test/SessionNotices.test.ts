@@ -130,26 +130,29 @@ test("banners come before status lines, in a fixed order", () => {
   assert.equal(find(s, "dialog-resolution")?.title, "Dialog expired: no answer in time");
 });
 
-test("a cancellation Pi received leaves no status line; a pending, uncertain or unsent one does", () => {
-  for (const delivery of ["pending", "written", "accepted", "uncertain", "not-sent"] as const) {
-    const line = find(
-      at({
-        dialogResolution: {
-          id: "d1",
-          generation: "g",
-          reason: "cancelled",
-          delivery,
-          detail: "Transport outcome",
-        },
-      }),
-      "dialog-resolution",
-    );
-    if (delivery === "written" || delivery === "accepted") assert.equal(line, undefined, delivery);
-    else {
-      assert.equal(line?.placement, "status");
-      assert.match(line?.title ?? "", /Transport outcome/);
+test("a cancel or Stop Pi received leaves no status line; a pending, uncertain or unsent one does", () => {
+  // Stop ends an open dialog as "aborted": the user's own act, as a cancel is.
+  for (const reason of ["cancelled", "aborted"] as const)
+    for (const delivery of ["pending", "written", "accepted", "uncertain", "not-sent"] as const) {
+      const line = find(
+        at({
+          dialogResolution: {
+            id: "d1",
+            generation: "g",
+            reason,
+            delivery,
+            detail: "Transport outcome",
+          },
+        }),
+        "dialog-resolution",
+      );
+      if (delivery === "written" || delivery === "accepted")
+        assert.equal(line, undefined, `${reason} ${delivery}`);
+      else {
+        assert.equal(line?.placement, "status");
+        assert.match(line?.title ?? "", /Transport outcome/);
+      }
     }
-  }
 });
 
 test("an answer card owns its delivery feedback without a duplicate status line", () => {
