@@ -3,7 +3,6 @@
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, readdirSync, writeFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-import { proposalDialog } from "../shared/library.ts";
 
 const args = process.argv.slice(2);
 // Simulate a personal extension remembering its project_trust decision during startup.
@@ -712,26 +711,26 @@ function handle(cmd) {
       }
       if (cmd.message.startsWith("propose")) {
         // A `piano-library` save proposal: "propose hidden" changes only a value Piano redacts.
+        // Imported here, not at startup, so every other fake Pi starts as fast as before.
         const hidden = cmd.message === "propose hidden";
-        out({
-          type: "extension_ui_request",
-          id: "p1",
-          method: "confirm",
-          ...proposalDialog({
-            kind: "prompt",
-            change: "update",
-            name: "deploy",
-            ...(hidden
-              ? {
-                  previous: '---\ndescription: "Deploy"\n---\nUse api_key: staging-111 for $1\n',
-                  file: '---\ndescription: "Deploy"\n---\nUse api_key: production-999 for $1\n',
-                }
-              : {
-                  previous: '---\ndescription: "Deploy"\n---\nDeploy $1\n',
-                  file: '---\ndescription: "Deploy"\n---\nDeploy $1 to staging\n',
-                }),
+        const files = hidden
+          ? ["Use api_key: staging-111 for $1", "Use api_key: production-999 for $1"]
+          : ["Deploy $1", "Deploy $1 to staging"];
+        const file = (body) => `---\ndescription: "Deploy"\n---\n${body}\n`;
+        import("../shared/library.ts").then(({ proposalDialog }) =>
+          out({
+            type: "extension_ui_request",
+            id: "p1",
+            method: "confirm",
+            ...proposalDialog({
+              kind: "prompt",
+              change: "update",
+              name: "deploy",
+              previous: file(files[0]),
+              file: file(files[1]),
+            }),
           }),
-        });
+        );
         return;
       }
       if (cmd.message.startsWith("exit cleanly")) process.exit(0);
