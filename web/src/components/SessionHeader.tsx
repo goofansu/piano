@@ -56,6 +56,9 @@ export function SessionHeader({
   const { single } = useNavigation();
   const sheet = mobile || single;
   const [sheetOpen, setSheetOpen] = useState(false);
+  // The sheet closes when the areas stop taking turns: it unmounts for the dropdown then, and
+  // must not reappear by itself when they take turns again.
+  if (!sheet && sheetOpen) setSheetOpen(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
   const { title, sessionId, cwd } = sessionContext(state);
