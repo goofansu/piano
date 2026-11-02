@@ -236,7 +236,7 @@ const inputPrefix = () =>
 
 export function createDrafts(): Drafts {
   const drafts = new Map<DraftKey, Draft>();
-  /** Session input sent but not yet reported by Pi or refused, by the `inputId` it was sent with. */
+  /** Session input sent but not yet acknowledged by its session or refused, by the `inputId` it was sent with. */
   const unconfirmed = new Map<string, { key: DraftKey; draft: Draft }>();
   const prefix = inputPrefix();
   let inputs = 0;
@@ -256,6 +256,12 @@ export function createDrafts(): Drafts {
       ...d,
       images: images.items.length || images.busy || images.error ? images : NO_IMAGES,
     }));
+  /** Input that never reached Pi returns to its draft, once: the first refusal claims it. */
+  const giveBack = (inputId: string) => {
+    const refused = unconfirmed.get(inputId);
+    unconfirmed.delete(inputId);
+    if (refused) update(refused.key, (now) => restore(refused.draft, now));
+  };
   const isSendable = (draft: Draft) =>
     sendable({ text: draftMessage(draft).text, images: draft.images });
   const paragraph = (key: DraftKey | null, text: string) =>
@@ -338,18 +344,22 @@ export function createDrafts(): Drafts {
     follow: (source) =>
       source.listen((m) => {
         if (m._tag === "error" && m.inputId) {
-          const refused = unconfirmed.get(m.inputId);
-          unconfirmed.delete(m.inputId);
-          if (refused) update(refused.key, (now) => restore(refused.draft, now));
+          // Refused before a session took it (no receipt follows), or after its `not_sent`
+          // receipt, which has already given it back.
+          giveBack(m.inputId);
         } else if (m._tag === "session" || m._tag === "selected") {
-          // Pi has the input: from here on, its outcome is Pi's submission receipt.
+          // The session has the input, and its receipt decides. `submitting` is announced before
+          // Pi is asked, so it decides nothing yet; `not_sent` means Pi never saw the input, so
+          // the draft comes back; any other verdict means Pi holds or held it, so it stays sent.
           const submission =
             m._tag === "selected"
               ? m.snapshot.state.submission
               : m.event._tag === "submission"
                 ? m.event.submission
                 : undefined;
-          if (submission?.inputId) unconfirmed.delete(submission.inputId);
+          if (submission?.inputId && submission.outcome !== "submitting")
+            if (submission.outcome === "not_sent") giveBack(submission.inputId);
+            else unconfirmed.delete(submission.inputId);
         } else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
           const restored = m.result.messages.map((message) => message.text).join("\n\n");
           if (restored) paragraph(sessionDraftKey(m), restored);
