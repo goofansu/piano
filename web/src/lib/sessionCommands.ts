@@ -364,7 +364,7 @@ export function sessionCommands(
         label: rail ? "Hide session rail" : "Show session rail",
         icon: "list",
         enabled: !single,
-        // One area at a time the session menu holds the rail's facts.
+        // One area at a time there is no rail: the header says where the session runs.
         hidden: single,
         keywords: ["details", "info", "outputs", "files", "links", "branch"],
         intent: { kind: "session-rail" },

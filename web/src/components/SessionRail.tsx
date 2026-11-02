@@ -57,13 +57,11 @@ const RECENT_LINKS = 5;
 const NO_MESSAGES: NonNullable<AppState["session"]>["messages"] = [];
 
 /**
- * What the session rail holds for the selected session, read once for both of its homes: the rail
- * column beside the Agent area and, one area at a time, the phone session menu. App is there
- * while a preview is known, Outputs once Pi wrote a file, Links once the conversation mentions a
- * link; Links lists newest first, `recentLinks` before Show all. The two homes differ only in
- * layout.
+ * What the session rail holds for the selected session: App while a preview is known, Outputs once
+ * Pi wrote a file, Links once the conversation mentions a link; Links lists newest first,
+ * `recentLinks` before Show all.
  */
-export function useRailContents(state: AppState) {
+function useRailContents(state: AppState) {
   const preview = useSeenPreview(state);
   const files = useSessionFiles();
   const messages = state.session?.messages ?? NO_MESSAGES;
@@ -79,7 +77,7 @@ export function useRailContents(state: AppState) {
   };
 }
 
-export type RailContents = ReturnType<typeof useRailContents>;
+type RailContents = ReturnType<typeof useRailContents>;
 
 /**
  * The session rail: Environment (its repository or folder, branch and linked pull request), Outputs (the
