@@ -66,8 +66,9 @@ export interface AnswerReceipt {
   status: { label: string; tone: AnswerTone; pulse: boolean } | null;
   /** The card offers the delivery detail behind a Details popover. */
   details: boolean;
-  /** The status line for a resolution without an answer; null when it has one. */
-  notice: { tone: "warning" | "quiet"; title: string } | null;
+  /** The status line for a resolution without an answer; null when it has one or the user's
+   * cancellation reached Pi. */
+  notice: { tone: "quiet"; title: string } | null;
   /** The answer was confirmed; announced once per resolution. */
   accepted: boolean;
 }
@@ -95,17 +96,17 @@ export function answerReceipt(resolution: DialogResolution): AnswerReceipt {
     delivery === "written" && owned
       ? { label: "Sent, waiting for Pi…", tone: "busy" as const }
       : deliveryStatus[delivery];
-  // Cancelling a question Pi already received is worth a warning; other endings stay quiet.
+  // A cancellation Pi received is the user's own act and needs no receipt, as a confirmed answer
+  // leaves none; a pending, uncertain or unsent one still says so (INV-04).
   const cancelled =
     resolution.reason === "cancelled" && (delivery === "written" || delivery === "accepted");
   return {
     card: !!answer && delivery !== "accepted" && !(delivery === "written" && !owned),
     status: status && { ...status, pulse: delivery === "pending" },
     details: delivery === "uncertain" || delivery === "not-sent" || delivery === "rejected",
-    notice: answer
-      ? null
-      : cancelled
-        ? { tone: "warning", title: "Question cancelled" }
+    notice:
+      answer || cancelled
+        ? null
         : { tone: "quiet", title: `Dialog ${resolution.reason}: ${resolution.detail}` },
     accepted: delivery === "accepted" && !!answer,
   };

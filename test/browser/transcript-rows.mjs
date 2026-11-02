@@ -284,21 +284,19 @@ await run(
       `!document.querySelector('${tool} [data-slot="collapsible-content"]').textContent`,
     );
 
-    // The live cancellation notice uses the same first-line gutter as transcript errors.
+    // Cancelling a question dismisses it: no "Question cancelled" line stays under the transcript.
     await page.ab("fill", '[aria-label="Message"]', "question");
     await page.press("Enter");
     await page.see("Which checks?");
     await page.click("button", "Cancel");
-    await page.see("Question cancelled");
-    await page.capture("3-cancelled-question");
-    const cancelled = (await page.evaluate(measure)).find(
-      (row) => row.text === "Question cancelled",
+    await page.until(
+      `!document.querySelector('section[aria-label="Question"]') && !document.querySelector('section[aria-label="Last dialog"]')`,
     );
-    assert.ok(cancelled, "cancellation has a gutter glyph");
-    assert.ok(Math.abs(cancelled.offset) <= 1, `cancellation glyph offset: ${cancelled.offset}px`);
-    writeFileSync(
-      join(process.argv[2] ?? ".scratch/browser/transcript-rows", "offsets-cancelled.json"),
-      JSON.stringify(cancelled, null, 2),
+    await page.capture("3-cancelled-question");
+    assert.equal(
+      await page.evaluate(`document.body.innerText.includes("Question cancelled")`),
+      false,
+      "a cancelled question leaves no status line",
     );
   },
 );
