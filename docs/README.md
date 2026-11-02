@@ -59,6 +59,9 @@ and sets gates for either; it is a recommendation, not a shipped terminal.
 (Linear first) and signs in to them through Pi's MCP OAuth.
 [Prompts](prompts.md) describes the Settings page that creates and deletes Pi prompt templates
 kept in Piano's own folder.
+The [agent-authored skills, prompts and instructions design](research/2026-11-02-agent-authored-skills-prompts-instructions.md)
+proposes tools through which a session asks the user to save what those Settings pages and Project
+settings show; it is a proposal, not a shipped capability.
 
 Changes to these decisions belong in a new or superseding ADR, with the affected invariant IDs
 and verification consequences made explicit. Routine implementation choices remain within the
