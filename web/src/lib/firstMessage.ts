@@ -72,6 +72,9 @@ export function reconcile(
       submission.outcome === "uncertain")
   )
     return { ...input, outcome: submission.outcome, detail: submission.detail };
+  // Pi never saw it; the detail says nothing was sent.
+  if (submission?.outcome === "not_sent")
+    return { ...input, outcome: "rejected", detail: submission.detail };
   if (submission?.outcome === "started" || submission?.outcome === "queued")
     return { ...input, outcome: "submitted", detail: undefined };
   if (session.state.closure && input.outcome !== "submitted")

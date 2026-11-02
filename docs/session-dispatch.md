@@ -282,8 +282,9 @@ without a run) or `rejected`, with the reason in `detail`. `needs_input` means a
 before Pi acknowledged the message, as a command that asks a question does; `detail` says what it
 asks, as [status](#status-by-session-id) does, and the session's link opens it. A start reports a
 dialog on its first prompt the same way. A dialog that was already waiting when the message was
-sent is not counted: Pi acknowledges the message around it. `not_sent` means Piano never received the
-message. `uncertain` means it may have reached Pi (a lost connection, a failure Piano reported
+sent is not counted: Pi acknowledges the message around it. `not_sent` means Pi never saw the
+message: Piano never received it, or refused it before Pi did (full input capacity, a stopped Pi),
+with the reason in `detail`; sending again cannot duplicate it. `uncertain` means it may have reached Pi (a lost connection, a failure Piano reported
 without Pi's verdict, or no answer within 30 seconds). The script never sends a message twice: after
 `uncertain`, read the session's [status](#status-by-session-id) and its transcript before deciding
 to send again. Accepted is not done; read the status for what the session did with it.

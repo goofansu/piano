@@ -198,7 +198,17 @@ export const PromptSubmission = Schema.Struct({
   inputId: Schema.optional(Schema.String),
   /** Same server-owned equality token as recorded input, before Pi transforms or redacts it. */
   inputFingerprint: Schema.optional(Schema.String),
-  outcome: Schema.Literals(["submitting", "started", "queued", "handled", "rejected", "uncertain"]),
+  /** `not_sent`: refused before Pi saw the input (full capacity, an exited Pi), so its sender may
+   * take it back. `rejected`: Pi saw it and refused it. `uncertain`: it may have reached Pi. */
+  outcome: Schema.Literals([
+    "submitting",
+    "started",
+    "queued",
+    "handled",
+    "rejected",
+    "not_sent",
+    "uncertain",
+  ]),
   detail: Schema.optional(Schema.String),
 });
 export type PromptSubmission = typeof PromptSubmission.Type;
