@@ -521,7 +521,7 @@ await run(
 
     // PIN-125: Space on a focused button activates it once; the type-anywhere shortcut must not
     // take it into the composer. Wide, the header toggles the side-by-side rail; narrow, the
-    // session menu, which holds the rail's facts there, opens. The unsent draft stays byte-for-byte.
+    // session menu, a sheet there, opens. The unsent draft stays byte-for-byte.
     await page.open("/s/login-bug");
     await page.see("echo: Add a regression test");
     const draft = "Keep  this draft ";
@@ -536,7 +536,7 @@ await run(
       await page.press(key);
       const after = await page.evaluate(`(() => ({
         pressed: document.querySelector('${trigger}')?.getAttribute('aria-pressed'),
-        sheet: !!document.querySelector('[role=dialog] [aria-label=Environment]'),
+        sheet: !!document.querySelector('[role=dialog][data-slot=sheet-content]'),
         rail: !!document.querySelector('[data-rail-trigger]'),
         draft: document.querySelector('[aria-label="Message"]').value,
         focus: document.activeElement?.getAttribute('aria-label'),
@@ -556,7 +556,7 @@ await run(
     }
     for (const key of ["Space", "Enter"]) {
       const { after } = await headerKey(600, "[data-session-menu]", key);
-      assert.ok(after.sheet, `${key} opens the session menu with the rail's Environment`);
+      assert.ok(after.sheet, `${key} opens the session menu as a sheet`);
       assert.equal(after.rail, false, "one area at a time the header has no rail toggle");
       await page.press("Escape");
       await page.until("!document.querySelector('[role=dialog]')");

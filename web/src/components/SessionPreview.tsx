@@ -64,7 +64,7 @@ import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
 /** The app's state in the status dot's vocabulary; work in progress breathes. */
-const dotTone: Record<PreviewTone, StatusTone> = {
+export const dotTone: Record<PreviewTone, StatusTone> = {
   ready: "ok",
   pending: "busy",
   problem: "err",

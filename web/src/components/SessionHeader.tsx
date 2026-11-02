@@ -8,7 +8,8 @@ import {
   useSessionProjectMenu,
 } from "@/components/CommandHost";
 import { IconButton } from "@/components/IconButton";
-import { MobileSessionSheet, SessionDetails } from "@/components/MobileSessionSheet";
+import { MiddleEllipsis } from "@/components/MiddleEllipsis";
+import { MobileSessionSheet } from "@/components/MobileSessionSheet";
 import { PaneHeader } from "@/components/Pane";
 import { PianoButton } from "@/components/PianoButton";
 import {
@@ -34,7 +35,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
-import { sessionContext } from "@/lib/sessionContext";
+import { sessionContext, sessionPlace } from "@/lib/sessionContext";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
@@ -52,7 +53,8 @@ export function SessionHeader({
   pullRequest: PullRequestControl;
 }) {
   const mobile = useIsMobile();
-  // One area at a time there is no rail, so the session menu is the sheet that holds its facts.
+  // One area at a time there is no rail: the session menu is a sheet, and the title's second line
+  // says where the session runs.
   const { single } = useNavigation();
   const sheet = mobile || single;
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -61,7 +63,9 @@ export function SessionHeader({
   if (!sheet && sheetOpen) setSheetOpen(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
-  const { title, sessionId, cwd } = sessionContext(state);
+  const context = sessionContext(state);
+  const { title, sessionId, cwd } = context;
+  const place = sheet && session ? sessionPlace(context) : undefined;
   const { commands, run } = useSessionCommands();
   const menu = sessionHeaderMenu(commands);
   const projectMenu = useSessionProjectMenu();
@@ -83,6 +87,27 @@ export function SessionHeader({
     <h1 className="min-w-0 truncate text-sm font-medium text-ink">
       {session ? title : "New session"}
     </h1>
+  );
+  // With no rail, where the session runs sits under the title as it does under a sidebar row: the
+  // repository or folder, then the branch shortened in the middle. It shows its own text, so it
+  // does nothing on tap.
+  const titleBlock = place ? (
+    <div className="flex min-w-0 flex-col">
+      {heading}
+      <p className="flex min-w-0 items-center gap-1 text-xs text-ink-3">
+        <span className="truncate">{place.name}</span>
+        {place.ref && (
+          <>
+            <span aria-hidden>·</span>
+            <span className="min-w-0 flex-1">
+              <MiddleEllipsis text={place.ref} />
+            </span>
+          </>
+        )}
+      </p>
+    </div>
+  ) : (
+    heading
   );
   const sessionMenu = sheet ? (
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -151,8 +176,8 @@ export function SessionHeader({
     <>
       {/* Outside the transcript scroller: stays visible without an overlay or scroll listener.
        * One line: the project crumb and the title with its menu, then its controls at the end.
-       * Where the session runs is in the session rail (one area at a time, the session menu) and,
-       * when shown, the sidebar row. */}
+       * Where the session runs is in the session rail and, when shown, the sidebar row; one area
+       * at a time, with no rail, it is the title's second line. */}
       <PaneHeader>
         {cwd ? (
           // Match header buttons by pointer capability: a landscape phone is wide but still touch.
@@ -177,14 +202,14 @@ export function SessionHeader({
                     /
                   </BreadcrumbSeparator>
                   <BreadcrumbItem className="min-w-0 gap-0.5">
-                    {heading}
+                    {titleBlock}
                     {!mobile && sessionMenu}
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
             ) : (
               <div className={cn(titleGroup, mobile && "h-full")}>
-                {heading}
+                {titleBlock}
                 {!mobile && sessionMenu}
               </div>
             )}
@@ -212,8 +237,8 @@ export function SessionHeader({
 
 /**
  * The session rail's toggle, at the header's end beside the Agent area, over where the rail shows.
- * Side by side only: one area at a time its command is hidden and the session menu holds the
- * rail's facts. The trigger is a button, never the composer.
+ * Side by side only: one area at a time its command is hidden, the title's second line says where
+ * the session runs and the session menu is a sheet. The trigger is a button, never the composer.
  */
 function SessionRailToggle() {
   const { commands, run } = useSessionCommands();
@@ -260,5 +285,29 @@ function ChangesToggle() {
     >
       <CommandIcon icon={command.icon} />
     </IconButton>
+  );
+}
+
+/** The selectable session ID at the top of the desktop session menu. */
+export function SessionDetails({
+  sessionId,
+  className,
+}: {
+  sessionId?: string;
+  className?: string;
+}) {
+  return (
+    // Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible.
+    <dl
+      className={cn(
+        "flex min-w-0 flex-1 select-text flex-col gap-1 py-2 font-mono text-xs",
+        className,
+      )}
+    >
+      <div className="min-w-0">
+        <dt className="sr-only">Session ID</dt>
+        <dd className="break-all text-muted-foreground">{sessionId ?? "Not available"}</dd>
+      </div>
+    </dl>
   );
 }

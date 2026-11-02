@@ -206,17 +206,17 @@ viewport) the areas take turns, each at full width, under tabs that show only wh
 open beside the Agent area: Agent, then the open tabs ("Agent | README.md"), drawn as the same
 strip tabs without Close (each view closes from its toolbar). With nothing open the bar is left
 out to save its row; Changes opens from the header or palette. Taking turns there is no rail and
-no rail control, in the header or the palette: the header drops folder and branch on phones, and
-the session menu ("…", a bottom sheet whenever the areas take turns) holds the rail's facts at its
-top, where the session ID sat. Environment's rows come first, each with its copy and "Open … on
-GitHub" menu, then App's Preview row while a preview is known; Outputs, and Links with its count,
-are rows that push a pane of their own, as Move to project does, with Back to return. Links' pane
-lists the five most recent mentions with Show all, which opens the searchable list in the same
-sheet. The session ID and its copy button follow, then the actions. Opening a file selects its tab
-and closes the sheet; Show preview does the same; Jump to message closes it and reveals Agent; links
-still open in a new browser tab. Browsing all links focuses Back rather than Search, so it does not
-request the software keyboard. Escape or a tap outside returns focus to "…", not the composer.
-Side by side the rail and its switch are unchanged. The transcript, composer draft and attachments
+no rail control, in the header or the palette. The header says where the session runs on a second
+line under the title: the repository or folder, then the branch shortened in the middle (or the
+short commit), in 12px muted text that does nothing on tap. The session menu ("…", a bottom sheet
+whenever the areas take turns) is the desktop menu's actions and no more, one level deep. Before
+them, only what a phone acts on: the linked pull request, a row that opens it on GitHub in a new
+tab and ends with the external-link icon, and Preview while a preview is known (its state dot,
+name and host; tapping it shows the preview and closes the sheet). Outputs, Links, Environment's
+copy menus and the session ID are desktop work and are not on the phone: links stay tappable in
+the conversation, and Share hands a session to another device. Add to project pushes the project
+picker, with Back to return. Escape or a tap outside returns focus to "…", not the composer. Side
+by side the rail and its switch are unchanged. The transcript, composer draft and attachments
 remain mounted.
 
 ## Linear
