@@ -22,7 +22,7 @@ import { loadSkillsFromDir, parseFrontmatter } from "@earendil-works/pi-coding-a
 import { Context, Data, Effect, Layer } from "effect";
 import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
 import { skillFile as fileOf } from "../shared/library.ts";
-import type { UserSkill, UserSkillCreate } from "../shared/skills.ts";
+import type { UserSkill, UserSkillCreate, UserSkillUpdate } from "../shared/skills.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 import { agentDir } from "./PiEnv.ts";
 
@@ -56,8 +56,9 @@ export class UserSkills extends Context.Service<
     readonly list: Effect.Effect<ReadonlyArray<UserSkill>>;
     readonly create: (request: UserSkillCreate) => Effect.Effect<UserSkill, UserSkillError>;
     /** Replaces the SKILL.md of a skill Piano created; any other name is refused, so a skill in
-     * another folder Pi loads, or a repository's, is never written over. */
-    readonly update: (request: UserSkillCreate) => Effect.Effect<UserSkill, UserSkillError>;
+     * another folder Pi loads, or a repository's, is never written over. With `previous`, only
+     * that file is replaced: a skill changed since it was shown is refused, and nothing written. */
+    readonly update: (request: UserSkillUpdate) => Effect.Effect<UserSkill, UserSkillError>;
     /** Removes a skill Piano created, with its directory; any other skill is refused. */
     readonly remove: (name: string) => Effect.Effect<void, UserSkillError>;
   }
@@ -171,7 +172,7 @@ export const UserSkillsLive = Layer.effect(
       });
     });
 
-    const update = Effect.fn("UserSkills.update")(function* (request: UserSkillCreate) {
+    const update = Effect.fn("UserSkills.update")(function* (request: UserSkillUpdate) {
       const check = checkDraft(request);
       if (!check.saved)
         return yield* refused(
@@ -183,12 +184,17 @@ export const UserSkillsLive = Layer.effect(
         disableModelInvocation: request.disableModelInvocation === true,
       };
       const { name } = saved;
-      // The name rule keeps the path inside the skills directory.
-      if (!piano(root(), name)) return yield* refused("Skill not found.", "name");
       const text = fileOf(saved);
       const dir = join(root(), name);
       return yield* Effect.try({
+        // Synchronous from the read to the rename, so no other update in this process lands
+        // between the comparison and the write.
         try: () => {
+          // The name rule keeps the path inside the skills directory.
+          const current = piano(root(), name);
+          if (!current) throw refused("Skill not found.", "name");
+          if (request.previous !== undefined && request.previous !== current.file)
+            throw refused("This skill changed since it was shown. Review it again.");
           // Written beside it, then renamed over it: a reader sees the old file or the new one.
           const temporary = join(dir, `.SKILL.md.${process.pid}.${Date.now()}`);
           writeFileSync(temporary, text, { flag: "wx" });
@@ -205,7 +211,8 @@ export const UserSkillsLive = Layer.effect(
             disableModelInvocation: saved.disableModelInvocation,
           };
         },
-        catch: () => refused("Could not save the skill."),
+        catch: (cause) =>
+          cause instanceof UserSkillError ? cause : refused("Could not save the skill."),
       });
     });
 

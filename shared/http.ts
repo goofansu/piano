@@ -10,11 +10,11 @@
 import { Schema } from "effect";
 import { FileDownload, FilePreview } from "./files.ts";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
-import { Prompt, PromptCreate } from "./prompts.ts";
+import { Prompt, PromptCreate, PromptUpdate } from "./prompts.ts";
 import { API_KEY_INVALID, ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
-import { UserSkill, UserSkillCreate } from "./skills.ts";
+import { UserSkill, UserSkillCreate, UserSkillUpdate } from "./skills.ts";
 import { Webhook, WebhookDelivery, WebhookSave } from "./webhooks.ts";
 import {
   ChangesScope,
@@ -59,6 +59,17 @@ export type Fallback = string | ((status: number) => string);
 
 /** A JSON Schema that needs no services to decode or encode. */
 export type Json = Schema.ConstraintCodec<unknown, unknown, never, never>;
+
+/**
+ * A failed request's answer, as the router writes it: `{ error, field? }`. `error` is the sentence
+ * for people, else `fallback` when the body is not that shape (a proxy, a crash); `field` is the
+ * form field it belongs to, if any.
+ */
+export function readRefusal(body: unknown, fallback: string): { error: string; field?: string } {
+  const answer = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const error = typeof answer.error === "string" && answer.error ? answer.error : fallback;
+  return typeof answer.field === "string" ? { error, field: answer.field } : { error };
+}
 
 /** The status a service's refusal (a tagged error carrying a `detail` for people) is answered with. */
 export type RefusedStatus = 400 | 409 | 502;
@@ -382,11 +393,12 @@ export const Endpoints = {
     redact: false,
     fallback: "Could not create skill.",
   }),
-  /** Replaces a skill Piano created; Piano's save tool calls it after the user's Save. */
+  /** Replaces a skill Piano created; Piano's save tool calls it after the user's Save, with the
+   * file it showed as `previous` so a skill changed since is refused, not overwritten. */
   updateUserSkill: endpoint({
     method: "PUT",
     path: "/api/settings/skills",
-    body: UserSkillCreate,
+    body: UserSkillUpdate,
     invalid: "Enter a name, a description and instructions.",
     response: UserSkill,
     noStore: true,
@@ -439,11 +451,12 @@ export const Endpoints = {
     redact: false,
     fallback: "Could not save prompt.",
   }),
-  /** Replaces a prompt Piano created; Piano's save tool calls it after the user's Save. */
+  /** Replaces a prompt Piano created; Piano's save tool calls it after the user's Save, with the
+   * file it showed as `previous` so a prompt changed since is refused, not overwritten. */
   updatePrompt: endpoint({
     method: "PUT",
     path: "/api/settings/prompts",
-    body: PromptCreate,
+    body: PromptUpdate,
     invalid: "Enter a name and the prompt.",
     response: Prompt,
     noStore: true,

@@ -193,3 +193,50 @@ test("a skill is saved after approval, and a name Pi loads from another folder i
   });
   assert.match(readFileSync(join(elsewhere, "shared", "SKILL.md"), "utf8"), /Theirs\./);
 });
+
+test("of two sessions updating one skill from the same file, the second Save is refused", async () => {
+  const draft = { name: "review", description: "Review a branch.", instructions: "One." };
+  assert.equal(
+    (await saveToLibrary("skill", draft, user(() => true).deps, undefined)).status,
+    "saved",
+  );
+  const path = join(skills, "review", "SKILL.md");
+  const shown = readFileSync(path, "utf8");
+
+  // Both proposals are on screen, each a diff against the same file, before either Save.
+  let release = () => {};
+  const bothAsked = new Promise<void>((resolve) => {
+    let waiting = 2;
+    release = () => {
+      waiting -= 1;
+      if (waiting === 0) resolve();
+    };
+  });
+  const decide = async () => {
+    release();
+    await bothAsked;
+    return true;
+  };
+  const a = user(decide);
+  const b = user(decide);
+  const [first, second] = await Promise.all([
+    saveToLibrary("skill", { ...draft, instructions: "From A." }, a.deps, undefined),
+    saveToLibrary("skill", { ...draft, instructions: "From B." }, b.deps, undefined),
+  ]);
+  assert.equal(a.asked[0]?.previous, shown);
+  assert.equal(b.asked[0]?.previous, shown);
+  const results = [first, second];
+  assert.deepEqual(results.map((r) => r.status).sort(), ["refused", "saved"], "exactly one wins");
+  const winner = results.find((r) => r.status === "saved");
+  assert.equal(readFileSync(path, "utf8"), winner?.status === "saved" && winner.file);
+  assert.deepEqual(
+    results.find((r) => r.status === "refused"),
+    {
+      status: "refused",
+      kind: "skill",
+      name: "review",
+      detail: "This skill changed since it was shown. Review it again.",
+    },
+    "the agent reads why, and the user's approved diff is never applied to another file",
+  );
+});

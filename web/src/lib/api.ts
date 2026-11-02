@@ -13,6 +13,7 @@ import {
   Endpoints,
   type IdParam,
   type Json,
+  readRefusal,
   type SignInEndpoints,
   WRITTEN_PATHS_LIMIT,
 } from "../../../shared/http.ts";
@@ -102,19 +103,8 @@ async function call<Q extends IdParam, B extends Json | undefined, R extends Jso
     return undefined;
   });
   if (!response.ok) {
-    const message =
-      json &&
-      typeof json === "object" &&
-      "error" in json &&
-      typeof json.error === "string" &&
-      json.error
-        ? json.error
-        : failure(response.status);
-    const field =
-      json && typeof json === "object" && "field" in json && typeof json.field === "string"
-        ? json.field
-        : undefined;
-    throw new ApiError(message, response.status, field);
+    const { error, field } = readRefusal(json, failure(response.status));
+    throw new ApiError(error, response.status, field);
   }
   const decoded = Schema.decodeUnknownExit(endpoint.response)(json);
   if (decoded._tag === "Failure") throw new ApiError(failure(response.status), response.status);

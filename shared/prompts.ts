@@ -19,3 +19,12 @@ export type Prompt = typeof Prompt.Type;
 
 export const PromptCreate = Schema.Struct(draftFields);
 export type PromptCreate = typeof PromptCreate.Type;
+
+/** An update: the new draft, and the template it replaces as the person saw it. When `previous`
+ * no longer matches the file on disk, the update is refused instead of overwriting a change the
+ * person never saw. */
+export const PromptUpdate = Schema.Struct({
+  ...draftFields,
+  previous: Schema.optional(Schema.String),
+});
+export type PromptUpdate = typeof PromptUpdate.Type;

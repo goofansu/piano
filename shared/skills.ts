@@ -18,3 +18,12 @@ export const UserSkillCreate = Schema.Struct({
   disableModelInvocation: Schema.optional(Schema.Boolean),
 });
 export type UserSkillCreate = typeof UserSkillCreate.Type;
+
+/** An update: the new draft, and the SKILL.md it replaces as the person saw it. When `previous`
+ * no longer matches the file on disk, the update is refused instead of overwriting a change the
+ * person never saw. */
+export const UserSkillUpdate = Schema.Struct({
+  ...UserSkillCreate.fields,
+  previous: Schema.optional(Schema.String),
+});
+export type UserSkillUpdate = typeof UserSkillUpdate.Type;

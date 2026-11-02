@@ -176,3 +176,45 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
     ),
   );
 });
+
+test("an update replaces only the prompt the person saw, and of two from one file one wins", async () => {
+  const dir = join(root, "precondition", "prompts");
+  const path = join(dir, "triage.md");
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const prompts = yield* Prompts;
+      const shown = (yield* prompts.create({
+        name: "triage",
+        description: "Triage",
+        instructions: "One.",
+      })).file;
+      const update = (instructions: string, previous: string) =>
+        prompts.update({ name: "triage", description: "Triage", instructions, previous });
+
+      const matching = yield* update("Two.", shown);
+      assert.equal(readFileSync(path, "utf8"), matching.file, "an update from the file on disk");
+
+      // Two sessions proposed from the same file: the second no longer replaces what it showed.
+      const [a, b] = yield* Effect.all(
+        [
+          Effect.result(update("Three.", matching.file)),
+          Effect.result(update("Four.", matching.file)),
+        ],
+        { concurrency: "unbounded" },
+      );
+      assert.deepEqual([a._tag, b._tag].sort(), ["Failure", "Success"], "exactly one wins");
+      const winner =
+        a._tag === "Success" ? a.success : b._tag === "Success" ? b.success : undefined;
+      assert.equal(readFileSync(path, "utf8"), winner?.file, "the loser wrote nothing");
+      const loser = a._tag === "Failure" ? a.failure : b._tag === "Failure" ? b.failure : undefined;
+      assert.deepEqual(
+        [loser?.detail, loser?.field],
+        ["This prompt changed since it was shown. Review it again.", undefined],
+      );
+
+      const before = readFileSync(path, "utf8");
+      assert.equal((yield* failure(update("Five.", shown))).detail, loser?.detail, "stale");
+      assert.equal(readFileSync(path, "utf8"), before, "a stale update writes nothing");
+    }).pipe(Effect.provide(PromptsLive), Effect.provideService(PromptsDir, dir)),
+  );
+});
