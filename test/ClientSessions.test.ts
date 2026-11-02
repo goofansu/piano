@@ -401,6 +401,13 @@ const liveTurns = (sent: ServerMessage[], selectionId: string) => {
       ),
   ];
 };
+/**
+ * Waits until a selection's view shows the assistant's turn. A follow attaches whenever the
+ * other client's resume is announced: before the reply, which then arrives as a live frame, or
+ * after a fast reply, which the snapshot already holds. Either way the turn shows once.
+ */
+const shownReply = ({ sent, next }: Effect.Success<typeof client>, selectionId: string) =>
+  next(() => liveTurns(sent, selectionId).includes("assistant"));
 
 test("INV-02/05: a session shown stopped follows another client's resume and shows its turn once", async () => {
   await run(
@@ -420,12 +427,7 @@ test("INV-02/05: a session shown stopped follows another client's resume and sho
 
       yield* b.sessions.act("B", { _tag: "prompt", text: "from B" }, {});
       // A neither selects nor acts again.
-      yield* a.next(
-        (m) =>
-          m._tag === "session" &&
-          m.event._tag === "message_end" &&
-          m.event.message.role === "assistant",
-      );
+      yield* shownReply(a, "A");
       yield* b.next(
         (m) =>
           m._tag === "session" &&
@@ -483,13 +485,7 @@ test("INV-05: a session resumed elsewhere after this client selected another sho
       // The newer selection still follows its own resume.
       yield* yield* b.sessions.select({ cwd, sessionId: second, selectionId: "B2" });
       yield* b.sessions.act("B2", { _tag: "prompt", text: "second from B" }, {});
-      yield* a.next(
-        (m) =>
-          m._tag === "session" &&
-          m.selectionId === "second" &&
-          m.event._tag === "message_end" &&
-          m.event.message.role === "assistant",
-      );
+      yield* shownReply(a, "second");
       assert.deepEqual(liveTurns(a.sent, "second"), ["user", "assistant"]);
     }),
   );
