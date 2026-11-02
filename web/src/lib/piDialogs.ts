@@ -99,10 +99,13 @@ export function answerReceipt(resolution: DialogResolution): AnswerReceipt {
     delivery === "written" && owned
       ? { label: "Sent, waiting for Pi…", tone: "busy" as const }
       : deliveryStatus[delivery];
-  // A cancellation Pi received is the user's own act and needs no receipt, as a confirmed answer
-  // leaves none; a pending, uncertain or unsent one still says so (INV-04).
+  // Ending a dialog by Cancel or by Stop ("aborted") is the user's own act: once Pi has it, it
+  // needs no receipt, as a confirmed answer leaves none. A pending, uncertain or unsent one still
+  // says so, and an ending the user did not choose (expiry, recovery, Pi exiting) always does
+  // (INV-04).
   const cancelled =
-    resolution.reason === "cancelled" && (delivery === "written" || delivery === "accepted");
+    (resolution.reason === "cancelled" || resolution.reason === "aborted") &&
+    (delivery === "written" || delivery === "accepted");
   return {
     card: !!answer && delivery !== "accepted" && !(delivery === "written" && !owned),
     status: status && { ...status, pulse: delivery === "pending" },
