@@ -4,7 +4,7 @@
  * Save, and a cancellation or a stop writes nothing (INV-04, INV-11). No Pi here: the extension
  * supplies the dialog and the request, so a test supplies them too.
  */
-import { checkDraft } from "../../shared/drafts.ts";
+import { checkDraft, isName, NAME_RULE } from "../../shared/drafts.ts";
 import { type Endpoint, Endpoints } from "../../shared/http.ts";
 import {
   LIBRARY_REACH,
@@ -61,6 +61,30 @@ async function refusal(response: Response, fallback: string) {
   } catch {
     return { detail: fallback, field: undefined };
   }
+}
+
+/** Read only Piano's catalog, by name; never accept a filesystem path or search Pi's other resources. */
+export async function readFromLibrary(
+  kind: LibraryKind,
+  name: string,
+  request: LibraryDeps["request"],
+  signal: AbortSignal | undefined,
+) {
+  if (!isName(name)) return { status: "refused" as const, kind, name, detail: NAME_RULE };
+  const response = await request(ENDPOINTS[kind].list.path, { method: "GET", signal });
+  if (!response.ok) throw new Error((await refusal(response, `Could not load ${kind}s.`)).detail);
+  const existing = ((await response.json()) as (Saved & { description: string })[]).find(
+    (item) => item.name === name,
+  );
+  if (!existing) return { status: "not_found" as const, kind, name };
+  return {
+    status: "found" as const,
+    kind,
+    name,
+    description: existing.description,
+    file: existing.file,
+    ...(kind === "skill" ? { disableModelInvocation: existing.disableModelInvocation } : {}),
+  };
 }
 
 export async function saveToLibrary(
