@@ -1,4 +1,3 @@
-import { isWorking } from "@shared/sessionProjection";
 import { cn } from "cn";
 import {
   ArrowLeftIcon,
@@ -7,7 +6,7 @@ import {
   FolderInputIcon,
   LinkIcon,
 } from "lucide-react";
-import { type ReactNode, type RefObject, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import {
   CommandIcon,
   useCommands,
@@ -19,8 +18,8 @@ import { SheetClose, SheetContent, SheetTitle } from "@/components/PianoSheet";
 import { ProjectCommandIconView } from "@/components/Projects";
 import { SessionLinks, SessionLinksBrowser } from "@/components/SessionLinks";
 import { SessionOutputs } from "@/components/SessionOutputs";
-import { PreviewRailRow, useSeenPreview } from "@/components/SessionPreview";
-import { SessionEnvironment } from "@/components/SessionRail";
+import { PreviewRailRow } from "@/components/SessionPreview";
+import { SessionEnvironment, useRailContents } from "@/components/SessionRail";
 import { RailLeaveProvider } from "@/components/SessionRailList";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -30,13 +29,8 @@ import { returnFocusForKeyboard } from "@/lib/pointerClose";
 import type { ProjectCommand } from "@/lib/projectCommands";
 import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
-import { sessionLinks } from "@/lib/sessionLinks";
-import { useSessionFiles } from "@/lib/useSessionFiles";
 
 type Page = "actions" | "projects" | "outputs" | "links" | "all-links";
-
-/** Links' recent entries before Show all, as in the session rail. */
-const RECENT_LINKS = 5;
 
 /** A full-width, 44px row with 16px icons, shared by buttons and the display switch's label. */
 const row =
@@ -189,11 +183,8 @@ export function MobileSessionSheet({
   const { commands, run } = useSessionCommands();
   const { sessionId } = sessionContext(state);
   const projects = useSessionProjectMenu();
-  const preview = useSeenPreview(state);
-  const files = useSessionFiles();
-  const messages = state.session?.messages ?? [];
-  const working = !!state.session && isWorking(state.session.state);
-  const links = useMemo(() => sessionLinks(messages).reverse(), [messages]);
+  const { preview, files, links, recentLinks, showAllLinks, messages, working } =
+    useRailContents(state);
   const left = useRef(false);
   const dismissed = useRef(false);
   const leave = () => {
@@ -326,7 +317,7 @@ export function MobileSessionSheet({
                 count={links.length}
                 onBack={() => setPage("actions")}
                 action={
-                  links.length > RECENT_LINKS && (
+                  showAllLinks && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -340,11 +331,7 @@ export function MobileSessionSheet({
               />
               <Separator className="my-1" />
               <div className="p-1">
-                <SessionLinks
-                  links={links.slice(0, RECENT_LINKS)}
-                  messages={messages}
-                  working={working}
-                />
+                <SessionLinks links={recentLinks} messages={messages} working={working} />
               </div>
             </>
           )}

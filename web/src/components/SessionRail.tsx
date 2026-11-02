@@ -30,7 +30,7 @@ import { createPreference, parseJson } from "@/lib/preference";
 import { pullRequestView } from "@/lib/pullRequestView";
 import { type EnvironmentRowKind, environmentRowMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
-import { type SessionLink, sessionLinks } from "@/lib/sessionLinks";
+import { sessionLinks } from "@/lib/sessionLinks";
 import type { TranscriptViewport } from "@/lib/transcriptViewport";
 import { usePreference } from "@/lib/usePreference";
 import { useSessionFiles } from "@/lib/useSessionFiles";
@@ -50,6 +50,36 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
     return Array.isArray(value) ? SECTIONS.filter((section) => value.includes(section)) : [];
   },
 });
+
+/** Links' recent entries before Show all. */
+const RECENT_LINKS = 5;
+
+const NO_MESSAGES: NonNullable<AppState["session"]>["messages"] = [];
+
+/**
+ * What the session rail holds for the selected session, read once for both of its homes: the rail
+ * column beside the Agent area and, one area at a time, the phone session menu. App is there
+ * while a preview is known, Outputs once Pi wrote a file, Links once the conversation mentions a
+ * link; Links lists newest first, `recentLinks` before Show all. The two homes differ only in
+ * layout.
+ */
+export function useRailContents(state: AppState) {
+  const preview = useSeenPreview(state);
+  const files = useSessionFiles();
+  const messages = state.session?.messages ?? NO_MESSAGES;
+  const links = useMemo(() => sessionLinks(messages).reverse(), [messages]);
+  return {
+    preview,
+    files,
+    links,
+    recentLinks: links.slice(0, RECENT_LINKS),
+    showAllLinks: links.length > RECENT_LINKS,
+    messages,
+    working: !!state.session && isWorking(state.session.state),
+  };
+}
+
+export type RailContents = ReturnType<typeof useRailContents>;
 
 /**
  * The session rail: Environment (its repository or folder, branch and linked pull request), Outputs (the
@@ -80,9 +110,8 @@ function SessionRailContent({ state }: RailProps) {
   const overviewScroll = useRef(0);
   const showAllRef = useRef<HTMLButtonElement | null>(null);
   const restoreFocus = useRef(false);
-  const messages = state.session?.messages ?? [];
-  const links = useMemo(() => sessionLinks(messages).reverse(), [messages]);
-  const working = !!state.session && isWorking(state.session.state);
+  const contents = useRailContents(state);
+  const { links, messages, working } = contents;
   const attachRail = useCallback((rail: HTMLElement | null) => {
     railRef.current = rail;
     return fadeOverflow(rail);
@@ -129,7 +158,7 @@ function SessionRailContent({ state }: RailProps) {
       ) : (
         <RailSections
           state={state}
-          links={links}
+          contents={contents}
           showAllRef={showAllRef}
           onShowLinks={() => {
             overviewScroll.current = railRef.current?.scrollTop ?? 0;
@@ -174,21 +203,17 @@ function passWheel(event: React.WheelEvent<HTMLElement>, viewport: TranscriptVie
 /** The rail's folding sections for the selected session. */
 function RailSections({
   state,
-  links,
+  contents,
   onShowLinks,
   showAllRef,
 }: {
   state: AppState;
-  links: readonly SessionLink[];
+  contents: RailContents;
   onShowLinks: () => void;
   showAllRef: React.Ref<HTMLButtonElement>;
 }) {
-  const session = state.session;
-  const preview = useSeenPreview(state);
+  const { preview, files, links, recentLinks, showAllLinks, messages, working } = contents;
   const { cwd } = sessionContext(state);
-  const files = useSessionFiles();
-  const messages = session?.messages ?? [];
-  const working = !!session && isWorking(session.state);
   const [collapsed, setCollapsed] = usePreference(collapsedPreference);
   const group = (section: RailSectionName) => ({
     open: !collapsed.includes(section),
@@ -216,7 +241,7 @@ function RailSections({
           count={links.length}
           {...group("links")}
           action={
-            links.length > 5 && (
+            showAllLinks && (
               <Button
                 ref={showAllRef}
                 variant="ghost"
@@ -229,7 +254,7 @@ function RailSections({
             )
           }
         >
-          <SessionLinks links={links.slice(0, 5)} messages={messages} working={working} />
+          <SessionLinks links={recentLinks} messages={messages} working={working} />
         </RailSection>
       )}
     </div>
