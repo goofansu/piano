@@ -174,6 +174,25 @@ test("a skill whose SKILL.md names it differently from its directory is listed, 
   assert.deepEqual(loadSkillsFromDir({ dir: directory, source: "user" }).skills, []);
 });
 
+test("of two skills in Piano's folder that declare one name, only the one Pi loads is acted on", async (t) => {
+  const { directory, run } = home(t);
+  // Pi reads the nested one first and drops the top-level one as a collision.
+  write(join(directory, "a-group"), "x", "name: x\ndescription: Nested.");
+  write(directory, "x", "name: x\ndescription: Top level.");
+  assert.deepEqual(
+    loadSkillsFromDir({ dir: directory, source: "user" }).skills.map((s) => s.description),
+    ["Nested.", "Top level."],
+  );
+  const listed = await run((skills) => skills.list);
+  assert.deepEqual(
+    listed._tag === "Success" && listed.success,
+    [],
+    "the skill Pi ignores is not listed",
+  );
+  assert.equal(refusal(await run((skills) => skills.remove("x"))).detail, "Skill not found.");
+  assert.ok(existsSync(join(directory, "x", "SKILL.md")));
+});
+
 test("a create names the field it refuses and never overwrites a skill", async (t) => {
   const { directory, agentsDirectory, piDirectory, run } = home(t);
   write(directory, "taken", "name: taken\ndescription: Already here.", "Original.");

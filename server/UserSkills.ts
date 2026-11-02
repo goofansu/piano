@@ -77,15 +77,19 @@ interface PianoSkill {
  * The skills Pi loads from Piano's folder, by the name Pi gives each (INV-12: Pi's own loader, not
  * a copy of its rules), in Piano's layout: `<folder>/<directory>/SKILL.md`, both real, not links,
  * so nothing here reaches outside the folder. A SKILL.md whose declared name differs from its
- * directory's is listed under the name Pi loads it as. Of two that declare one name, the first Pi
- * reads is kept.
+ * directory's is listed under the name Pi loads it as. Of two that declare one name, only the one
+ * Pi loads counts, even when that one is outside Piano's layout and so not listed.
  */
 function pianoSkills(root: string): Map<string, PianoSkill> {
   const found = new Map<string, PianoSkill>();
+  const taken = new Set<string>();
   for (const loaded of loadSkillsFromDir({ dir: root, source: "user" }).skills) {
     const dir = loaded.baseDir;
     const file = join(dir, "SKILL.md");
-    if (found.has(loaded.name) || dirname(dir) !== root || loaded.filePath !== file) continue;
+    // Pi keeps the first skill of a name and drops later ones, whatever their layout.
+    if (taken.has(loaded.name)) continue;
+    taken.add(loaded.name);
+    if (dirname(dir) !== root || loaded.filePath !== file) continue;
     if (!isReal(dir, "directory") || !isReal(file, "file")) continue;
     try {
       found.set(loaded.name, {
