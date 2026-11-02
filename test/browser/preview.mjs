@@ -331,17 +331,20 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         assert.ok(link.includes('target="_blank"'), link);
         const railPreview = () =>
           page.evaluate(
-            "!!document.querySelector('[data-slot=session-rail] button[aria-label=\"Show preview\"]')",
+            "!!document.querySelector(':is([data-slot=session-rail],[role=dialog]) button[aria-label=\"Show preview\"]')",
           );
         const showRail = async () => {
-          // An open rail may not have drawn the app's row yet; open it only when it is closed.
-          if (
-            !(await railPreview()) &&
-            (await page.evaluate("!!document.querySelector('[aria-label=\"Show session rail\"]')"))
-          )
-            await page.click("button", "Show session rail");
+          // An open rail may not have drawn the app's row yet; open it only when it is closed. One
+          // area at a time there is no rail: the session menu holds its rows.
+          if (!(await railPreview())) {
+            if (
+              await page.evaluate("!!document.querySelector('[aria-label=\"Show session rail\"]')")
+            )
+              await page.click("button", "Show session rail");
+            else await page.click("button", "Session information and actions");
+          }
           await page.until(
-            "!!document.querySelector('[data-slot=session-rail] button[aria-label=\"Show preview\"]')",
+            "!!document.querySelector(':is([data-slot=session-rail],[role=dialog]) button[aria-label=\"Show preview\"]')",
           );
         };
         const showPreview = async () => {
@@ -472,7 +475,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await showRail();
         assert.equal(
           await page.evaluate(
-            "document.querySelector('[data-slot=session-rail] a[aria-label=\"Open preview in new tab\"]')?.target",
+            "document.querySelector(':is([data-slot=session-rail],[role=dialog]) a[aria-label=\"Open preview in new tab\"]')?.target",
           ),
           "_blank",
         );
@@ -480,7 +483,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.ab("upload", 'input[type="file"]', join(evidence, "1-settled-preview-link.png"));
         const alignedPreviewDot = async (viewport) => {
           const offset = await page.evaluate(`(() => {
-            const row = document.querySelector('[data-slot=session-rail] button[aria-label="Show preview"]');
+            const row = document.querySelector(':is([data-slot=session-rail],[role=dialog]) button[aria-label="Show preview"]');
             const dot = row.querySelector('[data-slot=status-dot]').getBoundingClientRect();
             const range = document.createRange();
             range.selectNodeContents(row.querySelector('[data-slot=item-title]'));
@@ -496,7 +499,10 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await alignedPreviewDot("desktop");
         await page.capture("1b-rail-preview");
         // Sibling keyboard targets: the row inspects, its link only opens a browser tab.
-        await page.ab("focus", '[data-slot=session-rail] button[aria-label="Show preview"]');
+        await page.ab(
+          "focus",
+          ':is([data-slot=session-rail],[role=dialog]) button[aria-label="Show preview"]',
+        );
         await page.press("Tab");
         assert.equal(
           await page.evaluate("document.activeElement?.getAttribute('aria-label')"),
@@ -515,7 +521,10 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.capture("1b-app-folded");
         await page.click("button", "App");
         // PIN-125: Space activates the focused row once; the draft is not typed into.
-        await page.ab("focus", '[data-slot=session-rail] button[aria-label="Show preview"]');
+        await page.ab(
+          "focus",
+          ':is([data-slot=session-rail],[role=dialog]) button[aria-label="Show preview"]',
+        );
         await page.press("Space");
         await page.until(
           "!!document.querySelector('[data-slot=surface-area]:not([inert]) section[aria-label=Preview]')",
@@ -1015,7 +1024,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.capture("2b-narrow-stopped");
         await page.until("!document.querySelector('[data-sonner-toast]')");
         await page.click("button", "Close preview");
-        await page.until("document.activeElement?.hasAttribute('data-rail-trigger')");
+        await page.until("document.activeElement?.hasAttribute('data-session-menu')");
         await page.capture("2b-narrow-agent");
         await page.ab("set", "viewport", "1280", "900");
         await page.until("!document.querySelector('section[aria-label=Preview] a')");
@@ -1097,7 +1106,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         // The old link would now reach the unready replacement on the reused port.
         assert.equal(
           await page.evaluate(
-            `[...document.querySelectorAll('[data-slot=session-rail] a, section[aria-label=Preview] a')].some(a => a.href === ${JSON.stringify(replacing.url)})`,
+            `[...document.querySelectorAll(':is([data-slot=session-rail],[role=dialog]) a, section[aria-label=Preview] a')].some(a => a.href === ${JSON.stringify(replacing.url)})`,
           ),
           false,
           "no ready link while the replacement warms up",

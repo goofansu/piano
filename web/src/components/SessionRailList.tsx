@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import type { ComponentProps } from "react";
+import { type ComponentProps, createContext, useContext } from "react";
 import { SettingsList } from "@/components/SettingsSectionFrame";
 import { ItemTitle } from "@/components/ui/item";
 
@@ -11,6 +11,15 @@ import { ItemTitle } from "@/components/ui/item";
 export function RailList({ className, ...props }: ComponentProps<typeof SettingsList>) {
   return <SettingsList className={cn("text-xs", className)} {...props} />;
 }
+
+const RailLeave = createContext<() => void>(() => {});
+
+/**
+ * Called after a rail row takes the user elsewhere in the session (a file tab, Preview, a message):
+ * the phone session menu holding the row closes; the rail column, beside the Agent area, stays.
+ */
+export const RailLeaveProvider = RailLeave.Provider;
+export const useRailLeave = () => useContext(RailLeave);
 
 /** The classes an `Item` takes to sit in a `RailList`. */
 export const railRow = "flex-nowrap gap-2.5 rounded-none px-3 py-2 text-xs pointer-coarse:min-h-11";

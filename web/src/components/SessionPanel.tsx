@@ -120,8 +120,9 @@ export function SessionPanel({
   });
 
   // Closing a tab leaves focus where the user can go on: the tab now shown, else (beside the
-  // Agent area) the rail trigger, where inspection starts. One area at a time this never focuses
-  // the composer or raises the keyboard. Only focus that was lost is moved: an overlay
+  // Agent area) the rail trigger, where inspection starts, or (one area at a time) the session
+  // menu, which holds the rail's facts there. One area at a time this never focuses the composer or
+  // raises the keyboard. Only focus that was lost is moved: an overlay
   // that closed with the tab (the palette) restores its own first, so this checks after it.
   const previous = useRef({ count: tabs.length, key });
   useEffect(() => {
@@ -142,7 +143,7 @@ export function SessionPanel({
       document
         .querySelector<HTMLElement>(
           single
-            ? '[role="tab"][data-state="active"], [data-rail-trigger]'
+            ? '[role="tab"][data-state="active"], [data-session-menu]'
             : "[data-rail-trigger], [data-changes-trigger]",
         )
         ?.focus({ preventScroll: true });

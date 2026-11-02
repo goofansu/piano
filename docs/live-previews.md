@@ -8,8 +8,8 @@ No service manifest, skill collection or Stop session control is required.
 While the selected live session owns an app, its **session rail** has an **App** section. The
 **Preview** row shows a StatusDot and ready hostname, or its non-ready state. The row opens one
 **Preview** Surface tab beside Changes and files; its separate external-link action opens only a
-new browser tab. On narrow screens the same rail opens in a sheet, and selecting Preview dismisses
-it. The header has no separate app control. A newly appearing app never opens anything or steals focus.
+new browser tab. Where the session's areas take turns (phones), the row sits in the session menu
+instead, and selecting Preview closes the menu. The header has no separate app control. A newly appearing app never opens anything or steals focus.
 
 Preview embeds the current registered ready app, on an origin different from Piano. Its toolbar
 has **Reload preview**, **Open in new tab** and **More preview actions**: **Copy link**, **Details**,

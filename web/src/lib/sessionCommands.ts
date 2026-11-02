@@ -236,8 +236,9 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
- * - session rail: available at every width (its facts need neither Git nor a live Pi);
- *   "Hide session rail" while the column or narrow sheet shows, else "Show session rail".
+ * - session rail: side by side only (its facts need neither Git nor a live Pi); "Hide session
+ *   rail" while the column shows, else "Show session rail". One area at a time it is not listed:
+ *   the session menu holds the same facts.
  * - agent: the session is laid out one area at a time and the Agent tab shows, beside an open
  *   Surface tab.
  * - pull request, copy session ID: the selected session has a Pi session ID; a pull request is
@@ -272,7 +273,7 @@ export function sessionCommands(
   const commands: SessionCommand[] = [];
   if (selected && session) {
     const messagesOnly = options.messagesOnly ?? false;
-    const { agentTab, rail } = options.layout ?? AGENT_ONLY;
+    const { agentTab, rail, single } = options.layout ?? AGENT_ONLY;
     const sessionPath = session.state.sessionFile;
     const linked = !!ctx.pullRequest;
     const pullRequest = pullRequestView({ link: ctx.pullRequest ?? null, pullRequest: null });
@@ -362,7 +363,9 @@ export function sessionCommands(
         id: "session-rail",
         label: rail ? "Hide session rail" : "Show session rail",
         icon: "list",
-        enabled: true,
+        enabled: !single,
+        // One area at a time the session menu holds the rail's facts.
+        hidden: single,
         keywords: ["details", "info", "outputs", "files", "links", "branch"],
         intent: { kind: "session-rail" },
       },

@@ -86,7 +86,7 @@ export function SessionView({ state, send }: Props) {
     return () => observer.disconnect();
   }, [setSingle]);
   const agentHidden = !navigation.layout.agent;
-  // The wide rail is pinned beside the transcript; the narrow sheet lives at its header trigger.
+  // The rail is pinned beside the transcript side by side; one area at a time it is not shown.
   const railInside = !single && navigation.layout.rail;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();

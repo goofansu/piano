@@ -156,15 +156,6 @@ test("enabled commands reach the effect their intent names", () => {
     ],
     [byId(sessionCommands(selected), "changes"), ["openChanges"]],
     [byId(sessionCommands(selected), "session-rail"), ["toggleRail"]],
-    [
-      byId(
-        sessionCommands(selected, undefined, {
-          layout: { single: true, agent: true, surface: false, rail: false, agentTab: false },
-        }),
-        "session-rail",
-      ),
-      ["toggleRail"],
-    ],
     [byId(sessionCommands(selected), "pull-request"), ["openPullRequest"]],
     [byId(sessionCommands(linked), "pull-request"), ["openChanges"]],
   ];

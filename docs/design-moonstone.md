@@ -205,15 +205,19 @@ shrinks first, down to 400px. Below 849px of session width (measured after the s
 viewport) the areas take turns, each at full width, under tabs that show only while something is
 open beside the Agent area: Agent, then the open tabs ("Agent | README.md"), drawn as the same
 strip tabs without Close (each view closes from its toolbar). With nothing open the bar is left
-out to save its row; Changes opens from the header or palette. The Session rail control also
-stays available at every width. Narrow, it opens a right-hand sheet with the same Environment,
-Outputs and Links, a Session rail title and Hide session rail close action. The sheet scrolls
-independently, with safe-area padding; opening a file dismisses it and selects the file tab.
-Links still open in a new browser tab; Jump to message dismisses the sheet and reveals Agent.
-Browsing all links focuses Back rather than Search, so it does not request the software keyboard.
-Escape or dismissal restores focus to the header button, not the composer. Sheet openness is
-transient: switching sessions or crossing the layout breakpoint closes it, without changing the
-desktop switch or its covered tabs. The transcript, composer draft and attachments remain mounted.
+out to save its row; Changes opens from the header or palette. Taking turns there is no rail and
+no rail control, in the header or the palette: the header drops folder and branch on phones, and
+the session menu ("…", a bottom sheet whenever the areas take turns) holds the rail's facts at its
+top, where the session ID sat. Environment's rows come first, each with its copy and "Open … on
+GitHub" menu, then App's Preview row while a preview is known; Outputs, and Links with its count,
+are rows that push a pane of their own, as Move to project does, with Back to return. Links' pane
+lists the five most recent mentions with Show all, which opens the searchable list in the same
+sheet. The session ID and its copy button follow, then the actions. Opening a file selects its tab
+and closes the sheet; Show preview does the same; Jump to message closes it and reveals Agent; links
+still open in a new browser tab. Browsing all links focuses Back rather than Search, so it does not
+request the software keyboard. Escape or a tap outside returns focus to "…", not the composer.
+Side by side the rail and its switch are unchanged. The transcript, composer draft and attachments
+remain mounted.
 
 ## Linear
 

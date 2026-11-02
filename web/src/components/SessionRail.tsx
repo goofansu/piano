@@ -62,20 +62,19 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
  * scrollbar stays at the pane's edge, and the transcript, notices and composer keep clear of it
  * through `--rail-inset`. While it fits, the wheel over it scrolls the conversation as anywhere in
  * the area; taller, the wheel over it scrolls the rail alone and never runs on into the
- * conversation. Narrow layouts use the same content in a sheet, with its own scroller and no
- * wheel handoff. Both follow the selected session. Hand-written: no shadcn component is a pinned side column.
+ * conversation. One area at a time there is no rail: the phone session menu holds its sections.
+ * It follows the selected session. Hand-written: no shadcn component is a pinned side column.
  */
 interface RailProps {
   state: AppState;
-  sheet?: boolean;
 }
 
-export function SessionRail({ state, sheet = false }: RailProps) {
+export function SessionRail({ state }: RailProps) {
   if (!state.session) return null;
-  return <SessionRailContent key={sessionKey(state.session)} state={state} sheet={sheet} />;
+  return <SessionRailContent key={sessionKey(state.session)} state={state} />;
 }
 
-function SessionRailContent({ state, sheet }: RailProps) {
+function SessionRailContent({ state }: RailProps) {
   const [browseLinks, setBrowseLinks] = useState(false);
   const railRef = useRef<HTMLElement | null>(null);
   const overviewScroll = useRef(0);
@@ -107,21 +106,18 @@ function SessionRailContent({ state, sheet }: RailProps) {
       ref={attachRail}
       data-slot="session-rail"
       aria-label="Session rail"
-      onWheel={sheet || browseLinks ? undefined : onWheel}
+      onWheel={browseLinks ? undefined : onWheel}
       // Clear of the scrollbar at the area's edge; its first section level with the transcript's
       // first row. Overflow fades at either edge; the last row clears the fade at the scroll end.
       // It scrolls without a scrollbar, as the tab strips do.
       className={cn(
         "flex scrollbar-none flex-col overscroll-y-contain pb-[max(0.75rem,env(safe-area-inset-bottom))]",
-        sheet
-          ? "min-h-0 flex-1"
-          : "absolute inset-y-0 right-3 z-10 w-[calc(var(--rail-inset)-0.75rem)] pt-3 md:pt-5",
+        "absolute inset-y-0 right-3 z-10 w-[calc(var(--rail-inset)-0.75rem)] pt-3 md:pt-5",
         browseLinks ? "overflow-hidden" : "overflow-y-auto",
       )}
     >
       {browseLinks ? (
         <SessionLinksBrowser
-          focusSearch={!sheet}
           links={links}
           messages={messages}
           working={working}
@@ -189,9 +185,7 @@ function RailSections({
 }) {
   const session = state.session;
   const preview = useSeenPreview(state);
-  const { cwd, branch, detachedHead, githubRepo, branchUrl, pullRequest } = sessionContext(state);
-  const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
-  const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;
+  const { cwd } = sessionContext(state);
   const files = useSessionFiles();
   const messages = session?.messages ?? [];
   const working = !!session && isWorking(session.state);
@@ -204,58 +198,7 @@ function RailSections({
   return (
     <div className="flex shrink-0 flex-col gap-4 px-3 pt-3">
       <RailSection title="Environment" {...group("workspace")}>
-        <RailList aria-label="Environment">
-          {githubRepo ? (
-            <EnvironmentRow
-              name="Repository"
-              menu="repository"
-              icon={
-                <svg aria-hidden="true">
-                  <use href="/github.svg#github" />
-                </svg>
-              }
-              href={repositoryUrl}
-              cwd={cwd}
-            >
-              {githubRepo}
-            </EnvironmentRow>
-          ) : cwd ? (
-            <EnvironmentRow name="Folder" menu="folder" icon={<FolderOpenIcon />} cwd={cwd}>
-              {cwd.split("/").filter(Boolean).at(-1) || cwd}
-            </EnvironmentRow>
-          ) : null}
-          {detachedHead ? (
-            <EnvironmentRow
-              name="Git"
-              menu="commit"
-              icon={<GitCommitHorizontalIcon />}
-              mono
-              description="A commit is checked out directly; no branch is active."
-            >
-              {`${detachedHead.slice(0, 10)} (detached)`}
-            </EnvironmentRow>
-          ) : branch ? (
-            <EnvironmentRow
-              name="Branch"
-              menu="branch"
-              icon={<GitBranchIcon />}
-              mono
-              href={branchUrl}
-            >
-              {branch}
-            </EnvironmentRow>
-          ) : null}
-          {pr && (
-            <EnvironmentRow
-              name="Pull request"
-              menu="pull request"
-              icon={<GitPullRequestIcon />}
-              href={pr.url}
-            >
-              {pr.name}
-            </EnvironmentRow>
-          )}
-        </RailList>
+        <SessionEnvironment state={state} />
       </RailSection>
       {preview && (
         <RailSection title="App" {...group("app")}>
@@ -290,6 +233,65 @@ function RailSections({
         </RailSection>
       )}
     </div>
+  );
+}
+
+/**
+ * Where the session runs: its repository or folder, its branch or detached commit, and its linked
+ * pull request, each a row with its menu. The rail's first section, and the top of the phone
+ * session menu.
+ */
+export function SessionEnvironment({ state }: { state: AppState }) {
+  const { cwd, branch, detachedHead, githubRepo, branchUrl, pullRequest } = sessionContext(state);
+  const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
+  const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;
+  return (
+    <RailList aria-label="Environment">
+      {githubRepo ? (
+        <EnvironmentRow
+          name="Repository"
+          menu="repository"
+          icon={
+            <svg aria-hidden="true">
+              <use href="/github.svg#github" />
+            </svg>
+          }
+          href={repositoryUrl}
+          cwd={cwd}
+        >
+          {githubRepo}
+        </EnvironmentRow>
+      ) : cwd ? (
+        <EnvironmentRow name="Folder" menu="folder" icon={<FolderOpenIcon />} cwd={cwd}>
+          {cwd.split("/").filter(Boolean).at(-1) || cwd}
+        </EnvironmentRow>
+      ) : null}
+      {detachedHead ? (
+        <EnvironmentRow
+          name="Git"
+          menu="commit"
+          icon={<GitCommitHorizontalIcon />}
+          mono
+          description="A commit is checked out directly; no branch is active."
+        >
+          {`${detachedHead.slice(0, 10)} (detached)`}
+        </EnvironmentRow>
+      ) : branch ? (
+        <EnvironmentRow name="Branch" menu="branch" icon={<GitBranchIcon />} mono href={branchUrl}>
+          {branch}
+        </EnvironmentRow>
+      ) : null}
+      {pr && (
+        <EnvironmentRow
+          name="Pull request"
+          menu="pull request"
+          icon={<GitPullRequestIcon />}
+          href={pr.url}
+        >
+          {pr.name}
+        </EnvironmentRow>
+      )}
+    </RailList>
   );
 }
 
