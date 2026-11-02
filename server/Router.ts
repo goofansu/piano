@@ -336,6 +336,9 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.createUserSkill, ({ body }) =>
       Effect.flatMap(UserSkills, (skills) => skills.create(body)),
     );
+    yield* serve(Endpoints.updateUserSkill, ({ body }) =>
+      Effect.flatMap(UserSkills, (skills) => skills.update(body)),
+    );
     yield* serve(Endpoints.removeUserSkill, ({ body }) =>
       Effect.flatMap(UserSkills, (skills) => skills.remove(body.name)).pipe(
         Effect.as({ ok: true as const }),
@@ -345,6 +348,9 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(Endpoints.prompts, () => Effect.flatMap(Prompts, (prompts) => prompts.list));
     yield* serve(Endpoints.createPrompt, ({ body }) =>
       Effect.flatMap(Prompts, (prompts) => prompts.create(body)),
+    );
+    yield* serve(Endpoints.updatePrompt, ({ body }) =>
+      Effect.flatMap(Prompts, (prompts) => prompts.update(body)),
     );
     yield* serve(Endpoints.removePrompt, ({ body }) =>
       Effect.flatMap(Prompts, (prompts) => prompts.remove(body.name)).pipe(

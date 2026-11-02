@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -128,6 +128,30 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
         (yield* failure(prompts.remove("../agent/prompts/personal"))).detail,
         "Prompt not found.",
       );
+
+      // An update replaces a prompt Piano created, and a new Pi offers the new description.
+      const updated = yield* prompts.update({
+        name: "review",
+        description: "Review the branch",
+        instructions: "Review the branch against main.",
+      });
+      assert.equal(updated.file, readFileSync(join(dir, "review.md"), "utf8"));
+      assert.equal(updated.description, "Review the branch");
+      const offered = (yield* sessions.probe(root)).commands.find((c) => c.name === "review");
+      assert.equal(offered?.description, "Review the branch", "a new Pi loads the update");
+      // Pi's own prompt, an unknown name and a path are refused, and nothing is created.
+      for (const name of ["personal", "missing", "../agent/prompts/personal"]) {
+        const refused = yield* failure(
+          prompts.update({ name, description: "D.", instructions: "x" }),
+        );
+        assert.equal(refused.field, "name", name);
+        if (name !== "../agent/prompts/personal") assert.equal(refused.detail, "Prompt not found.");
+      }
+      assert.equal(
+        readFileSync(join(agent, "prompts", "personal.md"), "utf8"),
+        "Personal prompt\n",
+      );
+      assert.equal(existsSync(join(dir, "missing.md")), false, "an update never creates");
 
       yield* prompts.remove("review");
       yield* prompts.remove("review");

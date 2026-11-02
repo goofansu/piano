@@ -1,5 +1,7 @@
+import { readProposal } from "@shared/library";
 import type { Dialog } from "@shared/wire";
 import { useId, useSyncExternalStore } from "react";
+import { LibraryProposalCard } from "@/components/LibraryProposal";
 import {
   Popover,
   PopoverContent,
@@ -26,7 +28,20 @@ export function InlineQuestion({
   pending: PendingDialogs;
   send: Client["send"];
 }) {
-  return head && surface === "inline" ? (
+  if (!head || surface !== "inline") return null;
+  // A save tool's proposal (`piano-library`) is a confirmation asked here, as a card.
+  const proposal = readProposal(head);
+  if (proposal)
+    return (
+      <LibraryProposalCard
+        key={`${head.generation}/${head.id}`}
+        dialog={head}
+        proposal={proposal}
+        attachment={attachment}
+        send={send}
+      />
+    );
+  return (
     <Question
       key={`${head.generation}/${head.id}`}
       dialog={head}
@@ -35,7 +50,7 @@ export function InlineQuestion({
       session={session}
       send={send}
     />
-  ) : null;
+  );
 }
 
 function Question({

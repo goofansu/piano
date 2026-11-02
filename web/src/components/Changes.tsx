@@ -417,7 +417,7 @@ function FileSection({
 }
 
 /** Hand-written: no shadcn component renders a unified diff. Numbers, marks and tints follow the transcript's tokens. */
-function Hunks({ file }: { file: DiffFile }) {
+export function Hunks({ file }: { file: DiffFile }) {
   const [wrap] = useChangesWrap();
   // Fixed-layout wrapping must still leave room for large line numbers (not just two digits).
   const digits = useMemo(() => {

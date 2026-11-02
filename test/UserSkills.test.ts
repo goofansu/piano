@@ -239,3 +239,73 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
   assert.deepEqual(await skillCommands([directory]), [["skill:release-notes", "Writes notes."]]);
   assert.deepEqual(await skillCommands([]), [], "a Pi run without Piano's folder does not load it");
 });
+
+test("an update replaces only a skill Piano created, and a new Pi loads the new content", async (t) => {
+  const { directory, agentsDirectory, piDirectory, run } = home(t);
+  write(agentsDirectory, "agents-own", "name: agents-own\ndescription: Shared.", "Theirs.");
+  write(piDirectory, "pi-own", "name: pi-own\ndescription: Pi's own.", "Pi's.");
+  await run((skills) =>
+    skills.create({ name: "notes", description: "Writes notes.", instructions: "Old." }),
+  );
+  const update = (name: string, description = "D.", instructions = "I.") =>
+    run((skills) => skills.update({ name, description, instructions }));
+
+  const updated = await update("notes", "Writes release notes.", "New.");
+  assert.equal(updated._tag, "Success");
+  const file = readFileSync(join(directory, "notes", "SKILL.md"), "utf8");
+  assert.equal(
+    updated._tag === "Success" && updated.success.file,
+    file,
+    "it answers the file as saved",
+  );
+  assert.match(file, /New\.\n$/);
+  assert.deepEqual(
+    loadSkillsFromDir({ dir: directory, source: "user" }).skills.map((s) => [
+      s.name,
+      s.description,
+    ]),
+    [["notes", "Writes release notes."]],
+  );
+
+  for (const name of ["agents-own", "pi-own", "missing"]) {
+    const refused = refusal(await update(name));
+    assert.deepEqual([refused.detail, refused.field], ["Skill not found.", "name"], name);
+  }
+  assert.equal(refusal(await update("../escape")).field, "name", "the name rule keeps it inside");
+  assert.match(readFileSync(join(agentsDirectory, "agents-own", "SKILL.md"), "utf8"), /Theirs\./);
+  assert.match(readFileSync(join(piDirectory, "pi-own", "SKILL.md"), "utf8"), /Pi's\./);
+  assert.equal(existsSync(join(directory, "missing")), false, "an update never creates");
+  assert.equal(refusal(await update("notes", "  ")).field, "description");
+
+  // A real, isolated Pi started from now loads what the update wrote.
+  const root = mkdtempSync(join(tmpdir(), "piano-skills-update-pi-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const shim = join(root, "cli.mjs");
+  writeFileSync(
+    shim,
+    `for (const key of Object.keys(process.env)) if (key !== "PATH") delete process.env[key];
+process.env.HOME = ${JSON.stringify(root)};
+process.env.PI_CODING_AGENT_DIR = ${JSON.stringify(join(root, "agent"))};
+process.env.PI_SKIP_VERSION_CHECK = "1";
+process.env.PI_TELEMETRY = "0";
+globalThis.fetch = () => Promise.resolve(new Response("offline", { status: 404 }));
+await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
+  );
+  const commands = await Effect.runPromise(
+    Effect.flatMap(PiSessions, (sessions) => sessions.probe(root)).pipe(
+      Effect.map((probe) =>
+        probe.commands.filter((c) => c.source === "skill").map((c) => [c.name, c.description]),
+      ),
+      Effect.provide(PiSessionsLive),
+      Effect.provide(NodeServices.layer),
+      Effect.provideService(PiCli, {
+        node: process.execPath,
+        cli: shim,
+        extraArgs: ["--no-extensions"],
+        skills: [directory],
+      }),
+      Effect.timeout("40 seconds"),
+    ),
+  );
+  assert.deepEqual(commands, [["skill:notes", "Writes release notes."]]);
+});

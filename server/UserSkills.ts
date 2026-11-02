@@ -2,17 +2,26 @@
  * Skills the user creates in Piano, kept in Piano's own skills folder beside its database
  * (`<name>/SKILL.md`); every Pi child Piano starts loads that folder with `--skill` (main.ts), so
  * they are Piano's only, as prompts are. Pi owns loading (INV-12); this module writes a new skill's
- * file, lists the folder and removes a skill from it. Skills elsewhere (`~/.agents/skills`, Pi's own
+ * file, replaces the file of one it created, lists the folder and removes a skill from it. Skills elsewhere (`~/.agents/skills`, Pi's own
  * folder, a repository's) are never listed or touched, only read to refuse a name Pi already loads.
  * Nothing here changes a running session: one started from now loads the new set, and a running
  * one on `/reload`.
  */
-import { lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadSkillsFromDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
 import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
+import { skillFile as fileOf } from "../shared/library.ts";
 import type { UserSkill, UserSkillCreate } from "../shared/skills.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 import { agentDir } from "./PiEnv.ts";
@@ -46,6 +55,9 @@ export class UserSkills extends Context.Service<
     /** The skills Piano created, by name. */
     readonly list: Effect.Effect<ReadonlyArray<UserSkill>>;
     readonly create: (request: UserSkillCreate) => Effect.Effect<UserSkill, UserSkillError>;
+    /** Replaces the SKILL.md of a skill Piano created; any other name is refused, so a skill in
+     * another folder Pi loads, or a repository's, is never written over. */
+    readonly update: (request: UserSkillCreate) => Effect.Effect<UserSkill, UserSkillError>;
     /** Removes a skill Piano created, with its directory; any other skill is refused. */
     readonly remove: (name: string) => Effect.Effect<void, UserSkillError>;
   }
@@ -86,27 +98,6 @@ function piano(root: string, name: string): UserSkill | undefined {
     return undefined;
   }
 }
-
-/**
- * Double-quoted YAML scalars accept JSON string syntax, so the name and description stay strings:
- * unquoted, a name such as `123` or `true` would read back as a number or a boolean.
- */
-const fileOf = ({
-  name,
-  description,
-  instructions,
-  disableModelInvocation,
-}: Required<UserSkillCreate>) =>
-  [
-    "---",
-    `name: ${JSON.stringify(name)}`,
-    `description: ${JSON.stringify(description)}`,
-    // Pi's default is to let the model load the skill, so only the exception is written.
-    ...(disableModelInvocation ? ["disable-model-invocation: true"] : []),
-    "---",
-    "",
-    `${instructions.trimEnd()}\n`,
-  ].join("\n");
 
 export const UserSkillsLive = Layer.effect(
   UserSkills,
@@ -180,6 +171,44 @@ export const UserSkillsLive = Layer.effect(
       });
     });
 
+    const update = Effect.fn("UserSkills.update")(function* (request: UserSkillCreate) {
+      const check = checkDraft(request);
+      if (!check.saved)
+        return yield* refused(
+          check.problem?.detail ?? "Could not save the skill.",
+          check.problem?.field,
+        );
+      const saved = {
+        ...check.saved,
+        disableModelInvocation: request.disableModelInvocation === true,
+      };
+      const { name } = saved;
+      // The name rule keeps the path inside the skills directory.
+      if (!piano(root(), name)) return yield* refused("Skill not found.", "name");
+      const text = fileOf(saved);
+      const dir = join(root(), name);
+      return yield* Effect.try({
+        try: () => {
+          // Written beside it, then renamed over it: a reader sees the old file or the new one.
+          const temporary = join(dir, `.SKILL.md.${process.pid}.${Date.now()}`);
+          writeFileSync(temporary, text, { flag: "wx" });
+          try {
+            renameSync(temporary, join(dir, "SKILL.md"));
+          } catch (cause) {
+            rmSync(temporary, { force: true });
+            throw cause;
+          }
+          return {
+            name,
+            description: saved.description,
+            file: text,
+            disableModelInvocation: saved.disableModelInvocation,
+          };
+        },
+        catch: () => refused("Could not save the skill."),
+      });
+    });
+
     const remove = Effect.fn("UserSkills.remove")(function* (name: string) {
       // The name rule keeps the path inside the skills directory.
       if (!isName(name) || !piano(root(), name)) return yield* refused("Skill not found.");
@@ -189,6 +218,6 @@ export const UserSkillsLive = Layer.effect(
       });
     });
 
-    return UserSkills.of({ list, create, remove });
+    return UserSkills.of({ list, create, update, remove });
   }),
 );

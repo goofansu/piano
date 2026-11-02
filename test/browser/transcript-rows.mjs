@@ -104,6 +104,25 @@ const messages = [
       link: "http://127.0.0.1/s/rows-elsewhere",
     }),
   ),
+  assistant([
+    call("save", "piano_save_prompt", {
+      name: "triage",
+      description: "Triage an issue",
+      instructions: "Triage #$1.",
+    }),
+  ]),
+  result(
+    "save",
+    "piano_save_prompt",
+    JSON.stringify({
+      status: "saved",
+      kind: "prompt",
+      change: "create",
+      name: "triage",
+      file: '---\ndescription: "Triage an issue"\n---\nTriage #$1.\n',
+      reach: "In sessions started from now.",
+    }),
+  ),
   user(`${skill}\n\nFocus on login.`),
   assistant([{ type: "text", text: "" }], { stopReason: "error", errorMessage: "Rate limited" }),
   assistant([{ type: "text", text: "Done: every row kind is above." }]),
@@ -120,6 +139,7 @@ const expected = [
   "Answers",
   "Review the login fix.",
   "Session",
+  "Prompt saved:",
   "/skill:",
   "Rate limited",
   "Done: every row kind is above.",

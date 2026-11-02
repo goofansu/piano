@@ -6,11 +6,12 @@
  * and Pi keeps parsing and expanding templates (INV-12). A running Pi loaded its templates when it
  * started, so a change reaches sessions started from then on.
  */
-import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
 import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
+import { promptFile as templateText } from "../shared/library.ts";
 import type { Prompt, PromptCreate } from "../shared/prompts.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 
@@ -32,6 +33,8 @@ export class Prompts extends Context.Service<
     readonly list: Effect.Effect<readonly Prompt[], PromptError>;
     /** Save a new prompt; a name already taken is refused, never overwritten. */
     readonly create: (input: PromptCreate) => Effect.Effect<Prompt, PromptError>;
+    /** Replace a prompt Piano created; any other name is refused, never created. */
+    readonly update: (input: PromptCreate) => Effect.Effect<Prompt, PromptError>;
     /** Delete a prompt; one already gone counts as deleted. */
     readonly remove: (name: string) => Effect.Effect<void, PromptError>;
   }
@@ -60,18 +63,6 @@ const readPrompt = (name: string, text: string): Prompt => {
     description,
     file: text,
   };
-};
-
-/** The template file: front matter (JSON strings are YAML strings), then the instructions. A prompt
- * always has a description, so the front matter is never empty and instructions starting with `---`
- * stay the instructions. */
-const templateText = (input: PromptCreate) => {
-  return [
-    "---",
-    `description: ${JSON.stringify(input.description.trim())}`,
-    "---",
-    `${input.instructions.trim()}\n`,
-  ].join("\n");
 };
 
 export const PromptsLive = Layer.effect(
@@ -125,6 +116,32 @@ export const PromptsLive = Layer.effect(
       return readPrompt(name, text);
     });
 
+    const update = Effect.fn("Prompts.update")(function* (input: PromptCreate) {
+      const check = checkDraft(input);
+      const saved = check.saved;
+      if (!saved)
+        return yield* new PromptError(check.problem ?? { detail: "Could not save prompt." });
+      const name = saved.name;
+      const text = templateText(saved);
+      const notFound = new PromptError({ detail: "Prompt not found.", field: "name" });
+      // Only a file in Piano's folder, not a link out of it: the name rule keeps the path inside.
+      const existing = yield* Effect.tryPromise({
+        try: () => lstat(file(name)),
+        catch: () => notFound,
+      });
+      if (!existing.isFile()) return yield* notFound;
+      const temporary = join(dir, `.${name}.md.${process.pid}.${Date.now()}`);
+      yield* Effect.tryPromise({
+        // Written beside it, then renamed over it: a reader sees the old file or the new one.
+        try: () =>
+          writeFile(temporary, text, { encoding: "utf8", flag: "wx" }).then(() =>
+            rename(temporary, file(name)),
+          ),
+        catch: () => new PromptError({ detail: "Could not save prompt." }),
+      }).pipe(Effect.tapError(() => Effect.promise(() => rm(temporary, { force: true }))));
+      return readPrompt(name, text);
+    });
+
     const remove = Effect.fn("Prompts.remove")(function* (name: string) {
       // Only a name a prompt could have, so a request never reaches outside the folder.
       if (!isName(name)) return yield* new PromptError({ detail: "Prompt not found." });
@@ -140,6 +157,6 @@ export const PromptsLive = Layer.effect(
       );
     });
 
-    return { list: list(), create, remove };
+    return { list: list(), create, update, remove };
   }),
 );
