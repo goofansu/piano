@@ -130,8 +130,8 @@ test("banners come before status lines, in a fixed order", () => {
   assert.equal(find(s, "dialog-resolution")?.title, "Dialog expired: no answer in time");
 });
 
-test("a delivered cancellation is a compact warning, without hiding pending or uncertain delivery", () => {
-  for (const delivery of ["pending", "written", "uncertain", "not-sent"] as const) {
+test("a cancellation Pi received leaves no status line; a pending, uncertain or unsent one does", () => {
+  for (const delivery of ["pending", "written", "accepted", "uncertain", "not-sent"] as const) {
     const line = find(
       at({
         dialogResolution: {
@@ -144,14 +144,10 @@ test("a delivered cancellation is a compact warning, without hiding pending or u
       }),
       "dialog-resolution",
     );
-    assert.equal(line?.placement, "status");
-    if (delivery === "written") {
-      assert.equal(line?.tone, "warning");
-      assert.equal(line?.title, "Question cancelled");
-      assert.deepEqual(line?.details, []);
-    } else {
+    if (delivery === "written" || delivery === "accepted") assert.equal(line, undefined, delivery);
+    else {
+      assert.equal(line?.placement, "status");
       assert.match(line?.title ?? "", /Transport outcome/);
-      assert.notEqual(line?.title, "Question cancelled");
     }
   }
 });

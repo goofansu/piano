@@ -287,7 +287,7 @@ test("a receipt is shown by delivery and ownership; an answer-less one is a stat
     });
   for (const delivery of ["written", "accepted"] as const) {
     const receipt = ended("cancelled", delivery);
-    assert.deepEqual(receipt.notice, { tone: "warning", title: "Question cancelled" }, delivery);
+    assert.equal(receipt.notice, null, delivery);
     assert.equal(receipt.card, false);
     assert.equal(receipt.accepted, false, "only an answer is announced");
   }
