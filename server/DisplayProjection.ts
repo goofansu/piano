@@ -12,7 +12,8 @@
  * instructions, see `AUTHORED_PROJECT_FIELDS`). Redacting either would overwrite what it names.
  */
 import { stripVTControlCharacters } from "node:util";
-import type { Project, ServerMessage, SessionEvent, Snapshot } from "../shared/wire.ts";
+import { readProposal } from "../shared/library.ts";
+import type { Dialog, Project, ServerMessage, SessionEvent, Snapshot } from "../shared/wire.ts";
 
 const marker = "[REDACTED]";
 const prefixes = ["sk-", "ghp_", "github_pat_", "xoxb-", "xoxp-"];
@@ -181,12 +182,33 @@ const TRANSCRIPT_EVENTS: ReadonlySet<SessionEvent["_tag"]> = new Set([
   "tool_update",
 ]);
 
+/**
+ * Whether display hides part of what approving this dialog commits. A save proposal's Save writes
+ * the file its message carries, so a proposal whose title or message redaction changes cannot be
+ * approved as shown: the card answers it with Cancel only, and the answer path refuses Save. The
+ * `select` answer keeps its own rule (`dialogAnswerFor`): a shown label maps back to one option.
+ */
+export function concealsApproval(dialog: Dialog, redaction = compileRedaction()): boolean {
+  if (!readProposal(dialog)) return false;
+  const changed = (text: string | undefined) => text !== undefined && redaction.text(text) !== text;
+  return changed(dialog.title) || changed(dialog.message);
+}
+
+/** A dialog for display: redacted, and marked when that hides part of what Save would write. */
+function projectDialog(dialog: Dialog, redaction: DisplayRedaction): Dialog {
+  const shown = redaction.wire(dialog);
+  return concealsApproval(dialog, redaction) ? { ...shown, concealed: true } : shown;
+}
+
 /** A snapshot for display. Its transcript (messages, partial reply, tool executions) only ever
  * holds what PiRecords projected; its state and dialogs hold readbacks and raw dialog options. */
 export function projectSnapshot(snapshot: Snapshot): Snapshot {
   const { messages, pending, tools, ...rest } = snapshot;
+  const redaction = compileRedaction();
+  const shown = redaction.wire(rest);
   return {
-    ...projectDisplay(rest),
+    ...shown,
+    dialogs: rest.dialogs.map((dialog) => projectDialog(dialog, redaction)),
     messages,
     ...("pending" in snapshot ? { pending } : {}),
     ...("tools" in snapshot ? { tools } : {}),
@@ -197,6 +219,8 @@ export function projectSnapshot(snapshot: Snapshot): Snapshot {
 export function projectSessionEvent(event: SessionEvent): SessionEvent {
   if (TRANSCRIPT_EVENTS.has(event._tag)) return event;
   if (event._tag === "snapshot") return { ...event, snapshot: projectSnapshot(event.snapshot) };
+  if (event._tag === "dialog")
+    return { ...event, dialog: projectDialog(event.dialog, compileRedaction()) };
   return projectDisplay(event);
 }
 

@@ -35,7 +35,7 @@ import type {
   Usage,
 } from "../shared/wire.ts";
 import { Attachments, ContextUsage, SessionStats, SlashCommand } from "../shared/wire.ts";
-import { compileRedaction, type DisplayRedaction } from "./DisplayProjection.ts";
+import { compileRedaction, concealsApproval, type DisplayRedaction } from "./DisplayProjection.ts";
 import { imagePreview } from "./ImagePreviews.ts";
 
 interface RawContent {
@@ -679,6 +679,11 @@ export const dialogAnswerFor = (
   dialog: Dialog,
 ): { readonly command: PiCommand; readonly answer?: DialogResolution["answer"] } | PiRejection => {
   if (action.cancelled) return { command: dialogCancellation(dialog.id) };
+  if (action.confirmed === true && concealsApproval(dialog))
+    return {
+      rejected:
+        "This proposal contains hidden text, so it cannot be saved here. Cancel it instead.",
+    };
   let value = action.value ?? "";
   if (dialog.method === "select") {
     // Keep protocol values private. Redacted labels must not change

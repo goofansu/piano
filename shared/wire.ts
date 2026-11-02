@@ -139,6 +139,9 @@ export const Dialog = Schema.Struct({
   options: Schema.optional(Schema.Array(Schema.String)),
   placeholder: Schema.optional(Schema.String),
   prefill: Schema.optional(Schema.String),
+  /** A save proposal (`piano-library`) whose shown text display redaction changed: approving it
+   * would write text the person never saw, so only Cancel answers it (INV-04, INV-11). */
+  concealed: Schema.optional(Schema.Literal(true)),
 });
 export type Dialog = typeof Dialog.Type;
 

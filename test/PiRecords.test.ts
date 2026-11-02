@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { projectSessionEvent } from "../server/DisplayProjection.ts";
 import { dialogAnswerFor, modelChoicesOf, piExchangeFor } from "../server/PiRecords.ts";
+import { proposalDialog } from "../shared/library.ts";
 import type { Dialog } from "../shared/wire.ts";
 
 /** What reaches Pi's stdin for an action, or why nothing does. */
@@ -292,4 +293,53 @@ test("INV-11: a select option shown through the published dialog answers with it
   } finally {
     delete process.env.PIANO_ROUNDTRIP_TOKEN;
   }
+});
+
+test("INV-04: a save proposal redaction changed is shown as concealed and cannot be approved", () => {
+  const raised = (previous: string, file: string): Dialog => ({
+    id: "p1",
+    generation: "g",
+    receivedAt: 0,
+    deadlineAt: 1,
+    deadlineKind: "host-recovery",
+    method: "confirm",
+    ...proposalDialog({ kind: "prompt", change: "update", name: "deploy", file, previous }),
+  });
+  const confirm = (dialog: Dialog, confirmed: boolean) =>
+    dialogAnswerFor({ _tag: "answer", id: "p1", generation: "g", confirmed }, dialog);
+
+  // Only the key changes, and the key is what Piano hides: the shown diff would be empty.
+  const hidden = raised(
+    "Use api_key: staging-111 for $1\n",
+    "Use api_key: production-999 for $1\n",
+  );
+  const published = projectSessionEvent({ _tag: "dialog", dialog: hidden });
+  assert.ok(published._tag === "dialog");
+  assert.equal(published.dialog.concealed, true);
+  assert.doesNotMatch(published.dialog.message ?? "", /production-999/);
+  assert.deepEqual(confirm(hidden, true), {
+    rejected: "This proposal contains hidden text, so it cannot be saved here. Cancel it instead.",
+  });
+  assert.deepEqual(confirm(hidden, false), {
+    command: { type: "extension_ui_response", id: "p1", confirmed: false },
+    answer: { title: "Update prompt: deploy", value: false },
+  });
+
+  // A snapshot carries the same mark for a dialog still open when the browser connects.
+  const snapshot = projectSessionEvent({
+    _tag: "snapshot",
+    snapshot: { state: { sessionId: "s", isStreaming: false }, messages: [], dialogs: [hidden] },
+  });
+  assert.ok(snapshot._tag === "snapshot");
+  assert.equal(snapshot.snapshot.dialogs[0]?.concealed, true);
+
+  // A proposal shown as written is approved as before.
+  const plain = raised("Use $1\n", "Use $1 twice\n");
+  const shown = projectSessionEvent({ _tag: "dialog", dialog: plain });
+  assert.ok(shown._tag === "dialog");
+  assert.equal(shown.dialog.concealed, undefined);
+  assert.deepEqual(confirm(plain, true), {
+    command: { type: "extension_ui_response", id: "p1", confirmed: true },
+    answer: { title: "Update prompt: deploy", value: true },
+  });
 });
