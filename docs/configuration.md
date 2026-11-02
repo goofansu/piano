@@ -58,7 +58,8 @@ registry database (`server/PianoFolders.ts`): `prompts/` and `skills/`, so
 `PIANO_DB_PATH` brings its own. Every Pi child Piano starts loads them through `--prompt-template`
 and `--skill`; Pi run outside Piano does not. Each page lists its folder only: prompts and skills
 in Pi's own folders, `~/.agents/skills` or a repository stay theirs, and a new name Pi already
-loads from one of them is refused. Settings › Skills lists each skill Pi loads from Piano's folder
+loads from Pi's own folders or `~/.agents/skills` is refused: Pi loads those first and keeps the
+first of a name. A repository's is not, since which one applies depends on the session's folder. Settings › Skills lists each skill Pi loads from Piano's folder
 (a real `<directory>/SKILL.md`, not a link) under the name Pi loads it as, through Pi's own loader,
 so a SKILL.md renamed by hand is still listed and can be deleted. Both follow one draft rule (`shared/drafts.ts`): a name in the
 Agent Skills form (at most 64 lowercase letters, numbers and single hyphens, not at the start or

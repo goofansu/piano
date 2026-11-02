@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { Layer } from "effect";
 import { type LibraryDeps, saveToLibrary } from "../extensions/piano-library/LibrarySave.ts";
-import { PromptsDir } from "../server/Prompts.ts";
+import { PromptsEnvironment } from "../server/Prompts.ts";
 import { UserSkillsEnvironment } from "../server/UserSkills.ts";
 import { type LibraryProposal, readProposal } from "../shared/library.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
@@ -21,7 +21,7 @@ before(async () => {
     "piano-library-",
     Layer.mergeAll(
       Layer.succeed(UserSkillsEnvironment, { directory: () => skills, others: () => [elsewhere] }),
-      Layer.succeed(PromptsDir, prompts),
+      Layer.succeed(PromptsEnvironment, { directory: prompts, others: () => [] }),
     ),
   );
 });

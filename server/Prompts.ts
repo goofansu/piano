@@ -3,9 +3,11 @@
  * folder beside its database; every Pi child Piano starts loads that folder with
  * `--prompt-template` (main.ts), so the composer offers them as `/name` like any other template.
  * Settings lists this folder alone: Pi's personal and project prompt folders stay Pi's (INV-01),
- * and Pi keeps parsing and expanding templates (INV-12). A running Pi loaded its templates when it
+ * read only to refuse a name Pi already loads, and Pi keeps parsing and expanding templates
+ * (INV-12). A running Pi loaded its templates when it
  * started, so a change reaches sessions started from then on.
  */
+import { readFileSync, statSync } from "node:fs";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
@@ -15,6 +17,7 @@ import { promptFile as templateText } from "../shared/library.ts";
 import type { Prompt, PromptCreate, PromptUpdate } from "../shared/prompts.ts";
 import * as LibraryFile from "./LibraryFile.ts";
 import { pianoFolder } from "./PianoFolders.ts";
+import { agentDir } from "./PiEnv.ts";
 
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
 export class PromptError extends Data.TaggedError("PromptError")<{
@@ -22,17 +25,41 @@ export class PromptError extends Data.TaggedError("PromptError")<{
   readonly field?: DraftField;
 }> {}
 
-/** Piano's prompts folder, beside its database. */
-export const PromptsDir = Context.Reference<string>("piano/PromptsDir", {
-  defaultValue: () => pianoFolder("prompts"),
+export const PromptsEnvironment = Context.Reference<{
+  /** Piano's prompts folder, beside its database, which every Pi child loads. */
+  directory: string;
+  /** The other folders Pi loads user prompts from, read only to refuse a name Pi already loads. */
+  others: () => readonly string[];
+}>("piano/PromptsEnvironment", {
+  defaultValue: () => ({
+    directory: pianoFolder("prompts"),
+    others: () => [join(agentDir(), "prompts")],
+  }),
 });
+
+/**
+ * Whether Pi loads a prompt named `name` from `dir`. Pi's own loader is not exported, so this is
+ * its rule for one name: `<name>.md`, a file or a link to one, whose front matter parses. Pi
+ * merges Piano's folder after its own and keeps the first prompt of a name, so Piano's would lose.
+ */
+const loadedFrom = (dir: string, name: string) => {
+  const path = join(dir, `${name}.md`);
+  try {
+    if (!statSync(path).isFile()) return false;
+    parseFrontmatter(readFileSync(path, "utf8"));
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export class Prompts extends Context.Service<
   Prompts,
   {
     /** Piano's prompts by name, as Pi reads them. */
     readonly list: Effect.Effect<readonly Prompt[], PromptError>;
-    /** Save a new prompt; a name already taken is refused, never overwritten. */
+    /** Save a new prompt; a name already taken, in Piano's folder or one Pi loads before it, is
+     * refused, never overwritten. */
     readonly create: (input: PromptCreate) => Effect.Effect<Prompt, PromptError>;
     /** Replace a prompt Piano created; any other name is refused, never created. With
      * `previous`, only that file is replaced: a prompt changed since it was shown is refused, and
@@ -71,7 +98,8 @@ const readPrompt = (name: string, text: string): Prompt => {
 export const PromptsLive = Layer.effect(
   Prompts,
   Effect.gen(function* () {
-    const dir = yield* PromptsDir;
+    const environment = yield* PromptsEnvironment;
+    const dir = environment.directory;
     const file = (name: string) => join(dir, `${name}.md`);
     const unreadable = () => new PromptError({ detail: "Could not read prompts." });
 
@@ -105,6 +133,10 @@ export const PromptsLive = Layer.effect(
         return yield* new PromptError(check.problem ?? { detail: "Could not save prompt." });
       const name = saved.name;
       const text = templateText(saved);
+      const taken = () =>
+        new PromptError({ detail: `A prompt named ${name} already exists.`, field: "name" });
+      // A name Pi already loads from another folder would hide Piano's prompt behind it.
+      if (environment.others().some((other) => loadedFrom(other, name))) return yield* taken();
       yield* Effect.tryPromise({
         // `wx` refuses an existing file, so two creates of one name never overwrite each other.
         try: () =>
@@ -113,7 +145,7 @@ export const PromptsLive = Layer.effect(
           ),
         catch: (cause) =>
           code(cause) === "EEXIST"
-            ? new PromptError({ detail: `A prompt named ${name} already exists.`, field: "name" })
+            ? taken()
             : new PromptError({ detail: "Could not save prompt." }),
       });
       return readPrompt(name, text);
