@@ -144,6 +144,36 @@ test("only skills in Piano's folder are listed or deleted", async (t) => {
   assert.equal(existsSync(join(directory, "mine")), false);
 });
 
+test("a skill whose SKILL.md names it differently from its directory is listed, updated and deleted as Pi loads it", async (t) => {
+  const { directory, run } = home(t);
+  // Edited by hand (or by an agent): the directory says notes, the file says other.
+  write(directory, "notes", "name: other\ndescription: Renamed.");
+  assert.deepEqual(
+    loadSkillsFromDir({ dir: directory, source: "user" }).skills.map((skill) => skill.name),
+    ["other"],
+    "Pi loads it as other",
+  );
+
+  const listed = await run((skills) => skills.list);
+  assert.deepEqual(listed._tag === "Success" && listed.success.map((s) => s.name), ["other"]);
+
+  const path = join(directory, "notes", "SKILL.md");
+  const updated = await run((skills) =>
+    skills.update({
+      name: "other",
+      description: "Renamed.",
+      instructions: "Again.",
+      previous: readFileSync(path, "utf8"),
+    }),
+  );
+  assert.equal(updated._tag, "Success");
+  assert.match(readFileSync(path, "utf8"), /Again\.\n$/);
+
+  assert.equal((await run((skills) => skills.remove("other")))._tag, "Success");
+  assert.equal(existsSync(join(directory, "notes")), false, "its directory goes with it");
+  assert.deepEqual(loadSkillsFromDir({ dir: directory, source: "user" }).skills, []);
+});
+
 test("a create names the field it refuses and never overwrites a skill", async (t) => {
   const { directory, agentsDirectory, piDirectory, run } = home(t);
   write(directory, "taken", "name: taken\ndescription: Already here.", "Original.");
