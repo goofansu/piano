@@ -506,7 +506,17 @@ function previewCommands(
       label: "Open preview in new tab",
       icon: "preview",
       enabled: !!preview.url,
-      keywords: ["app", "run", "localhost"],
+      // The symptom finds the recovery: the embedded page denies what a real tab allows.
+      keywords: [
+        "app",
+        "run",
+        "localhost",
+        "not working",
+        "can't click",
+        "cant",
+        "sign in",
+        "popup",
+      ],
       ...(preview.url && { detail: previewHost(preview.url) }),
       intent: { kind: "open-url", url: preview.url ?? "" },
     },

@@ -67,8 +67,10 @@ With one view open the strip still shows, so closing is one place.
   as hairline rows; the popover goes, since its content has a place. A row opens a **file tab**.
 - **Preview** embeds the app in an `iframe` of the preview URL with the control's menu (Open,
   Copy link, Details, Stop preview) as the tab's actions. The header's preview control opens
-  this tab instead of its menu. An app that refuses framing shows one line, "Open preview" as
-  a button, since a blocked frame cannot be told from a slow one.
+  this tab instead of its menu. A blocked frame cannot be told from a slow one, so Piano shows
+  no framing message: the browser's own page shows in the frame, and **More preview actions →
+  Not working here?** offers **Open in new tab** (see
+  [live previews](live-previews.md#something-does-nothing-when-clicked)).
 - **Pull request** stays the popover over the sidebar; a view is a later step if the popover's
   files and diff want room.
 - **Navigation state:** `sidebar: SidebarPanel | null` becomes `views: View[]` plus the active

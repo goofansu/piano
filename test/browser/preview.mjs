@@ -334,7 +334,12 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
             "!!document.querySelector('[data-slot=session-rail] button[aria-label=\"Show preview\"]')",
           );
         const showRail = async () => {
-          if (!(await railPreview())) await page.click("button", "Show session rail");
+          // An open rail may not have drawn the app's row yet; open it only when it is closed.
+          if (
+            !(await railPreview()) &&
+            (await page.evaluate("!!document.querySelector('[aria-label=\"Show session rail\"]')"))
+          )
+            await page.click("button", "Show session rail");
           await page.until(
             "!!document.querySelector('[data-slot=session-rail] button[aria-label=\"Show preview\"]')",
           );
@@ -443,6 +448,12 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         };
         const noFrame = () =>
           page.until("!document.querySelector('iframe[title=\"App preview\"]')");
+        // A closing dialog hides the rest of the page from the accessibility tree until it has
+        // finished closing; a role lookup in that window finds nothing.
+        const dialogClosed = () =>
+          page.until(
+            "!document.querySelector('[role=dialog],[role=alertdialog],[data-aria-hidden]')",
+          );
         const more = async () => {
           await page.until("!document.querySelector('[data-sonner-toast]')");
           await page.click("button", "More preview actions");
@@ -601,7 +612,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.capture("1d-details-external-answer");
         await page.ab("tab", "close");
         await page.press("Escape");
-        await page.until("!document.querySelector('[role=dialog]')");
+        await dialogClosed();
         await more();
         await page.click("menuitem", "Copy link");
         await page.see("Preview link copied");
@@ -646,6 +657,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.see("Stop preview?");
         await page.capture("1g-palette-stop-answer");
         await page.click("button", "Cancel");
+        await dialogClosed();
 
         if (embeddedLocal) {
           // Browser failures are independent of local readiness. The fixture changes only its
@@ -670,7 +682,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.see("Output");
           await page.capture("1g-recovery-answer");
           await page.press("Escape");
-          await page.until("!document.querySelector('[role=dialog]')");
+          await dialogClosed();
           await rememberFrame();
           await page.click("button", "Reload preview");
           // The old page's load handler goes with its detached frame; only the new page can
@@ -710,6 +722,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.capture("1g-recovery-external-answer");
           await page.ab("tab", "close");
           await page.press("Escape");
+          await dialogClosed();
           writeFileSync(browserMode, "login");
           await page.click("button", "Reload preview");
           await appSee("Sign in required");
@@ -739,9 +752,65 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
             "document.activeElement?.getAttribute('aria-label') === 'Reload preview'",
           );
           await page.capture("1g-keyboard-frame-return");
+          // Something in the page does nothing: Piano cannot see why, so the user asks. The
+          // healthy page carries no hint, and the frame keeps denying top navigation and pop-ups.
+          assert.equal(
+            await page.evaluate(
+              "document.querySelector('iframe[title=\"App preview\"]').getAttribute('sandbox')",
+            ),
+            "allow-scripts allow-same-origin allow-forms",
+            "the frame never gains top navigation or pop-ups",
+          );
+          assert.equal(
+            await page.evaluate("document.body.innerText.includes('Not working here?')"),
+            false,
+            "a healthy page shows no help footer, banner or toast",
+          );
+          await more();
+          await page.capture("1g-more-menu-not-working");
+          await page.click("menuitem", "Not working here?");
+          await page.until(
+            "document.activeElement?.textContent?.trim() === 'Open in new tab' && !!document.activeElement.closest('[role=dialog]')",
+          );
+          await page.capture("1g-not-working-answer");
+          await page.press("Enter");
+          await page.see("Preview journey v1");
+          await page.capture("1g-not-working-external-answer");
+          await page.ab("tab", "close");
+          await dialogClosed();
+          assert.equal(request({ action: "status" }).instanceId, identity);
+          // Keyboard: Escape closes it and returns focus to the menu that opened it.
+          await page.ab("focus", '[aria-label="More preview actions"]');
+          await page.press("Enter");
+          await page.until("!!document.querySelector('[role=menu]')");
+          await page.until("document.activeElement?.textContent?.trim() === 'Not working here?'");
+          await page.press("Enter");
+          await page.until("document.activeElement?.textContent?.trim() === 'Open in new tab'");
+          await page.press("Escape");
+          await dialogClosed();
+          await page.until(
+            "document.activeElement?.getAttribute('aria-label') === 'More preview actions'",
+          );
+          // Reload from it replaces only the page; the app keeps its instance.
+          await more();
+          await page.click("menuitem", "Not working here?");
+          await rememberFrame();
+          await page.click("button", "Reload preview");
+          await dialogClosed();
+          assert.equal(await sameFrame(), false, "Reload preview replaces the page");
+          await frameReady();
+          assert.equal(request({ action: "status" }).instanceId, identity);
+          await more();
+          await page.click("menuitem", "Not working here?");
+          await page.click("button", "Details");
+          await page.see("Output");
+          await page.capture("1g-not-working-details");
+          await page.press("Escape");
+          await dialogClosed();
           observations.push({
             frameFallbacks: ["bounded pending", "DENY + frame-ancestors", "401 login"],
             keyboardFrameTraversal: true,
+            notWorkingHereRecovery: true,
           });
         }
 
@@ -757,6 +826,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await noFrame();
           await page.capture("1h-unknown-details");
           await page.press("Escape");
+          await dialogClosed();
           await page.click("button", "Check status");
           await page.capture("1h-check-status");
           await more();
@@ -925,6 +995,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("menuitem", "Details");
         await page.capture("2b-narrow-details");
         await page.press("Escape");
+        await dialogClosed();
         await more();
         await page.click("menuitem", "Copy link");
         await page.see("Preview link copied");
@@ -969,7 +1040,16 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           const before = observations.length;
           await page.open(sessionPath);
           await page.until("!!document.querySelector('[aria-label=Message]')");
-          await page.ab("fill", '[aria-label="Message"]', "Run again");
+          // A reopened page may restore its saved draft over an early fill; fill until it holds.
+          for (let i = 0; ; i++) {
+            await page.ab("fill", '[aria-label="Message"]', "Run again");
+            if (
+              await page.evaluate("document.querySelector('[aria-label=Send]')?.disabled === false")
+            )
+              break;
+            assert.ok(i < 50, "the composer accepts the message");
+            await delay(100);
+          }
           await page.click("button", "Send");
           for (let i = 0; observations.length === before || !app.ready; i++) {
             assert.ok(i < 300, "new preview ready");
@@ -1077,6 +1157,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("menuitem", "Details");
         await page.capture("3d-failed-details");
         await page.press("Escape");
+        await dialogClosed();
         await more();
         await page.click("menuitem", "Stop preview");
         await page.click("button", "Stop preview");
