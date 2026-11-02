@@ -12,16 +12,19 @@
  * Nothing here depends on React.
  */
 import type { ClientCommand, Dialog, DialogResolution } from "@shared/wire";
+// Relative, not @shared/: module tests load this file directly in Node.
+import { readProposal } from "../../../shared/library.ts";
 import { type AppState, sessionKey } from "../store.ts";
 // Relative, not @/: module tests load this file directly in Node.
 import { sessionReady } from "./sessionContext.ts";
 import type { SendDisposition } from "./ws.ts";
 
-/** Where a dialog is asked: a confirmation in a modal, any other method inline by the composer. */
+/** Where a dialog is asked: a confirmation in a modal, any other method inline by the composer, and
+ * so is a save tool's proposal, which is a confirmation the user reads beside the transcript. */
 export type DialogSurface = "modal" | "inline";
 
 export const dialogSurface = (dialog: Dialog): DialogSurface =>
-  dialog.method === "confirm" ? "modal" : "inline";
+  dialog.method === "confirm" && !readProposal(dialog) ? "modal" : "inline";
 
 /** A question's title, or the generic one when Pi gave none; the asking and answered views share it. */
 export const dialogTitle = (title: string | undefined): string => title || "Pi needs an answer";

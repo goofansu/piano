@@ -235,7 +235,6 @@ export function DraftFileView({
   fileLabel: string;
   close: () => void;
 }) {
-  const Kind = kind === "skill" ? "Skill" : "Prompt";
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
       <DialogContent
@@ -245,25 +244,46 @@ export function DraftFileView({
         <DialogHeader>
           <DialogTitle className="truncate font-mono">{name}</DialogTitle>
         </DialogHeader>
-        <div className="relative">
-          <Textarea
-            readOnly
-            aria-label={`${name} ${fileLabel}`}
-            spellCheck={false}
-            className="max-h-[50dvh] min-h-48 pr-10 font-mono"
-            value={file}
-          />
-          <CopyButton
-            text={file}
-            label={`Copy ${kind}`}
-            copiedLabel={`${Kind} copied`}
-            failure={`Couldn’t copy. Select the ${kind} text to copy it.`}
-            variant="ghost"
-            className="absolute top-2 right-2"
-          />
-        </div>
+        <DraftFileText kind={kind} name={name} file={file} fileLabel={fileLabel} />
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** A skill's or prompt's file as plain text, never rendered: read-only, copyable. View shows it,
+ * and so does the proposal card for a new one. */
+export function DraftFileText({
+  kind,
+  name,
+  file,
+  fileLabel,
+  className,
+}: {
+  kind: "skill" | "prompt";
+  name: string;
+  file: string;
+  fileLabel: string;
+  className?: string;
+}) {
+  const Kind = kind === "skill" ? "Skill" : "Prompt";
+  return (
+    <div className="relative">
+      <Textarea
+        readOnly
+        aria-label={`${name} ${fileLabel}`}
+        spellCheck={false}
+        className={cn("max-h-[50dvh] min-h-48 pr-10 font-mono", className)}
+        value={file}
+      />
+      <CopyButton
+        text={file}
+        label={`Copy ${kind}`}
+        copiedLabel={`${Kind} copied`}
+        failure={`Couldn’t copy. Select the ${kind} text to copy it.`}
+        variant="ghost"
+        className="absolute top-2 right-2"
+      />
+    </div>
   );
 }
 

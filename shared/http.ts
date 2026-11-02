@@ -382,6 +382,18 @@ export const Endpoints = {
     redact: false,
     fallback: "Could not create skill.",
   }),
+  /** Replaces a skill Piano created; Piano's save tool calls it after the user's Save. */
+  updateUserSkill: endpoint({
+    method: "PUT",
+    path: "/api/settings/skills",
+    body: UserSkillCreate,
+    invalid: "Enter a name, a description and instructions.",
+    response: UserSkill,
+    noStore: true,
+    refused: 400,
+    redact: false,
+    fallback: "Could not save skill.",
+  }),
   removeUserSkill: endpoint({
     method: "POST",
     path: "/api/settings/skills/remove",
@@ -417,6 +429,19 @@ export const Endpoints = {
   }),
   createPrompt: endpoint({
     method: "POST",
+    path: "/api/settings/prompts",
+    body: PromptCreate,
+    invalid: "Enter a name and the prompt.",
+    response: Prompt,
+    noStore: true,
+    refused: 400,
+    // Text the person wrote in Piano (DisplayProjection's authored-text rule): View copies it as saved.
+    redact: false,
+    fallback: "Could not save prompt.",
+  }),
+  /** Replaces a prompt Piano created; Piano's save tool calls it after the user's Save. */
+  updatePrompt: endpoint({
+    method: "PUT",
     path: "/api/settings/prompts",
     body: PromptCreate,
     invalid: "Enter a name and the prompt.",

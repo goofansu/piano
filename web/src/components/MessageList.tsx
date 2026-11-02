@@ -1,3 +1,4 @@
+import { LIBRARY_REACH, type LibraryResult } from "@shared/library";
 import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { cn } from "cn";
 import {
@@ -32,6 +33,7 @@ import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
 import { BranchLabel } from "@/components/BranchLabel";
 import { DisclosureChevron } from "@/components/Disclosure";
+import { DraftFileView } from "@/components/DraftDialogs";
 import { IconButton } from "@/components/IconButton";
 import { Markdown } from "@/components/Markdown";
 import { PianoButton } from "@/components/PianoButton";
@@ -960,6 +962,56 @@ function QuestionAnswersRow({ answers, stateKey }: { answers: QuestionAnswers; s
   );
 }
 
+/** A save of a skill or a prompt: what became of it, with View for a saved one, as Settings shows it. */
+function LibraryRow({ result, stateKey }: { result: LibraryResult; stateKey: string }) {
+  const [viewing, setViewing] = useState(false);
+  const Kind = result.kind === "skill" ? "Skill" : "Prompt";
+  const saved = result.status === "saved";
+  return (
+    <>
+      <FoldRow
+        glyph={<StatusDot tone={saved ? "ok" : "muted"} />}
+        header={
+          <span className="min-w-0 truncate font-medium text-ink">
+            {`${Kind} ${saved ? "saved" : "not saved"}: `}
+            <span className="font-mono font-normal text-ink-2">{result.name}</span>
+          </span>
+        }
+        label={`${Kind} ${result.name}`}
+        stateKey={`${stateKey}:library`}
+        canOpen={result.status !== "cancelled"}
+        toolOutput
+        data={{ "data-slot": "library-row", "data-status": result.status }}
+        action={
+          saved && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="-my-1 shrink-0"
+              onClick={() => setViewing(true)}
+            >
+              View
+            </Button>
+          )
+        }
+      >
+        <p className="text-ink-2">
+          {saved ? LIBRARY_REACH : result.status === "refused" && result.detail}
+        </p>
+      </FoldRow>
+      {saved && viewing && (
+        <DraftFileView
+          kind={result.kind}
+          name={result.name}
+          file={result.file}
+          fileLabel={result.kind === "skill" ? "SKILL.md" : "file"}
+          close={() => setViewing(false)}
+        />
+      )}
+    </>
+  );
+}
+
 function Tool({
   call,
   outcome,
@@ -971,8 +1023,10 @@ function Tool({
   summary,
   dispatch,
   answers,
+  library,
 }: ToolRow) {
   if (answers) return <QuestionAnswersRow answers={answers} stateKey={call.id} />;
+  if (library) return <LibraryRow result={library} stateKey={call.id} />;
   if (dispatch)
     return dispatch.map((session, i) => (
       <DispatchRow

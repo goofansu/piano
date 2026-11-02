@@ -39,6 +39,7 @@ import {
   sessionWorking,
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
+import { useLibraryToasts } from "@/lib/useLibraryToasts";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
@@ -96,6 +97,7 @@ export function SessionView({ state, send }: Props) {
     () => Object.fromEntries((t?.tools ?? []).map((tool) => [tool.id, tool])),
     [t?.tools],
   );
+  useLibraryToasts(t?.tools);
   const input = state.pendingCreate;
   const { workspace, pullRequestTarget, draftKey, pullRequest: link } = sessionContext(state);
   const { commands } = useSessionCommands();

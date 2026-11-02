@@ -16,6 +16,7 @@ import {
   type WaitStatus,
   type WaitToolResult,
 } from "../../../shared/dispatch.ts";
+import { type LibraryResult, storedLibraryResult } from "../../../shared/library.ts";
 import { abbrevHome, DETACHED_HEAD, stripAnsi, toolArgsText } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
@@ -55,6 +56,8 @@ export interface ToolRow {
   dispatch?: DispatchFacts[];
   /** Completed ask_user results, paired with the original questions in Pi's history. */
   answers?: QuestionAnswers;
+  /** A finished save of a skill or a prompt (`piano_save_skill`, `piano_save_prompt`). */
+  library?: LibraryResult;
 }
 
 export type QuestionAnswers = AskUserOutcome;
@@ -507,6 +510,8 @@ export function transcriptRows(
             : verbDone;
     const dispatch = dispatchFacts(call, output, outcome, briefs);
     const answers = outcome === "done" && result ? questionAnswersOf(call, output) : undefined;
+    const library =
+      outcome === "done" && result ? storedLibraryResult(call.name, output) : undefined;
     return {
       call,
       result,
@@ -519,6 +524,7 @@ export function transcriptRows(
       summary: summarize(call.args),
       ...(dispatch ? { dispatch } : {}),
       ...(answers ? { answers } : {}),
+      ...(library ? { library } : {}),
     };
   };
   const noResults = new Map<string, RenderMsg>();
