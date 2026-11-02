@@ -725,6 +725,8 @@ export interface RecordProjection {
   /** A tool call ended, with the result Pi stores: the caller closes the dialogs it owned and
    * confirms or rejects the answer written for them. */
   readonly toolEnded?: { readonly toolCallId: string; readonly result: unknown };
+  /** A run started: the caller retires a dialog receipt that has nothing left to report. */
+  readonly runStarted?: true;
 }
 
 /** Pi's facts about a requested dialog: a wire `Dialog` before Piano sets its deadline.
@@ -804,7 +806,7 @@ export class PiProjector {
         this.liveRun = true;
         this.responseSucceeded = false;
         this.cancelled = false;
-        return project([], { isStreaming: true });
+        return { ...project([], { isStreaming: true }), runStarted: true };
       case "queue_update": {
         const messages = queuedMessagesOf(raw);
         return project([
