@@ -1,6 +1,7 @@
 import type { SessionPreview } from "@shared/wire";
 import { cn } from "cn";
 import {
+  CircleHelpIcon,
   CopyIcon,
   ExternalLinkIcon,
   MoreHorizontalIcon,
@@ -49,6 +50,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Item, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
+import { returnFocusForKeyboard } from "@/lib/pointerClose";
 import { previewObservation, seenDetails, seenPreview, seenStop } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
@@ -189,49 +191,9 @@ export function PreviewPanel() {
   if (preview && preview.instanceId !== viewedInstance) setViewedInstance(preview.instanceId);
   const stopped = seenStop(state, observed, viewedInstance);
   const url = previewFrameUrl(preview, window.location.origin);
-  const actions = preview && (
-    <>
-      {preview.url && (
-        <IconButton asChild size="header" label="Open preview in new tab">
-          <a href={preview.url} target="_blank" rel="noopener noreferrer">
-            <ExternalLinkIcon />
-          </a>
-        </IconButton>
-      )}
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <IconButton size="header" label="More preview actions">
-            <MoreHorizontalIcon />
-          </IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuGroup>
-            {preview.url && (
-              <DropdownMenuItem onSelect={() => void copyLink(preview.url!)}>
-                <CopyIcon />
-                Copy link
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onSelect={commands.details}>
-              <ScrollTextIcon />
-              Details
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={!commands.canStop}
-              onSelect={commands.stop}
-            >
-              <SquareIcon className="fill-current" />
-              Stop preview
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </>
-  );
+  // `reload` exists only while a page is embedded: only then can something in it do nothing.
+  const actions = (reload?: () => void) =>
+    preview && <PreviewActions preview={preview} commands={commands} reload={reload} />;
   if (url && preview)
     return (
       <EmbeddedPreview
@@ -243,7 +205,7 @@ export function PreviewPanel() {
       />
     );
   return (
-    <SurfaceFrame tab="preview" actions={actions}>
+    <SurfaceFrame tab="preview" actions={actions()}>
       <Empty>
         <EmptyHeader>
           {preview ? (
@@ -288,11 +250,187 @@ export function PreviewPanel() {
   );
 }
 
+type PreviewCommands = ReturnType<typeof usePreviewCommands>;
+
+/** Preview's toolbar actions after Reload: open externally, and the rest in one menu. */
+function PreviewActions({
+  preview,
+  commands,
+  reload,
+}: {
+  preview: SessionPreview;
+  commands: PreviewCommands;
+  reload?: () => void;
+}) {
+  const [helpOpen, setHelpOpen] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const help = !!(reload && preview.url);
+  return (
+    <>
+      {preview.url && (
+        <IconButton asChild size="header" label="Open preview in new tab">
+          <a href={preview.url} target="_blank" rel="noopener noreferrer">
+            <ExternalLinkIcon />
+          </a>
+        </IconButton>
+      )}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <IconButton ref={moreRef} size="header" label="More preview actions">
+            <MoreHorizontalIcon />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          // The dialog takes focus; the menu must not hand it back to its trigger first.
+          onCloseAutoFocus={(event) => helpOpen && event.preventDefault()}
+        >
+          <DropdownMenuGroup>
+            {help && (
+              <DropdownMenuItem onSelect={() => setHelpOpen(true)}>
+                <CircleHelpIcon />
+                Not working here?
+              </DropdownMenuItem>
+            )}
+            {preview.url && (
+              <DropdownMenuItem onSelect={() => void copyLink(preview.url!)}>
+                <CopyIcon />
+                Copy link
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onSelect={commands.details}>
+              <ScrollTextIcon />
+              Details
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              variant="destructive"
+              disabled={!commands.canStop}
+              onSelect={commands.stop}
+            >
+              <SquareIcon className="fill-current" />
+              Stop preview
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {help && (
+        <PreviewHelpDialog
+          url={preview.url!}
+          open={helpOpen}
+          close={() => setHelpOpen(false)}
+          reload={reload!}
+          details={commands.details}
+          returnFocus={() => moreRef.current?.focus()}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * The user's report that something in the page does nothing. Piano cannot see into the frame, so
+ * this explains what the frame denies and offers the real tab; it never claims a block was seen.
+ */
+function PreviewHelpDialog({
+  url,
+  open,
+  close,
+  reload,
+  details,
+  returnFocus,
+}: {
+  url: string;
+  open: boolean;
+  close: () => void;
+  reload: () => void;
+  details: () => void;
+  returnFocus: () => void;
+}) {
+  const openRef = useRef<HTMLAnchorElement>(null);
+  // Details opens its own dialog, which takes focus itself.
+  const handOff = useRef(false);
+  const then =
+    (action: () => void, ownsFocus = false) =>
+    () => {
+      handOff.current = ownsFocus;
+      close();
+      action();
+    };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && close()}>
+      <DialogContent
+        className="sm:max-w-md"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          openRef.current?.focus();
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (handOff.current) {
+            handOff.current = false;
+            return;
+          }
+          // The item that opened this is gone with its menu; the menu's trigger stands in,
+          // under the same keyboard-only policy as any overlay's return.
+          let pointer = false;
+          returnFocusForKeyboard({ preventDefault: () => (pointer = true) });
+          if (!pointer) returnFocus();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Not working here?</DialogTitle>
+          <DialogDescription>
+            Preview runs the app in a restricted frame. Links that open a new window or leave the
+            frame, sign-in redirects, pop-ups, alerts and downloads may do nothing here.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col items-start gap-1.5">
+          <Button asChild>
+            <a
+              ref={openRef}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => close()}
+            >
+              Open in new tab
+              <ExternalLinkIcon data-icon="inline-end" aria-hidden />
+            </a>
+          </Button>
+          <p className="text-sm text-muted-foreground">Opens the app’s start page.</p>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          If it also fails in a new tab, check Details for the app’s output or ask the agent.
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={then(details, true)}>
+            <ScrollTextIcon data-icon="inline-start" aria-hidden />
+            Details
+          </Button>
+          <Button variant="outline" onClick={then(reload)}>
+            <RefreshCwIcon data-icon="inline-start" aria-hidden />
+            Reload preview
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** Ends one page's loading feedback, leaving a later page's alone. */
 const settled = (page: number) => (current: number | null) => (current === page ? null : current);
 
 /** One registered page. Reload replaces only its browsing context, never its managed process. */
-function EmbeddedPreview({ url, actions }: { url: string; actions: ReactNode }) {
+function EmbeddedPreview({
+  url,
+  actions,
+}: {
+  url: string;
+  actions: (reload: () => void) => ReactNode;
+}) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [page, setPage] = useState(0);
   const [loadingPage, setLoadingPage] = useState<number | null>(0);
@@ -326,7 +464,7 @@ function EmbeddedPreview({ url, actions }: { url: string; actions: ReactNode }) 
           <IconButton size="header" label="Reload preview" aria-busy={loading} onClick={reload}>
             <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
           </IconButton>
-          {actions}
+          {actions(reload)}
         </>
       }
     >

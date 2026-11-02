@@ -135,7 +135,8 @@ the kill bound. Only its scratch services stop; native platform gaps must be rep
 With a loopback origin (the macOS default `http://localhost`, or on Linux `PIANO_PREVIEW_CONFIG`
 pointing to a JSON file containing `{"origin":"http://127.0.0.1"}`), it also checks embedded desktop/narrow page-state
 preservation across tabs/rail, page-only reload, composer-driven deterministic HMR, native forms,
-keyboard traversal, a Surface resize released over the app (real CDP mouse input), synthetic Chromium touch scrolling, bounded loading, framing-denied and
+keyboard traversal, the **Not working here?** recovery (focus, new tab, Escape, page-only reload,
+an unchanged sandbox), a Surface resize released over the app (real CDP mouse input), synthetic Chromium touch scrolling, bounded loading, framing-denied and
 login-gated responses, and frame disposal on replacement/unknown/stop/owner loss. The pinned
 agent-browser's accessibility references reach the cross-origin app; no production DOM bridge is
 used. Synthetic touch is not real-device evidence. Authenticated external exe.dev access is a

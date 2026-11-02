@@ -59,6 +59,9 @@ agent launches an app in the session's workspace and returns a preview link (on 
 `http://localhost:<port>/`). It keeps running after the reply, Stop and browser disconnect,
 but ends with its owning Pi process (including archive/delete or Piano shutdown).
 Ask the agent to stop the exact instance when finished. See [setup and limits](docs/live-previews.md).
+If a link, sign-in or pop-up does nothing in Preview, choose **More preview actions → Not working
+here?** and open the app in a new tab; see
+[something does nothing when clicked](docs/live-previews.md#something-does-nothing-when-clicked).
 
 ### Dispatch work to another session
 

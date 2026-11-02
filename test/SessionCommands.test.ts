@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionPreview, SessionState, WorktreeView } from "../shared/wire.ts";
+import { paletteFilter } from "../web/src/lib/commandPalette.ts";
 import type { SessionLayout } from "../web/src/lib/navigation.ts";
 import {
   environmentRowMenu,
@@ -367,6 +368,19 @@ const previewIds = (state: AppState) =>
   sessionCommands(state, undefined, seen)
     .filter((c) => c.id.includes("preview"))
     .map((c) => [c.id, c.enabled]);
+
+test("typing what a broken embedded page does finds Open preview in new tab, once", () => {
+  const running = { ...base, session: session("/work/repo.feature", { preview: app() }) };
+  const rows = sessionCommands(running, undefined, seen);
+  for (const query of ["not working", "can't click", "cant click", "sign in", "popup"])
+    assert.deepEqual(
+      rows
+        .filter((c) => paletteFilter(c.label, query, c.keywords && [...c.keywords]) > 0)
+        .map((c) => c.label),
+      ["Open preview in new tab"],
+      query,
+    );
+});
 
 test("preview commands exist only while the selected session's live Pi owns an app", () => {
   assert.deepEqual(previewIds(base), []);

@@ -79,11 +79,42 @@ health or establish authentication, usable embedding or HMR.
 URL, not a claimed cross-origin current route. Its spinner ends on a frame load or after eight
 seconds (browsers fire no iframe error event); none of these establishes success. The healthy page
 has no status or help footer. Reload and **Open preview in new tab** are named icon controls in the
-toolbar; **Details** in its menu holds status and output on demand. The external link stays available
+toolbar; **Details** in its menu holds status and output on demand, and **Not working here?** above
+it answers a click that does nothing (see [below](#something-does-nothing-when-clicked)). The external link stays available
 while loading, after the deadline and on opaque framing/login failures. It is a normal user-activated external link
 with `noopener noreferrer`, not a second Surface tab. Keyboard Tab/Shift+Tab traverses the tested
 app and Piano's controls; iframe keys are not intercepted by a bridge. Removing a focused frame
 returns focus to its containing view; closing the tab uses the existing Surface focus policy.
+
+### Something does nothing when clicked
+
+The embedded page runs in a restricted frame. These do nothing there, silently, while they work in
+a normal tab:
+
+- links and forms that leave the frame (`target="_top"`), such as a **Sign in** that replaces the
+  whole page;
+- links that open a new window (`target="_blank"`) and `window.open` pop-ups, such as OAuth
+  sign-in windows;
+- scripts that redirect the whole page (SSO bounces, "session expired" redirects);
+- `alert`, `confirm` and `prompt` dialogs;
+- downloads;
+- clipboard, camera, location and fullscreen.
+
+The browser reports none of these to Piano, so Piano cannot tell a denied click from a click the
+app handled without loading a page, or from an app bug. It never claims to have detected one. When
+something does nothing, the user says so: **More preview actions → Not working here?** opens a
+dialog that lists these limits in one line, with **Open in new tab** focused first. Its note says
+it opens the app's start page: the frame's current route is unreadable across origins, so the
+new tab starts at the registered entry URL, and in-frame state such as a sign-in may not carry over.
+The dialog also offers **Reload preview** (the page only; the app keeps running) and **Details**
+(status and output). Typing the symptom in the command palette ("not working", "can't click",
+"sign in", "popup") finds **Open preview in new tab**.
+
+The triage rule: if it works in a new tab, it is a Preview limitation; keep using the tab for that
+flow. If it also fails there, it is the app or access: check **Details** for the app's output, or
+ask the agent. Neither path restarts the app or touches the conversation (ADR 0003). The frame
+never gains top-navigation or pop-up permission to make these work, because the app would then
+replace Piano's page instead.
 
 ### Permissions and access boundary
 
@@ -99,7 +130,8 @@ The iframe uses `sandbox="allow-scripts allow-same-origin allow-forms"` and
 `referrerPolicy="no-referrer"`. The tested Vite app needs scripts for interaction/HMR, its own
 origin for module loading and normal app-origin APIs, and forms for native submission. No extra
 Permissions Policy `allow` delegation, popup, download, modal or top-navigation permission is
-added. An app needing other capabilities can use the external link. Browser-managed app-origin
+added. An app needing other capabilities can use the external link (see
+[Something does nothing when clicked](#something-does-nothing-when-clicked)). Browser-managed app-origin
 cookies are not Piano credential forwarding. The app runs as a trusted same-account developer
 process: different ports/origins and these iframe restrictions are **not hostile-code isolation**.
 
