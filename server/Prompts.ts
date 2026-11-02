@@ -12,7 +12,7 @@ import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
-import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
+import { checkDraft, type DraftField } from "../shared/drafts.ts";
 import { promptFile as templateText } from "../shared/library.ts";
 import type { Prompt, PromptCreate, PromptProposal, PromptUpdate } from "../shared/prompts.ts";
 import * as LibraryFile from "./LibraryFile.ts";
@@ -53,8 +53,8 @@ export class Prompts extends Context.Service<
      * `previous`, only that file is replaced: a prompt changed since it was shown is refused, and
      * nothing written. */
     readonly update: (input: PromptUpdate) => Effect.Effect<Prompt, PromptError>;
-    /** Delete a prompt, even one Pi loads from another folder first; one already gone counts as
-     * deleted. */
+    /** Delete a prompt listed in Piano's folder, by the name Pi loads it as, even one Pi loads
+     * from another folder first; any other name, or one already gone, is refused. */
     readonly remove: (name: string) => Effect.Effect<void, PromptError>;
   }
 >()("piano/Prompts") {}
@@ -92,7 +92,12 @@ export const PromptsLive = Layer.effect(
     const file = (name: string) => join(dir, `${name}.md`);
     const unreadable = () => new PromptError({ detail: "Could not read prompts." });
 
-    const list = Effect.fn("Prompts.list")(function* () {
+    /**
+     * Piano's prompts by the name Pi loads each as: every regular `<name>.md` in the folder, not a
+     * link, so nothing here reaches outside it. A name Piano would not create, such as `Review`,
+     * is still listed, so it can be deleted; one gone since the folder was read is not.
+     */
+    const pianoPrompts = Effect.fn("Prompts.pianoPrompts")(function* () {
       const names = yield* Effect.tryPromise({
         try: () => readdir(dir, { withFileTypes: true }),
         catch: (cause) => cause,
@@ -107,13 +112,20 @@ export const PromptsLive = Layer.effect(
           code(cause) === "ENOENT" ? Effect.succeed([]) : Effect.fail(unreadable()),
         ),
       );
-      return yield* Effect.forEach(names, (name) =>
+      const found = yield* Effect.forEach(names, (name) =>
         Effect.tryPromise({
           try: () => readFile(file(name), "utf8"),
-          catch: unreadable,
-        }).pipe(Effect.map((text) => readPrompt(name, text))),
+          catch: (cause) => cause,
+        }).pipe(
+          Effect.map((text) => readPrompt(name, text)),
+          Effect.catch((cause) =>
+            code(cause) === "ENOENT" ? Effect.succeed(undefined) : Effect.fail(unreadable()),
+          ),
+        ),
       );
+      return found.filter((prompt) => prompt !== undefined);
     });
+    const list = pianoPrompts();
 
     const taken = (name: string) =>
       new PromptError({ detail: `A prompt named ${name} already exists.`, field: "name" });
@@ -212,21 +224,22 @@ export const PromptsLive = Layer.effect(
     });
 
     const remove = Effect.fn("Prompts.remove")(function* (name: string) {
-      // Only a name a prompt could have, so a request never reaches outside the folder.
-      if (!isName(name)) return yield* new PromptError({ detail: "Prompt not found." });
+      // Only a prompt listed in Piano's folder, found by the name Pi loads it as, so a request
+      // never reaches outside the folder.
+      const listed = yield* pianoPrompts().pipe(
+        Effect.mapError(() => new PromptError({ detail: "Could not delete prompt." })),
+      );
+      if (!listed.some((prompt) => prompt.name === name))
+        return yield* new PromptError({ detail: "Prompt not found." });
       yield* Effect.tryPromise({
         try: () => unlink(file(name)),
-        catch: (cause) => cause,
-      }).pipe(
-        Effect.catch((cause) =>
+        catch: (cause) =>
           code(cause) === "ENOENT"
-            ? Effect.void
-            : Effect.fail(new PromptError({ detail: "Could not delete prompt." })),
-        ),
-        LibraryFile.alone,
-      );
+            ? new PromptError({ detail: "Prompt not found." })
+            : new PromptError({ detail: "Could not delete prompt." }),
+      }).pipe(LibraryFile.alone);
     });
 
-    return { list: list(), propose, create, update, remove };
+    return { list, propose, create, update, remove };
   }),
 );
