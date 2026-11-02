@@ -615,7 +615,10 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     f.owner.observe((request, outcome) => {
       shown = projectPreview(shown, f.owner.identity.generation, request, outcome);
     });
-    const cold = await f.call(f.owner, { command: ["/bin/true"], timeoutSeconds: 1 });
+    const cold = await f.call(f.owner, {
+      command: [process.execPath, "-e", "process.exit(0)"],
+      timeoutSeconds: 1,
+    });
     assert.equal(cold.port, port);
     assert.equal(shown?.warming, true);
 
@@ -626,7 +629,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     const other = await f.open("elsewhere", elsewhere);
     let otherDone = false;
     const waiting = f
-      .call(other, { command: ["/bin/true"], timeoutSeconds: 8 })
+      .call(other, { command: [process.execPath, "-e", "process.exit(0)"], timeoutSeconds: 8 })
       .finally(() => (otherDone = true));
 
     // Meanwhile the first app answers: its owner's own checks show it while the other start waits.
@@ -667,7 +670,10 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     f.owner.observe((request, outcome) => {
       shown = projectPreview(shown, f.owner.identity.generation, request, outcome);
     });
-    const cold = await f.call(f.owner, { command: ["/bin/true"], timeoutSeconds: 1 });
+    const cold = await f.call(f.owner, {
+      command: [process.execPath, "-e", "process.exit(0)"],
+      timeoutSeconds: 1,
+    });
     assert.equal(shown?.warming, true);
 
     // Another helper holds the account-wide lock longer than a check waits for it.
