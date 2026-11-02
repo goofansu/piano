@@ -4,7 +4,7 @@ import {
   TooltipContent as BaseContent,
   TooltipTrigger as BaseTrigger,
 } from "@/components/ui/tooltip";
-import { preventPointerFocus } from "@/lib/pointerClose";
+import { pointerLast } from "@/lib/pointerClose";
 
 export { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 
@@ -14,7 +14,8 @@ export function TooltipTrigger({ onFocus, ...props }: ComponentProps<typeof Base
       {...props}
       onFocus={(event) => {
         onFocus?.(event);
-        preventPointerFocus(event);
+        // Focus restored after a pointer interaction opens no tooltip.
+        if (pointerLast()) event.preventDefault();
       }}
     />
   );

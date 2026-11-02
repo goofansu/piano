@@ -17,12 +17,18 @@ if (typeof document !== "undefined") {
 }
 
 /**
- * Radix returns focus to an overlay's trigger when it closes, and browsers draw that focus as a
- * keyboard ring. Return it only when the keyboard closed the overlay; a click leaves focus alone.
- * The same policy prevents tooltips opening on focus restored after a pointer interaction.
+ * Whether the pointer, not the keyboard, gave the latest input. Focus that moves on its own after
+ * a pointer interaction (an overlay handing focus back, a tooltip trigger refocused) is drawn by
+ * browsers as a keyboard ring; callers ask this before moving or showing anything for it.
  */
-export function preventPointerFocus(event: Pick<Event, "preventDefault">) {
-  if (pointer) event.preventDefault();
+export function pointerLast(): boolean {
+  return pointer;
 }
 
-export { preventPointerFocus as returnFocusForKeyboard };
+/**
+ * Radix returns focus to an overlay's trigger when it closes. Return it only when the keyboard
+ * closed the overlay; a click leaves focus alone.
+ */
+export function returnFocusForKeyboard(event: Pick<Event, "preventDefault">) {
+  if (pointer) event.preventDefault();
+}

@@ -50,7 +50,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Item, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
-import { returnFocusForKeyboard } from "@/lib/pointerClose";
+import { pointerLast } from "@/lib/pointerClose";
 import { previewObservation, seenDetails, seenPreview, seenStop } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
@@ -377,9 +377,7 @@ function PreviewHelpDialog({
           }
           // The item that opened this is gone with its menu; the menu's trigger stands in,
           // under the same keyboard-only policy as any overlay's return.
-          let pointer = false;
-          returnFocusForKeyboard({ preventDefault: () => (pointer = true) });
-          if (!pointer) returnFocus();
+          if (!pointerLast()) returnFocus();
         }}
       >
         <DialogHeader>
