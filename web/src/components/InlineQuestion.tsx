@@ -8,15 +8,9 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/PianoPopover";
+import { QuestionText } from "@/components/QuestionText";
 import { Button } from "@/components/ui/button";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,10 +74,10 @@ function Question({
           answer({ value: choice ? d.options?.[Number(selected) - 1] : value });
         }}
       >
-        <FieldSet disabled={disabled} className="min-w-0 gap-3">
-          <FieldLegend id={`${id}-title`} variant="label" className="break-words">
-            {title}
-          </FieldLegend>
+        {/* A legend holds phrasing content only; the question is Markdown blocks, so it names the
+            group by reference instead. */}
+        <FieldSet disabled={disabled} aria-labelledby={`${id}-title`} className="min-w-0 gap-3">
+          <QuestionText id={`${id}-title`} text={title} />
           <FieldGroup className="max-h-[min(16rem,35dvh)] gap-3 overflow-y-auto overscroll-contain p-1">
             {d.message && (
               <FieldDescription className="whitespace-pre-wrap break-words">
