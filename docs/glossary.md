@@ -31,6 +31,7 @@ SQLite, UI and documentation. Some describe the target model in
 | Registry | Piano's SQLite store of folders, projects, workspace identities, session references and preferences; not a transcript or evidence database. |
 | Prompt | A Pi prompt template created in Piano, offered as a `/name` command in the composer. Settings lists only these; Pi's own prompt templates stay Pi's. |
 | Skill | Agent instructions for a method or discipline, loaded by Pi; skill use does not by itself constitute evidence. |
+| Library | The skills and prompts created in Piano, kept in Piano's own folders that every Pi it starts loads last. One rule decides each save of either kind. |
 | Control plane | Piano's coordination of workspaces, execution lifecycle, observations and guarded actions. It does not prescribe a development methodology. |
 
 ## Projects
