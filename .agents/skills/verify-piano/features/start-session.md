@@ -47,7 +47,8 @@ project and reload on its own scratch instance, with its own folders and models 
   - Result: the URL becomes `/s/<uuid>`; the header text reads `hello verify` / `Ready`.
     Capture `02-reply`.
   - Side effect: the audit has one `start` for that session ID with `--session-id <uuid>`,
-    `--model fake/alpha`, `--thinking medium` and `"cwd": "$REPO"` (the chosen folder), then one
+    `--model fake/alpha`, `--thinking medium`, `"cwd": "$REPO"` (the chosen folder), and the run's
+    `--prompt-template` / `--skill` dirs under `$RUN/db/`, then one
     `{"command":"prompt","text":"hello verify","sessionId":"<uuid>"}`:
     `rg '"command":"(start|prompt)"' "$AUDIT" | rg -v '"probe"'`.
 - `reload`

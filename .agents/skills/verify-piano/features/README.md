@@ -66,3 +66,6 @@ Keep implementation details out; name user paths, handles, required state, comma
   `follow-up`, `status` and `list --project`, its refusals, and a dialog that needs input.
 - [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and its
   pull request, and the session rail's Environment, Outputs and Links.
+- [Settings › Skills and Prompts](./settings-skills-prompts.md): `/settings/skills` and
+  `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
+  empty states. Providers, MCP and Webhooks are reached the same way but not driven here.
