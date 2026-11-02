@@ -71,6 +71,11 @@ const audit = (session: PiSession) =>
       value?: string;
     }>;
   });
+const receipt = (id: string, delivery: string) => (event: SessionEvent) =>
+  event._tag === "state" &&
+  event.state.dialogResolution?.id === id &&
+  event.state.dialogResolution.delivery === delivery;
+
 const snapshot = (session: PiSession) =>
   session.events.pipe(
     Stream.take(1),
@@ -175,6 +180,51 @@ test("INV-04: estimated timeout survives attachment, rejects expired answers, an
         (yield* audit(session)).filter((record) => record.id === second.dialog.id).length <= 1,
       );
       assert.deepEqual((yield* snapshot(session)).dialogs, []);
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+  );
+});
+
+test("INV-04: a dialog's ending is reported until the next run starts; a rejected answer outlives it", {
+  timeout: 10_000,
+}, async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "dialog-receipt-lifetime",
+      });
+      const { dialog } = yield* openDialog(session, "/dialog input 1000");
+      const expired = yield* watch(session, (e) => e._tag === "dialog_resolved");
+      yield* TestClock.adjust(1000);
+      yield* Fiber.join(expired);
+      yield* audit(session); // a command that starts no run leaves the report in place
+      const ending = (yield* snapshot(session)).state.dialogResolution;
+      assert.equal(ending?.id, dialog.id);
+      assert.equal(ending?.reason, "expired");
+      // The fake opens a dialog once the run has started.
+      const started = yield* watch(session, (e) => e._tag === "dialog");
+      yield* session.act({ _tag: "prompt", text: "/new-turn" });
+      yield* Fiber.join(started);
+      assert.equal(
+        (yield* snapshot(session)).state.dialogResolution,
+        undefined,
+        "an ending from an earlier run never sits under a later one",
+      );
+
+      const kept = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "dialog-receipt-kept",
+      });
+      const question = yield* openDialog(kept, "/ask drop");
+      const rejected = yield* watch(kept, receipt(question.dialog.id, "rejected"));
+      yield* kept.act(answer(question.dialog));
+      yield* Fiber.join(rejected);
+      const next = yield* watch(kept, (e) => e._tag === "dialog");
+      yield* kept.act({ _tag: "prompt", text: "/new-turn" });
+      yield* Fiber.join(next);
+      const after = (yield* snapshot(kept)).state.dialogResolution;
+      assert.equal(after?.delivery, "rejected", "an answer Pi did not store stays with its words");
+      assert.equal(after?.answer?.value, "A");
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );
 });
@@ -348,11 +398,6 @@ test("INV-04: broken stdin is delivery-uncertain, never silently reopened or ret
     ),
   );
 });
-
-const receipt = (id: string, delivery: string) => (event: SessionEvent) =>
-  event._tag === "state" &&
-  event.state.dialogResolution?.id === id &&
-  event.state.dialogResolution.delivery === delivery;
 
 test("a question its tool call owns survives the recovery limit and reconnect; competing tabs send once; only the stored result accepts", {
   timeout: 15_000,

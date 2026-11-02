@@ -501,6 +501,7 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
           if (projected.state) yield* tx.mergeState(projected.state);
           for (const event of projected.events) yield* tx.publish(event);
           if (projected.toolEnded) yield* dialogs.toolEnded(tx, projected.toolEnded);
+          if (projected.runStarted) yield* dialogs.runStarted(tx);
           return {
             refresh: projected.refresh,
             dialog: projected.dialog && (yield* dialogs.opened(tx, projected.dialog)),

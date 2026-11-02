@@ -706,6 +706,8 @@ function handle(cmd) {
           method: "input",
           title: "Enter a value",
           placeholder: "type",
+          // "ask expire": Pi advertises a 3-second timeout, so the dialog lapses unanswered.
+          ...(cmd.message === "ask expire" ? { timeout: 3000 } : {}),
         });
         return; // stays streaming until answered (see extension_ui_response below is fire-and-forget; finish on answer)
       }

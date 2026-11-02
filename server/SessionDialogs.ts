@@ -40,13 +40,14 @@ const lapsed = (dialog: Dialog) =>
   dialog.deadlineKind === "pi-timeout" ? ("expired" as const) : ("recovery" as const);
 
 /** What can happen to the live receipt after its dialog closed: the next question of its tool call
- * opened, the call ended with the result Pi stored, an answer arrived after the closure, or Pi
- * exited. */
+ * opened, the call ended with the result Pi stored, an answer arrived after the closure, Pi
+ * exited, or a new run started. */
 type ReceiptEvent =
   | { readonly _tag: "question-opened"; readonly toolCallId: string }
   | { readonly _tag: "tool-ended"; readonly toolCallId: string; readonly result: unknown }
   | { readonly _tag: "late-answer"; readonly id: string; readonly value: string }
-  | { readonly _tag: "exited" };
+  | { readonly _tag: "exited" }
+  | { readonly _tag: "run-started" };
 
 export const makeSessionDialogs = ({
   generation,
@@ -91,12 +92,14 @@ export const makeSessionDialogs = ({
    * an answer (the tool asks only after storing it), its end accepts a cancellation and accepts or
    * rejects an answer by the result Pi stored, and Pi's exit leaves it uncertain, as it does any
    * response still being delivered. An answer arriving after an owned question closed unanswered
-   * is kept, rejected, in that question's receipt.
+   * is kept, rejected, in that question's receipt. A new run retires a receipt whose delivery is
+   * final and that holds no answer to keep: it reported its ending in the run it ended in. A
+   * pending, uncertain or rejected one, or a written answer still awaiting its tool, stays (INV-04).
    */
   const nextReceipt = (
     current: DialogResolution | undefined,
     event: ReceiptEvent,
-  ): DialogResolution | undefined => {
+  ): DialogResolution | "retired" | undefined => {
     if (!current) return;
     const waiting = current.delivery === "pending" || current.delivery === "written";
     switch (event._tag) {
@@ -145,6 +148,12 @@ export const makeSessionDialogs = ({
                 : "Pi stopped during response delivery. Do not resend this dialog response.",
             }
           : undefined;
+      case "run-started":
+        return current.delivery === "accepted" ||
+          current.delivery === "not-sent" ||
+          (current.delivery === "written" && !ownedReceipt(current))
+          ? "retired"
+          : undefined;
     }
   };
 
@@ -154,7 +163,8 @@ export const makeSessionDialogs = ({
     event: ReceiptEvent,
   ) {
     const next = nextReceipt((yield* publication.state).dialogResolution, event);
-    if (next) yield* transaction.mergeState({ dialogResolution: next });
+    if (next)
+      yield* transaction.mergeState({ dialogResolution: next === "retired" ? undefined : next });
   });
 
   /** Settle one dialog's claim under the lock: remove it, wake its watcher, publish. */
@@ -375,5 +385,10 @@ export const makeSessionDialogs = ({
     yield* publication.transaction((transaction) => advance(transaction, { _tag: "exited" }));
   });
 
-  return { opened, watch, answer, toolEnded, resolveAll };
+  /** A run started (Pi's native record, under the same lock): retire a receipt with nothing left
+   * to report, so an ending from an earlier run never sits under a later one. */
+  const runStarted = (transaction: PublicationTransaction) =>
+    advance(transaction, { _tag: "run-started" });
+
+  return { opened, watch, answer, toolEnded, runStarted, resolveAll };
 };

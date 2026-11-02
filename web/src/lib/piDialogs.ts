@@ -70,7 +70,8 @@ export interface AnswerReceipt {
   /** The card offers the delivery detail behind a Details popover. */
   details: boolean;
   /** The status line for a resolution without an answer; null when it has one or the user's
-   * cancellation reached Pi. */
+   * cancellation reached Pi. The server retires the receipt, and so the line, when the next run
+   * starts. */
   notice: { tone: "quiet"; title: string } | null;
   /** The answer was confirmed; announced once per resolution. */
   accepted: boolean;
