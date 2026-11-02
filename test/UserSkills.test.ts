@@ -193,6 +193,28 @@ test("of two skills in Piano's folder that declare one name, only the one Pi loa
   assert.ok(existsSync(join(directory, "x", "SKILL.md")));
 });
 
+test("a Piano skill Pi loads another of first is refused an update and can still be deleted", async (t) => {
+  const { directory, agentsDirectory, run } = home(t);
+  await run((skills) =>
+    skills.create({ name: "deploy", description: "Mine.", instructions: "Go." }),
+  );
+  const mine = readFileSync(join(directory, "deploy", "SKILL.md"), "utf8");
+  // Installed later into a folder Pi loads before Piano's: every session now runs this one.
+  write(agentsDirectory, "deploy", "name: deploy\ndescription: Theirs.");
+  const draft = { name: "deploy", description: "Mine.", instructions: "Changed." };
+  const hidden = ["Pi loads another skill named deploy instead of this one.", "name"];
+  const proposed = refusal(await run((skills) => skills.propose(draft)));
+  assert.deepEqual([proposed.detail, proposed.field], hidden);
+  const updated = refusal(await run((skills) => skills.update({ ...draft, previous: mine })));
+  assert.deepEqual([updated.detail, updated.field], hidden);
+  assert.equal(readFileSync(join(directory, "deploy", "SKILL.md"), "utf8"), mine);
+  const listed = await run((skills) => skills.list);
+  assert.deepEqual(listed._tag === "Success" && listed.success.map((s) => s.name), ["deploy"]);
+  assert.equal((await run((skills) => skills.remove("deploy")))._tag, "Success");
+  assert.equal(existsSync(join(directory, "deploy")), false);
+  assert.ok(existsSync(join(agentsDirectory, "deploy", "SKILL.md")), "theirs is untouched");
+});
+
 test("a create names the field it refuses and never overwrites a skill", async (t) => {
   const { directory, agentsDirectory, piDirectory, run } = home(t);
   write(directory, "taken", "name: taken\ndescription: Already here.", "Original.");

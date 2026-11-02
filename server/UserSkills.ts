@@ -3,7 +3,8 @@
  * (`<name>/SKILL.md`); every Pi child Piano starts loads that folder with `--skill` (main.ts), so
  * they are Piano's only, as prompts are. Pi owns loading (INV-12); this module writes a new skill's
  * file, replaces the file of one it created, lists the folder and removes a skill from it. Skills elsewhere (`~/.agents/skills`, Pi's own
- * folder, a repository's) are never listed or touched, only read to refuse a name Pi already loads.
+ * folder, a repository's) are never listed or touched, only read to tell whether Pi loads a name
+ * from them first.
  * Nothing here changes a running session: one started from now loads the new set, and a running
  * one on `/reload`.
  */
@@ -54,16 +55,19 @@ export class UserSkills extends Context.Service<
     readonly list: Effect.Effect<ReadonlyArray<UserSkill>>;
     /** What saving `request` would do, refused as the save would refuse it; writes nothing. A
      * skill Piano created is updated, keeping its Disable model invocation unless the draft sets
-     * it; any other name is created, unless Pi already loads a skill of that name. */
+     * it; any other name is created. Either is refused when Pi loads a skill of that name from
+     * another folder first. */
     readonly propose: (
       request: UserSkillCreate,
     ) => Effect.Effect<UserSkillProposal, UserSkillError>;
     readonly create: (request: UserSkillCreate) => Effect.Effect<UserSkill, UserSkillError>;
     /** Replaces the SKILL.md of a skill Piano created; any other name is refused, so a skill in
-     * another folder Pi loads, or a repository's, is never written over. With `previous`, only
+     * another folder Pi loads, or a repository's, is never written over, and so is one Pi loads
+     * from another folder first, since the change would never reach a session. With `previous`, only
      * that file is replaced: a skill changed since it was shown is refused, and nothing written. */
     readonly update: (request: UserSkillUpdate) => Effect.Effect<UserSkill, UserSkillError>;
-    /** Removes a skill Piano created, with its directory; any other skill is refused. */
+    /** Removes a skill Piano created, with its directory, even one Pi loads from another folder
+     * first; any other skill is refused. */
     readonly remove: (name: string) => Effect.Effect<void, UserSkillError>;
   }
 >()("piano/UserSkills") {}
@@ -131,13 +135,32 @@ export const UserSkillsLive = Layer.effect(
         .sort((a, b) => a.name.localeCompare(b.name)),
     );
 
-    /** Names Pi loads from either user directory, so a new skill never loses a name collision. */
-    const loaded = () =>
+    /** Names Pi loads from the other user folders, which it loads before Piano's. */
+    const elsewhere = () =>
       new Set(
-        [root(), ...environment.others()].flatMap((dir) =>
-          loadSkillsFromDir({ dir, source: "user" }).skills.map((skill) => skill.name),
-        ),
+        environment
+          .others()
+          .flatMap((dir) =>
+            loadSkillsFromDir({ dir, source: "user" }).skills.map((skill) => skill.name),
+          ),
       );
+    /**
+     * What a save of `name` meets: the skill Pi loads under that name from Piano's folder, if it
+     * is in Piano's layout; whether Piano's folder loads that name at all, or holds a directory of
+     * it; and whether Pi loads that name from another folder first, which hides Piano's.
+     */
+    const placeOf = (name: string) => {
+      const piano = pianoSkills(root());
+      return {
+        current: piano.get(name),
+        taken:
+          loadSkillsFromDir({ dir: root(), source: "user" }).skills.some((s) => s.name === name) ||
+          existsSync(join(root(), name)),
+        elsewhere: elsewhere().has(name),
+      };
+    };
+    const shadowed = (name: string) =>
+      refused(`Pi loads another skill named ${name} instead of this one.`, "name");
 
     const propose = Effect.fn("UserSkills.propose")(function* (request: UserSkillCreate) {
       const check = checkDraft(request);
@@ -147,10 +170,12 @@ export const UserSkillsLive = Layer.effect(
           check.problem?.field,
         );
       const { name } = check.saved;
-      const current = pianoSkills(root()).get(name);
+      const place = placeOf(name);
+      const current = place.current;
       const disableModelInvocation =
         request.disableModelInvocation ?? current?.skill.disableModelInvocation ?? false;
       const file = fileOf({ ...check.saved, disableModelInvocation });
+      if (current && place.elsewhere) return yield* shadowed(name);
       if (current)
         return {
           change: "update" as const,
@@ -160,7 +185,7 @@ export const UserSkillsLive = Layer.effect(
           disableModelInvocation,
         };
       // The refusals create gives: a name Pi loads anywhere, or a directory of that name.
-      if (loaded().has(name) || existsSync(join(root(), name)))
+      if (place.taken || place.elsewhere)
         return yield* refused(`A skill named ${name} already exists.`, "name");
       return { change: "create" as const, name, file, disableModelInvocation };
     });
@@ -180,7 +205,9 @@ export const UserSkillsLive = Layer.effect(
       const dir = join(root(), name);
       return yield* Effect.try({
         try: () => {
-          if (loaded().has(name)) throw refused(`A skill named ${name} already exists.`, "name");
+          const place = placeOf(name);
+          if (place.taken || place.elsewhere)
+            throw refused(`A skill named ${name} already exists.`, "name");
           mkdirSync(root(), { recursive: true });
           try {
             // Not recursive: an existing directory of that name, Piano's or not, refuses the create.
@@ -224,8 +251,10 @@ export const UserSkillsLive = Layer.effect(
       const { name } = saved;
       const text = fileOf(saved);
       // Only a skill in Piano's folder, found by the name Pi loads it as.
-      const current = pianoSkills(root()).get(name);
+      const place = placeOf(name);
+      const current = place.current;
       if (!current) return yield* refused("Skill not found.", "name");
+      if (place.elsewhere) return yield* shadowed(name);
       yield* LibraryFile.replace(join(current.dir, "SKILL.md"), request.previous, text).pipe(
         Effect.mapError(({ reason }) =>
           reason === "missing"

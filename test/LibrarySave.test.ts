@@ -213,6 +213,25 @@ test("a prompt name Pi loads from its own folder is refused before the user is a
     detail: "A prompt named standup already exists.",
   });
   assert.equal(existsSync(join(prompts, "standup.md")), false);
+
+  // Piano's prompt predates Pi's of the same name: the update Pi would ignore is never offered.
+  mkdirSync(prompts, { recursive: true });
+  writeFileSync(join(prompts, "retro.md"), "Mine\n");
+  writeFileSync(join(promptsElsewhere, "retro.md"), "Theirs\n");
+  const hidden = await saveToLibrary(
+    "prompt",
+    { name: "retro", description: "Mine.", instructions: "Changed." },
+    user(() => assert.fail("no dialog for an update Pi would not load")).deps,
+    undefined,
+  );
+  assert.deepEqual(hidden, {
+    status: "refused",
+    kind: "prompt",
+    name: "retro",
+    field: "name",
+    detail: "Pi loads another prompt named retro instead of this one.",
+  });
+  assert.equal(readFileSync(join(prompts, "retro.md"), "utf8"), "Mine\n");
 });
 
 test("of two sessions updating one skill from the same file, the second Save is refused", async () => {

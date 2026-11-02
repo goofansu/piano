@@ -263,6 +263,31 @@ test("a name Pi already loads from another prompts folder is refused, so Piano's
         (yield* prompts.list).map((p) => p.name),
         ["broken"],
       );
+
+      // Piano's prompt came first, then Pi's folder gained one of its name: Pi runs that one, so
+      // a change to Piano's would never reach a session. It is refused, and deleting still works.
+      yield* prompts.create({ name: "deploy", description: "Mine", instructions: "Mine" });
+      const mine = readFileSync(join(dir, "deploy.md"), "utf8");
+      writeFileSync(join(theirs, "deploy.md"), "Theirs\n");
+      const draft = { name: "deploy", description: "Mine", instructions: "Changed" };
+      const hidden = ["name", "Pi loads another prompt named deploy instead of this one."];
+      const proposed = yield* failure(prompts.propose(draft));
+      assert.deepEqual([proposed.field, proposed.detail], hidden);
+      const updated = yield* failure(prompts.update({ ...draft, previous: mine }));
+      assert.deepEqual([updated.field, updated.detail], hidden);
+      assert.equal(
+        readFileSync(join(dir, "deploy.md"), "utf8"),
+        mine,
+        "a refused update writes nothing",
+      );
+      assert.deepEqual(
+        (yield* prompts.list).map((p) => p.name),
+        ["broken", "deploy"],
+        "listed, so it can be deleted",
+      );
+      yield* prompts.remove("deploy");
+      assert.equal(existsSync(join(dir, "deploy.md")), false);
+      assert.equal(readFileSync(join(theirs, "deploy.md"), "utf8"), "Theirs\n");
     }).pipe(
       Effect.provide(PromptsLive),
       Effect.provideService(PromptsEnvironment, { directory: dir, others: () => [theirs] }),
