@@ -193,7 +193,7 @@ export const UserSkillsLive = Layer.effect(
           // The name rule keeps the path inside the skills directory.
           const current = piano(root(), name);
           if (!current) throw refused("Skill not found.", "name");
-          if (request.previous !== undefined && request.previous !== current.file)
+          if (request.previous !== current.file)
             throw refused("This skill changed since it was shown. Review it again.");
           // Written beside it, then renamed over it: a reader sees the old file or the new one.
           const temporary = join(dir, `.SKILL.md.${process.pid}.${Date.now()}`);

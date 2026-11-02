@@ -135,16 +135,14 @@ export const PromptsLive = Layer.effect(
           catch: () => notFound,
         });
         if (!existing.isFile()) return yield* notFound;
-        if (input.previous !== undefined) {
-          const current = yield* Effect.tryPromise({
-            try: () => readFile(file(name), "utf8"),
-            catch: () => notFound,
+        const current = yield* Effect.tryPromise({
+          try: () => readFile(file(name), "utf8"),
+          catch: () => notFound,
+        });
+        if (current !== input.previous)
+          return yield* new PromptError({
+            detail: "This prompt changed since it was shown. Review it again.",
           });
-          if (current !== input.previous)
-            return yield* new PromptError({
-              detail: "This prompt changed since it was shown. Review it again.",
-            });
-        }
         const temporary = join(dir, `.${name}.md.${process.pid}.${Date.now()}`);
         yield* Effect.tryPromise({
           // Written beside it, then renamed over it: a reader sees the old file or the new one.

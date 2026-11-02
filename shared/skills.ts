@@ -21,9 +21,9 @@ export type UserSkillCreate = typeof UserSkillCreate.Type;
 
 /** An update: the new draft, and the SKILL.md it replaces as the person saw it. When `previous`
  * no longer matches the file on disk, the update is refused instead of overwriting a change the
- * person never saw. */
+ * person never saw; an update without it is invalid. */
 export const UserSkillUpdate = Schema.Struct({
   ...UserSkillCreate.fields,
-  previous: Schema.optional(Schema.String),
+  previous: Schema.String,
 });
 export type UserSkillUpdate = typeof UserSkillUpdate.Type;

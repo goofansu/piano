@@ -134,6 +134,7 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
         name: "review",
         description: "Review the branch",
         instructions: "Review the branch against main.",
+        previous: readFileSync(join(dir, "review.md"), "utf8"),
       });
       assert.equal(updated.file, readFileSync(join(dir, "review.md"), "utf8"));
       assert.equal(updated.description, "Review the branch");
@@ -142,7 +143,7 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       // Pi's own prompt, an unknown name and a path are refused, and nothing is created.
       for (const name of ["personal", "missing", "../agent/prompts/personal"]) {
         const refused = yield* failure(
-          prompts.update({ name, description: "D.", instructions: "x" }),
+          prompts.update({ name, description: "D.", instructions: "x", previous: "" }),
         );
         assert.equal(refused.field, "name", name);
         if (name !== "../agent/prompts/personal") assert.equal(refused.detail, "Prompt not found.");
