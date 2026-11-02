@@ -1,8 +1,8 @@
 # Agent-authored skills and prompts
 
 A design for asking the agent, in a session, to create or change what two Piano screens show:
-**Settings › Skills** and **Settings › Prompts**. It is a proposal, not a shipped capability. It
-follows [prompts](../prompts.md) and
+**Settings › Skills** and **Settings › Prompts**. It shipped with PIN-144
+([saving from a session](../configuration.md#saving-from-a-session)). It follows [prompts](../prompts.md) and
 [Piano's prompts and skills](../configuration.md#pianos-prompts-and-skills).
 
 A project's instructions (Project settings › Instructions) stay the user's to write: the user

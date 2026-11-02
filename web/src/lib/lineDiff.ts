@@ -45,11 +45,12 @@ function edits(before: string[], after: string[]): DiffLine[] {
         middle.push({ kind: "context", text: a[i++] });
         j++;
       } else if (
-        j < b.length &&
-        (i === a.length || lcs[i * width + j + 1] >= lcs[(i + 1) * width + j])
+        i < a.length &&
+        (j === b.length || lcs[(i + 1) * width + j] >= lcs[i * width + j + 1])
       )
-        middle.push({ kind: "add", text: b[j++] });
-      else middle.push({ kind: "del", text: a[i++] });
+        // Removals before additions, as Git orders a replaced line.
+        middle.push({ kind: "del", text: a[i++] });
+      else middle.push({ kind: "add", text: b[j++] });
     }
   } else {
     for (const text of a) middle.push({ kind: "del", text });

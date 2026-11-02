@@ -42,6 +42,7 @@ cannot supply or shadow them. The flags come before the session arguments, so a 
 | `piano-dispatch` | Dispatches work to sessions and observes them: `piano_start_session`, `piano_session_status` and `piano_wait_sessions`. |
 | `piano-preview` | Manages the workspace's app preview: [`piano_preview`](live-previews.md). |
 | `piano-ask-user` | Asks the user questions through Piano: [`ask_user`](#user-questions). |
+| `piano-library` | Saves a skill or a prompt in Piano's folders after the user's Save: [`piano_save_skill` and `piano_save_prompt`](#saving-from-a-session). |
 | `radius-artifacts` | When Radius is signed in, publishes, updates and views [Radius artifacts](radius-artifacts.md). Also usable as a standalone Pi package. |
 
 Each follows Pi's multi-file layout under `extensions/<name>/`: `index.ts` is the extension, and a
@@ -62,6 +63,20 @@ Agent Skills form (at most 64 lowercase letters, numbers and single hyphens, not
 end), a description of at most 1,024 characters and instructions of at most 20,000. A skill adds
 Disable model invocation.
 See [prompts](prompts.md).
+
+### Saving from a session
+
+`piano-library` registers `piano_save_skill` and `piano_save_prompt`, model-callable tools and no
+slash command, and only when Piano gave the child its endpoint (`PIANO_SESSION_WS_URL`,
+`PIANO_SESSION_ORIGIN`, as for [dispatch](#session-dispatch)). A call checks the draft rule before
+anything is asked, then asks through a Pi `confirm` dialog whose title and message
+`shared/library.ts` writes; the browser shows it above the composer as a card: the file as it would
+be saved for a new one, a diff against the saved file for one Piano created. Only **Save** writes,
+through the same HTTP endpoints Settings uses (`PUT` replaces a skill or prompt Piano created and
+refuses any other name). Cancel, Stop or the dialog's recovery deadline write nothing. The toast is
+the Settings page's, and the transcript row ("Prompt saved: `name`", with View) is rebuilt from Pi's
+saved tool result. A save reaches sessions Piano starts from then on; no running Pi is reloaded.
+Design: [agent-authored skills and prompts](research/2026-11-02-agent-authored-skills-and-prompts.md).
 
 ## Session dispatch
 
