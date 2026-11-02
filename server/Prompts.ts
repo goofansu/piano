@@ -3,7 +3,7 @@
  * folder beside its database; every Pi child Piano starts loads that folder with
  * `--prompt-template` (main.ts), so the composer offers them as `/name` like any other template.
  * Settings lists this folder alone: Pi's personal and project prompt folders stay Pi's (INV-01),
- * read only to refuse a name Pi already loads, and Pi keeps parsing and expanding templates
+ * read only to tell whether Pi loads a name from them first, and Pi keeps parsing and expanding templates
  * (INV-12). A running Pi loaded its templates when it
  * started, so a change reaches sessions started from then on.
  */
@@ -59,17 +59,19 @@ export class Prompts extends Context.Service<
     /** Piano's prompts by name, as Pi reads them. */
     readonly list: Effect.Effect<readonly Prompt[], PromptError>;
     /** What saving `input` would do, refused as the save would refuse it; writes nothing. A
-     * prompt Piano created is updated; any other name is created, unless Pi already loads a
-     * prompt of that name. */
+     * prompt Piano created is updated; any other name is created. Either is refused when Pi
+     * loads a prompt of that name from another folder first. */
     readonly propose: (input: PromptCreate) => Effect.Effect<PromptProposal, PromptError>;
     /** Save a new prompt; a name already taken, in Piano's folder or one Pi loads before it, is
      * refused, never overwritten. */
     readonly create: (input: PromptCreate) => Effect.Effect<Prompt, PromptError>;
-    /** Replace a prompt Piano created; any other name is refused, never created. With
+    /** Replace a prompt Piano created; any other name is refused, never created, and so is one
+     * Pi loads from another folder first, since the change would never reach a session. With
      * `previous`, only that file is replaced: a prompt changed since it was shown is refused, and
      * nothing written. */
     readonly update: (input: PromptUpdate) => Effect.Effect<Prompt, PromptError>;
-    /** Delete a prompt; one already gone counts as deleted. */
+    /** Delete a prompt, even one Pi loads from another folder first; one already gone counts as
+     * deleted. */
     readonly remove: (name: string) => Effect.Effect<void, PromptError>;
   }
 >()("piano/Prompts") {}
@@ -132,9 +134,27 @@ export const PromptsLive = Layer.effect(
 
     const taken = (name: string) =>
       new PromptError({ detail: `A prompt named ${name} already exists.`, field: "name" });
-    // A name Pi already loads from another folder would hide Piano's prompt behind it.
-    const loadedElsewhere = (name: string) =>
-      environment.others().some((other) => loadedFrom(other, name));
+    const shadowed = (name: string) =>
+      new PromptError({
+        detail: `Pi loads another prompt named ${name} instead of this one.`,
+        field: "name",
+      });
+    /**
+     * What a save of `name` meets: Piano's own file, something else of that name in Piano's
+     * folder, or nothing; and whether Pi loads a prompt of that name from another folder first,
+     * which hides Piano's, whether it exists yet or not.
+     */
+    const placeOf = (name: string) => {
+      const kind = (() => {
+        try {
+          return lstatSync(file(name)).isFile() ? ("file" as const) : ("other" as const);
+        } catch {
+          return "none" as const;
+        }
+      })();
+      const elsewhere = environment.others().some((other) => loadedFrom(other, name));
+      return { kind, elsewhere };
+    };
 
     const propose = Effect.fn("Prompts.propose")(function* (input: PromptCreate) {
       const check = checkDraft(input);
@@ -143,23 +163,17 @@ export const PromptsLive = Layer.effect(
         return yield* new PromptError(check.problem ?? { detail: "Could not save prompt." });
       const name = saved.name;
       const text = templateText(saved);
-      const path = file(name);
-      const kind = (() => {
-        try {
-          return lstatSync(path).isFile() ? "file" : "other";
-        } catch {
-          return "none";
-        }
-      })();
+      const place = placeOf(name);
       // Only a regular file is replaced; anything else of that name refuses the create as well.
-      if (kind === "file") {
+      if (place.kind === "file") {
+        if (place.elsewhere) return yield* shadowed(name);
         const previous = yield* Effect.tryPromise({
-          try: () => readFile(path, "utf8"),
+          try: () => readFile(file(name), "utf8"),
           catch: unreadable,
         });
         return { change: "update" as const, name, file: text, previous };
       }
-      if (kind === "other" || loadedElsewhere(name)) return yield* taken(name);
+      if (place.kind === "other" || place.elsewhere) return yield* taken(name);
       return { change: "create" as const, name, file: text };
     });
 
@@ -170,7 +184,7 @@ export const PromptsLive = Layer.effect(
         return yield* new PromptError(check.problem ?? { detail: "Could not save prompt." });
       const name = saved.name;
       const text = templateText(saved);
-      if (loadedElsewhere(name)) return yield* taken(name);
+      if (placeOf(name).elsewhere) return yield* taken(name);
       yield* Effect.tryPromise({
         // `wx` refuses an existing file, so two creates of one name never overwrite each other.
         try: () =>
@@ -192,6 +206,8 @@ export const PromptsLive = Layer.effect(
         return yield* new PromptError(check.problem ?? { detail: "Could not save prompt." });
       const name = saved.name;
       const text = templateText(saved);
+      const place = placeOf(name);
+      if (place.kind === "file" && place.elsewhere) return yield* shadowed(name);
       yield* LibraryFile.replace(file(name), input.previous, text).pipe(
         Effect.mapError(({ reason }) =>
           reason === "missing"
