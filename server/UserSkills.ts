@@ -7,12 +7,12 @@
  * Nothing here changes a running session: one started from now loads the new set, and a running
  * one on `/reload`.
  */
-import { lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { loadSkillsFromDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { dirname, join } from "node:path";
+import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
-import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
+import { checkDraft, type DraftField } from "../shared/drafts.ts";
 import { skillFile as fileOf } from "../shared/library.ts";
 import type { UserSkill, UserSkillCreate, UserSkillUpdate } from "../shared/skills.ts";
 import * as LibraryFile from "./LibraryFile.ts";
@@ -45,7 +45,7 @@ const refused = (detail: string, field?: DraftField) =>
 export class UserSkills extends Context.Service<
   UserSkills,
   {
-    /** The skills Piano created, by name. */
+    /** The skills Pi loads from Piano's folder, by the name Pi loads each as. */
     readonly list: Effect.Effect<ReadonlyArray<UserSkill>>;
     readonly create: (request: UserSkillCreate) => Effect.Effect<UserSkill, UserSkillError>;
     /** Replaces the SKILL.md of a skill Piano created; any other name is refused, so a skill in
@@ -57,40 +57,55 @@ export class UserSkills extends Context.Service<
   }
 >()("piano/UserSkills") {}
 
-const isDirectory = (path: string) => {
+/** A real directory or file at `path`, not a link. */
+const isReal = (path: string, kind: "directory" | "file") => {
   try {
-    return lstatSync(path).isDirectory();
+    const stat = lstatSync(path);
+    return kind === "directory" ? stat.isDirectory() : stat.isFile();
   } catch {
     return false;
   }
 };
 
+/** A skill in Piano's folder, with the directory that holds it. */
+interface PianoSkill {
+  readonly skill: UserSkill;
+  readonly dir: string;
+}
+
 /**
- * The skill named `name` in Piano's folder: a real directory (not a link) of that name whose own
- * SKILL.md declares that name, as Pi reads it.
+ * The skills Pi loads from Piano's folder, by the name Pi gives each (INV-12: Pi's own loader, not
+ * a copy of its rules), in Piano's layout: `<folder>/<directory>/SKILL.md`, both real, not links,
+ * so nothing here reaches outside the folder. A SKILL.md whose declared name differs from its
+ * directory's is listed under the name Pi loads it as. Of two that declare one name, only the one
+ * Pi loads counts, even when that one is outside Piano's layout and so not listed.
  */
-function piano(root: string, name: string): UserSkill | undefined {
-  const dir = join(root, name);
-  if (!isDirectory(dir)) return undefined;
-  const file = join(dir, "SKILL.md");
-  try {
-    if (!lstatSync(file).isFile()) return undefined;
-    const text = readFileSync(file, "utf8");
-    const { frontmatter } = parseFrontmatter(text);
-    const { description } = frontmatter;
-    // Pi's own rule: a name that is not a string (`name: 123` reads as a number) falls back to the
-    // directory's, so such a skill is still the one Pi loads as `name`.
-    const declared = typeof frontmatter.name === "string" ? frontmatter.name : name;
-    if (declared !== name || typeof description !== "string") return undefined;
-    return {
-      name,
-      description,
-      file: text,
-      disableModelInvocation: frontmatter["disable-model-invocation"] === true,
-    };
-  } catch {
-    return undefined;
+function pianoSkills(root: string): Map<string, PianoSkill> {
+  const found = new Map<string, PianoSkill>();
+  const taken = new Set<string>();
+  for (const loaded of loadSkillsFromDir({ dir: root, source: "user" }).skills) {
+    const dir = loaded.baseDir;
+    const file = join(dir, "SKILL.md");
+    // Pi keeps the first skill of a name and drops later ones, whatever their layout.
+    if (taken.has(loaded.name)) continue;
+    taken.add(loaded.name);
+    if (dirname(dir) !== root || loaded.filePath !== file) continue;
+    if (!isReal(dir, "directory") || !isReal(file, "file")) continue;
+    try {
+      found.set(loaded.name, {
+        dir,
+        skill: {
+          name: loaded.name,
+          description: loaded.description,
+          file: readFileSync(file, "utf8"),
+          disableModelInvocation: loaded.disableModelInvocation,
+        },
+      });
+    } catch {
+      // Unreadable since Pi read it: not listed.
+    }
   }
+  return found;
 }
 
 export const UserSkillsLive = Layer.effect(
@@ -99,18 +114,11 @@ export const UserSkillsLive = Layer.effect(
     const environment = yield* UserSkillsEnvironment;
     const root = environment.directory;
 
-    const list = Effect.sync(() => {
-      let entries: string[];
-      try {
-        entries = readdirSync(root());
-      } catch {
-        return [];
-      }
-      return entries
-        .map((entry) => piano(root(), entry))
-        .filter((skill): skill is UserSkill => !!skill)
-        .sort((a, b) => a.name.localeCompare(b.name));
-    });
+    const list = Effect.sync(() =>
+      [...pianoSkills(root()).values()]
+        .map(({ skill }) => skill)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
 
     /** Names Pi loads from either user directory, so a new skill never loses a name collision. */
     const loaded = () =>
@@ -178,9 +186,10 @@ export const UserSkillsLive = Layer.effect(
       };
       const { name } = saved;
       const text = fileOf(saved);
-      // The name rule keeps the path inside the skills directory; only a skill Piano created.
-      if (!piano(root(), name)) return yield* refused("Skill not found.", "name");
-      yield* LibraryFile.replace(join(root(), name, "SKILL.md"), request.previous, text).pipe(
+      // Only a skill in Piano's folder, found by the name Pi loads it as.
+      const current = pianoSkills(root()).get(name);
+      if (!current) return yield* refused("Skill not found.", "name");
+      yield* LibraryFile.replace(join(current.dir, "SKILL.md"), request.previous, text).pipe(
         Effect.mapError(({ reason }) =>
           reason === "missing"
             ? refused("Skill not found.", "name")
@@ -198,10 +207,11 @@ export const UserSkillsLive = Layer.effect(
     });
 
     const remove = Effect.fn("UserSkills.remove")(function* (name: string) {
-      // The name rule keeps the path inside the skills directory.
-      if (!isName(name) || !piano(root(), name)) return yield* refused("Skill not found.");
+      // Only a skill in Piano's folder, found by the name Pi loads it as, with its directory.
+      const current = pianoSkills(root()).get(name);
+      if (!current) return yield* refused("Skill not found.");
       yield* Effect.try({
-        try: () => rmSync(join(root(), name), { recursive: true }),
+        try: () => rmSync(current.dir, { recursive: true }),
         catch: () => refused("Could not delete the skill."),
       }).pipe(LibraryFile.alone);
     });
