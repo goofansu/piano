@@ -305,18 +305,18 @@ export function sessionContext(state: AppState): SessionContext {
   };
 }
 
-/** Where a session runs, in a line: its repository or folder, then its branch or short commit. */
+/** Where a session runs: its repository or folder, then its branch or detached commit. The phone
+ * header's line and the rail's Environment rows both read this. */
 export interface SessionPlace {
   /** The GitHub repository ("owner/name"), else the folder's name. */
   name: string;
+  /** Whether `name` is a GitHub repository rather than a folder. */
+  repository: boolean;
   /** The branch, or the first ten characters of a detached commit; none for a non-Git folder. */
-  ref: string | undefined;
+  ref: { kind: "branch" | "commit"; name: string } | undefined;
 }
 
-/**
- * The phone header's second line: with no rail there, this is where the session says where it
- * runs. None before the session has a directory.
- */
+/** Where the session runs; none before the session has a directory. */
 export function sessionPlace({
   cwd,
   githubRepo,
@@ -328,7 +328,12 @@ export function sessionPlace({
   if (!cwd) return undefined;
   return {
     name: githubRepo ?? (cwd.split("/").filter(Boolean).at(-1) || cwd),
-    ref: branch ?? detachedHead?.slice(0, 10),
+    repository: githubRepo !== undefined,
+    ref: detachedHead
+      ? { kind: "commit", name: detachedHead.slice(0, 10) }
+      : branch
+        ? { kind: "branch", name: branch }
+        : undefined,
   };
 }
 

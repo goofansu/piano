@@ -29,7 +29,7 @@ import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { createPreference, parseJson } from "@/lib/preference";
 import { pullRequestView } from "@/lib/pullRequestView";
 import { type EnvironmentRowKind, environmentRowMenu } from "@/lib/sessionCommands";
-import { sessionContext } from "@/lib/sessionContext";
+import { sessionContext, sessionPlace } from "@/lib/sessionContext";
 import { sessionLinks } from "@/lib/sessionLinks";
 import type { TranscriptViewport } from "@/lib/transcriptViewport";
 import { usePreference } from "@/lib/usePreference";
@@ -265,12 +265,13 @@ function RailSections({
  * pull request, each a row with its menu. The rail's first section.
  */
 export function SessionEnvironment({ state }: { state: AppState }) {
-  const { cwd, branch, detachedHead, githubRepo, branchUrl, pullRequest } = sessionContext(state);
+  const context = sessionContext(state);
+  const { cwd, branchUrl, pullRequest } = context;
+  const place = sessionPlace(context);
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
-  const repositoryUrl = githubRepo ? `https://github.com/${githubRepo}` : undefined;
   return (
     <RailList aria-label="Environment">
-      {githubRepo ? (
+      {place?.repository ? (
         <EnvironmentRow
           name="Repository"
           menu="repository"
@@ -279,17 +280,17 @@ export function SessionEnvironment({ state }: { state: AppState }) {
               <use href="/github.svg#github" />
             </svg>
           }
-          href={repositoryUrl}
+          href={`https://github.com/${place.name}`}
           cwd={cwd}
         >
-          {githubRepo}
+          {place.name}
         </EnvironmentRow>
-      ) : cwd ? (
+      ) : place ? (
         <EnvironmentRow name="Folder" menu="folder" icon={<FolderOpenIcon />} cwd={cwd}>
-          {cwd.split("/").filter(Boolean).at(-1) || cwd}
+          {place.name}
         </EnvironmentRow>
       ) : null}
-      {detachedHead ? (
+      {place?.ref?.kind === "commit" ? (
         <EnvironmentRow
           name="Git"
           menu="commit"
@@ -297,11 +298,11 @@ export function SessionEnvironment({ state }: { state: AppState }) {
           mono
           description="A commit is checked out directly; no branch is active."
         >
-          {`${detachedHead.slice(0, 10)} (detached)`}
+          {`${place.ref.name} (detached)`}
         </EnvironmentRow>
-      ) : branch ? (
+      ) : place?.ref ? (
         <EnvironmentRow name="Branch" menu="branch" icon={<GitBranchIcon />} mono href={branchUrl}>
-          {branch}
+          {place.ref.name}
         </EnvironmentRow>
       ) : null}
       {pr && (

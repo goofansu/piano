@@ -688,7 +688,7 @@ test("a missing checkout is decided once: Trust, New session here, Rename, the f
   }
 });
 
-test("the phone header's place line: repository or folder, then branch or short commit", () => {
+test("where a session runs: repository or folder, then branch or short detached commit", () => {
   const none = {
     cwd: undefined,
     githubRepo: undefined,
@@ -702,10 +702,11 @@ test("the phone header's place line: repository or folder, then branch or short 
       githubRepo: "goofansu/piano",
       branch: "feature",
     }),
-    { name: "goofansu/piano", ref: "feature" },
+    { name: "goofansu/piano", repository: true, ref: { kind: "branch", name: "feature" } },
   );
   assert.deepEqual(sessionPlace({ ...none, cwd: "/work/notes/" }), {
     name: "notes",
+    repository: false,
     ref: undefined,
   });
   assert.deepEqual(
@@ -715,7 +716,7 @@ test("the phone header's place line: repository or folder, then branch or short 
       githubRepo: "goofansu/piano",
       detachedHead: "d4449bb7183bb577791acab4f6fc4f52f78d02b0",
     }),
-    { name: "goofansu/piano", ref: "d4449bb718" },
+    { name: "goofansu/piano", repository: true, ref: { kind: "commit", name: "d4449bb718" } },
   );
   assert.equal(sessionPlace(none), undefined, "no line before the session has a directory");
 });
