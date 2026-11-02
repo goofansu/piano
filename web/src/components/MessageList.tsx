@@ -38,12 +38,13 @@ import { IconButton } from "@/components/IconButton";
 import { Markdown } from "@/components/Markdown";
 import { PianoButton } from "@/components/PianoButton";
 import { Keys } from "@/components/PianoMark";
+import { QuestionText } from "@/components/QuestionText";
 import { StatusBadge as Badge } from "@/components/StatusBadge";
 import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { Item, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
+import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevHome, clamp, stripAnsi, toolArgsText } from "@/lib/format";
 import type { MessageError } from "@/lib/messageError";
@@ -942,9 +943,7 @@ function QuestionAnswersRow({ answers, stateKey }: { answers: QuestionAnswers; s
         {answers.items.map(({ id, question, answer }) => (
           <Item key={id} role="listitem" className="p-0">
             <ItemContent className="min-w-0">
-              <ItemTitle className="line-clamp-none whitespace-pre-wrap break-words">
-                {question}
-              </ItemTitle>
+              <QuestionText text={question} className="text-ink" />
               <p className="whitespace-pre-wrap break-words text-ink-2">
                 {answer === undefined ? (
                   <span className="text-ink-3">Not answered</span>

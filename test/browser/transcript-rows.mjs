@@ -59,6 +59,7 @@ const messages = [
       questions: [
         { id: "database", question: "Which database?", options: ["PostgreSQL", "SQLite"] },
         { id: "requirements", question: "What should change?" },
+        { id: "target", question: "Deploy **one**:\n- staging\n- production" },
       ],
     }),
   ]),
@@ -67,7 +68,11 @@ const messages = [
     "ask_user",
     JSON.stringify({
       status: "answered",
-      answers: { database: "SQLite", requirements: "Keep the API\nChange the layout" },
+      answers: {
+        database: "SQLite",
+        requirements: "Keep the API\nChange the layout",
+        target: "staging",
+      },
     }),
   ),
   assistant([
@@ -184,12 +189,23 @@ await run(
     await page.see("Which database?");
     assert.deepEqual(
       await page.evaluate(`[...document.querySelectorAll('[data-slot="question-answers"] [role="listitem"]')].map(item => ({
-        question: item.querySelector('[data-slot="item-title"]').textContent,
-        answer: item.querySelector('p').textContent,
+        question: item.querySelector('[data-slot="item-content"] > :first-child').innerText,
+        markup: [...item.querySelectorAll('strong, li')].map(node => node.localName + ":" + node.textContent),
+        answer: item.querySelector('[data-slot="item-content"] > :last-child').textContent,
       }))`),
       [
-        { question: "Which database?", answer: "SQLite" },
-        { question: "What should change?", answer: "Keep the API\nChange the layout" },
+        { question: "Which database?", markup: [], answer: "SQLite" },
+        {
+          question: "What should change?",
+          markup: [],
+          answer: "Keep the API\nChange the layout",
+        },
+        // The question is Markdown here as when it was asked: no literal ** or - is left.
+        {
+          question: "Deploy one:\n\nstaging\nproduction",
+          markup: ["strong:one", "li:staging", "li:production"],
+          answer: "staging",
+        },
       ],
       "saved question/answer pairs start expanded, not hidden behind raw JSON",
     );
