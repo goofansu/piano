@@ -7,15 +7,7 @@
  * Nothing here changes a running session: one started from now loads the new set, and a running
  * one on `/reload`.
  */
-import {
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadSkillsFromDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
@@ -23,6 +15,7 @@ import { Context, Data, Effect, Layer } from "effect";
 import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
 import { skillFile as fileOf } from "../shared/library.ts";
 import type { UserSkill, UserSkillCreate, UserSkillUpdate } from "../shared/skills.ts";
+import * as LibraryFile from "./LibraryFile.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 import { agentDir } from "./PiEnv.ts";
 
@@ -185,35 +178,23 @@ export const UserSkillsLive = Layer.effect(
       };
       const { name } = saved;
       const text = fileOf(saved);
-      const dir = join(root(), name);
-      return yield* Effect.try({
-        // Synchronous from the read to the rename, so no other update in this process lands
-        // between the comparison and the write.
-        try: () => {
-          // The name rule keeps the path inside the skills directory.
-          const current = piano(root(), name);
-          if (!current) throw refused("Skill not found.", "name");
-          if (request.previous !== current.file)
-            throw refused("This skill changed since it was shown. Review it again.");
-          // Written beside it, then renamed over it: a reader sees the old file or the new one.
-          const temporary = join(dir, `.SKILL.md.${process.pid}.${Date.now()}`);
-          writeFileSync(temporary, text, { flag: "wx" });
-          try {
-            renameSync(temporary, join(dir, "SKILL.md"));
-          } catch (cause) {
-            rmSync(temporary, { force: true });
-            throw cause;
-          }
-          return {
-            name,
-            description: saved.description,
-            file: text,
-            disableModelInvocation: saved.disableModelInvocation,
-          };
-        },
-        catch: (cause) =>
-          cause instanceof UserSkillError ? cause : refused("Could not save the skill."),
-      });
+      // The name rule keeps the path inside the skills directory; only a skill Piano created.
+      if (!piano(root(), name)) return yield* refused("Skill not found.", "name");
+      yield* LibraryFile.replace(join(root(), name, "SKILL.md"), request.previous, text).pipe(
+        Effect.mapError(({ reason }) =>
+          reason === "missing"
+            ? refused("Skill not found.", "name")
+            : reason === "changed"
+              ? refused("This skill changed since it was shown. Review it again.")
+              : refused("Could not save the skill."),
+        ),
+      );
+      return {
+        name,
+        description: saved.description,
+        file: text,
+        disableModelInvocation: saved.disableModelInvocation,
+      };
     });
 
     const remove = Effect.fn("UserSkills.remove")(function* (name: string) {
@@ -222,7 +203,7 @@ export const UserSkillsLive = Layer.effect(
       yield* Effect.try({
         try: () => rmSync(join(root(), name), { recursive: true }),
         catch: () => refused("Could not delete the skill."),
-      });
+      }).pipe(LibraryFile.alone);
     });
 
     return UserSkills.of({ list, create, update, remove });

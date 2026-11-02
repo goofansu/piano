@@ -6,13 +6,14 @@
  * and Pi keeps parsing and expanding templates (INV-12). A running Pi loaded its templates when it
  * started, so a change reaches sessions started from then on.
  */
-import { lstat, mkdir, readdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import { Context, Data, Effect, Layer, Semaphore } from "effect";
+import { Context, Data, Effect, Layer } from "effect";
 import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
 import { promptFile as templateText } from "../shared/library.ts";
 import type { Prompt, PromptCreate, PromptUpdate } from "../shared/prompts.ts";
+import * as LibraryFile from "./LibraryFile.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
@@ -73,8 +74,6 @@ export const PromptsLive = Layer.effect(
     const dir = yield* PromptsDir;
     const file = (name: string) => join(dir, `${name}.md`);
     const unreadable = () => new PromptError({ detail: "Could not read prompts." });
-    // Updates and deletes take turns, so none lands between another's read and its write.
-    const writing = yield* Semaphore.make(1);
 
     const list = Effect.fn("Prompts.list")(function* () {
       const names = yield* Effect.tryPromise({
@@ -127,34 +126,18 @@ export const PromptsLive = Layer.effect(
         return yield* new PromptError(check.problem ?? { detail: "Could not save prompt." });
       const name = saved.name;
       const text = templateText(saved);
-      const notFound = new PromptError({ detail: "Prompt not found.", field: "name" });
-      const replace = Effect.gen(function* () {
-        // Only a file in Piano's folder, not a link out of it: the name rule keeps the path inside.
-        const existing = yield* Effect.tryPromise({
-          try: () => lstat(file(name)),
-          catch: () => notFound,
-        });
-        if (!existing.isFile()) return yield* notFound;
-        const current = yield* Effect.tryPromise({
-          try: () => readFile(file(name), "utf8"),
-          catch: () => notFound,
-        });
-        if (current !== input.previous)
-          return yield* new PromptError({
-            detail: "This prompt changed since it was shown. Review it again.",
-          });
-        const temporary = join(dir, `.${name}.md.${process.pid}.${Date.now()}`);
-        yield* Effect.tryPromise({
-          // Written beside it, then renamed over it: a reader sees the old file or the new one.
-          try: () =>
-            writeFile(temporary, text, { encoding: "utf8", flag: "wx" }).then(() =>
-              rename(temporary, file(name)),
-            ),
-          catch: () => new PromptError({ detail: "Could not save prompt." }),
-        }).pipe(Effect.tapError(() => Effect.promise(() => rm(temporary, { force: true }))));
-        return readPrompt(name, text);
-      });
-      return yield* Semaphore.withPermits(writing, 1)(replace);
+      yield* LibraryFile.replace(file(name), input.previous, text).pipe(
+        Effect.mapError(({ reason }) =>
+          reason === "missing"
+            ? new PromptError({ detail: "Prompt not found.", field: "name" })
+            : reason === "changed"
+              ? new PromptError({
+                  detail: "This prompt changed since it was shown. Review it again.",
+                })
+              : new PromptError({ detail: "Could not save prompt." }),
+        ),
+      );
+      return readPrompt(name, text);
     });
 
     const remove = Effect.fn("Prompts.remove")(function* (name: string) {
@@ -169,7 +152,7 @@ export const PromptsLive = Layer.effect(
             ? Effect.void
             : Effect.fail(new PromptError({ detail: "Could not delete prompt." })),
         ),
-        Semaphore.withPermits(writing, 1),
+        LibraryFile.alone,
       );
     });
 
