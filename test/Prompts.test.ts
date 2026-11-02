@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -367,6 +368,33 @@ test("a prompt placed by hand under a name Piano would not create is listed and 
       Effect.provideService(PromptsEnvironment, {
         directory: dir,
         agentDir: () => join(root, "by-hand", "agent"),
+      }),
+    ),
+  );
+});
+
+test("a prompt Piano cannot read refuses its own save, never another prompt's", async (t) => {
+  if (process.getuid?.() === 0) return t.skip("root reads any file");
+  const dir = join(root, "unreadable", "prompts");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "locked.md"), "Locked\n");
+  chmodSync(join(dir, "locked.md"), 0o000);
+  t.after(() => chmodSync(join(dir, "locked.md"), 0o600));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const prompts = yield* Prompts;
+      const draft = { name: "open", description: "Open", instructions: "Read me." };
+      assert.equal((yield* prompts.propose(draft)).change, "create");
+      assert.equal((yield* prompts.create(draft)).name, "open");
+      assert.equal(
+        (yield* failure(prompts.propose({ ...draft, name: "locked" }))).detail,
+        "Could not save prompt.",
+      );
+    }).pipe(
+      Effect.provide(PromptsLive),
+      Effect.provideService(PromptsEnvironment, {
+        directory: dir,
+        agentDir: () => join(root, "unreadable", "agent"),
       }),
     ),
   );

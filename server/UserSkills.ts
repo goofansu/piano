@@ -113,6 +113,7 @@ export const UserSkillsLive = Layer.effect(
       folder: root,
       agentDir: environment.agentDir,
       shelf: async () => pianoSkills(root()),
+      find: async (name) => pianoSkills(root()).get(name),
       // A name Pi loads from Piano's folder in any layout, or a directory of that name.
       occupied: (name) =>
         loadSkillsFromDir({ dir: root(), source: "user" }).skills.some((s) => s.name === name) ||
@@ -130,14 +131,21 @@ export const UserSkillsLive = Layer.effect(
       },
       create: async (skill) => {
         const dir = join(root(), skill.name);
-        mkdirSync(root(), { recursive: true });
+        // Only the skill's own directory existing means the name is taken; any other failure is
+        // a failed save.
+        const failed = (cause: unknown) => new Error("Could not save the skill.", { cause });
+        try {
+          mkdirSync(root(), { recursive: true });
+        } catch (cause) {
+          throw failed(cause);
+        }
         // Not recursive: an existing directory of that name, Piano's or not, refuses the create.
         mkdirSync(dir);
         try {
           writeFileSync(join(dir, "SKILL.md"), skill.file, { flag: "wx" });
         } catch (cause) {
           rmSync(dir, { recursive: true, force: true });
-          throw cause;
+          throw failed(cause);
         }
       },
       // The skill's whole directory.

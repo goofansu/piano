@@ -44,12 +44,16 @@ export interface Layout<Entry extends { readonly name: string; readonly file: st
   /** Piano's entries by the name Pi loads each as, only those in Piano's layout and not links, so
    * nothing here reaches outside the folder. Fails only when the folder cannot be read. */
   readonly shelf: () => Promise<ReadonlyMap<string, Shelved<Entry>>>;
+  /** Piano's entry of `name`, a well-formed name, as `shelf` would list it; reads no other entry,
+   * so one unreadable entry never refuses a save of another. */
+  readonly find: (name: string) => Promise<Shelved<Entry> | undefined>;
   /** Whether anything at all of `name` is in Piano's folder or loaded from it, entry or not. */
   readonly occupied: (name: string) => boolean;
   /** The entry a save of `saved` writes. `kept` is the entry a proposal would replace, whose
    * settings the draft does not set are kept. */
   readonly render: (saved: Draft, request: Request, kept: Entry | undefined) => Entry;
-  /** Write a new entry's file, never over anything: throws an `EEXIST` error when the name is taken. */
+  /** Write a new entry's file, never over anything: throws an `EEXIST` error only when the name is
+   * taken. */
   readonly create: (entry: Entry) => Promise<void>;
   /** Delete one of Piano's entries. */
   readonly remove: (shelved: Shelved<Entry>) => Promise<void>;
@@ -95,12 +99,13 @@ export const makeLibrary = <
    * the name in Piano's folder; and whether Pi loads that name from another folder first.
    */
   const placeOf = Effect.fn("Library.placeOf")(function* (name: string) {
-    const current = (yield* shelf(couldNotSave)).get(name);
+    const current = yield* Effect.tryPromise({ try: () => layout.find(name), catch: couldNotSave });
     const elsewhere = yield* Effect.tryPromise({
       try: () => loadedBeforePiano(noun, layout.agentDir(), layout.folder()),
       catch: couldNotSave,
     });
-    return { current, occupied: layout.occupied(name), elsewhere: elsewhere.has(name) };
+    const occupied = yield* Effect.try({ try: () => layout.occupied(name), catch: couldNotSave });
+    return { current, occupied, elsewhere: elsewhere.has(name) };
   });
 
   /** The one decision: what a save of the name does, given what it meets; an update names the
@@ -122,7 +127,7 @@ export const makeLibrary = <
   };
 
   /** Piano's entries by name. */
-  const list = shelf(() => refused(`Could not load ${noun}s.`)).pipe(
+  const list = shelf(() => refused(`Could not read ${noun}s.`)).pipe(
     Effect.map((entries) =>
       [...entries.values()].map(({ entry }) => entry).sort((a, b) => a.name.localeCompare(b.name)),
     ),

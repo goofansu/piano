@@ -117,6 +117,15 @@ export const PromptsLive = Layer.effect(
         }
         return found;
       },
+      find: async (name) => {
+        try {
+          if (!lstatSync(file(name)).isFile()) return undefined;
+          return { entry: readPrompt(name, await readFile(file(name), "utf8")), path: file(name) };
+        } catch (cause) {
+          if (code(cause) === "ENOENT") return undefined;
+          throw cause;
+        }
+      },
       occupied: (name) => {
         try {
           lstatSync(file(name));
