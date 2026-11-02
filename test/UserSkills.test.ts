@@ -96,7 +96,12 @@ test("a created skill is one Pi loads as written, and is listed with its instruc
   // Each skill comes with its SKILL.md exactly as saved, which View shows and copies.
   const saved = (name: string) => readFileSync(join(directory, name, "SKILL.md"), "utf8");
   assert.deepEqual(listed._tag === "Success" && listed.success, [
-    { name: "deploy", description, file: saved("deploy"), disableModelInvocation: true },
+    {
+      name: "deploy",
+      description,
+      file: saved("deploy"),
+      disableModelInvocation: true,
+    },
     {
       name: "release-notes",
       description,
@@ -180,6 +185,51 @@ test("the New skill rule accepts only a filled, well-formed, in-bounds draft", (
   );
 });
 
+test("an update replaces only the SKILL.md the person saw, and of two from one file one wins", async (t) => {
+  const { directory, run } = home(t);
+  const created = await run((skills) =>
+    skills.create({ name: "notes", description: "D.", instructions: "One." }),
+  );
+  assert.ok(created._tag === "Success");
+  const shown = created.success.file;
+  const path = join(directory, "notes", "SKILL.md");
+  const update = (instructions: string, previous: string) =>
+    run((skills) =>
+      skills.update({
+        name: "notes",
+        description: "D.",
+        instructions,
+        previous,
+      }),
+    );
+
+  const matching = await update("Two.", shown);
+  assert.ok(matching._tag === "Success", "an update from the file on disk is written");
+  assert.equal(readFileSync(path, "utf8"), matching.success.file);
+
+  // Two sessions proposed from the same file: the second no longer replaces what it showed.
+  const [a, b] = await Promise.all([
+    update("Three.", matching.success.file),
+    update("Four.", matching.success.file),
+  ]);
+  assert.deepEqual([a._tag, b._tag].sort(), ["Failure", "Success"], "exactly one wins");
+  const winner = a._tag === "Success" ? a.success : b._tag === "Success" ? b.success : undefined;
+  assert.equal(readFileSync(path, "utf8"), winner?.file, "the loser wrote nothing");
+  const loser = refusal(a._tag === "Failure" ? a : b);
+  assert.deepEqual(
+    [loser.detail, loser.field],
+    ["This skill changed since it was shown. Review it again.", undefined],
+  );
+
+  const before = readFileSync(path, "utf8");
+  assert.equal(
+    refusal(await update("Five.", shown)).detail,
+    loser.detail,
+    "a stale file is refused",
+  );
+  assert.equal(readFileSync(path, "utf8"), before, "and nothing is written");
+});
+
 test("a name YAML would read as a number is written and listed as the skill's name", async (t) => {
   const { directory, run } = home(t);
   const created = await run((skills) =>
@@ -203,7 +253,11 @@ test("a name YAML would read as a number is written and listed as the skill's na
 test("Pi loads the skills in Piano's folder through --skill, and only Piano's Pi does", async (t) => {
   const { directory, run } = home(t);
   await run((skills) =>
-    skills.create({ name: "release-notes", description: "Writes notes.", instructions: "Go." }),
+    skills.create({
+      name: "release-notes",
+      description: "Writes notes.",
+      instructions: "Go.",
+    }),
   );
   const root = mkdtempSync(join(tmpdir(), "piano-skills-pi-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -245,7 +299,11 @@ test("an update replaces only a skill Piano created, and a new Pi loads the new 
   write(agentsDirectory, "agents-own", "name: agents-own\ndescription: Shared.", "Theirs.");
   write(piDirectory, "pi-own", "name: pi-own\ndescription: Pi's own.", "Pi's.");
   await run((skills) =>
-    skills.create({ name: "notes", description: "Writes notes.", instructions: "Old." }),
+    skills.create({
+      name: "notes",
+      description: "Writes notes.",
+      instructions: "Old.",
+    }),
   );
   const update = (name: string, description = "D.", instructions = "I.") =>
     run((skills) => skills.update({ name, description, instructions }));

@@ -9,10 +9,10 @@
 import { lstat, mkdir, readdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import { Context, Data, Effect, Layer } from "effect";
+import { Context, Data, Effect, Layer, Semaphore } from "effect";
 import { checkDraft, type DraftField, isName } from "../shared/drafts.ts";
 import { promptFile as templateText } from "../shared/library.ts";
-import type { Prompt, PromptCreate } from "../shared/prompts.ts";
+import type { Prompt, PromptCreate, PromptUpdate } from "../shared/prompts.ts";
 import { pianoFolder } from "./PianoFolders.ts";
 
 /** A refusal written for people; `field` names the editor field it belongs to, if any. */
@@ -33,8 +33,10 @@ export class Prompts extends Context.Service<
     readonly list: Effect.Effect<readonly Prompt[], PromptError>;
     /** Save a new prompt; a name already taken is refused, never overwritten. */
     readonly create: (input: PromptCreate) => Effect.Effect<Prompt, PromptError>;
-    /** Replace a prompt Piano created; any other name is refused, never created. */
-    readonly update: (input: PromptCreate) => Effect.Effect<Prompt, PromptError>;
+    /** Replace a prompt Piano created; any other name is refused, never created. With
+     * `previous`, only that file is replaced: a prompt changed since it was shown is refused, and
+     * nothing written. */
+    readonly update: (input: PromptUpdate) => Effect.Effect<Prompt, PromptError>;
     /** Delete a prompt; one already gone counts as deleted. */
     readonly remove: (name: string) => Effect.Effect<void, PromptError>;
   }
@@ -71,6 +73,8 @@ export const PromptsLive = Layer.effect(
     const dir = yield* PromptsDir;
     const file = (name: string) => join(dir, `${name}.md`);
     const unreadable = () => new PromptError({ detail: "Could not read prompts." });
+    // Updates and deletes take turns, so none lands between another's read and its write.
+    const writing = yield* Semaphore.make(1);
 
     const list = Effect.fn("Prompts.list")(function* () {
       const names = yield* Effect.tryPromise({
@@ -116,7 +120,7 @@ export const PromptsLive = Layer.effect(
       return readPrompt(name, text);
     });
 
-    const update = Effect.fn("Prompts.update")(function* (input: PromptCreate) {
+    const update = Effect.fn("Prompts.update")(function* (input: PromptUpdate) {
       const check = checkDraft(input);
       const saved = check.saved;
       if (!saved)
@@ -124,22 +128,35 @@ export const PromptsLive = Layer.effect(
       const name = saved.name;
       const text = templateText(saved);
       const notFound = new PromptError({ detail: "Prompt not found.", field: "name" });
-      // Only a file in Piano's folder, not a link out of it: the name rule keeps the path inside.
-      const existing = yield* Effect.tryPromise({
-        try: () => lstat(file(name)),
-        catch: () => notFound,
+      const replace = Effect.gen(function* () {
+        // Only a file in Piano's folder, not a link out of it: the name rule keeps the path inside.
+        const existing = yield* Effect.tryPromise({
+          try: () => lstat(file(name)),
+          catch: () => notFound,
+        });
+        if (!existing.isFile()) return yield* notFound;
+        if (input.previous !== undefined) {
+          const current = yield* Effect.tryPromise({
+            try: () => readFile(file(name), "utf8"),
+            catch: () => notFound,
+          });
+          if (current !== input.previous)
+            return yield* new PromptError({
+              detail: "This prompt changed since it was shown. Review it again.",
+            });
+        }
+        const temporary = join(dir, `.${name}.md.${process.pid}.${Date.now()}`);
+        yield* Effect.tryPromise({
+          // Written beside it, then renamed over it: a reader sees the old file or the new one.
+          try: () =>
+            writeFile(temporary, text, { encoding: "utf8", flag: "wx" }).then(() =>
+              rename(temporary, file(name)),
+            ),
+          catch: () => new PromptError({ detail: "Could not save prompt." }),
+        }).pipe(Effect.tapError(() => Effect.promise(() => rm(temporary, { force: true }))));
+        return readPrompt(name, text);
       });
-      if (!existing.isFile()) return yield* notFound;
-      const temporary = join(dir, `.${name}.md.${process.pid}.${Date.now()}`);
-      yield* Effect.tryPromise({
-        // Written beside it, then renamed over it: a reader sees the old file or the new one.
-        try: () =>
-          writeFile(temporary, text, { encoding: "utf8", flag: "wx" }).then(() =>
-            rename(temporary, file(name)),
-          ),
-        catch: () => new PromptError({ detail: "Could not save prompt." }),
-      }).pipe(Effect.tapError(() => Effect.promise(() => rm(temporary, { force: true }))));
-      return readPrompt(name, text);
+      return yield* Semaphore.withPermits(writing, 1)(replace);
     });
 
     const remove = Effect.fn("Prompts.remove")(function* (name: string) {
@@ -154,6 +171,7 @@ export const PromptsLive = Layer.effect(
             ? Effect.void
             : Effect.fail(new PromptError({ detail: "Could not delete prompt." })),
         ),
+        Semaphore.withPermits(writing, 1),
       );
     });
 

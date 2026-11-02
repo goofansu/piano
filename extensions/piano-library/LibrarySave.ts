@@ -5,7 +5,7 @@
  * supplies the dialog and the request, so a test supplies them too.
  */
 import { checkDraft, isName, NAME_RULE } from "../../shared/drafts.ts";
-import { type Endpoint, Endpoints } from "../../shared/http.ts";
+import { type Endpoint, Endpoints, readRefusal } from "../../shared/http.ts";
 import {
   LIBRARY_REACH,
   type LibraryKind,
@@ -52,15 +52,8 @@ interface Saved {
 
 /** A refusal's sentence, as the Settings page reads it from the server's answer. */
 async function refusal(response: Response, fallback: string) {
-  try {
-    const body = (await response.json()) as { error?: unknown; field?: unknown };
-    return {
-      detail: typeof body.error === "string" && body.error ? body.error : fallback,
-      field: typeof body.field === "string" ? body.field : undefined,
-    };
-  } catch {
-    return { detail: fallback, field: undefined };
-  }
+  const { error, field } = readRefusal(await response.json().catch(() => undefined), fallback);
+  return { detail: error, field };
 }
 
 /** Read only Piano's catalog, by name; never accept a filesystem path or search Pi's other resources. */
@@ -120,7 +113,9 @@ export async function saveToLibrary(
   if (!approved || signal?.aborted) return { status: "cancelled", kind, name: saved.name };
 
   const endpoint = existing ? endpoints.update : endpoints.create;
-  const body = kind === "skill" ? { ...saved, disableModelInvocation } : saved;
+  const draftBody = kind === "skill" ? { ...saved, disableModelInvocation } : saved;
+  // An update replaces only the file the user approved a change to: one changed since is refused.
+  const body = existing ? { ...draftBody, previous: existing.file } : draftBody;
   // Once approved, the save is not abandoned half-way: the user's Save is carried out.
   const response = await deps.request(endpoint.path, {
     method: endpoint.method,
