@@ -169,8 +169,10 @@ await run(
     await page.capture("10-mobile-palette");
     // One area at a time on a phone: Changes takes the session's full width under its tab.
     await page.ab("type", "[cmdk-input]", "Changes");
+    // Changes also exists in the unfiltered list. Wait for this search to settle:
+    // the palette deliberately refuses selection of results from a pending query.
     await page.until(
-      `[...document.querySelectorAll('[cmdk-item]')].some((i) => i.textContent.trim() === 'Changes')`,
+      `document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false' && [...document.querySelectorAll('[cmdk-item]')].some((i) => i.textContent.trim() === 'Changes')`,
     );
     await page.click("option", "Changes");
     await page.until(

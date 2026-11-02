@@ -672,7 +672,12 @@ test("INV-02/06: archive/delete retain the session on preview cleanup failure; e
         writeFileSync(intent, "corrupt launch intent");
         // A live tool admission makes this owner responsible even when its observation fails.
         yield* Effect.promise(() =>
-          assert.rejects(ownerRequest(endpoint, { action: "start", command: ["/bin/false"] })),
+          assert.rejects(
+            ownerRequest(endpoint, {
+              action: "start",
+              command: [process.execPath, "-e", "process.exit(1)"],
+            }),
+          ),
         );
         for (const operation of ["archive", "delete"] as const) {
           const error = yield* hosts[operation](cwd, id).pipe(Effect.flip);
@@ -862,7 +867,12 @@ test("INV-02: one host's failing idle check does not keep the next idle host fro
       assert.ok(endpoint);
       // An admitted start makes this owner ask its adapter before idle release.
       yield* Effect.promise(() =>
-        assert.rejects(ownerRequest(endpoint, { action: "start", command: ["/bin/false"] })),
+        assert.rejects(
+          ownerRequest(endpoint, {
+            action: "start",
+            command: [process.execPath, "-e", "process.exit(1)"],
+          }),
+        ),
       );
       const other = yield* registered("idle-after-failure");
       for (const s of [failing, other]) {
@@ -1156,7 +1166,12 @@ test("INV-01/02: input refused because its Pi is closing records no activity", a
       const endpoint = records(id).find((r) => r.event === "spawn")?.previewOwner;
       assert.ok(endpoint);
       yield* Effect.promise(() =>
-        assert.rejects(ownerRequest(endpoint, { action: "start", command: ["/bin/false"] })),
+        assert.rejects(
+          ownerRequest(endpoint, {
+            action: "start",
+            command: [process.execPath, "-e", "process.exit(1)"],
+          }),
+        ),
       );
       const bumps: string[] = [];
       yield* registry.onChange((before, after) =>

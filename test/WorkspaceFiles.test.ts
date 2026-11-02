@@ -18,7 +18,9 @@ import { downloadWorkspaceFile, place, readWorkspaceFile } from "../server/Works
 import { previewKindByName, previewKindsByExtension } from "../shared/files.ts";
 
 test("file reads accept explicit external paths, stay bounded and never guess another workspace", async () => {
-  const root = await mkdtemp(join(tmpdir(), "piano-files-"));
+  // macOS's temporary directory can be an alias (/var -> /private/var).
+  // Keep this fixture canonical; directory/leaf alias behavior is exercised below.
+  const root = await realpath(await mkdtemp(join(tmpdir(), "piano-files-")));
   try {
     const a = join(root, "a"),
       b = join(root, "b");

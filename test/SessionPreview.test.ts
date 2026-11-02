@@ -93,7 +93,10 @@ const askTool = (session: PiSession, request: object) =>
 /** The session's tool starts an app, as the agent would. */
 const startFromTool = (session: PiSession) =>
   Effect.gen(function* () {
-    yield* askTool(session, { action: "start", command: ["/bin/false"] });
+    yield* askTool(session, {
+      action: "start",
+      command: [process.execPath, "-e", "process.exit(1)"],
+    });
     return (yield* stateWhere(session, (s) => !!s.preview)).preview!;
   });
 
@@ -110,7 +113,7 @@ test("the tool's app reaches the session state; the browser re-observes and stop
       assert.equal(app.state, "failed");
       assert.equal(app.ready, false);
       assert.equal(app.url, null, "an unready app offers nothing to open");
-      assert.deepEqual(app.command, ["/bin/false"]);
+      assert.deepEqual(app.command, [process.execPath, "-e", "process.exit(1)"]);
 
       // Unavailable supervision is unknown: not stopped, and not openable.
       f.host.unavailable = true;
@@ -210,7 +213,7 @@ test("a stale stop after a replacement neither stops nor clears the replacement"
       const first = yield* startFromTool(session);
       yield* session.act({
         _tag: "prompt",
-        text: `preview ${JSON.stringify({ action: "start", replace: first.instanceId, command: ["/bin/false"] })}`,
+        text: `preview ${JSON.stringify({ action: "start", replace: first.instanceId, command: [process.execPath, "-e", "process.exit(1)"] })}`,
       });
       const next = (yield* stateWhere(
         session,
@@ -265,7 +268,7 @@ test("a replacement that fails after stopping the app no longer shows the stoppe
       const reply = yield* askTool(session, {
         action: "start",
         replace: app.instanceId,
-        command: ["/bin/false"],
+        command: [process.execPath, "-e", "process.exit(1)"],
       });
       assert.match(reply, /preview failed: .*No free supported preview port/);
       assert.equal(f.stops.length, 1, "the replaced app was stopped");
@@ -287,14 +290,14 @@ test("a first start whose observation fails shows its app as unknown, and can st
 
       const reply = yield* askTool(session, {
         action: "start",
-        command: ["/bin/false"],
+        command: [process.execPath, "-e", "process.exit(1)"],
       });
       assert.match(reply, /preview failed: .*unavailable/);
       assert.equal(f.launched.length, 1, "the app was submitted");
       const unknown = (yield* session.state).preview;
       assert.equal(unknown?.state, "unknown");
       assert.equal(unknown?.url, null);
-      assert.deepEqual(unknown?.command, ["/bin/false"]);
+      assert.deepEqual(unknown?.command, [process.execPath, "-e", "process.exit(1)"]);
 
       f.host.unavailable = false;
       const stopped = yield* session.act({

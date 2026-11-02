@@ -3,6 +3,7 @@ import { cn } from "cn";
 import {
   type ComponentProps,
   type RefObject,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -132,6 +133,19 @@ export function SlashTextarea({
     : catalog.error
       ? { commands: [], error: catalog.error }
       : undefined;
+  // Discovery still starts immediately and stays scoped to this opening. Only its
+  // presentation waits: fast responses need no loading flash, slow ones get a status row.
+  const pending = open && !current;
+  const [waitingContext, setWaitingContext] = useState<string>();
+  useEffect(() => {
+    if (!pending) {
+      setWaitingContext(undefined);
+      return;
+    }
+    const timer = setTimeout(() => setWaitingContext(key), 150);
+    return () => clearTimeout(timer);
+  }, [pending, key]);
+  const visible = open && (!!current || waitingContext === key);
   const commands = rankCommands(current?.commands ?? [], range?.query ?? "");
   const active = slashActive(state, view, commands.length);
   useLayoutEffect(() => {
@@ -158,7 +172,7 @@ export function SlashTextarea({
   };
   return (
     <Popover
-      open={open}
+      open={visible}
       onOpenChange={(next) => {
         if (!next) update({ type: "dismiss" });
       }}
@@ -172,8 +186,8 @@ export function SlashTextarea({
             role="combobox"
             aria-autocomplete="list"
             aria-haspopup="listbox"
-            aria-expanded={open}
-            aria-controls={open ? id : undefined}
+            aria-expanded={visible}
+            aria-controls={visible ? id : undefined}
             aria-activedescendant={open && commands.length ? `${id}-${active}` : undefined}
             onPointerMove={(event) => {
               const rects = tokenElement.current?.getClientRects();
@@ -265,10 +279,14 @@ export function SlashTextarea({
         </div>
       </PopoverAnchor>
       <PopoverContent
+        still
         side="top"
         align="start"
         role="presentation"
-        className="w-[min(32rem,var(--radix-popover-trigger-width))] max-w-[calc(100vw-2rem)] p-1"
+        className={cn(
+          "max-w-[calc(100vw-2rem)] gap-0 p-1",
+          commands.length ? "w-[min(32rem,var(--radix-popover-trigger-width))]" : "w-auto",
+        )}
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => {

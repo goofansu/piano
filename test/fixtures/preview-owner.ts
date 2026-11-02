@@ -12,7 +12,7 @@ const { adapter } = fakeAdapter(platform, stateRoot, {
   hangOnSubmit: true,
 });
 await adapter.request(
-  { action: "start", workspace, command: ["/bin/false"] },
+  { action: "start", workspace, command: [process.execPath, "-e", "process.exit(1)"] },
   stateRoot,
   {
     origin: "https://test.exe.xyz",
