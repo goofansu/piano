@@ -524,13 +524,20 @@ export function startSession(
               );
               return;
             // `selection_failed` answers an attach; creation fails with `error`. Either way an
-            // admitted request may already have created the session and sent its input.
+            // admitted request may already have created the session and sent its input, unless
+            // the error names that input: its session refused it before Pi saw it.
             case "selection_failed":
-            case "error":
+            case "error": {
+              const verdict = inputVerdictOf(message);
               settle(
-                handle ? result("created", "uncertain", message.message) : unnamed(message.message),
+                handle && verdict && verdict.inputId === inputId
+                  ? result("created", verdict.outcome, verdict.detail)
+                  : handle
+                    ? result("created", "uncertain", message.message)
+                    : unnamed(message.message),
               );
               return;
+            }
             default:
               return;
           }

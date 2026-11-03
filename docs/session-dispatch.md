@@ -76,7 +76,10 @@ port, Piano not running, a connection timeout) or the start was cancelled before
 request was sent. Address `detail` and dispatch again. Once the request may have been sent, a lost
 connection, deadline or cancellation reports `uncertain` instead, and the client never sends it a
 second time. A send that fails on an open socket counts as possibly sent: the socket may already
-have taken the frame.
+have taken the frame. `creation: "created"` with `submission: "not_sent"` means the session exists
+but Piano refused its first prompt before Pi saw it (Pi stopped, or its checkout went, between
+startup and the prompt): the handle names the session, and sending the prompt to it cannot
+duplicate it.
 
 The optional output file is reserved exclusively before network side effects, including against
 concurrent invocations, and kept once creation is attempted, even if the run was interrupted and

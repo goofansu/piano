@@ -21,6 +21,7 @@ import type {
   ClientMessage,
   Dialog,
   ServerMessage,
+  SessionAction,
   SessionPreview,
   WorktreeDiscovery,
 } from "../shared/wire.ts";
@@ -1315,6 +1316,66 @@ test("PIN-132: a follow-up its host refuses while another browser archives the s
       );
       assert.equal(sessionPane(browser.getState()).composerDisabled, true);
       assert.equal(requests().filter((m) => m._tag === "act").length, 1, "nothing is sent again");
+    }),
+  );
+});
+
+test("INV-03: a first message its new session refuses before Pi sees it reads not sent, not uncertain", async () => {
+  await run(
+    Effect.gen(function* () {
+      const requests: ClientMessage[] = [];
+      let handlers: ConnectionHandlers | undefined;
+      const browser = createClient({
+        initial: initialState,
+        connect: (h) => {
+          handlers = h;
+          return {
+            send: (m) => {
+              requests.push(m);
+              return "sent";
+            },
+            close: () => {},
+          };
+        },
+        notify: () => {},
+      });
+      browser.start();
+      handlers!.onStatus(true);
+      const hosts = yield* SessionHosts;
+      // Pi stops between attaching and the first prompt (another client archives the new
+      // session here), so the prompt reaches a host that is closing.
+      const dispatch = yield* makeClientDispatch({
+        send: (m) => Effect.sync(() => handlers!.onMessage(m)),
+        overflow: (e) => Effect.die(e),
+      }).pipe(
+        Effect.provideService(SessionHosts, {
+          ...hosts,
+          create: (spec) =>
+            hosts.create(spec).pipe(
+              Effect.map((session) => ({
+                ...session,
+                act: (action: SessionAction) =>
+                  hosts
+                    .archive(session.spec.cwd, session.spec.sessionId)
+                    .pipe(Effect.orDie, Effect.andThen(session.act(action))),
+              })),
+            ),
+        }),
+      );
+      const errors: ServerMessage[] = [];
+      browser.listen((m) => {
+        if (m._tag === "error") errors.push(m);
+      });
+      browser.send({ _tag: "create_session", cwd, options: {}, text: "Reply with exactly: X" });
+      const create = requests.find((m) => m._tag === "create_session");
+      assert.ok(create?._tag === "create_session");
+      yield* yield* dispatch.receive(create);
+      assert.deepEqual(
+        errors.map((m) => m._tag === "error" && m.inputId),
+        [create.selectionId],
+        "the refusal names the first message",
+      );
+      assert.equal(browser.getState().pendingCreate?.outcome, "not_sent");
     }),
   );
 });

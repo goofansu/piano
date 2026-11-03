@@ -82,7 +82,7 @@ interface ClientSessions {
    */
   readonly create: (
     request: CreateSessionRequest & { readonly selectionId: string },
-  ) => Effect.Effect<Effect.Effect<void, PiSessionError | SessionNotCreated>>;
+  ) => Effect.Effect<Effect.Effect<void, PiSessionError | SessionNotCreated | InputNotSent>>;
   /**
    * Sends `action` to the selected session, starting it with `start` when it is not running,
    * and delivers any `action_result`. Never creates a session. Reuse the current select or
@@ -322,6 +322,20 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     return launched ? session : yield* applyChoices(session, options);
   });
 
+  // Sends `action` to a host. A host that refuses an input before Pi sees it (closing for an
+  // archive another client asked for or Pi's exit, a checkout that went) names it, for a
+  // follow-up and a new session's first message alike.
+  const deliver = (session: PiSession, action: SessionAction) =>
+    session
+      .act(action)
+      .pipe(
+        Effect.mapError((cause) =>
+          "inputId" in action && action.inputId !== undefined && cause.notSent
+            ? new InputNotSent({ inputId: action.inputId, detail: cause.detail, cause })
+            : cause,
+        ),
+      );
+
   const act = Effect.fn("ClientSessions.act")(function* (
     selectionId: string,
     action: SessionAction,
@@ -339,17 +353,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         inputId === undefined ? cause : new InputNotSent({ inputId, detail: cause.detail, cause }),
       ),
     );
-    // A host that refuses the input before Pi sees it (closing for an archive another client
-    // asked for, a checkout that went) names it too.
-    const result = yield* session
-      .act(action)
-      .pipe(
-        Effect.mapError((cause) =>
-          inputId !== undefined && cause.notSent
-            ? new InputNotSent({ inputId, detail: cause.detail, cause })
-            : cause,
-        ),
-      );
+    const result = yield* deliver(session, action);
     if (result)
       yield* send({
         _tag: "action_result",
@@ -429,7 +433,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     const trimmed = text?.trim() ?? "";
     if (!trimmed && !attachments?.length) return;
     // Sent only once this client has attached, so it observes the prompt.
-    yield* session.act({ _tag: "prompt", text: trimmed, attachments, inputId: selectionId });
+    yield* deliver(session, { _tag: "prompt", text: trimmed, attachments, inputId: selectionId });
   });
 
   return {

@@ -1,11 +1,14 @@
+import type { RenderMsg, ServerMessage, Snapshot } from "@shared/wire";
 /**
  * The browser's record of a session's first message, from the moment it is sent until Pi's own
  * submission supersedes it. It covers failures Pi never sees (a rejected selection, a lost
  * connection) and is never part of Pi's transcript or the registry (INV-01). The store decides
  * when each transition applies; this module decides what each one does to the record.
  */
-import type { RenderMsg, Snapshot } from "@shared/wire";
+import { inputVerdictOf } from "../../../shared/inputVerdict.ts";
 import { type SubmissionPhase, submissionPhase } from "./submissionReceipt.ts";
+
+type ErrorFrame = Extract<ServerMessage, { _tag: "error" }>;
 
 /** Browser-only submitted input, never part of Pi's transcript or registry. */
 export interface PendingCreate {
@@ -42,11 +45,14 @@ export const rejected = (
 ): PendingCreate | null =>
   input?.selectionId === selectionId ? { ...input, outcome: "rejected", detail } : input;
 
-/** An error on the first message's selection: it may or may not have reached Pi. */
-export const failed = (input: PendingCreate, detail: string): PendingCreate => ({
+/**
+ * An error on the first message's selection. One naming the message says Piano refused it before
+ * Pi saw it; any other may follow its delivery, so whether it reached Pi is unknown.
+ */
+export const failed = (input: PendingCreate, error: ErrorFrame): PendingCreate => ({
   ...input,
-  outcome: "uncertain",
-  detail,
+  outcome: inputVerdictOf(error)?.inputId === input.selectionId ? "not_sent" : "uncertain",
+  detail: error.message,
 });
 
 /**
@@ -72,7 +78,8 @@ export function reconcile(
   if (phase === "submitted") return { ...input, outcome: phase, detail: undefined };
   if (phase && phase !== "submitting")
     return { ...input, outcome: phase, detail: submission?.detail };
-  if (session.state.closure && input.outcome !== "submitted")
+  // A closure leaves a delivered message's fate unknown; one Piano refused unsent stays unsent.
+  if (session.state.closure && input.outcome !== "submitted" && input.outcome !== "not_sent")
     return { ...input, outcome: "uncertain", detail: session.state.closure.detail };
   return input;
 }
