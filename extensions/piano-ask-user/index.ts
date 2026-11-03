@@ -1,34 +1,40 @@
-import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 /** Model-initiated questions through Pi's supported dialogs; Piano owns the answer surface. */
-import { type Static, Type } from "typebox";
+import { StringEnum } from "@earendil-works/pi-ai";
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { arr, map, obj, opt, type Static, str } from "@earendil-works/pi-schema";
 import { ASK_USER_TOOL, askUserPrompt, askUserQuestions } from "../../shared/askUser.ts";
 
-const Parameters = Type.Object({
-  questions: Type.Array(
-    Type.Object({
-      id: Type.String({
-        minLength: 1,
-        description: "Unique ID used to key this question's answer",
-      }),
-      question: Type.String({ minLength: 1, description: "Question, including essential context" }),
-      options: Type.Optional(
-        Type.Array(Type.String({ minLength: 1 }), {
-          minItems: 1,
-          uniqueItems: true,
-          description: "Choices for a single selection; omit for a free-text answer",
-        }),
+/** Objects accept fields they do not declare, as the TypeBox schemas these replaced did. */
+const open = { open: true } as const;
+const Parameters = obj(
+  {
+    questions: arr(
+      obj(
+        {
+          id: str({ minLength: 1, description: "Unique ID used to key this question's answer" }),
+          question: str({ minLength: 1, description: "Question, including essential context" }),
+          options: opt(
+            arr(str({ minLength: 1 }), {
+              minItems: 1,
+              uniqueItems: true,
+              description: "Choices for a single selection; omit for a free-text answer",
+            }),
+          ),
+        },
+        open,
       ),
-    }),
-    {
-      minItems: 1,
-      description: "Questions in presentation order; use one item for a single question",
-    },
-  ),
-});
-const Output = Type.Object({
-  status: Type.Union([Type.Literal("answered"), Type.Literal("cancelled")]),
-  answers: Type.Record(Type.String(), Type.String()),
-});
+      {
+        minItems: 1,
+        description: "Questions in presentation order; use one item for a single question",
+      },
+    ),
+  },
+  open,
+);
+const Output = obj(
+  { status: StringEnum(["answered", "cancelled"] as const), answers: map(str()) },
+  open,
+);
 
 export default function pianoAskUser(pi: ExtensionAPI) {
   pi.registerTool(
@@ -44,7 +50,7 @@ export default function pianoAskUser(pi: ExtensionAPI) {
       parameters: Parameters,
       outputSchema: Output,
       executionMode: "sequential",
-      async execute(_id, { questions }, signal, _update, ctx) {
+      async execute(_id, { questions }: Static<typeof Parameters>, signal, _update, ctx) {
         // Validate the entire batch before collecting any answers: IDs must never overwrite one another.
         // The same rule Piano reads the call's records by, so a batch it accepts is one Piano tracks.
         if (!questions.length) throw new Error("At least one question is required.");
