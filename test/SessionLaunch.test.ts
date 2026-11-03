@@ -108,26 +108,29 @@ test("a session link opens from the listener's own origin unless an HTTPS one is
   assert.equal(sessionLinkOrigin(proxied, { host: "::1", port: 7070 }), "https://piano.example");
 });
 
-test("a running Piano launches Pi with its extensions and a usable endpoint", {
-  timeout: 60_000,
-}, async () => {
-  const root = mkdtempSync(join(tmpdir(), "piano-launch-"));
-  const reservation = createServer();
-  reservation.listen(0, "127.0.0.1");
-  await once(reservation, "listening");
-  const address = reservation.address();
-  assert.ok(address && typeof address !== "string");
-  const port = address.port;
-  await new Promise<void>((resolve) => reservation.close(() => resolve()));
-  const base = `http://127.0.0.1:${port}`;
-  const proxy = "https://piano.example";
+test(
+  "a running Piano launches Pi with its extensions and a usable endpoint",
+  {
+    timeout: 60_000,
+  },
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), "piano-launch-"));
+    const reservation = createServer();
+    reservation.listen(0, "127.0.0.1");
+    await once(reservation, "listening");
+    const address = reservation.address();
+    assert.ok(address && typeof address !== "string");
+    const port = address.port;
+    await new Promise<void>((resolve) => reservation.close(() => resolve()));
+    const base = `http://127.0.0.1:${port}`;
+    const proxy = "https://piano.example";
 
-  // Records how Piano launched Pi, then behaves as the fake Pi the probe talks to.
-  const captured = join(root, "launch.jsonl");
-  const shim = join(root, "pi-cli.mjs");
-  writeFileSync(
-    shim,
-    `import { appendFileSync } from "node:fs";
+    // Records how Piano launched Pi, then behaves as the fake Pi the probe talks to.
+    const captured = join(root, "launch.jsonl");
+    const shim = join(root, "pi-cli.mjs");
+    writeFileSync(
+      shim,
+      `import { appendFileSync } from "node:fs";
 appendFileSync(${JSON.stringify(captured)}, JSON.stringify({
   argv: process.argv.slice(2),
   wsUrl: process.env.PIANO_SESSION_WS_URL ?? null,
@@ -135,97 +138,98 @@ appendFileSync(${JSON.stringify(captured)}, JSON.stringify({
 }) + "\\n");
 await import(${JSON.stringify(pathToFileURL(new URL("fake-pi.mjs", import.meta.url).pathname).href)});
 `,
-  );
-
-  const child = spawn(process.execPath, ["server/main.ts"], {
-    cwd: new URL("..", import.meta.url),
-    env: {
-      ...process.env,
-      HOST: "127.0.0.1",
-      PORT: String(port),
-      PIANO_DB_PATH: join(root, "registry.db"),
-      PI_CODING_AGENT_DIR: join(root, "agent"),
-      PI_CODING_AGENT_SESSION_DIR: join(root, "sessions"),
-      // The listener's origin is listed first to show the HTTPS origin a link opens from wins.
-      PIANO_ALLOWED_ORIGINS: `${base},${proxy}`,
-      PIANO_PI_CLI: shim,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let logs = "";
-  child.stdout.on("data", (chunk) => {
-    logs += chunk;
-  });
-  child.stderr.on("data", (chunk) => {
-    logs += chunk;
-  });
-  try {
-    const deadline = Date.now() + 30_000;
-    for (;;) {
-      try {
-        if ((await fetch(`${base}/api/folders`)).ok) break;
-      } catch {
-        /* startup */
-      }
-      assert.ok(Date.now() < deadline && child.exitCode === null, logs);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-
-    // Any request that needs Pi's facts spawns a child; the commands probe is the cheapest.
-    const commands = await fetch(`${base}/api/commands`, {
-      method: "POST",
-      headers: { origin: base, "content-type": "application/json" },
-      body: JSON.stringify({ cwd: root }),
-    });
-    assert.equal(commands.status, 200, logs);
-    assert.ok(existsSync(captured), `Pi was never spawned: ${logs}`);
-
-    const launch = JSON.parse(readFileSync(captured, "utf8").split("\n")[0]) as {
-      argv: string[];
-      wsUrl: string | null;
-      origin: string | null;
-    };
-    const leading = [
-      "--mode",
-      "rpc",
-      ...defaultPiCli().extensions!.flatMap((path) => ["--extension", path]),
-    ];
-    assert.deepEqual(
-      launch.argv.slice(0, leading.length),
-      leading,
-      "the extensions load before the session arguments",
     );
-    assert.equal(launch.wsUrl, `ws://127.0.0.1:${port}/ws`);
-    assert.equal(launch.origin, proxy, "a `/s/<id>` link must open from a remote browser");
 
-    // The handed values must actually work: Node's built-in WebSocket can set Origin through
-    // undici's `headers` option, which the installed types do not describe.
-    const socket = new WebSocket(launch.wsUrl, {
-      headers: { Origin: launch.origin },
-    } as unknown as string[]);
-    const opened = await Promise.race([
-      once(socket, "open").then(() => "open" as const),
-      once(socket, "error").then(() => "error" as const),
-    ]);
-    socket.close();
-    assert.equal(opened, "open", "the endpoint Piano hands a child passes its own origin check");
+    const child = spawn(process.execPath, ["server/main.ts"], {
+      cwd: new URL("..", import.meta.url),
+      env: {
+        ...process.env,
+        HOST: "127.0.0.1",
+        PORT: String(port),
+        PIANO_DB_PATH: join(root, "registry.db"),
+        PI_CODING_AGENT_DIR: join(root, "agent"),
+        PI_CODING_AGENT_SESSION_DIR: join(root, "sessions"),
+        // The listener's origin is listed first to show the HTTPS origin a link opens from wins.
+        PIANO_ALLOWED_ORIGINS: `${base},${proxy}`,
+        PIANO_PI_CLI: shim,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let logs = "";
+    child.stdout.on("data", (chunk) => {
+      logs += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      logs += chunk;
+    });
+    try {
+      const deadline = Date.now() + 30_000;
+      for (;;) {
+        try {
+          if ((await fetch(`${base}/api/folders`)).ok) break;
+        } catch {
+          /* startup */
+        }
+        assert.ok(Date.now() < deadline && child.exitCode === null, logs);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
 
-    // And the policy is still closed: the endpoint borrows an origin, it does not add one.
-    const rejected = new WebSocket(launch.wsUrl, {
-      headers: { Origin: "https://evil.example" },
-    } as unknown as string[]);
-    const outcome = await Promise.race([
-      once(rejected, "open").then(() => "open" as const),
-      once(rejected, "error").then(() => "error" as const),
-    ]);
-    rejected.close();
-    assert.equal(outcome, "error");
-  } finally {
-    const exited = once(child, "exit");
-    child.kill("SIGTERM");
-    const force = setTimeout(() => child.kill("SIGKILL"), 5000);
-    if (child.exitCode === null) await exited;
-    clearTimeout(force);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
+      // Any request that needs Pi's facts spawns a child; the commands probe is the cheapest.
+      const commands = await fetch(`${base}/api/commands`, {
+        method: "POST",
+        headers: { origin: base, "content-type": "application/json" },
+        body: JSON.stringify({ cwd: root }),
+      });
+      assert.equal(commands.status, 200, logs);
+      assert.ok(existsSync(captured), `Pi was never spawned: ${logs}`);
+
+      const launch = JSON.parse(readFileSync(captured, "utf8").split("\n")[0]) as {
+        argv: string[];
+        wsUrl: string | null;
+        origin: string | null;
+      };
+      const leading = [
+        "--mode",
+        "rpc",
+        ...defaultPiCli().extensions!.flatMap((path) => ["--extension", path]),
+      ];
+      assert.deepEqual(
+        launch.argv.slice(0, leading.length),
+        leading,
+        "the extensions load before the session arguments",
+      );
+      assert.equal(launch.wsUrl, `ws://127.0.0.1:${port}/ws`);
+      assert.equal(launch.origin, proxy, "a `/s/<id>` link must open from a remote browser");
+
+      // The handed values must actually work: Node's built-in WebSocket can set Origin through
+      // undici's `headers` option, which the installed types do not describe.
+      const socket = new WebSocket(launch.wsUrl, {
+        headers: { Origin: launch.origin },
+      } as unknown as string[]);
+      const opened = await Promise.race([
+        once(socket, "open").then(() => "open" as const),
+        once(socket, "error").then(() => "error" as const),
+      ]);
+      socket.close();
+      assert.equal(opened, "open", "the endpoint Piano hands a child passes its own origin check");
+
+      // And the policy is still closed: the endpoint borrows an origin, it does not add one.
+      const rejected = new WebSocket(launch.wsUrl, {
+        headers: { Origin: "https://evil.example" },
+      } as unknown as string[]);
+      const outcome = await Promise.race([
+        once(rejected, "open").then(() => "open" as const),
+        once(rejected, "error").then(() => "error" as const),
+      ]);
+      rejected.close();
+      assert.equal(outcome, "error");
+    } finally {
+      const exited = once(child, "exit");
+      child.kill("SIGTERM");
+      const force = setTimeout(() => child.kill("SIGKILL"), 5000);
+      if (child.exitCode === null) await exited;
+      clearTimeout(force);
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);

@@ -89,6 +89,8 @@ export function useVirtualTranscript(
     };
   }, [container, viewport, virtual]);
 
+  // Measure after every render; setMargin bails out when the offset is unchanged.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const el = container.current;
     const inner = list.current;

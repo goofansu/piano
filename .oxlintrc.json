@@ -1,0 +1,49 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "react-hooks/exhaustive-deps": "error",
+    // `const { omitted, ...rest } = value` is how Piano drops a field.
+    "no-unused-vars": [
+      "error",
+      { "ignoreRestSiblings": true, "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+    ],
+    // `for (const f of [...listeners])` snapshots a set that its callbacks may change.
+    "unicorn/no-useless-spread": "off",
+    // Focus moves into the field a person just opened: a dialog or a new form.
+    "jsx-a11y/no-autofocus": "off",
+    // Not in jsx-a11y's recommended set, and it misreads table cells as controls.
+    "jsx-a11y/control-has-associated-label": "off",
+    // React Compiler rules. Piano does not build with the React Compiler.
+    "react/refs": "off",
+    "react/set-state-in-effect": "off",
+    "react/immutability": "off",
+    "react/purity": "off",
+    "react/incompatible-library": "off",
+    // Not in jsx-a11y's recommended set: ARIA roles on divs are deliberate here (live status
+    // regions, virtualised list rows, splitters).
+    "jsx-a11y/prefer-tag-over-role": "off"
+  },
+  // Upstream shadcn source. web/src/components/ui has its own config.
+  "ignorePatterns": ["web/src/hooks/use-mobile.ts"],
+  "overrides": [
+    {
+      // Effect's `HttpRouter.use` is not a React hook.
+      "files": ["server/**", "shared/**", "extensions/**", "scripts/**", "test/**"],
+      "rules": {
+        "react-hooks/rules-of-hooks": "off"
+      }
+    },
+    {
+      "files": ["web/src/**/*.{ts,tsx}"],
+      "jsPlugins": ["@shadcn/lint"],
+      "rules": {
+        // shadcn's Sonner wrapper uses this as a non-utility marker.
+        "shadcn/no-unknown-classes": ["error", { "allow": ["toaster"] }]
+      }
+    }
+  ]
+}

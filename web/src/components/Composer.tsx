@@ -184,7 +184,7 @@ export function Composer({
               <ol className="flex min-h-0 max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
                 {queuedMessages.map((message, index) => (
                   <li
-                    // biome-ignore lint/suspicious/noArrayIndexKey: Pi queues carry only text, which may repeat.
+                    // Index keys: Pi queues carry only text, which may repeat.
                     key={`${message.kind}-${index}`}
                     className="flex min-w-0 flex-col gap-1"
                   >
@@ -280,7 +280,7 @@ export function Composer({
         }
       />
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums">
-        {/* biome-ignore lint/a11y/useSemanticElements: a <fieldset> brings form semantics and min-content sizing to a row of status buttons. */}
+        {/* role=group, not a <fieldset>: a <fieldset> brings form semantics and min-content sizing to a row of status buttons. */}
         <div
           className="ml-auto flex shrink-0 items-center gap-1 md:gap-2"
           role="group"

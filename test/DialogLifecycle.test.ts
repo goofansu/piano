@@ -138,136 +138,159 @@ test("INV-04: competing tabs claim one supported dialog before writing; late att
   );
 });
 
-test("INV-04: estimated timeout survives attachment, rejects expired answers, and races answers only once", {
-  timeout: 10_000,
-}, async () => {
-  await run(
-    Effect.gen(function* () {
-      const session = yield* (yield* PiSessions).open({
-        cwd: process.cwd(),
-        sessionId: "dialog-timeout",
-      });
-      const first = yield* openDialog(session, "/dialog input 1000");
-      assert.equal(first.dialog.timeoutMs, 1000);
-      assert.equal(first.dialog.deadlineKind, "pi-timeout", "Pi's timeout precedes host recovery");
-      assert.equal(first.dialog.deadlineAt! - first.dialog.receivedAt, 1000);
-      yield* TestClock.adjust(400);
-      assert.equal(
-        (yield* snapshot(session)).dialogs[0].deadlineAt,
-        first.dialog.deadlineAt,
-        "reload cannot reset the original host estimate",
-      );
-      const expired = yield* watch(session, (e) => e._tag === "dialog_resolved");
-      yield* TestClock.adjust(600);
-      yield* Fiber.join(expired);
-      assert.equal((yield* session.act(answer(first.dialog)).pipe(Effect.result))._tag, "Failure");
-      assert.deepEqual(
-        yield* audit(session),
-        [],
-        "Pi owns advertised timeout; the host sends no answer after its estimate",
-      );
-      assert.equal((yield* session.state).dialogResolution?.reason, "expired");
-      assert.equal((yield* session.state).dialogResolution?.answer, undefined);
-      assert.deepEqual((yield* snapshot(session)).dialogs, []);
-      // Controlled competition at the deadline: either answer or timeout may win,
-      // but Pi must never receive two responses and late attachment stays closed.
-      const second = yield* openDialog(session, "/dialog input 1000");
-      yield* Effect.all(
-        [session.act(answer(second.dialog)).pipe(Effect.result), TestClock.adjust(1000)],
-        { concurrency: "unbounded" },
-      );
-      assert.ok(
-        (yield* audit(session)).filter((record) => record.id === second.dialog.id).length <= 1,
-      );
-      assert.deepEqual((yield* snapshot(session)).dialogs, []);
-    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
-  );
-});
-
-test("INV-04: a dialog's ending is reported until the next run starts; a rejected answer outlives it", {
-  timeout: 10_000,
-}, async () => {
-  await run(
-    Effect.gen(function* () {
-      const session = yield* (yield* PiSessions).open({
-        cwd: process.cwd(),
-        sessionId: "dialog-receipt-lifetime",
-      });
-      const { dialog } = yield* openDialog(session, "/dialog input 1000");
-      const expired = yield* watch(session, (e) => e._tag === "dialog_resolved");
-      yield* TestClock.adjust(1000);
-      yield* Fiber.join(expired);
-      yield* audit(session); // a command that starts no run leaves the report in place
-      const ending = (yield* snapshot(session)).state.dialogResolution;
-      assert.equal(ending?.id, dialog.id);
-      assert.equal(ending?.reason, "expired");
-      // The fake opens a dialog once the run has started.
-      const started = yield* watch(session, (e) => e._tag === "dialog");
-      yield* session.act({ _tag: "prompt", text: "/new-turn" });
-      yield* Fiber.join(started);
-      assert.equal(
-        (yield* snapshot(session)).state.dialogResolution,
-        undefined,
-        "an ending from an earlier run never sits under a later one",
-      );
-
-      const kept = yield* (yield* PiSessions).open({
-        cwd: process.cwd(),
-        sessionId: "dialog-receipt-kept",
-      });
-      const question = yield* openDialog(kept, "/ask drop");
-      const rejected = yield* watch(kept, receipt(question.dialog.id, "rejected"));
-      yield* kept.act(answer(question.dialog));
-      yield* Fiber.join(rejected);
-      const next = yield* watch(kept, (e) => e._tag === "dialog");
-      yield* kept.act({ _tag: "prompt", text: "/new-turn" });
-      yield* Fiber.join(next);
-      const after = (yield* snapshot(kept)).state.dialogResolution;
-      assert.equal(after?.delivery, "rejected", "an answer Pi did not store stays with its words");
-      assert.equal(after?.answer?.value, "A");
-    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
-  );
-});
-
-test("INV-04: invisible extension cancellation is bounded by an explicit host recovery policy", {
-  timeout: 10_000,
-}, async () => {
-  await run(
-    Effect.gen(function* () {
-      const session = yield* (yield* PiSessions).open({
-        cwd: process.cwd(),
-        sessionId: "dialog-recovery",
-      });
-      // Without a Pi timeout, and with one later than the policy, host recovery bounds the dialog.
-      for (const text of ["/dialog input", "/dialog input 120000"]) {
-        const { dialog, prompt } = yield* openDialog(session, text);
-        assert.equal(dialog.deadlineKind, "host-recovery");
-        assert.equal(dialog.deadlineAt! - dialog.receivedAt, 2000);
-        const resolved = yield* watch(
-          session,
-          (e) =>
-            e._tag === "state" &&
-            e.state.dialogResolution?.id === dialog.id &&
-            e.state.dialogResolution.delivery === "written",
+test(
+  "INV-04: estimated timeout survives attachment, rejects expired answers, and races answers only once",
+  {
+    timeout: 10_000,
+  },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const session = yield* (yield* PiSessions).open({
+          cwd: process.cwd(),
+          sessionId: "dialog-timeout",
+        });
+        const first = yield* openDialog(session, "/dialog input 1000");
+        assert.equal(first.dialog.timeoutMs, 1000);
+        assert.equal(
+          first.dialog.deadlineKind,
+          "pi-timeout",
+          "Pi's timeout precedes host recovery",
         );
-        yield* TestClock.adjust(2000);
-        yield* Fiber.join(resolved);
-        yield* Fiber.join(prompt);
+        assert.equal(first.dialog.deadlineAt! - first.dialog.receivedAt, 1000);
+        yield* TestClock.adjust(400);
+        assert.equal(
+          (yield* snapshot(session)).dialogs[0].deadlineAt,
+          first.dialog.deadlineAt,
+          "reload cannot reset the original host estimate",
+        );
+        const expired = yield* watch(session, (e) => e._tag === "dialog_resolved");
+        yield* TestClock.adjust(600);
+        yield* Fiber.join(expired);
+        assert.equal(
+          (yield* session.act(answer(first.dialog)).pipe(Effect.result))._tag,
+          "Failure",
+        );
         assert.deepEqual(
-          (yield* audit(session)).filter((record) => record.id === dialog.id),
-          [{ type: "extension_ui_response", id: dialog.id, cancelled: true }],
+          yield* audit(session),
+          [],
+          "Pi owns advertised timeout; the host sends no answer after its estimate",
         );
-        assert.equal((yield* session.state).dialogResolution?.reason, "recovery");
+        assert.equal((yield* session.state).dialogResolution?.reason, "expired");
         assert.equal((yield* session.state).dialogResolution?.answer, undefined);
         assert.deepEqual((yield* snapshot(session)).dialogs, []);
-      }
-    }).pipe(
-      Effect.scoped,
-      Effect.provide(TestClock.layer()),
-      Effect.provideService(PiDialogRecoveryMs, 2000),
-    ),
-  );
-});
+        // Controlled competition at the deadline: either answer or timeout may win,
+        // but Pi must never receive two responses and late attachment stays closed.
+        const second = yield* openDialog(session, "/dialog input 1000");
+        yield* Effect.all(
+          [session.act(answer(second.dialog)).pipe(Effect.result), TestClock.adjust(1000)],
+          { concurrency: "unbounded" },
+        );
+        assert.ok(
+          (yield* audit(session)).filter((record) => record.id === second.dialog.id).length <= 1,
+        );
+        assert.deepEqual((yield* snapshot(session)).dialogs, []);
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    );
+  },
+);
+
+test(
+  "INV-04: a dialog's ending is reported until the next run starts; a rejected answer outlives it",
+  {
+    timeout: 10_000,
+  },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const session = yield* (yield* PiSessions).open({
+          cwd: process.cwd(),
+          sessionId: "dialog-receipt-lifetime",
+        });
+        const { dialog } = yield* openDialog(session, "/dialog input 1000");
+        const expired = yield* watch(session, (e) => e._tag === "dialog_resolved");
+        yield* TestClock.adjust(1000);
+        yield* Fiber.join(expired);
+        yield* audit(session); // a command that starts no run leaves the report in place
+        const ending = (yield* snapshot(session)).state.dialogResolution;
+        assert.equal(ending?.id, dialog.id);
+        assert.equal(ending?.reason, "expired");
+        // The fake opens a dialog once the run has started.
+        const started = yield* watch(session, (e) => e._tag === "dialog");
+        yield* session.act({ _tag: "prompt", text: "/new-turn" });
+        yield* Fiber.join(started);
+        assert.equal(
+          (yield* snapshot(session)).state.dialogResolution,
+          undefined,
+          "an ending from an earlier run never sits under a later one",
+        );
+
+        const kept = yield* (yield* PiSessions).open({
+          cwd: process.cwd(),
+          sessionId: "dialog-receipt-kept",
+        });
+        const question = yield* openDialog(kept, "/ask drop");
+        const rejected = yield* watch(kept, receipt(question.dialog.id, "rejected"));
+        yield* kept.act(answer(question.dialog));
+        yield* Fiber.join(rejected);
+        const next = yield* watch(kept, (e) => e._tag === "dialog");
+        yield* kept.act({ _tag: "prompt", text: "/new-turn" });
+        yield* Fiber.join(next);
+        const after = (yield* snapshot(kept)).state.dialogResolution;
+        assert.equal(
+          after?.delivery,
+          "rejected",
+          "an answer Pi did not store stays with its words",
+        );
+        assert.equal(after?.answer?.value, "A");
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    );
+  },
+);
+
+test(
+  "INV-04: invisible extension cancellation is bounded by an explicit host recovery policy",
+  {
+    timeout: 10_000,
+  },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const session = yield* (yield* PiSessions).open({
+          cwd: process.cwd(),
+          sessionId: "dialog-recovery",
+        });
+        // Without a Pi timeout, and with one later than the policy, host recovery bounds the dialog.
+        for (const text of ["/dialog input", "/dialog input 120000"]) {
+          const { dialog, prompt } = yield* openDialog(session, text);
+          assert.equal(dialog.deadlineKind, "host-recovery");
+          assert.equal(dialog.deadlineAt! - dialog.receivedAt, 2000);
+          const resolved = yield* watch(
+            session,
+            (e) =>
+              e._tag === "state" &&
+              e.state.dialogResolution?.id === dialog.id &&
+              e.state.dialogResolution.delivery === "written",
+          );
+          yield* TestClock.adjust(2000);
+          yield* Fiber.join(resolved);
+          yield* Fiber.join(prompt);
+          assert.deepEqual(
+            (yield* audit(session)).filter((record) => record.id === dialog.id),
+            [{ type: "extension_ui_response", id: dialog.id, cancelled: true }],
+          );
+          assert.equal((yield* session.state).dialogResolution?.reason, "recovery");
+          assert.equal((yield* session.state).dialogResolution?.answer, undefined);
+          assert.deepEqual((yield* snapshot(session)).dialogs, []);
+        }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(TestClock.layer()),
+        Effect.provideService(PiDialogRecoveryMs, 2000),
+      ),
+    );
+  },
+);
 
 test("INV-02/04: abort releases pre-ack command dialogs, cancels arrivals, and a late abort cannot clear a new turn", async () => {
   await run(
@@ -399,48 +422,56 @@ test("INV-04: broken stdin is delivery-uncertain, never silently reopened or ret
   );
 });
 
-test("a question its tool call owns survives the recovery limit and reconnect; competing tabs send once; only the stored result accepts", {
-  timeout: 15_000,
-}, async () => {
-  await run(
-    Effect.gen(function* () {
-      const session = yield* (yield* PiSessions).open({
-        cwd: process.cwd(),
-        sessionId: "owned-race",
-      });
-      const { dialog, prompt } = yield* openDialog(session, "/ask hold");
-      yield* Fiber.join(prompt);
-      assert.equal(dialog.toolCallId, "call1", "the running ask_user call owns the question");
-      assert.equal(dialog.deadlineAt, null);
-      assert.equal(dialog.deadlineKind, "tool-end");
-      yield* TestClock.adjust(20 * 60_000);
-      assert.deepEqual(
-        (yield* snapshot(session)).dialogs,
-        [dialog],
-        "reattachment after twenty minutes still offers the same question",
-      );
-      const written = yield* watch(session, receipt(dialog.id, "written"));
-      const outcomes = yield* Effect.all(
-        [
-          session.act(answer(dialog)).pipe(Effect.result),
-          session.act({ ...answer(dialog), value: "B" }).pipe(Effect.result),
-        ],
-        { concurrency: "unbounded" },
-      );
-      assert.equal(outcomes.filter((outcome) => outcome._tag === "Success").length, 1);
-      const sent = yield* audit(session);
-      assert.equal(sent.length, 1);
-      yield* Fiber.join(written);
-      const pending = (yield* snapshot(session)).state.dialogResolution;
-      assert.equal(pending?.delivery, "written", "a successful write is not acceptance");
-      assert.equal(pending?.answer?.value, sent[0].value, "the written answer stays visible");
-      const accepted = yield* watch(session, receipt(dialog.id, "accepted"));
-      yield* session.act({ _tag: "prompt", text: "/end-held" });
-      yield* Fiber.join(accepted);
-      assert.equal((yield* audit(session)).length, 1, "the tool's end confirms; nothing is resent");
-    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
-  );
-});
+test(
+  "a question its tool call owns survives the recovery limit and reconnect; competing tabs send once; only the stored result accepts",
+  {
+    timeout: 15_000,
+  },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const session = yield* (yield* PiSessions).open({
+          cwd: process.cwd(),
+          sessionId: "owned-race",
+        });
+        const { dialog, prompt } = yield* openDialog(session, "/ask hold");
+        yield* Fiber.join(prompt);
+        assert.equal(dialog.toolCallId, "call1", "the running ask_user call owns the question");
+        assert.equal(dialog.deadlineAt, null);
+        assert.equal(dialog.deadlineKind, "tool-end");
+        yield* TestClock.adjust(20 * 60_000);
+        assert.deepEqual(
+          (yield* snapshot(session)).dialogs,
+          [dialog],
+          "reattachment after twenty minutes still offers the same question",
+        );
+        const written = yield* watch(session, receipt(dialog.id, "written"));
+        const outcomes = yield* Effect.all(
+          [
+            session.act(answer(dialog)).pipe(Effect.result),
+            session.act({ ...answer(dialog), value: "B" }).pipe(Effect.result),
+          ],
+          { concurrency: "unbounded" },
+        );
+        assert.equal(outcomes.filter((outcome) => outcome._tag === "Success").length, 1);
+        const sent = yield* audit(session);
+        assert.equal(sent.length, 1);
+        yield* Fiber.join(written);
+        const pending = (yield* snapshot(session)).state.dialogResolution;
+        assert.equal(pending?.delivery, "written", "a successful write is not acceptance");
+        assert.equal(pending?.answer?.value, sent[0].value, "the written answer stays visible");
+        const accepted = yield* watch(session, receipt(dialog.id, "accepted"));
+        yield* session.act({ _tag: "prompt", text: "/end-held" });
+        yield* Fiber.join(accepted);
+        assert.equal(
+          (yield* audit(session)).length,
+          1,
+          "the tool's end confirms; nothing is resent",
+        );
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    );
+  },
+);
 
 test("the next question of a batch accepts the previous answer; the batch result accepts the last", async () => {
   await run(

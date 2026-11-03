@@ -87,7 +87,7 @@ export const withProviderAuth = (
   url: string,
   provider: string,
 ): McpServerConfig => {
-  const next: McpServerConfig = { ...(config ?? {}), url, auth: { provider } };
+  const next: McpServerConfig = { ...config, url, auth: { provider } };
   if ("url" in next) {
     delete next.oauth;
     if (next.headers)

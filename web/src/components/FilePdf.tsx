@@ -51,7 +51,7 @@ export default function FilePdf({ bytes }: { bytes: Uint8Array }) {
     );
     return () => clearTimeout(timer);
   }, [pages, error]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: page/error mark release of the current Page, even before the next Page loads.
+  // Extra dependencies: page/error mark release of the current Page, even before the next Page loads.
   useEffect(() => {
     return () => {
       loadedPage.current?.cleanup();

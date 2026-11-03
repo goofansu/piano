@@ -20,7 +20,6 @@ import {
   SettingsSkeleton,
   settingsRow,
 } from "@/components/SettingsSectionFrame";
-import { UserSkillSettings } from "@/components/UserSkillSettings";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -38,6 +37,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UserSkillSettings } from "@/components/UserSkillSettings";
 import { WebhookSettings } from "@/components/WebhookSettings";
 import { providersSettingsView } from "@/lib/providersSettingsView";
 import {

@@ -207,137 +207,149 @@ const seed = (path: string, id: string, name: string) => {
   return file;
 };
 
-test("INV-01/03: last-known statistics survive host and registry restart without copying history", {
-  timeout: 15000,
-}, async () => {
-  const id = "saved-stats",
-    statsFile = join(root, "stats.json");
-  const stats = {
-    cost: 1.23,
-    tokens: { input: 100, output: 20, cacheRead: 30, cacheWrite: 0, total: 150 },
-    contextUsage: { tokens: 50, contextWindow: 1000, percent: 5 },
-  };
-  writeFileSync(statsFile, JSON.stringify(stats));
-  const file = seed(alias, id, "authoritative history"),
-    before = readFileSync(file, "utf8");
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts;
-      yield* (yield* Registry).addSession(alias, id);
-      const s = yield* hosts.open({ cwd, sessionId: id });
-      yield* quiescent(s);
-      assert.equal((yield* s.state).cost, 1.23);
-      assert.equal((yield* s.state).contextIsLastKnown, false);
-      const entry = (yield* (yield* Registry).get).sessions.find((s) => s.sessionId === id)!;
-      assert.equal(entry.stats?.cost, 1.23, "persist while running, not only on graceful release");
-      assert.equal(entry.updatedAt, entry.createdAt, "statistics do not reorder session activity");
-      assert.deepEqual(Object.keys(entry.stats!).sort(), [
-        "context",
-        "cost",
-        "statsUpdatedAt",
-        "tokens",
-      ]);
-      yield* hosts.release(cwd, id);
-    }),
-    { statsFile },
-  );
-  // A new layer rereads the registry from disk, not the previous host's memory.
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts;
-      const view = yield* saved(hosts, cwd, id);
-      assert.equal(view.cwd, alias);
-      assert.equal(view.snapshot.state.cost, 1.23);
-      assert.deepEqual(view.snapshot.state.context, stats.contextUsage);
-      assert.deepEqual(view.snapshot.state.tokens, stats.tokens);
-      assert.equal(view.snapshot.state.contextIsLastKnown, true);
-      assert.equal(typeof view.snapshot.state.statsUpdatedAt, "number");
-      assert.equal(view.snapshot.messages[0].text, "authoritative history");
-      assert.equal(readFileSync(file, "utf8"), before);
-      assert.equal(
-        records(id).filter((r) => r.event === "spawn").length,
-        1,
-        "peeking never starts Pi",
-      );
-      yield* (yield* Registry).addSession(cwd, "uncached-stats");
-      const unknown = (yield* saved(hosts, cwd, "uncached-stats")).snapshot.state;
-      assert.equal(unknown.context, undefined);
-      assert.equal(unknown.cost, undefined, "no invented zero or another session's cache");
+test(
+  "INV-01/03: last-known statistics survive host and registry restart without copying history",
+  {
+    timeout: 15000,
+  },
+  async () => {
+    const id = "saved-stats",
+      statsFile = join(root, "stats.json");
+    const stats = {
+      cost: 1.23,
+      tokens: { input: 100, output: 20, cacheRead: 30, cacheWrite: 0, total: 150 },
+      contextUsage: { tokens: 50, contextWindow: 1000, percent: 5 },
+    };
+    writeFileSync(statsFile, JSON.stringify(stats));
+    const file = seed(alias, id, "authoritative history"),
+      before = readFileSync(file, "utf8");
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        yield* (yield* Registry).addSession(alias, id);
+        const s = yield* hosts.open({ cwd, sessionId: id });
+        yield* quiescent(s);
+        assert.equal((yield* s.state).cost, 1.23);
+        assert.equal((yield* s.state).contextIsLastKnown, false);
+        const entry = (yield* (yield* Registry).get).sessions.find((s) => s.sessionId === id)!;
+        assert.equal(
+          entry.stats?.cost,
+          1.23,
+          "persist while running, not only on graceful release",
+        );
+        assert.equal(
+          entry.updatedAt,
+          entry.createdAt,
+          "statistics do not reorder session activity",
+        );
+        assert.deepEqual(Object.keys(entry.stats!).sort(), [
+          "context",
+          "cost",
+          "statsUpdatedAt",
+          "tokens",
+        ]);
+        yield* hosts.release(cwd, id);
+      }),
+      { statsFile },
+    );
+    // A new layer rereads the registry from disk, not the previous host's memory.
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        const view = yield* saved(hosts, cwd, id);
+        assert.equal(view.cwd, alias);
+        assert.equal(view.snapshot.state.cost, 1.23);
+        assert.deepEqual(view.snapshot.state.context, stats.contextUsage);
+        assert.deepEqual(view.snapshot.state.tokens, stats.tokens);
+        assert.equal(view.snapshot.state.contextIsLastKnown, true);
+        assert.equal(typeof view.snapshot.state.statsUpdatedAt, "number");
+        assert.equal(view.snapshot.messages[0].text, "authoritative history");
+        assert.equal(readFileSync(file, "utf8"), before);
+        assert.equal(
+          records(id).filter((r) => r.event === "spawn").length,
+          1,
+          "peeking never starts Pi",
+        );
+        yield* (yield* Registry).addSession(cwd, "uncached-stats");
+        const unknown = (yield* saved(hosts, cwd, "uncached-stats")).snapshot.state;
+        assert.equal(unknown.context, undefined);
+        assert.equal(unknown.cost, undefined, "no invented zero or another session's cache");
 
-      const s = yield* hosts.open({ cwd, sessionId: id });
-      assert.equal(
-        (yield* s.state).cost,
-        1.23,
-        "cached snapshot available before withheld stats reply",
-      );
-      assert.equal((yield* s.state).contextIsLastKnown, true);
-      yield* waitAudit(
-        id,
-        (rs) => rs.filter((r) => r.command === "get_session_stats").length === 2,
-      );
-      const failed = yield* observe(s, (e) => e._tag === "state" && !!e.state.statsRefreshError);
-      writeFileSync(statsFile, JSON.stringify({ error: "fixture unavailable" }));
-      process.kill(records(id).findLast((r) => r.event === "spawn")!.pid, "SIGCONT");
-      yield* Fiber.join(failed);
-      assert.equal((yield* s.state).cost, 1.23);
-      assert.deepEqual((yield* s.state).context, stats.contextUsage);
-      assert.equal((yield* s.state).contextIsLastKnown, true);
-      assert.equal(
-        (yield* s.state).statsUpdatedAt,
-        view.snapshot.state.statsUpdatedAt,
-        "failed reads never advance observation time",
-      );
+        const s = yield* hosts.open({ cwd, sessionId: id });
+        assert.equal(
+          (yield* s.state).cost,
+          1.23,
+          "cached snapshot available before withheld stats reply",
+        );
+        assert.equal((yield* s.state).contextIsLastKnown, true);
+        yield* waitAudit(
+          id,
+          (rs) => rs.filter((r) => r.command === "get_session_stats").length === 2,
+        );
+        const failed = yield* observe(s, (e) => e._tag === "state" && !!e.state.statsRefreshError);
+        writeFileSync(statsFile, JSON.stringify({ error: "fixture unavailable" }));
+        process.kill(records(id).findLast((r) => r.event === "spawn")!.pid, "SIGCONT");
+        yield* Fiber.join(failed);
+        assert.equal((yield* s.state).cost, 1.23);
+        assert.deepEqual((yield* s.state).context, stats.contextUsage);
+        assert.equal((yield* s.state).contextIsLastKnown, true);
+        assert.equal(
+          (yield* s.state).statsUpdatedAt,
+          view.snapshot.state.statsUpdatedAt,
+          "failed reads never advance observation time",
+        );
 
-      writeFileSync(
-        statsFile,
-        JSON.stringify({
-          cost: 0,
-          tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-          contextUsage: { tokens: null, contextWindow: 2000, percent: null },
-        }),
-      );
-      const fresh = yield* observe(
-        s,
-        (e) =>
-          e._tag === "state" &&
-          e.state.context?.tokens === null &&
-          e.state.contextIsLastKnown === false,
-      );
-      yield* prompt(s, "/settle");
-      yield* Fiber.join(fresh);
-      const state = yield* s.state;
-      assert.equal(state.statsRefreshError, undefined);
-      assert.equal(state.cost, 0, "fresh Pi values replace rather than sum or max the cache");
-      assert.equal(state.tokens?.total, 0);
-      const closed = yield* observe(s, (e) => e._tag === "closed");
-      process.kill(records(id).findLast((r) => r.event === "spawn")!.pid, "SIGUSR1");
-      yield* Fiber.join(closed);
-      const stopped = (yield* saved(hosts, cwd, id)).snapshot.state;
-      assert.equal(stopped.cost, 0);
-      assert.equal(stopped.contextIsLastKnown, true);
-    }),
-    { statsFile, holdStats: true },
-  );
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts;
-      const cached = (yield* saved(hosts, cwd, id)).snapshot.state;
-      assert.deepEqual(cached.context, { tokens: null, contextWindow: 2000, percent: null });
-      assert.equal(cached.cost, 0);
-      writeFileSync(statsFile, JSON.stringify({ cost: 0 }));
-      const s = yield* hosts.open({ cwd, sessionId: id });
-      yield* quiescent(s);
-      assert.equal(
-        (yield* s.state).context,
-        undefined,
-        "Pi omission clears cached context when no model/window is available",
-      );
-      yield* hosts.release(cwd, id);
-      assert.equal((yield* saved(hosts, cwd, id)).snapshot.state.context, undefined);
-    }),
-    { statsFile },
-  );
-});
+        writeFileSync(
+          statsFile,
+          JSON.stringify({
+            cost: 0,
+            tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            contextUsage: { tokens: null, contextWindow: 2000, percent: null },
+          }),
+        );
+        const fresh = yield* observe(
+          s,
+          (e) =>
+            e._tag === "state" &&
+            e.state.context?.tokens === null &&
+            e.state.contextIsLastKnown === false,
+        );
+        yield* prompt(s, "/settle");
+        yield* Fiber.join(fresh);
+        const state = yield* s.state;
+        assert.equal(state.statsRefreshError, undefined);
+        assert.equal(state.cost, 0, "fresh Pi values replace rather than sum or max the cache");
+        assert.equal(state.tokens?.total, 0);
+        const closed = yield* observe(s, (e) => e._tag === "closed");
+        process.kill(records(id).findLast((r) => r.event === "spawn")!.pid, "SIGUSR1");
+        yield* Fiber.join(closed);
+        const stopped = (yield* saved(hosts, cwd, id)).snapshot.state;
+        assert.equal(stopped.cost, 0);
+        assert.equal(stopped.contextIsLastKnown, true);
+      }),
+      { statsFile, holdStats: true },
+    );
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        const cached = (yield* saved(hosts, cwd, id)).snapshot.state;
+        assert.deepEqual(cached.context, { tokens: null, contextWindow: 2000, percent: null });
+        assert.equal(cached.cost, 0);
+        writeFileSync(statsFile, JSON.stringify({ cost: 0 }));
+        const s = yield* hosts.open({ cwd, sessionId: id });
+        yield* quiescent(s);
+        assert.equal(
+          (yield* s.state).context,
+          undefined,
+          "Pi omission clears cached context when no model/window is available",
+        );
+        yield* hosts.release(cwd, id);
+        assert.equal((yield* saved(hosts, cwd, id)).snapshot.state.context, undefined);
+      }),
+      { statsFile },
+    );
+  },
+);
 
 test("INV-01/02/06: deleted checkout history remains readable and can be archived or deleted without starting Pi", async () => {
   const path = join(root, "deleted-checkout");
@@ -569,87 +581,95 @@ test("INV-02: concurrent public opens through real/symlink paths have one child 
   );
 });
 
-test("INV-02: a disconnected opener cannot interrupt or duplicate server-owned acquisition", {
-  timeout: 10000,
-}, async () => {
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts,
-        registry = yield* Registry;
-      yield* registry.saveProject({ id: "abandoned", name: "Abandoned" });
-      // Registration precedes Pi, so the fresh ID is learned from the registry write.
-      const registered = yield* Deferred.make<string>();
-      yield* registry.onChange((_, after) => {
-        const entry = after.sessions.find((s) => s.projectId === "abandoned");
-        return entry ? Deferred.succeed(registered, entry.sessionId) : Effect.void;
-      });
-      const abandoned = yield* hosts
-        .create({ cwd, projectId: "abandoned", options: {} })
-        .pipe(Effect.forkChild);
-      const id = yield* Deferred.await(registered);
-      yield* waitAudit(id, (rs) => rs.some((r) => r.command === "get_state"));
-      yield* Fiber.interrupt(abandoned);
-      const entry = (yield* registry.get).sessions.find((s) => s.sessionId === id)!;
-      assert.deepEqual(
-        [entry.cwd, entry.projectId],
-        [cwd, "abandoned"],
-        "registration already includes membership while Pi is starting",
-      );
-      const returning = yield* hosts.open({ cwd: alias, sessionId: id }).pipe(Effect.forkChild);
-      process.kill(records(id)[0].pid, "SIGCONT");
-      const session = yield* Fiber.join(returning);
-      assert.equal((yield* session.state).sessionId, id);
-      assert.equal(records(id).filter((r) => r.event === "spawn").length, 1);
-      assert.equal("projectId" in session.spec, false);
-      assert.equal(
-        (yield* registry.get).sessions.find((s) => s.sessionId === id)?.projectId,
-        "abandoned",
-      );
-      yield* hosts.release(cwd, id);
-    }),
-    { holdReadiness: true, registry: "abandoned" },
-  );
-});
+test(
+  "INV-02: a disconnected opener cannot interrupt or duplicate server-owned acquisition",
+  {
+    timeout: 10000,
+  },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts,
+          registry = yield* Registry;
+        yield* registry.saveProject({ id: "abandoned", name: "Abandoned" });
+        // Registration precedes Pi, so the fresh ID is learned from the registry write.
+        const registered = yield* Deferred.make<string>();
+        yield* registry.onChange((_, after) => {
+          const entry = after.sessions.find((s) => s.projectId === "abandoned");
+          return entry ? Deferred.succeed(registered, entry.sessionId) : Effect.void;
+        });
+        const abandoned = yield* hosts
+          .create({ cwd, projectId: "abandoned", options: {} })
+          .pipe(Effect.forkChild);
+        const id = yield* Deferred.await(registered);
+        yield* waitAudit(id, (rs) => rs.some((r) => r.command === "get_state"));
+        yield* Fiber.interrupt(abandoned);
+        const entry = (yield* registry.get).sessions.find((s) => s.sessionId === id)!;
+        assert.deepEqual(
+          [entry.cwd, entry.projectId],
+          [cwd, "abandoned"],
+          "registration already includes membership while Pi is starting",
+        );
+        const returning = yield* hosts.open({ cwd: alias, sessionId: id }).pipe(Effect.forkChild);
+        process.kill(records(id)[0].pid, "SIGCONT");
+        const session = yield* Fiber.join(returning);
+        assert.equal((yield* session.state).sessionId, id);
+        assert.equal(records(id).filter((r) => r.event === "spawn").length, 1);
+        assert.equal("projectId" in session.spec, false);
+        assert.equal(
+          (yield* registry.get).sessions.find((s) => s.sessionId === id)?.projectId,
+          "abandoned",
+        );
+        yield* hosts.release(cwd, id);
+      }),
+      { holdReadiness: true, registry: "abandoned" },
+    );
+  },
+);
 
-test("INV-02: release holds ownership through blocked shutdown; a late close cannot retire the replacement", {
-  timeout: 10000,
-}, async () => {
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts;
-      const first = yield* registered("reopen");
-      const release = yield* hosts.release(cwd, "reopen").pipe(Effect.forkChild);
-      yield* waitAudit("reopen", (rs) => rs.some((r) => r.event === "stdin-end"));
-      const reopening = yield* hosts
-        .open({ cwd: alias, sessionId: "reopen" })
-        .pipe(Effect.forkChild);
-      // Another checkout/session remains usable while this shutdown is blocked.
-      const independent = yield* registered("independent");
-      assert.equal(records("reopen").filter((r) => r.event === "spawn").length, 1);
-      assert.equal(
-        (yield* first.act({ _tag: "prompt", text: "must not send" }).pipe(Effect.result))._tag,
-        "Failure",
-      );
-      process.kill(records("reopen")[0].pid, "SIGUSR2");
-      yield* Fiber.join(release);
-      const second = yield* Fiber.join(reopening);
-      const log = records("reopen");
-      assert.equal(log.filter((r) => r.event === "spawn").length, 2);
-      assert.ok(
-        log.findIndex((r) => r.event === "exit") < log.findLastIndex((r) => r.event === "spawn"),
-      );
-      yield* prompt(second, "/alive");
-      assert.equal(records("reopen").filter((r) => r.text === "must not send").length, 0);
-      process.kill(records("reopen").findLast((r) => r.event === "spawn")!.pid, "SIGUSR2");
-      process.kill(records("independent")[0].pid, "SIGUSR2");
-      yield* independent.events.pipe(
-        Stream.takeUntil((e) => e._tag === "closed"),
-        Stream.runDrain,
-      );
-    }),
-    { holdShutdown: true },
-  );
-});
+test(
+  "INV-02: release holds ownership through blocked shutdown; a late close cannot retire the replacement",
+  {
+    timeout: 10000,
+  },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        const first = yield* registered("reopen");
+        const release = yield* hosts.release(cwd, "reopen").pipe(Effect.forkChild);
+        yield* waitAudit("reopen", (rs) => rs.some((r) => r.event === "stdin-end"));
+        const reopening = yield* hosts
+          .open({ cwd: alias, sessionId: "reopen" })
+          .pipe(Effect.forkChild);
+        // Another checkout/session remains usable while this shutdown is blocked.
+        const independent = yield* registered("independent");
+        assert.equal(records("reopen").filter((r) => r.event === "spawn").length, 1);
+        assert.equal(
+          (yield* first.act({ _tag: "prompt", text: "must not send" }).pipe(Effect.result))._tag,
+          "Failure",
+        );
+        process.kill(records("reopen")[0].pid, "SIGUSR2");
+        yield* Fiber.join(release);
+        const second = yield* Fiber.join(reopening);
+        const log = records("reopen");
+        assert.equal(log.filter((r) => r.event === "spawn").length, 2);
+        assert.ok(
+          log.findIndex((r) => r.event === "exit") < log.findLastIndex((r) => r.event === "spawn"),
+        );
+        yield* prompt(second, "/alive");
+        assert.equal(records("reopen").filter((r) => r.text === "must not send").length, 0);
+        process.kill(records("reopen").findLast((r) => r.event === "spawn")!.pid, "SIGUSR2");
+        process.kill(records("independent")[0].pid, "SIGUSR2");
+        yield* independent.events.pipe(
+          Stream.takeUntil((e) => e._tag === "closed"),
+          Stream.runDrain,
+        );
+      }),
+      { holdShutdown: true },
+    );
+  },
+);
 
 test("INV-02/06: archive/delete retain the session on preview cleanup failure; explicit release retries", async () => {
   const stateRoot = join(root, "broken-preview-state");
@@ -699,40 +719,44 @@ test("INV-02/06: archive/delete retain the session on preview cleanup failure; e
 });
 
 for (const operation of ["archive", "delete"] as const)
-  test(`INV-01/02: ${operation} owns shutdown and retention; racing reopen cannot resurrect work`, {
-    timeout: 10000,
-  }, async () => {
-    await run(
-      Effect.gen(function* () {
-        const hosts = yield* SessionHosts;
-        const s = yield* registered(operation);
-        yield* prompt(s, "/hold");
-        const file = (yield* s.state).sessionFile!;
-        const retirement = yield* hosts[operation](cwd, operation).pipe(Effect.forkChild);
-        yield* waitAudit(operation, (rs) => rs.some((r) => r.event === "stdin-end"));
-        const reopening = yield* hosts
-          .open({ cwd: alias, sessionId: operation })
-          .pipe(Effect.result, Effect.forkChild);
-        process.kill(records(operation)[0].pid, "SIGUSR2");
-        yield* Fiber.join(retirement);
-        const result = yield* Fiber.join(reopening);
-        assert.equal(result._tag, "Failure");
-        if (result._tag === "Failure")
-          assert.match(
-            result.failure.detail,
-            operation === "archive" ? /archived/ : /no longer registered/,
+  test(
+    `INV-01/02: ${operation} owns shutdown and retention; racing reopen cannot resurrect work`,
+    {
+      timeout: 10000,
+    },
+    async () => {
+      await run(
+        Effect.gen(function* () {
+          const hosts = yield* SessionHosts;
+          const s = yield* registered(operation);
+          yield* prompt(s, "/hold");
+          const file = (yield* s.state).sessionFile!;
+          const retirement = yield* hosts[operation](cwd, operation).pipe(Effect.forkChild);
+          yield* waitAudit(operation, (rs) => rs.some((r) => r.event === "stdin-end"));
+          const reopening = yield* hosts
+            .open({ cwd: alias, sessionId: operation })
+            .pipe(Effect.result, Effect.forkChild);
+          process.kill(records(operation)[0].pid, "SIGUSR2");
+          yield* Fiber.join(retirement);
+          const result = yield* Fiber.join(reopening);
+          assert.equal(result._tag, "Failure");
+          if (result._tag === "Failure")
+            assert.match(
+              result.failure.detail,
+              operation === "archive" ? /archived/ : /no longer registered/,
+            );
+          assert.equal(records(operation).filter((r) => r.event === "spawn").length, 1);
+          assert.equal(existsSync(file), operation === "archive");
+          const entries = (yield* (yield* Registry).get).sessions.filter(
+            (s) => s.sessionId === operation,
           );
-        assert.equal(records(operation).filter((r) => r.event === "spawn").length, 1);
-        assert.equal(existsSync(file), operation === "archive");
-        const entries = (yield* (yield* Registry).get).sessions.filter(
-          (s) => s.sessionId === operation,
-        );
-        assert.equal(entries.length, operation === "archive" ? 1 : 0);
-        if (entries.length) assert.equal(entries[0].archived, true);
-      }),
-      { holdShutdown: true },
-    );
-  });
+          assert.equal(entries.length, operation === "archive" ? 1 : 0);
+          if (entries.length) assert.equal(entries[0].archived, true);
+        }),
+        { holdShutdown: true },
+      );
+    },
+  );
 
 // SessionReferences' tests own which reference and file a session resolves to and what a
 // conflict is; this one owns that Pi starts under the owner's spelling and a refusal starts none.
@@ -757,43 +781,47 @@ test("INV-01/02: alias history opens under its registry owner; a conflict refuse
   );
 });
 
-test("INV-02/03/04: idle deadline respects queue, retry, compaction, dialogs and older uncertain commands", {
-  timeout: 15000,
-}, async () => {
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts;
-      for (const mode of ["queue", "retry", "compact", "dialog", "uncertain"]) {
-        const id = `idle-${mode}`;
-        const s = yield* registered(id);
-        if (mode === "uncertain") {
-          const received = yield* observe(
-            s,
-            (e) => e._tag === "notice" && e.message.includes("without acknowledgement"),
-          );
-          const pending = yield* s
-            .act({ _tag: "prompt", text: "/uncertain" })
-            .pipe(Effect.result, Effect.forkChild);
-          yield* Fiber.join(received);
-          yield* TestClock.adjust(1000);
-          yield* Fiber.join(pending);
-          yield* prompt(s, "/newer-handled"); // must not erase uncertainty of the older command
-        } else yield* prompt(s, `/${mode}`);
+test(
+  "INV-02/03/04: idle deadline respects queue, retry, compaction, dialogs and older uncertain commands",
+  {
+    timeout: 15000,
+  },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        for (const mode of ["queue", "retry", "compact", "dialog", "uncertain"]) {
+          const id = `idle-${mode}`;
+          const s = yield* registered(id);
+          if (mode === "uncertain") {
+            const received = yield* observe(
+              s,
+              (e) => e._tag === "notice" && e.message.includes("without acknowledgement"),
+            );
+            const pending = yield* s
+              .act({ _tag: "prompt", text: "/uncertain" })
+              .pipe(Effect.result, Effect.forkChild);
+            yield* Fiber.join(received);
+            yield* TestClock.adjust(1000);
+            yield* Fiber.join(pending);
+            yield* prompt(s, "/newer-handled"); // must not erase uncertainty of the older command
+          } else yield* prompt(s, `/${mode}`);
+          yield* TestClock.adjust(2000);
+          assert.equal(yield* hosts.get(alias, id), s, `${mode} cannot be retired`);
+          assert.equal(records(id).filter((r) => r.event === "exit").length, 0);
+          yield* hosts.release(cwd, id);
+        }
+        const s = yield* registered("actually-idle");
+        yield* prompt(s, "/settle");
+        yield* quiescent(s);
         yield* TestClock.adjust(2000);
-        assert.equal(yield* hosts.get(alias, id), s, `${mode} cannot be retired`);
-        assert.equal(records(id).filter((r) => r.event === "exit").length, 0);
-        yield* hosts.release(cwd, id);
-      }
-      const s = yield* registered("actually-idle");
-      yield* prompt(s, "/settle");
-      yield* quiescent(s);
-      yield* TestClock.adjust(2000);
-      yield* waitAudit("actually-idle", (rs) => rs.some((r) => r.event === "exit"));
-      assert.equal(yield* hosts.get(cwd, "actually-idle"), undefined);
-    }),
-    { idleMs: 1000, clock: true, timeoutMs: 1000 },
-  );
-});
+        yield* waitAudit("actually-idle", (rs) => rs.some((r) => r.event === "exit"));
+        assert.equal(yield* hosts.get(cwd, "actually-idle"), undefined);
+      }),
+      { idleMs: 1000, clock: true, timeoutMs: 1000 },
+    );
+  },
+);
 
 test("the hosts list calls a session working while it holds queued work Pi is not running yet", async () => {
   await run(
@@ -845,154 +873,169 @@ test("the browser hears a session's working state change when only its queue cha
   );
 });
 
-test("INV-02: one host's failing idle check does not keep the next idle host from release", {
-  timeout: 15000,
-}, async () => {
-  /** A supervisor that cannot answer whether this generation's app is gone. */
-  class UnknownPreview extends PreviewAdapter {
-    override async request(): Promise<never> {
-      throw new Error("no supervisor in this test");
-    }
-    override async retire(_: PreviewOwnerIdentity, __: string, idle = false) {
-      if (idle) throw new Error("preview state unreadable");
-      return true;
-    }
-  }
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts;
-      // Opened first, so the sweep checks it before the other host.
-      const failing = yield* registered("idle-check-fails");
-      const endpoint = records("idle-check-fails").find((r) => r.event === "spawn")?.previewOwner;
-      assert.ok(endpoint);
-      // An admitted start makes this owner ask its adapter before idle release.
-      yield* Effect.promise(() =>
-        assert.rejects(
-          ownerRequest(endpoint, {
-            action: "start",
-            command: [process.execPath, "-e", "process.exit(1)"],
-          }),
-        ),
-      );
-      const other = yield* registered("idle-after-failure");
-      for (const s of [failing, other]) {
-        yield* prompt(s, "/settle");
-        yield* quiescent(s);
+test(
+  "INV-02: one host's failing idle check does not keep the next idle host from release",
+  {
+    timeout: 15000,
+  },
+  async () => {
+    /** A supervisor that cannot answer whether this generation's app is gone. */
+    class UnknownPreview extends PreviewAdapter {
+      override async request(): Promise<never> {
+        throw new Error("no supervisor in this test");
       }
-      yield* TestClock.adjust(2000);
-      yield* waitAudit("idle-after-failure", (rs) => rs.some((r) => r.event === "exit"));
-      assert.equal(yield* hosts.get(cwd, "idle-after-failure"), undefined);
-      assert.equal(yield* hosts.get(cwd, "idle-check-fails"), failing, "unknown is not idle");
-      assert.equal(records("idle-check-fails").filter((r) => r.event === "exit").length, 0);
-    }),
-    { idleMs: 100, clock: true, timeoutMs: 1000, previewAdapter: new UnknownPreview() },
-  );
-});
+      override async retire(_: PreviewOwnerIdentity, __: string, idle = false) {
+        if (idle) throw new Error("preview state unreadable");
+        return true;
+      }
+    }
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        // Opened first, so the sweep checks it before the other host.
+        const failing = yield* registered("idle-check-fails");
+        const endpoint = records("idle-check-fails").find((r) => r.event === "spawn")?.previewOwner;
+        assert.ok(endpoint);
+        // An admitted start makes this owner ask its adapter before idle release.
+        yield* Effect.promise(() =>
+          assert.rejects(
+            ownerRequest(endpoint, {
+              action: "start",
+              command: [process.execPath, "-e", "process.exit(1)"],
+            }),
+          ),
+        );
+        const other = yield* registered("idle-after-failure");
+        for (const s of [failing, other]) {
+          yield* prompt(s, "/settle");
+          yield* quiescent(s);
+        }
+        yield* TestClock.adjust(2000);
+        yield* waitAudit("idle-after-failure", (rs) => rs.some((r) => r.event === "exit"));
+        assert.equal(yield* hosts.get(cwd, "idle-after-failure"), undefined);
+        assert.equal(yield* hosts.get(cwd, "idle-check-fails"), failing, "unknown is not idle");
+        assert.equal(records("idle-check-fails").filter((r) => r.event === "exit").length, 0);
+      }),
+      { idleMs: 100, clock: true, timeoutMs: 1000, previewAdapter: new UnknownPreview() },
+    );
+  },
+);
 
-test("INV-02/03: idle release and branch export agree on busy; a retired host rejects input", {
-  timeout: 15000,
-}, async () => {
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts;
-      const busy = /Wait for this session to finish/;
-      // An admitted action Pi has not answered keeps the session busy for both.
-      const held = yield* registered("busy-held");
-      const received = yield* observe(
-        held,
-        (e) => e._tag === "notice" && e.message.includes("without acknowledgement"),
-      );
-      const pending = yield* held
-        .act({ _tag: "prompt", text: "/uncertain" })
-        .pipe(Effect.forkChild);
-      yield* Fiber.join(received);
-      assert.match((yield* hosts.exportBranch(cwd, "busy-held").pipe(Effect.flip)).detail, busy);
-      yield* TestClock.adjust(500); // past the idle deadline, before the command times out
-      assert.equal(yield* hosts.get(cwd, "busy-held"), held, "in-flight input is not idle");
-      yield* hosts.release(cwd, "busy-held");
-      yield* Fiber.await(pending); // release interrupts the admitted action
-      // Settled with no action in flight: both see it as not busy.
-      const s = yield* registered("busy-settled");
-      yield* prompt(s, "/final");
-      yield* quiescent(s);
-      assert.match(yield* hosts.exportBranch(cwd, "busy-settled"), /Final busy-settled/);
-      yield* TestClock.adjust(2000);
-      yield* waitAudit("busy-settled", (rs) => rs.some((r) => r.event === "exit"));
-      assert.equal(yield* hosts.get(cwd, "busy-settled"), undefined);
-      assert.match(
-        (yield* s.act({ _tag: "prompt", text: "after retirement" }).pipe(Effect.flip)).detail,
-        /closing|stopped/,
-      );
-      assert.equal(records("busy-settled").filter((r) => r.text === "after retirement").length, 0);
-    }),
-    { idleMs: 100, clock: true, timeoutMs: 1000 },
-  );
-});
+test(
+  "INV-02/03: idle release and branch export agree on busy; a retired host rejects input",
+  {
+    timeout: 15000,
+  },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        const busy = /Wait for this session to finish/;
+        // An admitted action Pi has not answered keeps the session busy for both.
+        const held = yield* registered("busy-held");
+        const received = yield* observe(
+          held,
+          (e) => e._tag === "notice" && e.message.includes("without acknowledgement"),
+        );
+        const pending = yield* held
+          .act({ _tag: "prompt", text: "/uncertain" })
+          .pipe(Effect.forkChild);
+        yield* Fiber.join(received);
+        assert.match((yield* hosts.exportBranch(cwd, "busy-held").pipe(Effect.flip)).detail, busy);
+        yield* TestClock.adjust(500); // past the idle deadline, before the command times out
+        assert.equal(yield* hosts.get(cwd, "busy-held"), held, "in-flight input is not idle");
+        yield* hosts.release(cwd, "busy-held");
+        yield* Fiber.await(pending); // release interrupts the admitted action
+        // Settled with no action in flight: both see it as not busy.
+        const s = yield* registered("busy-settled");
+        yield* prompt(s, "/final");
+        yield* quiescent(s);
+        assert.match(yield* hosts.exportBranch(cwd, "busy-settled"), /Final busy-settled/);
+        yield* TestClock.adjust(2000);
+        yield* waitAudit("busy-settled", (rs) => rs.some((r) => r.event === "exit"));
+        assert.equal(yield* hosts.get(cwd, "busy-settled"), undefined);
+        assert.match(
+          (yield* s.act({ _tag: "prompt", text: "after retirement" }).pipe(Effect.flip)).detail,
+          /closing|stopped/,
+        );
+        assert.equal(
+          records("busy-settled").filter((r) => r.text === "after retirement").length,
+          0,
+        );
+      }),
+      { idleMs: 100, clock: true, timeoutMs: 1000 },
+    );
+  },
+);
 
-test("INV-02/03: hung readbacks time out visibly without blocking a later dialog or exit; crash history never resumes work", {
-  timeout: 15000,
-}, async () => {
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts;
-      const s = yield* registered("hung-inspection");
-      const initialStateReads = records("hung-inspection").filter(
-        (r) => r.command === "get_state",
-      ).length;
-      const silenced = yield* observe(
-        s,
-        (e) => e._tag === "notice" && e.message === "barrier /silence",
-      );
-      const command = yield* s.act({ _tag: "prompt", text: "/silence" }).pipe(Effect.forkChild);
-      yield* Fiber.join(silenced);
-      const dialog = yield* observe(s, (e) => e._tag === "dialog");
-      const next = yield* s.act({ _tag: "prompt", text: "/events" }).pipe(Effect.forkChild);
-      const events = yield* Fiber.join(dialog); // BEFORE advancing the withheld state/stats deadline
-      assert.ok(
-        events.some(
-          (e) => e._tag === "message_end" && e.message.text.includes("behind hung readback"),
-        ),
-      );
-      yield* waitAudit(
-        "hung-inspection",
-        (rs) =>
-          rs.filter((r) => r.command === "get_state").length >= initialStateReads + 2 &&
-          rs.filter((r) => r.command === "get_session_stats").length >= 2,
-      );
-      yield* TestClock.adjust(1000);
-      // The handled command also reconciles context. Its fresh activity read must time out
-      // independently; a previous state timeout is not evidence that this query has completed.
-      yield* waitAudit(
-        "hung-inspection",
-        (rs) => rs.filter((r) => r.command === "get_state").length >= initialStateReads + 4,
-      );
-      yield* TestClock.adjust(1000);
-      yield* Fiber.join(command);
-      yield* Fiber.join(next);
-      assert.match((yield* s.state).stateRefreshError ?? "", /get_state.*1000ms/);
-      assert.match((yield* s.state).statsRefreshError ?? "", /get_session_stats.*1000ms/);
-      const closed = yield* observe(s, (e) => e._tag === "closed");
-      process.kill(records("hung-inspection")[0].pid, "SIGUSR1");
-      yield* Fiber.join(closed);
-      const view = yield* saved(hosts, cwd, "hung-inspection");
-      const closure = view.snapshot.state.closure;
-      assert.equal(
-        closure?._tag === "exited" && closure.code,
-        7,
-        "a crash is reported as an exit, not a release",
-      );
-      assert.ok(view.snapshot.messages.some((m) => m.text.includes("behind hung readback")));
-      const reopened = yield* hosts.open({ cwd, sessionId: "hung-inspection" });
-      assert.equal((yield* reopened.state).isStreaming, false);
-      assert.equal(
-        records("hung-inspection").filter((r) => r.command === "prompt").length,
-        2,
-        "reopen never replays a prompt",
-      );
-    }),
-    { clock: true, timeoutMs: 1000 },
-  );
-});
+test(
+  "INV-02/03: hung readbacks time out visibly without blocking a later dialog or exit; crash history never resumes work",
+  {
+    timeout: 15000,
+  },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        const s = yield* registered("hung-inspection");
+        const initialStateReads = records("hung-inspection").filter(
+          (r) => r.command === "get_state",
+        ).length;
+        const silenced = yield* observe(
+          s,
+          (e) => e._tag === "notice" && e.message === "barrier /silence",
+        );
+        const command = yield* s.act({ _tag: "prompt", text: "/silence" }).pipe(Effect.forkChild);
+        yield* Fiber.join(silenced);
+        const dialog = yield* observe(s, (e) => e._tag === "dialog");
+        const next = yield* s.act({ _tag: "prompt", text: "/events" }).pipe(Effect.forkChild);
+        const events = yield* Fiber.join(dialog); // BEFORE advancing the withheld state/stats deadline
+        assert.ok(
+          events.some(
+            (e) => e._tag === "message_end" && e.message.text.includes("behind hung readback"),
+          ),
+        );
+        yield* waitAudit(
+          "hung-inspection",
+          (rs) =>
+            rs.filter((r) => r.command === "get_state").length >= initialStateReads + 2 &&
+            rs.filter((r) => r.command === "get_session_stats").length >= 2,
+        );
+        yield* TestClock.adjust(1000);
+        // The handled command also reconciles context. Its fresh activity read must time out
+        // independently; a previous state timeout is not evidence that this query has completed.
+        yield* waitAudit(
+          "hung-inspection",
+          (rs) => rs.filter((r) => r.command === "get_state").length >= initialStateReads + 4,
+        );
+        yield* TestClock.adjust(1000);
+        yield* Fiber.join(command);
+        yield* Fiber.join(next);
+        assert.match((yield* s.state).stateRefreshError ?? "", /get_state.*1000ms/);
+        assert.match((yield* s.state).statsRefreshError ?? "", /get_session_stats.*1000ms/);
+        const closed = yield* observe(s, (e) => e._tag === "closed");
+        process.kill(records("hung-inspection")[0].pid, "SIGUSR1");
+        yield* Fiber.join(closed);
+        const view = yield* saved(hosts, cwd, "hung-inspection");
+        const closure = view.snapshot.state.closure;
+        assert.equal(
+          closure?._tag === "exited" && closure.code,
+          7,
+          "a crash is reported as an exit, not a release",
+        );
+        assert.ok(view.snapshot.messages.some((m) => m.text.includes("behind hung readback")));
+        const reopened = yield* hosts.open({ cwd, sessionId: "hung-inspection" });
+        assert.equal((yield* reopened.state).isStreaming, false);
+        assert.equal(
+          records("hung-inspection").filter((r) => r.command === "prompt").length,
+          2,
+          "reopen never replays a prompt",
+        );
+      }),
+      { clock: true, timeoutMs: 1000 },
+    );
+  },
+);
 
 const unavailableProject = "Project is unavailable. Choose a current project before starting.";
 
@@ -1440,94 +1483,98 @@ test("INV-01: a closed folder reached by another spelling reopens under its regi
   );
 });
 
-test("INV-02/06: a requester that leaves while Worktrunk runs cannot interrupt creation into a half-made checkout", {
-  timeout: 30_000,
-}, async () => {
-  const git = (dir: string, ...args: string[]) => {
-    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
-    assert.equal(result.status, 0, result.stderr);
-    return result.stdout.trim();
-  };
-  const repo = join(root, "slow-repo");
-  mkdirSync(repo);
-  git(repo, "init", "--quiet", "-b", "main");
-  git(
-    repo,
-    "-c",
-    "user.name=Test",
-    "-c",
-    "user.email=test@example.invalid",
-    "commit",
-    "--quiet",
-    "--allow-empty",
-    "-m",
-    "baseline",
-  );
-  // The installed Worktrunk, isolated from the user's configuration, and slow to start creating.
-  const config = join(root, "wt-config", "worktrunk");
-  mkdirSync(config, { recursive: true });
-  writeFileSync(join(config, "config.toml"), "");
-  const isolated = {
-    HOME: join(root, "wt-home"),
-    XDG_CONFIG_HOME: join(root, "wt-config"),
-    XDG_CACHE_HOME: join(root, "wt-cache"),
-    XDG_STATE_HOME: join(root, "wt-state"),
-    WORKTRUNK_CONFIG_PATH: join(config, "config.toml"),
-  };
-  mkdirSync(isolated.HOME);
-  const real = spawnSync("which", ["wt"], { encoding: "utf8" }).stdout.trim();
-  const started = join(root, "wt-started");
-  const wt = join(root, "slow-wt");
-  writeFileSync(
-    wt,
-    `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';import {writeFileSync} from 'node:fs';
+test(
+  "INV-02/06: a requester that leaves while Worktrunk runs cannot interrupt creation into a half-made checkout",
+  {
+    timeout: 30_000,
+  },
+  async () => {
+    const git = (dir: string, ...args: string[]) => {
+      const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    };
+    const repo = join(root, "slow-repo");
+    mkdirSync(repo);
+    git(repo, "init", "--quiet", "-b", "main");
+    git(
+      repo,
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.invalid",
+      "commit",
+      "--quiet",
+      "--allow-empty",
+      "-m",
+      "baseline",
+    );
+    // The installed Worktrunk, isolated from the user's configuration, and slow to start creating.
+    const config = join(root, "wt-config", "worktrunk");
+    mkdirSync(config, { recursive: true });
+    writeFileSync(join(config, "config.toml"), "");
+    const isolated = {
+      HOME: join(root, "wt-home"),
+      XDG_CONFIG_HOME: join(root, "wt-config"),
+      XDG_CACHE_HOME: join(root, "wt-cache"),
+      XDG_STATE_HOME: join(root, "wt-state"),
+      WORKTRUNK_CONFIG_PATH: join(config, "config.toml"),
+    };
+    mkdirSync(isolated.HOME);
+    const real = spawnSync("which", ["wt"], { encoding: "utf8" }).stdout.trim();
+    const started = join(root, "wt-started");
+    const wt = join(root, "slow-wt");
+    writeFileSync(
+      wt,
+      `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';import {writeFileSync} from 'node:fs';
 const a=process.argv.slice(2);
 if(a.includes('switch')){writeFileSync(${JSON.stringify(started)},'');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
 const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env,...${JSON.stringify(isolated)}}});process.exit(r.status??1);\n`,
-    { mode: 0o755 },
-  );
-  const until = <A>(read: Effect.Effect<A | undefined>, what: string) =>
-    Effect.gen(function* () {
-      for (let n = 0; n < 500; n++) {
-        const value = yield* read;
-        if (value !== undefined) return value;
-        yield* Effect.sleep("20 millis");
-      }
-      return yield* Effect.die(new Error(`never observed: ${what}`));
-    });
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts,
-        registry = yield* Registry;
-      const requester = yield* hosts
-        .create({ cwd: repo, options: {}, worktree: { branch: "slow" } })
-        .pipe(Effect.forkChild);
-      yield* until(
-        Effect.sync(() => (existsSync(started) ? true : undefined)),
-        "Worktrunk running",
-      );
-      yield* Fiber.interrupt(requester);
-      // Without its requester, the creation still completes: the worktree, its registration
-      // under the repository's folder, the session's reference and its running child.
-      const entry = yield* until(
-        Effect.map(registry.get, (data) => data.sessions.find((s) => s.cwd !== repo)),
-        "a session registered in the new worktree",
-      );
-      assert.ok(git(repo, "worktree", "list", "--porcelain").includes(`worktree ${entry.cwd}\n`));
-      assert.equal(git(entry.cwd, "branch", "--show-current"), "slow");
-      // Git reports physical paths; the fixture root may be reached through a symlink (macOS /var).
-      // Worktrunk's reported base branch is kept: Changes compares the branch with it.
-      assert.deepEqual((yield* registry.get).worktrees, [
-        { folder: realpathSync(repo), path: entry.cwd, branch: "slow", baseBranch: "main" },
-      ]);
-      yield* until(
-        Effect.map(hosts.list, (list) =>
-          list.some((h) => h.sessionId === entry.sessionId) ? true : undefined,
-        ),
-        "the session's child running",
-      );
-      yield* hosts.release(entry.cwd, entry.sessionId);
-    }).pipe(Effect.provideService(WorktrunkCommand, wt)),
-    { fakePi: "slow-worktree" },
-  );
-});
+      { mode: 0o755 },
+    );
+    const until = <A>(read: Effect.Effect<A | undefined>, what: string) =>
+      Effect.gen(function* () {
+        for (let n = 0; n < 500; n++) {
+          const value = yield* read;
+          if (value !== undefined) return value;
+          yield* Effect.sleep("20 millis");
+        }
+        return yield* Effect.die(new Error(`never observed: ${what}`));
+      });
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts,
+          registry = yield* Registry;
+        const requester = yield* hosts
+          .create({ cwd: repo, options: {}, worktree: { branch: "slow" } })
+          .pipe(Effect.forkChild);
+        yield* until(
+          Effect.sync(() => (existsSync(started) ? true : undefined)),
+          "Worktrunk running",
+        );
+        yield* Fiber.interrupt(requester);
+        // Without its requester, the creation still completes: the worktree, its registration
+        // under the repository's folder, the session's reference and its running child.
+        const entry = yield* until(
+          Effect.map(registry.get, (data) => data.sessions.find((s) => s.cwd !== repo)),
+          "a session registered in the new worktree",
+        );
+        assert.ok(git(repo, "worktree", "list", "--porcelain").includes(`worktree ${entry.cwd}\n`));
+        assert.equal(git(entry.cwd, "branch", "--show-current"), "slow");
+        // Git reports physical paths; the fixture root may be reached through a symlink (macOS /var).
+        // Worktrunk's reported base branch is kept: Changes compares the branch with it.
+        assert.deepEqual((yield* registry.get).worktrees, [
+          { folder: realpathSync(repo), path: entry.cwd, branch: "slow", baseBranch: "main" },
+        ]);
+        yield* until(
+          Effect.map(hosts.list, (list) =>
+            list.some((h) => h.sessionId === entry.sessionId) ? true : undefined,
+          ),
+          "the session's child running",
+        );
+        yield* hosts.release(entry.cwd, entry.sessionId);
+      }).pipe(Effect.provideService(WorktrunkCommand, wt)),
+      { fakePi: "slow-worktree" },
+    );
+  },
+);

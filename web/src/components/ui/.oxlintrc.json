@@ -1,0 +1,11 @@
+{
+  "$schema": "../../../../node_modules/oxlint/configuration_schema.json",
+  // Upstream shadcn source: only the Tailwind class check applies here.
+  "plugins": [],
+  "categories": { "correctness": "off" },
+  "jsPlugins": ["@shadcn/lint"],
+  "rules": {
+    // shadcn's Sonner wrapper uses this as a non-utility marker.
+    "shadcn/no-unknown-classes": ["error", { "allow": ["toaster"] }]
+  }
+}

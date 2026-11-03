@@ -59,6 +59,7 @@ export function SurfaceFrame({
   const close = () => closeTab(tabKey(tab));
   const toolbar = status !== undefined || actions !== undefined || single;
   return (
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape closes the tab from anywhere inside it.
     <section
       aria-label={names.region}
       className="flex min-h-0 min-w-0 flex-1 flex-col"
@@ -171,7 +172,7 @@ export function SurfaceColumn({
     >
       {!single && shown && (
         // No standard shadcn resize handle supports a remembered pixel width; mirrors the sidebar's.
-        // biome-ignore lint/a11y/useSemanticElements: interactive window splitter, not a thematic break.
+        // role=separator: an interactive window splitter, not a thematic break.
         <div
           role="separator"
           tabIndex={0}

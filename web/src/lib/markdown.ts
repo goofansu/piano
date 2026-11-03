@@ -21,7 +21,7 @@ function localFilePath(destination: string): string | undefined {
     }
     // Escapes that are not UTF-8 throw: a name Piano cannot spell is not a local file.
     path = path.replace(/(?:%[\da-f]{2})+/gi, (escapes) => decodeURIComponent(escapes));
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: reject path control characters.
+    // oxlint-disable-next-line no-control-regex -- reject path control characters.
     return path && !/[\u0000-\u001f\u007f]/.test(path) ? path : undefined;
   } catch {
     return;

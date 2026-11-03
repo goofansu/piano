@@ -458,7 +458,7 @@ export function Hunks({ file }: { file: DiffFile }) {
               </colgroup>
               <tbody>
                 {block.items.map((row, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: a diff's rows are positional and never reorder.
+                  // Index keys: a diff's rows are positional and never reorder.
                   <DiffRowView key={i} row={row} wrap={wrap} />
                 ))}
               </tbody>

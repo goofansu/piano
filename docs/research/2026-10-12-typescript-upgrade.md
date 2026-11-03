@@ -1,5 +1,7 @@
 # TypeScript upgrade: use 6.0.3, defer 7
 
+> Superseded by [oxlint, oxfmt and TypeScript 7](2026-11-03-oxc-and-typescript-7.md).
+
 ## Decision
 
 Update [PR #91](https://github.com/goofansu/piano/pull/91) to TypeScript

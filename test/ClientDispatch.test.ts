@@ -605,7 +605,7 @@ function worktreePicker(receive: (m: ClientRequest) => Effect.Effect<Effect.Effe
       handlers = h;
       return {
         send: (m) => {
-          m._tag !== "ack" && commands.push(m);
+          if (m._tag !== "ack") commands.push(m);
           return "sent";
         },
         close: () => {},

@@ -36,7 +36,7 @@ export function useCommandForms(deps: {
   const { listen } = deps;
   useEffect(() => listen(forms.hear), [listen, forms]);
   // Before paint, so a deleted project's home never shows "Project not found" on its way out.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: settle reads the rendered state through getState; each new state is its signal.
+  // Extra dependency: settle reads the rendered state through getState; each new state is its signal.
   useLayoutEffect(() => forms.settle(), [deps.state, forms]);
   const state = useSyncExternalStore(forms.subscribe, forms.getState);
   return { ...forms, ...state };

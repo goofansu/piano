@@ -73,7 +73,7 @@ export function SlashTextarea({
   const token = commandToken(value, state.accepted);
   // The native textarea remains the editor (selection, undo, IME and accessibility).
   // A non-interactive mirror paints command color and hover without replacing native editing.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: resync DOM metrics when draft text or input styling changes, not on streaming renders.
+  // Extra dependencies: resync DOM metrics when draft text or input styling changes, not on streaming renders.
   useLayoutEffect(() => {
     const element = ref.current;
     const overlay = mirror.current;
@@ -304,18 +304,17 @@ export function SlashTextarea({
         <ul
           ref={list}
           id={id}
-          // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the textarea drives this listbox through aria-activedescendant.
+          // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- the textarea drives this listbox through aria-activedescendant.
           role="listbox"
           aria-label="Slash commands"
           className="max-h-[min(18rem,var(--radix-popover-content-available-height))] overflow-y-auto"
         >
           {commands.map((command, index) => (
-            // biome-ignore lint/a11y/useFocusableInteractive: as above.
-            // biome-ignore lint/a11y/useKeyWithClickEvents: as above.
+            // oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- the textarea keeps focus and handles keys.
             <li
               key={command.name}
               id={`${id}-${index}`}
-              // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: options stay unfocusable; the textarea keeps focus and handles keys.
+              // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- options stay unfocusable; the textarea keeps focus and handles keys.
               role="option"
               aria-selected={index === active}
               className={cn(

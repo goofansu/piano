@@ -6,21 +6,31 @@ How Piano's formatting, lint, CI and dependency policy work. For setup, see the
 
 ## Formatting and lint
 
-`biome.json` is the source of truth for formatting: two spaces, LF, a 100-column target, double
-quotes (also in JSX), semicolons and trailing commas. `npm run format` rewrites files and
-`npm run format:check` only reports.
+Piano formats with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and lints with
+[oxlint](https://oxc.rs/docs/guide/usage/linter). Type checking is TypeScript 7's `tsc`.
 
-Biome formats application and test source and the maintained JS and JSON config. It skips
-upstream shadcn source (`web/src/components/ui/` and `web/src/hooks/use-mobile.ts`) so updates stay
-reviewable. Always add specific Biome exclusions for new upstream-owned paths, including files
-outside `components/ui/`; see [shadcn ownership](shadcn-ui.md). Tailwind checks still cover upstream
-components. Biome leaves lockfiles, captured evidence, vendored skills, Markdown and YAML alone.
-Put mechanical formatting in its own commit, apart from behavior changes.
+`.oxfmtrc.json` is the source of truth for formatting: two spaces, LF, a 100-column target, double
+quotes (also in JSX), semicolons, trailing commas and sorted imports. `npm run format` rewrites
+files and `npm run format:check` only reports. oxfmt formats application and test source, CSS and
+the maintained JSON config. It skips upstream shadcn source (`web/src/components/ui/` and
+`web/src/hooks/use-mobile.ts`) so updates stay reviewable; always add a specific `ignorePatterns`
+entry for a new upstream-owned path, including files outside `components/ui/` (see
+[shadcn ownership](shadcn-ui.md)). It leaves lockfiles, captured evidence, vendored skills,
+Markdown and YAML alone. Put mechanical formatting in its own commit, apart from behavior changes.
 
-`npm run lint` runs `biome check` (rules and formatting), then `npm run lint:tailwind`. The Tailwind
-check runs ESLint with `@shadcn/lint`, configured in `eslint.config.mjs`. It rejects classes the
-UI's Tailwind theme does not define, `components/ui` included. It ignores inline ESLint directives,
-so old React Hooks directives cannot switch it off.
+`npm run lint` runs oxlint, Stylelint, then `oxfmt --check`. `.oxlintrc.json` enables oxlint's correctness
+rules with the TypeScript, unicorn, import, React and jsx-a11y plugins; each rule it turns off says
+why. Suppress one finding with `// oxlint-disable-next-line <rule> -- <reason>`; lint fails on a
+suppression that no longer matches. The same run checks Tailwind classes with `@shadcn/lint`, loaded
+as an oxlint JS plugin: it rejects classes the UI's Tailwind theme does not define.
+`web/src/components/ui/.oxlintrc.json` runs only that check on upstream components.
+
+Stylelint checks the CSS for names that do not exist: an unknown property, or a `var(--…)` that no
+CSS defines. Both pass the build and silently do nothing in the browser. `stylelint.config.mjs` runs
+only those two rules. It counts Tailwind's own theme variables as defined, and lists the custom
+properties that components set at runtime through `style`; add a new one there with the file that
+sets it. It does not see `var(--…)` inside TSX class
+names or `style` props.
 
 `npm install` installs a Husky pre-commit hook that runs `npm run lint`. A lint error blocks the
 commit.

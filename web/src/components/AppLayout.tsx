@@ -76,7 +76,7 @@ export function AppLayout({
         </div>
         {!collapsed && (
           // No standard shadcn resize handle supports drag-to-collapse with remembered pixel width.
-          // biome-ignore lint/a11y/useSemanticElements: interactive window splitter, not a thematic break.
+          // role=separator: an interactive window splitter, not a thematic break.
           <div
             role="separator"
             tabIndex={0}

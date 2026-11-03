@@ -122,7 +122,7 @@ test("file reads accept explicit external paths, stay bounded and never guess an
     await assert.rejects(read("large.pdf"), /pdf file up to 20 MiB/);
     await writeFile(
       join(a, "program.md"),
-      Buffer.from([0x7f, 0x45, 0x4c, 0x46, ...new Array(100).fill(0)]),
+      Buffer.from([0x7f, 0x45, 0x4c, 0x46, ...Array.from({ length: 100 }, () => 0)]),
     );
     await assert.rejects(read("program.md"), /not supported/);
   } finally {
