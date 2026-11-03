@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { appendFileSync, rmSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Result, Schema, Scope, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
@@ -1218,6 +1218,36 @@ for (const mode of ["success", "abort-failure", "abort-exit", "clear-failure", "
     );
   });
 }
+
+test("only one Stop runs at a time; input sent alongside it is refused unsent", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "one-stop-at-a-time",
+      });
+      // Sent together, as two tabs or a double-click would: admission alone decides.
+      const results = yield* Effect.all(
+        [
+          session.act({ _tag: "stop" }),
+          session.act({ _tag: "stop" }),
+          session.act({ _tag: "prompt", text: "racing input" }),
+        ].map((action) => Effect.result(action)),
+        { concurrency: "unbounded" },
+      );
+      const stops = results.slice(0, 2);
+      assert.equal(stops.filter(Result.isSuccess).length, 1, "exactly one Stop runs");
+      for (const result of [...stops.filter(Result.isFailure), results[2]]) {
+        assert.ok(result && Result.isFailure(result), "input alongside Stop is refused");
+        if (!Result.isFailure(result)) continue;
+        assert.equal(result.failure.reason, "rejected");
+        assert.match(result.failure.detail, /Stop is in progress/);
+        assert.equal(result.failure.notSent, true, "refused before Pi saw it");
+      }
+      assert.equal((yield* session.state).isStopping, false);
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+});
 
 test("busy input preserves extension commands and retry/compaction remain active after agent_end", async () => {
   await run(
