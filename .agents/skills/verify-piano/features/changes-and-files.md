@@ -3,7 +3,7 @@
 From a session the user sees what changed in its workspace: Changes, in the Surface area beside
 the Agent area (or under its own tab where the areas take turns), shows the Git diff of
 the session's folder or worktree against HEAD (per-file additions and removals, new files, a diff
-per file), and the session rail (turned on or off for every session from the header, and
+per file), and the desktop session rail (turned on or off for every session from the header, and
 sharing the right side with the Surface area: whichever came in last shows), shows where the
 session runs as the Environment section (Folder, or Repository once GitHub is known, then Branch,
 or the commit when HEAD is detached), Outputs, the files Pi wrote or edited in this session, each
@@ -13,13 +13,14 @@ The palette (Mod+K) searches neither outputs nor links.
 
 ## Sub-features
 
-- `changes-open`: the header's last control, the "Changes" toggle, opens the Surface area and is
+- `changes-open`: the header's "Changes" toggle opens the Surface area and is
   pressed while Changes shows, then named "Hide changes", which hides it; the palette's "Changes"
   focuses Changes without rereading, collapsing or hiding it. The toggle shows on every layout;
   below 849px of session width it shows the Changes area (the "Agent" tab bar shows only while
   something is open: `Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar
-  closes it. The header's end holds only "Show session rail" / "Hide session rail" and this
-  toggle (plus the preview control while an app runs); the pull request is read in Changes.
+  closes it. Side by side, the header's end holds "Show session rail" / "Hide session rail" and
+  this toggle. One area at a time, the rail control is absent; the session menu opens a sheet
+  ([`open-session.md`](./open-session.md) `phone-menu`).
 - `changes-scope`: the toolbar starts with the comparison menu, "Comparison: Uncommitted" by
   default (visible text `Uncommitted`), or "Comparison: <target>" (`main`, `origin/main`):
   Uncommitted compares with HEAD, the branch option with the branch's target (the pull request's
@@ -63,10 +64,10 @@ The palette (Mod+K) searches neither outputs nor links.
   rail", turns the session rail on or off; it stays on
   across sessions and reloads, hides while a Surface tab shows, and returns when the last one
   closes; turned on over open tabs, it hides them until the rail goes off. It is offered even
-  without Git. Narrow, the same header and palette controls open a transient sheet with the
-  same content; Escape or Hide session rail dismisses it and restores focus to the header button.
-  Opening a file dismisses it and selects the file tab. Resizing or switching sessions closes
-  the sheet; widening restores the desktop switch without changing its preference.
+  without Git. One area at a time, neither the header nor the palette offers the rail. The header
+  shows folder/repository and branch below the title; the session menu holds actions and the
+  linked pull request, not Environment copy menus, Outputs or Links. Widen to use those sections;
+  the desktop rail preference is kept.
 - `environment`: the rail's "Environment" rows are menu buttons named `Folder: repo`, `Branch:
   main` (field names are screen-reader only in the visible text), and, when a pull request is
   linked, a "Pull request" row showing its number without a hash (`222` on the seed). The Folder
@@ -74,7 +75,7 @@ The palette (Mod+K) searches neither outputs nor links.
   Branch row's "Copy git branch" (a detached commit's "Copy commit SHA"), each with "Open … on
   GitHub" once the repository is known. The rail shows no row for the working directory itself.
 - `files-list`: The rail's "Outputs" lists files written in the session by name only, and its
-  "Links" (heading "Links <n>") lists the conversation's first five web links, each with "Jump to
+  "Links" (heading "Links <n>") lists the conversation's five most recent web links, each with "Jump to
   message", and "Show all" past five. Either section appears only once it has a row.
 - `file-viewer`: an Outputs row opens the file in a tab of its own at the strip's end (tab = file
   name, toolbar = path, "Close <file name>" on the tab, or in the toolbar where one area shows at
@@ -83,8 +84,8 @@ The palette (Mod+K) searches neither outputs nor links.
 ## How to get to it (user POV)
 
 - Session page header → the "Changes" icon; the palette's "Changes" does the same, "Hide changes" and (one area at a time) "Agent" go back.
-- Session page header → "Show session rail" → an Outputs row → a file; the palette's "Show
-  session rail" / "Hide session rail" does the same.
+- Desktop session page header → "Show session rail" → an Outputs row → a file; the palette's
+  "Show session rail" / "Hide session rail" does the same while the areas fit side by side.
 - The same diff over HTTP: `POST /api/workspace/changes?workspaceId=<id>` with an allowed Origin.
 
 ## Driving it with agent-browser
@@ -131,17 +132,14 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Links: send `Read https://example.com/docs/guide please` from the composer; fake Pi echoes
     it, and the rail gains `Links` / `1` / `example.com/docs/guide` with "Jump to message".
     Capture `04-links`.
-  - Narrow: with Changes open, `ab set viewport 700 800`: tablist "Session views" reads `Agent |
-    Changes`; the header still offers Changes and Show session rail.
-    `ab find role button click --name "Show session rail" --exact` opens dialog "Session rail"
-    with the same sections. Capture `05-narrow-rail`. Open `answer.ts`: the sheet disappears and
-    the file tab is selected. Capture `06-narrow-file`. Choose tab Agent and confirm the draft
-    and attachments remain. Reopen the sheet, press Escape and verify focus is on Show session
-    rail (not the composer). Also exercise the palette's Show / Hide session rail, then widen
-    while the sheet is open: no sheet overlay remains and only the desktop presentation is active.
-    Narrow again and switch sessions through the palette while the sheet is open: it closes and
-    reopening shows only the selected session's content. Phone viewport evidence is emulation,
-    not a real-device keyboard, safe-area or touch-scroll check.
+  - Narrow: with Changes open, `ab set viewport 700 800;
+    ab wait '[role=tablist][aria-label="Session views"]'`: tabs read `Agent | Changes`.
+    The header shows `repo · main` below the title and offers Changes and
+    "Session information and actions", not Show session rail. Capture `05-narrow-changes`.
+    Drive [`open-session.md`](./open-session.md) `phone-menu` for its sheet, dismissal and resize
+    checks. Outputs, Links and Environment copy menus require widening; there is no narrow rail
+    sheet or Outputs picker. Phone viewport evidence is emulation, not a real-device keyboard,
+    safe-area or touch-scroll check.
 
 ## Gotchas
 

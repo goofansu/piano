@@ -9,11 +9,17 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 
 - `open-from-sidebar`: click the session's row in navigation "Sessions".
 - `history`: the saved user message and reply render; "Jump to message" lists them.
-- `header`: one line: the project crumb ("Project: <name>", only for a member session) and the
+- `header`: on desktop, one line: the project crumb ("Project: <name>", only for a member session) and the
   title with "Session information and actions" beside it; at its end "Show session rail" and
   "Changes". Where the session runs is in the session rail and, when shown, the sidebar row; the
   pull request is read in Changes. The session's state is the sidebar row's; the header only
   carries it as screen-reader `role=status` text ("Ready", "Not running").
+- `phone-menu`: one area at a time, the header shows folder/repository and branch below the title;
+  "Session information and actions" opens the "Session" sheet. It holds the linked "Pull request
+  #222", Rename, Pin, Move to project (Add to project for a loose session), Messages only,
+  Archive and Delete; Preview appears only when one is known. It has no Outputs, Links,
+  Environment copy menus or session ID. Escape returns focus to its trigger; widening closes it
+  and narrowing again does not reopen it.
 - `row-details`: View options → Show → "Folder and branch" (off by default, remembered per
   browser; the palette's "Show folder and branch" / "Hide folder and branch") adds a line under
   each sidebar row with its folder and branch (only the branch where the group names the folder).
@@ -46,6 +52,26 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab wait --text "Answer 4."`
   - Result: `What is 2 + 2? (Loose session)` and `Answer 4.` visible; the header text reads
     `Loose session` / `Not running`. Capture `01-opened`.
+- `phone-menu`
+  - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
+    ab set viewport 700 800;
+    ab find role button click --name "Session information and actions" --exact;
+    ab wait '[role=dialog]'`
+  - Result: heading `Session`, link `Pull request #222` and the actions above, not rail sections.
+    Capture `05-phone-menu`. `ab find role button click --name "Move to project" --exact`
+    opens the project picker; capture `06-project-picker`, then
+    `ab find role button click --name "Back" --exact` returns to actions.
+    `ab find role switch click --name "Messages only" --exact` changes the switch; click it
+    again to restore the default. `ab press Escape;
+    ab wait --fn "!document.querySelector('[role=dialog]')"` closes the sheet;
+    `ab eval "document.activeElement?.getAttribute('aria-label')"` reads
+    `Session information and actions`.
+  - Resize: reopen with the same trigger, then `ab set viewport 1280 800;
+    ab wait --fn "!document.querySelector('[role=dialog]')"; ab set viewport 700 800;
+    ab wait --fn "!document.querySelector('[role=dialog]')"`. Capture `07-menu-stays-closed`;
+    `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-loose"; ab wait --text "Answer 4."`
+    restores desktop and the session for the following steps. This is viewport emulation, not
+    real-phone proof.
 - `row-details`
   - Action: `ab find role button click --name "View options" --exact;
     ab find role menuitem click --name "Show" --exact;

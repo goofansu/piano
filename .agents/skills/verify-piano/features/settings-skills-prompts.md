@@ -54,6 +54,22 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   - Result: dialog reads `New skill` / `Saved in Piano…` / `Name` / `Description` /
     `0 / 1,024` / `Instructions` / `0 / 20,000` / `Disable model invocation` / `Cancel` /
     `Create skill`. Capture `02-new-skill`. Escape closes it without saving.
+  - Action: in the open New skill dialog,
+    `ab find role textbox fill --name "Name" --exact "verify-skill";
+    ab find role textbox fill --name "Description" --exact "Maintain verification";
+    ab find role textbox fill --name "Instructions" --exact "Reply with OK.";
+    ab find role button click --name "Create skill" --exact; ab wait --text "verify-skill"`
+  - Result: toast `Skill created`; the row reads `verify-skill` / `Maintain verification`.
+    Capture `02b-skill-created`.
+- `skill-row-actions`
+  - Action: `ab wait --fn "!document.querySelector('[data-sonner-toast]')";
+    ab find role button click --name "Skill actions verify-skill" --exact;
+    ab find role menuitem click --name "View" --exact; ab wait '[role=dialog]'`
+  - Result: the dialog shows the complete SKILL.md and "Copy skill". Capture `02c-skill-view`.
+    `ab press Escape; ab find role button click --name "Skill actions verify-skill" --exact;
+    ab find role menuitem click --name "Delete" --exact; ab wait --text "Delete skill?"`;
+    capture `02d-skill-delete`, then `ab find role button click --name "Delete" --exact;
+    ab wait --text "No skills"`. Capture `02e-skill-deleted`.
 - `prompts-empty` and `new-prompt`
   - Action: `ab open "$WEB_URL/settings/prompts"; ab wait --text "No prompts";
     ab find role button click --name "New prompt" --exact; ab wait "[role=dialog]";
@@ -77,8 +93,10 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     `05-prompt-delete`, `06-prompt-deleted`.
 - `palette-new`
   - Action: on `/settings/prompts`, `ab press Control+k; ab wait "[cmdk-input]";
-    ab fill "[cmdk-input]" "new prompt"; ab snapshot -i | rg 'New prompt'`
-  - Result: option `New prompt` is listed (and `Prompts` / `Skills` when the query is `settings`).
+    ab fill "[cmdk-input]" "new prompt"; ab wait '[cmdk-list][aria-busy="false"]';
+    ab find role option click --name "New prompt" --exact; ab wait '[role=dialog]'`
+  - Result: the New prompt dialog opens. Capture `07-palette-new`; Escape closes it.
+    `Prompts` / `Skills` are listed when the query is `settings`.
 - Side effects: Skills and Prompts pages start no Pi. A new session's fake-Pi `start` audit gains
   `--prompt-template "$RUN/db/prompts"` and `--skill "$RUN/db/skills"` (paths under the run's
   database dir); proving a template reaches Pi needs a real or scripted model, not fake Pi.
@@ -91,3 +109,11 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 - The create toast covers the row's actions button until it leaves; wait
   `!document.querySelector('[data-sonner-toast]')` before opening the menu.
 - Fake Pi does not exercise slash-completion of a prompt or model invocation of a skill.
+- Agent-authored saves are a separate user path: ask a session to create or update a Piano skill
+  or prompt; its proposal shows the new file or update diff, with Save skill / Save prompt and
+  Cancel. A proposal containing hidden text offers only Cancel. Manual Settings CRUD does not
+  prove this approval path. The default browser fake only echoes `propose visible`; the dialogs
+  fake can render a proposal but does not save the file. End-to-end proof requires an isolated
+  real-Pi session with a scripted model calling `piano_save_skill` / `piano_save_prompt`, then
+  observing Save or Cancel and the resulting Settings list. Report that prerequisite as unmet
+  when using only the default launch; never use the owner's real session to fill this gap.

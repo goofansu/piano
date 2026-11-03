@@ -209,6 +209,8 @@ harness journeys clean up their own instance and browser.
 - Radix menus and popovers open on pointer events: use `ab.sh ... click` / `find ... click`, never
   a DOM `.click()` from `eval`. After choosing, wait for
   `!document.querySelector('[data-radix-popper-content-wrapper]')` before the next step.
+- After filling the Mod+K query, wait for `'[cmdk-list][aria-busy="false"]'` before selecting
+  an option. Pending results can still display a matching row but refuse its action.
 - Opening a session page starts a Pi `probe` (audit `sessionId: "probe"`) for its composer; count
   only non-probe entries as user-driven Pi starts.
 - Fake Pi writes no history: a session started on it is empty again after a backend restart.

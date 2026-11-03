@@ -58,7 +58,8 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   - Result: `ab eval "document.querySelector('[aria-current=page]')?.innerText"` is `Projects`.
 - `palette-row`
   - Action: on `/settings/providers`, `ab press Control+k; ab wait "[cmdk-input]";
-    ab fill "[cmdk-input]" "projects"; ab find role option click --name "Projects" --exact;
+    ab fill "[cmdk-input]" "projects"; ab wait '[cmdk-list][aria-busy="false"]';
+    ab find role option click --name "Projects" --exact;
     ab wait --url "**/projects"`
   - Result: `/projects`, Settings closed, `main h1` reads `Projects`.
 - `new-project`

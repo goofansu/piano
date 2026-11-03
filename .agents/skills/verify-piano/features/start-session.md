@@ -15,8 +15,10 @@ the session without sending the message again; a message that cannot be sent kee
   in the one chosen ("None" clears a choice).
 - `first-message`: combobox "First message" plus Enter or "Send" starts the session and lands on it.
 - `reload`: reloading `/s/<id>` shows the same transcript and sends no second prompt.
-- `not-sent`: when the socket is down, "Message not sent. Your draft is kept; retry when the
-  session reconnects."
+- `not-sent`: when the socket is down, Send is disabled and Enter keeps the draft without
+  creating a session. A send refused at the delivery boundary can instead show "Message not
+  sent. Your draft is kept; retry when the session reconnects."; disconnecting first does not
+  exercise that race.
 
 ## How to get to it (user POV)
 
@@ -54,11 +56,20 @@ project and reload on its own scratch instance, with its own folders and models 
 - `reload`
   - Action: `ab reload; ab wait --text "echo: hello verify"`
   - Result: same URL and transcript. `rg -c '"command":"prompt"' "$AUDIT"` is still 1.
-- `not-sent`
-  - Action: covered by the harness and unit tests; driving it by hand means stopping the scratch
-    backend by its recorded PID (`server` line of `$RUN/pids`) while the page stays open, then
-    sending. That ends the run; relaunch afterwards.
-  - Result: the warning text above, and the draft still in the textbox.
+- `not-sent` (last drive before Cleanup; ends this run)
+  - Action: `ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
+    ab fill '[aria-label="First message"]' "keep this draft";
+    ab wait --fn "!document.querySelector('[aria-label=Send]').disabled"`.
+    Capture `03-connected-draft`. Stop only this scratch backend after checking its identity:
+    `. .agents/skills/verify-piano/scripts/lib.sh; read -r role pid started cwd < "$RUN/pids";
+    test "$role" = server && test "$(starttime "$pid")" = "$started" &&
+    test "$(process_cwd "$pid")" = "$ROOT" && kill -TERM "$pid"`.
+    Then `ab wait --fn "document.querySelector('[aria-label=Send]').disabled"; ab press Enter`.
+  - Result: Send stays disabled; `ab get value '[aria-label="First message"]'` is
+    `keep this draft`, still on `/new`, and the audit has no prompt with that text.
+    Capture `04-disconnected-draft`, then Cleanup. No warning is required for an already-disabled
+    send. The browser harness covers successful send/reload, not this case; the delivery-race
+    warning is separately protected by `test/DraftSubmission.test.ts`.
 
 ## Gotchas
 
