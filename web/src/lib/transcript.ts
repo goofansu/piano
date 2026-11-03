@@ -463,6 +463,30 @@ export function nestedFold(nested: ReadonlyArray<ToolExecution>): NestedFold {
   };
 }
 
+/** What a closed row with nested calls says about them: the call a running script is on, and
+ * how many it has made and how many failed. */
+export interface NestedProgress {
+  /** While the parent runs: its newest running call, else its newest call. */
+  latest?: ToolExecution;
+  calls: number;
+  failed: number;
+}
+
+export function nestedProgress(
+  nested: ReadonlyArray<ToolExecution>,
+  running: boolean,
+): NestedProgress | undefined {
+  if (!nested.length) return undefined;
+  const latest = running
+    ? (nested.findLast((call) => call.status === "running") ?? nested.at(-1))
+    : undefined;
+  return {
+    ...(latest ? { latest } : {}),
+    calls: nested.length,
+    failed: nested.filter((call) => call.status === "error").length,
+  };
+}
+
 const turnLabel = (m: RenderMsg) =>
   messageLabel(m.skill ? `/skill:${m.skill.name} ${m.text}` : m.text) ||
   (m.attachments?.length ? "Image" : "");

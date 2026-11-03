@@ -16,6 +16,7 @@ import {
   NESTED_TAIL,
   nestedFold,
   nestedOutcome,
+  nestedProgress,
   revealEntries,
   type TranscriptOptions,
   type TranscriptRow,
@@ -402,6 +403,26 @@ test("a nested call still running stays in view however old, in call order", () 
   const fold = nestedFold(script(statuses));
   assert.deepEqual(numbers(fold.visible), [2, 13, 14, 15, 16, 17, 18, 19, 20]);
   assert.equal(fold.hidden, 11);
+});
+
+test("a running script's closed row names the call it is on and counts its calls", () => {
+  const calls = script(["success", "error", "success", "running"]);
+  const progress = nestedProgress(calls, true);
+  assert.equal(progress?.latest?.id, "code/4");
+  assert.deepEqual([progress?.calls, progress?.failed], [4, 1]);
+  // Between two calls nothing runs: the newest call stands for where the script is.
+  assert.equal(nestedProgress(script(["success", "success"]), true)?.latest?.id, "code/2");
+  // Calls in parallel: the newest running one, not a later one that already ended.
+  assert.equal(
+    nestedProgress(script(["running", "running", "success"]), true)?.latest?.id,
+    "code/2",
+  );
+});
+
+test("a finished script's closed row counts its calls without naming one", () => {
+  const progress = nestedProgress(script(["success", "error", "error"]), false);
+  assert.deepEqual(progress, { calls: 3, failed: 2 });
+  assert.equal(nestedProgress([], true), undefined, "a call that made no calls says nothing");
 });
 
 test("a failed aborted tool replaces only the duplicated abort, including pending and reload views", () => {

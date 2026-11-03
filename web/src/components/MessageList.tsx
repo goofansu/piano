@@ -60,6 +60,7 @@ import {
   NESTED_TAIL,
   nestedFold,
   nestedOutcome,
+  nestedProgress,
   summarize,
   type QuestionAnswers,
   type ToolOutcome,
@@ -431,8 +432,9 @@ function FoldRow({
 }: {
   stateKey?: string;
   glyph?: React.ReactNode;
-  /** What the row is: its title, a quiet note, a badge. The chevron follows it. */
-  header: React.ReactNode;
+  /** What the row is: its title, a quiet note, a badge. The chevron follows it. A function
+   * answers for the row's state, for what only a closed row shows. */
+  header: React.ReactNode | ((open: boolean) => React.ReactNode);
   /** The group's accessible name. */
   label: string;
   defaultOpen?: boolean;
@@ -510,7 +512,7 @@ function FoldRow({
   // A horizontal drag that starts on a header still opens the mobile sidebar; a tap folds.
   const title = (
     <>
-      {header}
+      {typeof header === "function" ? header(open) : header}
       {canOpen && (
         // The 14px chevron's painted right inset is 4.67px closed, 2.92px open. Nudge the
         // open tool chevron inward 1px to match the gutter dot's 4px inset, not its SVG box.
@@ -1155,11 +1157,13 @@ function Tool({
       />
     ));
   const failed = outcome === "failed";
+  const progress = nestedProgress(nested, outcome === "running");
+  const latest = progress?.latest;
 
   return (
     <FoldRow
       glyph={<span className={cn("block size-2 rounded-full", DOT[outcome])} />}
-      header={
+      header={(open) => (
         <>
           <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>
             {verb}
@@ -1171,8 +1175,24 @@ function Tool({
             <span className="min-w-0 flex-1 truncate font-mono text-ink-2">{summary}</span>
           )}
           {knownTool && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
+          {/* Closed only: an open row lists the calls and counts them on its fold line. */}
+          {progress && !open && (
+            <>
+              {!summary && latest && (
+                <span className="min-w-0 flex-1 truncate font-mono text-ink-2">
+                  {latest.name} {summarize(latest.args)}
+                </span>
+              )}
+              <span className="shrink-0 text-ink-3">
+                {progress.calls} {progress.calls === 1 ? "call" : "calls"}
+                {progress.failed > 0 && (
+                  <span className="text-err"> · {progress.failed} failed</span>
+                )}
+              </span>
+            </>
+          )}
         </>
-      }
+      )}
       label={`${call.name} tool call`}
       stateKey={call.id}
       toolOutput

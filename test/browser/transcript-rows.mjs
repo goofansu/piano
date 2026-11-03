@@ -261,6 +261,8 @@ await run(
           `document.querySelector('[data-fold-probe="${round}-${i}"]').scrollIntoView({ block: "center" })`,
         );
         await page.ab("click", `[data-fold-probe="${round}-${i}"]`);
+        // An opening fold moves the rows below it; click the next one once they have settled.
+        await page.until(`!document.getAnimations().length`);
       }
     }
     assert.ok(opened.includes("bash tool call"), `opened folds: ${opened.join(" | ")}`);
