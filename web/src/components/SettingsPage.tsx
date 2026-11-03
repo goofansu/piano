@@ -4,10 +4,10 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { ApiKeySettings } from "@/components/ApiKeySettings";
 import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
+import { LibrarySettings } from "@/components/LibrarySettings";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoButton } from "@/components/PianoButton";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
-import { PromptSettings } from "@/components/PromptSettings";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RadiusSection } from "@/components/RadiusSection";
 import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
@@ -37,7 +37,6 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UserSkillSettings } from "@/components/UserSkillSettings";
 import { WebhookSettings } from "@/components/WebhookSettings";
 import { providersSettingsView } from "@/lib/providersSettingsView";
 import {
@@ -116,8 +115,8 @@ export function SettingsPage({
       <ProvidersSettings revealRadius={section === "radius" ? request : undefined} />
     ),
     mcp: () => <McpSettings />,
-    skills: () => <UserSkillSettings />,
-    prompts: () => <PromptSettings />,
+    skills: () => <LibrarySettings kind="skill" />,
+    prompts: () => <LibrarySettings kind="prompt" />,
     webhooks: () => <WebhookSettings />,
   };
   return pages[page]();
