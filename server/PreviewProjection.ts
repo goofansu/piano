@@ -4,18 +4,16 @@
  * from the browser, into the last observation. Internal to PiSessions.
  */
 import type { PreviewRequest } from "../scripts/PreviewAdapter.ts";
-import { generationApp, type PreviewOutcome } from "../scripts/PreviewOwner.ts";
+import { type GenerationApp, observeApp, type PreviewOutcome } from "../scripts/PreviewOwner.ts";
 import { PREVIEW_STATES, type SessionPreview } from "../shared/wire.ts";
 
 const text = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-/** An app observation that belongs to `generation`, or undefined for any other result. A launch
+/** This generation's app as the browser's preview; undefined for a state it cannot show. A launch
  * intent without an observation is in an `unknown` state. */
-function observed(app: unknown, generation: string): SessionPreview | undefined {
-  const result = generationApp(app, generation);
-  if (!result) return undefined;
+function shown(result: GenerationApp): SessionPreview | undefined {
   const state = [...PREVIEW_STATES, "unknown" as const].find((s) => s === result.state);
   const spec = isRecord(result.spec) ? result.spec : undefined;
   if (!state) return undefined;
@@ -34,12 +32,19 @@ function observed(app: unknown, generation: string): SessionPreview | undefined 
   };
 }
 
+/** An app observation that belongs to `generation`, or undefined for any other result. */
+function observed(result: unknown, generation: string): SessionPreview | undefined {
+  const seen = observeApp(generation, { action: "status" }, { result });
+  return seen.kind === "app" ? shown(seen.app) : undefined;
+}
+
 /**
- * The preview after `request` ended with `outcome`. An observation of this generation's app
- * replaces it; another owner's app or an absent record is not this session's preview; a confirmed
- * stop of the current instance clears it. A failed observation makes the current app, or the one a
- * failed start launched, unknown rather than stopped. A failed or refused start (an ownership
- * conflict) arrives as the status read that followed it.
+ * The preview after `request` ended with `outcome`, read as the owner's warming checks read it
+ * (`observeApp`). An observation of this generation's app replaces it; the app gone (an absent
+ * record, another owner's app, a confirmed stop of the current instance) clears it; an outcome
+ * that observed nothing keeps it, except that a failed observation makes the current app, or the
+ * one a failed start launched, unknown rather than stopped. A failed or refused start (an
+ * ownership conflict) arrives as the status read that followed it.
  */
 export function projectPreview(
   current: SessionPreview | undefined,
@@ -63,16 +68,17 @@ export function projectPreview(
       observedAt: Date.now() / 1000,
     };
   }
-  const { result } = outcome;
-  const app = observed(result, generation);
-  if (app) return app;
-  if (!isRecord(result)) return current;
-  if (result.status === "absent") return undefined;
-  if (result.status === "stopped" || result.status === "cleared")
-    return current?.instanceId === result.instanceId ? undefined : current;
-  // A status naming another owner's app: this session has none in its workspace.
-  if (request.action === "status" && typeof result.instanceId === "string") return undefined;
-  return current;
+  const seen = observeApp(generation, request, outcome);
+  switch (seen.kind) {
+    case "app":
+      return shown(seen.app) ?? current;
+    case "gone":
+      return seen.instanceId === undefined || seen.instanceId === current?.instanceId
+        ? undefined
+        : current;
+    case "nothing":
+      return current;
+  }
 }
 
 /** Logs from a status observation of this generation's app; another owner's logs are not shown. */

@@ -594,6 +594,58 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.equal(requests, answered);
   });
 
+  test(`[${platform}] a stale stop or replace while an app warms still shows it once it answers`, async (t) => {
+    if (foreign) return t.skip("needs native process ownership");
+    const f = await fixture(t);
+    const port = await freePort();
+    f.config.ports = [port];
+    let warm = false;
+    const server = createHttpServer((_request, response) => {
+      response.statusCode = warm ? 200 : 500;
+      response.end();
+    });
+    t.after(
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        }),
+    );
+    f.host.afterSubmit = async () => {
+      f.host.phase = "running";
+      server.listen(port, "127.0.0.1");
+      await once(server, "listening");
+    };
+    let shown: SessionPreview | undefined;
+    f.owner.observe((request, outcome) => {
+      shown = projectPreview(shown, f.owner.identity.generation, request, outcome);
+    });
+    const cold = await f.call(f.owner, {
+      command: [process.execPath, "-e", "process.exit(0)"],
+      timeoutSeconds: 1,
+    });
+    assert.equal(shown?.warming, true);
+
+    // Requests naming an instance that is no longer current observe nothing about this app.
+    assert.equal(
+      (await f.call(f.owner, { action: "stop", instanceId: "stale" })).status,
+      "not-current",
+    );
+    assert.equal(
+      (await f.call(f.owner, { replace: "stale", command: [process.execPath, "-e", "0"] })).status,
+      "not-current",
+    );
+    assert.equal(shown?.warming, true, "a stale request says nothing about the app");
+
+    warm = true;
+    const deadline = Date.now() + 10000;
+    while (!shown?.ready && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(shown?.ready, true, "the session gains the link once the app answers");
+    assert.equal(shown?.instanceId, cold.instanceId);
+    assert.equal(shown?.url, `http://localhost:${port}/`);
+  });
+
   test(`[${platform}] another workspace's start waiting for readiness never stalls a warming app's checks`, async (t) => {
     if (foreign) return t.skip("needs native process ownership");
     const f = await fixture(t);

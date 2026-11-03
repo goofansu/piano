@@ -21,20 +21,41 @@ export type PreviewOutcome = { result: unknown } | { error: unknown; attempted?:
  * left behind. */
 export type PreviewObserver = (request: PreviewRequest, outcome: PreviewOutcome) => void;
 
-/** An adapter result's app, when it is `generation`'s own; undefined for any other result (a
- * stop, an absent record, another owner's app). */
-export function generationApp(
-  result: unknown,
+/** This generation's app as an adapter result shows it. */
+export type GenerationApp = Record<string, unknown> & { instanceId: string };
+
+/** What an outcome says about this generation's app, decided once for the owner's warming checks
+ * and for the session's projection alike:
+ * - `app`: an observation of this generation's app;
+ * - `gone`: this session has no app (`instanceId` undefined: an absent record, or a status read
+ *   finding another owner's app) or no longer the named instance (a confirmed stop or clear);
+ * - `nothing`: nothing about the app, which stays as it was last seen. An error, busy or not, and
+ *   a request naming an instance that is not current (`not-current`) observe nothing. */
+export type AppObservation =
+  | { kind: "app"; app: GenerationApp }
+  | { kind: "gone"; instanceId?: string }
+  | { kind: "nothing" };
+
+export function observeApp(
   generation: string,
-): (Record<string, unknown> & { instanceId: string }) | undefined {
-  if (typeof result !== "object" || result === null) return undefined;
+  request: Pick<PreviewRequest, "action">,
+  outcome: PreviewOutcome,
+): AppObservation {
+  if ("error" in outcome) return { kind: "nothing" };
+  const { result } = outcome;
+  if (typeof result !== "object" || result === null) return { kind: "nothing" };
   const app = result as Record<string, unknown>;
   const owner = app.owner as Record<string, unknown> | null | undefined;
-  return typeof app.instanceId === "string" &&
-    typeof owner === "object" &&
-    owner?.generation === generation
-    ? (app as Record<string, unknown> & { instanceId: string })
-    : undefined;
+  if (typeof app.instanceId === "string" && owner?.generation === generation)
+    return { kind: "app", app: app as GenerationApp };
+  if (app.status === "absent") return { kind: "gone" };
+  if (app.status === "stopped" || app.status === "cleared")
+    return typeof app.instanceId === "string"
+      ? { kind: "gone", instanceId: app.instanceId }
+      : { kind: "nothing" };
+  // A status naming another owner's app: this session has none in its workspace.
+  if (request.action === "status" && typeof app.instanceId === "string") return { kind: "gone" };
+  return { kind: "nothing" };
 }
 
 /** One Pi generation's admission gate and live connections. Browser/tool cancellation never
@@ -164,26 +185,32 @@ export class PreviewOwner {
   /** Publish an outcome to the observer, then let it decide the warming check. */
   private publish(request: PreviewRequest, outcome: PreviewOutcome) {
     this.observer?.(request, outcome);
-    this.follow(outcome);
+    this.follow(request, outcome);
   }
 
-  /** The one rule for checking a warming-up app: only an observed app starts or ends the check;
-   * an error, busy or not, observed nothing, so the owner keeps checking the same app. A start's
-   * deadline ends only its caller's wait. The check ends once the app answers, exits or is
-   * replaced, and at the latest a warm-up window after it was first seen warming up, so a
-   * persistent error cannot keep it checking forever. */
-  private follow(outcome: PreviewOutcome) {
+  /** The one rule for checking a warming-up app, on the same reading of an outcome as the
+   * session's projection (`observeApp`): an observation of this generation's app starts or ends
+   * the check, and the app gone ends it; an outcome that observed nothing (an error, busy or not,
+   * or a stale request's `not-current`) keeps checking the same app. A start's deadline ends only
+   * its caller's wait. The check ends once the app answers, exits or is replaced, and at the
+   * latest when its warm-up window after launch closes, so a persistent error cannot keep it
+   * checking forever. */
+  private follow(request: Pick<PreviewRequest, "action">, outcome: PreviewOutcome) {
     if (this.ending) return;
-    if ("result" in outcome) {
-      const app = generationApp(outcome.result, this.identity.generation);
-      const instanceId = app?.warming === true ? app.instanceId : undefined;
-      if (this.warming?.instanceId !== instanceId) {
-        clearTimeout(this.warming?.timer);
-        this.warming = instanceId
-          ? { instanceId, until: Date.now() + WARMUP_SECONDS * 1000 }
-          : undefined;
+    const seen = observeApp(this.identity.generation, request, outcome);
+    if (seen.kind === "app") {
+      const { app } = seen;
+      if (app.warming !== true) this.stopWarming();
+      else if (this.warming?.instanceId !== app.instanceId) {
+        this.stopWarming();
+        const launched = typeof app.createdAt === "number" ? app.createdAt * 1000 : Date.now();
+        this.warming = { instanceId: app.instanceId, until: launched + WARMUP_SECONDS * 1000 };
       }
-    }
+    } else if (
+      seen.kind === "gone" &&
+      (seen.instanceId === undefined || seen.instanceId === this.warming?.instanceId)
+    )
+      this.stopWarming();
     const warming = this.warming;
     if (!warming || warming.timer) return;
     if (Date.now() >= warming.until) {
@@ -193,6 +220,11 @@ export class PreviewOwner {
     warming.timer = setTimeout(() => this.check(warming), READY_INTERVAL_MS);
     // A pending check never keeps a process alive by itself.
     warming.timer.unref();
+  }
+
+  private stopWarming() {
+    clearTimeout(this.warming?.timer);
+    this.warming = undefined;
   }
 
   private check(warming: NonNullable<PreviewOwner["warming"]>) {
@@ -218,7 +250,8 @@ export class PreviewOwner {
       if (this.ending || this.warming !== warming) return;
       warming.timer = undefined;
       // A busy lock observed nothing worth showing: the app is as warm as it was.
-      if ("error" in outcome && outcome.error instanceof PreviewBusyError) this.follow(outcome);
+      if ("error" in outcome && outcome.error instanceof PreviewBusyError)
+        this.follow(status, outcome);
       else this.publish(status, outcome);
     });
   }
@@ -268,8 +301,7 @@ export class PreviewOwner {
   /** Called at transport exit, before waiting for adapter locks or supervisor commands. */
   disconnect() {
     this.ending = true;
-    clearTimeout(this.warming?.timer);
-    this.warming = undefined;
+    this.stopWarming();
     if (!this.disposed) {
       for (const socket of this.sockets) socket.destroy();
       this.disposed = new Promise<void>((resolve) => this.server.close(() => resolve())).then(() =>

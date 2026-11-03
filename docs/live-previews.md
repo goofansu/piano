@@ -39,8 +39,10 @@ with its own 5s timeout, separate from how long a start waits. While the app's p
 has never answered 2xx/3xx, within ten minutes of launch, it is **warming up**, not failed: a start
 whose wait ends then returns `warming: true` with its recent logs and leaves the app running, and
 the owner keeps checking until the app answers, exits or the window ends, publishing each check.
-Only an observed app ends the checking: a failed read, the owner's or the browser's, shows the app
-unknown and the owner checks it again, for at most ten minutes after it first saw the app warming up.
+Only an observation of the app, or of its end, ends the checking: a failed read, the owner's or the
+browser's, shows the app unknown and the owner checks it again, for at most ten minutes after
+launch; a request naming an instance that is no longer current (`not-current`) observes nothing and
+changes neither the rail nor the checking.
 The rail shows **Running, warming up** and gains the link once the app answers. An app that has
 answered once is no longer warming up; a later bad answer shows **Running, not answering**.
 
