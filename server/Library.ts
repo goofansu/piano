@@ -42,10 +42,13 @@ export interface Layout<Entry extends { readonly name: string; readonly file: st
   /** Pi's agent folder, whose settings, packages and folders Pi loads before Piano's. */
   readonly agentDir: () => string;
   /** Piano's entries by the name Pi loads each as, only those in Piano's layout and not links, so
-   * nothing here reaches outside the folder. Fails only when the folder cannot be read. */
+   * nothing here reaches outside the folder. An entry it cannot read is left out, so it fails only
+   * when the folder cannot be read. */
   readonly shelf: () => Promise<ReadonlyMap<string, Shelved<Entry>>>;
-  /** Piano's entry of `name`, a well-formed name, as `shelf` would list it; reads no other entry,
-   * so one unreadable entry never refuses a save of another. */
+  /** Piano's entry of `name`, any name, as `shelf` would list it, or undefined; nothing outside the
+   * folder is reached, since a delete passes the name as asked. It reads no other entry, so one
+   * unreadable entry never refuses a save or delete of another, and throws when its own entry is
+   * there but cannot be read. */
   readonly find: (name: string) => Promise<Shelved<Entry> | undefined>;
   /** Whether anything at all of `name` is in Piano's folder or loaded from it, entry or not. */
   readonly occupied: (name: string) => boolean;
@@ -174,10 +177,14 @@ export const makeLibrary = <
     return entry;
   });
 
-  /** Delete Piano's entry by the name Pi loads it as, even one Pi loads another of first. */
+  /** Delete Piano's entry by the name Pi loads it as, even one Pi loads another of first. Reads
+   * only that entry, as a save does. */
   const remove = Effect.fn("Library.remove")(function* (name: string) {
     const couldNotDelete = () => refused(`Could not delete ${noun}.`);
-    const current = (yield* shelf(couldNotDelete)).get(name);
+    const current = yield* Effect.tryPromise({
+      try: () => layout.find(name),
+      catch: couldNotDelete,
+    });
     if (!current) return yield* notFound();
     yield* Effect.tryPromise({
       try: () => layout.remove(current),

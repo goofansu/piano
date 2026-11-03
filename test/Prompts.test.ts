@@ -399,3 +399,54 @@ test("a prompt Piano cannot read refuses its own save, never another prompt's", 
     ),
   );
 });
+
+test("a delete never reaches a file outside Piano's prompts folder", async () => {
+  const dir = join(root, "outside", "prompts");
+  mkdirSync(dir, { recursive: true });
+  const outside = join(root, "outside", "secret.md");
+  writeFileSync(outside, "Not Piano's\n");
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const prompts = yield* Prompts;
+      for (const name of ["../secret", `${dir}/../secret`])
+        assert.equal((yield* failure(prompts.remove(name))).detail, "Prompt not found.", name);
+      assert.equal(readFileSync(outside, "utf8"), "Not Piano's\n");
+    }).pipe(
+      Effect.provide(PromptsLive),
+      Effect.provideService(PromptsEnvironment, {
+        directory: dir,
+        agentDir: () => join(root, "outside", "agent"),
+      }),
+    ),
+  );
+});
+
+test("a prompt Piano cannot read is not listed, and never blocks deleting another", async (t) => {
+  if (process.getuid?.() === 0) return t.skip("root reads any file");
+  const dir = join(root, "unreadable-sibling", "prompts");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "a.md"), "A\n");
+  writeFileSync(join(dir, "b.md"), "B\n");
+  chmodSync(join(dir, "b.md"), 0o000);
+  t.after(() => chmodSync(join(dir, "b.md"), 0o600));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const prompts = yield* Prompts;
+      assert.deepEqual(
+        (yield* prompts.list).map((p) => p.name),
+        ["a"],
+      );
+      yield* prompts.remove("a");
+      assert.equal(existsSync(join(dir, "a.md")), false);
+      // Not listed, so the person was never offered it; Piano says it cannot, and keeps the file.
+      assert.equal((yield* failure(prompts.remove("b"))).detail, "Could not delete prompt.");
+      assert.ok(existsSync(join(dir, "b.md")));
+    }).pipe(
+      Effect.provide(PromptsLive),
+      Effect.provideService(PromptsEnvironment, {
+        directory: dir,
+        agentDir: () => join(root, "unreadable-sibling", "agent"),
+      }),
+    ),
+  );
+});
