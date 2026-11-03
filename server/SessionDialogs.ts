@@ -87,14 +87,27 @@ export const makeSessionDialogs = ({
   });
 
   /**
+   * A receipt with something left to report: pending, uncertain or rejected, an answer Pi never
+   * received, or a response written for a tool call that has not yet given its verdict. It stays
+   * across a new run and is not replaced by another dialog's closure that carries no answer
+   * (INV-04).
+   */
+  const unsettled = (current: DialogResolution) =>
+    !(
+      current.delivery === "accepted" ||
+      (current.delivery === "not-sent" && !current.answer) ||
+      (current.delivery === "written" && !ownedReceipt(current))
+    );
+
+  /**
    * The one transition of the live receipt after its dialog closed; undefined leaves it as it is.
    * A response written for a dialog a tool call owns waits on that call: its next question accepts
    * an answer (the tool asks only after storing it), its end accepts a cancellation and accepts or
    * rejects an answer by the result Pi stored, and Pi's exit leaves it uncertain, as it does any
    * response still being delivered. An answer arriving after an owned question closed unanswered
    * is kept, rejected, in that question's receipt. A new run retires a receipt whose delivery is
-   * final and that holds no answer to keep: it reported its ending in the run it ended in. A
-   * pending, uncertain or rejected one, or a written answer still awaiting its tool, stays (INV-04).
+   * final and that holds no answer to keep: it reported its ending in the run it ended in. An
+   * `unsettled` one stays (INV-04).
    */
   const nextReceipt = (
     current: DialogResolution | undefined,
@@ -149,11 +162,7 @@ export const makeSessionDialogs = ({
             }
           : undefined;
       case "run-started":
-        return current.delivery === "accepted" ||
-          (current.delivery === "not-sent" && !current.answer) ||
-          (current.delivery === "written" && !ownedReceipt(current))
-          ? "retired"
-          : undefined;
+        return unsettled(current) ? undefined : "retired";
     }
   };
 
@@ -167,7 +176,11 @@ export const makeSessionDialogs = ({
       yield* transaction.mergeState({ dialogResolution: next === "retired" ? undefined : next });
   });
 
-  /** Settle one dialog's claim under the lock: remove it, wake its watcher, publish. */
+  /**
+   * Settle one dialog's claim under the lock: remove it, wake its watcher, publish. Its ending
+   * becomes the live receipt unless that receipt is `unsettled` and the ending carries no answer:
+   * the queue still drops the dialog, but its status line yields to the receipt still reporting.
+   */
   const settle = Effect.fnUntraced(function* (
     transaction: PublicationTransaction,
     resolution: DialogResolution,
@@ -176,9 +189,11 @@ export const makeSessionDialogs = ({
     if (signal) yield* Deferred.succeed(signal, undefined);
     closed.delete(resolution.id);
     yield* transaction.publish({ _tag: "dialog_resolved", resolution });
+    const state = yield* publication.state;
+    if (state.dialogResolution && unsettled(state.dialogResolution) && !resolution.answer) return;
     yield* transaction.publish({
       _tag: "state",
-      state: { ...(yield* publication.state), dialogResolution: resolution },
+      state: { ...state, dialogResolution: resolution },
     });
   });
 
