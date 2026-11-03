@@ -755,6 +755,109 @@ function handle(cmd) {
         setInterval(() => {}, 1000);
         return;
       }
+      // "codemode <n> [fail <k>]": one codemode call whose script makes n nested bash/read/write
+      // calls, k of them failing, as live executions each running for 150ms, then recorded in
+      // its result.
+      const codemode = /^codemode (\d+)(?: fail (\d+))?$/.exec(cmd.message);
+      if (codemode) {
+        const n = Number(codemode[1]);
+        const failures = Number(codemode[2] ?? 0);
+        const id = `code${messages.length}`;
+        const code = `// @options: {"timeout_ms": 600000}\nfor (const file of files) await bash(\`wc -l \${file}\`);`;
+        const asst = {
+          role: "assistant",
+          content: [{ type: "toolCall", id, name: "code", arguments: { code } }],
+          model: model.id,
+          provider: model.provider,
+          stopReason: "toolUse",
+          timestamp: Date.now(),
+        };
+        messages.push(asst);
+        out({ type: "message_end", message: asst });
+        out({ type: "tool_execution_start", toolCallId: id, toolName: "code", args: { code } });
+        // Failures spread over the run, the first early enough to fold away.
+        const failing = new Set(
+          Array.from({ length: failures }, (_, i) => 2 + Math.floor((i * n) / failures)),
+        );
+        const tools = ["bash", "read", "write"];
+        const calls = Array.from({ length: n }, (_, i) => {
+          const name = tools[i % 3];
+          const file = `/tmp/eval/file-${i + 1}.md`;
+          return {
+            id: `${id}/${i + 1}`,
+            name,
+            arguments:
+              name === "bash"
+                ? { command: `wc -l ${file}` }
+                : name === "read"
+                  ? { path: file }
+                  : { path: file, content: `# ${i + 1}\n` },
+            status: failing.has(i + 1) ? "error" : "ok",
+          };
+        });
+        let i = 0;
+        const step = () => {
+          if (i < calls.length) {
+            const c = calls[i++];
+            const error = c.status === "error";
+            out({
+              type: "tool_execution_start",
+              toolCallId: c.id,
+              parentToolCallId: id,
+              toolName: c.name,
+              args: c.arguments,
+            });
+            // Each call runs for its 150ms before it ends and the next starts.
+            return setTimeout(() => {
+              out({
+                type: "tool_execution_end",
+                toolCallId: c.id,
+                toolName: c.name,
+                result: {
+                  content: [
+                    { type: "text", text: error ? "ENOENT: no such file" : `${i * 12} lines` },
+                  ],
+                },
+                isError: error,
+              });
+              step();
+            }, 150);
+          }
+          const content = [{ type: "text", text: `${n} calls, ${failures} failed` }];
+          out({
+            type: "tool_execution_end",
+            toolCallId: id,
+            toolName: "code",
+            result: { content },
+            isError: false,
+          });
+          const result = {
+            role: "toolResult",
+            toolCallId: id,
+            toolName: "code",
+            content,
+            isError: false,
+            nestedCalls: { complete: true, calls },
+            timestamp: Date.now(),
+          };
+          messages.push(result);
+          out({ type: "message_end", message: result });
+          const reply = {
+            role: "assistant",
+            content: [{ type: "text", text: `Ran ${n} tool calls.` }],
+            model: model.id,
+            provider: model.provider,
+            stopReason: "stop",
+            timestamp: Date.now(),
+          };
+          messages.push(reply);
+          out({ type: "message_end", message: reply });
+          out({ type: "turn_end", message: reply, toolResults: [] });
+          settle(reply);
+        };
+        step();
+        return;
+      }
       const text = `echo: ${cmd.message}`;
       out({
         type: "message_start",

@@ -57,7 +57,10 @@ import {
   contextFacts,
   type DispatchFacts,
   messageAnchorId,
-  nestedStatus,
+  NESTED_TAIL,
+  nestedFold,
+  nestedOutcome,
+  summarize,
   type QuestionAnswers,
   type ToolOutcome,
   type ToolRow,
@@ -1011,6 +1014,122 @@ function LibraryRow({ result, stateKey }: { result: LibraryResult; stateKey: str
   );
 }
 
+/** A tool call's arguments and output, as its opened row shows them. */
+function ToolDetails({
+  args,
+  output,
+  failed,
+  outputLimit = 20000,
+}: {
+  args: string;
+  output: string | undefined;
+  failed: boolean;
+  outputLimit?: number;
+}) {
+  const details = toolArgsText(args);
+  return (
+    <>
+      {details && (
+        // The scroll container wraps the <pre>, as in PreviewDetailsDialog, where a scrollable
+        // <pre> broke drag selection in Firefox.
+        <div className="overflow-x-auto rounded-lg bg-fill">
+          <pre className="whitespace-pre px-3 py-2 text-ink-2">{clamp(details, 4000)}</pre>
+        </div>
+      )}
+      {output && (
+        <div data-slot="tool-output" className={cn(details && "mt-1")}>
+          <pre
+            className={cn(
+              "whitespace-pre-wrap break-all border-l-2 border-line py-1 pl-3",
+              failed ? "text-err" : "text-ink-2",
+            )}
+          >
+            {clamp(output, outputLimit)}
+          </pre>
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * The calls a script made (codemode), inside its opened tool row. A long run folds to its last
+ * few behind one line that counts them all; `nestedFold` decides which stay in view. The fold
+ * line is a full-width disclosure row, not a ghost Button, so its chevron sits in the column of
+ * the calls' dots and its text in the column of their names.
+ */
+function NestedCalls({ parentId, nested }: { parentId: string; nested: ToolExecution[] }) {
+  // Kept per parent call while the transcript is open: new calls arriving leave it as it was.
+  const [all, setAll] = useTranscriptDisclosure(`${parentId}:nested`);
+  const root = useRef<HTMLDivElement>(null);
+  const measureRow = useContext(TranscriptMeasure);
+  const wasAll = useRef(all);
+  // Showing every call changes the row's height at once: move the rows below before the paint.
+  useLayoutEffect(() => {
+    if (wasAll.current === all) return;
+    wasAll.current = all;
+    const row = root.current?.closest<HTMLElement>("[data-index]");
+    if (row) measureRow?.(row);
+  }, [all, measureRow]);
+  const fold = nestedFold(nested);
+  const shown = all ? nested : fold.visible;
+  return (
+    <div ref={root} data-slot="nested-calls" className="mt-2 flex flex-col gap-2">
+      {fold.hidden > 0 && (
+        <button
+          type="button"
+          aria-expanded={all}
+          data-sidebar-swipe="true"
+          className={cn(disclosureRow, "ml-0 w-full px-0 text-ink-3 hover:text-ink")}
+          onClick={() => setAll(!all)}
+        >
+          <Row as="span" glyph={<DisclosureChevron open={all} />}>
+            {all ? `Show last ${NESTED_TAIL} tool calls` : `Show all ${nested.length} tool calls`}
+            {fold.failed > 0 && <span className="text-err"> · {fold.failed} failed</span>}
+          </Row>
+        </button>
+      )}
+      {shown.map((child) => (
+        <NestedCall key={child.id} call={child} />
+      ))}
+    </div>
+  );
+}
+
+/** One call a script made: its dot, name and what it acted on, opening to its arguments and output. */
+function NestedCall({ call }: { call: ToolExecution }) {
+  const outcome = nestedOutcome(call.status);
+  const summary = summarize(call.args);
+  return (
+    <FoldRow
+      glyph={<span className={cn("block size-2 rounded-full", DOT[outcome])} />}
+      header={
+        <>
+          <span
+            className={cn("shrink-0 font-mono", outcome === "failed" ? "text-err" : "text-ink")}
+          >
+            {call.name}
+          </span>
+          {summary && (
+            <span className="min-w-0 flex-1 truncate font-mono text-ink-2">{summary}</span>
+          )}
+        </>
+      }
+      label={`${call.name} tool call`}
+      stateKey={call.id}
+      ruled={false}
+    >
+      <ToolDetails
+        args={call.args}
+        output={stripAnsi(call.text)}
+        failed={outcome === "failed"}
+        outputLimit={4000}
+      />
+      {call.outputKind === "unavailable" && <p className="mt-1 text-ink-3">Output unavailable</p>}
+    </FoldRow>
+  );
+}
+
 function Tool({
   call,
   outcome,
@@ -1036,7 +1155,6 @@ function Tool({
       />
     ));
   const failed = outcome === "failed";
-  const details = toolArgsText(call.args);
 
   return (
     <FoldRow
@@ -1060,49 +1178,8 @@ function Tool({
       toolOutput
       ruled={false}
     >
-      {details && (
-        // The scroll container wraps the <pre>, as in PreviewDetailsDialog, where a scrollable
-        // <pre> broke drag selection in Firefox.
-        <div className="overflow-x-auto rounded-lg bg-fill">
-          <pre className="whitespace-pre px-3 py-2 text-ink-2">{clamp(details, 4000)}</pre>
-        </div>
-      )}
-      {output && (
-        <div data-slot="tool-output" className={cn(details && "mt-1")}>
-          <pre
-            className={cn(
-              "whitespace-pre-wrap break-all border-l-2 border-line py-1 pl-3",
-              failed ? "text-err" : "text-ink-2",
-            )}
-          >
-            {clamp(output, 20000)}
-          </pre>
-        </div>
-      )}
-      {nested.map((child) => (
-        /* role=group, not a <fieldset>: a <fieldset> is for form controls. */ <div
-          key={child.id}
-          role="group"
-          aria-label={`${child.name} tool call`}
-          className="mt-2 border-l border-line pl-3 text-xs"
-        >
-          <p className="flex items-center gap-2">
-            {child.name}{" "}
-            <Badge variant={nestedStatus(child.status).badge}>
-              {nestedStatus(child.status).label}
-            </Badge>
-          </p>
-          <pre className="whitespace-pre-wrap break-words">
-            {clamp(toolArgsText(child.args), 2000)}
-          </pre>
-          {child.outputKind === "unavailable" && <p className="text-ink-3">Output unavailable</p>}
-          {child.text && (
-            <pre className="whitespace-pre-wrap break-words">
-              {clamp(stripAnsi(child.text), 4000)}
-            </pre>
-          )}
-        </div>
-      ))}
+      <ToolDetails args={call.args} output={output} failed={failed} />
+      {nested.length > 0 && <NestedCalls parentId={call.id} nested={nested} />}
       {!nestedComplete && (
         <p className="text-xs text-warning">Some tool details are unavailable.</p>
       )}

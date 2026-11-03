@@ -407,7 +407,7 @@ function dispatchFacts(
 /** One line that says what a tool call did: the command, the path, or the pattern. A one-line
  * command is its own description. A multi-line command (a heredoc script, a `&&` chain) shows
  * how it starts and how many lines follow; those wait in the row's details. */
-function summarize(args: string): string {
+export function summarize(args: string): string {
   try {
     const a = JSON.parse(args) as Record<string, unknown>;
     const v = a.command ?? a.path ?? a.file_path ?? a.pattern ?? a.url ?? a.query;
@@ -424,18 +424,43 @@ function summarize(args: string): string {
   return "";
 }
 
-/** A nested tool call's badge, by what became of the call. */
-export function nestedStatus(status: ToolExecution["status"]): { label: string; badge: Badge } {
+/** What became of a nested call, in the outcome vocabulary of top-level tool rows. */
+export function nestedOutcome(status: ToolExecution["status"]): ToolOutcome {
   switch (status) {
     case "running":
-      return { label: "Running", badge: "warning" };
+      return "running";
     case "success":
-      return { label: "Done", badge: "success" };
+      return "done";
     case "error":
-      return { label: "Failed", badge: "destructive" };
+      return "failed";
     case "incomplete":
-      return { label: "Incomplete", badge: "secondary" };
+      return "incomplete";
   }
+}
+
+/** A call's nested calls that stay in view while the rest are folded away. */
+export const NESTED_TAIL = 8;
+
+/** Which of a call's nested calls show while folded, and what the fold line says about the rest. */
+export interface NestedFold {
+  /** In call order: the last `NESTED_TAIL` calls, and any older call still running. */
+  visible: ToolExecution[];
+  /** Calls folded away; zero means there is no fold line. */
+  hidden: number;
+  /** Failed calls among all of them, shown or folded. */
+  failed: number;
+}
+
+/** Folds a script's long run of nested calls to its last few. A running call is never folded
+ * away, however old: it is what the script is waiting on. */
+export function nestedFold(nested: ReadonlyArray<ToolExecution>): NestedFold {
+  const tail = nested.length - NESTED_TAIL;
+  const visible = nested.filter((call, i) => i >= tail || call.status === "running");
+  return {
+    visible,
+    hidden: nested.length - visible.length,
+    failed: nested.filter((call) => call.status === "error").length,
+  };
 }
 
 const turnLabel = (m: RenderMsg) =>
