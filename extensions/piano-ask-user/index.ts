@@ -4,37 +4,26 @@ import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { arr, map, obj, opt, type Static, str } from "@earendil-works/pi-schema";
 import { ASK_USER_TOOL, askUserPrompt, askUserQuestions } from "../../shared/askUser.ts";
 
-/** Objects accept fields they do not declare, as the TypeBox schemas these replaced did. */
-const open = { open: true } as const;
-const Parameters = obj(
-  {
-    questions: arr(
-      obj(
-        {
-          id: str({ minLength: 1, description: "Unique ID used to key this question's answer" }),
-          question: str({ minLength: 1, description: "Question, including essential context" }),
-          options: opt(
-            arr(str({ minLength: 1 }), {
-              minItems: 1,
-              uniqueItems: true,
-              description: "Choices for a single selection; omit for a free-text answer",
-            }),
-          ),
-        },
-        open,
+const Parameters = obj({
+  questions: arr(
+    obj({
+      id: str({ minLength: 1, description: "Unique ID used to key this question's answer" }),
+      question: str({ minLength: 1, description: "Question, including essential context" }),
+      options: opt(
+        arr(str({ minLength: 1 }), {
+          minItems: 1,
+          uniqueItems: true,
+          description: "Choices for a single selection; omit for a free-text answer",
+        }),
       ),
-      {
-        minItems: 1,
-        description: "Questions in presentation order; use one item for a single question",
-      },
-    ),
-  },
-  open,
-);
-const Output = obj(
-  { status: StringEnum(["answered", "cancelled"] as const), answers: map(str()) },
-  open,
-);
+    }),
+    {
+      minItems: 1,
+      description: "Questions in presentation order; use one item for a single question",
+    },
+  ),
+});
+const Output = obj({ status: StringEnum(["answered", "cancelled"] as const), answers: map(str()) });
 
 export default function pianoAskUser(pi: ExtensionAPI) {
   pi.registerTool(

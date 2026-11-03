@@ -70,8 +70,13 @@ test(
       // because start returns on the brief's admission rather than on the child's answer.
       assert.deepEqual(
         requests.filter((request) => request.role === "parent").map((request) => request.answered),
-        ["piano_start_session call", "piano_wait_sessions call", "report"],
-        "the parent started a session, waited on the returned handle, and reported the answer",
+        [
+          "piano_start_session stale call",
+          "piano_start_session call",
+          "piano_wait_sessions call",
+          "report",
+        ],
+        "Pi rejected the removed options; the parent started a session without them, waited on the returned handle, and reported the answer",
       );
       assert.deepEqual(
         requests.filter((request) => request.role === "child").map((request) => request.answered),

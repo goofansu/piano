@@ -43,104 +43,77 @@ const dispatchDirectory = (requested: string | undefined, parent: string): strin
     ? (requested ?? parent)
     : resolve(parent, requested);
 
-/** Objects accept fields they do not declare, as the TypeBox schemas these replaced did. */
-const open = { open: true } as const;
-const Handle = obj(
-  {
-    cwd: str(),
-    sessionId: str(),
-    generation: str(),
-    submissionId: nullable(int()),
-    baselineMessages: int({ minimum: 0 }),
-    baselineFingerprint: str(),
-    inputFingerprint: str(),
-    anchorMessageId: nullable(str()),
-  },
-  open,
-);
+const Handle = obj({
+  cwd: str(),
+  sessionId: str(),
+  generation: str(),
+  submissionId: nullable(int()),
+  baselineMessages: int({ minimum: 0 }),
+  baselineFingerprint: str(),
+  inputFingerprint: str(),
+  anchorMessageId: nullable(str()),
+});
 const NullableString = nullable(str());
-const Observation = obj(
-  {
-    handle: Handle,
-    status: StringEnum(WAIT_STATUSES),
-    ending: StringEnum(["observed", "deadline", "aborted"] as const),
-    answer: NullableString,
-    attribution: StringEnum(["attributed", "no-output", "unattributable"] as const),
-    detail: opt(str()),
-    link: str(),
-  },
-  open,
-);
-const Worktree = obj(
-  {
-    branch: str({ minLength: 1, description: "New branch name; it must not exist yet" }),
-    hooks: opt(
-      bool({ description: "Run approved Worktrunk hooks; unapproved hooks refuse creation" }),
-    ),
-  },
-  open,
-);
-const StartParameters = obj(
-  {
-    prompt: str({ minLength: 1, description: "Self-contained work brief" }),
-    cwd: opt(str({ minLength: 1 })),
-    worktree: opt(Worktree),
-  },
-  open,
-);
-const StartOutput = obj(
-  {
-    cwd: str(),
-    creation: StringEnum(["created", "refused", "uncertain"] as const),
-    submission: str(),
-    handle: nullable(Handle),
-    worktree: nullable(obj({ path: str(), branch: str() }, open)),
-    detail: opt(str()),
-    link: NullableString,
-  },
-  open,
-);
-const WaitParameters = obj(
-  {
-    sessions: arr(Handle, { minItems: 1, maxItems: 32 }),
-    timeoutMs: opt(
-      int({
-        minimum: 1000,
-        maximum: 60000,
-        description: "Only for an explicitly bounded observation; omit to wait for completion.",
-      }),
-    ),
-  },
-  open,
-);
-const WaitOutput = obj({ results: arr(Observation) }, open);
-const StatusParameters = obj(
-  { sessionId: str({ minLength: 1, description: "A session ID, as a start or link names it" }) },
-  open,
-);
-const StatusOutput = obj(
-  {
-    sessionId: str(),
-    cwd: str(),
-    projectId: NullableString,
-    disposition: StringEnum(DISPOSITIONS),
-    since: NullableString,
-    needs: nullable(obj({ title: str(), kind: str(), link: str() }, open)),
-    lastAnswer: NullableString,
-    changes: nullable(
-      obj(
-        {
-          branch: NullableString,
-          files: num(),
-          pullRequest: nullable(obj({ number: num(), url: str(), state: NullableString }, open)),
-        },
-        open,
-      ),
-    ),
-    link: str(),
-  },
-  open,
-);
+const Observation = obj({
+  handle: Handle,
+  status: StringEnum(WAIT_STATUSES),
+  ending: StringEnum(["observed", "deadline", "aborted"] as const),
+  answer: NullableString,
+  attribution: StringEnum(["attributed", "no-output", "unattributable"] as const),
+  detail: opt(str()),
+  link: str(),
+});
+const Worktree = obj({
+  branch: str({ minLength: 1, description: "New branch name; it must not exist yet" }),
+  hooks: opt(
+    bool({ description: "Run approved Worktrunk hooks; unapproved hooks refuse creation" }),
+  ),
+});
+const StartParameters = obj({
+  prompt: str({ minLength: 1, description: "Self-contained work brief" }),
+  cwd: opt(str({ minLength: 1 })),
+  worktree: opt(Worktree),
+});
+const StartOutput = obj({
+  cwd: str(),
+  creation: StringEnum(["created", "refused", "uncertain"] as const),
+  submission: str(),
+  handle: nullable(Handle),
+  worktree: nullable(obj({ path: str(), branch: str() })),
+  detail: opt(str()),
+  link: NullableString,
+});
+const WaitParameters = obj({
+  sessions: arr(Handle, { minItems: 1, maxItems: 32 }),
+  timeoutMs: opt(
+    int({
+      minimum: 1000,
+      maximum: 60000,
+      description: "Only for an explicitly bounded observation; omit to wait for completion.",
+    }),
+  ),
+});
+const WaitOutput = obj({ results: arr(Observation) });
+const StatusParameters = obj({
+  sessionId: str({ minLength: 1, description: "A session ID, as a start or link names it" }),
+});
+const StatusOutput = obj({
+  sessionId: str(),
+  cwd: str(),
+  projectId: NullableString,
+  disposition: StringEnum(DISPOSITIONS),
+  since: NullableString,
+  needs: nullable(obj({ title: str(), kind: str(), link: str() })),
+  lastAnswer: NullableString,
+  changes: nullable(
+    obj({
+      branch: NullableString,
+      files: num(),
+      pullRequest: nullable(obj({ number: num(), url: str(), state: NullableString })),
+    }),
+  ),
+  link: str(),
+});
 
 /**
  * The schemas describe shared/dispatch.ts's shapes to Pi; these fail the type check when they
