@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { markdownImages, markdownLinks } from "../web/src/lib/markdown.ts";
+import { markdownImages } from "../web/src/lib/markdown.ts";
 import { renderMarkdown } from "./fixtures/markdown.ts";
 
 // Assertions cover semantic output, not incidental Streamdown wrappers or whitespace.
@@ -43,7 +43,6 @@ test("excessive input falls back to readable escaped source without resource dis
     const html = renderMarkdown(source, true);
     assert.ok(html.includes("<pre><code>[before](https://example.test)"));
     assert.ok(!html.includes("<script>"));
-    assert.deepEqual(markdownLinks(source), []);
     assert.deepEqual(markdownImages(source), []);
   }
 });
@@ -54,9 +53,6 @@ test("unmatched brackets remain readable and do not hide later links", () => {
     const html = renderMarkdown(source);
     assert.ok(html.includes("[".repeat(size)));
     assert.match(html, /href="https:\/\/example.test"[^>]*>ok<\/a>/);
-    assert.deepEqual(markdownLinks(source), [
-      { url: "https://example.test", label: "ok", kind: "markdown" },
-    ]);
   }
 });
 
@@ -229,17 +225,13 @@ test("code excludes links and images for nested lists, quotes, tilde and long fe
   ]) {
     assert.ok(!renderMarkdown(source, true).includes("data-local-image"));
     assert.ok(!renderMarkdown(source).includes("<a "));
-    assert.deepEqual(markdownLinks(source), []);
     assert.deepEqual(markdownImages(source), []);
   }
 });
 
-test("references share the same grammar for rendering and link/image discovery", () => {
+test("references share the same grammar for rendering and image discovery", () => {
   const source = "[docs][d] ![shot][i]\n\n[d]: https://example.test/docs\n[i]: ./shot.png";
   assert.match(renderMarkdown(source, true), /href="https:\/\/example.test\/docs"/);
-  assert.deepEqual(markdownLinks(source), [
-    { url: "https://example.test/docs", label: "docs", kind: "markdown" },
-  ]);
   assert.deepEqual(markdownImages(source), ["./shot.png"]);
 });
 

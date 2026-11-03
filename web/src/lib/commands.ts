@@ -57,6 +57,8 @@ export interface CommandEffects {
   openProject: (projectId: string) => void;
   openChanges: () => void;
   openPreview: () => void;
+  /** The session header's Artifacts menu. */
+  openArtifacts: () => void;
   toggleRail: () => void;
   showAgent: () => void;
   /** The dialog that links a pull request to the selected session. */
@@ -148,6 +150,9 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "stop-preview":
       effects.openForm(intent);
+      break;
+    case "artifacts":
+      effects.openArtifacts();
       break;
     case "show-preview":
       effects.openPreview();

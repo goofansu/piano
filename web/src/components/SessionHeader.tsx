@@ -23,6 +23,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
+import { ArtifactsMenu } from "@/components/SessionArtifacts";
 import { type PullRequestControl, PullRequestLinkDialog } from "@/components/SessionPullRequest";
 import { surfaceTabNames } from "@/components/SurfaceArea";
 import {
@@ -225,6 +226,7 @@ export function SessionHeader({
         </span>
         {/* Ghost controls: the group pulls out so the last one's content ends on the gutter. */}
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
+          <ArtifactsMenu state={state} />
           <SessionRailToggle />
           <ChangesToggle />
           {mobile && sessionMenu}

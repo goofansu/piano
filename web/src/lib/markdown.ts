@@ -52,13 +52,9 @@ function walk(node: Node, visit: (node: Node) => void, depth = 0, budget = { nod
   if ("children" in node) for (const child of node.children) walk(child, visit, depth + 1, budget);
 }
 
-export interface MarkdownLink {
-  url: string;
-  label?: string;
-  kind: "markdown" | "autolink" | "bare";
-}
+type LinkKind = "markdown" | "autolink" | "bare";
 
-function linkKind(source: string): MarkdownLink["kind"] {
+function linkKind(source: string): LinkKind {
   return source.startsWith("[") ? "markdown" : source.startsWith("<") ? "autolink" : "bare";
 }
 
@@ -131,37 +127,6 @@ function parse(source: string): Root {
   walk(tree, () => {});
   remarkPiano()(tree, { value: source });
   return tree;
-}
-
-/** Discover links from the same CommonMark/GFM grammar as the renderer, excluding code/images. */
-export function markdownLinks(source: string): MarkdownLink[] {
-  try {
-    const tree = parse(source);
-    const definitions = new Map<string, string>();
-    walk(tree, (node) => {
-      if (node.type === "definition") definitions.set(node.identifier, node.url);
-    });
-    const links: MarkdownLink[] = [];
-    walk(tree, (node) => {
-      if (node.type !== "link" && node.type !== "linkReference") return;
-      const url = node.type === "link" ? node.url : definitions.get(node.identifier);
-      if (!url || !/^https?:\/\//i.test(url)) return;
-      const raw = source.slice(node.position?.start.offset, node.position?.end.offset);
-      const kind = node.type === "linkReference" ? "markdown" : linkKind(raw);
-      const first = node.children[0]?.position?.start.offset;
-      const last = node.children.at(-1)?.position?.end.offset;
-      links.push({
-        url,
-        ...(kind === "markdown"
-          ? { label: first === undefined ? "" : source.slice(first, last) }
-          : {}),
-        kind,
-      });
-    });
-    return links;
-  } catch {
-    return [];
-  }
 }
 
 /** Only local document images may be fetched, through the workspace-scoped file API. */

@@ -12,6 +12,7 @@ import {
   PinIcon,
   PinOffIcon,
   ScrollTextIcon,
+  ShapesIcon,
   ShareIcon,
   SquareIcon,
   SquarePenIcon,
@@ -38,10 +39,12 @@ import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { artifactsMenu } from "@/lib/artifactsMenu";
 import { confirmation, FORM_NOT_SENT } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import type { SessionLayout } from "@/lib/navigation";
+import { openLink } from "@/lib/openLink";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
@@ -51,7 +54,6 @@ import {
   type SessionTarget,
   sessionCommands,
 } from "@/lib/sessionCommands";
-import { openLink } from "@/lib/sessionLinks";
 import { hostedPreview } from "@/lib/sessionPreview";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
@@ -76,6 +78,7 @@ async function copySessionValue(value: string, label: string) {
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   copy: CopyIcon,
   changes: FileDiffIcon,
+  artifacts: ShapesIcon,
   list: ListIcon,
   agent: MessagesSquareIcon,
   "pull-request": GitPullRequestIcon,
@@ -253,6 +256,7 @@ export function CommandHost({
       openPreview();
       previewObservation.refresh();
     },
+    openArtifacts: artifactsMenu.open,
     toggleRail,
     showAgent,
     openPullRequest,

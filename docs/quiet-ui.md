@@ -73,7 +73,7 @@ and license attribution, and use `currentColor` to match the UI; see `web/public
 
 The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the keyboard surface for
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Global commands
-and Session commands (only with a selected session). A session's outputs and links are read in its
+and Session commands (only with a selected session). A session's outputs are read in its
 session rail, not searched from the palette. A feature that adds an action the sidebar or header offers also adds
 a row in the appropriate command group, named as its button is.
 Global shortcuts are Mod+K (palette) and Sidebar's ⌘B (not Ctrl+B); the composer alone binds Mod+/ to
