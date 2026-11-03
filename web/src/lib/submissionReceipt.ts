@@ -5,6 +5,7 @@
  * Pi's own submission supersedes it, after which Pi's submission is the receipt. Status, the
  * reply indicator and the status line all read phase, tone and words from here.
  */
+import type { PromptSubmission } from "@shared/wire";
 import type { AppState } from "../store.ts";
 
 /**
@@ -30,6 +31,7 @@ export interface SubmissionReceipt {
   detail: string | undefined;
 }
 
+/** The phase each of Pi's submission outcomes reads as, wherever a receipt is shown. */
 const PI_PHASE = {
   submitting: "submitting",
   started: "submitted",
@@ -39,7 +41,11 @@ const PI_PHASE = {
   // Refused before Pi saw it: the draft is back in the composer and the detail says nothing was sent.
   not_sent: "rejected",
   uncertain: "uncertain",
-} as const satisfies Record<string, SubmissionPhase>;
+} as const satisfies Record<PromptSubmission["outcome"], SubmissionPhase>;
+
+/** What Pi's submission outcome means for the input it answers: the one reading of each outcome,
+ * shared by Pi's own receipt and the browser's first-message record. */
+export const submissionPhase = (outcome: PromptSubmission["outcome"]) => PI_PHASE[outcome];
 
 const text = (phase: SubmissionPhase, source: SubmissionReceipt["source"]): string | undefined => {
   switch (phase) {
@@ -75,5 +81,7 @@ export function submissionReceipt(state: AppState): SubmissionReceipt | undefine
   const input = state.pendingCreate;
   const submission = state.session?.state.submission;
   if (input) return receipt("browser", input.outcome, input.detail ?? submission?.detail);
-  return submission ? receipt("pi", PI_PHASE[submission.outcome], submission.detail) : undefined;
+  return submission
+    ? receipt("pi", submissionPhase(submission.outcome), submission.detail)
+    : undefined;
 }

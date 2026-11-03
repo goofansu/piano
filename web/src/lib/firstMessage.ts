@@ -5,6 +5,7 @@
  * when each transition applies; this module decides what each one does to the record.
  */
 import type { RenderMsg, Snapshot } from "@shared/wire";
+import { type SubmissionPhase, submissionPhase } from "./submissionReceipt.ts";
 
 /** Browser-only submitted input, never part of Pi's transcript or registry. */
 export interface PendingCreate {
@@ -13,7 +14,8 @@ export interface PendingCreate {
   cwd: string;
   text: string;
   attachments?: RenderMsg["attachments"];
-  outcome: "starting" | "submitted" | "handled" | "rejected" | "uncertain";
+  /** Every phase but `submitting`: until Pi answers, the record still reads `starting`. */
+  outcome: Exclude<SubmissionPhase, "submitting">;
   /** First observed Pi submission; later input supersedes this local receipt. */
   submissionId?: number;
   detail?: string;
@@ -65,18 +67,11 @@ export function reconcile(
     if (input.submissionId !== undefined && submission.id > input.submissionId) return null;
     if (input.submissionId === undefined) input = { ...input, submissionId: submission.id };
   }
-  if (
-    submission &&
-    (submission.outcome === "handled" ||
-      submission.outcome === "rejected" ||
-      submission.outcome === "uncertain")
-  )
-    return { ...input, outcome: submission.outcome, detail: submission.detail };
-  // Pi never saw it; the detail says nothing was sent.
-  if (submission?.outcome === "not_sent")
-    return { ...input, outcome: "rejected", detail: submission.detail };
-  if (submission?.outcome === "started" || submission?.outcome === "queued")
-    return { ...input, outcome: "submitted", detail: undefined };
+  // Pi's verdict reads as its receipt does; `submitting` decides nothing yet.
+  const phase = submission ? submissionPhase(submission.outcome) : undefined;
+  if (phase === "submitted") return { ...input, outcome: phase, detail: undefined };
+  if (phase && phase !== "submitting")
+    return { ...input, outcome: phase, detail: submission?.detail };
   if (session.state.closure && input.outcome !== "submitted")
     return { ...input, outcome: "uncertain", detail: session.state.closure.detail };
   return input;
