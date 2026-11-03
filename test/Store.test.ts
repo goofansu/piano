@@ -248,8 +248,8 @@ const emptyCreated = (): Extract<ServerMessage, { _tag: "selected" }> => ({
   snapshot: { state: { sessionId: "new", isStreaming: false }, messages: [], dialogs: [] },
 });
 
-test("INV-03: handled, rejected and uncertain input retain the original without inventing history or waiting for a run", () => {
-  for (const outcome of ["handled", "rejected", "uncertain"] as const) {
+test("INV-03: handled, rejected, not sent and uncertain input retain the original without inventing history or waiting for a run", () => {
+  for (const outcome of ["handled", "rejected", "not_sent", "uncertain"] as const) {
     const selected = emptyCreated();
     let state = reduce(beginCreate(), { type: "server", message: selected });
     state = reduce(state, {
