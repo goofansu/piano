@@ -275,6 +275,14 @@ test("Pi's submission speaks once the browser's record is gone", () => {
   assert.equal(rejected?.tone, "warning");
   assert.equal(rejected?.title, "Message rejected.");
   assert.deepEqual(rejected?.details, ["busy"]);
+  // Refused before Pi saw it: not Pi's rejection, and the composer has the draft back.
+  const notSent = find(
+    at({ submission: { id: 2, outcome: "not_sent", detail: "Pi is stopping." } }),
+    "submission",
+  );
+  assert.equal(notSent?.tone, "warning");
+  assert.equal(notSent?.title, "Not sent.");
+  assert.deepEqual(notSent?.details, ["Pi is stopping."]);
   assert.match(
     find(at({ submission: { id: 2, outcome: "uncertain" } }), "submission")?.title ?? "",
     /^Delivery uncertain — inspect the session and queue/,
