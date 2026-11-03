@@ -534,6 +534,18 @@ test("local work: commits not pushed count against the branch's upstream, not a 
   assert.equal(ready(await preview()).local.commitsNotPushed, 2);
 });
 
+test("local work: a branch whose push ref Git does not hold counts no commits not pushed", async (t) => {
+  const { git, preview } = fixture(t);
+  git("switch", "-qc", "main");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  git("remote", "add", "origin", "https://github.com/example/repo.git");
+  git("switch", "-qc", "feat");
+  git("commit", "-q", "--allow-empty", "-m", "local");
+  assert.equal(ready(await preview()).local.commitsNotPushed, null, "never pushed");
+  git("update-ref", "refs/remotes/origin/feat", "main");
+  assert.equal(ready(await preview()).local.commitsNotPushed, 1, "pushed, then committed");
+});
+
 test("a branch started from a remote branch compares and counts by its own name on that remote", async (t) => {
   const { git, read, preview } = fixture(t);
   git("switch", "-qc", "main");

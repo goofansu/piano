@@ -26,6 +26,9 @@ export interface TargetHints {
 export interface Comparisons {
   readonly head: string | null;
   readonly branch: string | null;
+  /** The remote-tracking ref the branch's push updates, when Git holds it (`BranchHome.pushed`);
+   * commits not pushed count against it. */
+  readonly pushed: string | null;
   /** The hinted pull request was opened from this branch: its head, on the branch's remote. */
   readonly pullRequestFromBranch: boolean;
   readonly scopes: ScopeAvailability[];
@@ -168,18 +171,15 @@ async function branchScope(
 }
 
 /**
- * What of the branch is still only here: commits its remote-tracking ref does not have, as Git
- * holds that ref locally (no fetch), or null when there is no such ref to compare with.
+ * What of the branch is still only here: commits the remote-tracking ref its push updates does
+ * not have, as Git holds that ref locally (no fetch), or null when there is no such ref.
  */
 export async function commitsNotPushed(
   checkout: Checkout,
-  head: string | null,
-  branch: string | null,
+  { head, pushed }: Pick<Comparisons, "head" | "pushed">,
 ): Promise<number | null> {
-  if (!head || !branch) return null;
-  const { ref } = await checkout.upstream(branch);
-  if (!(await commitOf(checkout, ref))) return null;
-  const count = (await checkout.text(["rev-list", "--count", `${ref}..${head}`])).trim();
+  if (!head || !pushed) return null;
+  const count = (await checkout.text(["rev-list", "--count", `${pushed}..${head}`])).trim();
   return Number(count) || 0;
 }
 
@@ -226,6 +226,7 @@ export async function resolveComparisons(
   return {
     head,
     branch,
+    pushed: home?.pushed && upstream ? upstream.ref : null,
     pullRequestFromBranch: pullRequestHead !== null,
     scopes,
     of: of as Comparisons["of"],
