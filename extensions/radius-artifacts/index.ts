@@ -16,8 +16,6 @@ const Intent = z.object({
   visibility: z.enum(["private", "organization", "public"]),
 });
 type Intent = z.infer<typeof Intent>;
-/** Objects accept fields they do not declare, as the TypeBox schemas these replaced did. */
-const open = { open: true } as const;
 const text = str({ minLength: 1 });
 const document = {
   operationKey: str({
@@ -41,30 +39,29 @@ const document = {
     "application/x-asciicast",
   ] as const),
 };
-const CreateParameters = obj(document, open);
-const UpdateParameters = obj(
-  { ...document, artifactId: text, expectedRevision: int({ minimum: 1 }) },
-  open,
-);
-const ViewParameters = obj(
-  { artifactId: text, revision: opt(int({ minimum: 1 })), path: opt(text) },
-  open,
-);
-const outputSchema = obj(
-  {
-    status: StringEnum(["confirmed", "unknown", "error"] as const),
-    message: str(),
-    artifactId: opt(str()),
-    url: opt(str()),
-    revision: opt(int()),
-    latestRevision: opt(int()),
-    visibility: opt(str()),
-    expiresAt: opt(str()),
-    files: opt(arr(obj({ path: str(), content_type: str(), stored_bytes: num() }, open))),
-    content: opt(str()),
-  },
-  open,
-);
+const CreateParameters = obj(document);
+const UpdateParameters = obj({
+  ...document,
+  artifactId: text,
+  expectedRevision: int({ minimum: 1 }),
+});
+const ViewParameters = obj({
+  artifactId: text,
+  revision: opt(int({ minimum: 1 })),
+  path: opt(text),
+});
+const outputSchema = obj({
+  status: StringEnum(["confirmed", "unknown", "error"] as const),
+  message: str(),
+  artifactId: opt(str()),
+  url: opt(str()),
+  revision: opt(int()),
+  latestRevision: opt(int()),
+  visibility: opt(str()),
+  expiresAt: opt(str()),
+  files: opt(arr(obj({ path: str(), content_type: str(), stored_bytes: num() }))),
+  content: opt(str()),
+});
 type Output = {
   status: "confirmed" | "unknown" | "error";
   message: string;

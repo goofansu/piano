@@ -12,8 +12,6 @@ import {
   saveToLibrary,
 } from "./LibrarySave.ts";
 
-/** Objects accept fields they do not declare, as the TypeBox schemas these replaced did. */
-const open = { open: true } as const;
 const draftFields = {
   name: str({
     description: `Lowercase letters, numbers and single hyphens, at most ${NAME_MAX} characters`,
@@ -25,34 +23,28 @@ const draftFields = {
     description: `Complete Markdown body (not a patch), at most ${TEXT_MAX} characters`,
   }),
 };
-const SkillParameters = obj(
-  {
-    ...draftFields,
-    disableModelInvocation: opt(
-      bool({
-        description:
-          "True loads the skill only when the user runs /skill:<name>. Omit to keep a saved skill's setting (false for a new one).",
-      }),
-    ),
-  },
-  open,
-);
-const PromptParameters = obj(draftFields, open);
-const ReadParameters = obj({ name: draftFields.name }, open);
+const SkillParameters = obj({
+  ...draftFields,
+  disableModelInvocation: opt(
+    bool({
+      description:
+        "True loads the skill only when the user runs /skill:<name>. Omit to keep a saved skill's setting (false for a new one).",
+    }),
+  ),
+});
+const PromptParameters = obj(draftFields);
+const ReadParameters = obj({ name: draftFields.name });
 const Kind = StringEnum(["skill", "prompt"] as const);
-const Output = obj(
-  {
-    status: StringEnum(["saved", "cancelled", "refused"] as const),
-    kind: Kind,
-    name: str(),
-    change: opt(StringEnum(["create", "update"] as const)),
-    file: opt(str()),
-    reach: opt(str()),
-    field: opt(str()),
-    detail: opt(str()),
-  },
-  open,
-);
+const Output = obj({
+  status: StringEnum(["saved", "cancelled", "refused"] as const),
+  kind: Kind,
+  name: str(),
+  change: opt(StringEnum(["create", "update"] as const)),
+  file: opt(str()),
+  reach: opt(str()),
+  field: opt(str()),
+  detail: opt(str()),
+});
 
 const GUIDELINES = [
   "For skills and prompt templates explicitly requested in Piano or across Piano sessions, use piano_save_skill or piano_save_prompt. Keep using Piano tools for edits when the conversation has already established Piano ownership. For an explicit repo/project-local destination, follow that project's conventions and file workflow instead. If the destination is genuinely ambiguous, ask; a generic skill or prompt request does not imply Piano-wide storage.",
@@ -118,18 +110,15 @@ export default function pianoLibrary(pi: ExtensionAPI) {
         promptSnippet: `Read a Piano-owned ${kind} by name`,
         promptGuidelines: GUIDELINES,
         parameters: ReadParameters,
-        outputSchema: obj(
-          {
-            status: StringEnum(["found", "not_found", "refused"] as const),
-            kind: Kind,
-            name: str(),
-            description: opt(str()),
-            file: opt(str()),
-            disableModelInvocation: opt(bool()),
-            detail: opt(str()),
-          },
-          open,
-        ),
+        outputSchema: obj({
+          status: StringEnum(["found", "not_found", "refused"] as const),
+          kind: Kind,
+          name: str(),
+          description: opt(str()),
+          file: opt(str()),
+          disableModelInvocation: opt(bool()),
+          detail: opt(str()),
+        }),
         annotations: { readOnlyHint: true, openWorldHint: false },
         async execute(_id, { name }: Static<typeof ReadParameters>, signal) {
           const result = await readFromLibrary(kind, name, request, signal);

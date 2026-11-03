@@ -4,9 +4,6 @@ import { arr, map, num, obj, opt, str } from "@earendil-works/pi-schema";
 import { ownerRequest } from "../../scripts/PreviewClient.ts";
 import { START_TIMEOUT_SECONDS } from "../../scripts/PreviewReadiness.ts";
 
-/** Objects accept fields they do not declare, as the TypeBox schemas these replaced did. */
-const open = { open: true } as const;
-
 /** Bundled Pi extension: one managed app preview per workspace, run for this session. */
 export default function pianoPreview(pi: ExtensionAPI) {
   registerPreview(pi);
@@ -58,20 +55,17 @@ export function registerPreview(
         `Report observed local readiness and a Markdown preview link. ${host.access} Keep the app running after your reply. On interruption or uncertain completion read status before starting again. If the supervisor/configuration is unavailable, report the limitation; do not fall back to an unowned process.`,
       ],
       description: `Run the inspected current checkout's actual app dev/start entry point, including monorepo and Python apps; not a generic file host. No sibling/unrelated/temporary document roots, manufactured static servers or inline listeners for generated HTML/reports, or bash workarounds: use file preview or artifact delivery. A package script wrapping file hosting is not an application entry point. Identifiable unsupported launches are rejected before submission and before replacement stops the old instance; admission does not certify arbitrary scripts or provide a sandbox. One managed app per canonical workspace, owned by this session's live Pi generation and executed by ${host.supervisor}. It survives turn completion, abort and browser disconnect, but stops when Pi ends (including archive/delete or Piano shutdown). Reopening never adopts or relaunches it. start chooses a supported free port and waits up to timeoutSeconds (default ${START_TIMEOUT_SECONDS.default}, at most ${START_TIMEOUT_SECONDS.max}) for an owned loopback HTTP listener that answers the preview hostname with 2xx/3xx; each check is one GET of readyPath with its own short timeout. A start that ends its wait while the app runs unanswered returns warming: true and leaves it running. When this generation owns an app, start returns it (specChanged if the request differs) and launches nothing; another session's app is an ownership conflict, even if failed; replace with its exact instanceId stops it and launches this request, or the same launch when command is omitted; a replace naming an instance that is no longer current returns not-current and launches nothing. command is argv (no shell interpretation), with {port} substitution; PORT is injected and refused in env; a bare command[0] resolves on the app's PATH. status reconciles saved intent and returns state (starting, running, exited, failed, stopping or not-loaded), bounded startup logs, identities, cwd, selected port, local readiness and the preview URL. stop requires the exact instanceId from start/status and explicit user authorization. Abort ends observation, not the app.`,
-      parameters: obj(
-        {
-          action: StringEnum(["start", "status", "stop"] as const),
-          command: opt(arr(str(), { minItems: 1 })),
-          env: opt(map(str())),
-          readyPath: opt(str()),
-          timeoutSeconds: opt(
-            num({ minimum: START_TIMEOUT_SECONDS.min, maximum: START_TIMEOUT_SECONDS.max }),
-          ),
-          instanceId: opt(str()),
-          replace: opt(str()),
-        },
-        open,
-      ),
+      parameters: obj({
+        action: StringEnum(["start", "status", "stop"] as const),
+        command: opt(arr(str(), { minItems: 1 })),
+        env: opt(map(str())),
+        readyPath: opt(str()),
+        timeoutSeconds: opt(
+          num({ minimum: START_TIMEOUT_SECONDS.min, maximum: START_TIMEOUT_SECONDS.max }),
+        ),
+        instanceId: opt(str()),
+        replace: opt(str()),
+      }),
       async execute(_id, params, signal) {
         const text = await previewRequest(params, signal);
         return { content: [{ type: "text", text }], details: JSON.parse(text) };

@@ -279,13 +279,7 @@ export async function startRealPiDispatch(
     if (!userTexts.some((text) => text.includes(parentSecret)))
       return record(refuse(response, "a request belonging to neither the parent nor the child"));
 
-    if (toolResults.length === 0) {
-      const schema = declared.find((tool) => tool.function?.name === startTool)?.function
-        ?.parameters;
-      if (!schema) return record(refuse(response, `${startTool} was not declared to the model`));
-      // Stale tool calls may still carry removed options, including a nonexistent model.
-      // Neither those options nor the parent's non-default model may override child defaults.
-      const args = { prompt: brief, model: "missing/nonexistent", thinkingLevel: "high" };
+    const callStart = (args: Record<string, unknown>, id: string) =>
       respond(
         response,
         body.model,
@@ -294,7 +288,7 @@ export async function startRealPiDispatch(
           tool_calls: [
             {
               index: 0,
-              id: "call_start",
+              id,
               type: "function",
               function: { name: startTool, arguments: JSON.stringify(args) },
             },
@@ -302,12 +296,35 @@ export async function startRealPiDispatch(
         },
         "tool_calls",
       );
-      return record(`${startTool} call`);
+
+    if (toolResults.length === 0) {
+      const schema = declared.find((tool) => tool.function?.name === startTool)?.function
+        ?.parameters;
+      if (!schema) return record(refuse(response, `${startTool} was not declared to the model`));
+      // A stale call carries options the tool removed, including a nonexistent model: Pi rejects it
+      // before anything starts, so neither those options nor the parent's model reach the child.
+      callStart(
+        { prompt: brief, model: "missing/nonexistent", thinkingLevel: "high" },
+        "call_start_stale",
+      );
+      return record(`${startTool} stale call`);
     }
 
     if (toolResults.length === 1) {
+      // The model has to be told which options do not exist, so it can retry without them.
+      if (
+        !["- model: unknown field", "- thinkingLevel: unknown field"].every((line) =>
+          toolResults[0].includes(line),
+        )
+      )
+        return record(refuse(response, `${startTool} accepted or misreported removed options`));
+      callStart({ prompt: brief }, "call_start");
+      return record(`${startTool} call`);
+    }
+
+    if (toolResults.length === 2) {
       // The handle has to be readable here, in the text the model is shown.
-      const started: unknown = JSON.parse(toolResults[0]);
+      const started: unknown = JSON.parse(toolResults[1]);
       handle = isRecord(started) && isRecord(started.handle) ? started.handle : null;
       if (!handle)
         return record(refuse(response, `no session handle in the visible text of ${startTool}`));
