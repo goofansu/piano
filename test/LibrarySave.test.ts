@@ -308,3 +308,40 @@ test("an update that names no file it replaces is refused, for a skill and a pro
     before,
   );
 });
+
+test("an update that omits Disable model invocation writes the file proposed", async () => {
+  const draft = { name: "quiet", description: "Quiet.", instructions: "One." };
+  assert.equal(
+    (
+      await saveToLibrary(
+        "skill",
+        { ...draft, disableModelInvocation: true },
+        user(() => true).deps,
+        undefined,
+      )
+    ).status,
+    "saved",
+  );
+  const path = join(skills, "quiet", "SKILL.md");
+  const shown = readFileSync(path, "utf8");
+
+  // Any caller of the endpoints, not only the extension: the update's body is the draft the
+  // proposal was made from, plus the file it showed.
+  const changed = { ...draft, instructions: "Two." };
+  const proposal = await server.handle("/api/settings/skills/proposal", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(changed),
+  });
+  const proposed = (await proposal.json()) as { file: string; previous: string };
+  assert.equal(proposed.previous, shown);
+  assert.match(proposed.file, /disable-model-invocation: true/);
+
+  const response = await server.handle("/api/settings/skills", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...changed, previous: proposed.previous }),
+  });
+  assert.equal(response.status, 200);
+  assert.equal(readFileSync(path, "utf8"), proposed.file, "the file written is the file proposed");
+});

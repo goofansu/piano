@@ -118,7 +118,7 @@ export const UserSkillsLive = Layer.effect(
       occupied: (name) =>
         loadSkillsFromDir({ dir: root(), source: "user" }).skills.some((s) => s.name === name) ||
         existsSync(join(root(), name)),
-      // A proposal keeps the saved skill's Disable model invocation unless the draft sets it.
+      // A save over a skill keeps its Disable model invocation unless the draft sets it.
       render: (saved, request, kept) => {
         const disableModelInvocation =
           request.disableModelInvocation ?? kept?.disableModelInvocation ?? false;
