@@ -1,6 +1,6 @@
-/** Model-initiated questions through Pi's supported dialogs; Piano owns the answer surface. */
-import { type Static, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+/** Model-initiated questions through Pi's supported dialogs; Piano owns the answer surface. */
+import { type Static, Type } from "typebox";
 import { ASK_USER_TOOL, askUserPrompt, askUserQuestions } from "../../shared/askUser.ts";
 
 const Parameters = Type.Object({

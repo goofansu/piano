@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Type } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { z } from "zod";
 import { type Artifact, RadiusClient, RadiusError, safeError } from "./RadiusClient.ts";
 

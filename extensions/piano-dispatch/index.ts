@@ -1,7 +1,8 @@
 /** Bundled Pi extension: dispatch work through Piano, never launch or own another Pi process. */
 import { isAbsolute, resolve } from "node:path";
-import { type JsonValue, type Static, type TSchema, Type } from "@earendil-works/pi-ai";
+import type { JsonValue } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { type Static, type TSchema, Type } from "typebox";
 import {
   DISPATCH_ENTRY,
   DISPATCHED_FROM_FLAG,
