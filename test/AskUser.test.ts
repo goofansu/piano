@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { type JsonObject, validateToolArguments } from "@earendil-works/pi-ai";
 import type {
   ExtensionAPI,
   ExtensionToolContext,
@@ -139,6 +140,49 @@ test("a choice question is asked as a select of its choices, read from raw argum
       { method: "editor", title: "3 of 3: What should change?" },
     ],
   );
+});
+
+test("Piano reads a call's questions only when Pi accepts the call, with the arguments Pi passes the tool", () => {
+  const ask = tool();
+  const piReads = (args: JsonObject) => {
+    try {
+      return validateToolArguments(ask, {
+        type: "toolCall",
+        id: "c",
+        name: ask.name,
+        arguments: args,
+      });
+    } catch {
+      return undefined;
+    }
+  };
+  for (const args of [
+    { questions: [question] },
+    { questions: [{ id: 7, question: true, options: [8080, false] }] },
+    { questions: [{ ...question, options: "Yes" }] },
+    { questions: [{ ...question, options: null }] },
+    { questions: [{ ...question, multiline: true }] },
+    { questions: [question], extra: 1 },
+    { questions: [{ ...question, options: [] }] },
+    { questions: [{ ...question, options: ["Yes", "Yes"] }] },
+    { questions: [{ ...question, options: [""] }] },
+    { questions: [{ ...question, options: [{ label: "Yes" }] }] },
+    { questions: [{ question: "No ID" }] },
+    { questions: [] },
+    { questions: question },
+    {},
+  ] as JsonObject[]) {
+    const accepted = piReads(args);
+    assert.deepEqual(
+      askUserQuestions(args),
+      accepted?.questions,
+      `Piano and Pi read ${JSON.stringify(args)} alike`,
+    );
+  }
+  // The control: the reader can disagree with Pi, by its own rule on top of Pi's.
+  const duplicate = { questions: [question, question] };
+  assert.ok(piReads(duplicate), "Pi accepts duplicate IDs; the tool refuses them itself");
+  assert.equal(askUserQuestions(duplicate), undefined);
 });
 
 test("ask_user validates the whole batch before opening a dialog and requires a UI", async () => {

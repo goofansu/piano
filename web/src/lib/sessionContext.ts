@@ -374,7 +374,9 @@ export function sessionActivity(state: AppState, messagesOnly: boolean): Session
       : !t && receipt
         ? receipt.phase === "rejected"
           ? "Message rejected"
-          : "Delivery uncertain"
+          : receipt.phase === "not_sent"
+            ? "Not sent"
+            : "Delivery uncertain"
         : !state.connected || (t !== null && !sessionReady(state))
           ? "Reconnecting"
           : !t

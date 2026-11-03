@@ -94,6 +94,7 @@ let liveStage = 0;
 const steering = [];
 const followUp = [];
 const messages = [];
+const publishedArtifacts = new Set();
 const queueUpdate = () =>
   out({ type: "queue_update", steering: [...steering], followUp: [...followUp] });
 const settle = (last) => {
@@ -754,6 +755,109 @@ function handle(cmd) {
         setInterval(() => {}, 1000);
         return;
       }
+      // "codemode <n> [fail <k>]": one codemode call whose script makes n nested bash/read/write
+      // calls, k of them failing, as live executions each running for 150ms, then recorded in
+      // its result.
+      const codemode = /^codemode (\d+)(?: fail (\d+))?$/.exec(cmd.message);
+      if (codemode) {
+        const n = Number(codemode[1]);
+        const failures = Number(codemode[2] ?? 0);
+        const id = `code${messages.length}`;
+        const code = `// @options: {"timeout_ms": 600000}\nfor (const file of files) await bash(\`wc -l \${file}\`);`;
+        const asst = {
+          role: "assistant",
+          content: [{ type: "toolCall", id, name: "code", arguments: { code } }],
+          model: model.id,
+          provider: model.provider,
+          stopReason: "toolUse",
+          timestamp: Date.now(),
+        };
+        messages.push(asst);
+        out({ type: "message_end", message: asst });
+        out({ type: "tool_execution_start", toolCallId: id, toolName: "code", args: { code } });
+        // Failures spread over the run, the first early enough to fold away.
+        const failing = new Set(
+          Array.from({ length: failures }, (_, i) => 2 + Math.floor((i * n) / failures)),
+        );
+        const tools = ["bash", "read", "write"];
+        const calls = Array.from({ length: n }, (_, i) => {
+          const name = tools[i % 3];
+          const file = `/tmp/eval/file-${i + 1}.md`;
+          return {
+            id: `${id}/${i + 1}`,
+            name,
+            arguments:
+              name === "bash"
+                ? { command: `wc -l ${file}` }
+                : name === "read"
+                  ? { path: file }
+                  : { path: file, content: `# ${i + 1}\n` },
+            status: failing.has(i + 1) ? "error" : "ok",
+          };
+        });
+        let i = 0;
+        const step = () => {
+          if (i < calls.length) {
+            const c = calls[i++];
+            const error = c.status === "error";
+            out({
+              type: "tool_execution_start",
+              toolCallId: c.id,
+              parentToolCallId: id,
+              toolName: c.name,
+              args: c.arguments,
+            });
+            // Each call runs for its 150ms before it ends and the next starts.
+            return setTimeout(() => {
+              out({
+                type: "tool_execution_end",
+                toolCallId: c.id,
+                toolName: c.name,
+                result: {
+                  content: [
+                    { type: "text", text: error ? "ENOENT: no such file" : `${i * 12} lines` },
+                  ],
+                },
+                isError: error,
+              });
+              step();
+            }, 150);
+          }
+          const content = [{ type: "text", text: `${n} calls, ${failures} failed` }];
+          out({
+            type: "tool_execution_end",
+            toolCallId: id,
+            toolName: "code",
+            result: { content },
+            isError: false,
+          });
+          const result = {
+            role: "toolResult",
+            toolCallId: id,
+            toolName: "code",
+            content,
+            isError: false,
+            nestedCalls: { complete: true, calls },
+            timestamp: Date.now(),
+          };
+          messages.push(result);
+          out({ type: "message_end", message: result });
+          const reply = {
+            role: "assistant",
+            content: [{ type: "text", text: `Ran ${n} tool calls.` }],
+            model: model.id,
+            provider: model.provider,
+            stopReason: "stop",
+            timestamp: Date.now(),
+          };
+          messages.push(reply);
+          out({ type: "message_end", message: reply });
+          out({ type: "turn_end", message: reply, toolResults: [] });
+          settle(reply);
+        };
+        step();
+        return;
+      }
       const text = `echo: ${cmd.message}`;
       out({
         type: "message_start",
@@ -783,6 +887,19 @@ function handle(cmd) {
             path: "keys/sk-abcdefghijklmnopqrstuvwxyz123456.ts",
             content: "sk-content-abcdefghijklmnopqrstuvwxyz",
           },
+        });
+      // "artifact <id> <confirmed|error> <title>": a radius-artifacts publication, as the bundled
+      // extension's create (an ID not yet published) or update call and its result report it.
+      const artifact = /^artifact (\S+) (confirmed|error) (.+)$/.exec(cmd.message);
+      const artifactTool =
+        artifact &&
+        (publishedArtifacts.has(artifact[1]) ? "radius_artifact_update" : "radius_artifact_create");
+      if (artifact)
+        asst.content.push({
+          type: "toolCall",
+          id: `artifact${messages.length}`,
+          name: artifactTool,
+          arguments: { operationKey: artifact[1], title: artifact[3], content: "# Report" },
         });
       messages.push(asst);
       if (cmd.message === "live context")
@@ -836,6 +953,29 @@ function handle(cmd) {
           result: { content: [{ type: "text", text: "edited" }] },
           isError: false,
         });
+        messages.push(result);
+        out({ type: "message_end", message: result });
+      }
+      if (artifact) {
+        const confirmed = artifact[2] === "confirmed";
+        if (confirmed) publishedArtifacts.add(artifact[1]);
+        const details = confirmed
+          ? {
+              status: "confirmed",
+              message: "Radius publication confirmed.",
+              artifactId: artifact[1],
+              url: `https://radius.example.test/a/${artifact[1]}`,
+              revision: 1,
+            }
+          : { status: "error", message: "Radius refused the publication." };
+        const result = {
+          role: "toolResult",
+          toolCallId: asst.content.at(-1).id,
+          toolName: artifactTool,
+          content: [{ type: "text", text: JSON.stringify(details) }],
+          details,
+          isError: !confirmed,
+        };
         messages.push(result);
         out({ type: "message_end", message: result });
       }

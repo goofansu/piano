@@ -1,7 +1,19 @@
 /** Bundled Pi extension: dispatch work through Piano, never launch or own another Pi process. */
 import { isAbsolute, resolve } from "node:path";
-import { type JsonValue, type Static, type TSchema, Type } from "@earendil-works/pi-ai";
+import { type JsonValue, StringEnum } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+  arr,
+  bool,
+  int,
+  nullable,
+  num,
+  obj,
+  opt,
+  type Schema,
+  type Static,
+  str,
+} from "@earendil-works/pi-schema";
 import {
   DISPATCH_ENTRY,
   DISPATCHED_FROM_FLAG,
@@ -31,106 +43,76 @@ const dispatchDirectory = (requested: string | undefined, parent: string): strin
     ? (requested ?? parent)
     : resolve(parent, requested);
 
-/** The schema one of these literals has. */
-type LiteralSchema<Value> = Value extends string ? ReturnType<typeof Type.Literal<Value>> : never;
-/** A union of the given literals. Mapping the values in place would type it as a union of none. */
-const literals = <const Values extends ReadonlyArray<string>>(
-  values: Values,
-  options?: { description: string },
-) =>
-  Type.Union(
-    values.map((value) => Type.Literal(value)) as unknown as [LiteralSchema<Values[number]>],
-    options,
-  );
-
-const Handle = Type.Object({
-  cwd: Type.String(),
-  sessionId: Type.String(),
-  generation: Type.String(),
-  submissionId: Type.Union([Type.Integer(), Type.Null()]),
-  baselineMessages: Type.Integer({ minimum: 0 }),
-  baselineFingerprint: Type.String(),
-  inputFingerprint: Type.String(),
-  anchorMessageId: Type.Union([Type.String(), Type.Null()]),
+const Handle = obj({
+  cwd: str(),
+  sessionId: str(),
+  generation: str(),
+  submissionId: nullable(int()),
+  baselineMessages: int({ minimum: 0 }),
+  baselineFingerprint: str(),
+  inputFingerprint: str(),
+  anchorMessageId: nullable(str()),
 });
-const NullableString = Type.Union([Type.String(), Type.Null()]);
-const Observation = Type.Object({
+const NullableString = nullable(str());
+const Observation = obj({
   handle: Handle,
-  status: literals(WAIT_STATUSES),
-  ending: Type.Union([Type.Literal("observed"), Type.Literal("deadline"), Type.Literal("aborted")]),
+  status: StringEnum(WAIT_STATUSES),
+  ending: StringEnum(["observed", "deadline", "aborted"] as const),
   answer: NullableString,
-  attribution: Type.Union([
-    Type.Literal("attributed"),
-    Type.Literal("no-output"),
-    Type.Literal("unattributable"),
-  ]),
-  detail: Type.Optional(Type.String()),
-  link: Type.String(),
+  attribution: StringEnum(["attributed", "no-output", "unattributable"] as const),
+  detail: opt(str()),
+  link: str(),
 });
-const Worktree = Type.Object({
-  branch: Type.String({ minLength: 1, description: "New branch name; it must not exist yet" }),
-  hooks: Type.Optional(
-    Type.Boolean({ description: "Run approved Worktrunk hooks; unapproved hooks refuse creation" }),
+const Worktree = obj({
+  branch: str({ minLength: 1, description: "New branch name; it must not exist yet" }),
+  hooks: opt(
+    bool({ description: "Run approved Worktrunk hooks; unapproved hooks refuse creation" }),
   ),
 });
-const StartParameters = Type.Object({
-  prompt: Type.String({ minLength: 1, description: "Self-contained work brief" }),
-  cwd: Type.Optional(Type.String({ minLength: 1 })),
-  worktree: Type.Optional(Worktree),
+const StartParameters = obj({
+  prompt: str({ minLength: 1, description: "Self-contained work brief" }),
+  cwd: opt(str({ minLength: 1 })),
+  worktree: opt(Worktree),
 });
-const StartOutput = Type.Object({
-  cwd: Type.String(),
-  creation: Type.Union([
-    Type.Literal("created"),
-    Type.Literal("refused"),
-    Type.Literal("uncertain"),
-  ]),
-  submission: Type.String(),
-  handle: Type.Union([Handle, Type.Null()]),
-  worktree: Type.Union([Type.Object({ path: Type.String(), branch: Type.String() }), Type.Null()]),
-  detail: Type.Optional(Type.String()),
+const StartOutput = obj({
+  cwd: str(),
+  creation: StringEnum(["created", "refused", "uncertain"] as const),
+  submission: str(),
+  handle: nullable(Handle),
+  worktree: nullable(obj({ path: str(), branch: str() })),
+  detail: opt(str()),
   link: NullableString,
 });
-const WaitParameters = Type.Object({
-  sessions: Type.Array(Handle, { minItems: 1, maxItems: 32 }),
-  timeoutMs: Type.Optional(
-    Type.Integer({
+const WaitParameters = obj({
+  sessions: arr(Handle, { minItems: 1, maxItems: 32 }),
+  timeoutMs: opt(
+    int({
       minimum: 1000,
       maximum: 60000,
       description: "Only for an explicitly bounded observation; omit to wait for completion.",
     }),
   ),
 });
-const WaitOutput = Type.Object({ results: Type.Array(Observation) });
-const StatusParameters = Type.Object({
-  sessionId: Type.String({
-    minLength: 1,
-    description: "A session ID, as a start or link names it",
-  }),
+const WaitOutput = obj({ results: arr(Observation) });
+const StatusParameters = obj({
+  sessionId: str({ minLength: 1, description: "A session ID, as a start or link names it" }),
 });
-const StatusOutput = Type.Object({
-  sessionId: Type.String(),
-  cwd: Type.String(),
+const StatusOutput = obj({
+  sessionId: str(),
+  cwd: str(),
   projectId: NullableString,
-  disposition: literals(DISPOSITIONS),
+  disposition: StringEnum(DISPOSITIONS),
   since: NullableString,
-  needs: Type.Union([
-    Type.Object({ title: Type.String(), kind: Type.String(), link: Type.String() }),
-    Type.Null(),
-  ]),
+  needs: nullable(obj({ title: str(), kind: str(), link: str() })),
   lastAnswer: NullableString,
-  changes: Type.Union([
-    Type.Object({
+  changes: nullable(
+    obj({
       branch: NullableString,
-      files: Type.Number(),
-      pullRequest: Type.Union([
-        Type.Object({ number: Type.Number(), url: Type.String(), state: NullableString }),
-        Type.Null(),
-      ]),
+      files: num(),
+      pullRequest: nullable(obj({ number: num(), url: str(), state: NullableString })),
     }),
-    Type.Null(),
-  ]),
-  link: Type.String(),
+  ),
+  link: str(),
 });
 
 /**
@@ -138,16 +120,14 @@ const StatusOutput = Type.Object({
  * drift apart. A schema may be looser than its shape (the start output's submission is any
  * string), but every value of the shape must fit it and both must name the same fields.
  */
-type Describes<Schema extends TSchema, Shape> = [Shape] extends [Static<Schema>]
-  ? [keyof Shape] extends [keyof Static<Schema>]
-    ? [keyof Static<Schema>] extends [keyof Shape]
+type Describes<S extends Schema, Shape> = [Shape] extends [Static<S>]
+  ? [keyof Shape] extends [keyof Static<S>]
+    ? [keyof Static<S>] extends [keyof Shape]
       ? true
       : false
     : false
   : false;
-type Exact<Schema extends TSchema, Shape> = [Static<Schema>] extends [Shape]
-  ? Describes<Schema, Shape>
-  : false;
+type Exact<S extends Schema, Shape> = [Static<S>] extends [Shape] ? Describes<S, Shape> : false;
 type Holds<T extends true> = T;
 export type SchemaChecks = [
   Holds<Exact<typeof Handle, SessionHandle>>,
@@ -223,7 +203,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
         "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout; a relative cwd is resolved from this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there. A missing cwd, a non-Git cwd or a branch that exists refuses the start and creates no session. Worktrunk hooks are skipped unless worktree.hooks is true; then an unapproved hook refuses the start, and a failed hook may leave the new checkout on disk (see detail). Always uses normal new-session model and effort defaults, not the parent's settings. Returns creation (created; refused, when no session exists because Piano refused the start or never received it; or uncertain, when one may), submission (what Pi did with the brief: started, queued, handled, needs_input, rejected, not_sent or uncertain), a handle to pass unchanged to piano_wait_sessions, the created worktree, and an Open session link. Creation/admission is not completion. refused with submission not_sent means nothing was started: fix the cause in detail before dispatching again. On uncertain creation or delivery inspect Piano before trying again: never automatically repeat dispatch.",
       parameters: StartParameters,
       outputSchema: StartOutput,
-      async execute(_id, params, signal, _update, ctx) {
+      async execute(_id, params: Static<typeof StartParameters>, signal, _update, ctx) {
         if (!params.prompt.trim())
           throw new Error("A non-empty, self-contained work brief is required.");
         return invoke(signal, async (observationSignal) => {
@@ -255,7 +235,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
         "Read what a Piano session is doing and what it needs, by session ID, without waiting or opening it. Works for any session Piano lists, after a lost reply or a Piano restart. Returns disposition (running, needs_input, settled, exited or unknown) with since, what a needs_input session asks for, the last turn's final answer (bounded) or null, changes (branch, changed file count, linked pull request) and the session link. settled means execution stopped, not that the task succeeded; unknown means live facts are gone and history proves no ending. One read: call again to observe later.",
       parameters: StatusParameters,
       outputSchema: StatusOutput,
-      async execute(_id, params, signal) {
+      async execute(_id, params: Static<typeof StatusParameters>, signal) {
         return invoke(signal, async (readSignal) => {
           const reply = await readStatus({ sessionId: params.sessionId }, environment, readSignal);
           if (reply.status !== "ready") throw new Error(reply.detail);
@@ -276,7 +256,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
         "Wait for fresh work sessions using the exact handles returned by piano_start_session. Omit timeoutMs: one call stays open until all sessions finish or any needs input, fails, is cancelled or becomes unobservable. Do not poll with repeated short waits or status reads when you need completion. Only set timeoutMs (1000–60000) for an explicitly bounded observation. Returns every handle's current result with running, settled, failed, cancelled, needs_input or unknown status, answer or null, and Open session links. ending=deadline is an observation limit, not child failure. Cancelling this wait only closes observation; children keep running. Lost connections and unreadable state have bounded recovery. Later input, a restarted host or missing evidence may prevent attribution; inspect that session instead. Settlement does not certify task/check success, handled input may have no answer, and child completion does not wake a parent whose turn has ended. When called through codemode, await the call and omit the script timeout too.",
       parameters: WaitParameters,
       outputSchema: WaitOutput,
-      async execute(_id, params, signal) {
+      async execute(_id, params: Static<typeof WaitParameters>, signal) {
         return invoke(signal, async (observationSignal) => {
           const results = await waitSessions(
             params.sessions,

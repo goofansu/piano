@@ -163,6 +163,37 @@ test("enabled commands reach the effect their intent names", () => {
     assert.deepEqual(effectsOf(command), { ran: true, calls: [call] }, command.label);
 });
 
+test("Artifacts is offered once the session published one, and opens the header's menu", () => {
+  const artifacts = (state: AppState) => sessionCommands(state).find((c) => c.id === "artifacts")!;
+  assert.equal(artifacts(selected).hidden, true, "nothing to list before the first artifact");
+  const published: AppState = {
+    ...selected,
+    session: {
+      ...selected.session!,
+      messages: [
+        {
+          id: "m0",
+          role: "assistant",
+          text: "",
+          toolCalls: [{ id: "c1", name: "radius_artifact_create", args: '{"title":"Report"}' }],
+        },
+        {
+          id: "m1",
+          role: "tool_result",
+          text: '{"status":"confirmed","artifactId":"r1","url":"https://r.test/r1"}',
+          toolName: "radius_artifact_create",
+          toolCallId: "c1",
+          isError: false,
+        },
+      ],
+    },
+  };
+  const command = artifacts(published);
+  assert.equal(command.label, "Artifacts");
+  assert.ok(command.enabled && !command.hidden);
+  assert.deepEqual(effectsOf(command), { ran: true, calls: [["openArtifacts"]] });
+});
+
 test("archiving a working background session asks before sending a destructive command", () => {
   const working: AppState = {
     ...online,

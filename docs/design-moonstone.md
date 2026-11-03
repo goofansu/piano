@@ -172,7 +172,10 @@ cut off at the edge showing there is more (a native bar takes the list's bottom 
 the tabs off the rule; an edge fade fades a lone tab in browsers without scroll-driven
 animations). Reloading the page brings back the session's
 tabs, the one shown and its area; another session, or a new browser tab, starts with only the
-Agent area. Pressing a tab never draws the keyboard ring. At the header's end, over where the
+Agent area. Pressing a tab never draws the keyboard ring. At the header's end, once the session
+has published a Radius artifact, Artifacts comes first: its icon and how many, opening a menu of
+their titles, newest first, each opening its artifact in a new tab (the palette's Artifacts row
+opens the same menu). Over where the
 rail shows, the list icon is "Show session rail" or "Hide session rail", and the palette's row
 carries the same name; the Changes icon after it, last in the header, toggles Changes the same
 way, "Changes" or "Hide changes" and filled while Changes shows.
@@ -189,16 +192,10 @@ clear of the rail (`--rail-inset`), and its first section sits level with the tr
 row. It and the Surface area share the session's right side: whichever came in last shows. Opening a Surface tab hides the rail;
 closing the last one brings it back; turning the rail on while tabs are open hides them until a
 tab is shown again or the rail goes off. The desktop rail has no header or toolbar: its folding sections are
-Environment (folder or repository, branch or detached commit, linked pull request), Outputs, the files Pi wrote or edited,
-and Links, the web links the conversation mentions, the last two only once they have a row.
-Links shows its count and five most recently mentioned URLs, each once, with its title and domain
-(or its bare URL); Jump to message is revealed on hover or keyboard focus and stays visible on
-touch. With more than five, Show all opens a Links view in the same rail, replacing the overview.
-Its header and Search links field stay above one scrolling list; search matches titles and URLs,
-including domains. Existing rows stay in place while browsing, with new URLs appended; Back
-restores the overview's scroll and focus. Links still open in a new tab, and Jump to message reveals
-the latest mention in the conversation beside the rail. The composer's usage row once held Outputs
-and Links as popovers, and the palette no longer searches them. The
+Environment (folder or repository, branch or detached commit, linked pull request) and Outputs,
+the files Pi wrote or edited, once there is one. A Links section once listed the web links the
+conversation mentioned; mostly long bare URLs nobody revisits, it was removed, and links stay
+tappable in the conversation. The composer's usage row once held Outputs as a popover. The
 Surface area's remembered width is a
 preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
 shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the
@@ -212,7 +209,7 @@ short commit), in 12px muted text that does nothing on tap. The session menu ("â
 whenever the areas take turns) is the desktop menu's actions and no more, one level deep. Before
 them, only what a phone acts on: the linked pull request, a row that opens it on GitHub in a new
 tab and ends with the external-link icon, and Preview while a preview is known (its state dot,
-name and host; tapping it shows the preview and closes the sheet). Outputs, Links, Environment's
+name and host; tapping it shows the preview and closes the sheet). Outputs, Environment's
 copy menus and the session ID are desktop work and are not on the phone: links stay tappable in
 the conversation, and Share hands a session to another device. Add to project pushes the project
 picker, with Back to return. Escape or a tap outside returns focus to "â€¦", not the composer. Side

@@ -8,6 +8,7 @@ import type { AppState } from "../store.ts";
 import type { SessionLayout } from "./navigation.ts";
 import { type PreviewObservationState, seenPreview } from "./previewObservation.ts";
 import { pullRequestView } from "./pullRequestView.ts";
+import { sessionArtifacts } from "./sessionArtifacts.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
@@ -41,6 +42,7 @@ export type SessionCommandId =
   | "copy-session-id"
   | "copy-session-path"
   | "changes"
+  | "artifacts"
   | "session-rail"
   | "agent"
   | "wrap-changes"
@@ -60,6 +62,7 @@ export type SessionCommandId =
 export type SessionCommandIcon =
   | "copy"
   | "changes"
+  | "artifacts"
   | "list"
   | "agent"
   | "pull-request"
@@ -79,9 +82,11 @@ export type SessionCommandIntent =
   | { kind: "send"; command: ClientCommand }
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
+  /** Open the session header's Artifacts menu. */
+  | { kind: "artifacts" }
   /**
-   * Turn the session rail (the session's folder, branch and directory, its outputs and its
-   * links) on or off beside the Agent area.
+   * Turn the session rail (the session's folder, branch and directory, and its outputs) on or off
+   * beside the Agent area.
    */
   | { kind: "session-rail" }
   /** Show the Agent area in a single-view layout. */
@@ -236,6 +241,7 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
  *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
+ * - artifacts: listed only once the session published a Radius artifact (`sessionArtifacts`).
  * - session rail: side by side only (its facts need neither Git nor a live Pi); "Hide session
  *   rail" while the column shows, else "Show session rail". One area at a time it is not listed:
  *   the session menu holds the same facts.
@@ -277,6 +283,7 @@ export function sessionCommands(
     const sessionPath = session.state.sessionFile;
     const linked = !!ctx.pullRequest;
     const pullRequest = pullRequestView({ link: ctx.pullRequest ?? null, pullRequest: null });
+    const hasArtifacts = sessionArtifacts(session.messages).length > 0;
     commands.push(
       {
         id: "copy-working-directory",
@@ -360,13 +367,22 @@ export function sessionCommands(
         intent: { kind: "changes" },
       },
       {
+        id: "artifacts",
+        label: "Artifacts",
+        icon: "artifacts",
+        enabled: hasArtifacts,
+        // The header's control appears with the first artifact; until then there is nothing to grey.
+        hidden: !hasArtifacts,
+        intent: { kind: "artifacts" },
+      },
+      {
         id: "session-rail",
         label: rail ? "Hide session rail" : "Show session rail",
         icon: "list",
         enabled: !single,
         // One area at a time there is no rail: the header says where the session runs.
         hidden: single,
-        keywords: ["details", "info", "outputs", "files", "links", "branch"],
+        keywords: ["details", "info", "outputs", "files", "branch"],
         intent: { kind: "session-rail" },
       },
       {

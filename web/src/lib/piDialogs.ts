@@ -167,12 +167,6 @@ export interface DialogAnswer {
   view: (now: number, attachment: string | null) => DialogAnswerView;
 }
 
-/**
- * Abort stays available past the deadline: the deadline only bounds when Pi still reads a reply,
- * while abort is how the user gets out of a dialog Pi may already have given up on.
- */
-export const ABORT_IGNORES_DEADLINE = true;
-
 export function createDialogAnswer({
   dialog,
   send,
@@ -209,7 +203,9 @@ export function createDialogAnswer({
     return {
       submitted,
       disabled: submitted || !connected || expired,
-      abortDisabled: submitted || !connected || (!ABORT_IGNORES_DEADLINE && expired),
+      // Abort stays available past the deadline: the deadline only bounds when Pi still reads a
+      // reply, while abort is how the user gets out of a dialog Pi may already have given up on.
+      abortDisabled: submitted || !connected,
       title,
       deadline:
         at === null

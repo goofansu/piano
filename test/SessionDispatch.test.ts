@@ -360,10 +360,7 @@ test(
   async () => {
     const h = world();
     const baseline = [message("m1", "context", "startup")];
-    const start = startSession(
-      { cwd: asked, prompt: "do the thing", model: "p/m", thinkingLevel: "high" },
-      h.env,
-    );
+    const start = startSession({ cwd: asked, prompt: "do the thing" }, h.env);
     h.last().accept();
     const socket = h.last();
     socket.frame(selected(socket.selection(), snapshotOf({}, baseline)));
@@ -378,7 +375,7 @@ test(
     assert.equal(creations.length, 1);
     assert.deepEqual(
       { cwd: creations[0]!.cwd, text: creations[0]!.text, options: creations[0]!.options },
-      { cwd: asked, text: "do the thing", options: { model: "p/m", thinkingLevel: "high" } },
+      { cwd: asked, text: "do the thing", options: {} },
     );
     assert.equal(result.creation, "created");
     assert.equal(result.submission, "started");
@@ -2130,28 +2127,31 @@ test(
   },
 );
 
-test("a follow-up Piano refused by its inputId reports it not sent at once", bounded, async () => {
-  const h = world();
-  const sent = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
-  h.last().accept();
-  const socket = h.last();
-  socket.frame(selected(socket.selection(), running()));
-  const [act] = h.sentOf("act");
-  assert.ok(act?._tag === "act" && "inputId" in act.action && act.action.inputId);
-  // A removed checkout: refused before Pi saw the message, with no receipt to follow.
-  socket.frame({
-    _tag: "error",
-    selectionId: socket.selection(),
-    inputId: act.action.inputId,
-    message: "This session's checkout is missing.",
-  });
-  // No grace period: the refusal is the verdict.
-  assert.deepEqual(await sent, {
-    sessionId,
-    delivery: "follow-up",
-    submission: "not_sent",
-    detail: "This session's checkout is missing.",
-  });
-  assert.equal(h.sentOf("act").length, 1, "the message is never sent again");
-  assert.equal(h.pendingTimers(), 0);
-});
+test(
+  "a follow-up Piano refused before Pi saw it reports not_sent at once, with Piano's reason",
+  bounded,
+  async () => {
+    const h = world();
+    const sent = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
+    h.last().accept();
+    const socket = h.last();
+    socket.frame(selected(socket.selection(), snapshotOf()));
+    const act = h.sentOf("act")[0]!.action;
+    assert.ok(act._tag === "prompt");
+    // The error names the input it refused: Pi never saw it (`ServerMessage` `error.inputId`).
+    socket.frame({
+      _tag: "error",
+      selectionId: socket.selection(),
+      inputId: act.inputId,
+      message: "The session's checkout is gone.",
+    });
+    assert.equal(h.pendingTimers(), 0, "it settles at once, with no grace timer left waiting");
+    assert.deepEqual(await sent, {
+      sessionId,
+      delivery: "follow-up",
+      submission: "not_sent",
+      detail: "The session's checkout is gone.",
+    });
+    assert.equal(h.sentOf("act").length, 1, "the message is sent once");
+  },
+);

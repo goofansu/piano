@@ -41,7 +41,6 @@ import {
   type SessionClosure,
   type SessionStatusFacts,
   type Snapshot,
-  type ThinkingLevel,
   WORKTREE_CREATION_MS,
 } from "../../shared/wire.ts";
 import {
@@ -59,8 +58,6 @@ export interface StartRequest {
   readonly cwd: string;
   /** Start in a new worktree Piano creates; a failure creates no session. */
   readonly worktree?: WorktreeRequest;
-  readonly model?: string;
-  readonly thinkingLevel?: ThinkingLevel;
   /** The dispatching session, recorded in the new one's history for its backlink. */
   readonly dispatchedFrom?: string;
 }
@@ -287,7 +284,7 @@ export function startSession(
   environment: SocketEnvironment,
   signal?: AbortSignal,
 ): Promise<StartResult> {
-  const { cwd, prompt, model, thinkingLevel, dispatchedFrom, worktree } = request;
+  const { cwd, prompt, dispatchedFrom, worktree } = request;
   return observe<StartResult>(
     environment,
     { deadlineMs: START_DEADLINE_MS + (worktree ? WORKTREE_CREATION_MS : 0), signal },
@@ -369,7 +366,7 @@ export function startSession(
               _tag: "create_session",
               selectionId,
               cwd,
-              options: { model, thinkingLevel, dispatchedFrom },
+              options: { dispatchedFrom },
               ...(worktree ? { worktree } : {}),
               text: prompt,
             });

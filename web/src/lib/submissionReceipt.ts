@@ -5,11 +5,13 @@
  * Pi's own submission supersedes it, after which Pi's submission is the receipt. Status, the
  * reply indicator and the status line all read phase, tone and words from here.
  */
+import type { PromptSubmission } from "@shared/wire";
 import type { AppState } from "../store.ts";
 
 /**
  * `starting`: the first message is on its way with a new session. `submitting`: Pi has it but has
- * not answered. `submitted`: Pi started or queued it. The rest are Pi's, or the browser's, verdicts.
+ * not answered. `submitted`: Pi started or queued it. `not_sent`: refused before Pi saw it, so the
+ * sender has it back. The rest are Pi's, or the browser's, verdicts.
  */
 export type SubmissionPhase =
   | "starting"
@@ -17,6 +19,7 @@ export type SubmissionPhase =
   | "submitted"
   | "handled"
   | "rejected"
+  | "not_sent"
   | "uncertain";
 
 export interface SubmissionReceipt {
@@ -30,16 +33,20 @@ export interface SubmissionReceipt {
   detail: string | undefined;
 }
 
+/** The phase each of Pi's submission outcomes reads as, wherever a receipt is shown. */
 const PI_PHASE = {
   submitting: "submitting",
   started: "submitted",
   queued: "submitted",
   handled: "handled",
   rejected: "rejected",
-  // Refused before Pi saw it: the draft is back in the composer and the detail says nothing was sent.
-  not_sent: "rejected",
+  not_sent: "not_sent",
   uncertain: "uncertain",
-} as const satisfies Record<string, SubmissionPhase>;
+} as const satisfies Record<PromptSubmission["outcome"], SubmissionPhase>;
+
+/** What Pi's submission outcome means for the input it answers: the one reading of each outcome,
+ * shared by Pi's own receipt and the browser's first-message record. */
+export const submissionPhase = (outcome: PromptSubmission["outcome"]) => PI_PHASE[outcome];
 
 const text = (phase: SubmissionPhase, source: SubmissionReceipt["source"]): string | undefined => {
   switch (phase) {
@@ -52,6 +59,8 @@ const text = (phase: SubmissionPhase, source: SubmissionReceipt["source"]): stri
       return "Command handled.";
     case "rejected":
       return "Message rejected.";
+    case "not_sent": // The draft is back in the composer; the detail says why.
+      return "Not sent.";
     case "uncertain":
       // Before Pi answered, the session itself may not exist; after, the input may sit in its queue.
       return `Delivery uncertain — inspect the ${source === "browser" ? "session list" : "session and queue"} before deciding whether to send again. Piano will not resend automatically.`;
@@ -65,7 +74,7 @@ const receipt = (
 ): SubmissionReceipt => ({
   source,
   phase,
-  tone: phase === "rejected" || phase === "uncertain" ? "warning" : "quiet",
+  tone: phase === "rejected" || phase === "not_sent" || phase === "uncertain" ? "warning" : "quiet",
   text: text(phase, source),
   detail,
 });
@@ -75,5 +84,7 @@ export function submissionReceipt(state: AppState): SubmissionReceipt | undefine
   const input = state.pendingCreate;
   const submission = state.session?.state.submission;
   if (input) return receipt("browser", input.outcome, input.detail ?? submission?.detail);
-  return submission ? receipt("pi", PI_PHASE[submission.outcome], submission.detail) : undefined;
+  return submission
+    ? receipt("pi", submissionPhase(submission.outcome), submission.detail)
+    : undefined;
 }

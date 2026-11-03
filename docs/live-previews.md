@@ -234,8 +234,9 @@ after checkout deletion, without `realpath` of the missing directory.
    }
    ```
 
-   Omit the Vite host override on a Mac: localhost is already allowed. The session broker fixes
-   workspace and generation from trusted PiSessions context, ignoring caller workspace/owner fields.
+   Omit the Vite host override on a Mac: localhost is already allowed. Pi rejects arguments the tool
+   does not declare, such as workspace or owner; the session broker fixes workspace and generation
+   from trusted PiSessions context regardless.
    The application gets only PATH, PORT and explicit `env`; add HOME only when required. Never pass
    Piano credentials. Environment values are saved privately and omitted/redacted in observations;
    commands and logs are not secret storage.

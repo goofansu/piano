@@ -1,4 +1,3 @@
-import { isWorking } from "@shared/sessionProjection";
 import { cn } from "cn";
 import {
   ChevronDownIcon,
@@ -8,7 +7,7 @@ import {
   GitCommitHorizontalIcon,
   GitPullRequestIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback } from "react";
 import { SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { MiddleEllipsis } from "@/components/MiddleEllipsis";
@@ -19,7 +18,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
-import { SessionLinks, SessionLinksBrowser } from "@/components/SessionLinks";
 import { SessionOutputs } from "@/components/SessionOutputs";
 import { PreviewRailRow, useSeenPreview } from "@/components/SessionPreview";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
@@ -30,7 +28,6 @@ import { createPreference, parseJson } from "@/lib/preference";
 import { pullRequestView } from "@/lib/pullRequestView";
 import { type EnvironmentRowKind, environmentRowMenu } from "@/lib/sessionCommands";
 import { sessionContext, sessionPlace } from "@/lib/sessionContext";
-import { sessionLinks } from "@/lib/sessionLinks";
 import type { TranscriptViewport } from "@/lib/transcriptViewport";
 import { usePreference } from "@/lib/usePreference";
 import { useSessionFiles } from "@/lib/useSessionFiles";
@@ -38,8 +35,8 @@ import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { type AppState, sessionKey } from "@/store";
 
 /** The rail's sections, each folding on its own. */
-type RailSectionName = "workspace" | "app" | "outputs" | "links";
-const SECTIONS: readonly RailSectionName[] = ["workspace", "app", "outputs", "links"];
+type RailSectionName = "workspace" | "app" | "outputs";
+const SECTIONS: readonly RailSectionName[] = ["workspace", "app", "outputs"];
 
 /** The sections the user folded, remembered across sessions and reloads; every section starts
  * open. The key predates the rail's name. */
@@ -51,39 +48,11 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
   },
 });
 
-/** Links' recent entries before Show all. */
-const RECENT_LINKS = 5;
-
-const NO_MESSAGES: NonNullable<AppState["session"]>["messages"] = [];
-
 /**
- * What the session rail holds for the selected session: App while a preview is known, Outputs once
- * Pi wrote a file, Links once the conversation mentions a link; Links lists newest first,
- * `recentLinks` before Show all.
- */
-function useRailContents(state: AppState) {
-  const preview = useSeenPreview(state);
-  const files = useSessionFiles();
-  const messages = state.session?.messages ?? NO_MESSAGES;
-  const links = useMemo(() => sessionLinks(messages).reverse(), [messages]);
-  return {
-    preview,
-    files,
-    links,
-    recentLinks: links.slice(0, RECENT_LINKS),
-    showAllLinks: links.length > RECENT_LINKS,
-    messages,
-    working: !!state.session && isWorking(state.session.state),
-  };
-}
-
-type RailContents = ReturnType<typeof useRailContents>;
-
-/**
- * The session rail: Environment (its repository or folder, branch and linked pull request), Outputs (the
- * files Pi wrote or edited) and Links (the web links the conversation mentions), each a section that folds; Outputs and Links appear once they have a row. It reads
- * nothing itself: the facts are the registry's and Pi's, the lists the transcript's, so it is
- * never stale. Links shows five recent entries; its full, searchable view replaces the overview.
+ * The session rail: Environment (its repository or folder, branch and linked pull request), App
+ * while a preview is known, and Outputs (the files Pi wrote or edited) once there is one, each a
+ * section that folds. It reads nothing itself: the facts are the registry's and Pi's, the lists
+ * the transcript's, so it is never stale. The artifacts Pi published are the header's.
  *
  * It stands at the Agent area's right, as tall as the transcript and composer together, as Claude
  * Code's session rail does: the transcript's scroller keeps the area's full width, so its
@@ -104,24 +73,7 @@ export function SessionRail({ state }: RailProps) {
 }
 
 function SessionRailContent({ state }: RailProps) {
-  const [browseLinks, setBrowseLinks] = useState(false);
-  const railRef = useRef<HTMLElement | null>(null);
-  const overviewScroll = useRef(0);
-  const showAllRef = useRef<HTMLButtonElement | null>(null);
-  const restoreFocus = useRef(false);
-  const contents = useRailContents(state);
-  const { links, messages, working } = contents;
-  const attachRail = useCallback((rail: HTMLElement | null) => {
-    railRef.current = rail;
-    return fadeOverflow(rail);
-  }, []);
-  useLayoutEffect(() => {
-    if (railRef.current) railRef.current.scrollTop = browseLinks ? 0 : overviewScroll.current;
-    if (!browseLinks && restoreFocus.current) {
-      showAllRef.current?.focus({ preventScroll: true });
-      restoreFocus.current = false;
-    }
-  }, [browseLinks]);
+  const attachRail = useCallback((rail: HTMLElement | null) => fadeOverflow(rail), []);
   const viewport = useTranscriptViewport();
   const onWheel = useCallback(
     (event: React.WheelEvent<HTMLElement>) => passWheel(event, viewport),
@@ -130,41 +82,19 @@ function SessionRailContent({ state }: RailProps) {
   if (!state.session) return null;
   return (
     <aside
-      key={browseLinks ? "links" : "overview"}
       ref={attachRail}
       data-slot="session-rail"
       aria-label="Session rail"
-      onWheel={browseLinks ? undefined : onWheel}
+      onWheel={onWheel}
       // Clear of the scrollbar at the area's edge; its first section level with the transcript's
       // first row. Overflow fades at either edge; the last row clears the fade at the scroll end.
       // It scrolls without a scrollbar, as the tab strips do.
       className={cn(
         "flex scrollbar-none flex-col overscroll-y-contain pb-[max(0.75rem,env(safe-area-inset-bottom))]",
-        "absolute inset-y-0 right-3 z-10 w-[calc(var(--rail-inset)-0.75rem)] pt-3 md:pt-5",
-        browseLinks ? "overflow-hidden" : "overflow-y-auto",
+        "absolute inset-y-0 right-3 z-10 w-[calc(var(--rail-inset)-0.75rem)] overflow-y-auto pt-3 md:pt-5",
       )}
     >
-      {browseLinks ? (
-        <SessionLinksBrowser
-          links={links}
-          messages={messages}
-          working={working}
-          onBack={() => {
-            restoreFocus.current = true;
-            setBrowseLinks(false);
-          }}
-        />
-      ) : (
-        <RailSections
-          state={state}
-          contents={contents}
-          showAllRef={showAllRef}
-          onShowLinks={() => {
-            overviewScroll.current = railRef.current?.scrollTop ?? 0;
-            setBrowseLinks(true);
-          }}
-        />
-      )}
+      <RailSections state={state} />
     </aside>
   );
 }
@@ -200,18 +130,9 @@ function passWheel(event: React.WheelEvent<HTMLElement>, viewport: TranscriptVie
 }
 
 /** The rail's folding sections for the selected session. */
-function RailSections({
-  state,
-  contents,
-  onShowLinks,
-  showAllRef,
-}: {
-  state: AppState;
-  contents: RailContents;
-  onShowLinks: () => void;
-  showAllRef: React.Ref<HTMLButtonElement>;
-}) {
-  const { preview, files, links, recentLinks, showAllLinks, messages, working } = contents;
+function RailSections({ state }: { state: AppState }) {
+  const preview = useSeenPreview(state);
+  const files = useSessionFiles();
   const { cwd } = sessionContext(state);
   const [collapsed, setCollapsed] = usePreference(collapsedPreference);
   const group = (section: RailSectionName) => ({
@@ -232,28 +153,6 @@ function RailSections({
       {files.length > 0 && (
         <RailSection title="Outputs" {...group("outputs")}>
           <SessionOutputs files={files} cwd={cwd} />
-        </RailSection>
-      )}
-      {links.length > 0 && (
-        <RailSection
-          title="Links"
-          count={links.length}
-          {...group("links")}
-          action={
-            showAllLinks && (
-              <Button
-                ref={showAllRef}
-                variant="ghost"
-                size="sm"
-                className="pointer-coarse:min-h-11"
-                onClick={onShowLinks}
-              >
-                Show all
-              </Button>
-            )
-          }
-        >
-          <SessionLinks links={recentLinks} messages={messages} working={working} />
         </RailSection>
       )}
     </div>

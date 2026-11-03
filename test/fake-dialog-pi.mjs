@@ -1,4 +1,5 @@
 // Deterministic dialog/abort barriers at the actual Pi JSONL process seam. No model calls.
+import { spawn } from "node:child_process";
 import { closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import { askUserPrompt, askUserQuestions } from "../shared/askUser.ts";
@@ -163,6 +164,15 @@ function handle(cmd) {
         return;
       }
       if (cmd.message === "/exit") process.exit(3);
+      if (cmd.message === "/exit-held-stdout") {
+        // A descendant inherits stdout and keeps it open after Pi exits. Exit 0: a nonzero exit
+        // has the spawner signal the process group at once.
+        const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+          stdio: ["ignore", process.stdout, "ignore"],
+        });
+        child.once("spawn", () => process.exit(0));
+        return;
+      }
       return reply(cmd, { disposition: "handled" });
     }
   }

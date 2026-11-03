@@ -10,7 +10,7 @@
  */
 import { lstatSync } from "node:fs";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Context, Effect, Layer } from "effect";
 import { promptFile as templateText } from "../shared/library.ts";
@@ -32,7 +32,8 @@ export const PromptsEnvironment = Context.Reference<{
 export class Prompts extends Context.Service<
   Prompts,
   {
-    /** Piano's prompts by name, as Pi reads them; a folder that cannot be read is a defect. */
+    /** Piano's prompts by name, as Pi reads them; one Piano cannot read is left out, and a folder
+     * that cannot be read is a defect. */
     readonly list: Effect.Effect<readonly Prompt[]>;
     /** What saving `input` would do, refused as the save would refuse it; writes nothing. A
      * prompt Piano created is updated; any other name is created. Either is refused when Pi
@@ -47,7 +48,8 @@ export class Prompts extends Context.Service<
      * nothing written. */
     readonly update: (input: PromptUpdate) => Effect.Effect<Prompt, LibraryError>;
     /** Delete a prompt listed in Piano's folder, by the name Pi loads it as, even one Pi loads
-     * from another folder first; any other name, or one already gone, is refused. */
+     * from another folder first; any other name, or one already gone, is refused. Reads only that
+     * prompt, so one Piano cannot read refuses its own delete, never another's. */
     readonly remove: (name: string) => Effect.Effect<void, LibraryError>;
   }
 >()("piano/Prompts") {}
@@ -91,7 +93,7 @@ export const PromptsLive = Layer.effect(
       /**
        * Every regular `<name>.md` in the folder, not a link, by the name Pi loads it as. A name
        * Piano would not create, such as `Review`, is still listed, so it can be deleted; one gone
-       * since the folder was read is not.
+       * since the folder was read, or one Piano cannot read, is not.
        */
       shelf: async () => {
         const names = await readdir(dir, { withFileTypes: true }).then(
@@ -111,13 +113,15 @@ export const PromptsLive = Layer.effect(
               entry: readPrompt(name, await readFile(file(name), "utf8")),
               path: file(name),
             });
-          } catch (cause) {
-            if (code(cause) !== "ENOENT") throw cause;
+          } catch {
+            // Gone or unreadable since the folder was read: not listed.
           }
         }
         return found;
       },
+      /** Any name: one that is not a file name, such as `../x`, names no entry in the folder. */
       find: async (name) => {
+        if (basename(name) !== name || name.includes("\0")) return undefined;
         try {
           if (!lstatSync(file(name)).isFile()) return undefined;
           return { entry: readPrompt(name, await readFile(file(name), "utf8")), path: file(name) };

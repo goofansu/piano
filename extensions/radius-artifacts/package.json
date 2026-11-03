@@ -13,7 +13,8 @@
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-schema": "*"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
