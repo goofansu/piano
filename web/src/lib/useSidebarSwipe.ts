@@ -70,7 +70,7 @@ export function useSidebarSwipe({
     if (progress === null) paintPosition(mainRef.current, revealRef.current, null);
   }, [progress]);
   // A command or navigation can change the committed state while a finger is still down.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: open is the external cancellation signal.
+  // Extra dependency: open is the external cancellation signal.
   useEffect(cancelDrag, [open, cancelDrag]);
 
   useEffect(() => {

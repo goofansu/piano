@@ -713,7 +713,7 @@ function UserMessage({
   // A read here would interleave with adjacent Markdown layout effects' writes, forcing a
   // transcript layout per prompt. The parent batches these reads; ResizeObserver handles local
   // expansion and column resizing, including changes that don't render the parent.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: text and expansion change the measured DOM; a capped element may gain overflow without resizing.
+  // Extra dependencies: text and expansion change the measured DOM; a capped element may gain overflow without resizing.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -734,7 +734,7 @@ function UserMessage({
   const toggle = () => setOpen((o) => !o);
   // A long prompt opens and closes from its toggle button, or by clicking anywhere on it.
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a pointer shortcut for the toggle button below, which keyboard users reach.
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- the click is a pointer shortcut for the toggle button below, which keyboard users reach.
     <article
       id={id ? messageAnchorId(id) : undefined}
       data-slot={id ? undefined : "submitted-input"}
@@ -1080,7 +1080,7 @@ function Tool({
         </div>
       )}
       {nested.map((child) => (
-        /* biome-ignore lint/a11y/useSemanticElements: a <fieldset> is for form controls. */ <div
+        /* role=group, not a <fieldset>: a <fieldset> is for form controls. */ <div
           key={child.id}
           role="group"
           aria-label={`${child.name} tool call`}

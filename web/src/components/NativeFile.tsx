@@ -51,7 +51,7 @@ export function NativeFile({
   // Local read-only media can have no caption track; the viewer must still expose the original.
   return kind === "audio" ? (
     <div className="p-4">
-      {/* biome-ignore lint/a11y/useMediaCaption: arbitrary local audio has no supplied caption track. */}
+      {/* oxlint-disable-next-line jsx-a11y/media-has-caption -- arbitrary local audio has no supplied caption track. */}
       <audio
         ref={media}
         src={url}
@@ -63,7 +63,7 @@ export function NativeFile({
     </div>
   ) : (
     <div className="flex flex-1 items-center justify-center p-4">
-      {/* biome-ignore lint/a11y/useMediaCaption: arbitrary local video has no supplied caption track. */}
+      {/* oxlint-disable-next-line jsx-a11y/media-has-caption -- arbitrary local video has no supplied caption track. */}
       <video
         ref={(element) => {
           media.current = element;

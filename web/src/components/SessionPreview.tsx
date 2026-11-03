@@ -177,7 +177,7 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
 /** The current app in the existing Surface. Navigation never owns the service lifetime. */
 export function PreviewPanel() {
   const { shownTab, surfaceRequest } = useNavigation();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: repeated requests to show Preview are explicit observations too.
+  // Extra dependencies: repeated requests to show Preview are explicit observations too.
   useEffect(() => {
     if (shownTab === "preview") previewObservation.refresh();
   }, [shownTab, surfaceRequest]);
@@ -445,7 +445,7 @@ function EmbeddedPreview({
     const timer = setTimeout(() => setLoadingPage(settled(page)), 8_000);
     return () => clearTimeout(timer);
   }, [page]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each page is a different iframe DOM node.
+  // Extra dependencies: each page is a different iframe DOM node.
   useLayoutEffect(() => {
     const element = frame.current;
     return () => {

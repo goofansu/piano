@@ -138,6 +138,7 @@ function PaletteContents({
     (group: PalettePage["group"]["id"], page: number) => {
       if (allowed.current && input.current?.value === settled.current) results.page(group, page);
     },
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- page is the only member read.
     [results.page],
   );
   const selectionContext = useRef(results.selectionKey);

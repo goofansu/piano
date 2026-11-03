@@ -98,7 +98,7 @@ export function AttachmentDraftView({
       {(!!draft.items.length || draft.busy) && (
         <AttachmentGroup aria-label="Attachments" className="scroll-fade-none px-3 pt-3 font-sans">
           {draft.items.map((a, i) => (
-            /* biome-ignore lint/suspicious/noArrayIndexKey: drafts may repeat a file name and only append or clear. */ <Attachment
+            /* Index keys: drafts may repeat a file name and only append or clear. */ <Attachment
               key={`${a.name}-${i}`}
               data-motion="enter"
               orientation="vertical"
@@ -208,7 +208,7 @@ export function MessageAttachments({ items }: { items: RenderMsg["attachments"] 
   return items?.length ? (
     <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1">
       {items.map((a, i) => (
-        /* biome-ignore lint/suspicious/noArrayIndexKey: a message's attachments are fixed and may repeat a URL. */ <ImagePreview
+        /* Index keys: a message's attachments are fixed and may repeat a URL. */ <ImagePreview
           key={`${a.url}-${i}`}
           url={a.url}
         />

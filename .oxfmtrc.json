@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "endOfLine": "lf",
+  "semi": true,
+  "singleQuote": false,
+  "jsxSingleQuote": false,
+  "trailingComma": "all",
+  "sortImports": { "newlinesBetween": false },
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "**/*.md",
+    "**/*.yml",
+    "**/*.yaml",
+    "**/*.toml",
+    "**/*.html",
+    ".agents/**",
+    ".claude/**",
+    ".github/**",
+    ".humanlayer/**",
+    "deploy/**",
+    "docs/**",
+    "package-lock.json",
+    "skills-lock.json",
+    "web/public/**",
+    "web/src/components/ui/**",
+    "web/src/hooks/use-mobile.ts"
+  ]
+}

@@ -131,7 +131,7 @@ test("a real Pi dispatches a brief and reads the child's answer back", {
     const sessions = fixture.spawns().filter((spawned) => spawned.sessionId !== null);
     const sessionIds = sessions.map((spawned) => spawned.sessionId);
     assert.deepEqual(
-      [...new Set(sessionIds)].length,
+      new Set(sessionIds).size,
       sessionIds.length,
       `one Pi process per session; saw ${sessionIds.join(", ")}`,
     );

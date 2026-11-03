@@ -13,11 +13,10 @@
     "test": "node --test --import ./test/setup.ts 'test/**/*.test.ts'",
     "test:browser": "node test/browser/start-session.mjs && node test/browser/open-session.mjs && node test/browser/transcript-rows.mjs",
     "typecheck": "tsc -p tsconfig.json && npm --prefix web run typecheck",
-    "format": "biome format --write .",
-    "format:check": "biome format .",
-    "lint": "biome check . && npm run lint:tailwind",
-    "lint:tailwind": "eslint --no-inline-config --max-warnings 0 web/src",
-    "lint:fix": "biome check --write . && npm run lint:tailwind",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint --deny-warnings --report-unused-disable-directives && oxfmt --check",
+    "lint:fix": "oxlint --fix && oxfmt",
     "prepare": "node .husky/install.mjs"
   },
   "dependencies": {
@@ -28,14 +27,13 @@
     "ipaddr.js": "^2.5.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
-    "@shadcn/lint": "^0.2.1",
+    "@shadcn/lint": "^0.2.5",
     "@types/node": "^26.6.5",
-    "@typescript-eslint/parser": "^8.71.2",
     "concurrently": "^10.0.6",
-    "eslint": "^10.13.0",
     "husky": "9.1.7",
-    "typescript": "~6.0.3"
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.90.0",
+    "typescript": "~7.0.2"
   },
   "workspaces": [
     "web",

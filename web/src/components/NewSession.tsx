@@ -375,6 +375,7 @@ function DirectorySelect({
         <Button
           variant="ghost"
           size="sm"
+          // oxlint-disable-next-line jsx-a11y/role-has-required-aria-props -- PopoverTrigger sets aria-controls.
           role="combobox"
           aria-expanded={open}
           aria-label="Directory"

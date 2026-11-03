@@ -108,7 +108,7 @@ function Question({
               >
                 {(d.options ?? []).map((option, index) => (
                   <Field
-                    // biome-ignore lint/suspicious/noArrayIndexKey: Pi's immutable option strings may repeat.
+                    // Index keys: Pi's immutable option strings may repeat.
                     key={`${index}-${option}`}
                     orientation="horizontal"
                     data-disabled={disabled}

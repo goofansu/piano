@@ -37,7 +37,7 @@ export function FileText({ content, language }: { content: string; language: str
   }, [content, language, dark]);
   if (highlighted?.content === content && highlighted.dark === dark)
     return (
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: Shiki escapes source; only its token markup is inserted.
+      // Raw HTML is safe: Shiki escapes source; only its token markup is inserted.
       <div className="file-source" dangerouslySetInnerHTML={{ __html: highlighted.html }} />
     );
   if (!content) return <p className="p-4 text-sm text-ink-3">(Empty file)</p>;

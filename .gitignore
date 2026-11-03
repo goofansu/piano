@@ -7,7 +7,7 @@ node_modules/
 # Generated from the locked PDF.js package by Vite.
 web/public/pdfjs/
 
-# Claude Code worktrees carry their own biome.json
+# Claude Code worktrees carry their own lint and format config
 .claude/worktrees/
 
 # TypeScript incremental build state.

@@ -102,11 +102,11 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
             <p className="text-xs text-ink-2">
               {metric === "tokens" ? "Tokens" : "Cost"} per response · peak {peakText}
             </p>
-            {/* biome-ignore lint/a11y/useSemanticElements: a <section> region would add a landmark inside a popover. */}
+            {/* role=region, not a <section>: a <section> region would add a landmark inside a popover. */}
             <div
               ref={chartRef}
               className="min-w-0 overflow-x-auto overscroll-x-contain"
-              // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be keyboard-focusable to scroll.
+              // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be keyboard-focusable to scroll.
               tabIndex={0}
               role="region"
               aria-label="Scrollable response chart"

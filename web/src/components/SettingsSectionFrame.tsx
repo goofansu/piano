@@ -119,7 +119,6 @@ export function SettingsList({
 }: React.ComponentProps<"div"> & { children: React.ReactNode }) {
   return (
     // Its rows are shadcn Items (divs), which a <ul> cannot hold; the role names the list.
-    // biome-ignore lint/a11y/useSemanticElements: see above.
     <div
       role="list"
       className={cn(

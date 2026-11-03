@@ -48,7 +48,7 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       const sessions = yield* PiSessions;
       assert.deepEqual(yield* prompts.list, [], "no folder yet reads as no prompts");
 
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: Pi's argument syntax, not JavaScript's.
+      // `${...}` here is Pi's argument syntax, not a JavaScript template.
       const instructions =
         "Review the staged changes. Focus on ${1:-correctness, security, and error handling}.";
       const review = yield* prompts.create({

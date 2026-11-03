@@ -215,7 +215,7 @@ function MarkdownPre({ node }: ComponentProps<"pre"> & ExtraProps) {
         data-mermaid-diagram=""
         role="img"
         aria-label="Mermaid diagram"
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users scroll the diagram's overflow.
+        // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- keyboard users scroll the diagram's overflow.
         tabIndex={0}
       />
       <CopyCode text={text} />
@@ -243,7 +243,7 @@ const components: Components = {
   strong: "strong",
   hr: "hr",
   table: ({ children }) => (
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users scroll wide tables.
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- keyboard users scroll wide tables.
     <section className="markdown-table-scroll" aria-label="Table" tabIndex={0}>
       <table>{children}</table>
     </section>
