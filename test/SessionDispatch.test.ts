@@ -2129,3 +2129,29 @@ test(
     assert.match(result.detail ?? "", /^Pi has stopped\. Read the session's status/);
   },
 );
+
+test("a follow-up Piano refused by its inputId reports it not sent at once", bounded, async () => {
+  const h = world();
+  const sent = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
+  h.last().accept();
+  const socket = h.last();
+  socket.frame(selected(socket.selection(), running()));
+  const [act] = h.sentOf("act");
+  assert.ok(act?._tag === "act" && "inputId" in act.action && act.action.inputId);
+  // A removed checkout: refused before Pi saw the message, with no receipt to follow.
+  socket.frame({
+    _tag: "error",
+    selectionId: socket.selection(),
+    inputId: act.action.inputId,
+    message: "This session's checkout is missing.",
+  });
+  // No grace period: the refusal is the verdict.
+  assert.deepEqual(await sent, {
+    sessionId,
+    delivery: "follow-up",
+    submission: "not_sent",
+    detail: "This session's checkout is missing.",
+  });
+  assert.equal(h.sentOf("act").length, 1, "the message is never sent again");
+  assert.equal(h.pendingTimers(), 0);
+});

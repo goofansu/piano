@@ -17,6 +17,7 @@ import {
   MAX_IMAGE_BYTES,
 } from "../../../shared/attachments.ts";
 import { cutText } from "../../../shared/cutText.ts";
+import { inputVerdictOf } from "../../../shared/inputVerdict.ts";
 import { sessionKey } from "../../../shared/wire.ts";
 import type { SendDisposition } from "./ws.ts";
 
@@ -343,24 +344,14 @@ export function createDrafts(): Drafts {
     },
     follow: (source) =>
       source.listen((m) => {
-        if (m._tag === "error" && m.inputId) {
-          // Refused before a session took it (no receipt follows), or after its `not_sent`
-          // receipt, which has already given it back.
-          giveBack(m.inputId);
-        } else if (m._tag === "session" || m._tag === "selected") {
-          // The session has the input, and its receipt decides. `submitting` is announced before
-          // Pi is asked, so it decides nothing yet; `not_sent` means Pi never saw the input, so
-          // the draft comes back; any other verdict means Pi holds or held it, so it stays sent.
-          const submission =
-            m._tag === "selected"
-              ? m.snapshot.state.submission
-              : m.event._tag === "submission"
-                ? m.event.submission
-                : undefined;
-          if (submission?.inputId && submission.outcome !== "submitting")
-            if (submission.outcome === "not_sent") giveBack(submission.inputId);
-            else unconfirmed.delete(submission.inputId);
-        } else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
+        // `not_sent` means Pi never saw the input, so the draft comes back (once, whether the
+        // refusal or the receipt arrives first); any other verdict means Pi holds or held it, so
+        // it stays sent.
+        const verdict = inputVerdictOf(m);
+        if (verdict)
+          if (verdict.outcome === "not_sent") giveBack(verdict.inputId);
+          else unconfirmed.delete(verdict.inputId);
+        else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
           const restored = m.result.messages.map((message) => message.text).join("\n\n");
           if (restored) paragraph(sessionDraftKey(m), restored);
         }

@@ -28,6 +28,7 @@ import {
   type WaitStatus,
   type WorktreeRequest,
 } from "../../shared/dispatch.ts";
+import { type InputVerdict, inputVerdictOf, submissionVerdict } from "../../shared/inputVerdict.ts";
 import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
 import { dialogAsks, isAnswer, liveActivityOf } from "../../shared/sessionStatus.ts";
 import { turnEnding } from "../../shared/turnEnding.ts";
@@ -250,23 +251,22 @@ interface InputDisposition {
 }
 
 /**
- * When an input's handling is known, for a start and a follow-up alike: its own submission once
- * that is final, or a dialog that opened after the input was sent while its submission is not
+ * When an input's handling is known, for a start and a follow-up alike: its own verdict once
+ * there is one (`inputVerdictOf`), or a dialog that opened after the input was sent while its submission is not
  * final yet. Pi holds a command's acknowledgement while the dialog it opened is waiting, so
  * `submitting` would otherwise last until a person answers; the caller hears `needs_input` now.
  * `opened` names the dialogs that were already waiting when the input was sent (none for a new
  * session): they did not come from this input, which Pi acknowledges in their presence. A dialog
  * the current run opens in the moment between the send and Pi's acknowledgement cannot be told
  * apart from the input's own; either way the session waits on a person. `undefined` while the
- * input is still `submitting`, or not acknowledged at all.
+ * input is still undecided.
  */
 const dispositionOf = (
-  submission: PromptSubmission | undefined,
+  verdict: InputVerdict | undefined,
   dialogs: ReadonlyArray<Dialog>,
   opened: ReadonlySet<string>,
 ): InputDisposition | undefined => {
-  if (submission && submission.outcome !== "submitting")
-    return { submission: submission.outcome, detail: submission.detail };
+  if (verdict) return { submission: verdict.outcome, detail: verdict.detail };
   const dialog = dialogs.find((d) => !opened.has(d.id));
   return dialog && { submission: "needs_input", detail: dialogAsks(dialog) };
 };
@@ -356,7 +356,8 @@ export function startSession(
       };
       /** Everything in a new session arrived after its creation, which carries the input. */
       const settleOn = (submission: PromptSubmission | undefined) => {
-        const known = snapshot && dispositionOf(submission, snapshot.dialogs, new Set());
+        const known =
+          snapshot && dispositionOf(submissionVerdict(submission), snapshot.dialogs, new Set());
         if (known) settle(result("created", known.submission, known.detail));
       };
       return {
@@ -1068,8 +1069,9 @@ export function sendFollowUp(
       let selectionId: string | null = null;
       let inputId: string | null = null;
       let failed = false;
-      /** This message's latest submission, and the dialogs already waiting when it was sent. */
-      let submission: PromptSubmission | undefined;
+      /** This message's verdict once a frame gives one, and the dialogs already waiting when it
+       * was sent. */
+      let verdict: InputVerdict | undefined;
       let opened: ReadonlySet<string> = new Set();
       const result = (
         submission: FollowUpResult["submission"],
@@ -1086,13 +1088,15 @@ export function sendFollowUp(
       /** Before the act, nothing reached Piano; after it, Pi may hold the message. */
       const ended = (before: string, after: string) =>
         link.committed() ? unconfirmed(after) : unsent(before);
-      /** Settles once this message's handling is known (`dispositionOf`), from a frame's own
-       * submission and the dialogs it shows. */
-      const apply = (next: PromptSubmission | undefined, dialogs: ReadonlyArray<Dialog> = []) => {
-        if (inputId === null) return;
-        if (next?.inputId === inputId) submission = next;
-        const known = dispositionOf(submission, dialogs, opened);
+      /** Settles once this message's handling is known (`dispositionOf`), from the frame's verdict
+       * on it and the dialogs it shows; says whether it settled. */
+      const apply = (message: ServerMessage, dialogs: ReadonlyArray<Dialog> = []) => {
+        if (inputId === null) return false;
+        const next = inputVerdictOf(message);
+        if (next?.inputId === inputId) verdict = next;
+        const known = dispositionOf(verdict, dialogs, opened);
         if (known) settle(result(known.submission, known.detail));
+        return known !== undefined;
       };
       return {
         connected: () => {
@@ -1134,15 +1138,13 @@ export function sendFollowUp(
                 return;
               }
               // A stopped session started by the act is shown again under this selection.
-              apply(message.snapshot.state.submission, message.snapshot.dialogs);
+              apply(message, message.snapshot.dialogs);
               return;
             case "session": {
               const event = message.event;
-              if (event._tag === "submission") apply(event.submission);
-              else if (event._tag === "state") apply(event.state.submission);
-              else if (event._tag === "snapshot")
-                apply(event.snapshot.state.submission, event.snapshot.dialogs);
-              else if (event._tag === "dialog") apply(undefined, [event.dialog]);
+              if (event._tag === "snapshot") apply(message, event.snapshot.dialogs);
+              else if (event._tag === "dialog") apply(message, [event.dialog]);
+              else apply(message);
               return;
             }
             case "selection_rejected":
@@ -1152,9 +1154,10 @@ export function sendFollowUp(
                 settle(unsent(message.message));
                 return;
               }
-              // Piano reports a failure apart from the session's frames; Pi's own verdict on the
-              // message, when there is one, may still be on its way.
-              if (failed) return;
+              // An error naming this message is the verdict: Piano refused it before Pi saw it.
+              // Any other failure Piano reports apart from the session's frames; Pi's own verdict
+              // on the message, when there is one, may still be on its way.
+              if (apply(message) || failed) return;
               failed = true;
               link.after(FAILURE_GRACE_MS, () => settle(unconfirmed(message.message)));
               return;
