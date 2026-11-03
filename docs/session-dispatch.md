@@ -27,8 +27,7 @@ printf '%s\n' 'Reply with exactly: READY' > .scratch/piano-brief.txt
 node scripts/dispatch-session.ts .scratch/piano-brief.txt /path/to/my-repo
 
 # Alternatively, save the JSON as well. Use a fresh output path for each dispatch.
-node scripts/dispatch-session.ts .scratch/piano-brief.txt /path/to/my-worktree .scratch/piano-start.json \
-  --model provider/model-id --thinkingLevel medium
+node scripts/dispatch-session.ts .scratch/piano-brief.txt /path/to/my-worktree .scratch/piano-start.json
 
 # Or start it in a new worktree on the new branch task-a, created from my-repo's repository.
 node scripts/dispatch-session.ts .scratch/piano-brief.txt /path/to/my-repo --worktree task-a
@@ -55,9 +54,8 @@ origin with no path or trailing slash, accepted by the server's
 the local backend's WebSocket port. The Origin also supplies the base for the returned session link.
 This is not a remote-worker client: the directory must be on the server's machine.
 
-Omit `--model` and `--thinkingLevel` to keep Piano's normal new-session defaults. Supported effort
-values are `off`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`; the selected model must
-support the chosen value. Run `node scripts/dispatch-session.ts --help` for the full syntax.
+The session always starts on Piano's normal new-session model and effort defaults; the script has
+no option to choose either. Run `node scripts/dispatch-session.ts --help` for the full syntax.
 
 Piano places the directory the same way for every way of starting a session (the New page, the
 `piano_start_session` tool and this script); see [checkout choice](#setup-and-checkout-choice).
@@ -69,9 +67,8 @@ and `submission`. `1` is an unexpected failure (including Piano not answering, o
 when its capacity is full), `2` invalid input or configuration (including a session or project
 Piano answers that it does not list) and `3` an existing output file. Errors go to stderr. A
 start result includes the full dispatch handle, the session `link` when known, the directory Piano
-placed the session in as `cwd`, the created `worktree` (`{ "path", "branch" }`, or `null`) and the
-requested `model` / `thinkingLevel` (`null` when omitted, not the resolved defaults). It does not wait for
-the agent to finish. The handle can be passed unchanged to the existing `piano_wait_sessions` tool.
+placed the session in as `cwd` and the created `worktree` (`{ "path", "branch" }`, or `null`). It
+does not wait for the agent to finish. The handle can be passed unchanged to the existing `piano_wait_sessions` tool.
 
 `creation: "refused"` with `submission: "not_sent"` means no session exists: Piano refused the
 start (the reason is in `detail`) or never received it, because its WebSocket did not open (a wrong
@@ -142,9 +139,8 @@ while Worktrunk runs (a cancelled tool call, a closed terminal) does not interru
 its registration and the session complete, and `piano_session_status` or `list` finds the session;
 only its first prompt is not sent, since the caller was no longer attached to observe it.
 
-The tool always uses Piano's normal new-session model and effort defaults, not the parent's
-settings. It does not accept model or effort overrides; the human-facing CLI still supports
-`--model` and `--thinkingLevel`.
+The tool, like the script, always uses Piano's normal new-session model and effort defaults, not
+the parent's settings: neither accepts a model or effort.
 
 For example, the agent can call `piano_start_session` with:
 
