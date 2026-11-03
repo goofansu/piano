@@ -24,6 +24,7 @@ put `~/node/bin` and `~/.local/bin` (Node 24, `wt`) on `PATH` themselves. The fe
 .agents/skills/verify-piano/scripts/launch.sh                      # seeded: folder repo, 2 projects, 2 saved sessions
 .agents/skills/verify-piano/scripts/launch.sh --empty              # empty database: nothing registered
 .agents/skills/verify-piano/scripts/launch.sh --fake-pi dialogs    # test/fake-pi.mjs: "ask ..." opens a dialog, "crash ..." exits
+.agents/skills/verify-piano/scripts/launch.sh --fake-pi ask        # test/fake-dialog-pi.mjs: "/ask store 2 numeric" runs ask_user
 VERIFY_GH_CLI=<path> .agents/skills/verify-piano/scripts/launch.sh  # a stand-in gh (PIANO_GH_CLI), e.g. a wrapper over test/fixtures/fake-gh.mjs
 ```
 
@@ -40,8 +41,8 @@ and Chromium, first. Launch needs `node_modules` (runs `npm ci` when missing). I
   `HOME` for the backend, so `~/.pi`, Worktrunk's user config and the user's credentials are never
   read or written.
 - `audit.jsonl`: every command the fake Pi received (`PIANO_TEST_AUDIT`). Only the default
-  `test/browser/fake-pi.mjs` writes it; on `--fake-pi dialogs` there is no audit, so prove what Pi
-  received from its replies instead.
+  `test/browser/fake-pi.mjs` writes it; on `--fake-pi dialogs` and `ask` there is no audit, so
+  prove what Pi received from its replies instead.
 - `logs/`, `pids`, `run.env`.
 
 The backend runs `node server/main.ts` with `HOST=127.0.0.1`, `PIANO_PI_CLI=test/browser/fake-pi.mjs`

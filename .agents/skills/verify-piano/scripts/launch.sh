@@ -2,10 +2,11 @@
 # Start an isolated scratch Piano for verification: a new run dir with its own database, Pi agent
 # and session dirs and HOME, a throwaway Git repo, fake Pi, a backend and the Vite UI on free
 # loopback ports. Waits until the UI's session socket answers, then prints the run dir.
-# Usage: launch.sh [--empty] [--fake-pi browser|dialogs]
+# Usage: launch.sh [--empty] [--fake-pi browser|dialogs|ask]
 #   --empty            start from an empty database: no folder, project or session
 #   --fake-pi browser  test/browser/fake-pi.mjs (default): echoes, "hold" runs until Stop, audits
 #   --fake-pi dialogs  test/fake-pi.mjs: "ask..." opens an input dialog, "crash..." exits Pi
+#   --fake-pi ask      test/fake-dialog-pi.mjs: "/ask [mode] [count] [numeric]" runs ask_user
 # Env: VERIFY_SCRATCH (default /tmp/verify-piano), VERIFY_EVIDENCE (default
 #   ${TMPDIR:-/tmp}/verify-piano-evidence), VERIFY_RUN_ID, VERIFY_PORT, VERIFY_WEB_PORT.
 set -euo pipefail
@@ -17,8 +18,8 @@ FAKE=browser
 while [ $# -gt 0 ]; do
   case "$1" in
     --empty) SEED=0 ;;
-    --fake-pi) FAKE=${2:?--fake-pi browser|dialogs}; shift ;;
-    -h | --help) sed -n '2,10p' "$0"; exit 0 ;;
+    --fake-pi) FAKE=${2:?--fake-pi browser|dialogs|ask}; shift ;;
+    -h | --help) sed -n '2,11p' "$0"; exit 0 ;;
     *) die "unknown option $1 (see --help)" ;;
   esac
   shift
@@ -26,7 +27,8 @@ done
 case "$FAKE" in
   browser) PI_CLI=$ROOT/test/browser/fake-pi.mjs ;;
   dialogs) PI_CLI=$ROOT/test/fake-pi.mjs ;;
-  *) die "--fake-pi takes browser or dialogs" ;;
+  ask) PI_CLI=$ROOT/test/fake-dialog-pi.mjs ;;
+  *) die "--fake-pi takes browser, dialogs or ask" ;;
 esac
 
 RUN_ID=${VERIFY_RUN_ID:-$(date +%Y%m%d-%H%M%S)-$$}

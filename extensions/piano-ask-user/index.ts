@@ -1,28 +1,14 @@
 /** Model-initiated questions through Pi's supported dialogs; Piano owns the answer surface. */
 import { StringEnum } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { arr, map, obj, opt, type Static, str } from "@earendil-works/pi-schema";
-import { ASK_USER_TOOL, askUserPrompt, askUserQuestions } from "../../shared/askUser.ts";
+import { map, obj, type Static, str } from "@earendil-works/pi-schema";
+import {
+  ASK_USER_TOOL,
+  AskUserParameters,
+  askUserPrompt,
+  askUserQuestions,
+} from "../../shared/askUser.ts";
 
-const Parameters = obj({
-  questions: arr(
-    obj({
-      id: str({ minLength: 1, description: "Unique ID used to key this question's answer" }),
-      question: str({ minLength: 1, description: "Question, including essential context" }),
-      options: opt(
-        arr(str({ minLength: 1 }), {
-          minItems: 1,
-          uniqueItems: true,
-          description: "Choices for a single selection; omit for a free-text answer",
-        }),
-      ),
-    }),
-    {
-      minItems: 1,
-      description: "Questions in presentation order; use one item for a single question",
-    },
-  ),
-});
 const Output = obj({ status: StringEnum(["answered", "cancelled"] as const), answers: map(str()) });
 
 export default function pianoAskUser(pi: ExtensionAPI) {
@@ -36,10 +22,10 @@ export default function pianoAskUser(pi: ExtensionAPI) {
       ],
       description:
         "Ask questions sequentially in Piano's inline form, with no model turns between them. Supply a non-empty questions array with unique IDs, including for a single question. Each item has a question and optional options for a single choice; omit options for multiline free text. Returns answers keyed by ID and status answered when all are submitted, or cancelled with partial answers when the batch ends early. Include essential context in each question. Do not use this as a substitute for required permission or approval mechanisms.",
-      parameters: Parameters,
+      parameters: AskUserParameters,
       outputSchema: Output,
       executionMode: "sequential",
-      async execute(_id, { questions }: Static<typeof Parameters>, signal, _update, ctx) {
+      async execute(_id, { questions }: Static<typeof AskUserParameters>, signal, _update, ctx) {
         // Validate the entire batch before collecting any answers: IDs must never overwrite one another.
         // The same rule Piano reads the call's records by, so a batch it accepts is one Piano tracks.
         if (!questions.length) throw new Error("At least one question is required.");
