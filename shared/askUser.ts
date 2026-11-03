@@ -34,7 +34,7 @@ const recordOf = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
-/** A string field as Pi converts it before the tool runs (TypeBox `Value.Convert`): Pi's records
+/** A string field as Pi coerces it before the tool runs (pi-schema, since Pi 1.5): Pi's records
  * keep the model's raw arguments, so `id: 1` is announced as a number but asked and stored as "1". */
 const asText = (value: unknown): string | undefined =>
   typeof value === "string"

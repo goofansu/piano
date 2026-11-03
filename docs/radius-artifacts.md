@@ -111,7 +111,7 @@ unknowns are failed Pi tool results, not successful publication. No local-file f
 
 ## Contract sources and verification boundary
 
-Implementation follows Pi 1.4.0's extension lifecycle, `ModelRegistry` auth API and package
+Implementation follows Pi 1.5.0's extension lifecycle, `ModelRegistry` auth API and package
 manifest conventions, the [Radius MCP setup](https://radius.earendil.com/docs/extensions),
 [artifact documentation](https://radius.earendil.com/docs/artifacts), and inspected live MCP schemas
 for `artifacts_create`, `artifacts_versions_publish`, `artifacts_read`,

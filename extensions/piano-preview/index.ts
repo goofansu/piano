@@ -1,5 +1,5 @@
-import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { ownerRequest } from "../../scripts/PreviewClient.ts";
 import { START_TIMEOUT_SECONDS } from "../../scripts/PreviewReadiness.ts";
 

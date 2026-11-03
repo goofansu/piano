@@ -1,6 +1,6 @@
-/** Identity marker: Pi's ordinary project extension discovery must load this only with trust. */
-import { Type } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+/** Identity marker: Pi's ordinary project extension discovery must load this only with trust. */
+import { Type } from "typebox";
 
 export default function (pi: ExtensionAPI) {
   pi.registerTool({

@@ -1,6 +1,7 @@
 /** Bundled Pi extension: read Piano-owned skills/prompts and propose saves for user approval. */
-import { type JsonValue, Type } from "@earendil-works/pi-ai";
+import type { JsonValue } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { DESCRIPTION_MAX, NAME_MAX, TEXT_MAX } from "../../shared/drafts.ts";
 import { type LibraryKind, SAVE_PROMPT_TOOL, SAVE_SKILL_TOOL } from "../../shared/library.ts";
 import { dispatchConfiguration } from "../piano-dispatch/NodeSocket.ts";
