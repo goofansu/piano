@@ -519,11 +519,9 @@ await import(${JSON.stringify(pathToFileURL(installedCli).href)});
   }
 
   const connect = async (): Promise<WireClient> => {
-    const socket = new (
-      WebSocket as unknown as {
-        new (url: string, options: { headers: Record<string, string> }): WebSocket;
-      }
-    )(`ws://127.0.0.1:${port}/ws`, { headers: { Origin: origin } });
+    const socket = new (WebSocket as unknown as {
+      new (url: string, options: { headers: Record<string, string> }): WebSocket;
+    })(`ws://127.0.0.1:${port}/ws`, { headers: { Origin: origin } });
     const received: ServerMessage[] = [];
     const waiters = new Set<{
       match: (m: ServerMessage) => boolean;

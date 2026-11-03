@@ -246,16 +246,14 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
         // References survive closed directories and missing history; discovery never removes them.
         // A session not yet judged counts as available until the next run says otherwise; a hosted
         // one is available whatever its saved files say.
-        const sessionReferences = data.sessions.map(
-          (s): SessionReference => ({
-            ...shownReference(s),
-            workspaceId: data.workspaces.find((w) => w.path === s.cwd)!.id,
-            branch: branchOf(s.cwd),
-            unavailable: hosted(s.cwd, s.sessionId)
-              ? undefined
-              : unavailable.get(sessionKey(s.cwd, s.sessionId)),
-          }),
-        );
+        const sessionReferences = data.sessions.map((s): SessionReference => ({
+          ...shownReference(s),
+          workspaceId: data.workspaces.find((w) => w.path === s.cwd)!.id,
+          branch: branchOf(s.cwd),
+          unavailable: hosted(s.cwd, s.sessionId)
+            ? undefined
+            : unavailable.get(sessionKey(s.cwd, s.sessionId)),
+        }));
         return {
           _tag: "registry",
           folders,

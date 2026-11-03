@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
-import { UsageDivider } from "@/components/UsageDivider";
 import { Button } from "@/components/ui/button";
+import { UsageDivider } from "@/components/UsageDivider";
 
 interface Props {
   /** The trigger's and the panel's accessible name. */

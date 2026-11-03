@@ -53,9 +53,8 @@ async function resolveHere(
   agentDir: string,
   piano: string,
 ): Promise<Array<[string, string]>> {
-  const { DefaultPackageManager, loadSkills, parseFrontmatter, SettingsManager } = await import(
-    "@earendil-works/pi-coding-agent"
-  );
+  const { DefaultPackageManager, loadSkills, parseFrontmatter, SettingsManager } =
+    await import("@earendil-works/pi-coding-agent");
   // Piano's folder's parent as the working directory, untrusted, so no project's resources count.
   const cwd = dirname(piano);
   const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: false });

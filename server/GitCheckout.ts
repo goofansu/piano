@@ -36,8 +36,10 @@ function hardenedEnv(extra: Record<string, string> = {}, userConfig = false): No
   };
 }
 
-interface GitOptions
-  extends Pick<RunOptions, "input" | "limit" | "truncate" | "okCodes" | "timeout"> {
+interface GitOptions extends Pick<
+  RunOptions,
+  "input" | "limit" | "truncate" | "okCodes" | "timeout"
+> {
   readonly cwd: string;
   /** `-c key=value` pairs, already split as Git takes them. */
   readonly config?: readonly string[];

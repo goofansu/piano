@@ -47,8 +47,10 @@ export interface RadiusSetupOptions {
   newKey?: () => string;
 }
 
-export interface RadiusSetupSnapshot
-  extends Pick<SetupActionsState<RadiusConfirmation, string>, "confirmation" | "signIn"> {
+export interface RadiusSetupSnapshot extends Pick<
+  SetupActionsState<RadiusConfirmation, string>,
+  "confirmation" | "signIn"
+> {
   /** Both Pi's setup and the accounts have been read once; until then the section is a skeleton. */
   loaded: boolean;
   /** A read of the setup is in flight, or the first reads have not finished. */

@@ -724,32 +724,36 @@ for (const [platform, name] of supervisors) {
   );
 }
 
-test("[systemd] Linux without a configured origin launches nothing", {
-  skip: process.platform !== "linux",
-}, async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "piano-preview-contract-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const stateRoot = join(root, "state");
-  const { adapter, launched } = fakeAdapter("linux", stateRoot, {
-    phase: "failed",
-    runs: 1,
-    owner: "self",
-    journal: "",
-    unavailable: false,
-    lostReply: false,
-    hangOnSubmit: false,
-  });
-  await assert.rejects(
-    adapter.request(
-      { action: "start", workspace: root, command: [process.execPath, "-e", "process.exit(1)"] },
-      stateRoot,
-      {},
-      { generation: "test", sessionId: "test", workspace: root, endpoint: "/unused" },
-    ),
-    /Configure origin/,
-  );
-  assert.equal(launched.length, 0);
-});
+test(
+  "[systemd] Linux without a configured origin launches nothing",
+  {
+    skip: process.platform !== "linux",
+  },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "piano-preview-contract-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const stateRoot = join(root, "state");
+    const { adapter, launched } = fakeAdapter("linux", stateRoot, {
+      phase: "failed",
+      runs: 1,
+      owner: "self",
+      journal: "",
+      unavailable: false,
+      lostReply: false,
+      hangOnSubmit: false,
+    });
+    await assert.rejects(
+      adapter.request(
+        { action: "start", workspace: root, command: [process.execPath, "-e", "process.exit(1)"] },
+        stateRoot,
+        {},
+        { generation: "test", sessionId: "test", workspace: root, endpoint: "/unused" },
+      ),
+      /Configure origin/,
+    );
+    assert.equal(launched.length, 0);
+  },
+);
 
 test("an unsupported platform refuses managed launch without side effects", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "piano-preview-contract-"));

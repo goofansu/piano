@@ -93,15 +93,13 @@ export function projectGroups<
   P extends Pick<Project, "id" | "name">,
   S extends SessionLike & { projectId?: string },
 >(projects: readonly P[], sessions: readonly S[], sort: SortBy): Array<SessionGroup<P, S>> {
-  const groups = projects.map(
-    (project): SessionGroup<P, S> => ({
-      project,
-      sessions: sortSessions(
-        sessions.filter((s) => s.projectId === project.id),
-        sort,
-      ),
-    }),
-  );
+  const groups = projects.map((project): SessionGroup<P, S> => ({
+    project,
+    sessions: sortSessions(
+      sessions.filter((s) => s.projectId === project.id),
+      sort,
+    ),
+  }));
   const ungrouped: SessionGroup<P, S> = {
     project: null,
     sessions: sortSessions(

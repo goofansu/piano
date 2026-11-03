@@ -95,9 +95,8 @@ async function call<Q extends IdParam, B extends Json | undefined, R extends Jso
     throw new ApiError(failure(0), 0);
   }
   // A proxy or crashed server may answer with something other than JSON.
-  const json: unknown = await (response.ok && readSuccess
-    ? readSuccess(response)
-    : response.json()
+  const json: unknown = await (
+    response.ok && readSuccess ? readSuccess(response) : response.json()
   ).catch((error) => {
     if (signal?.aborted) throw error;
     return undefined;

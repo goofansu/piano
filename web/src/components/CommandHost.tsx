@@ -31,8 +31,8 @@ import {
   DialogTitle,
 } from "@/components/PianoDialog";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
-import { ProjectSettingsDialog } from "@/components/ProjectSettings";
 import { ProjectDialogView } from "@/components/Projects";
+import { ProjectSettingsDialog } from "@/components/ProjectSettings";
 import { PreviewDetailsDialog } from "@/components/SessionPreview";
 import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";

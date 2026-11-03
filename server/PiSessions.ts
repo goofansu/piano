@@ -560,14 +560,12 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
     let releaseRequested = false;
     yield* Effect.addFinalizer(() =>
       announceClosed(
-        Effect.map(
-          publication.snapshot,
-          (snapshot): SessionClosure =>
-            settled(snapshot) && !child.hasPendingWork()
-              ? { _tag: "released", detail: "Pi was released" }
-              : releaseRequested
-                ? { _tag: "stopped", detail: "Pi was stopped during work" }
-                : { _tag: "released_during_work", detail: "Pi was released during work" },
+        Effect.map(publication.snapshot, (snapshot): SessionClosure =>
+          settled(snapshot) && !child.hasPendingWork()
+            ? { _tag: "released", detail: "Pi was released" }
+            : releaseRequested
+              ? { _tag: "stopped", detail: "Pi was stopped during work" }
+              : { _tag: "released_during_work", detail: "Pi was released during work" },
         ),
       ),
     );
