@@ -690,7 +690,7 @@ test("a missing checkout is decided once: Trust, New session here, Rename, the f
 
 test("where a session runs: repository or folder, then branch or short detached commit", () => {
   const none = {
-    cwd: undefined,
+    folderName: undefined,
     githubRepo: undefined,
     branch: undefined,
     detachedHead: undefined,
@@ -698,25 +698,41 @@ test("where a session runs: repository or folder, then branch or short detached 
   assert.deepEqual(
     sessionPlace({
       ...none,
-      cwd: "/work/repo.feature",
+      folderName: "repo",
       githubRepo: "goofansu/piano",
       branch: "feature",
     }),
     { name: "goofansu/piano", repository: true, ref: { kind: "branch", name: "feature" } },
   );
-  assert.deepEqual(sessionPlace({ ...none, cwd: "/work/notes/" }), {
-    name: "notes",
-    repository: false,
-    ref: undefined,
-  });
   assert.deepEqual(
     sessionPlace({
       ...none,
-      cwd: "/repo",
+      folderName: "repo",
       githubRepo: "goofansu/piano",
       detachedHead: "d4449bb7183bb577791acab4f6fc4f52f78d02b0",
     }),
     { name: "goofansu/piano", repository: true, ref: { kind: "commit", name: "d4449bb718" } },
   );
   assert.equal(sessionPlace(none), undefined, "no line before the session has a directory");
+});
+
+// The phone header and the rail name the place as the sidebar row does: a worktree session sits in
+// its folder, not in the worktree's `folder.branch` directory.
+test("a session's place names its folder as its sidebar row does", () => {
+  const worktreeState = { ...base, session: session("/work/repo.feature") };
+  assert.deepEqual(sessionPlace(sessionContext(worktreeState)), {
+    name: "repo",
+    repository: false,
+    ref: { kind: "branch", name: "feature" },
+  });
+  assert.equal(catalogEntry(worktreeState, "s1")?.folder, "repo");
+
+  // A directory no registered folder holds is named by its last segment, a trailing slash ignored.
+  const loose = {
+    ...base,
+    session: session("/work/notes/"),
+    sessionReferences: [sessionReference("/work/notes/", "s1")],
+  };
+  assert.equal(sessionPlace(sessionContext(loose))?.name, "notes");
+  assert.equal(catalogEntry(loose, "s1")?.folder, "notes");
 });

@@ -208,6 +208,8 @@ export interface SessionContext {
   /** The selected session's directory, or the one a first message is starting in. */
   cwd: string | undefined;
   folder: FolderView | undefined;
+  /** Where the session runs, named as its sidebar row names it; undefined without `cwd`. */
+  folderName: string | undefined;
   /** The server's session branch: Git's when listed (none when detached or non-Git), otherwise the
    * last branch Git reported for the worktree. */
   branch: string | undefined;
@@ -263,7 +265,7 @@ export function sessionContext(state: AppState): SessionContext {
   const cwd = session?.cwd ?? state.pendingCreate?.cwd;
   const ref = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId } : undefined;
   const reference = ref && sessionReference(state, ref);
-  const { folder, checkout } = sessionDirectories(state)(cwd);
+  const { folder, checkout, folderName } = sessionDirectories(state)(cwd);
   const workspace = workspaceFor(state, session?.cwd);
   const checkoutMissing = !!session && checkoutMissingAt(state, session.cwd);
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;
@@ -274,6 +276,7 @@ export function sessionContext(state: AppState): SessionContext {
   return {
     cwd,
     folder,
+    folderName: cwd === undefined ? undefined : folderName,
     branch,
     detachedHead:
       checkout?.status === "current" && checkout.facts?.detached ? checkout.facts.head : undefined,
@@ -308,7 +311,7 @@ export function sessionContext(state: AppState): SessionContext {
 /** Where a session runs: its repository or folder, then its branch or detached commit. The phone
  * header's line and the rail's Environment rows both read this. */
 export interface SessionPlace {
-  /** The GitHub repository ("owner/name"), else the folder's name. */
+  /** The GitHub repository ("owner/name"), else the folder's name as the sidebar row shows it. */
   name: string;
   /** Whether `name` is a GitHub repository rather than a folder. */
   repository: boolean;
@@ -318,16 +321,16 @@ export interface SessionPlace {
 
 /** Where the session runs; none before the session has a directory. */
 export function sessionPlace({
-  cwd,
+  folderName,
   githubRepo,
   branch,
   detachedHead,
-}: Pick<SessionContext, "cwd" | "githubRepo" | "branch" | "detachedHead">):
+}: Pick<SessionContext, "folderName" | "githubRepo" | "branch" | "detachedHead">):
   | SessionPlace
   | undefined {
-  if (!cwd) return undefined;
+  if (folderName === undefined) return undefined;
   return {
-    name: githubRepo ?? (cwd.split("/").filter(Boolean).at(-1) || cwd),
+    name: githubRepo ?? folderName,
     repository: githubRepo !== undefined,
     ref: detachedHead
       ? { kind: "commit", name: detachedHead.slice(0, 10) }
