@@ -49,8 +49,8 @@ export interface Layout<Entry extends { readonly name: string; readonly file: st
   readonly find: (name: string) => Promise<Shelved<Entry> | undefined>;
   /** Whether anything at all of `name` is in Piano's folder or loaded from it, entry or not. */
   readonly occupied: (name: string) => boolean;
-  /** The entry a save of `saved` writes. `kept` is the entry a proposal would replace, whose
-   * settings the draft does not set are kept. */
+  /** The entry a save of `saved` writes. `kept` is the entry the save replaces, whose settings
+   * the draft does not set are kept. */
   readonly render: (saved: Draft, request: Request, kept: Entry | undefined) => Entry;
   /** Write a new entry's file, never over anything: throws an `EEXIST` error only when the name is
    * taken. */
@@ -133,12 +133,24 @@ export const makeLibrary = <
     ),
   );
 
+  /**
+   * The one place a save's file is decided: what a save of `request` does and the entry it writes.
+   * An update renders over the entry it replaces, keeping the settings the draft does not set, so
+   * a proposal and the update that follows it write the same file from the same draft.
+   */
+  const plan = Effect.fn("Library.plan")(function* (
+    intent: LibraryChange | "propose",
+    request: Request,
+  ) {
+    const saved = yield* draft(request);
+    const decision = yield* decide(intent, saved.name, yield* placeOf(saved.name));
+    const kept = decision.change === "update" ? decision.current.entry : undefined;
+    return { saved, decision, entry: layout.render(saved, request, kept) };
+  });
+
   /** What saving `request` would do, refused as the save would refuse it; writes nothing. */
   const propose = Effect.fn("Library.propose")(function* (request: Request) {
-    const saved = yield* draft(request);
-    const place = yield* placeOf(saved.name);
-    const decision = yield* decide("propose", saved.name, place);
-    const entry = layout.render(saved, request, place.current?.entry);
+    const { decision, entry } = yield* plan("propose", request);
     return decision.change === "update"
       ? { change: decision.change, entry, previous: decision.current.entry.file }
       : { change: decision.change, entry };
@@ -146,9 +158,7 @@ export const makeLibrary = <
 
   /** Save a new entry; a name already taken is refused, never overwritten. */
   const create = Effect.fn("Library.create")(function* (request: Request) {
-    const saved = yield* draft(request);
-    yield* decide("create", saved.name, yield* placeOf(saved.name));
-    const entry = layout.render(saved, request, undefined);
+    const { saved, entry } = yield* plan("create", request);
     yield* Effect.tryPromise({
       try: () => layout.create(entry),
       catch: (cause) => (code(cause) === "EEXIST" ? taken(saved.name) : couldNotSave()),
@@ -156,19 +166,17 @@ export const makeLibrary = <
     return entry;
   });
 
-  /** Replace Piano's entry, only while its file is still `previous`, the text the person saw. */
+  /** Replace Piano's entry, only while its file is still `previous`, the text the person saw, with
+   * the file a proposal of the same draft showed. */
   const update = Effect.fn("Library.update")(function* (request: Request & { previous: string }) {
-    const saved = yield* draft(request);
-    const decision = yield* decide("update", saved.name, yield* placeOf(saved.name));
+    const changed = () => refused(`This ${noun} changed since it was shown. Review it again.`);
+    const { decision, entry } = yield* plan("update", request);
     if (decision.change !== "update") return yield* notFound("name");
-    const entry = layout.render(saved, request, undefined);
+    // The kept settings come from the file read now: it must be the one the person saw.
+    if (decision.current.entry.file !== request.previous) return yield* changed();
     yield* LibraryFile.replace(decision.current.path, request.previous, entry.file).pipe(
       Effect.mapError(({ reason }) =>
-        reason === "missing"
-          ? notFound("name")
-          : reason === "changed"
-            ? refused(`This ${noun} changed since it was shown. Review it again.`)
-            : couldNotSave(),
+        reason === "missing" ? notFound("name") : reason === "changed" ? changed() : couldNotSave(),
       ),
     );
     return entry;

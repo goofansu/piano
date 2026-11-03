@@ -58,7 +58,6 @@ interface Planned {
   name: string;
   file: string;
   previous?: string;
-  disableModelInvocation?: boolean;
 }
 
 /** A refusal's sentence, as the Settings page reads it from the server's answer. */
@@ -142,12 +141,13 @@ export async function saveToLibrary(
   if (!approved || signal?.aborted) return { status: "cancelled", kind, name: proposal.name };
 
   const endpoint = proposal.change === "update" ? endpoints.update : endpoints.create;
+  // The draft the proposal was made from: Piano writes the file it proposed, settings kept.
   const saved = {
     name: proposal.name,
     description: draft.description,
     instructions: draft.instructions,
-    ...(kind === "skill"
-      ? { disableModelInvocation: planned.disableModelInvocation === true }
+    ...(kind === "skill" && draft.disableModelInvocation !== undefined
+      ? { disableModelInvocation: draft.disableModelInvocation }
       : {}),
   };
   // An update replaces only the file the user approved a change to: one changed since is refused.
