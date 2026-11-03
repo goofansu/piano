@@ -755,6 +755,45 @@ function handle(cmd) {
         setInterval(() => {}, 1000);
         return;
       }
+      // "think <ms>": a reply that waits <ms> for its first token, thinks for <ms>, then writes its
+      // text. Its thinking block has a headline while live and only a signature when saved, as a
+      // redacted block does.
+      const think = /^think (\d+)$/.exec(cmd.message);
+      if (think) {
+        const text = "Thought it through.";
+        const ms = Number(think[1]);
+        out({
+          type: "message_start",
+          message: { role: "assistant", content: [], model: model.id, provider: model.provider },
+        });
+        const update = (assistantMessageEvent) =>
+          out({ type: "message_update", usage: {}, assistantMessageEvent });
+        setTimeout(() => {
+          update({ type: "thinking_start", contentIndex: 0 });
+          update({ type: "thinking_delta", contentIndex: 0, delta: "**Weighing it**" });
+        }, ms);
+        setTimeout(() => {
+          update({ type: "thinking_end", contentIndex: 0, content: "" });
+          update({ type: "text_start", contentIndex: 1 });
+          for (const ch of text) update({ type: "text_delta", contentIndex: 1, delta: ch });
+          const asst = {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "", thinkingSignature: "sig", redacted: true },
+              { type: "text", text },
+            ],
+            model: model.id,
+            provider: model.provider,
+            stopReason: "stop",
+            timestamp: Date.now(),
+          };
+          messages.push(asst);
+          out({ type: "message_end", message: asst });
+          out({ type: "turn_end", message: asst, toolResults: [] });
+          settle(asst);
+        }, 2 * ms);
+        return;
+      }
       // "codemode <n> [fail <k>]": one codemode call whose script makes n nested bash/read/write
       // calls, k of them failing, as live executions each running for 150ms, then recorded in
       // its result.

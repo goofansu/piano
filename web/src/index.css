@@ -853,6 +853,36 @@
     opacity: 0.3;
   }
 }
+/* The reply caret, while Pi works with nothing to show yet, blinks as a cursor waits: on the keys'
+ * 1.2s clock, so the caret and the keys keep one time. */
+[data-motion="blink"] {
+  animation: caret-blink 1.2s step-end infinite;
+}
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+/* "Thinking" while Pi is in a thinking block: a band of full ink sweeps across the dimmed word, on
+ * twice the keys' clock. Only `background-position` moves, so it stays cheap while replies stream.
+ * Under reduced motion the word is plain dimmed ink. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-motion="shimmer"] {
+    color: transparent;
+    background: linear-gradient(90deg, var(--ink-3) 35%, var(--ink) 50%, var(--ink-3) 65%) 0 0 /
+      300% 100%;
+    background-clip: text;
+    animation: text-shimmer 2.4s linear infinite;
+  }
+}
+@keyframes text-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
 /* The composer's focus and drop ring is a change of colour, so it eases. */
 [data-motion="ring"] {
   transition:
@@ -985,7 +1015,8 @@
   }
   /* The keys hold their pressed state instead of playing, and a status dot holds its colour. */
   [data-motion="key"],
-  [data-motion="pulse"] {
+  [data-motion="pulse"],
+  [data-motion="blink"] {
     animation: none !important;
   }
   /* The phone sidebar comes to rest at once; finger tracking stays. */

@@ -520,6 +520,43 @@ test("snapshot first, then a streamed turn", async () => {
   assert.equal(new Set(ids).size, ids.length, "final messages have distinct ids");
 });
 
+test("a streaming reply says it is thinking only while Pi is in a thinking block", async () => {
+  const seen = await run(
+    Effect.gen(function* () {
+      const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "thinking" });
+      const ready = yield* Deferred.make<void>();
+      const collector = yield* collectUntil(
+        t.events.pipe(
+          Stream.tap((e) =>
+            e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+        ),
+        (e) => e._tag === "state" && !e.state.isStreaming,
+      ).pipe(Effect.forkChild);
+      yield* Deferred.await(ready);
+      yield* t.act({ _tag: "prompt", text: "think 100" });
+      return yield* Fiber.join(collector);
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+  const partials = seen.flatMap((e) => (e._tag === "message_update" ? [e.message] : []));
+  const thinking = partials.filter((m) => m.thinking);
+  assert.ok(thinking.length > 0, "a partial says Pi is thinking");
+  assert.ok(
+    thinking.every((m) => m.text === ""),
+    "thinking text is never shown as reply text",
+  );
+  const writing = partials.filter((m) => m.text);
+  assert.ok(writing.length > 0, "the reply then streams its text");
+  assert.ok(
+    writing.every((m) => !m.thinking),
+    "once the thinking block ends, the reply no longer says it is thinking",
+  );
+  const reply = seen.find((e) => e._tag === "message_end" && e.message.role === "assistant");
+  assert.ok(reply && reply._tag === "message_end");
+  assert.equal(reply.message.text, "Thought it through.");
+  assert.equal(reply.message.thinking, undefined, "a saved reply does not say it is thinking");
+});
+
 test("the readback that settles a turn keeps the ids its live messages carried", async () => {
   const seen = await run(
     Effect.gen(function* () {

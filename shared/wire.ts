@@ -115,6 +115,8 @@ export const RenderMsg = Schema.Struct({
   label: Schema.optional(Schema.String),
   nestedCalls: Schema.optional(Schema.Array(ToolExecution)),
   nestedCallsComplete: Schema.optional(Schema.Boolean),
+  /** A streaming reply only: Pi is producing a thinking block now. Saved messages never carry it. */
+  thinking: Schema.optional(Schema.Literal(true)),
 });
 export type RenderMsg = typeof RenderMsg.Type;
 

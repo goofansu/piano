@@ -337,7 +337,8 @@ export function sessionPlace({
   };
 }
 
-export type ReplyActivity = "starting" | "working";
+/** Thinking while Pi is in a thinking block; working while it waits on anything else. */
+export type ReplyActivity = "starting" | "thinking" | "working";
 
 export interface SessionActivity {
   /** One word or phrase for the session's state, announced to screen readers. */
@@ -365,7 +366,7 @@ export function sessionActivity(state: AppState, messagesOnly: boolean): Session
   // Messages only hides pending text, so it cannot replace the working indicator.
   if (messagesOnly || !t?.pending?.text) {
     if (starting) replyActivity = "starting";
-    else if (streaming) replyActivity = "working";
+    else if (streaming) replyActivity = t.pending?.thinking ? "thinking" : "working";
   }
   // A dialog the first input opened needs the user, so it outranks startup.
   const status =

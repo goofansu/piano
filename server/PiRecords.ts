@@ -277,7 +277,9 @@ interface MessageEventRecord extends PiRecord {
 }
 type Block =
   | { type: "text"; text: string }
-  | { type: "tool"; id: string; name: string; args: string; writtenPath?: string };
+  | { type: "tool"; id: string; name: string; args: string; writtenPath?: string }
+  /** Only whether Pi is still producing it: thinking text is never shown. */
+  | { type: "thinking"; open: boolean };
 
 // ── Readbacks ────────────────────────────────────────────────────────────────
 
@@ -1018,6 +1020,12 @@ export class PiProjector {
           case "text_end":
             this.blocks.set(index, { type: "text", text: ev.content ?? "" });
             break;
+          case "thinking_start":
+            this.blocks.set(index, { type: "thinking", open: true });
+            break;
+          case "thinking_end":
+            this.blocks.set(index, { type: "thinking", open: false });
+            break;
           case "toolcall_start":
             this.blocks.set(index, {
               type: "tool",
@@ -1116,8 +1124,11 @@ export class PiProjector {
     if (!this.partial) return [];
     const blocks = [...this.blocks.entries()].sort(([a], [b]) => a - b).map(([, b]) => b);
     const redaction = compileRedaction();
+    const { thinking: _, ...partial } = this.partial;
+    const thinking = blocks.some((b) => b.type === "thinking" && b.open);
     this.partial = redaction.wire({
-      ...this.partial,
+      ...partial,
+      ...(thinking ? { thinking } : {}),
       text: redaction.text(assistantText(blocks), true),
       toolCalls: blocks.flatMap((b) =>
         b.type === "tool"

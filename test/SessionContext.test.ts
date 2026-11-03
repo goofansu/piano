@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
+import type { FolderView, RenderMsg, SessionState, WorktreeView } from "../shared/wire.ts";
 import { directoryTrust } from "../web/src/lib/directoryTrust.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
@@ -356,6 +356,19 @@ test("reply activity yields to visible pending text, except in Messages display"
       false,
     ).replyActivity,
     "starting",
+  );
+});
+
+test("reply activity is thinking only while the streaming reply is in a thinking block", () => {
+  const streaming = (pending: RenderMsg) => ({
+    ...base,
+    session: session("/repo", { isStreaming: true }, { pending }),
+  });
+  const thinking = streaming({ id: "p", role: "assistant", text: "", thinking: true });
+  assert.equal(sessionActivity(thinking, false).replyActivity, "thinking");
+  assert.equal(
+    sessionActivity(streaming({ id: "p", role: "assistant", text: "" }), false).replyActivity,
+    "working",
   );
 });
 

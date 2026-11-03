@@ -50,6 +50,7 @@ import { abbrevHome, clamp, stripAnsi, toolArgsText } from "@/lib/format";
 import type { MessageError } from "@/lib/messageError";
 import { routePath } from "@/lib/routes";
 import type { SessionDestination } from "@/lib/sessionCatalog";
+import type { ReplyActivity } from "@/lib/sessionContext";
 import { disclosureRow } from "@/lib/styles";
 import {
   BOTTOM_ENTRY,
@@ -105,7 +106,7 @@ interface Props {
   submittedInput?: Pick<RenderMsg, "text" | "attachments"> | null;
   tools: Record<string, ToolExecution>;
   /** Startup or Pi work awaiting reply text: the keys play in the reply area. */
-  activity?: "starting" | "working";
+  activity?: ReplyActivity;
   /** Agent lifecycle, independent of whether the working indicator is visible. */
   working?: boolean;
   /** Shown above an empty transcript; the caller decides when (see `sessionPane`). */
@@ -266,10 +267,23 @@ export function MessageList({
             </PromptMeasurementsContext>
             {activity && (
               <Row glyph={<Keys playing className="text-brand" />}>
-                <span className="sr-only">
-                  {activity === "starting" ? "Starting" : "Pi is working"}
-                </span>
-                <span aria-hidden className="inline-block h-[1em] w-0.5 bg-brand align-[-0.15em]" />
+                {activity === "thinking" ? (
+                  // Only the state: Pi's thinking text is never shown.
+                  <span data-motion="shimmer" className="text-ink-3">
+                    Thinking
+                  </span>
+                ) : (
+                  <>
+                    <span className="sr-only">
+                      {activity === "starting" ? "Starting" : "Pi is working"}
+                    </span>
+                    <span
+                      aria-hidden
+                      data-motion="blink"
+                      className="inline-block h-[1em] w-0.5 bg-brand align-[-0.15em]"
+                    />
+                  </>
+                )}
               </Row>
             )}
           </div>
