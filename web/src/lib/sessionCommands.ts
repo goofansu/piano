@@ -20,7 +20,12 @@ import {
   sessionWorking,
   workspaceFor,
 } from "./sessionContext.ts";
-import { previewHost, sessionHasPreview } from "./sessionPreview.ts";
+import {
+  type PreviewClaim,
+  previewClaim,
+  previewHost,
+  sessionHasPreview,
+} from "./sessionPreview.ts";
 
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
@@ -96,13 +101,8 @@ export type SessionCommandIntent =
   | { kind: "pull-request"; linked: boolean }
   /** Open the app in a new tab. */
   | { kind: "open-url"; url: string }
-  | {
-      kind: "stop-preview";
-      instanceId: string;
-      selectionId: string | null;
-      generation: string | null;
-      host: string;
-    }
+  /** Stop the app it claims, only while that app is still the one on screen. */
+  | ({ kind: "stop-preview"; host: string } & PreviewClaim)
   | { kind: "show-preview" }
   | { kind: "preview-details" }
   /** Turn Messages only on or off. */
@@ -510,7 +510,8 @@ function previewCommands(
   observed: Pick<PreviewObservationState, "unconfirmed">,
 ): SessionCommand[] {
   const preview = seenPreview(state, observed);
-  if (!preview) return [];
+  const claim = previewClaim(state);
+  if (!preview || !claim) return [];
   return [
     {
       id: "show-preview",
@@ -555,9 +556,7 @@ function previewCommands(
       keywords: ["app", "kill"],
       intent: {
         kind: "stop-preview",
-        instanceId: preview.instanceId,
-        selectionId: state.selectionId,
-        generation: state.session?.cursor?.generation ?? null,
+        ...claim,
         host: preview.url ? previewHost(preview.url) : "this app",
       },
     },

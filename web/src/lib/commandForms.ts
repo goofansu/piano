@@ -26,7 +26,7 @@ import {
 import { inSidebarGroups, sessionCatalog, sessionLabel } from "./sessionCatalog.ts";
 import { canRenameSession, canShareSession } from "./sessionCommands.ts";
 import { sessionMutable, sessionReady, sessionWorking, workspaceFor } from "./sessionContext.ts";
-import { hostedPreview, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
+import { previewClaimHolds, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
 export interface FormAnswer {
@@ -74,15 +74,8 @@ export function answerForm(
   const text = typeof input === "string" ? input : "";
   switch (form.kind) {
     case "stop-preview": {
-      const preview = hostedPreview(state);
-      if (
-        !sessionReady(state) ||
-        state.selectionId !== form.selectionId ||
-        (state.session?.cursor?.generation ?? null) !== form.generation ||
-        preview?.instanceId !== form.instanceId
-      )
-        return { allowed: false };
-      return { allowed: true, command: stopPreview(preview) };
+      if (!sessionReady(state) || !previewClaimHolds(state, form)) return { allowed: false };
+      return { allowed: true, command: stopPreview(form) };
     }
     case "rename-session": {
       const { target } = form;

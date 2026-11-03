@@ -54,7 +54,7 @@ import {
   type SessionTarget,
   sessionCommands,
 } from "@/lib/sessionCommands";
-import { hostedPreview } from "@/lib/sessionPreview";
+import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
@@ -238,11 +238,7 @@ export function CommandHost({
   const project = form?.kind === "project" ? form.dialog : undefined;
   const projectSettings = form?.kind === "project-settings";
   // The app whose details are open; another app, even in the same session, never reopens them.
-  const [previewDetails, setPreviewDetails] = useState<{
-    instanceId: string;
-    selectionId: string | null;
-    generation: string | null;
-  } | null>(null);
+  const [previewDetails, setPreviewDetails] = useState<PreviewClaim | null>(null);
 
   const effects: CommandEffects = {
     send,
@@ -272,16 +268,7 @@ export function CommandHost({
     },
     openUrl: openLink,
     openPreviewDetails: () => {
-      const preview = hostedPreview(state);
-      setPreviewDetails(
-        preview
-          ? {
-              instanceId: preview.instanceId,
-              selectionId: state.selectionId,
-              generation: state.session?.cursor?.generation ?? null,
-            }
-          : null,
-      );
+      setPreviewDetails(previewClaim(state) ?? null);
       previewObservation.refresh();
     },
     addWebhook: () => webhookEditor.open("new"),
@@ -377,15 +364,7 @@ export function CommandHost({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <PreviewDetailsDialog
-        instanceId={
-          previewDetails?.selectionId === state.selectionId &&
-          previewDetails?.generation === (state.session?.cursor?.generation ?? null)
-            ? (previewDetails?.instanceId ?? null)
-            : null
-        }
-        close={() => setPreviewDetails(null)}
-      />
+      <PreviewDetailsDialog claim={previewDetails} close={() => setPreviewDetails(null)} />
       <ProjectDialogView
         open={!!project}
         dialog={project}

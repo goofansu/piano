@@ -54,8 +54,10 @@ import { pointerLast } from "@/lib/pointerClose";
 import { previewObservation, seenDetails, seenPreview, seenStop } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
+  type PreviewClaim,
   type PreviewTone,
   previewAccess,
+  previewClaimHolds,
   previewFace,
   previewFrameUrl,
   previewHost,
@@ -525,14 +527,14 @@ function PreviewFacts({ preview }: { preview: SessionPreview }) {
 
 /**
  * The selected session's preview on demand: what was observed, the app's recent output, and its
- * actions. `instanceId` is the app it was opened for; it closes once that app is stopped, replaced
- * or its session ends, and never reopens for another one.
+ * actions. `claim` is the app it was opened for; it closes once that app is stopped, replaced, its
+ * Pi restarted or its session left, and never reopens for another one.
  */
 export function PreviewDetailsDialog({
-  instanceId,
+  claim,
   close,
 }: {
-  instanceId: string | null;
+  claim: PreviewClaim | null;
   close: () => void;
 }) {
   const { state } = useCommands();
@@ -543,7 +545,7 @@ export function PreviewDetailsDialog({
   const details = seenDetails(state, observed);
   return (
     <Dialog
-      open={!!preview && preview.instanceId === instanceId}
+      open={!!preview && !!claim && previewClaimHolds(state, claim)}
       onOpenChange={(o) => !o && close()}
     >
       <DialogContent
