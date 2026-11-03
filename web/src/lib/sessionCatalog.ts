@@ -73,7 +73,9 @@ export interface SessionDirectory {
   folder: FolderView | undefined;
   /** The folder's checkout at the directory. */
   checkout: WorktreeView | undefined;
-  /** The folder's name, else the directory's last segment; empty without a directory. */
+  /** The folder's name, else the directory's last segment (a trailing slash ignored); empty
+   * without a directory. The sidebar row, the phone header and the rail all name a session's
+   * place by this. */
   folderName: string;
   /** A linked worktree's directory name; undefined for the folder's own checkout. */
   worktreeName: string | undefined;
@@ -98,7 +100,8 @@ export function sessionDirectories(state: AppState): (cwd: string | undefined) =
   return (cwd) => {
     const folder = cwd === undefined ? undefined : folderOf.get(cwd);
     const checkout = folder?.worktrees.find((w) => w.path === cwd);
-    const folderName = folder?.name ?? cwd?.split("/").pop() ?? "";
+    const folderName =
+      folder?.name ?? (cwd === undefined ? "" : cwd.split("/").filter(Boolean).at(-1) || cwd);
     return {
       folder,
       checkout,
