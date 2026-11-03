@@ -46,8 +46,13 @@ Replace Biome (lint and format) and ESLint (the Tailwind class check) with
 
 ## Losses
 
-- Biome also linted CSS (`noImportantStyles`, `noDescendingSpecificity`); oxlint lints only
-  JavaScript and TypeScript. oxfmt still formats CSS.
+- Biome also linted CSS; oxlint lints only JavaScript and TypeScript. Agents rarely misspell a
+  property, but they do invent plausible token names (`var(--muted-fg)` for `--ink-3`), which pass
+  the build and silently fall back. Stylelint replaces the useful part with two rules:
+  `property-no-unknown` and `csstools/value-no-unknown-custom-properties`, with an allow-list of
+  the custom properties components set at runtime. Its `recommended` preset was rejected: on
+  `index.css` it raised about 12 Tailwind false positives (`@apply` preludes, shadcn's repeated
+  `:root` and `.dark` blocks). Neither tool sees `var(--…)` in TSX class names or `style` props.
 - ESLint ran the Tailwind check with `--no-inline-config`, so no inline directive could switch it
   off. oxlint has no equivalent; review new `shadcn/` suppressions.
 - oxlint JS plugins are alpha, and oxfmt is 0.x.
