@@ -24,8 +24,7 @@ Replace Biome (lint and format) and ESLint (the Tailwind class check) with
 - **Format.** `.oxfmtrc.json` keeps Biome's style: 100 columns, double quotes, semicolons and
   trailing commas. `sortImports` with `newlinesBetween: false` keeps Biome's import order. The only
   difference is the Prettier-style layout of a trailing options object, as in
-  `test(name, { timeout }, async () => …)`, which oxfmt splits. That reformat is its own commit,
-  listed in `.git-blame-ignore-revs`. The scope stays Biome's: Markdown, YAML, docs, vendored skills
+  `test(name, { timeout }, async () => …)`, which oxfmt splits. That reformat is its own commit. The scope stays Biome's: Markdown, YAML, docs, vendored skills
   and upstream shadcn source are left alone.
 - **Lint.** oxlint's correctness category with the TypeScript, unicorn, oxc, import, React and
   jsx-a11y plugins. These are off, each with its reason in `.oxlintrc.json`:
