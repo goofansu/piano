@@ -699,7 +699,7 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
             return;
           }
           case "stop": {
-            stopping = true;
+            // `session.act` set `stopping` when it admitted this Stop.
             // Pi has no compound RPC. Take its authoritative queue before abort
             // can drain steering at a tool boundary (INV-01/03). Keep ownership
             // in the session if the requesting browser disconnects mid-operation.
@@ -840,9 +840,19 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
                   "Session input capacity is full. Nothing was sent; wait for pending work before trying again.",
                 ),
               );
+            // Admission and the flag are one decision, so a second Stop or new input sent
+            // alongside this one is refused, never run while this one is still under way.
+            const stop = action._tag === "stop";
+            if (stop) stopping = true;
             // Admission follows session-owned work, not the lifetime of a browser join.
             return act(action).pipe(
-              Effect.ensuring(Effect.sync(release)),
+              Effect.ensuring(
+                Effect.sync(() => {
+                  // Covers a Stop refused before its work cleared the flag (e.g. Pi exited).
+                  if (stop) stopping = false;
+                  release();
+                }),
+              ),
               Effect.forkIn(sessionScope, { uninterruptible: false }),
               Effect.flatMap((fiber) => restore(Fiber.join(fiber))),
             );
