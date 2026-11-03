@@ -2,6 +2,7 @@
  * the dialog it raises for each and the batch result Pi stores. The extension owns the tool and
  * asks through `askUserPrompt`; this is the one reader of its arguments, dialogs and result, for
  * the server's answer receipts and the browser's transcript alike. */
+import { arr, compile, obj, opt, str } from "@earendil-works/pi-schema";
 
 export const ASK_USER_TOOL = "ask_user";
 
@@ -34,46 +35,46 @@ const recordOf = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
-/** A string field as Pi coerces it before the tool runs (pi-schema, since Pi 1.5): Pi's records
- * keep the model's raw arguments, so `id: 1` is announced as a number but asked and stored as "1". */
-const asText = (value: unknown): string | undefined =>
-  typeof value === "string"
-    ? value
-    : typeof value === "number" || typeof value === "boolean" || value === null
-      ? String(value)
-      : value === undefined
-        ? ""
-        : undefined;
+/** The tool's parameters, as Pi declares them to the model and validates each call against. */
+export const AskUserParameters = obj({
+  questions: arr(
+    obj({
+      id: str({ minLength: 1, description: "Unique ID used to key this question's answer" }),
+      question: str({ minLength: 1, description: "Question, including essential context" }),
+      options: opt(
+        arr(str({ minLength: 1 }), {
+          minItems: 1,
+          uniqueItems: true,
+          description: "Choices for a single selection; omit for a free-text answer",
+        }),
+      ),
+    }),
+    {
+      minItems: 1,
+      description: "Questions in presentation order; use one item for a single question",
+    },
+  ),
+});
 
-/** A call's questions, from its raw or converted arguments; undefined unless every ID and question
- * is non-blank and every ID unique, the rule the tool checks before asking anything. Choices are
- * read as Pi converts them too: `null` drops them (an omitted optional field) and a lone choice
- * becomes a list of one. */
+/** Pi's own reading of a call: it compiles a tool's parameters with coercion and parses each call
+ * before the tool runs. Pi also passes string formats and rejects dangling `$ref`s, neither of
+ * which these parameters have. */
+const parameters = compile(AskUserParameters, { coerce: true });
+
+/** A call's questions, from its raw or converted arguments, read as Pi reads them: Pi's records
+ * keep the model's raw arguments, so `id: 1` is announced as a number but asked and stored as "1",
+ * `options: null` drops the choices and a lone choice becomes a list of one. Undefined for a call
+ * Pi rejects, or unless every ID and question is non-blank and every ID unique, the rule the tool
+ * checks before asking anything. */
 export function askUserQuestions(args: unknown): AskUserQuestion[] | undefined {
-  const questions = recordOf(args)?.questions;
-  if (!Array.isArray(questions) || !questions.length) return;
+  const parsed = parameters.parse(args);
+  if (!parsed.ok) return;
   const ids = new Set<string>();
-  const items: AskUserQuestion[] = [];
-  for (const value of questions) {
-    const fields = recordOf(value);
-    if (!fields) return;
-    const id = asText(fields.id);
-    const question = asText(fields.question);
-    if (id === undefined || question === undefined) return;
+  for (const { id, question } of parsed.value.questions) {
     if (!id.trim() || !question.trim() || ids.has(id)) return;
-    let options: string[] | undefined;
-    if (fields.options !== undefined && fields.options !== null) {
-      options = [];
-      for (const option of Array.isArray(fields.options) ? fields.options : [fields.options]) {
-        const text = asText(option);
-        if (text === undefined) return;
-        options.push(text);
-      }
-    }
     ids.add(id);
-    items.push(options ? { id, question, options } : { id, question });
   }
-  return items;
+  return parsed.value.questions;
 }
 
 /** The dialog the tool raises for `questions[index]`: numbered `1 of 3: …` in a batch, the bare
