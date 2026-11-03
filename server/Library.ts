@@ -18,7 +18,7 @@
  */
 import { Data, Effect } from "effect";
 import { checkDraft, type Draft, type DraftField } from "../shared/drafts.ts";
-import type { LibraryChange, LibraryKind } from "../shared/library.ts";
+import { LIBRARY_KINDS, type LibraryChange, type LibraryKind } from "../shared/library.ts";
 import * as LibraryFile from "./LibraryFile.ts";
 import { loadedBeforePiano } from "./PiLoads.ts";
 
@@ -73,8 +73,7 @@ export const makeLibrary = <
 >(
   layout: Layout<Entry, Request>,
 ) => {
-  const noun = layout.kind;
-  const Noun = `${noun[0]?.toUpperCase()}${noun.slice(1)}`;
+  const { kind: noun, Noun } = LIBRARY_KINDS[layout.kind];
   const refused = (detail: string, field?: DraftField) =>
     new LibraryError(field ? { detail, field } : { detail });
   const couldNotSave = () => refused(`Could not save ${noun}.`);
@@ -126,8 +125,9 @@ export const makeLibrary = <
     return Effect.succeed({ change: "create" });
   };
 
-  /** Piano's entries by name. */
-  const list = shelf(() => refused(`Could not read ${noun}s.`)).pipe(
+  /** Piano's entries by name. A folder that cannot be read is a defect, not a refusal: nothing the
+   * person asked for was wrong, so the server logs its cause and answers its fallback. */
+  const list = Effect.promise(layout.shelf).pipe(
     Effect.map((entries) =>
       [...entries.values()].map(({ entry }) => entry).sort((a, b) => a.name.localeCompare(b.name)),
     ),

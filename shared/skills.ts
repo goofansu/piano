@@ -1,6 +1,6 @@
 /** Skills created in Piano; a new one follows the draft rule a prompt does (`checkDraft` in `drafts.ts`). */
 import { Schema } from "effect";
-import { draftFields } from "./drafts.ts";
+import { draftFields, proposalFields } from "./drafts.ts";
 
 /** A skill created in Piano, as Settings › Skills lists it. */
 export const UserSkill = Schema.Struct({
@@ -28,14 +28,10 @@ export const UserSkillUpdate = Schema.Struct({
 });
 export type UserSkillUpdate = typeof UserSkillUpdate.Type;
 
-/** What saving a draft would do, before anyone is asked: make a new skill or replace the SKILL.md
- * of one Piano created (`previous`), and the file it would write. Disable model invocation is the
- * draft's, else the saved skill's. A draft the save would refuse gets the save's refusal instead. */
+/** What saving a draft would do (`proposalFields`), with the Disable model invocation it would
+ * write: the draft's, else the saved skill's. */
 export const UserSkillProposal = Schema.Struct({
-  change: Schema.Literals(["create", "update"]),
-  name: Schema.String,
-  file: Schema.String,
-  previous: Schema.optional(Schema.String),
+  ...proposalFields,
   disableModelInvocation: Schema.Boolean,
 });
 export type UserSkillProposal = typeof UserSkillProposal.Type;

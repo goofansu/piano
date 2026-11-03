@@ -34,16 +34,16 @@ export const listWebhooks = (options?: RequestOptions) => call(Endpoints.webhook
 export const saveWebhook = (body: import("../../../shared/webhooks.ts").WebhookSave) =>
   call(Endpoints.saveWebhook, { body });
 export const removeWebhook = (id: string) => call(Endpoints.removeWebhook, { body: { id } });
-export const listUserSkills = (options?: RequestOptions) => call(Endpoints.userSkills, {}, options);
+export const listUserSkills = (options?: RequestOptions) =>
+  call(Endpoints.skills.list, {}, options);
 export const createUserSkill = (body: import("../../../shared/skills.ts").UserSkillCreate) =>
-  call(Endpoints.createUserSkill, { body });
-export const removeUserSkill = (name: string) =>
-  call(Endpoints.removeUserSkill, { body: { name } });
+  call(Endpoints.skills.create, { body });
+export const removeUserSkill = (name: string) => call(Endpoints.skills.remove, { body: { name } });
 export const testWebhook = (id: string) => call(Endpoints.testWebhook, { body: { id } });
-export const listPrompts = (options?: RequestOptions) => call(Endpoints.prompts, {}, options);
+export const listPrompts = (options?: RequestOptions) => call(Endpoints.prompts.list, {}, options);
 export const createPrompt = (body: import("../../../shared/prompts.ts").PromptCreate) =>
-  call(Endpoints.createPrompt, { body });
-export const removePrompt = (name: string) => call(Endpoints.removePrompt, { body: { name } });
+  call(Endpoints.prompts.create, { body });
+export const removePrompt = (name: string) => call(Endpoints.prompts.remove, { body: { name } });
 
 /**
  * Every failed request: the server's own `error` message when it sent one, otherwise the

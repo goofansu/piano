@@ -32,8 +32,8 @@ export const PromptsEnvironment = Context.Reference<{
 export class Prompts extends Context.Service<
   Prompts,
   {
-    /** Piano's prompts by name, as Pi reads them. */
-    readonly list: Effect.Effect<readonly Prompt[], LibraryError>;
+    /** Piano's prompts by name, as Pi reads them; a folder that cannot be read is a defect. */
+    readonly list: Effect.Effect<readonly Prompt[]>;
     /** What saving `input` would do, refused as the save would refuse it; writes nothing. A
      * prompt Piano created is updated; any other name is created. Either is refused when Pi
      * loads a prompt of that name from another folder first. */

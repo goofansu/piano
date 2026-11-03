@@ -5,7 +5,7 @@
  * rule a skill does (`checkDraft` in `drafts.ts`).
  */
 import { Schema } from "effect";
-import { draftFields } from "./drafts.ts";
+import { draftFields, proposalFields } from "./drafts.ts";
 
 /** A prompt as Pi reads it: its command name and description. */
 export const Prompt = Schema.Struct({
@@ -29,13 +29,6 @@ export const PromptUpdate = Schema.Struct({
 });
 export type PromptUpdate = typeof PromptUpdate.Type;
 
-/** What saving a draft would do, before anyone is asked: make a new prompt or replace the file of
- * one Piano created (`previous`), and the file it would write. A draft the save would refuse gets
- * the save's refusal instead. */
-export const PromptProposal = Schema.Struct({
-  change: Schema.Literals(["create", "update"]),
-  name: Schema.String,
-  file: Schema.String,
-  previous: Schema.optional(Schema.String),
-});
+/** What saving a draft would do (`proposalFields`). */
+export const PromptProposal = Schema.Struct(proposalFields);
 export type PromptProposal = typeof PromptProposal.Type;

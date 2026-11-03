@@ -15,6 +15,22 @@ export type LibraryKind = "skill" | "prompt";
 /** Whether a save makes a new skill or prompt or replaces one Piano created. */
 export type LibraryChange = "create" | "update";
 
+/** The words for one kind, decided once: Settings, the save tool's proposal and its transcript row
+ * all name a kind and its file from here. `kind` is also the lowercase noun ("skill"). */
+export interface LibraryKindWords {
+  readonly kind: LibraryKind;
+  /** The noun starting a sentence or a title: "Skill saved", "Prompt copied". */
+  readonly Noun: string;
+  /** How the file is named after an entry's name, as assistive technology reads it: "review
+   * SKILL.md", "triage file". */
+  readonly fileLabel: string;
+}
+
+export const LIBRARY_KINDS = {
+  skill: { kind: "skill", Noun: "Skill", fileLabel: "SKILL.md" },
+  prompt: { kind: "prompt", Noun: "Prompt", fileLabel: "file" },
+} as const satisfies { readonly [K in LibraryKind]: LibraryKindWords & { readonly kind: K } };
+
 export const libraryKindOf = (tool: string): LibraryKind | undefined =>
   tool === SAVE_SKILL_TOOL ? "skill" : tool === SAVE_PROMPT_TOOL ? "prompt" : undefined;
 
@@ -182,4 +198,4 @@ export function storedLibraryResult(tool: string, output: string | undefined) {
 
 /** The toast a save ends with, as the Settings page says it for the same change. */
 export const savedToast = (kind: LibraryKind, change: LibraryChange) =>
-  `${kind === "skill" ? "Skill" : "Prompt"} ${change === "create" ? "created" : "saved"}`;
+  `${LIBRARY_KINDS[kind].Noun} ${change === "create" ? "created" : "saved"}`;

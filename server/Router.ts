@@ -332,33 +332,33 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.flatMap(Webhooks, (hooks) => hooks.test(body.id)),
     );
 
-    yield* serve(Endpoints.userSkills, () => Effect.flatMap(UserSkills, (skills) => skills.list));
-    yield* serve(Endpoints.createUserSkill, ({ body }) =>
+    yield* serve(Endpoints.skills.list, () => Effect.flatMap(UserSkills, (skills) => skills.list));
+    yield* serve(Endpoints.skills.create, ({ body }) =>
       Effect.flatMap(UserSkills, (skills) => skills.create(body)),
     );
-    yield* serve(Endpoints.proposeUserSkill, ({ body }) =>
+    yield* serve(Endpoints.skills.propose, ({ body }) =>
       Effect.flatMap(UserSkills, (skills) => skills.propose(body)),
     );
-    yield* serve(Endpoints.updateUserSkill, ({ body }) =>
+    yield* serve(Endpoints.skills.update, ({ body }) =>
       Effect.flatMap(UserSkills, (skills) => skills.update(body)),
     );
-    yield* serve(Endpoints.removeUserSkill, ({ body }) =>
+    yield* serve(Endpoints.skills.remove, ({ body }) =>
       Effect.flatMap(UserSkills, (skills) => skills.remove(body.name)).pipe(
         Effect.as({ ok: true as const }),
       ),
     );
 
-    yield* serve(Endpoints.prompts, () => Effect.flatMap(Prompts, (prompts) => prompts.list));
-    yield* serve(Endpoints.createPrompt, ({ body }) =>
+    yield* serve(Endpoints.prompts.list, () => Effect.flatMap(Prompts, (prompts) => prompts.list));
+    yield* serve(Endpoints.prompts.create, ({ body }) =>
       Effect.flatMap(Prompts, (prompts) => prompts.create(body)),
     );
-    yield* serve(Endpoints.proposePrompt, ({ body }) =>
+    yield* serve(Endpoints.prompts.propose, ({ body }) =>
       Effect.flatMap(Prompts, (prompts) => prompts.propose(body)),
     );
-    yield* serve(Endpoints.updatePrompt, ({ body }) =>
+    yield* serve(Endpoints.prompts.update, ({ body }) =>
       Effect.flatMap(Prompts, (prompts) => prompts.update(body)),
     );
-    yield* serve(Endpoints.removePrompt, ({ body }) =>
+    yield* serve(Endpoints.prompts.remove, ({ body }) =>
       Effect.flatMap(Prompts, (prompts) => prompts.remove(body.name)).pipe(
         Effect.as({ ok: true as const }),
       ),

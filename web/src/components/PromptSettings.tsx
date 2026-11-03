@@ -58,7 +58,6 @@ export function PromptSettings() {
               kind="prompt"
               name={viewing.name}
               file={viewing.file}
-              fileLabel="file"
               close={() => setViewing(undefined)}
             />
           )}
