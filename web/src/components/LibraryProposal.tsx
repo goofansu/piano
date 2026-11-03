@@ -1,4 +1,4 @@
-import type { LibraryProposal } from "@shared/library";
+import { LIBRARY_KINDS, type LibraryProposal } from "@shared/library";
 import type { Dialog } from "@shared/wire";
 import { useId, useMemo } from "react";
 import { Hunks } from "@/components/Changes";
@@ -32,7 +32,7 @@ export function LibraryProposalCard({
     send,
   );
   const { kind, change, name, file, previous } = proposal;
-  const fileLabel = kind === "skill" ? "SKILL.md" : "file";
+  const { fileLabel } = LIBRARY_KINDS[kind];
   const diff = useMemo(
     () => (previous === undefined ? undefined : lineDiff(`${name} ${fileLabel}`, previous, file)),
     [previous, file, name, fileLabel],
@@ -61,13 +61,7 @@ export function LibraryProposalCard({
             <p className="text-sm text-ink-3">No text changes.</p>
           )
         ) : (
-          <DraftFileText
-            kind={kind}
-            name={name}
-            file={file}
-            fileLabel={fileLabel}
-            className="max-h-[min(20rem,40dvh)]"
-          />
+          <DraftFileText kind={kind} name={name} file={file} className="max-h-[min(20rem,40dvh)]" />
         )}
         <div className="flex items-center justify-end gap-2">
           {dialog.concealed && <p className="mr-auto text-sm text-ink-2">Contains hidden text</p>}

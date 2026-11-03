@@ -62,7 +62,6 @@ export function UserSkillSettings() {
               kind="skill"
               name={viewing.name}
               file={viewing.file}
-              fileLabel="SKILL.md"
               close={() => setViewing(null)}
             />
           )}

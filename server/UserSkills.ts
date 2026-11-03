@@ -153,8 +153,7 @@ export const UserSkillsLive = Layer.effect(
     });
 
     return UserSkills.of({
-      // Reading the folder with Pi's loader fails only as a defect, as it did before.
-      list: library.list.pipe(Effect.orDie),
+      list: library.list,
       propose: (request) =>
         library.propose(request).pipe(
           Effect.map(({ change, entry, previous }) => ({

@@ -42,7 +42,7 @@ for (const kind of ["skill", "prompt"] as const) {
       requests.push(url.href);
       assert.equal(
         url.pathname,
-        kind === "skill" ? Endpoints.userSkills.path : Endpoints.prompts.path,
+        kind === "skill" ? Endpoints.skills.list.path : Endpoints.prompts.list.path,
       );
       assert.equal(init.method, "GET", "reads never mutate the library");
       return Response.json([entry, { ...entry, name: "echo-other", file: "not this entry" }]);

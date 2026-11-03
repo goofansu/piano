@@ -9,6 +9,7 @@
  */
 import { Schema } from "effect";
 import { FileDownload, FilePreview } from "./files.ts";
+import { LIBRARY_KINDS, type LibraryKind, type LibraryKindWords } from "./library.ts";
 import { McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { Prompt, PromptCreate, PromptProposal, PromptUpdate } from "./prompts.ts";
 import { API_KEY_INVALID, ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
@@ -171,6 +172,71 @@ const signInEndpoints = <const P extends `/api/${string}`>(path: NoPathParams<P>
   };
 };
 export type SignInEndpoints = ReturnType<typeof signInEndpoints>;
+
+/**
+ * One library kind's requests (`library.ts`), all on `/api/settings/<kind>s` and worded once for
+ * both kinds: list, create, propose (what a save would do, so Piano's save tool shows it for the
+ * user's Save and asks nothing when the save would be refused; writes nothing), update (replaces
+ * an entry Piano created, with the file the tool showed as `previous`, so one changed since is
+ * refused, not overwritten) and remove. Entries are the user's own words, shown and copied as they
+ * wrote them (DisplayProjection's authored-text rule), so they leave without redaction. A list
+ * that cannot be read is an unexpected failure, not a refusal: nothing in the request was wrong.
+ */
+const libraryEndpoints = <E extends Json, C extends Json, U extends Json, P extends Json>(
+  { kind, Noun }: LibraryKindWords,
+  schemas: { entry: E; create: C; update: U; proposal: P },
+) => {
+  const path: `/api/settings/${LibraryKind}s` = `/api/settings/${kind}s`;
+  const shared = { noStore: true, redact: false } as const;
+  const save = {
+    ...shared,
+    invalid: "Enter a name, a description and instructions.",
+    refused: 400,
+  } as const;
+  return {
+    list: endpoint({
+      ...shared,
+      method: "GET",
+      path,
+      response: Schema.Array(schemas.entry),
+      fallback: `Could not load ${kind}s.`,
+    }),
+    create: endpoint({
+      ...save,
+      method: "POST",
+      path,
+      body: schemas.create,
+      response: schemas.entry,
+      fallback: `Could not create ${kind}.`,
+    }),
+    propose: endpoint({
+      ...save,
+      method: "POST",
+      path: `${path}/proposal`,
+      body: schemas.create,
+      response: schemas.proposal,
+      fallback: `Could not save ${kind}.`,
+    }),
+    update: endpoint({
+      ...save,
+      method: "PUT",
+      path,
+      body: schemas.update,
+      response: schemas.entry,
+      fallback: `Could not save ${kind}.`,
+    }),
+    remove: endpoint({
+      method: "POST",
+      path: `${path}/remove`,
+      body: Schema.Struct({ name: Schema.String }),
+      invalid: `${Noun} name required.`,
+      response: Schema.Struct({ ok: Schema.Literal(true) }),
+      noStore: true,
+      refused: 400,
+      fallback: `Could not delete ${kind}.`,
+    }),
+  };
+};
 
 export const Endpoints = {
   // Folder picker
@@ -373,61 +439,11 @@ export const Endpoints = {
     refused: 400,
     fallback: "Could not delete webhook.",
   }),
-  userSkills: endpoint({
-    method: "GET",
-    path: "/api/settings/skills",
-    response: Schema.Array(UserSkill),
-    noStore: true,
-    // The user's own words, shown and kept as they wrote them.
-    redact: false,
-    fallback: "Could not load skills.",
-  }),
-  createUserSkill: endpoint({
-    method: "POST",
-    path: "/api/settings/skills",
-    body: UserSkillCreate,
-    invalid: "Enter a name, a description and instructions.",
-    response: UserSkill,
-    noStore: true,
-    refused: 400,
-    redact: false,
-    fallback: "Could not create skill.",
-  }),
-  /** What saving a skill draft would do; Piano's save tool shows it for the user's Save, and asks
-   * nothing when the save would be refused. Writes nothing. */
-  proposeUserSkill: endpoint({
-    method: "POST",
-    path: "/api/settings/skills/proposal",
-    body: UserSkillCreate,
-    invalid: "Enter a name, a description and instructions.",
-    response: UserSkillProposal,
-    noStore: true,
-    refused: 400,
-    redact: false,
-    fallback: "Could not save skill.",
-  }),
-  /** Replaces a skill Piano created; Piano's save tool calls it after the user's Save, with the
-   * file it showed as `previous` so a skill changed since is refused, not overwritten. */
-  updateUserSkill: endpoint({
-    method: "PUT",
-    path: "/api/settings/skills",
-    body: UserSkillUpdate,
-    invalid: "Enter a name, a description and instructions.",
-    response: UserSkill,
-    noStore: true,
-    refused: 400,
-    redact: false,
-    fallback: "Could not save skill.",
-  }),
-  removeUserSkill: endpoint({
-    method: "POST",
-    path: "/api/settings/skills/remove",
-    body: Schema.Struct({ name: Schema.String }),
-    invalid: "Skill name required.",
-    response: Schema.Struct({ ok: Schema.Literal(true) }),
-    noStore: true,
-    refused: 400,
-    fallback: "Could not delete skill.",
+  skills: libraryEndpoints(LIBRARY_KINDS.skill, {
+    entry: UserSkill,
+    create: UserSkillCreate,
+    update: UserSkillUpdate,
+    proposal: UserSkillProposal,
   }),
   testWebhook: endpoint({
     method: "POST",
@@ -442,65 +458,11 @@ export const Endpoints = {
     fallback: "Could not test webhook.",
   }),
 
-  prompts: endpoint({
-    method: "GET",
-    path: "/api/settings/prompts",
-    response: Schema.Array(Prompt),
-    noStore: true,
-    refused: 400,
-    // Text the person wrote in Piano (DisplayProjection's authored-text rule): View copies it as saved.
-    redact: false,
-    fallback: "Could not load prompts.",
-  }),
-  createPrompt: endpoint({
-    method: "POST",
-    path: "/api/settings/prompts",
-    body: PromptCreate,
-    invalid: "Enter a name and the prompt.",
-    response: Prompt,
-    noStore: true,
-    refused: 400,
-    // Text the person wrote in Piano (DisplayProjection's authored-text rule): View copies it as saved.
-    redact: false,
-    fallback: "Could not save prompt.",
-  }),
-  /** What saving a prompt draft would do; Piano's save tool shows it for the user's Save, and asks
-   * nothing when the save would be refused. Writes nothing. */
-  proposePrompt: endpoint({
-    method: "POST",
-    path: "/api/settings/prompts/proposal",
-    body: PromptCreate,
-    invalid: "Enter a name and the prompt.",
-    response: PromptProposal,
-    noStore: true,
-    refused: 400,
-    // Text the person wrote in Piano (DisplayProjection's authored-text rule): View copies it as saved.
-    redact: false,
-    fallback: "Could not save prompt.",
-  }),
-  /** Replaces a prompt Piano created; Piano's save tool calls it after the user's Save, with the
-   * file it showed as `previous` so a prompt changed since is refused, not overwritten. */
-  updatePrompt: endpoint({
-    method: "PUT",
-    path: "/api/settings/prompts",
-    body: PromptUpdate,
-    invalid: "Enter a name and the prompt.",
-    response: Prompt,
-    noStore: true,
-    refused: 400,
-    // Text the person wrote in Piano (DisplayProjection's authored-text rule): View copies it as saved.
-    redact: false,
-    fallback: "Could not save prompt.",
-  }),
-  removePrompt: endpoint({
-    method: "POST",
-    path: "/api/settings/prompts/remove",
-    body: Schema.Struct({ name: Schema.String }),
-    invalid: "Prompt name required.",
-    response: Schema.Struct({ ok: Schema.Literal(true) }),
-    noStore: true,
-    refused: 400,
-    fallback: "Could not delete prompt.",
+  prompts: libraryEndpoints(LIBRARY_KINDS.prompt, {
+    entry: Prompt,
+    create: PromptCreate,
+    update: PromptUpdate,
+    proposal: PromptProposal,
   }),
 
   saveDefaults: endpoint({

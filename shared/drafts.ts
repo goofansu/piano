@@ -33,6 +33,16 @@ export const draftFields = {
 };
 export type Draft = Record<DraftField, string>;
 
+/** What saving a draft would do, before anyone is asked, as both kinds answer it: make a new entry
+ * or replace the file of one Piano created (`previous`), and the file it would write. A draft the
+ * save would refuse gets the save's refusal instead. */
+export const proposalFields = {
+  change: Schema.Literals(["create", "update"]),
+  name: Schema.String,
+  file: Schema.String,
+  previous: Schema.optional(Schema.String),
+};
+
 export interface FieldCheck {
   length: number;
   max: number;

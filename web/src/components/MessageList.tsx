@@ -1,4 +1,4 @@
-import { LIBRARY_REACH, type LibraryResult } from "@shared/library";
+import { LIBRARY_KINDS, LIBRARY_REACH, type LibraryResult } from "@shared/library";
 import type { RenderMsg, ToolExecution } from "@shared/wire";
 import { cn } from "cn";
 import {
@@ -964,7 +964,7 @@ function QuestionAnswersRow({ answers, stateKey }: { answers: QuestionAnswers; s
 /** A save of a skill or a prompt: what became of it, with View for a saved one, as Settings shows it. */
 function LibraryRow({ result, stateKey }: { result: LibraryResult; stateKey: string }) {
   const [viewing, setViewing] = useState(false);
-  const Kind = result.kind === "skill" ? "Skill" : "Prompt";
+  const { Noun: Kind } = LIBRARY_KINDS[result.kind];
   const saved = result.status === "saved";
   return (
     <>
@@ -1003,7 +1003,6 @@ function LibraryRow({ result, stateKey }: { result: LibraryResult; stateKey: str
           kind={result.kind}
           name={result.name}
           file={result.file}
-          fileLabel={result.kind === "skill" ? "SKILL.md" : "file"}
           close={() => setViewing(false)}
         />
       )}

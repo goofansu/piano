@@ -3,6 +3,7 @@
  * draft (`checkDraft`, the rule the server applies), and View shows the file exactly as saved.
  */
 import { checkDraft, DRAFT_FIELDS, type Draft, type DraftField, NAME_RULE } from "@shared/drafts";
+import { LIBRARY_KINDS, type LibraryKind } from "@shared/library";
 import { cn } from "cn";
 import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
@@ -64,7 +65,7 @@ export function NewDraftDialog({
   refresh,
 }: {
   /** What is created, lowercase: "skill" names the title, Create button, ids and messages. */
-  kind: "skill" | "prompt";
+  kind: LibraryKind;
   /** Saves the trimmed draft; a refusal naming a field shows on that field. */
   create: (draft: Draft) => Promise<unknown>;
   /** Controls after the draft's fields, such as a skill's Disable model invocation. */
@@ -73,7 +74,7 @@ export function NewDraftDialog({
   /** Re-reads the list once a create settles. */
   refresh: () => void;
 }) {
-  const Kind = kind === "skill" ? "Skill" : "Prompt";
+  const { Noun: Kind } = LIBRARY_KINDS[kind];
   const [draft, setDraft] = useState<Draft>({ name: "", description: "", instructions: "" });
   const edit = (field: DraftField) => (value: string) =>
     setDraft((current) => ({ ...current, [field]: value }));
@@ -225,14 +226,11 @@ export function DraftFileView({
   kind,
   name,
   file,
-  fileLabel,
   close,
 }: {
-  kind: "skill" | "prompt";
+  kind: LibraryKind;
   name: string;
   file: string;
-  /** How the file is named to assistive technology after the name: "SKILL.md", "file". */
-  fileLabel: string;
   close: () => void;
 }) {
   return (
@@ -244,7 +242,7 @@ export function DraftFileView({
         <DialogHeader>
           <DialogTitle className="truncate font-mono">{name}</DialogTitle>
         </DialogHeader>
-        <DraftFileText kind={kind} name={name} file={file} fileLabel={fileLabel} />
+        <DraftFileText kind={kind} name={name} file={file} />
       </DialogContent>
     </Dialog>
   );
@@ -256,16 +254,14 @@ export function DraftFileText({
   kind,
   name,
   file,
-  fileLabel,
   className,
 }: {
-  kind: "skill" | "prompt";
+  kind: LibraryKind;
   name: string;
   file: string;
-  fileLabel: string;
   className?: string;
 }) {
-  const Kind = kind === "skill" ? "Skill" : "Prompt";
+  const { Noun: Kind, fileLabel } = LIBRARY_KINDS[kind];
   return (
     <div className="relative">
       <Textarea

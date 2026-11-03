@@ -284,7 +284,7 @@ test("of two sessions updating one skill from the same file, the second Save is 
   );
 });
 
-test("an update that names no file it replaces is refused, for a skill and a prompt alike", async () => {
+test("an update that names no file it replaces is refused, for a skill and a prompt alike, in the same words", async () => {
   const draft = { name: "blind", description: "Blind update.", instructions: "One." };
   for (const kind of ["skill", "prompt"] as const)
     assert.equal(
@@ -301,7 +301,13 @@ test("an update that names no file it replaces is refused, for a skill and a pro
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...draft, instructions: "Overwritten." }),
     });
-    assert.equal(response.status, 400, path);
+    // The prompt's refusal once still asked for "a name and the prompt", after a prompt gained a
+    // required description and its text became Instructions.
+    assert.deepEqual(
+      { status: response.status, body: await response.json() },
+      { status: 400, body: { error: "Enter a name, a description and instructions." } },
+      path,
+    );
   }
   assert.deepEqual(
     files.map((file) => readFileSync(file, "utf8")),

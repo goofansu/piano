@@ -32,18 +32,8 @@ export interface LibraryDeps {
 }
 
 const ENDPOINTS = {
-  skill: {
-    list: Endpoints.userSkills,
-    propose: Endpoints.proposeUserSkill,
-    create: Endpoints.createUserSkill,
-    update: Endpoints.updateUserSkill,
-  },
-  prompt: {
-    list: Endpoints.prompts,
-    propose: Endpoints.proposePrompt,
-    create: Endpoints.createPrompt,
-    update: Endpoints.updatePrompt,
-  },
+  skill: Endpoints.skills,
+  prompt: Endpoints.prompts,
 } satisfies Record<LibraryKind, Record<"list" | "propose" | "create" | "update", Endpoint>>;
 
 interface Saved {
