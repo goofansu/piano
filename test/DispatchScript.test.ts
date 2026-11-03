@@ -218,7 +218,6 @@ test("CLI dispatches the prompt file to the resolved directory with Piano's defa
   assert.equal(json.cwd, f.cwd);
   assert.equal(json.link, `${origin}/s/portable-session`);
   assert.equal(json.handle.sessionId, "portable-session");
-  assert.deepEqual([json.model, json.thinkingLevel], [null, null]);
   const creates = p.requests.filter((m) => m._tag === "create_session");
   assert.equal(creates.length, 1, "create_session is sent exactly once");
   assert.ok(creates[0]._tag === "create_session");
@@ -228,29 +227,14 @@ test("CLI dispatches the prompt file to the resolved directory with Piano's defa
   assert.deepEqual(p.origins, [origin]);
 });
 
-test("explicit flags override env, save full JSON exclusively and forward model/effort", async (t) => {
+test("explicit flags override env and save full JSON exclusively", async (t) => {
   const f = fixture(t);
   const p = await peer(t);
   const out = join(f.dir, "start.json");
-  const args = [
-    f.prompt,
-    f.cwd,
-    out,
-    "--model",
-    "provider/model",
-    "--thinkingLevel",
-    "low",
-    "--ws-url",
-    p.url,
-    "--origin",
-    origin,
-  ];
+  const args = [f.prompt, f.cwd, out, "--ws-url", p.url, "--origin", origin];
   const result = await run(args, "invalid", { PIANO_SESSION_ORIGIN: "invalid" });
   assert.equal(result.code, 0, result.stderr);
   assert.deepEqual(JSON.parse(readFileSync(out, "utf8")), JSON.parse(result.stdout));
-  const create = p.requests.find((m) => m._tag === "create_session");
-  assert.ok(create?._tag === "create_session");
-  assert.deepEqual(create.options, { model: "provider/model", thinkingLevel: "low" });
   const before = p.requests.length;
   const again = await run(args, p.url);
   assert.equal(again.code, 3);
@@ -290,8 +274,9 @@ test("invalid configuration and input fail before network side effects and reser
   const p = await peer(t);
   const out = join(f.dir, "never.json");
   for (const extra of [
-    ["--thinkingLevel", "extreme"],
-    ["--model", "bare-id"],
+    // Removed options: a dispatched session always starts on Piano's default model and effort.
+    ["--model", "provider/model"],
+    ["--thinkingLevel", "low"],
     ["--ws-url", "wss://public.example/ws"],
     ["--origin", `${origin}/`],
     ["--unknown"],

@@ -14,9 +14,9 @@ link a person can open.
 - `list`: `list --project <id>` prints one JSON line per active member session.
 - `follow-up`: `follow-up <sessionId> <prompt-file> [--steer]` sends one more message to the
   session and prints `submission` and `link`.
-- `options`: `--model provider/id` and `--thinkingLevel LEVEL` (otherwise Piano's defaults, printed
-  as `"model": null`, `"thinkingLevel": null`), `--hooks` with `--worktree`, and an optional
-  out-file (exit 3 when it exists).
+- `options`: `--hooks` with `--worktree`, and an optional out-file (exit 3 when it exists). The
+  session always starts on Piano's default model and effort; `--model` and `--thinkingLevel` are
+  unknown options (exit 2).
 - `refusals`: a missing cwd fails locally with exit 2; a refused creation prints
   `"creation":"refused"` and `"submission":"not_sent"`.
 - `needs-input`: on `--fake-pi dialogs`, a prompt starting `ask` leaves the session waiting on a

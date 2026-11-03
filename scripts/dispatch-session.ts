@@ -17,9 +17,7 @@ import {
   startSession,
   withLinks,
 } from "../extensions/piano-dispatch/SessionDispatch.ts";
-import { ThinkingLevel } from "../shared/wire.ts";
 
-const levels = ThinkingLevel.literals.join(", ");
 const usage = `Usage: node scripts/dispatch-session.ts <prompt-file> <cwd> [out-file] [options]
        node scripts/dispatch-session.ts follow-up <sessionId> <prompt-file> [--steer] [--ws-url URL] [--origin ORIGIN]
        node scripts/dispatch-session.ts status <sessionId> [--ws-url URL] [--origin ORIGIN]
@@ -31,8 +29,6 @@ Options:
   --worktree BRANCH     Create a new worktree on new branch BRANCH from <cwd>'s repository and
                         start the session there; a failure creates no session
   --hooks               With --worktree, run approved Worktrunk hooks (default: off)
-  --model provider/id   New session model; omitted uses Piano's default
-  --thinkingLevel LEVEL  ${levels}; omitted uses Piano's default
   --steer               With follow-up, steer the current run at Pi's next tool boundary instead
                         of waiting for it to finish
   --project ID          With list, the project whose active sessions to read
@@ -70,8 +66,6 @@ function argumentsFromCommandLine() {
         help: { type: "boolean" },
         "ws-url": { type: "string" },
         origin: { type: "string" },
-        model: { type: "string" },
-        thinkingLevel: { type: "string" },
         worktree: { type: "string" },
         hooks: { type: "boolean" },
         steer: { type: "boolean" },
@@ -96,9 +90,6 @@ function promptFrom(file: string) {
     throw new CliError(2, (error as Error).message);
   }
 }
-
-const isThinkingLevel = (value: string): value is ThinkingLevel =>
-  (ThinkingLevel.literals as readonly string[]).includes(value);
 
 async function main() {
   const { values, positionals } = argumentsFromCommandLine();
@@ -166,12 +157,6 @@ async function main() {
   const worktree = values.worktree?.trim();
   if (worktree !== undefined && (!worktree || worktree.startsWith("-")))
     throw new CliError(2, "--worktree must name a new branch");
-  const model = values.model;
-  if (model !== undefined && !/^[^/\s]+\/\S+$/.test(model))
-    throw new CliError(2, "--model must be provider/id");
-  const thinkingLevel = values.thinkingLevel;
-  if (thinkingLevel !== undefined && !isThinkingLevel(thinkingLevel))
-    throw new CliError(2, `Invalid --thinkingLevel; choose ${levels}`);
   const { origin } = configured();
   const [promptFile, rawCwd, outFile] = positionals;
   const cwd = resolve(rawCwd);
@@ -200,18 +185,12 @@ async function main() {
       {
         prompt,
         cwd,
-        model,
-        thinkingLevel,
         ...(worktree ? { worktree: { branch: worktree, hooks: values.hooks } } : {}),
       },
       nodeSocketEnvironment(configured()),
     );
     const link = result.handle ? sessionLink(origin, result.handle.sessionId) : null;
-    const json = JSON.stringify(
-      { ...result, link, model: model ?? null, thinkingLevel: thinkingLevel ?? null },
-      null,
-      2,
-    );
+    const json = JSON.stringify({ ...result, link }, null, 2);
     if (output !== undefined) writeFileSync(output, `${json}\n`);
     console.log(json);
   } finally {

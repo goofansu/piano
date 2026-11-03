@@ -360,10 +360,7 @@ test(
   async () => {
     const h = world();
     const baseline = [message("m1", "context", "startup")];
-    const start = startSession(
-      { cwd: asked, prompt: "do the thing", model: "p/m", thinkingLevel: "high" },
-      h.env,
-    );
+    const start = startSession({ cwd: asked, prompt: "do the thing" }, h.env);
     h.last().accept();
     const socket = h.last();
     socket.frame(selected(socket.selection(), snapshotOf({}, baseline)));
@@ -378,7 +375,7 @@ test(
     assert.equal(creations.length, 1);
     assert.deepEqual(
       { cwd: creations[0]!.cwd, text: creations[0]!.text, options: creations[0]!.options },
-      { cwd: asked, text: "do the thing", options: { model: "p/m", thinkingLevel: "high" } },
+      { cwd: asked, text: "do the thing", options: {} },
     );
     assert.equal(result.creation, "created");
     assert.equal(result.submission, "started");
