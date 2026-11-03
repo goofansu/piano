@@ -78,6 +78,7 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "copy-session-id": true,
     "copy-session-path": false,
     changes: true,
+    artifacts: false,
     "session-rail": true,
     agent: false,
     "wrap-changes": true,

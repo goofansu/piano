@@ -94,6 +94,7 @@ let liveStage = 0;
 const steering = [];
 const followUp = [];
 const messages = [];
+const publishedArtifacts = new Set();
 const queueUpdate = () =>
   out({ type: "queue_update", steering: [...steering], followUp: [...followUp] });
 const settle = (last) => {
@@ -784,6 +785,19 @@ function handle(cmd) {
             content: "sk-content-abcdefghijklmnopqrstuvwxyz",
           },
         });
+      // "artifact <id> <confirmed|error> <title>": a radius-artifacts publication, as the bundled
+      // extension's create (an ID not yet published) or update call and its result report it.
+      const artifact = /^artifact (\S+) (confirmed|error) (.+)$/.exec(cmd.message);
+      const artifactTool =
+        artifact &&
+        (publishedArtifacts.has(artifact[1]) ? "radius_artifact_update" : "radius_artifact_create");
+      if (artifact)
+        asst.content.push({
+          type: "toolCall",
+          id: `artifact${messages.length}`,
+          name: artifactTool,
+          arguments: { operationKey: artifact[1], title: artifact[3], content: "# Report" },
+        });
       messages.push(asst);
       if (cmd.message === "live context")
         liveContext = { tokens: 42000, contextWindow: 200000, percent: 21 };
@@ -836,6 +850,29 @@ function handle(cmd) {
           result: { content: [{ type: "text", text: "edited" }] },
           isError: false,
         });
+        messages.push(result);
+        out({ type: "message_end", message: result });
+      }
+      if (artifact) {
+        const confirmed = artifact[2] === "confirmed";
+        if (confirmed) publishedArtifacts.add(artifact[1]);
+        const details = confirmed
+          ? {
+              status: "confirmed",
+              message: "Radius publication confirmed.",
+              artifactId: artifact[1],
+              url: `https://radius.example.test/a/${artifact[1]}`,
+              revision: 1,
+            }
+          : { status: "error", message: "Radius refused the publication." };
+        const result = {
+          role: "toolResult",
+          toolCallId: asst.content.at(-1).id,
+          toolName: artifactTool,
+          content: [{ type: "text", text: JSON.stringify(details) }],
+          details,
+          isError: !confirmed,
+        };
         messages.push(result);
         out({ type: "message_end", message: result });
       }

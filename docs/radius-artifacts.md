@@ -5,6 +5,10 @@ bundled `radius-artifacts` Pi extension publishes the document to Radius and ret
 viewing URL, artifact ID, revision, visibility and expiration. “Update that artifact” keeps the ID
 and URL; “View that artifact” reads the publication, not a file on the Piano host.
 
+The session header counts the artifacts a session published and lists them by title; each opens
+its Radius URL in a new tab. The list is read from the session's own tool results (a confirmed
+create or update), so it holds only what these tools published, and nothing Piano stores.
+
 Artifact requests mean Radius by default. Local files are only staging unless the user explicitly
 asks for local delivery. A failed publication is never silently delivered as a local file.
 
