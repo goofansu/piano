@@ -20,6 +20,42 @@ export function hostedPreview(state: AppState): SessionPreview | undefined {
   return session.state.preview;
 }
 
+/**
+ * The app on screen when a preview action was chosen: the selection showing it, the Pi generation
+ * that owns it (ADR 0003) and its instance. A later Stop or Preview details acts on that app only.
+ */
+export interface PreviewClaim {
+  instanceId: string;
+  selectionId: string | null;
+  generation: string | null;
+}
+
+/** Claims the selected session's app as it is now; none when it has none. */
+export function previewClaim(state: AppState): PreviewClaim | undefined {
+  const preview = hostedPreview(state);
+  return (
+    preview && {
+      instanceId: preview.instanceId,
+      selectionId: state.selectionId,
+      generation: state.session?.cursor?.generation ?? null,
+    }
+  );
+}
+
+/**
+ * Whether the app `claim` named is still the one on screen: the same selection, the same Pi
+ * generation and the same instance. A new attachment, a restarted Pi or a replaced app each end it.
+ */
+export function previewClaimHolds(state: AppState, claim: PreviewClaim): boolean {
+  const now = previewClaim(state);
+  return (
+    !!now &&
+    now.instanceId === claim.instanceId &&
+    now.selectionId === claim.selectionId &&
+    now.generation === claim.generation
+  );
+}
+
 /** Hosts browsers treat as potentially trustworthy, so an HTTPS page may still frame them. */
 const loopback = (hostname: string) =>
   hostname === "localhost" ||

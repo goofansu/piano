@@ -18,6 +18,7 @@ import {
 } from "../web/src/lib/commandForms.ts";
 import type { CommandForm } from "../web/src/lib/commands.ts";
 import { type SessionTarget, sessionCommands } from "../web/src/lib/sessionCommands.ts";
+import { previewClaim, previewClaimHolds } from "../web/src/lib/sessionPreview.ts";
 import type { SendDisposition } from "../web/src/lib/ws.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
@@ -145,6 +146,51 @@ test("preview confirmation stays on its exact attachment, generation and instanc
   assert.equal(forms.submit(), true);
   assert.equal(forms.submit(), false);
   assert.deepEqual(sent, [{ _tag: "act", action: { _tag: "preview_stop", instanceId: "i1" } }]);
+});
+
+// Stop preview and Preview details both act through this claim, so it is the whole identity rule.
+test("a preview claim holds only for the same selection, Pi generation and app instance", () => {
+  const preview = {
+    instanceId: "i1",
+    state: "running" as const,
+    ready: true,
+    warming: false,
+    url: "http://localhost:4000/",
+    port: 4000,
+    command: ["npm", "run", "dev"],
+    detail: "",
+    externalAccess: "same-host" as const,
+    observedAt: 0,
+  };
+  const withSession = (patch: Partial<SessionView>, state: Partial<SessionState> = {}) => ({
+    ...online,
+    session: {
+      ...session,
+      cursor: { cwd: "/repo", sessionId: "s1", generation: "g1", sequence: 1 },
+      ...patch,
+      state: { ...session.state, preview, ...state },
+    },
+  });
+  const current = withSession({});
+  assert.equal(previewClaim(online), undefined, "no app, nothing to claim");
+  const claim = previewClaim(current)!;
+  assert.deepEqual(claim, { instanceId: "i1", selectionId: "sel", generation: "g1" });
+  assert.equal(previewClaimHolds(current, claim), true, "the same app");
+  assert.equal(
+    previewClaimHolds({ ...current, selectionId: "next" }, claim),
+    false,
+    "new selection",
+  );
+  const restarted = withSession({
+    cursor: { cwd: "/repo", sessionId: "s1", generation: "g2", sequence: 1 },
+  });
+  assert.equal(previewClaimHolds(restarted, claim), false, "new Pi generation");
+  const replaced = withSession({}, { preview: { ...preview, instanceId: "i2" } });
+  assert.equal(previewClaimHolds(replaced, claim), false, "replaced app");
+  const stopped = withSession({}, { preview: undefined });
+  assert.equal(previewClaimHolds(stopped, claim), false, "stopped app");
+  const closed = withSession({}, { closure: { _tag: "exited", code: 1, detail: "Pi exited." } });
+  assert.equal(previewClaimHolds(closed, claim), false, "closed session");
 });
 
 test("rename sends the trimmed new title, and refuses an empty or unchanged one", () => {
