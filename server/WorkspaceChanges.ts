@@ -184,7 +184,6 @@ async function preview(
 /** What is still only here, whatever the scope and whether it can be read: edits HEAD lacks
  * (untracked, non-ignored files included) and commits the remote-tracking ref lacks. */
 async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<LocalWork> {
-  const { head, branch } = comparisons;
   const untracked = await checkout.records(["ls-files", "--others", "--exclude-standard", "-z"]);
   const uncommitted =
     untracked.length > 0 ||
@@ -202,7 +201,7 @@ async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<
         { okCodes: [0, 1] },
       )
     ).code === 1;
-  return { commitsNotPushed: await commitsNotPushed(checkout, head, branch), uncommitted };
+  return { commitsNotPushed: await commitsNotPushed(checkout, comparisons), uncommitted };
 }
 
 /** Whether `path` (relative to the workspace, or absolute) names something on disk; a dangling

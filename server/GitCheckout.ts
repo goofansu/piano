@@ -126,14 +126,9 @@ export interface Upstream {
  * usually live in the user's config, so the read keeps it (`userConfig`). */
 const UPSTREAM_FORMAT =
   "%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)%00%(push:remotename)%00%(push)%00%(push:remoteref)";
-const upstreamRead = (branch: string) => [
-  "for-each-ref",
-  `--format=${UPSTREAM_FORMAT}`,
-  `refs/heads/${branch}`,
-];
 
 /**
- * `branch`'s upstream from `upstreamRead`'s answer, as Git would push it. Git names the
+ * `branch`'s upstream from an `UPSTREAM_FORMAT` answer, as Git would push it. Git names the
  * remote-tracking ref a push updates; when it names none (under `push.default=simple`, a branch
  * tracking another name, as after `git switch -c feat origin/main`), the work goes to the
  * branch's own name on its push remote. A local remote (`.`) counts as none. Git names the
@@ -434,8 +429,6 @@ export interface Checkout {
   readonly head: () => Promise<string | null>;
   /** The checked-out branch, or null when detached. */
   readonly branch: () => Promise<string | null>;
-  /** Where `branch`'s work goes and is counted. */
-  readonly upstream: (branch: string) => Promise<Upstream>;
   /** The fetch URL Git would contact, including user-config rewrites; null without that remote. */
   readonly remoteUrl: (name: string) => Promise<string | null>;
   /** Where `branch` lives (`BranchHome`), as this checkout's config answers. */
@@ -518,8 +511,6 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
           : path,
       head: () => optional(["rev-parse", "--verify", "--quiet", "HEAD"]),
       branch: async () => decode((await run(BRANCH)).stdout).trim() || null,
-      upstream: async (branch) =>
-        upstreamOf(branch, decode((await run(upstreamRead(branch), { userConfig: true })).stdout)),
       remoteUrl: (name) => url(["remote", "get-url", name]),
       home: async (branch) =>
         (
