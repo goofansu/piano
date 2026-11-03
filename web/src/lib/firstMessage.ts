@@ -1,10 +1,11 @@
-import type { RenderMsg, ServerMessage, Snapshot } from "@shared/wire";
 /**
  * The browser's record of a session's first message, from the moment it is sent until Pi's own
  * submission supersedes it. It covers failures Pi never sees (a rejected selection, a lost
  * connection) and is never part of Pi's transcript or the registry (INV-01). The store decides
  * when each transition applies; this module decides what each one does to the record.
  */
+import type { RenderMsg, ServerMessage, Snapshot } from "@shared/wire";
+// Relative, not @shared: module tests load this file directly in Node.
 import { inputVerdictOf } from "../../../shared/inputVerdict.ts";
 import { type SubmissionPhase, submissionPhase } from "./submissionReceipt.ts";
 
