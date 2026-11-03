@@ -89,7 +89,10 @@ before queuing any bytes (Pi already exited, input full) is **not sent**, with t
 Nothing is retried or resent. The next run Pi starts retires a receipt with nothing left to report
 (accepted, not sent without an answer, or written for an ordinary dialog), so an earlier run's
 ending never sits under a later one; a pending, uncertain or rejected receipt, an unsent answer,
-or a written answer awaiting its call, stays. This
+or a written answer awaiting its call, stays. Such a receipt also outlasts another dialog's
+closure that carries no answer, such as Stop cancelling it or Pi's exit: that dialog leaves the
+queue, but its own status line is not shown, so the receipt still reporting (and an owned
+answer's later verdict) is not lost. This
 is not durable draft storage across a Piano restart; Pi still owns persisted tool results. When
 several tools run at once, a dialog gets no owner and keeps the recovery policy, as third-party
 dialogs always do.

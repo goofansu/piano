@@ -423,6 +423,42 @@ test("INV-04: broken stdin is delivery-uncertain, never silently reopened or ret
   );
 });
 
+test("INV-04: another dialog's exit closure does not replace an uncertain answer's receipt", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "dialog-pipe-two",
+      });
+      const { dialog } = yield* openDialog(session);
+      const other = yield* openDialog(session);
+      const closedInput = yield* watch(
+        session,
+        (e) => e._tag === "notice" && e.message === "input closed",
+      );
+      yield* session
+        .act({ _tag: "prompt", text: "/close-input" })
+        .pipe(Effect.ignore, Effect.forkChild);
+      yield* Fiber.join(closedInput);
+      const stopped = yield* watch(session, (e) => e._tag === "closed");
+      const failed = yield* session.act(answer(dialog)).pipe(Effect.result);
+      assert.equal(failed._tag, "Failure");
+      yield* Fiber.join(stopped);
+      // Pi's exit settled the other dialog as unanswered; the queue drops it.
+      assert.deepEqual((yield* snapshot(session)).dialogs, []);
+      assert.notEqual(other.dialog.id, dialog.id);
+      const kept = (yield* session.state).dialogResolution;
+      assert.equal(kept?.id, dialog.id, "the do-not-resend receipt stays visible");
+      assert.equal(kept?.delivery, "uncertain");
+      assert.deepEqual(kept?.answer, { title: `Fixture ${dialog.id}`, value: "A" });
+    }).pipe(
+      Effect.provideService(PiRequestTimeoutMs, 3000),
+      Effect.timeout("8 seconds"),
+      Effect.scoped,
+    ),
+  );
+});
+
 test("INV-04: an answer refused after Pi exited, before closure, reads not sent and keeps its words", async () => {
   // Pi's input stops at process exit; closure waits for stdout, which a descendant holds. The
   // test clock keeps that drain open; the end of the stdin sink shows input has stopped.
@@ -627,6 +663,39 @@ test("Stop during a question its tool call owns is confirmed by the tool's end, 
       const closed = (yield* snapshot(session)).state.dialogResolution;
       assert.equal(closed?.reason, "aborted");
       assert.equal(closed?.delivery, "accepted", "exit cannot cast doubt on a confirmed close");
+    }).pipe(Effect.timeout("8 seconds"), Effect.scoped),
+  );
+});
+
+test("Stop with another extension's dialog open leaves an answered question's receipt for its tool's verdict", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "owned-abort-foreign",
+      });
+      const question = yield* openDialog(session, "/ask hold");
+      const written = yield* watch(session, receipt(question.dialog.id, "written"));
+      yield* session.act(answer(question.dialog));
+      yield* Fiber.join(written);
+      const foreign = yield* openDialog(session, "/dialog input");
+      assert.equal(foreign.dialog.toolCallId, undefined);
+      // Stop cancels the foreign dialog; its cancellation is written before abort returns.
+      yield* session.act({ _tag: "abort" });
+      assert.deepEqual((yield* snapshot(session)).dialogs, []);
+      assert.equal((yield* session.state).dialogResolution?.id, question.dialog.id);
+      yield* session.act({ _tag: "prompt", text: "/end-held" });
+      const sent = yield* audit(session);
+      assert.deepEqual(
+        sent.map(({ id, cancelled }) => [id, cancelled === true]),
+        [
+          [question.dialog.id, false],
+          [foreign.dialog.id, true],
+        ],
+      );
+      const verdict = (yield* session.state).dialogResolution;
+      assert.equal(verdict?.id, question.dialog.id);
+      assert.equal(verdict?.delivery, "accepted", "the tool's stored result reaches its receipt");
     }).pipe(Effect.timeout("8 seconds"), Effect.scoped),
   );
 });
