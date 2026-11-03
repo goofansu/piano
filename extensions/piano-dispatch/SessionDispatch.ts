@@ -1148,7 +1148,9 @@ export function sendFollowUp(
             case "selection_rejected":
             case "selection_failed":
             case "error":
-              if (!link.committed()) {
+              // Piano names the input it refused before Pi saw it: never delivered.
+              const refused = message._tag === "error" && message.inputId === inputId;
+              if (!link.committed() || refused) {
                 settle(unsent(message.message));
                 return;
               }

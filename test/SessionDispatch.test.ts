@@ -2129,3 +2129,32 @@ test(
     assert.match(result.detail ?? "", /^Pi has stopped\. Read the session's status/);
   },
 );
+
+test(
+  "a follow-up Piano refused before Pi saw it reports not_sent at once, with Piano's reason",
+  bounded,
+  async () => {
+    const h = world();
+    const sent = sendFollowUp({ cwd, sessionId, text: "x", delivery: "follow-up" }, h.env);
+    h.last().accept();
+    const socket = h.last();
+    socket.frame(selected(socket.selection(), snapshotOf()));
+    const act = h.sentOf("act")[0]!.action;
+    assert.ok(act._tag === "prompt");
+    // The error names the input it refused: Pi never saw it (`ServerMessage` `error.inputId`).
+    socket.frame({
+      _tag: "error",
+      selectionId: socket.selection(),
+      inputId: act.inputId,
+      message: "The session's checkout is gone.",
+    });
+    assert.equal(h.pendingTimers(), 0, "it settles at once, with no grace timer left waiting");
+    assert.deepEqual(await sent, {
+      sessionId,
+      delivery: "follow-up",
+      submission: "not_sent",
+      detail: "The session's checkout is gone.",
+    });
+    assert.equal(h.sentOf("act").length, 1, "the message is sent once");
+  },
+);
