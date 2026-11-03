@@ -64,7 +64,7 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     `Verify Project`, and `main`'s text continues with the composer's directory `repo` and the
     heading `Sessions` / `1`. Capture `02-home`.
 - `crumb`
-  - Action: `ab find role button click --name "Projects" --exact; ab wait --url "**/projects"`
+  - Action: `ab click 'main [data-slot=breadcrumb-link]'; ab wait --url "**/projects"`
   - Result: `ab get url` ends in `/projects` and `ab get title` is `Projects - Piano`. Capture
     `02b-index`.
 - `member-cards`
@@ -89,7 +89,7 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
 - `open-from-palette`
   - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4."; ab press Control+k;
     ab wait "[cmdk-input]"; ab fill "[cmdk-input]" "open project";
-    ab find role option click --name "Open project: Verify Project" --exact;
+    ab wait '[cmdk-list][aria-busy="false"]'; ab find role option click --name "Open project: Verify Project" --exact;
     ab wait --url "**/projects/verify"`
   - Result: `/projects/verify`; beside it, "Move to project: New project". On `/s/verify-loose`
     (no project) the query `project` offers no "Open project" row, only "Add to project: ..."

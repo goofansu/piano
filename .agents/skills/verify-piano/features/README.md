@@ -55,7 +55,7 @@ Keep implementation details out; name user paths, handles, required state, comma
   choices, the first message and reply, reload without resending, a kept draft when not sent.
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
   home; read history and cost; follow up; stop a running reply; archive and delete from the row's
-  menu.
+  menu; the narrow session-menu sheet and its project picker.
 - [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
   per project with folders, count, last activity and the project menu; New project in the header;
   empty and phone.
@@ -65,7 +65,21 @@ Keep implementation details out; name user paths, handles, required state, comma
 - [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
   `follow-up`, `status` and `list --project`, its refusals, and a dialog that needs input.
 - [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and its
-  pull request, and the session rail's Environment, Outputs and Links.
+  pull request, and the desktop session rail's Environment, Outputs and Links (no narrow rail).
 - [Settings › Skills and Prompts](./settings-skills-prompts.md): `/settings/skills` and
   `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
-  empty states. Providers, MCP and Webhooks are reached the same way but not driven here.
+  empty states; the separate agent-authored approval path's real-Pi prerequisite. Providers, MCP
+  and Webhooks are reached the same way but not driven here.
+
+## Coverage boundaries
+
+Report entry points individually: one visited path does not prove every branch in a feature file.
+Keep these prerequisites visible when using the default launch:
+
+- Dialog answers need `--fake-pi dialogs` rather than the browser echo fake; see
+  [Session dispatch](./session-dispatch.md). Neither fake proves that an agent-authored library
+  save writes only the approved file; see [Settings](./settings-skills-prompts.md#gotchas).
+- Managed Preview (including "Not working here?" recovery) needs the isolated real-Pi/native
+  supervisor journey in [`docs/testing.md`](../../../../docs/testing.md#managed-preview-host-journey),
+  `node test/browser/preview.mjs <evidence-directory>`. The default fake's Changes/rail checks
+  are not Preview evidence; authenticated exe.dev access and real-device touch remain separate.
