@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Sink, Stream } from "effect";
+import { ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import { PiCli } from "../server/PiCli.ts";
 import {
@@ -418,6 +419,60 @@ test("INV-04: broken stdin is delivery-uncertain, never silently reopened or ret
       Effect.provideService(PiRequestTimeoutMs, 3000),
       Effect.timeout("8 seconds"),
       Effect.scoped,
+    ),
+  );
+});
+
+test("INV-04: an answer refused after Pi exited, before closure, reads not sent and keeps its words", async () => {
+  // Pi's input stops at process exit; closure waits for stdout, which a descendant holds. The
+  // test clock keeps that drain open; the end of the stdin sink shows input has stopped.
+  const inputStopped = Deferred.makeUnsafe<void>();
+  const observedInput = Layer.effect(
+    ChildProcessSpawner.ChildProcessSpawner,
+    Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      return {
+        ...spawner,
+        spawn: Effect.fn("Test.spawn")(function* (...args: Parameters<typeof spawner.spawn>) {
+          const handle = yield* spawner.spawn(...args);
+          return {
+            ...handle,
+            stdin: handle.stdin.pipe(Sink.ensuring(Deferred.succeed(inputStopped, undefined))),
+          };
+        }),
+      };
+    }),
+  ).pipe(Layer.provide(NodeServices.layer));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "dialog-exit-drain",
+      });
+      const { dialog } = yield* openDialog(session);
+      yield* session
+        .act({ _tag: "prompt", text: "/exit-held-stdout" })
+        .pipe(Effect.ignore, Effect.forkChild);
+      yield* Deferred.await(inputStopped);
+      const failed = yield* session.act(answer(dialog)).pipe(Effect.result);
+      const refused = (yield* session.state).dialogResolution;
+      // Elapse the drain bound before asserting: it ends the descendant holding stdout.
+      const closed = yield* watch(session, (e) => e._tag === "closed");
+      yield* TestClock.adjust(1000);
+      yield* Fiber.join(closed);
+      assert.equal(failed._tag, "Failure");
+      const kept = { title: `Fixture ${dialog.id}`, value: "A" };
+      assert.equal(refused?.delivery, "not-sent", "an answer Pi never received is not uncertain");
+      assert.deepEqual(refused?.answer, kept);
+      // The closure keeps the receipt as it is.
+      assert.equal((yield* session.state).dialogResolution?.delivery, "not-sent");
+      assert.deepEqual((yield* session.state).dialogResolution?.answer, kept);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(TestClock.layer()),
+      Effect.provide(PiSessionsLive.pipe(Layer.provide(observedInput))),
+      Effect.provideService(PiCli, cli),
+      Effect.timeout("8 seconds"),
     ),
   );
 });

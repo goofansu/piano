@@ -150,7 +150,7 @@ export const makeSessionDialogs = ({
           : undefined;
       case "run-started":
         return current.delivery === "accepted" ||
-          current.delivery === "not-sent" ||
+          (current.delivery === "not-sent" && !current.answer) ||
           (current.delivery === "written" && !ownedReceipt(current))
           ? "retired"
           : undefined;
@@ -227,16 +227,28 @@ export const makeSessionDialogs = ({
       resolution.reason === "answered" && answer ? answer : dialogCancellation(dialog.id),
     ).pipe(Effect.result);
     const owned = dialog.toolCallId !== undefined;
-    const final: DialogResolution = {
-      ...resolution,
-      delivery: result._tag === "Success" ? "written" : "uncertain",
-      detail:
-        result._tag === "Success"
-          ? owned
-            ? `${resolution.reason === "answered" ? "Answer" : "Cancellation"} written to Pi. Waiting for the question to close.`
-            : `${resolution.reason === "answered" ? "Answer" : "Cancellation"} written to Pi. Consumption is unconfirmed; Pi sends no UI acknowledgement.`
-          : `Dialog response delivery is uncertain. It will not be retried or reopened. Inspect the session; restart Pi if blocked. ${result.failure.detail}`,
-    };
+    const response = resolution.reason === "answered" ? "Answer" : "Cancellation";
+    // A refusal before any bytes were queued (Pi exited, input capacity) proves Pi never saw it.
+    const final: DialogResolution =
+      result._tag === "Success"
+        ? {
+            ...resolution,
+            delivery: "written",
+            detail: owned
+              ? `${response} written to Pi. Waiting for the question to close.`
+              : `${response} written to Pi. Consumption is unconfirmed; Pi sends no UI acknowledgement.`,
+          }
+        : result.failure.notSent
+          ? {
+              ...resolution,
+              delivery: "not-sent",
+              detail: `${response} not delivered: Pi never received it. It will not be retried or reopened. ${result.failure.detail}`,
+            }
+          : {
+              ...resolution,
+              delivery: "uncertain",
+              detail: `Dialog response delivery is uncertain. It will not be retried or reopened. Inspect the session; restart Pi if blocked. ${result.failure.detail}`,
+            };
     yield* publication.transaction((transaction) =>
       Effect.gen(function* () {
         const state = yield* publication.state;
@@ -250,7 +262,7 @@ export const makeSessionDialogs = ({
             _tag: "state",
             state: { ...state, dialogResolution: final },
           });
-        if (result._tag === "Failure")
+        if (final.delivery === "uncertain")
           yield* transaction.publish({
             _tag: "notice",
             level: "error",

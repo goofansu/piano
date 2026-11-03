@@ -84,10 +84,12 @@ of the batch, or the call's end with the answer stored under its question's ID, 
 **accepted**; an end without it, even with the same text stored for another question, makes it
 **rejected** with the answer kept in the live receipt. The call's end also closes a question
 nobody answered, and an answer arriving after that closure is kept as rejected
-without being sent. Pi's exit leaves a written answer uncertain. Nothing is retried or resent. The
-next run Pi starts retires a receipt with nothing left to report (accepted, not sent, or written
-for an ordinary dialog), so an earlier run's ending never sits under a later one; a pending,
-uncertain or rejected receipt, or a written answer awaiting its call, stays. This
+without being sent. Pi's exit leaves a written answer uncertain; a response the transport refused
+before queuing any bytes (Pi already exited, input full) is **not sent**, with the answer kept.
+Nothing is retried or resent. The next run Pi starts retires a receipt with nothing left to report
+(accepted, not sent without an answer, or written for an ordinary dialog), so an earlier run's
+ending never sits under a later one; a pending, uncertain or rejected receipt, an unsent answer,
+or a written answer awaiting its call, stays. This
 is not durable draft storage across a Piano restart; Pi still owns persisted tool results. When
 several tools run at once, a dialog gets no owner and keeps the recovery policy, as third-party
 dialogs always do.
