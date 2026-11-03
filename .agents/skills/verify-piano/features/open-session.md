@@ -26,6 +26,16 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 - `cost`: "Context usage" opens "Token and cost breakdown" with the reply's tokens and cost.
 - `follow-up`: "Message" plus Enter sends to the same Pi session.
 - `stop`: "Stop" aborts a running reply.
+- `nested-calls`: an opened codemode tool row lists the calls its script made, one line each
+  (status dot, tool name, what it acted on) that opens to its arguments and output. More than 8
+  fold to the last 8 behind "Show all <n> tool calls" (" · <k> failed" in red when any failed),
+  which turns into "Show last 8 tool calls" once opened; a running call older than the last 8
+  stays in view, and an opened fold stays open while calls arrive. Closed, the row's header
+  carries the progress instead: while running the call the script is on, and always
+  "<n> calls" (" · <k> failed" in red). Drive it on
+  `--fake-pi dialogs` from `/new` (its fake Pi cannot continue a seeded session): the first
+  message `codemode 40 fail 2` runs one `code` call with 40 nested calls, 150ms each, then
+  records them in its result.
 - `archive-delete`: the row's "Session menu for <title>" ends with "Archive" and a red "Delete".
   Archiving an idle session acts at once and toasts "Session archived"; Delete asks "Delete
   session?" (`"<title>" and its transcript are removed from Pi's session store. This cannot be

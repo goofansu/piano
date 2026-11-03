@@ -54,6 +54,20 @@ const messages = [
   assistant([{ type: "text", text: "Reply: the CSRF token is stale." }]),
   assistant([call("run", "bash", { command: "npm test" })]),
   result("run", "bash", "ok"),
+  // A codemode call whose script made more nested calls than its fold shows.
+  assistant([call("script", "code", { code: "for (const f of files) await bash(`wc -l ${f}`);" })]),
+  {
+    ...result("script", "code", "12 calls"),
+    nestedCalls: {
+      complete: true,
+      calls: Array.from({ length: 12 }, (_, i) => ({
+        id: `script/${i + 1}`,
+        name: "bash",
+        arguments: { command: `wc -l file-${i + 1}.md` },
+        status: i === 1 ? "error" : "ok",
+      })),
+    },
+  },
   assistant([
     call("questions", "ask_user", {
       questions: [
@@ -141,6 +155,7 @@ const expected = [
   "Question: why does login fail?",
   "Reply: the CSRF token is stale.",
   "Ran",
+  "Called",
   "Answers",
   "Review the login fix.",
   "Session",
@@ -229,20 +244,33 @@ await run(
 
     // Every folding row opens the same way: its whole body, a tool's output included, sits in
     // the fold's animated content, and the glyphs stay on their lines while open.
-    const closed = await page.evaluate(`[...document.querySelectorAll(
-      '[data-slot="collapsible-trigger"][aria-expanded="false"]:not(:disabled)')].map((trigger, i) => {
-      trigger.setAttribute("data-fold-probe", String(i));
-      return trigger.closest('[role="group"]').getAttribute("aria-label");
-    })`);
-    assert.ok(closed.includes("bash tool call"), `closed folds: ${closed.join(" | ")}`);
-    for (const [i] of closed.entries()) {
-      // Centred, so the scroll-to-bottom button never covers the header.
-      await page.ab(
-        "eval",
-        `document.querySelector('[data-fold-probe="${i}"]').scrollIntoView({ block: "center" })`,
-      );
-      await page.ab("click", `[data-fold-probe="${i}"]`);
+    // Opening a codemode call reveals its nested calls' folds, so open in rounds until none is left.
+    const opened = [];
+    for (let round = 0; round < 3; round++) {
+      const closed = await page.evaluate(`[...document.querySelectorAll(
+        '[data-slot="collapsible-trigger"][aria-expanded="false"]:not(:disabled)')].map((trigger, i) => {
+        trigger.setAttribute("data-fold-probe", "${round}-" + i);
+        return trigger.closest('[role="group"]').getAttribute("aria-label");
+      })`);
+      if (!closed.length) break;
+      opened.push(...closed);
+      for (const [i] of closed.entries()) {
+        // Centred, so the scroll-to-bottom button never covers the header.
+        await page.ab(
+          "eval",
+          `document.querySelector('[data-fold-probe="${round}-${i}"]').scrollIntoView({ block: "center" })`,
+        );
+        await page.ab("click", `[data-fold-probe="${round}-${i}"]`);
+        // An opening fold moves the rows below it; click the next one once they have settled.
+        await page.until(`!document.getAnimations().length`);
+      }
     }
+    assert.ok(opened.includes("bash tool call"), `opened folds: ${opened.join(" | ")}`);
+    assert.equal(
+      opened.filter((label) => label === "bash tool call").length,
+      1 + 8,
+      "the top-level bash call and the codemode call's last 8 nested calls open",
+    );
     await page.until(
       `[...document.querySelectorAll('[data-slot="collapsible-content"]')].every((c) => c.dataset.state === "open" && !c.getAnimations().length)`,
     );
@@ -258,12 +286,17 @@ await run(
       })`);
     const leaked = bodies.filter((body) => body.outside.length);
     assert.deepEqual(leaked, [], `fold body outside its content: ${JSON.stringify(leaked)}`);
-    const opened = await page.evaluate(measure);
+    const openRows = await page.evaluate(measure);
     writeFileSync(
       join(process.argv[2] ?? ".scratch/browser/transcript-rows", "offsets-open.json"),
-      JSON.stringify(opened, null, 2),
+      JSON.stringify(openRows, null, 2),
     );
-    const offOpen = opened.filter((row) => Math.abs(row.offset) > 1);
+    for (const first of ["Show all 12 tool calls", "bash"])
+      assert.ok(
+        openRows.some((row) => row.text.startsWith(first)),
+        `no open gutter row starts with ${JSON.stringify(first)}`,
+      );
+    const offOpen = openRows.filter((row) => Math.abs(row.offset) > 1);
     assert.deepEqual(offOpen, [], `open glyphs off their line: ${JSON.stringify(offOpen)}`);
     const tool = '[role="group"][aria-label="bash tool call"]';
     // Tool edges align optically: measure the painted SVG path (including its round stroke),
