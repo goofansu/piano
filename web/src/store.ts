@@ -315,7 +315,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       return {
         ...s,
         selecting: null,
-        pendingCreate: FirstMessage.failed(s.pendingCreate, m.message),
+        pendingCreate: FirstMessage.failed(s.pendingCreate, m),
       };
     // A restored queue goes to its session's draft, which lib/messageDraft keeps (`drafts.follow`).
     case "session": {

@@ -460,6 +460,30 @@ test("a refused creation names nothing and claims nothing", bounded, async () =>
   );
 });
 
+test(
+  "a first message its new session refused before Pi saw it reads not sent",
+  bounded,
+  async () => {
+    const h = world();
+    const start = startSession({ cwd: asked, prompt: "hi" }, h.env);
+    h.last().accept();
+    const socket = h.last();
+    socket.frame(selected(socket.selection(), snapshotOf()));
+    // The error names the input: Piano refused it before Pi saw it, so it may be sent again.
+    socket.frame({
+      _tag: "error",
+      selectionId: socket.selection(),
+      inputId: socket.selection(),
+      message: "Pi is closing.",
+    });
+    const result = await start;
+    assert.deepEqual(
+      [result.creation, result.submission, result.detail, result.handle?.sessionId],
+      ["created", "not_sent", "Pi is closing.", sessionId],
+    );
+  },
+);
+
 test("a dialog on the first prompt returns the handle at once", bounded, async () => {
   const h = world();
   const start = startSession({ cwd: asked, prompt: "migrate" }, h.env);

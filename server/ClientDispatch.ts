@@ -152,12 +152,20 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
             ),
           ),
       // Creation may already have submitted its first message; a failure keeps that uncertain,
-      // unless SessionHosts says it failed before any session existed, so nothing was started.
+      // unless SessionHosts says it failed before any session existed, so nothing was started, or
+      // the session's host refused the first message before Pi saw it, which names it.
       unanswered: ({ selectionId }, reason) =>
         reason._tag === "refused" ||
         (reason._tag === "failed" && reason.error instanceof SessionNotCreated)
           ? { _tag: "selection_rejected", selectionId, message: unansweredText(reason) }
-          : { _tag: "error", message: unansweredText(reason), selectionId },
+          : {
+              _tag: "error",
+              message: unansweredText(reason),
+              selectionId,
+              ...(reason._tag === "failed" && reason.error instanceof InputNotSent
+                ? { inputId: reason.error.inputId }
+                : {}),
+            },
       confirmed: null,
     },
     // A read: it answers every outcome, an unknown session or project included.
