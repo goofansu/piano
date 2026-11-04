@@ -42,10 +42,8 @@ export interface ToolRow {
   outcome: ToolOutcome;
   /** The result's text, else the latest execution preview. */
   output?: string;
-  /** Calls made inside this one: recorded with its result, then any still streaming in. */
-  nested: ToolExecution[];
-  /** False when the result says some nested calls were not recorded. */
-  nestedComplete: boolean;
+  /** Calls made inside this one (codemode): recorded with its result, then any still streaming in. */
+  nested: NestedView;
   /** What the call did, in the tense its outcome calls for ("Running", "Read", "Failed"). */
   verb: string;
   /** False for a tool without its own verb, whose name then follows the generic one. */
@@ -61,6 +59,30 @@ export interface ToolRow {
 }
 
 export type QuestionAnswers = AskUserOutcome;
+
+/** One call a script made, as its line in the parent's row reads. */
+export interface NestedCall {
+  call: ToolExecution;
+  outcome: ToolOutcome;
+  /** The command, path or pattern it acted on. */
+  summary: string;
+}
+
+/** What a tool row shows of the calls made inside it. */
+export interface NestedView {
+  /** Every call, in call order. */
+  calls: NestedCall[];
+  /** In call order: those that stay in view while the rest are folded away. */
+  folded: NestedCall[];
+  /** The fold line's words, to show every call and to fold back; absent when nothing folds. */
+  fold?: { showAll: string; showFewer: string };
+  /** Failed calls among all of them, shown or folded. */
+  failed: number;
+  /** While the parent runs: its newest running call, else its newest call. */
+  latest?: NestedCall;
+  /** False when the result says some nested calls were not recorded. */
+  complete: boolean;
+}
 
 /** One session a dispatch tool started or waited on, as the parent observed it. */
 export interface DispatchFacts {
@@ -133,7 +155,7 @@ export function contextFacts(label: string | undefined): ContextFacts {
 }
 
 /** One line of a message, with markdown prefixes and extra whitespace folded away. */
-export function messageLabel(text: string, max = 80): string {
+function messageLabel(text: string, max = 80): string {
   const line = text
     .replace(/\s+/g, " ")
     .trim()
@@ -407,7 +429,7 @@ function dispatchFacts(
 /** One line that says what a tool call did: the command, the path, or the pattern. A one-line
  * command is its own description. A multi-line command (a heredoc script, a `&&` chain) shows
  * how it starts and how many lines follow; those wait in the row's details. */
-export function summarize(args: string): string {
+function summarize(args: string): string {
   try {
     const a = JSON.parse(args) as Record<string, unknown>;
     const v = a.command ?? a.path ?? a.file_path ?? a.pattern ?? a.url ?? a.query;
@@ -425,7 +447,7 @@ export function summarize(args: string): string {
 }
 
 /** What became of a nested call, in the outcome vocabulary of top-level tool rows. */
-export function nestedOutcome(status: ToolExecution["status"]): ToolOutcome {
+function nestedOutcome(status: ToolExecution["status"]): ToolOutcome {
   switch (status) {
     case "running":
       return "running";
@@ -439,51 +461,42 @@ export function nestedOutcome(status: ToolExecution["status"]): ToolOutcome {
 }
 
 /** A call's nested calls that stay in view while the rest are folded away. */
-export const NESTED_TAIL = 8;
+const NESTED_TAIL = 8;
 
-/** Which of a call's nested calls show while folded, and what the fold line says about the rest. */
-export interface NestedFold {
-  /** In call order: the last `NESTED_TAIL` calls, and any older call still running. */
-  visible: ToolExecution[];
-  /** Calls folded away; zero means there is no fold line. */
-  hidden: number;
-  /** Failed calls among all of them, shown or folded. */
-  failed: number;
-}
-
-/** Folds a script's long run of nested calls to its last few. A running call is never folded
- * away, however old: it is what the script is waiting on. */
-export function nestedFold(nested: ReadonlyArray<ToolExecution>): NestedFold {
-  const tail = nested.length - NESTED_TAIL;
-  const visible = nested.filter((call, i) => i >= tail || call.status === "running");
-  return {
-    visible,
-    hidden: nested.length - visible.length,
-    failed: nested.filter((call) => call.status === "error").length,
-  };
-}
-
-/** What a closed row with nested calls says about them: the call a running script is on, and
- * how many it has made and how many failed. */
-export interface NestedProgress {
-  /** While the parent runs: its newest running call, else its newest call. */
-  latest?: ToolExecution;
-  calls: number;
-  failed: number;
-}
-
-export function nestedProgress(
-  nested: ReadonlyArray<ToolExecution>,
+/** Projects a call's nested calls into what its row shows. A long run folds to its last few; a
+ * running call is never folded away, however old: it is what the script is waiting on. */
+function nestedView(
+  calls: ReadonlyArray<ToolExecution>,
   running: boolean,
-): NestedProgress | undefined {
-  if (!nested.length) return undefined;
-  const latest = running
-    ? (nested.findLast((call) => call.status === "running") ?? nested.at(-1))
-    : undefined;
+  complete: boolean,
+): NestedView {
+  const all = calls.map((call) => ({
+    call,
+    outcome: nestedOutcome(call.status),
+    summary: summarize(call.args),
+  }));
+  const tail = all.length - NESTED_TAIL;
+  const folded = all.filter((c, i) => i >= tail || c.outcome === "running");
+  const hidden = all.length - folded.length;
+  const latest = running ? (all.findLast((c) => c.outcome === "running") ?? all.at(-1)) : undefined;
   return {
+    calls: all,
+    folded,
+    ...(hidden > 0
+      ? {
+          fold: {
+            showAll: `Show all ${all.length} tool calls`,
+            // Folding back keeps an older running call too: the line counts what it will show.
+            showFewer:
+              folded.length === NESTED_TAIL
+                ? `Show last ${NESTED_TAIL} tool calls`
+                : `Show ${folded.length} tool calls`,
+          },
+        }
+      : {}),
+    failed: all.filter((c) => c.outcome === "failed").length,
     ...(latest ? { latest } : {}),
-    calls: nested.length,
-    failed: nested.filter((call) => call.status === "error").length,
+    complete,
   };
 }
 
@@ -566,8 +579,11 @@ export function transcriptRows(
       result,
       outcome,
       ...(output !== undefined ? { output } : {}),
-      nested: [...nested.values()],
-      nestedComplete: result?.nestedCallsComplete !== false,
+      nested: nestedView(
+        [...nested.values()],
+        outcome === "running",
+        result?.nestedCallsComplete !== false,
+      ),
       verb,
       knownTool: !!verbs,
       summary: summarize(call.args),

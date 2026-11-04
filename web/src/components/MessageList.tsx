@@ -57,11 +57,8 @@ import {
   contextFacts,
   type DispatchFacts,
   messageAnchorId,
-  NESTED_TAIL,
-  nestedFold,
-  nestedOutcome,
-  nestedProgress,
-  summarize,
+  type NestedCall as NestedCallLine,
+  type NestedView,
   type QuestionAnswers,
   type ToolOutcome,
   type ToolRow,
@@ -1055,11 +1052,11 @@ function ToolDetails({
 
 /**
  * The calls a script made (codemode), inside its opened tool row. A long run folds to its last
- * few behind one line that counts them all; `nestedFold` decides which stay in view. The fold
+ * few behind one line that counts them all; `transcriptRows` decides which stay in view. The fold
  * line is a full-width disclosure row, not a ghost Button, so its chevron sits in the column of
  * the calls' dots and its text in the column of their names.
  */
-function NestedCalls({ parentId, nested }: { parentId: string; nested: ToolExecution[] }) {
+function NestedCalls({ parentId, nested }: { parentId: string; nested: NestedView }) {
   // Kept per parent call while the transcript is open: new calls arriving leave it as it was.
   const [all, setAll] = useTranscriptDisclosure(`${parentId}:nested`);
   const root = useRef<HTMLDivElement>(null);
@@ -1072,11 +1069,11 @@ function NestedCalls({ parentId, nested }: { parentId: string; nested: ToolExecu
     const row = root.current?.closest<HTMLElement>("[data-index]");
     if (row) measureRow?.(row);
   }, [all, measureRow]);
-  const fold = nestedFold(nested);
-  const shown = all ? nested : fold.visible;
+  const { fold } = nested;
+  const shown = all || !fold ? nested.calls : nested.folded;
   return (
     <div ref={root} data-slot="nested-calls" className="mt-2 flex flex-col gap-2">
-      {fold.hidden > 0 && (
+      {fold && (
         <button
           type="button"
           aria-expanded={all}
@@ -1085,22 +1082,20 @@ function NestedCalls({ parentId, nested }: { parentId: string; nested: ToolExecu
           onClick={() => setAll(!all)}
         >
           <Row as="span" glyph={<DisclosureChevron open={all} />}>
-            {all ? `Show last ${NESTED_TAIL} tool calls` : `Show all ${nested.length} tool calls`}
-            {fold.failed > 0 && <span className="text-err"> · {fold.failed} failed</span>}
+            {all ? fold.showFewer : fold.showAll}
+            {nested.failed > 0 && <span className="text-err"> · {nested.failed} failed</span>}
           </Row>
         </button>
       )}
-      {shown.map((child) => (
-        <NestedCall key={child.id} call={child} />
+      {shown.map((line) => (
+        <NestedCall key={line.call.id} line={line} />
       ))}
     </div>
   );
 }
 
 /** One call a script made: its dot, name and what it acted on, opening to its arguments and output. */
-function NestedCall({ call }: { call: ToolExecution }) {
-  const outcome = nestedOutcome(call.status);
-  const summary = summarize(call.args);
+function NestedCall({ line: { call, outcome, summary } }: { line: NestedCallLine }) {
   return (
     <FoldRow
       glyph={<span className={cn("block size-2 rounded-full", DOT[outcome])} />}
@@ -1136,7 +1131,6 @@ function Tool({
   outcome,
   output,
   nested,
-  nestedComplete,
   verb,
   knownTool,
   summary,
@@ -1156,8 +1150,7 @@ function Tool({
       />
     ));
   const failed = outcome === "failed";
-  const progress = nestedProgress(nested, outcome === "running");
-  const latest = progress?.latest;
+  const { calls, failed: callsFailed, latest } = nested;
 
   return (
     <FoldRow
@@ -1175,18 +1168,16 @@ function Tool({
           )}
           {knownTool && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
           {/* Closed only: an open row lists the calls and counts them on its fold line. */}
-          {progress && !open && (
+          {calls.length > 0 && !open && (
             <>
               {!summary && latest && (
                 <span className="min-w-0 flex-1 truncate font-mono text-ink-2">
-                  {latest.name} {summarize(latest.args)}
+                  {latest.call.name} {latest.summary}
                 </span>
               )}
               <span className="shrink-0 text-ink-3">
-                {progress.calls} {progress.calls === 1 ? "call" : "calls"}
-                {progress.failed > 0 && (
-                  <span className="text-err"> · {progress.failed} failed</span>
-                )}
+                {calls.length} {calls.length === 1 ? "call" : "calls"}
+                {callsFailed > 0 && <span className="text-err"> · {callsFailed} failed</span>}
               </span>
             </>
           )}
@@ -1198,8 +1189,8 @@ function Tool({
       ruled={false}
     >
       <ToolDetails args={call.args} output={output} failed={failed} />
-      {nested.length > 0 && <NestedCalls parentId={call.id} nested={nested} />}
-      {!nestedComplete && (
+      {calls.length > 0 && <NestedCalls parentId={call.id} nested={nested} />}
+      {!nested.complete && (
         <p className="text-xs text-warning">Some tool details are unavailable.</p>
       )}
     </FoldRow>

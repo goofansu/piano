@@ -13,10 +13,6 @@ import type { RenderMsg, ToolExecution } from "../shared/wire.ts";
 import { messageError } from "../web/src/lib/messageError.ts";
 import {
   jumpEntries,
-  NESTED_TAIL,
-  nestedFold,
-  nestedOutcome,
-  nestedProgress,
   type TranscriptOptions,
   type TranscriptRow,
   transcriptRows,
@@ -342,24 +338,15 @@ test("a call's nested calls are those its result recorded plus live executions i
   ];
   const [task, other] = reply(transcriptRows(history, { tools }), "a").tools;
   assert.deepEqual(
-    task!.nested.map((c) => [c.id, c.text]),
+    task!.nested.calls.map(({ call }) => [call.id, call.text]),
     [
       ["task/1", "newer"],
       ["task/2", "task/2"],
       ["child", "child"],
     ],
   );
-  assert.equal(task!.nestedComplete, false);
-  assert.deepEqual([other!.nested, other!.nestedComplete], [[], true]);
-});
-
-test("a nested call's dot reads as a top-level tool's would", () => {
-  assert.deepEqual((["running", "success", "error", "incomplete"] as const).map(nestedOutcome), [
-    "running",
-    "done",
-    "failed",
-    "incomplete",
-  ]);
+  assert.equal(task!.nested.complete, false);
+  assert.deepEqual([other!.nested.calls, other!.nested.complete], [[], true]);
 });
 
 const script = (statuses: ReadonlyArray<ToolExecution["status"]>): ToolExecution[] =>
@@ -367,61 +354,116 @@ const script = (statuses: ReadonlyArray<ToolExecution["status"]>): ToolExecution
     id: `code/${i + 1}`,
     parentId: "code",
     name: "bash",
-    args: "{}",
+    args: JSON.stringify({ command: `step ${i + 1}` }),
     text: "",
     status,
     outputKind: "unavailable",
   }));
-const numbers = (calls: ReadonlyArray<ToolExecution>) => calls.map((c) => Number(c.id.slice(5)));
+/** The nested calls of one codemode call, as its row shows them: recorded with the call's result
+ * once it finished, else streaming in while it runs. */
+const nestedOf = (
+  statuses: ReadonlyArray<ToolExecution["status"]>,
+  { running = false }: { running?: boolean } = {},
+) => {
+  const calls = script(statuses);
+  const history: RenderMsg[] = [
+    {
+      id: "a",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "code", name: "code", args: "{}" }],
+    },
+  ];
+  if (!running)
+    history.push({
+      id: "r",
+      role: "tool_result",
+      toolCallId: "code",
+      text: "",
+      nestedCalls: calls,
+    });
+  const parent: ToolExecution = {
+    id: "code",
+    name: "code",
+    args: "{}",
+    text: "",
+    status: "running",
+    outputKind: "latest-update",
+  };
+  const tools = running
+    ? Object.fromEntries([parent, ...calls].map((call) => [call.id, call]))
+    : {};
+  return reply(transcriptRows(history, { tools }), "a").tools[0]!.nested;
+};
+const numbers = (calls: ReadonlyArray<{ call: ToolExecution }>) =>
+  calls.map(({ call }) => Number(call.id.slice(5)));
+
+test("a nested call's dot reads as a top-level tool's would, beside what it acted on", () => {
+  const { calls } = nestedOf(["running", "success", "error", "incomplete"], { running: true });
+  assert.deepEqual(
+    calls.map((c) => [c.outcome, c.summary]),
+    [
+      ["running", "step 1"],
+      ["done", "step 2"],
+      ["failed", "step 3"],
+      ["incomplete", "step 4"],
+    ],
+  );
+});
 
 test("a script's nested calls fold to its last 8, with the rest counted on the fold line", () => {
-  assert.equal(NESTED_TAIL, 8);
   // Failures both among the folded calls (3, 10) and in the tail (38).
   const statuses = Array.from({ length: 40 }, (_, i) =>
     [3, 10, 38].includes(i + 1) ? ("error" as const) : ("success" as const),
   );
-  const fold = nestedFold(script(statuses));
-  assert.deepEqual(numbers(fold.visible), [33, 34, 35, 36, 37, 38, 39, 40]);
-  assert.equal(fold.hidden, 32);
-  assert.equal(fold.failed, 3, "every failure counts, folded or shown");
+  const nested = nestedOf(statuses);
+  assert.deepEqual(numbers(nested.folded), [33, 34, 35, 36, 37, 38, 39, 40]);
+  assert.equal(nested.calls.length, 40);
+  assert.deepEqual(nested.fold, {
+    showAll: "Show all 40 tool calls",
+    showFewer: "Show last 8 tool calls",
+  });
+  assert.equal(nested.failed, 3, "every failure counts, folded or shown");
 });
 
 test("eight or fewer nested calls all show, with no fold line", () => {
   for (const n of [0, 1, 8]) {
-    const fold = nestedFold(script(Array.from({ length: n }, () => "success" as const)));
-    assert.deepEqual([fold.visible.length, fold.hidden, fold.failed], [n, 0, 0], `${n} calls`);
+    const nested = nestedOf(Array.from({ length: n }, () => "success" as const));
+    assert.deepEqual([nested.folded.length, nested.fold, nested.failed], [n, undefined, 0]);
   }
-  const nine = nestedFold(script(Array.from({ length: 9 }, () => "success" as const)));
-  assert.deepEqual([numbers(nine.visible), nine.hidden], [[2, 3, 4, 5, 6, 7, 8, 9], 1]);
+  const nine = nestedOf(Array.from({ length: 9 }, () => "success" as const));
+  assert.deepEqual(numbers(nine.folded), [2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.equal(nine.fold?.showAll, "Show all 9 tool calls");
 });
 
-test("a nested call still running stays in view however old, in call order", () => {
+test("a nested call still running stays in view however old, and folding back says so", () => {
   const statuses = Array.from({ length: 20 }, (_, i) =>
     i + 1 === 2 ? ("running" as const) : ("success" as const),
   );
-  const fold = nestedFold(script(statuses));
-  assert.deepEqual(numbers(fold.visible), [2, 13, 14, 15, 16, 17, 18, 19, 20]);
-  assert.equal(fold.hidden, 11);
+  const nested = nestedOf(statuses, { running: true });
+  assert.deepEqual(numbers(nested.folded), [2, 13, 14, 15, 16, 17, 18, 19, 20]);
+  // Nine calls stay in view, not the last eight.
+  assert.equal(nested.fold?.showFewer, "Show 9 tool calls");
 });
 
 test("a running script's closed row names the call it is on and counts its calls", () => {
-  const calls = script(["success", "error", "success", "running"]);
-  const progress = nestedProgress(calls, true);
-  assert.equal(progress?.latest?.id, "code/4");
-  assert.deepEqual([progress?.calls, progress?.failed], [4, 1]);
+  const nested = nestedOf(["success", "error", "success", "running"], { running: true });
+  assert.equal(nested.latest?.call.id, "code/4");
+  assert.equal(nested.latest?.summary, "step 4");
+  assert.deepEqual([nested.calls.length, nested.failed], [4, 1]);
   // Between two calls nothing runs: the newest call stands for where the script is.
-  assert.equal(nestedProgress(script(["success", "success"]), true)?.latest?.id, "code/2");
+  assert.equal(nestedOf(["success", "success"], { running: true }).latest?.call.id, "code/2");
   // Calls in parallel: the newest running one, not a later one that already ended.
   assert.equal(
-    nestedProgress(script(["running", "running", "success"]), true)?.latest?.id,
+    nestedOf(["running", "running", "success"], { running: true }).latest?.call.id,
     "code/2",
   );
 });
 
 test("a finished script's closed row counts its calls without naming one", () => {
-  const progress = nestedProgress(script(["success", "error", "error"]), false);
-  assert.deepEqual(progress, { calls: 3, failed: 2 });
-  assert.equal(nestedProgress([], true), undefined, "a call that made no calls says nothing");
+  const nested = nestedOf(["success", "error", "error"]);
+  assert.deepEqual([nested.calls.length, nested.failed, nested.latest], [3, 2, undefined]);
+  assert.equal(nestedOf([], { running: true }).calls.length, 0, "a call that made no calls");
 });
 
 test("a failed aborted tool replaces only the duplicated abort, including pending and reload views", () => {
