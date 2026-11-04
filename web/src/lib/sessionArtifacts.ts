@@ -1,9 +1,10 @@
 /**
  * The Radius artifacts a session published, for the session header's Artifacts menu. Pi's history is
- * the record (INV-01): each comes from a `radius_artifact_create` or `radius_artifact_update` call
- * whose result the bundled extension confirmed (`extensions/radius-artifacts`), so a failed or
- * unconfirmed publication is never listed.
+ * the record (INV-01): each comes from a create or update call of the bundled extension
+ * (`extensions/radius-artifacts`) whose result its shared contract (`shared/radiusArtifacts.ts`)
+ * reads as confirmed, so a failed or unconfirmed publication is never listed.
  */
+import { isPublishingTool, publishedArtifact } from "../../../shared/radiusArtifacts.ts";
 import type { RenderMsg } from "../../../shared/wire.ts";
 
 export interface SessionArtifact {
@@ -13,8 +14,6 @@ export interface SessionArtifact {
   title: string;
   url: string;
 }
-
-const PUBLISHING_TOOLS = new Set(["radius_artifact_create", "radius_artifact_update"]);
 
 function parseObject(text: string): Record<string, unknown> | undefined {
   try {
@@ -50,18 +49,16 @@ function derive(messages: ReadonlyArray<RenderMsg>): SessionArtifact[] {
   for (const message of messages) {
     if (message.role === "assistant") {
       for (const call of message.toolCalls ?? []) {
-        if (!PUBLISHING_TOOLS.has(call.name)) continue;
+        if (!isPublishingTool(call.name)) continue;
         const title = text(parseObject(call.args)?.title);
         if (title) titles.set(call.id, title);
       }
       continue;
     }
     if (message.role !== "tool_result" || message.isError) continue;
-    if (!message.toolName || !PUBLISHING_TOOLS.has(message.toolName)) continue;
-    const result = parseObject(message.text);
-    const id = text(result?.artifactId);
-    const url = text(result?.url);
-    if (result?.status !== "confirmed" || !id || !url) continue;
+    const published = message.toolName && publishedArtifact(message.toolName, message.text);
+    if (!published) continue;
+    const { id, url } = published;
     const title = (message.toolCallId && titles.get(message.toolCallId)) ?? latest.get(id)?.title;
     // Re-inserting moves the artifact to the end: Map order is publication order.
     latest.delete(id);
