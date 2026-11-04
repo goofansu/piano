@@ -30,18 +30,9 @@ import {
   START_TIMEOUT_SECONDS,
   WARMUP_SECONDS,
 } from "./PreviewReadiness.ts";
+import type { PreviewRequest } from "./PreviewRequest.ts";
 
-export interface PreviewRequest {
-  action: "start" | "status" | "stop";
-  workspace: string;
-  command?: string[];
-  env?: Record<string, string>;
-  readyPath?: string;
-  timeoutSeconds?: number;
-  instanceId?: string;
-  /** The exact current instanceId to stop and launch again, with this request's launch. */
-  replace?: string;
-}
+export type { PreviewRequest };
 export interface PreviewConfig {
   origin?: string;
   ports?: number[];
