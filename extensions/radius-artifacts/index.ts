@@ -1,8 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { arr, int, num, obj, opt, type Static, str } from "@earendil-works/pi-schema";
+import { int, obj, opt, type Static, str } from "@earendil-works/pi-schema";
 import { z } from "zod";
+import {
+  RADIUS_ARTIFACT_CREATE_TOOL,
+  RADIUS_ARTIFACT_UPDATE_TOOL,
+  RADIUS_ARTIFACT_VIEW_TOOL,
+  RadiusArtifactResult,
+} from "../../shared/radiusArtifacts.ts";
 import { type Artifact, RadiusClient, RadiusError, safeError } from "./RadiusClient.ts";
 
 const entryType = "radius-artifact-intent-v1";
@@ -50,31 +56,7 @@ const ViewParameters = obj({
   revision: opt(int({ minimum: 1 })),
   path: opt(text),
 });
-const outputSchema = obj({
-  status: StringEnum(["confirmed", "unknown", "error"] as const),
-  message: str(),
-  artifactId: opt(str()),
-  url: opt(str()),
-  revision: opt(int()),
-  latestRevision: opt(int()),
-  visibility: opt(str()),
-  expiresAt: opt(str()),
-  files: opt(arr(obj({ path: str(), content_type: str(), stored_bytes: num() }))),
-  content: opt(str()),
-});
-type Output = {
-  status: "confirmed" | "unknown" | "error";
-  message: string;
-  artifactId?: string;
-  url?: string;
-  revision?: number;
-  latestRevision?: number;
-  visibility?: string;
-  expiresAt?: string;
-  files?: { path: string; content_type: string; stored_bytes: number }[];
-  content?: string;
-};
-function result(data: Output) {
+function result(data: RadiusArtifactResult) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(data) }],
     details: data,
@@ -82,7 +64,7 @@ function result(data: Output) {
     isError: data.status !== "confirmed",
   };
 }
-function metadata(artifact: Artifact, revision: number): Output {
+function metadata(artifact: Artifact, revision: number): RadiusArtifactResult {
   return {
     status: "confirmed",
     message: "Radius publication confirmed.",
@@ -131,7 +113,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
     const run = async (
       ctx: ExtensionContext,
       signal: AbortSignal | undefined,
-      work: (client: RadiusClient) => Promise<Output>,
+      work: (client: RadiusClient) => Promise<RadiusArtifactResult>,
     ) => {
       const key = await token(ctx);
       if (!key)
@@ -162,7 +144,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
         artifactId?: string;
         expectedRevision?: number;
       },
-    ): Promise<Output> => {
+    ): Promise<RadiusArtifactResult> => {
       if (Buffer.byteLength(params.content) > 128 * 1024)
         throw new RadiusError("Document exceeds the 128 KiB publication limit.");
       const fingerprint = createHash("sha256")
@@ -257,7 +239,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
     };
 
     const common = {
-      outputSchema,
+      outputSchema: RadiusArtifactResult,
       executionMode: "sequential" as const,
       annotations: {
         readOnlyHint: false,
@@ -268,7 +250,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
     };
     pi.registerTool({
       ...common,
-      name: "radius_artifact_create",
+      name: RADIUS_ARTIFACT_CREATE_TOOL,
       label: "Create Radius artifact",
       description:
         "Publish a textual artifact to Radius (private). Returns a confirmed Radius viewing URL, identity, revision and expiry, never a local path. An operationKey is a durable intent in Pi history; repeating it only reconciles, never republishes.",
@@ -279,7 +261,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
     });
     pi.registerTool({
       ...common,
-      name: "radius_artifact_update",
+      name: RADIUS_ARTIFACT_UPDATE_TOOL,
       label: "Update Radius artifact",
       description:
         "Publish a new revision to the same Radius artifact and URL, preserving visibility. View first and supply expectedRevision. Reuse the operationKey on uncertain outcomes; retries only read. Replaces the file set; earlier revisions remain available.",
@@ -288,9 +270,9 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
         run(ctx, signal, (client) => publish(client, ctx, params)),
     });
     pi.registerTool({
-      name: "radius_artifact_view",
+      name: RADIUS_ARTIFACT_VIEW_TOOL,
       label: "View Radius artifact",
-      outputSchema,
+      outputSchema: RadiusArtifactResult,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
