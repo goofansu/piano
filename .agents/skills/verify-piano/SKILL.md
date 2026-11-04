@@ -208,12 +208,15 @@ harness journeys clean up their own instance and browser.
   then check the critical paths and one proof run (launch, doctor, drive, cleanup).
 
 - Radix menus and popovers open on pointer events: use `ab.sh ... click` / `find ... click`, never
-  a DOM `.click()` from `eval`. After choosing, wait for
-  `!document.querySelector('[data-radix-popper-content-wrapper]')` before the next step.
+  a DOM `.click()` from `eval`. Before clicking a submenu item, wait for its entrance animation:
+  `ab.sh "$RUN" wait --fn "[...document.querySelectorAll('[role=menu]')].every(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))"`.
+  A click during motion can hit another item. After choosing or Escape, wait for the menu's
+  `[role=menu]` (or the specific popover) to disappear, not every Radix popper wrapper: a tooltip
+  can remain on the focused trigger.
 - After filling the Mod+K query, wait for `'[cmdk-list][aria-busy="false"]'` before selecting
   an option. Pending results can still display a matching row but refuse its action.
-- Opening a session page starts a Pi `probe` (audit `sessionId: "probe"`) for its composer; count
-  only non-probe entries as user-driven Pi starts.
+- Opening a session or populated project home can start a Pi `probe` (audit `sessionId: "probe"`)
+  for an uncached composer catalog; count only non-probe entries as user-driven Pi starts.
 - Fake Pi writes no history: a session started on it is empty again after a backend restart.
   Seeded sessions keep their history.
 - A detached Vite stops picking up edits after a while. If the UI shows old markup, compare

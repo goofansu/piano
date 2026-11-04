@@ -7,23 +7,23 @@ per file), and the desktop session rail (turned on or off for every session from
 sharing the right side with the Surface area: whichever came in last shows), shows where the
 session runs as the Environment section (Folder, or Repository once GitHub is known, then Branch,
 or the commit when HEAD is detached), Outputs, the files Pi wrote or edited in this session, each
-opening a file viewer, and Links, the web links the conversation mentions, each with "Jump to
-message".
-The palette (Mod+K) searches neither outputs nor links.
+opening a file viewer. Plain conversation URLs do not create rail entries. Published Radius
+artifacts have their own header menu ([`open-session.md`](./open-session.md) `artifacts`);
+the palette (Mod+K) does not search individual outputs.
 
 ## Sub-features
 
-- `changes-open`: the header's "Changes" toggle opens the Surface area and is
-  pressed while Changes shows, then named "Hide changes", which hides it; the palette's "Changes"
-  focuses Changes without rereading, collapsing or hiding it. The toggle shows on every layout;
-  below 849px of session width it shows the Changes area (the "Agent" tab bar shows only while
-  something is open: `Agent | Changes`, `Agent | README.md`), and Close in the view's toolbar
-  closes it. Side by side, the header's end holds "Show session rail" / "Hide session rail" and
+- `changes-open`: on desktop the header's "Changes" toggle opens the Surface area and is
+  pressed while Changes shows, then named "Hide changes", which closes that tab; the palette's
+  "Changes" focuses it without rereading, collapsing or hiding it. Below 849px of session width
+  the header button stays named "Changes", without a pressed state, and opens/focuses the area.
+  The tab bar shows only while something is open (`Agent | Changes`, `Agent | README.md`);
+  "Hide changes" in the view's toolbar closes it. Side by side, the header's end holds "Show session rail" / "Hide session rail" and
   this toggle. One area at a time, the rail control is absent; the session menu opens a sheet
   ([`open-session.md`](./open-session.md) `phone-menu`).
 - `changes-scope`: the toolbar starts with the comparison menu, "Comparison: Uncommitted" by
   default (visible text `Uncommitted`), or "Comparison: <target>" (`main`, `origin/main`):
-  Uncommitted compares with HEAD, the branch option with the branch's target (the pull request's
+  Uncommitted compares with HEAD, the branch option with the merge base against its target (the pull request's
   base, the base Worktrunk reported at creation, the remote's default branch, or a local
   main/master). An unavailable option is disabled and shows only its name (on `main`, the
   menuitemradio `main`, since main is the base branch). The choice is saved for the session. The toolbar's actions are Collapse all
@@ -39,8 +39,8 @@ The palette (Mod+K) searches neither outputs nor links.
   running|passed|failed|unavailable" (unavailable: the token reads the pull request but not its
   checks), "Approved" / "Changes requested" / "Review required", "<n> commits not pushed", "Edits not
   committed", and `head → base` only when the head is not the inspected branch; "Status
-  unavailable" when GitHub cannot be read (the seed's `#222` without a `gh`), with gh's cause in
-  the error toast. Its "Pull request
+  unavailable" when GitHub cannot be read (the seed's `#222` without a configured `gh`).
+  Ordinary status reads do not promise an error toast; explicit link/discovery failures do. Its "Pull request
   actions" menu: Open pull request, Change link…, Find from branch, Remove link
   (toasts "Pull request linked" / "Pull request link removed"). PR linking is absent from both
   session menus. The palette's "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
@@ -55,28 +55,30 @@ The palette (Mod+K) searches neither outputs nor links.
 - `changes-list`: list "Changed files" with one collapsible row per file
   (`<path>[, new | , deleted], <n> added, <n> removed: collapse`), the path on one line (its
   directory truncated first), the file name green when new (untracked) and red, struck through,
-  when deleted, "Binary" beside the size, an "Ask about <path>" button, and the diff, region
-  "Diff of <path>".
+  when deleted, "Binary" instead of line counts for binary files, an "Ask about <path>" button
+  when asking is available, and the diff, region "Diff of <path>". Large patches may start
+  collapsed; Ask needs an open, readable patch.
 - `changes-refresh`: "Refresh changes" re-reads the workspace after files change.
-- `changes-close`: "Hide changes" (or Escape inside it) hides the area and returns focus to the header's "Changes" icon;
-  reopening shows the same scroll and expanded files.
+- `changes-close`: "Hide changes" closes that tab; Escape inside the area does so on desktop.
+  The area hides only if no other tab remains. A header click keeps focus on that header button;
+  closing from inside restores lost focus to a remaining tab, otherwise the rail/menu trigger.
+  Reopening Changes preserves its scroll and expanded files.
 - `details-open`: the list icon left of "Changes" in the header, named "Show session rail" / "Hide session
   rail", turns the session rail on or off; it stays on
   across sessions and reloads, hides while a Surface tab shows, and returns when the last one
   closes; turned on over open tabs, it hides them until the rail goes off. It is offered even
   without Git. One area at a time, neither the header nor the palette offers the rail. The header
   shows folder/repository and branch below the title; the session menu holds actions and the
-  linked pull request, not Environment copy menus, Outputs or Links. Widen to use those sections;
+  linked pull request, not Environment copy menus or Outputs. Widen to use those sections;
   the desktop rail preference is kept.
 - `environment`: the rail's "Environment" rows are menu buttons named `Folder: repo`, `Branch:
   main` (field names are screen-reader only in the visible text), and, when a pull request is
   linked, a "Pull request" row showing its number without a hash (`222` on the seed). The Folder
   row's menu has "Copy working directory" (a Repository row's also "Copy repository name"), the
-  Branch row's "Copy git branch" (a detached commit's "Copy commit SHA"), each with "Open … on
-  GitHub" once the repository is known. The rail shows no row for the working directory itself.
-- `files-list`: The rail's "Outputs" lists files written in the session by name only, and its
-  "Links" (heading "Links <n>") lists the conversation's five most recent web links, each with "Jump to
-  message", and "Show all" past five. Either section appears only once it has a row.
+  Branch row's "Copy git branch" (a detached commit's "Copy commit SHA"). Repository and branch
+  rows also offer "Open … on GitHub" when their URLs are known. The rail shows no row for the working directory itself.
+- `files-list`: The rail's "Outputs" lists files written in the session by name only, and
+  appears only once it has a row. There is no Links section.
 - `file-viewer`: an Outputs row opens the file in a tab of its own at the strip's end (tab = file
   name, toolbar = path, "Close <file name>" on the tab, or in the toolbar where one area shows at
   a time); opening it again shows the same tab.
@@ -86,7 +88,8 @@ The palette (Mod+K) searches neither outputs nor links.
 - Session page header → the "Changes" icon; the palette's "Changes" does the same, "Hide changes" and (one area at a time) "Agent" go back.
 - Desktop session page header → "Show session rail" → an Outputs row → a file; the palette's
   "Show session rail" / "Hide session rail" does the same while the areas fit side by side.
-- The same diff over HTTP: `POST /api/workspace/changes?workspaceId=<id>` with an allowed Origin.
+- The Uncommitted diff over HTTP: `POST /api/workspace/changes?workspaceId=<id>` with an allowed
+  Origin; this workspace endpoint does not apply the session's saved branch comparison.
 
 ## Driving it with agent-browser
 
@@ -112,14 +115,15 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Action: `rm "$REPO/new.txt"; ab find role button click --name "Refresh changes" --exact`
   - Result: `new.txt` leaves the list; `src/answer.ts` stays. Capture `02-refreshed`.
 - `changes-close`
-  - Action: `ab find role button click --name "Hide changes" --exact`
+  - Action: with only Changes open, `ab click 'main header [aria-label="Hide changes"]'`
   - Result: `document.querySelector('[data-slot=surface-area]:not([inert])')` is null and the
-    focused element is the header's "Changes" button.
+    focused element is the header's "Changes" button. Scope the click: the tab also has a
+    "Hide changes" button, whose focus-restoration path differs.
 - `details-open`, `environment`, `files-list` and `file-viewer`
   - Action: `ab find role button click --name "Show session rail" --exact;
     ab wait "[data-slot=session-rail]:not([inert])"`
   - Result: `ab eval "document.querySelector('[data-slot=session-rail]:not([inert])').innerText"`
-    is `Environment` / `repo` / `main` / `222` / `Outputs` / `answer.ts` (no Links yet; the
+    contains `Environment` / `repo` / `main` / `222` / `Outputs` / `answer.ts` (no Links section; the
     Folder / Branch / Pull request labels are screen-reader only, and `222` is the seed's linked
     PR): bordered lists of icon rows; each heading folds its section, and folds are remembered
     across reloads. Capture `03-rail`.
@@ -127,17 +131,18 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     and "Folder: repo" one of `Copy working directory` (Escape each). Then
     `ab find role button click --name "answer.ts" --exact; ab wait '[aria-label="Close answer.ts"]'`
     opens a tab `answer.ts` with toolbar `src/answer.ts`, the file's current contents and "Close
-    answer.ts" on the tab, and the rail hides; `ab find role button click --name "Close answer.ts" --exact`
-    shows the rail again. Capture `03-file-viewer`.
-  - Links: send `Read https://example.com/docs/guide please` from the composer; fake Pi echoes
-    it, and the rail gains `Links` / `1` / `example.com/docs/guide` with "Jump to message".
-    Capture `04-links`.
+    answer.ts" on the tab, and the rail hides. Capture `03-file-viewer` while it is open;
+    `ab find role button click --name "Close answer.ts" --exact` shows the rail again.
+  - Plain URL: `ab fill '[aria-label="Message"]' 'Read https://example.com/docs/guide please';
+    ab press Enter; ab wait --text 'echo: Read https://example.com/docs/guide please'`.
+    The transcript contains the URL, but the rail still has only Environment and Outputs.
+    Capture `04-no-links`.
   - Narrow: with Changes open, `ab set viewport 700 800;
     ab wait '[role=tablist][aria-label="Session views"]'`: tabs read `Agent | Changes`.
     The header shows `repo · main` below the title and offers Changes and
     "Session information and actions", not Show session rail. Capture `05-narrow-changes`.
     Drive [`open-session.md`](./open-session.md) `phone-menu` for its sheet, dismissal and resize
-    checks. Outputs, Links and Environment copy menus require widening; there is no narrow rail
+    checks. Outputs and Environment copy menus require widening; there is no narrow rail
     sheet or Outputs picker. Phone viewport evidence is emulation, not a real-device keyboard,
     safe-area or touch-scroll check.
 
@@ -152,4 +157,4 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
 - "Changes" is the header's icon, the narrow tabs and the palette; neither the session header's menu nor
   the sidebar's "Session menu for <title>" has a Changes item.
 - A non-Git folder's header has no "Changes" icon; the palette lists Changes disabled with "Not a
-  Git repository"; narrow, there are no tabs.
+  Git repository". Other open Surface content can still give a non-Git session narrow tabs.
