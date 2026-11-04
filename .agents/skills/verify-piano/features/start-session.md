@@ -8,12 +8,14 @@ the session without sending the message again; a message that cannot be sent kee
 ## Sub-features
 
 - `choose-folder`: combobox "Directory" lists registered folders and "Browse…", plus "Worktrees"
-  once a folder is chosen. With exactly one registered folder it is chosen already.
+  for a registered checkout. `/new` defaults to the last-used directory, otherwise the first
+  registered folder; a fresh `/projects/<id>/new` needs a directory choice.
 - `model-effort`: the "Model: <model>; effort: <level>" button picks a model and effort, passed to
   Pi as `--model` and `--thinking`.
 - `project`: the "Project" button lists "New project…" and the projects, filing the new session
   in the one chosen ("None" clears a choice).
-- `first-message`: combobox "First message" plus Enter or "Send" starts the session and lands on it.
+- `first-message`: combobox "First message" plus "Send" starts the session and lands on it.
+  Desktop Enter sends; on a coarse-pointer device Enter inserts a newline.
 - `reload`: reloading `/s/<id>` shows the same transcript and sends no second prompt.
 - `not-sent`: when the socket is down, Send is disabled and Enter keeps the draft without
   creating a session. A send refused at the delivery boundary can instead show "Message not
@@ -44,9 +46,11 @@ project and reload on its own scratch instance, with its own folders and models 
     (selected), `Browse…`, `Worktrees`. `ab find role option click --name "repo" --exact`.
     Capture `01-new`.
 - `first-message`
-  - Action: `ab fill '[aria-label="First message"]' "hello verify"; ab press Enter;
+  - Action: `ab fill '[aria-label="First message"]' "hello verify";
+    ab wait --fn "!document.querySelector('[aria-label=Send]').disabled"; ab press Enter;
     ab wait --text "echo: hello verify"`
-  - Result: the URL becomes `/s/<uuid>`; the header text reads `hello verify` / `Ready`.
+  - Result: the URL becomes `/s/<uuid>`; the visible header title is `hello verify`, with
+    screen-reader `role=status` text `Ready`.
     Capture `02-reply`.
   - Side effect: the audit has one `start` for that session ID with `--session-id <uuid>`,
     `--model fake/alpha`, `--thinking medium`, `"cwd": "$REPO"` (the chosen folder), and the run's

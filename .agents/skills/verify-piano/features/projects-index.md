@@ -45,11 +45,12 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/projects"; ab wait --text "Verify Project";
     ab eval "[...document.querySelectorAll('main [data-slot=item]')].map(b => b.innerText.replace(/\n+/g, ' | '))"`
   - Result: `["Verify Project | repo · 1 session | 1 hour ago", "Empty Project | No sessions yet"]`;
-    "Loose session" (no project) appears nowhere. Capture `01-index`.
-  - Action: `ab click 'main [data-slot=item-title] button'; ab wait --url "**/projects/verify"`
+    "Loose session" (no project) is absent from these main-pane rows. Capture `01-index`.
+  - Action: `ab click 'main [data-slot=item]:has([aria-label="Project menu for Verify Project"]) [data-slot=item-title] button';
+    ab wait --url "**/projects/verify"`
   - Result: the home's header reads `Projects` / `/` / `Verify Project`. Capture `02-home`.
 - `row-menu`
-  - Action: back on `/projects`, `ab find role button click --name "Project menu for Verify Project" --exact;
+  - Action: back on `/projects`, `ab click 'main [aria-label="Project menu for Verify Project"]';
     ab snapshot -i | rg menuitem; ab press Escape`
   - Result: menuitems `Project settings`, `Delete project`.
 - `sidebar-row`
@@ -74,7 +75,8 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     yet`, and its Project settings dialog shows the instructions. Creating changes the database;
     relaunch afterwards.
 - `address`
-  - Action: `ab click 'main [data-slot=item-title] button'; ab wait --url "**/projects/verify"; ab back;
+  - Action: back on `/projects`, `ab click 'main [data-slot=item]:has([aria-label="Project menu for Verify Project"]) [data-slot=item-title] button';
+    ab wait --url "**/projects/verify"; ab back;
     ab wait --url "**/projects"; ab get title`
   - Result: `Projects - Piano`.
 - `empty`
@@ -84,14 +86,17 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   - Action: `ab set viewport 390 844; ab open "$WEB_URL/projects"; ab wait --text "Verify Project";
     ab eval "document.documentElement.scrollWidth + ' ' + document.documentElement.clientWidth"`
   - Result: `390 390`. Capture `07-phone`.
-- Side effects: the index starts no Pi. From the baseline, `rg -c '"command":"prompt"' "$AUDIT"`
-  finds nothing.
+- Side effects: the index starts no Pi. Compare `start` audit counts immediately before and
+  after index-only navigation (`rg -c '"command":"start"' "$AUDIT"`, treating an absent audit as
+  zero). This multi-page recipe also opens session pages, which can start catalog probes;
+  absence of `prompt` alone does not prove absence of Pi starts.
 
 ## Gotchas
 
 - Rows are `Item`s with `role=listitem`, as the project home's rows are; the button inside is the
-  row's title, named by the project, which a project-grouped sidebar repeats. Click
-  `main [data-slot=item-title] button` rather than `find role button --name <project>`.
+  row's title, named by the project, which a project-grouped sidebar repeats. Scope to `main`
+  and identify the intended row by its project-menu label as above; the bare title selector
+  matches every project, so the first match changes with activity order.
 - `--exact` on "Projects" matters: the sidebar's group buttons and "New session in <name>" also
   contain the word on a project-grouped sidebar.
 - Times are relative and age while you drive.

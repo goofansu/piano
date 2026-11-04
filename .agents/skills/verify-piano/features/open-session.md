@@ -1,7 +1,7 @@
 # Open and continue a session
 
 A saved session opens from the sidebar, a project home or the Mod+K palette at `/s/<sessionId>`
-with its Pi history, its header (project, title, folder, branch), and its usage in the
+with its Pi history, its project/title header, and its usage in the
 "Context usage" popover. The user sends follow-ups in the "Message" box and stops a running reply
 with "Stop". The row's "Session menu for <title>" archives or deletes it.
 
@@ -20,6 +20,9 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
   Archive and Delete; Preview appears only when one is known. It has no Outputs, Links,
   Environment copy menus or session ID. Escape returns focus to its trigger; widening closes it
   and narrowing again does not reopen it.
+- `artifacts`: when the session has confirmed Radius publications, the header's "Artifacts: <n>"
+  button lists their titles as new-tab links. Updating an artifact keeps one entry with its latest
+  title. The palette's "Artifacts" opens the same menu; plain URLs are not publications.
 - `row-details`: View options → Show → "Folder and branch" (off by default, remembered per
   browser; the palette's "Show folder and branch" / "Hide folder and branch") adds a line under
   each sidebar row with its folder and branch (only the branch where the group names the folder).
@@ -37,10 +40,11 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
   message `codemode 40 fail 2` runs one `code` call with 40 nested calls, 150ms each, then
   records them in its result.
 - `archive-delete`: the row's "Session menu for <title>" ends with "Archive" and a red "Delete".
-  Archiving an idle session acts at once and toasts "Session archived"; Delete asks "Delete
+  Archiving an idle session without an owned app acts at once and toasts "Session archived"; Delete asks "Delete
   session?" (`"<title>" and its transcript are removed from Pi's session store. This cannot be
-  undone.`) and toasts "Session deleted". A working session asks "Stop and archive this
-  session?" first. The same menu sits on project home rows.
+  undone.`) and toasts "Session deleted". A working session or one owning an app asks
+  "Stop and archive this session?" first; deleting an app owner also warns about stopping the app.
+  The same menu sits on project home rows.
 
 ## How to get to it (user POV)
 
@@ -85,8 +89,9 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 - `row-details`
   - Action: `ab find role button click --name "View options" --exact;
     ab find role menuitem click --name "Show" --exact;
+    ab wait --fn "[...document.querySelectorAll('[role=menu]')].every(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))";
     ab find role menuitemcheckbox click --name "Folder and branch" --exact;
-    ab wait --fn "!document.querySelector('[data-radix-popper-content-wrapper]')"`
+    ab wait --fn "!document.querySelector('[role=menu]')"`
   - Result: `ab eval "document.querySelector('nav[aria-label=Sessions]').innerText"` gives each row
     `Folder:` / `repo` / `Git branch:` / `main` under its title. Capture `05-folder-and-branch`.
 - `cost`
@@ -111,9 +116,26 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     navigation "Sessions". Capture `04-archived`. Delete is driven on the project home
     ([`project-home.md`](./project-home.md) `row-actions`). Both change the database; relaunch
     afterwards.
+- `artifacts` (separate `--fake-pi dialogs` launch, from `/new`)
+  - Action: `ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
+    ab fill '[aria-label="First message"]' 'artifact verify confirmed Verification report';
+    ab wait --fn "!document.querySelector('[aria-label=Send]').disabled"; ab click '[aria-label=Send]';
+    ab wait '[data-artifacts-trigger]'; ab find role button click --name 'Artifacts: 1' --exact`
+  - Result: menuitem `Verification report`, `href=https://radius.example.test/a/verify`,
+    `target=_blank`. Capture `08-artifact-menu`; inspect the link with
+    `ab eval "document.querySelector('[role=menuitem]')?.getAttribute('href')"` rather than opening
+    this fake URL. `ab press Escape; ab wait --fn "!document.querySelector('[role=menu]')"`.
+  - Update: `ab fill '[aria-label="Message"]' 'artifact verify confirmed Revised report';
+    ab press Enter; ab wait --text 'Revised report';
+    ab find role button click --name 'Artifacts: 1' --exact`.
+    The same URL now has title `Revised report`, still one entry. Capture `09-artifact-update`.
+    Escape, then Mod+K → query `artifacts` → wait for the palette to settle → "Artifacts"
+    opens the same menu. This proves rendering of fake confirmed tool results, not Radius
+    publication or authenticated access.
 
 ## Gotchas
 
-- Opening any session page starts a `probe` Pi; it is not a resend.
+- Opening a session can start a `probe` Pi for an uncached composer catalog; it is not a resend.
 - "hold" must be the whole prompt for the fake Pi to keep running.
-- The Session column of the cost popover shows `—` on fake Pi; only the Response column is real.
+- Fake Pi supplies Session cost, not Session token totals (those remain `—`). After the seeded
+  loose session's `second` reply, Response cost is `$0.0063` and Session cost `$0.0126`.

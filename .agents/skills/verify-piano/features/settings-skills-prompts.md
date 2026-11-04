@@ -28,8 +28,8 @@ sidebar's Settings opens Providers; the palette lists each section by name.
 - `prompt-row-actions`: "Prompt actions <name>" holds View then a red Delete. View shows the
   prompt file with "Copy prompt"; Delete asks "Delete prompt?" with the same "sessions started
   from now" wording and toasts "Prompt deleted".
-- `palette-new`: on Skills, Mod+K offers "New skill"; on Prompts, "New prompt" (and from other
-  screens after typing `settings` / `prompt` / `skill`).
+- `palette-new`: on Skills, Mod+K offers "New skill"; on Prompts, "New prompt". From other
+  screens, search `skill` / `prompt` to open that Settings section first.
 
 ## How to get to it (user POV)
 
@@ -40,7 +40,8 @@ sidebar's Settings opens Providers; the palette lists each section by name.
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`.
+`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Mod+K is `Control+k` on Linux,
+`Meta+k` on macOS.
 
 - `open-settings`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/"; ab wait --text "Loose session";
@@ -53,7 +54,8 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab find role button click --name "New skill" --exact; ab wait "[role=dialog]"`
   - Result: dialog reads `New skill` / `Saved in Piano…` / `Name` / `Description` /
     `0 / 1,024` / `Instructions` / `0 / 20,000` / `Disable model invocation` / `Cancel` /
-    `Create skill`. Capture `02-new-skill`. Escape closes it without saving.
+    `Create skill`. Capture `02-new-skill`. Escape closes it without saving; reopen with
+    `ab find role button click --name "New skill" --exact` before the next step.
   - Action: in the open New skill dialog,
     `ab find role textbox fill --name "Name" --exact "verify-skill";
     ab find role textbox fill --name "Description" --exact "Maintain verification";
@@ -80,7 +82,8 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab wait --text "verify-prompt"`
   - Result: before Create, the dialog matches New skill minus Disable model invocation; after,
     toast `Prompt created` and main lists `verify-prompt` / `A short verify prompt`. Capture
-    `03-prompt-created`. Creating changes the database; relaunch afterwards for a clean seed.
+    `03-prompt-created`. Creating writes a file beside the scratch database; continue with
+    `prompt-row-actions` before relaunching for a clean seed.
 - `prompt-row-actions`
   - Action: after `new-prompt`, wait out the create toast first
     (`ab wait --fn "!document.querySelector('[data-sonner-toast]')"`), then
@@ -96,7 +99,7 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab fill "[cmdk-input]" "new prompt"; ab wait '[cmdk-list][aria-busy="false"]';
     ab find role option click --name "New prompt" --exact; ab wait '[role=dialog]'`
   - Result: the New prompt dialog opens. Capture `07-palette-new`; Escape closes it.
-    `Prompts` / `Skills` are listed when the query is `settings`.
+    Search `prompt` or `skill` for `Prompts` / `Skills`; the query `settings` does not match them.
 - Side effects: Skills and Prompts pages start no Pi. A new session's fake-Pi `start` audit gains
   `--prompt-template "$RUN/db/prompts"` and `--skill "$RUN/db/skills"` (paths under the run's
   database dir); proving a template reaches Pi needs a real or scripted model, not fake Pi.
@@ -104,11 +107,18 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 ## Gotchas
 
 - Pi's own prompt and skill folders are not listed; only Piano-created ones appear.
-- "Sessions started from now" is literal: an already-running session keeps the set it started with.
+- "Sessions started from now" means no automatic refresh of an already-running session's set;
+  Pi's explicit `/reload` is a separate path, not proved by this CRUD recipe.
 - Name and Description are required; Create stays off while either is empty or over the limit.
 - The create toast covers the row's actions button until it leaves; wait
   `!document.querySelector('[data-sonner-toast]')` before opening the menu.
-- Fake Pi does not exercise slash-completion of a prompt or model invocation of a skill.
+- The browser fake discovers saved prompt/skill names for slash-completion, but does not expand
+  templates or invoke skills. For a separate completion check, keep both entries instead of
+  deleting the skill first. Choose a fresh scratch directory in `/new` through Directory →
+  Browse… (a previously visited directory may have a cached catalog),
+  then `ab fill '[aria-label="First message"]' '/verify'; ab wait --text "verify-prompt"`:
+  listbox "Slash commands" offers `/verify-prompt` and `/skill:verify-skill`. Capture this
+  separately from Settings CRUD; clear the draft rather than claiming a model used either file.
 - Agent-authored saves are a separate user path: ask a session to create or update a Piano skill
   or prompt; its proposal shows the new file or update diff, with Save skill / Save prompt and
   Cancel. A proposal containing hidden text offers only Cancel. Manual Settings CRUD does not

@@ -2,7 +2,7 @@
 
 A project's home at `/projects/<id>` lists its member sessions as hairline rows (title, folder,
 branch, PR number, last activity) under a "Sessions" heading that carries their count, newest
-first, and starts a new session filed in the project. Its header is the breadcrumb "Projects /
+first on entry (rows stay put while the page remains open), and starts a new session filed in the project. Its header is the breadcrumb "Projects /
 <name>". Users reach it from the session header, the sidebar's project groups and the Mod+K
 palette, and the Projects index from its crumb. Deleting a project
 moves its sessions to "No project"; unknown IDs show "Project not found".
@@ -68,16 +68,18 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   - Result: `ab get url` ends in `/projects` and `ab get title` is `Projects - Piano`. Capture
     `02b-index`.
 - `member-cards`
-  - Action: read the rows, then open the only one.
-    `ab eval "[...document.querySelectorAll('main [data-slot=item]')].map(b => b.innerText.replace(/\n+/g, ' | '))"`;
+  - Action: return from the index to `/projects/verify`, then read the rows and open the only one.
+    `ab open "$WEB_URL/projects/verify"; ab wait --text "Plan the verification";
+    ab eval "[...document.querySelectorAll('main [data-slot=item]')].map(b => b.innerText.replace(/\n+/g, ' | '))"`;
     `ab click 'main [data-slot=item-title] button'; ab wait --url "**/s/verify-plan"`
   - Result: exactly one row, `Plan the verification | repo | main | Pull request | 222 | 1 hour ago`; "Loose
     session" (no project) is absent; the click lands on `/s/verify-plan`. Capture `03-card-opened`.
 - `open-from-sidebar`
   - Action: `ab find role button click --name "View options" --exact;
     ab find role menuitem click --name "Group by Date" --exact;
+    ab wait --fn "[...document.querySelectorAll('[role=menu]')].every(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))";
     ab find role menuitemradio click --name "Project" --exact;
-    ab wait --fn "!document.querySelector('[data-radix-popper-content-wrapper]')";
+    ab wait --fn "!document.querySelector('[role=menu]')";
     ab find role button click --name "New session in Empty Project" --exact;
     ab wait --url "**/projects/empty"` (the button shows on hover; `find role button` reaches it)
   - Result: `/projects/empty`; the sidebar shows groups "Empty Project", "Verify Project" and "No
@@ -95,7 +97,7 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     (no project) the query `project` offers no "Open project" row, only "Add to project: ..."
     rows (New project, Empty Project, Verify Project).
 - `settings`
-  - Action: on `/projects/verify`, `ab find role button click --name "Project menu for Verify Project" --exact;
+  - Action: on `/projects/verify`, `ab click 'main [aria-label="Project menu for Verify Project"]';
     ab find role menuitem click --name "Project settings" --exact; ab wait "[role=dialog]";
     ab find role textbox fill --name "Instructions" --exact "Reply tersely.";
     ab find role button click --name "Save" --exact`
@@ -107,12 +109,12 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     ab click '[aria-label="Send"]'; ab wait --text "echo: from project home"`
   - Result: combobox "Directory" read `repo` before sending, and no "Project" button; the send
     lands on `/s/<new id>`, and back on `/projects/verify` the heading reads `Sessions` / `2`
-    with the new row first. Capture `05-new-in-project`. Sending changes the database; relaunch afterwards.
-- `row-actions` (after `new-in-project`, on that new session, so the seed's row stays for
-  `delete`)
-  - Action: `ab find role button click --name "Session menu for from project home" --exact;
+    with the new row first. Capture `05-new-in-project`. Continue with `row-actions` before relaunching.
+- `row-actions` (after `new-in-project`, back on the home, so the seed's row stays for `delete`)
+  - Action: `ab open "$WEB_URL/projects/verify"; ab wait --text "from project home";
+    ab click 'main [aria-label="Session menu for from project home"]';
     ab find role menuitem click --name "Archive" --exact`; then send `to delete` from the home's
-    composer, come back, and `ab find role button click --name "Session menu for to delete" --exact;
+    composer, come back, and `ab click 'main [aria-label="Session menu for to delete"]';
     ab find role menuitem click --name "Delete" --exact; ab wait --text "Delete session?"`,
     capture `08-delete-session`, `ab find role button click --name "Delete" --exact`
   - Result: toast `Session archived`, the row gone and the heading back to `Sessions` / `1`;
@@ -120,7 +122,7 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     cannot be undone.`; toast `Session deleted`; still on `/projects/verify`.
 - `delete`
   - Action: with Group by Project, on `/projects/verify`,
-    `ab find role button click --name "Project menu for Verify Project" --exact;
+    `ab click 'main [aria-label="Project menu for Verify Project"]';
     ab find role menuitem click --name "Delete project" --exact;
     ab wait --text "Delete project?"`, capture `06-confirm`, then
     `ab find role button click --name "Delete" --exact; ab wait --url "**/projects"`
@@ -135,7 +137,7 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     `Project not found` / `This project is not in Piano's database.` Capture `07-missing`.
 - Side effects: a project home starts no Pi session. Before `new-in-project`, `rg -c '"command":"prompt"' "$AUDIT"` finds
   nothing (prints nothing, exit 1) and `rg -vc '"sessionId":"probe"' "$AUDIT"` likewise: the audit
-  holds only the `probe` entries from the session pages visited.
+  holds only `probe` entries for uncached composer catalogs (session pages or populated homes).
 
 ## Gotchas
 
@@ -143,6 +145,8 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   on a member session's page; on the New page or a loose session it is absent, which is not a bug.
 - The sidebar group name only folds the group; its "New session in <name>" button is the way home.
 - "Group by" is a submenu whose trigger's name includes the current choice (`Group by Date`).
+- Scope home menus to `main`: a project-grouped sidebar repeats the project menu, and both
+  surfaces have session row menus. A global name lookup can act on the sidebar instead.
 - `ab wait --text "X" --state hidden` is not a valid form; wait on a URL or a `--fn` predicate.
 - Row times are relative ("1 hour ago") and age while you drive.
 - The tab title briefly reads `Project - Piano` before the project loads; wait for the heading.

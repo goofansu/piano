@@ -9,7 +9,8 @@ link a person can open.
 
 - `start`: `<prompt-file> <cwd>` creates and starts a session; prints `creation`, `submission`,
   `handle.sessionId`, `link`.
-- `worktree`: `--worktree BRANCH` has Piano create `<repo>.<BRANCH>` first and start there.
+- `worktree`: `--worktree BRANCH` has Piano create a worktree first and start there; the isolated
+  scratch configuration uses `<repo>.<BRANCH>`. Use the returned `worktree.path`.
 - `status`: `status <sessionId>` prints `disposition`, `needs`, `lastAnswer`, `changes`, `link`.
 - `list`: `list --project <id>` prints one JSON line per active member session.
 - `follow-up`: `follow-up <sessionId> <prompt-file> [--steer]` sends one more message to the
@@ -49,7 +50,7 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
     `curl -s "$API_URL/api/folders"` lists it under folder `repo`.
 - `status`
   - Command: `node scripts/dispatch-session.ts status <sessionId from worktree.json>`
-  - Result: exit 0; `"disposition": "settled"`, `"lastAnswer": "echo: dispatch hello"`,
+  - Result: once the reply finishes, exit 0; `"disposition": "settled"`, `"lastAnswer": "echo: dispatch hello"`,
     `"changes": {"branch": "verify-wt", "files": 0, "pullRequest": null}`.
 - `list`
   - Command: `node scripts/dispatch-session.ts list --project verify`
@@ -58,14 +59,15 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
 - `follow-up`
   - Command: `printf "one more" > "$RUN/more.txt"; node scripts/dispatch-session.ts follow-up <sessionId from start.json> "$RUN/more.txt"; echo $?`
   - Result: exit 0 with `"delivery": "follow-up"`, `"submission": "started"` and `link`; the
-    audit gains `{"command":"prompt","text":"one more",...}` for that ID, and `status <id>` then
-    reports `"lastAnswer": "echo: one more"`. A follow-up sends the file verbatim, so `echo`'s
+    audit gains `{"command":"prompt","text":"one more",...}` for that ID, and `status <id>` after
+    the reply finishes reports `"lastAnswer": "echo: one more"`. A follow-up sends the file verbatim, so `echo`'s
     trailing newline would reach Pi (`"one more\n"`); the first message of a start arrives trimmed.
 - `refusals`
   - Command: `node scripts/dispatch-session.ts "$RUN/prompt.txt" "$RUN/missing"; echo $?`
   - Result: `ENOENT: no such file or directory, stat '<path>'` and exit 2; the audit gains no
     `start`.
-- Then open the link: `ab open <link>; ab wait --text "echo: dispatch hello"`; capture
+- Then open the worktree session's link (not the follow-up session):
+  `ab open <link from worktree.json>; ab wait --text "echo: dispatch hello"`; capture
   `01-dispatched`.
 - `needs-input` (relaunch with `.agents/skills/verify-piano/scripts/launch.sh --fake-pi dialogs`)
   - Command: `echo "ask for a value" > "$RUN/ask.txt"; node scripts/dispatch-session.ts "$RUN/ask.txt" "$REPO"`,
@@ -84,7 +86,9 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
   the printed links come from `PIANO_SESSION_ORIGIN`, so they open the UI (`$WEB_URL`).
 - `status`'s `changes.files` counts uncommitted files whatever comparison the Changes pane shows.
 - Run it with the checkout's Node 24 (`node scripts/dispatch-session.ts`), not `npx tsx`.
-- `test/fake-pi.mjs` gives every dialog the ID `d1`; a second dialog in the same session may not
+- Start/follow-up report submission, not completion. A status read can still say `running`;
+  observe the expected reply in the browser before asserting settled status. Do not resend.
+- `test/fake-pi.mjs` gives each `ask…` dialog the ID `d1`; a second ask in the same session may not
   render. Start a new session per dialog check.
 - `test/fake-pi.mjs` writes no audit, so on `--fake-pi dialogs` the reply (`you said 42`) is the
   proof of what Pi received. Its `status` `lastAnswer` stays `null` after the answer.
