@@ -31,7 +31,6 @@ export function CopyButton({
       label={copied ? copiedLabel : label}
       variant={variant}
       size="inline"
-      data-copied={copied ? "" : undefined}
       className={className}
       onClick={async () => {
         try {
