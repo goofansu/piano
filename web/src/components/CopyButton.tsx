@@ -3,17 +3,13 @@ import { type ComponentProps, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { IconButton } from "@/components/IconButton";
 
-/**
- * Copies `text`, its icon turning to a check for two seconds. A code block reveals it on hover
- * (`reveal`); elsewhere it always shows.
- */
+/** Copies `text`, its icon turning to a check for two seconds. */
 export function CopyButton({
   text,
   label,
   copiedLabel,
   failure,
   variant,
-  reveal = false,
   className,
 }: {
   text: string;
@@ -22,7 +18,6 @@ export function CopyButton({
   /** The toast when the clipboard refuses. */
   failure: string;
   variant?: ComponentProps<typeof IconButton>["variant"];
-  reveal?: boolean;
   className?: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -36,7 +31,6 @@ export function CopyButton({
       label={copied ? copiedLabel : label}
       variant={variant}
       size="inline"
-      data-motion={reveal ? "reveal" : undefined}
       data-copied={copied ? "" : undefined}
       className={className}
       onClick={async () => {
