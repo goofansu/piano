@@ -4,7 +4,7 @@ type LinkBrand = {
   icon: { viewBox: string } & ({ path: string } | { href: string });
 };
 
-/** Bundled branding for a recognized destination, shared by prose and session-link labels.
+/** Bundled branding for a recognized destination in prose links.
  * Recognition, URL safeguards, compact labels and icon sources belong here, not in callers. */
 export function linkBrand(href: string): LinkBrand | undefined {
   let url: URL;

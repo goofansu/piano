@@ -5,8 +5,8 @@ import { ItemTitle } from "@/components/ui/item";
 
 /**
  * A session rail section's rows: the bordered, hairline-divided list Settings uses, at the rail's
- * small size. Each row is an `Item` with `railRow`, its icon in `ItemMedia`, its text in
- * `ItemContent` and, for a link, Jump to message in `RowActions`.
+ * small size. Each row is an `Item` with `railRow`, its icon in `ItemMedia` and its text in
+ * `ItemContent`.
  */
 export function RailList({ className, ...props }: ComponentProps<typeof SettingsList>) {
   return <SettingsList className={cn("text-xs", className)} {...props} />;

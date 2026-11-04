@@ -17,7 +17,6 @@ import {
   nestedFold,
   nestedOutcome,
   nestedProgress,
-  revealEntries,
   type TranscriptOptions,
   type TranscriptRow,
   transcriptRows,
@@ -554,17 +553,17 @@ test("summarization retains exact raw details and safely falls back for unknown 
   assert.ok(present(long)!.summary.length <= 240);
 });
 
-test("revealing a mention tries the message's own row, then the exchange it belongs to", () => {
+test("a reply that tool calls interrupt is not a Jump to destination", () => {
   const messages: RenderMsg[] = [
     { id: "u1", role: "user", text: "Deploy it" },
     {
       id: "a1",
       role: "assistant",
-      text: "Reading https://example.com/docs first",
+      text: "Reading the docs first",
       toolCalls: [{ id: "t1", name: "bash", args: "{}" }],
     },
     { id: "r1", role: "tool_result", text: "ok", toolCallId: "t1" },
-    { id: "a2", role: "assistant", text: "Done, see https://example.com/done" },
+    { id: "a2", role: "assistant", text: "Done" },
     { id: "u2", role: "user", text: "Thanks" },
   ];
   const entries = jumpEntries(transcriptRows(messages));
@@ -573,23 +572,6 @@ test("revealing a mention tries the message's own row, then the exchange it belo
     ["top", "u1", "a2", "u2", "bottom"],
     "the intermediate reply is not a destination",
   );
-  assert.deepEqual(
-    revealEntries(messages, entries, "a1").map((e) => [e.kind, e.id]),
-    [
-      ["assistant", "a1"],
-      ["user", "u1"],
-    ],
-  );
-  assert.deepEqual(
-    revealEntries(messages, entries, "a2").map((e) => e.id),
-    ["a2", "u1"],
-    "a destination's own row comes first; the fallback is the destination before it",
-  );
-  assert.deepEqual(
-    revealEntries(messages, entries, "u1").map((e) => e.id),
-    ["u1"],
-  );
-  assert.deepEqual(revealEntries(messages, entries, "missing"), []);
 });
 
 test("a multi-line command's summary is its first line and how many lines follow", () => {
