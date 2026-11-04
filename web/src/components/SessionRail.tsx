@@ -302,22 +302,18 @@ function EnvironmentRow({
 /** A section of the rail: its name as a folding heading, then its list. */
 function RailSection({
   title,
-  count,
-  action,
   open,
   onOpenChange,
   children,
 }: {
   title: string;
-  count?: number;
-  action?: ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
 }) {
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} className="flex flex-col gap-2">
-      <div className="flex min-h-8 items-center justify-between gap-2 pointer-coarse:min-h-11">
+      <div className="flex min-h-8 items-center gap-2 pointer-coarse:min-h-11">
         <h2 className="flex min-w-0">
           <CollapsibleTrigger asChild>
             {/* The heading is the fold: its name, then the chevron turned by its state. */}
@@ -327,12 +323,10 @@ function RailSection({
               className="-ml-2 h-7 gap-1 px-2 text-sm font-medium text-ink aria-expanded:bg-transparent pointer-coarse:min-h-11"
             >
               {title}
-              {count !== undefined && <span className="ml-1 text-xs text-ink-3">{count}</span>}
               <DisclosureChevron open={open} />
             </Button>
           </CollapsibleTrigger>
         </h2>
-        {action}
       </div>
       <CollapsibleContent className="disclosure-content">{children}</CollapsibleContent>
     </Collapsible>
