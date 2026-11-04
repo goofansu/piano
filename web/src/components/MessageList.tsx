@@ -94,6 +94,23 @@ const PromptMeasurementsContext = createContext<Set<() => void> | null>(null);
  * opened one. */
 const TranscriptMeasure = createContext<((row: HTMLElement) => void) | null>(null);
 
+/** Re-measures the transcript row holding `inside` when `value` changes, before the paint: for a
+ * fold whose height changes at once, without an animation the virtualizer could follow. */
+function useRowRemeasure(
+  inside: React.RefObject<HTMLElement | null>,
+  value: unknown,
+  enabled = true,
+) {
+  const measureRow = useContext(TranscriptMeasure);
+  const was = useRef(value);
+  useLayoutEffect(() => {
+    if (!enabled || Object.is(was.current, value)) return;
+    was.current = value;
+    const row = inside.current?.closest<HTMLElement>("[data-index]");
+    if (row) measureRow?.(row);
+  }, [inside, value, enabled, measureRow]);
+}
+
 interface Props {
   workspaceId?: string;
   messages: ReadonlyArray<RenderMsg>;
@@ -456,15 +473,8 @@ function FoldRow({
   const restoreFocus = useRef(false);
   const [tall, setTall] = useState(false);
   const viewport = useTranscriptViewport();
-  const measureRow = useContext(TranscriptMeasure);
-  const wasOpen = useRef(open);
-  // A tool fold changes height without an animation: move the rows below before the paint.
-  useLayoutEffect(() => {
-    if (!toolOutput || wasOpen.current === open) return;
-    wasOpen.current = open;
-    const row = root.current?.closest<HTMLElement>("[data-index]");
-    if (row) measureRow?.(row);
-  }, [toolOutput, open, measureRow]);
+  // A tool fold changes height without an animation.
+  useRowRemeasure(root, open, toolOutput);
   useLayoutEffect(() => {
     const el = root.current;
     const scroller = el?.closest<HTMLElement>('[data-slot="transcript"]');
@@ -1060,15 +1070,8 @@ function NestedCalls({ parentId, nested }: { parentId: string; nested: NestedVie
   // Kept per parent call while the transcript is open: new calls arriving leave it as it was.
   const [all, setAll] = useTranscriptDisclosure(`${parentId}:nested`);
   const root = useRef<HTMLDivElement>(null);
-  const measureRow = useContext(TranscriptMeasure);
-  const wasAll = useRef(all);
-  // Showing every call changes the row's height at once: move the rows below before the paint.
-  useLayoutEffect(() => {
-    if (wasAll.current === all) return;
-    wasAll.current = all;
-    const row = root.current?.closest<HTMLElement>("[data-index]");
-    if (row) measureRow?.(row);
-  }, [all, measureRow]);
+  // Showing every call changes the row's height at once.
+  useRowRemeasure(root, all);
   const { fold } = nested;
   const shown = all || !fold ? nested.calls : nested.folded;
   return (
