@@ -27,7 +27,6 @@ function CopyCode({ text }: { text: string }) {
       copiedLabel="Code copied"
       failure="Couldn’t copy. Select the code text to copy it."
       variant="outline-solid"
-      reveal
       className="absolute top-4 right-2"
     />
   );

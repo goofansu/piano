@@ -282,8 +282,8 @@ await run(
     })()`);
 
     // Deferred overflow measurement still offers long prompts' complete text and works again
-    // after collapsing and resizing. The adjacent reply's code copy stays hidden until the
-    // block is pointed at, then copies the fence.
+    // after collapsing and resizing. The adjacent reply's code copy stays visible without
+    // hover or focus, then copies only the fence.
     // Scoped to the transcript: the sidebar's open groups are expanded disclosure buttons too.
     await page.click("button", "Show more");
     await page.until(
@@ -308,19 +308,26 @@ await run(
     await page.see("Show less");
     const resized = await promptSize();
     assert.equal(resized.height, resized.content, "prompt still expands after resizing");
-    const copyOpacity = () =>
+    const copyOpacity = (label) =>
       page.evaluate(`(() => {
-        const button = document.querySelector('.markdown-code-block [data-motion="reveal"]');
+        const button = document.querySelector('button[aria-label="${label}"]');
         return button ? Number(getComputedStyle(button).opacity) : -1;
       })()`);
-    assert.equal(await copyOpacity(), 0, "code copy stays hidden until the block is pointed at");
-    await page.capture("code-copy-rest");
-    // Headless Chrome reports pointer: none, so it never applies :hover. The control is still
-    // there: activating it copies, and the confirmation stays visible after the pointer leaves.
+    await page.ab("mouse", "move", "0", "0");
+    await page.ab("focus", '[aria-label="Message"]');
+    for (const width of [1280, 390, 800]) {
+      await page.ab("set", "viewport", String(width), "900");
+      assert.equal(
+        await copyOpacity("Copy code"),
+        1,
+        "code copy is visible without hover or focus",
+      );
+      await page.capture(`code-copy-rest-${width}`);
+    }
     await page.click("button", "Copy code");
     await page.until(`!!document.querySelector('button[aria-label="Code copied"]')`);
     await page.until(
-      `Number(getComputedStyle(document.querySelector('.markdown-code-block [data-motion="reveal"]')).opacity) === 1`,
+      `Number(getComputedStyle(document.querySelector('button[aria-label="Code copied"]')).opacity) === 1`,
     );
     await page.capture("code-copy-copied");
     // Headless Chrome on macOS never pastes from the clipboard: a synthetic Cmd+V does nothing
@@ -339,6 +346,14 @@ await run(
         "copy contains only the fenced code",
       );
     }
+    await page.ab("mouse", "move", "0", "0");
+    await page.ab("focus", '[aria-label="Message"]');
+    await page.until(`!!document.querySelector('button[aria-label="Copy code"]')`);
+    assert.equal(
+      await copyOpacity("Copy code"),
+      1,
+      "code copy stays visible after confirmation resets",
+    );
     await page.capture("8-reopened-long-session");
     assert.ok(
       await page.evaluate(
