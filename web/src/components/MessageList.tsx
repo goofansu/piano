@@ -20,7 +20,6 @@ import {
   useCallback,
   useContext,
   useDeferredValue,
-  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -29,9 +28,9 @@ import {
   useSyncExternalStore,
 } from "react";
 import { flushSync } from "react-dom";
-import { toast } from "sonner";
 import { MessageAttachments } from "@/components/Attachments";
 import { BranchLabel } from "@/components/BranchLabel";
+import { useCopy } from "@/components/CopyButton";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { DraftFileView } from "@/components/DraftDialogs";
 import { IconButton } from "@/components/IconButton";
@@ -675,12 +674,7 @@ function ErrorMessage({ error, id }: { error: MessageError; id?: string }) {
 const USER_LINES = 6;
 
 function CopyResponse({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
+  const { copied, copy } = useCopy(text, "Couldn’t copy. Select the reply text to copy it.");
   return (
     <Button
       variant="ghost"
@@ -690,15 +684,7 @@ function CopyResponse({ text }: { text: string }) {
         "mt-2 -ml-2 text-ink-3 opacity-0 select-none group-hover/reply:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
         copied && "text-brand opacity-100",
       )}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-        } catch {
-          setCopied(false);
-          toast.error("Couldn’t copy. Select the reply text to copy it.");
-        }
-      }}
+      onClick={copy}
     >
       {copied ? <CheckIcon /> : <CopyIcon />}
       <span role="status">{copied ? "Copied" : "Copy"}</span>
