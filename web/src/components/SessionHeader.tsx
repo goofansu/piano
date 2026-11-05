@@ -227,8 +227,8 @@ export function SessionHeader({
         {/* Ghost controls: the group pulls out so the last one's content ends on the gutter. */}
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           <ArtifactsMenu state={state} />
-          <SessionRailToggle />
           <ChangesToggle />
+          <SessionRailToggle />
           {mobile && sessionMenu}
         </div>
       </PaneHeader>
@@ -262,7 +262,7 @@ function SessionRailToggle() {
 }
 
 /**
- * Changes' toggle, always last at the header's end, on every layout: the Changes command, which
+ * Changes' toggle, before the session rail toggle when present: the Changes command, which
  * shows Changes in the Surface area, or, while Changes shows beside the Agent area, its tab's
  * Close ("Hide changes"), filled then, as the rail's toggle is. One area at a time it shows the
  * Changes area, and the tabs say which area shows. Left out while Changes cannot open; the
