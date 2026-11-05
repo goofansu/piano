@@ -17,7 +17,7 @@ other servers carry the server icon.
   `mcp.json` unchanged and the row in Available. A completed sign-in (not exercised on a scratch
   run) saves the entry, which moves to Connected.
 - `add-form`: Add MCP server (header or palette) opens a dialog on its Form tab: Name, Type
-  (URL / Command), URL, Authentication (Sign in / Authorization header), Headers with Add header;
+  (URL / Command), URL, Authentication (Sign in if needed / Authorization header), Headers with Add header;
   on Command: Command, Arguments (one per line), Environment with Add variable, Working directory.
   A command toasts "<name> MCP added for new sessions." and the row appears with the server
   icon; a URL nothing answers fails under the URL field ("Could not connect to <name> MCP. Check

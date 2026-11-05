@@ -389,7 +389,7 @@ export function McpServerDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="oauth">Sign in</SelectItem>
+                        <SelectItem value="oauth">Sign in if needed</SelectItem>
                         <SelectItem value="header">Authorization header</SelectItem>
                       </SelectContent>
                     </Select>

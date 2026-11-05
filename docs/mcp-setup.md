@@ -37,7 +37,7 @@ server connects. A local command is saved as Pi validates it; Piano never starts
   at that endpoint, whatever its name, counts as connected and is kept as configured. A catalog
   server whose default name another entry holds says so instead.
 - **Add MCP server** (the header, or Mod+K on the page) opens a dialog with two tabs. **Form**
-  takes a name, a URL or a command, and for a URL how Pi authenticates: **Sign in** (Pi's MCP
+  takes a name, a URL or a command, and for a URL how Pi authenticates: **Sign in if needed** (Pi's MCP
   OAuth when the server asks for it) or an **Authorization header**, whose value is sent verbatim
   (`Bearer …`, `Basic …`, or a `${VAR}` reference Pi resolves on the backend); other headers, or
   a command's arguments, environment and working directory, follow. **JSON** takes the
