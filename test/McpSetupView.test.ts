@@ -73,12 +73,10 @@ test("a row is titled by its catalog server, else by its entry name, with its ho
   assert.equal(linear?.title, "Linear");
   assert.equal(linear?.catalog, "linear");
   assert.equal(linear?.value, "mcp.linear.app");
-  assert.equal(linear?.removeVerb, "Uninstall");
   const custom = row(docs());
   assert.equal(custom?.title, "docs");
   assert.equal(custom?.catalog, undefined);
   assert.equal(custom?.value, "mcp.example.com");
-  assert.equal(custom?.removeVerb, "Remove");
   assert.equal(row(tools)?.value, "uvx tools-mcp");
   assert.equal(
     row(docs({ config: { url: "not a url", headers: {}, hasAuthorization: false } }))?.value,
@@ -127,17 +125,11 @@ test("installing or adding goes on to sign in only to an entry ready and awaitin
   assert.equal(signInAfterAdd(undefined, ["sentry"]), undefined);
 });
 
-test("the removal confirmation names the server and its verb", () => {
-  assert.deepEqual(mcpRemovalCopy({ title: "Linear", removeVerb: "Uninstall" }), {
-    title: "Uninstall Linear MCP?",
+test("the removal confirmation names the server", () => {
+  assert.deepEqual(mcpRemovalCopy({ title: "Linear" }), {
+    title: "Remove Linear MCP?",
     description: "Removes Linear MCP and its saved sign-in from Pi on this machine.",
-    action: "Uninstall",
-    done: "Linear MCP uninstalled for new sessions.",
-  });
-  assert.deepEqual(mcpRemovalCopy({ title: "docs", removeVerb: "Remove" }), {
-    title: "Remove docs MCP?",
-    description: "Removes docs MCP and its saved sign-in from Pi on this machine.",
     action: "Remove",
-    done: "docs MCP removed for new sessions.",
+    done: "Linear MCP removed for new sessions.",
   });
 });

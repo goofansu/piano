@@ -27,7 +27,7 @@ export function RemovalDialog({
   open: boolean;
   title: string;
   description: string;
-  /** The confirm button's label, such as "Remove" or "Uninstall". */
+  /** The confirm button's label, such as "Remove" or "Sign out". */
   action: string;
   /** The confirm button's label while the removal runs; defaults to `action`. */
   progress?: string;

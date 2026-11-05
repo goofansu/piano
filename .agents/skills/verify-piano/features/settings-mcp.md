@@ -8,11 +8,11 @@ No MCP server is reached unless a sign-in starts; fake Pi never connects one. Ca
 ## Sub-features
 
 - `mcp-empty`: with no entries, the page is headed MCP with Add MCP server, no Configured group,
-  and Available listing Linear, Jira and Paper, each with Install.
-- `install`: Install on an Available row writes the entry under its catalog name and toasts
-  "<Name> MCP installed."; Linear and Jira then open the sign-in dialog (Pi's OAuth against the
+  and Available listing Linear, Jira and Paper, each with Add.
+- `install`: Add on an Available row writes the entry under its catalog name and toasts
+  "<Name> MCP added."; Linear and Jira then open the sign-in dialog (Pi's OAuth against the
   real endpoint: cancel it on a scratch run). The row moves to Configured with its host or
-  command and Sign in / Edit / Uninstall.
+  command and Sign in / Edit / Remove.
 - `add-form`: Add MCP server (header or palette) opens a dialog on its Form tab: Name, Type
   (URL / Command), URL, Authentication (Sign in / Authorization header), Headers with Add header;
   on Command: Command, Arguments (one per line), Environment with Add variable, Working directory.
@@ -23,7 +23,7 @@ No MCP server is reached unless a sign-in starts; fake Pi never connects one. Ca
   and writes nothing.
 - `edit`: Edit opens the dialog on the entry (no tabs); a saved Authorization header shows as a
   masked placeholder with Remove / Keep; Save toasts "<name> MCP saved for new sessions.".
-- `remove`: Uninstall (catalog) or Remove (user's) asks "<Verb> <Name> MCP?" and toasts
-  "<Name> MCP uninstalled|removed for new sessions."; the entry leaves the file.
+- `remove`: Remove asks "Remove <Name> MCP?" and toasts
+  "<Name> MCP removed for new sessions."; the entry leaves the file.
 - `problem`: with `{"extensions":["-builtin:mcp"]}` in `$RUN/pi-agent/settings.json`, the page
   shows "MCP is unavailable" with Pi's reason and every control off.

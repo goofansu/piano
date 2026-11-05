@@ -39,13 +39,11 @@ export interface McpServerRow {
   /** A configuration problem the user must fix in Pi. */
   detail?: string;
   actions: readonly McpServerAction[];
-  /** A catalog server is uninstalled; a server the user added is removed. */
-  removeVerb: "Uninstall" | "Remove";
 }
 
 export interface McpAvailableRow {
   server: McpCatalogServer;
-  /** Why Install is not offered as is. */
+  /** Why Add is not offered as is. */
   detail?: string;
 }
 
@@ -87,7 +85,6 @@ export function mcpServerRow(setup: McpServerSetup): McpServerRow {
     ready: !setup.detail && (!setup.oauth || setup.signedIn),
     ...(setup.detail ? { detail: setup.detail } : {}),
     actions,
-    removeVerb: catalog ? "Uninstall" : "Remove",
   };
 }
 
@@ -131,13 +128,12 @@ export function signInAfterAdd(
 }
 
 /** The removal dialog's wording and the toast once it is done. */
-export function mcpRemovalCopy(row: Pick<McpServerRow, "title" | "removeVerb"> | undefined) {
-  const verb = row?.removeVerb ?? "Remove";
+export function mcpRemovalCopy(row: Pick<McpServerRow, "title"> | undefined) {
   const name = row?.title;
   return {
-    title: `${verb} ${name} MCP?`,
+    title: `Remove ${name} MCP?`,
     description: `Removes ${name} MCP and its saved sign-in from Pi on this machine.`,
-    action: verb,
-    done: `${name} MCP ${verb === "Uninstall" ? "uninstalled" : "removed"} for new sessions.`,
+    action: "Remove",
+    done: `${name} MCP removed for new sessions.`,
   };
 }
