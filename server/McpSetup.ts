@@ -134,8 +134,9 @@ export class McpSetup extends Context.Service<
   {
     readonly state: Effect.Effect<McpSetupState>;
     readonly change: (request: McpSetupRequest) => Effect.Effect<McpSetupChange, McpSetupError>;
-    /** Sign-in to a configured server, or to the server a change is waiting to save, by its entry
-     * name; shaped as provider sign-in so the browser shares one dialog. */
+    /** Sign-in to a configured server by its entry name, or to the server a change is waiting to
+     * save by the subject the change answered with; shaped as provider sign-in so the browser
+     * shares one dialog. */
     readonly signIn: SignInLane;
   }
 >()("piano/McpSetup") {}
@@ -270,14 +271,23 @@ export const McpSetupLive = Layer.effect(
         await connection.close().catch(() => undefined);
       }
     };
-    /** The one change waiting for its sign-in before it saves; a newer one replaces it. */
-    let pending:
+    /** The one change waiting for its sign-in before it saves; a newer one replaces it. Its
+     * sign-in subject is its own, never an entry name: retrying it from its dialog finds it, while
+     * a saved entry's Reconnect, which passes the entry's name, never saves a change left waiting. */
+    let waiting:
       | {
+          subject: string;
+          /** The entries it changes: the one it saves and, renamed, the one it replaces. */
+          names: ReadonlySet<string>;
           entry: McpServerEntry;
           url: string;
           save: Effect.Effect<unknown, McpConfigEntryError>;
         }
       | undefined;
+    let waits = 0;
+    /** A sign-in is running for the entry `name`: its own, or a change's waiting to save it. */
+    const signingIn = (name: string) =>
+      attempts.busy(name) || (!!waiting?.names.has(name) && attempts.busy(waiting.subject));
 
     /** The sign-in to `entry`, a saved one or one waiting to be saved: `save` writes it once
      * signed in, and a sign-in that ends without saving drops the tokens it stored. */
@@ -403,14 +413,17 @@ export const McpSetupLive = Layer.effect(
       entry: McpServerEntry,
       save: Effect.Effect<unknown, McpConfigEntryError>,
       fallback: string,
+      replaces?: string,
     ): Effect.Effect<McpSetupChange, McpSetupError> =>
       Effect.promise(() => reach(entry)).pipe(
         Effect.flatMap((reached) => {
           if (reached === "connected") return writing(save, fallback);
           const url = oauthUrl(entry);
           if (reached === "sign-in" && url) {
-            pending = { entry, url, save };
-            return Effect.succeed({ state: snapshot(), signIn: entry.name });
+            const subject = `${entry.name}#waiting-${++waits}`;
+            const names = new Set([entry.name, ...(replaces ? [replaces] : [])]);
+            waiting = { subject, names, entry, url, save };
+            return Effect.succeed({ state: snapshot(), signIn: subject });
           }
           if (!("url" in entry.config)) {
             const reason = reached === "sign-in" ? undefined : reached.failed;
@@ -478,7 +491,7 @@ export const McpSetupLive = Layer.effect(
               "Could not save this MCP server. Its configuration may have changed. Refresh and try again.";
             const configure = (existing: McpServerConfig) => merged(existing, request.config);
             return prepared(() => {
-              if (attempts.busy(request.name)) throw new Error("Sign-in in progress.");
+              if (signingIn(request.name)) throw new Error("Sign-in in progress.");
               return entries.prepareUpdate(
                 request.name,
                 request.removalKey,
@@ -501,14 +514,14 @@ export const McpSetupLive = Layer.effect(
                       }),
                     ),
                   );
-                return saveConnected(entry, save, fallback);
+                return saveConnected(entry, save, fallback, request.name);
               }),
             );
           }
           case "remove":
             return writing(
               Effect.try(() => {
-                if (attempts.busy(request.name)) throw new Error("Sign-in in progress.");
+                if (signingIn(request.name)) throw new Error("Sign-in in progress.");
               }).pipe(
                 // Credentials go first, so a failure leaves the entry installed to remove again.
                 Effect.flatMap(() =>
@@ -519,18 +532,20 @@ export const McpSetupLive = Layer.effect(
             );
         }
       },
-      signIn: attempts.lane((name) =>
+      signIn: attempts.lane((subject) =>
         Effect.try({
           try: () => {
-            const waiting = pending?.entry.name === name ? pending : undefined;
-            if (waiting) {
+            const change = waiting?.subject === subject ? waiting : undefined;
+            if (change) {
               const save = () =>
-                Effect.runPromise(waiting.save).then(() => {
-                  if (pending === waiting) pending = undefined;
+                Effect.runPromise(change.save).then(() => {
+                  if (waiting === change) waiting = undefined;
                 });
-              return source(label(waiting.entry), waiting.entry, waiting.url, save);
+              return source(label(change.entry), change.entry, change.url, save);
             }
-            const { entry, url, name: shown } = signedInEntry(name);
+            if (!entries.named(subject) && subject.includes("#waiting-"))
+              throw new Error("This change is no longer waiting. Save it again.");
+            const { entry, url, name: shown } = signedInEntry(subject);
             return source(shown, entry, url);
           },
           catch: (cause) =>

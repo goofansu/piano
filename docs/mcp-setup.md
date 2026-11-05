@@ -89,7 +89,10 @@ Start a **new session** after a change; running Pi children are not reloaded.
 - A name is Pi's: letters, digits, `_` and `-`, unique in the file. Adding refuses a taken name
   or an entry Pi rejects, and then writes nothing.
 - Connecting before saving waits up to 20 seconds, Pi's own retries included. Only one change
-  waits for its sign-in at a time; a newer one replaces it.
+  waits for its sign-in at a time; a newer one replaces it. Only that change's own sign-in, which
+  its dialog starts and retries, saves it: an entry's Reconnect signs in to the entry as saved,
+  so a change the user walked away from is never saved later. While its sign-in runs, the entry
+  it changes cannot be edited or removed.
 - OAuth failure details can contain token responses, so the browser receives only a generic
   message. One sign-in runs at a time and expires after 15 minutes.
 
@@ -98,7 +101,8 @@ Start a **new session** after a change; running Pi children are not reloaded.
 - `test/McpSetup.test.ts` runs Pi's real client and sign-in against a loopback OAuth + MCP
   server that also accepts a fixed Authorization header: connecting a catalog server that is
   saved only once the pasted-redirect sign-in succeeds (including a rejected paste), stored-token
-  reuse, a refused or cancelled sign-in saving nothing and leaving no tokens, an unreachable
+  reuse, a refused or cancelled sign-in saving nothing and leaving no tokens, a waiting edit
+  that the entry's own Reconnect never saves, an unreachable
   server or a rejected header refused on the URL field, a local command saved only once it
   starts and stopped after the check, edits that keep Pi's other keys and the saved Authorization header and save only once
   they connect, a rename dropping stored tokens, removal after a switch to a header (with an
