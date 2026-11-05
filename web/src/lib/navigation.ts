@@ -62,11 +62,11 @@ export type SessionArea = "agent" | "surface";
  * The session's layout: which of its areas show, and whether the session rail does. Side by
  * side, the Agent area always, and on its right either the Surface area, while it has tabs and
  * the rail does not cover it, or the rail, while it is on: whichever came in last. One area at a
- * time, the one the user moved to last, never the rail, whose facts are in the session menu; Agent
- * is then a tab while something is open beside it.
+ * time, the one the user moved to last, never the rail; Agent is then a tab while inspection
+ * tabs exist. The header/menu offer context and selected actions, not a second rail.
  */
 export interface SessionLayout {
-  /** One area at a time, as the session's width decides. */
+  /** One-area-at-a-time capacity; false means side-by-side, not necessarily a visible Surface. */
   single: boolean;
   agent: boolean;
   surface: boolean;
@@ -130,7 +130,7 @@ export interface NavigationState {
   /** Side by side, whether the rail, turned on after the Surface area, hides it; its tabs wait. */
   covered: boolean;
   /**
-   * The area the user moved to last: the one a single-view layout shows. Only showing a surface
+   * The area the user moved to last: the one a one-area-at-a-time layout shows. Only showing a surface
    * moves it there; files changing or the agent finishing never do.
    */
   area: SessionArea;
@@ -177,7 +177,7 @@ export interface NavigationOptions {
   /** Whether the session rail is on; without one it starts off and lasts for this navigation only. */
   rail?: Preference<boolean>;
   /**
-   * Called on every move the user or history makes, e.g. to close the mobile sidebar: once per
+   * Called on every move the user or history makes, e.g. to close the sidebar reveal: once per
    * request, whether or not it changed anything, so asking for the Agent area reveals it even
    * when it is already the area shown.
    */
@@ -207,7 +207,7 @@ export interface Navigation {
   /**
    * Shows the session rail on the Agent area's right, or hides it, for every session: on hides
    * the Surface area until a tab is shown again or the rail goes off. One area at a time there is
-   * no rail (its facts are in the session menu), so it changes nothing.
+   * no rail, so it changes nothing.
    */
   toggleRail: () => void;
   /**
@@ -223,7 +223,7 @@ export interface Navigation {
    * area at a time a file opened from the Agent area returns there.
    */
   closeTab: (key: string) => void;
-  /** Shows the Agent area in a single-view layout, keeping the surface for the next visit. */
+  /** Shows the Agent area one-area-at-a-time, keeping the Surface tabs for the next visit. */
   showAgent: () => void;
   /** The session reports its layout as its available width changes. */
   setSingle: (single: boolean) => void;

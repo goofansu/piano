@@ -71,8 +71,8 @@ export function SessionView({ state, send }: Props) {
   } = navigation;
   const onPullRequestOpenChange = (open: boolean) =>
     open ? openPullRequest() : closePullRequest();
-  // The width left after navigation and insets decides the layout, not the viewport alone. A
-  // hidden session (under Settings) measures nothing and keeps its layout.
+  // Measure the areas container after sidebar/insets; panelLayout owns capacity and navigation
+  // projects visible areas/rail/tabs. A hidden session (under Settings) keeps its prior mode.
   const areas = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const element = areas.current;
@@ -88,7 +88,7 @@ export function SessionView({ state, send }: Props) {
   }, [setSingle]);
   const agentHidden = !navigation.layout.agent;
   // The rail is pinned beside the transcript side by side; one area at a time it is not shown.
-  const railInside = !single && navigation.layout.rail;
+  const railInside = navigation.layout.rail;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
@@ -293,9 +293,9 @@ export function SessionView({ state, send }: Props) {
 /**
  * One area at a time, the tabs between them while something is open beside the Agent area:
  * Agent, then the open tabs in opening order ("Agent | README.md"). Without one the bar is left
- * out, saving its row; Changes opens from the header or palette and becomes a tab. The session
- * rail opens in a sheet, not a tab. Choosing Agent never focuses the composer, so a phone keeps its keyboard
- * down; choosing a view shows it as it was left. A tab closes from its view's toolbar.
+ * out, saving its row; Changes opens from the header or palette and becomes a tab. There is no
+ * session rail in this layout. Choosing Agent never focuses the composer or raises the software
+ * keyboard; choosing a view shows it as it was left. A tab closes from its view's toolbar.
  */
 function AreaTabs() {
   const navigation = useNavigation();

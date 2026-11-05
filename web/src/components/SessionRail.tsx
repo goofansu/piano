@@ -59,7 +59,7 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
  * scrollbar stays at the pane's edge, and the transcript, notices and composer keep clear of it
  * through `--rail-inset`. While it fits, the wheel over it scrolls the conversation as anywhere in
  * the area; taller, the wheel over it scrolls the rail alone and never runs on into the
- * conversation. One area at a time there is no rail: the phone header's second line says where
+ * conversation. One area at a time there is no rail: the session header's second line says where
  * the session runs, and the session menu holds Preview and the pull request.
  * It follows the selected session. Hand-written: no shadcn component is a pinned side column.
  */

@@ -12,12 +12,13 @@ export const RAIL_WIDTH = 320;
 export const AGENT_MIN_WIDTH = 448;
 /**
  * Below this session width (both minimums and the hairline) the areas take turns. It is measured
- * after navigation and insets, so a tablet with its sidebar open never gets two squeezed columns.
+ * on the areas container after the sidebar and insets, not on the viewport. Preferred Surface
+ * width and pointer capability do not choose the mode.
  */
 export const SPLIT_MIN_WIDTH = AGENT_MIN_WIDTH + PANEL_WIDTH.min + 1;
 const WIDTH_KEY = "piano.panelWidth";
 
-/** Whether a session `width` pixels wide shows its areas one at a time; 0 is unmeasured (hidden). */
+/** One-area-at-a-time below 849 CSS px, without rounding. Zero is unmeasured/hidden: retain the prior mode. */
 export const singleArea = (width: number): boolean | undefined =>
   width > 0 ? width < SPLIT_MIN_WIDTH : undefined;
 

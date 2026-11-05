@@ -534,6 +534,76 @@ await run(
       await page.capture(`9-header-${id}`);
     }
 
+    // #557: a wide viewport can still be one-area-at-a-time. Protect the actual measured
+    // capacity → navigation → header/tabs seam, not just a supplied layout boolean.
+    await page.open("/s/live");
+    await page.see("Answer 1.");
+    await page.ab("fill", '[aria-label="Message"]', "Keep the boundary draft");
+    await page.ab("set", "viewport", "1146", "900");
+    const areasWidth = `document.querySelector('[data-slot="agent-area"]').parentElement.getBoundingClientRect().width`;
+    await page.until(`${areasWidth} === 848 && !document.querySelector('[data-rail-trigger]')`);
+    await page.click("button", "Changes");
+    await page.until(`!!document.querySelector('[role="tab"][data-state="active"]')`);
+    assert.equal(
+      await page.evaluate(`document.querySelector('[data-slot="agent-area"]').inert`),
+      true,
+    );
+    assert.ok(
+      await page.evaluate(`document.querySelector('[data-session-menu]').closest('nav') !== null`),
+    );
+    assert.ok(
+      await page.evaluate(`document.querySelector('main header nav button').checkVisibility()`),
+    );
+    assert.match(
+      await page.evaluate(`document.querySelector('main header').innerText`),
+      /feat-live/,
+    );
+    await page.capture("17-wide-one-area");
+    await page.click("button", "Session information and actions");
+    await page.until(`!!document.querySelector('[role="dialog"][data-slot="sheet-content"]')`);
+    await page.capture("18-wide-one-area-sheet");
+    for (const [width, areas] of [
+      [1147, 849],
+      [1148, 850],
+    ]) {
+      await page.ab("set", "viewport", String(width), "900");
+      await page.until(
+        `${areasWidth} === ${areas} && !!document.querySelector('[data-rail-trigger]') && !document.querySelector('[role="dialog"]')`,
+      );
+      assert.equal(
+        await page.evaluate(`document.querySelector('[data-slot="agent-area"]').inert`),
+        false,
+      );
+      assert.equal(
+        await page.evaluate(
+          `document.querySelector('[data-session-menu]').getAttribute('aria-haspopup')`,
+        ),
+        "menu",
+      );
+      assert.doesNotMatch(
+        await page.evaluate(`document.querySelector('main header').innerText`),
+        /feat-live/,
+      );
+    }
+    await page.capture("19-side-by-side-boundary");
+    await page.ab("set", "viewport", "1146", "900");
+    await page.until(`${areasWidth} === 848 && !document.querySelector('[data-rail-trigger]')`);
+    assert.equal(
+      await page.evaluate(`!!document.querySelector('[role="dialog"]')`),
+      false,
+      "the sheet must not resurrect",
+    );
+    assert.equal(
+      await page.evaluate(`document.querySelector('[aria-label="Message"]').value`),
+      "Keep the boundary draft",
+    );
+    assert.equal(
+      await page.evaluate(`document.querySelector('[data-slot="agent-area"]').inert`),
+      true,
+      "the chosen inspection area survives",
+    );
+    await page.capture("20-one-area-return");
+
     // PIN-125: Space on a focused button activates it once; the type-anywhere shortcut must not
     // take it into the composer. Wide, the header toggles the side-by-side rail; narrow, the
     // session menu, a sheet there, opens. The unsent draft stays byte-for-byte.
