@@ -105,8 +105,10 @@ as one band. The mark sits in the footer beside Settings. Collapsed, there is no
 pane takes the width, and its header's show control, with a breathing dot while any session works,
 brings the sidebar back. It is the current row, with the active fill, while the index is open. Grouping by
 project is unchanged: a group's name still folds it, and its hover action still opens the home.
-Done projects' groups come last, after No project, muted as that group is, and fold once when
-the project is marked done; their sessions are listed as any other's.
+Done projects' groups come last, after No project, under one "Done" label, muted as that group
+is, and fold once when the project is marked done; their sessions are listed as any other's. The
+label is plain text, not a fold: each group already folds, and a fold of folds would be a second
+level to reveal a session through. It is absent while no project is done.
 Below the breakpoint the row sits in the sidebar sheet, so the index is one tap from any screen.
 
 ### Session header
@@ -137,7 +139,7 @@ already. No new global shortcut.
 | 14 / 20,000 | value | The Instructions count on both project dialogs; red past the limit. |
 | Open, Merged | state | Later, with the Pull requests group. |
 | Mark project done, Reopen project | control's name | One row of the project menu, in every place the menu appears, and the palette on the home. |
-| Done (index group, home title) | state | Once per screen: the index says it by grouping, the home beside the title. |
+| Done (index group, home title, sidebar label) | state | Once per screen: the index and the sidebar say it by grouping, the home beside the title. |
 | Project marked done, Project reopened | feedback | The toast the server answers with. |
 
 Feedback stays where it is: a project saved, marked done or deleted answers with its toast;
