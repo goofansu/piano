@@ -16,7 +16,8 @@ export type McpCatalogServer = { readonly id: McpCatalogId; readonly name: strin
   | { readonly url?: undefined; readonly command: McpCatalogCommand }
 );
 
-/** MCP servers Piano can set up from Settings. Pi owns the configuration and the sign-in. */
+/** MCP servers Piano offers to install from Settings, ready to sign in to. Pi owns the
+ * configuration and the sign-in. Any other server is added by the user. */
 export const MCP_CATALOG: readonly McpCatalogServer[] = [
   {
     id: "linear",
@@ -38,28 +39,104 @@ export const MCP_CATALOG: readonly McpCatalogServer[] = [
 export const McpCatalogId = Schema.Literals(["linear", "jira", "paper"]);
 export type McpCatalogId = typeof McpCatalogId.Type;
 
-/** Machine-wide observations of Pi's global configuration and credentials, not live session connectivity. */
+const Headers = Schema.Record(Schema.String, Schema.String);
+
+/**
+ * An entry's configuration as the browser edits it: an HTTP endpoint with its headers, or a local
+ * command. The `Authorization` header's value never leaves the machine: the browser learns only
+ * that one is set. Pi's other keys (exposure, timeout, OAuth client settings) stay as configured.
+ */
+export const McpHttpConfig = Schema.Struct({
+  url: Schema.String,
+  /** Headers other than `Authorization`. */
+  headers: Headers,
+  hasAuthorization: Schema.Boolean,
+});
+export const McpCommandConfig = Schema.Struct({
+  command: Schema.String,
+  args: Schema.Array(Schema.String),
+  env: Headers,
+  cwd: Schema.optional(Schema.String),
+});
+export const McpServerConfigView = Schema.Union([McpHttpConfig, McpCommandConfig]);
+export type McpServerConfigView = typeof McpServerConfigView.Type;
+
+/** One entry of Pi's global `mcp.json`: a machine-wide observation, not live session connectivity. */
 export const McpServerSetup = Schema.Struct({
-  id: McpCatalogId,
-  status: Schema.Literals(["missing", "ready", "blocked"]),
+  /** Pi's entry name: the key in `mcpServers` and the namespace of the server's tools. */
+  name: Schema.String,
+  /** The catalog server this entry is, matched by its endpoint or command. */
+  catalog: Schema.optional(McpCatalogId),
+  config: McpServerConfigView,
+  /** A configuration problem the user must fix in Pi, such as the entry being disabled. */
   detail: Schema.optional(Schema.String),
   /** Whether Pi signs in to this entry with MCP OAuth; false when it sends a configured
    * Authorization header, and false for a local command, which Pi starts without signing in. */
   oauth: Schema.Boolean,
   signedIn: Schema.Boolean,
-  /** Opaque identity of the configuration reviewed before confirming removal. */
-  removalKey: Schema.optional(Schema.String),
+  /** Opaque identity of the configuration reviewed before editing or confirming removal. */
+  removalKey: Schema.String,
 });
 export type McpServerSetup = typeof McpServerSetup.Type;
-export const McpSetupState = Schema.Struct({ servers: Schema.Array(McpServerSetup) });
+
+/** A catalog server not configured yet, or one whose default name another entry holds. */
+export const McpAvailableServer = Schema.Struct({
+  id: McpCatalogId,
+  /** Why it cannot be installed as is. */
+  detail: Schema.optional(Schema.String),
+});
+export type McpAvailableServer = typeof McpAvailableServer.Type;
+
+export const McpSetupState = Schema.Struct({
+  /** Every entry of Pi's global file, in its order. */
+  servers: Schema.Array(McpServerSetup),
+  /** Catalog servers no entry is, in catalog order. */
+  available: Schema.Array(McpAvailableServer),
+  /** Pi's MCP configuration cannot be used until the user fixes it in Pi: nothing can change. */
+  problem: Schema.optional(Schema.String),
+});
 export type McpSetupState = typeof McpSetupState.Type;
 
-export const McpSetupRequest = Schema.Union([
-  Schema.Struct({ action: Schema.Literals(["install", "sign-out"]), server: McpCatalogId }),
+/**
+ * What the dialog saves. Adding sends Pi's own `mcpServers` shape, as a form builds it or as a
+ * README documents it, and Pi validates it. Editing sends the fields the dialog shows; the server
+ * merges them into the entry, keeping Pi's other keys, and `authorization` left out keeps the saved
+ * header, `null` removes it.
+ */
+export const McpServerEdit = Schema.Union([
   Schema.Struct({
-    action: Schema.Literal("uninstall"),
-    server: McpCatalogId,
+    url: Schema.String,
+    headers: Headers,
+    authorization: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
+  Schema.Struct({
+    command: Schema.String,
+    args: Schema.Array(Schema.String),
+    env: Headers,
+    cwd: Schema.optional(Schema.String),
+  }),
+]);
+export type McpServerEdit = typeof McpServerEdit.Type;
+
+export const McpSetupRequest = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("install"), server: McpCatalogId }),
+  Schema.Struct({
+    action: Schema.Literal("add"),
+    servers: Schema.Array(Schema.Struct({ name: Schema.String, config: Schema.Unknown })),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("update"),
+    name: Schema.String,
+    removalKey: Schema.String,
+    /** The entry's new name; the same name keeps it. */
+    rename: Schema.optional(Schema.String),
+    config: McpServerEdit,
+  }),
+  Schema.Struct({
+    action: Schema.Literal("remove"),
+    name: Schema.String,
     removalKey: Schema.String,
   }),
+  Schema.Struct({ action: Schema.Literal("sign-out"), name: Schema.String }),
 ]);
 export type McpSetupRequest = typeof McpSetupRequest.Type;

@@ -45,6 +45,7 @@ export type GlobalCommandId =
   | "projects"
   | "new-project"
   | "add-webhook"
+  | "add-mcp-server"
   | "new-skill"
   | "new-prompt"
   | "project-settings"
@@ -94,6 +95,8 @@ export type GlobalCommandIntent =
   | ProjectCommandIntent
   /** Open the webhook editor on a new webhook, as the Webhooks page's header does. */
   | { kind: "add-webhook" }
+  /** Open the MCP server editor on a new server, as the MCP page's header does. */
+  | { kind: "add-mcp-server" }
   /** Open the skill editor on a new skill, as the Skills page's header does. */
   | { kind: "new-skill" }
   /** Open the prompt editor on a new prompt, as the Prompts page's header does. */
@@ -195,6 +198,17 @@ export function pageCommands(
           group: "navigate",
           enabled: true,
           intent: { kind: "add-webhook" },
+        },
+      ];
+    if (page === "mcp")
+      return [
+        {
+          id: "add-mcp-server",
+          label: "Add MCP server",
+          icon: "new",
+          group: "navigate",
+          enabled: true,
+          intent: { kind: "add-mcp-server" },
         },
       ];
     if (page === "skills")

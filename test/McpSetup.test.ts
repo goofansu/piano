@@ -12,7 +12,7 @@ import { McpOAuthCredentialStore } from "../node_modules/@earendil-works/pi-codi
 import { DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { McpSetup, McpSetupEnvironment, McpSetupLive } from "../server/McpSetup.ts";
 import { PiSessions } from "../server/PiSessions.ts";
-import { MCP_CATALOG } from "../shared/mcp.ts";
+import { MCP_CATALOG, type McpSetupState } from "../shared/mcp.ts";
 import type { ProviderLoginState } from "../shared/wire.ts";
 
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
@@ -133,21 +133,23 @@ const until = (setup: McpSetup["Service"], done: (state: ProviderLoginState) => 
       yield* Effect.sleep(5);
     }
   }).pipe(Effect.timeout("10 seconds"));
-const server = (setup: McpSetup["Service"], id: string) =>
-  Effect.map(setup.state, (state) => state.servers.find((server) => server.id === id)!);
+/** The entry named `name`, or undefined when Pi's file has none. */
+const server = (setup: McpSetup["Service"], name: string) =>
+  Effect.map(setup.state, (state) => state.servers.find((server) => server.name === name));
 const linear = (setup: McpSetup["Service"]) => server(setup, "linear");
+const available = (state: McpSetupState) => state.available.map((server) => server.id);
+const names = (state: McpSetupState) => state.servers.map((server) => server.name);
 
 test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall a catalog MCP server through Pi", async () => {
   await fixture((setup, directory, url) =>
     Effect.gen(function* () {
       const file = join(directory, "mcp.json");
       save(file, { custom: { untouched: true }, mcpServers: { other: { command: "do-not-run" } } });
-      assert.deepEqual(yield* linear(setup), {
-        id: "linear",
-        status: "missing",
-        oauth: true,
-        signedIn: false,
-      });
+      // The user's own entry is listed; the catalog servers wait to be installed.
+      const initial = yield* setup.state;
+      assert.deepEqual(names(initial), ["other"]);
+      assert.deepEqual(available(initial), ["linear", "paper"]);
+      assert.equal(yield* linear(setup), undefined);
       const notInstalled = yield* Effect.flip(setup.signIn.start("linear"));
       assert.match(notInstalled.detail, /Install Linear MCP/);
 
@@ -156,9 +158,19 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
         custom: { untouched: true },
         mcpServers: { other: { command: "do-not-run" }, linear: { url } },
       });
-      const installed = yield* linear(setup);
-      assert.equal(installed.status, "ready");
-      assert.equal(installed.signedIn, false);
+      const installed = (yield* linear(setup))!;
+      assert.deepEqual(
+        { ...installed, removalKey: typeof installed.removalKey },
+        {
+          name: "linear",
+          catalog: "linear",
+          config: { url, headers: {}, hasAuthorization: false },
+          oauth: true,
+          signedIn: false,
+          removalKey: "string",
+        },
+      );
+      assert.deepEqual(available(yield* setup.state), ["paper"]);
 
       yield* setup.signIn.start("linear");
       const waiting = yield* until(setup, (state) => !!state.prompt && !!state.url);
@@ -182,7 +194,7 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
         !JSON.stringify(finished).includes("private-"),
         "no token reaches the browser state",
       );
-      assert.equal((yield* linear(setup)).signedIn, true);
+      assert.equal((yield* linear(setup))?.signedIn, true);
       assert.match(readFileSync(join(directory, "mcp-auth.json"), "utf8"), /private-access-token/);
 
       // A second sign-in finds the stored token and asks nothing.
@@ -192,24 +204,25 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
         "Already signed in to Linear.",
       );
 
-      yield* setup.change({ action: "sign-out", server: "linear" });
-      assert.equal((yield* linear(setup)).signedIn, false);
+      yield* setup.change({ action: "sign-out", name: "linear" });
+      assert.equal((yield* linear(setup))?.signedIn, false);
       assert.doesNotMatch(
         readFileSync(join(directory, "mcp-auth.json"), "utf8"),
         /private-access-token/,
       );
 
-      const { removalKey } = yield* linear(setup);
+      const { removalKey } = (yield* linear(setup))!;
       const stale = yield* Effect.flip(
-        setup.change({ action: "uninstall", server: "linear", removalKey: "stale" }),
+        setup.change({ action: "remove", name: "linear", removalKey: "stale" }),
       );
-      assert.match(stale.detail, /changed since|Refresh/);
-      yield* setup.change({ action: "uninstall", server: "linear", removalKey: removalKey! });
+      assert.match(stale.detail, /changed|Refresh/);
+      yield* setup.change({ action: "remove", name: "linear", removalKey });
       assert.deepEqual(json(file), {
         custom: { untouched: true },
         mcpServers: { other: { command: "do-not-run" } },
       });
-      assert.equal((yield* linear(setup)).status, "missing");
+      assert.equal(yield* linear(setup), undefined);
+      assert.deepEqual(available(yield* setup.state), ["linear", "paper"]);
     }),
   );
 });
@@ -231,7 +244,7 @@ test("INV-01/12: uninstall clears the endpoint's sign-in after a switch to a hea
 
       yield* setup.change({ action: "install", server: "linear" });
       signIn("linear", url, "synthetic-linear");
-      assert.equal((yield* linear(setup)).signedIn, true);
+      assert.equal((yield* linear(setup))?.signedIn, true);
 
       // The user switches the same endpoint to a header in Pi; the old sign-in is still stored.
       save(file, {
@@ -240,31 +253,36 @@ test("INV-01/12: uninstall clears the endpoint's sign-in after a switch to a hea
           linear: { url, headers: { Authorization: "Bearer synthetic-header" } },
         },
       });
-      const switched = yield* linear(setup);
-      assert.deepEqual([switched.status, switched.oauth], ["ready", false]);
+      const switched = (yield* linear(setup))!;
+      assert.equal(switched.oauth, false);
+      assert.deepEqual(switched.config, { url, headers: {}, hasAuthorization: true });
+      assert.ok(
+        !JSON.stringify(yield* setup.state).includes("synthetic-header"),
+        "the Authorization value never reaches the browser",
+      );
       assert.ok(store.tokens("linear", url), "the earlier sign-in survives the switch");
 
       const stale = yield* Effect.flip(
-        setup.change({ action: "uninstall", server: "linear", removalKey: "stale" }),
+        setup.change({ action: "remove", name: "linear", removalKey: "stale" }),
       );
-      assert.match(stale.detail, /changed since|Refresh/);
+      assert.match(stale.detail, /changed|Refresh/);
       assert.ok(store.tokens("linear", url), "a stale removal keeps the credentials");
 
-      // An unreadable credential store fails the uninstall and leaves the entry to retry.
+      // An unreadable credential store fails the removal and leaves the entry to retry.
       const stored = readFileSync(auth, "utf8");
       writeFileSync(auth, "{ not json");
       const failed = yield* Effect.flip(
-        setup.change({ action: "uninstall", server: "linear", removalKey: switched.removalKey! }),
+        setup.change({ action: "remove", name: "linear", removalKey: switched.removalKey }),
       );
-      assert.match(failed.detail, /Could not uninstall/);
-      assert.equal((yield* linear(setup)).status, "ready");
+      assert.match(failed.detail, /Could not remove/);
+      assert.ok(yield* linear(setup));
       assert.ok(json(file).mcpServers.linear, "the entry is kept for a retry");
 
       writeFileSync(auth, stored);
       yield* setup.change({
-        action: "uninstall",
-        server: "linear",
-        removalKey: (yield* linear(setup)).removalKey!,
+        action: "remove",
+        name: "linear",
+        removalKey: (yield* linear(setup))!.removalKey,
       });
       assert.deepEqual(json(file), { mcpServers: { notes: { url: notes } } });
       assert.equal(store.tokens("linear", url), undefined);
@@ -272,11 +290,8 @@ test("INV-01/12: uninstall clears the endpoint's sign-in after a switch to a hea
       assert.doesNotMatch(readFileSync(auth, "utf8"), /synthetic-linear/);
 
       yield* setup.change({ action: "install", server: "linear" });
-      const reinstalled = yield* linear(setup);
-      assert.deepEqual(
-        [reinstalled.status, reinstalled.oauth, reinstalled.signedIn],
-        ["ready", true, false],
-      );
+      const reinstalled = (yield* linear(setup))!;
+      assert.deepEqual([reinstalled.oauth, reinstalled.signedIn], [true, false]);
     }),
   );
 });
@@ -287,12 +302,7 @@ test("INV-01/12: a local command server configures its CLI, never signs in, and 
       const file = join(directory, "mcp.json");
       save(file, { custom: { untouched: true }, mcpServers: { other: { command: "do-not-run" } } });
       // Nothing to sign in to, installed or not: Pi starts a local command without OAuth.
-      assert.deepEqual(yield* server(setup, "paper"), {
-        id: "paper",
-        status: "missing",
-        oauth: false,
-        signedIn: false,
-      });
+      assert.equal(yield* server(setup, "paper"), undefined);
       assert.match((yield* Effect.flip(setup.signIn.start("paper"))).detail, /Install Paper MCP/);
 
       // Installing configures the relay; it does not install or look for the CLI, which an
@@ -306,13 +316,14 @@ test("INV-01/12: a local command server configures its CLI, never signs in, and 
           paper: { command: command(directory), args: ["mcp"] },
         },
       });
-      const installed = yield* server(setup, "paper");
-      assert.equal(installed.status, "ready");
+      const installed = (yield* server(setup, "paper"))!;
+      assert.equal(installed.catalog, "paper");
+      assert.deepEqual(installed.config, { command: command(directory), args: ["mcp"], env: {} });
       assert.equal(installed.oauth, false);
       assert.equal(installed.signedIn, false);
       assert.match((yield* Effect.flip(setup.signIn.start("paper"))).detail, /does not sign in/);
       assert.equal(
-        (yield* Effect.result(setup.change({ action: "sign-out", server: "paper" })))._tag,
+        (yield* Effect.result(setup.change({ action: "sign-out", name: "paper" })))._tag,
         "Failure",
       );
       assert.equal(existsSync(join(directory, "mcp-auth.json")), false, "no credential is stored");
@@ -323,14 +334,223 @@ test("INV-01/12: a local command server configures its CLI, never signs in, and 
       yield* setup.change({ action: "install", server: "paper" });
       assert.equal(readFileSync(file, "utf8"), before);
 
-      const { removalKey } = yield* server(setup, "paper");
-      yield* setup.change({ action: "uninstall", server: "paper", removalKey: removalKey! });
+      const { removalKey } = (yield* server(setup, "paper"))!;
+      yield* setup.change({ action: "remove", name: "paper", removalKey });
       assert.deepEqual(json(file), {
         custom: { untouched: true },
         mcpServers: { other: { command: "do-not-run" }, linear: { url } },
       });
-      assert.equal((yield* server(setup, "paper")).status, "missing");
-      assert.equal((yield* server(setup, "linear")).status, "ready");
+      assert.equal(yield* server(setup, "paper"), undefined);
+      assert.ok(yield* server(setup, "linear"));
+    }),
+  );
+});
+
+test("INV-01/12: the user's own servers are added in Pi's shape, all or none, edited with Pi's other keys kept, and the Authorization value stays on the machine", async () => {
+  await fixture((setup, directory, url) =>
+    Effect.gen(function* () {
+      const file = join(directory, "mcp.json");
+      save(file, { custom: { untouched: true }, mcpServers: {} });
+      const docsUrl = "https://docs.example.test/mcp";
+      const docs = {
+        url: docsUrl,
+        headers: { Authorization: "Bearer private-docs", "x-org": "acme" },
+        timeout: 30,
+      };
+      const tools = { command: "uvx", args: ["tools-mcp"], env: { API_KEY: "${TOOLS_KEY}" } };
+
+      // The pasted `mcpServers` shape lands as written, with Pi's own keys intact.
+      const added = yield* setup.change({
+        action: "add",
+        servers: [
+          { name: "docs", config: docs },
+          { name: "tools", config: tools },
+        ],
+      });
+      assert.deepEqual(json(file), { custom: { untouched: true }, mcpServers: { docs, tools } });
+      assert.deepEqual(names(added), ["docs", "tools"]);
+      assert.deepEqual(available(added), ["linear", "paper"]);
+      const [docsSetup, toolsSetup] = added.servers;
+      assert.deepEqual(
+        { ...docsSetup, removalKey: typeof docsSetup!.removalKey },
+        {
+          name: "docs",
+          config: { url: docsUrl, headers: { "x-org": "acme" }, hasAuthorization: true },
+          oauth: false,
+          signedIn: false,
+          removalKey: "string",
+        },
+      );
+      assert.deepEqual(toolsSetup!.config, {
+        command: "uvx",
+        args: ["tools-mcp"],
+        env: { API_KEY: "${TOOLS_KEY}" },
+      });
+      assert.equal(toolsSetup!.oauth, false);
+      assert.ok(!JSON.stringify(added).includes("private-docs"), "no header value on the wire");
+
+      // Refusals name the field; a batch with one bad entry writes nothing.
+      const before = readFileSync(file, "utf8");
+      const taken = yield* Effect.flip(
+        setup.change({ action: "add", servers: [{ name: "docs", config: { url } }] }),
+      );
+      assert.deepEqual([taken.field, taken.detail], ["name", "Another MCP server is named docs."]);
+      const invalid = yield* Effect.flip(
+        setup.change({
+          action: "add",
+          servers: [
+            { name: "fine", config: { url } },
+            { name: "broken", config: { nope: true } },
+          ],
+        }),
+      );
+      assert.equal(invalid.field, "config");
+      assert.match(invalid.detail, /broken/);
+      const twice = yield* Effect.flip(
+        setup.change({
+          action: "add",
+          servers: [
+            { name: "dup", config: { url } },
+            { name: "dup", config: { url } },
+          ],
+        }),
+      );
+      assert.equal(twice.field, "name");
+      assert.equal(readFileSync(file, "utf8"), before);
+
+      // Editing: a rename, new headers, the saved Authorization kept while the edit leaves it out.
+      const edited = yield* setup.change({
+        action: "update",
+        name: "docs",
+        removalKey: docsSetup!.removalKey,
+        rename: "handbook",
+        config: { url: docsUrl, headers: { "x-team": "platform" } },
+      });
+      assert.deepEqual(json(file).mcpServers.handbook, {
+        url: docsUrl,
+        headers: { Authorization: "Bearer private-docs", "x-team": "platform" },
+        timeout: 30,
+      });
+      assert.equal(json(file).mcpServers.docs, undefined);
+      assert.deepEqual(names(edited), ["tools", "handbook"]);
+      const handbook = edited.servers.find((server) => server.name === "handbook")!;
+      assert.deepEqual(handbook.config, {
+        url: docsUrl,
+        headers: { "x-team": "platform" },
+        hasAuthorization: true,
+      });
+
+      // A stale identity refuses the edit; `null` removes the header, so Pi signs in instead.
+      const stale = yield* Effect.flip(
+        setup.change({
+          action: "update",
+          name: "handbook",
+          removalKey: docsSetup!.removalKey,
+          config: { url: docsUrl, headers: {} },
+        }),
+      );
+      assert.match(stale.detail, /changed|Refresh/);
+      const cleared = yield* setup.change({
+        action: "update",
+        name: "handbook",
+        removalKey: handbook.removalKey,
+        config: { url: docsUrl, headers: {}, authorization: null },
+      });
+      assert.deepEqual(json(file).mcpServers.handbook, { url: docsUrl, timeout: 30 });
+      const signsIn = cleared.servers.find((server) => server.name === "handbook")!;
+      assert.deepEqual(
+        [signsIn.oauth, signsIn.config],
+        [true, { url: docsUrl, headers: {}, hasAuthorization: false }],
+      );
+
+      // A change of transport drops the other transport's keys; Pi still validates the result.
+      const switched = yield* setup.change({
+        action: "update",
+        name: "tools",
+        removalKey: toolsSetup!.removalKey,
+        config: { url: "https://tools.example.test/mcp", headers: {}, authorization: "Bearer t" },
+      });
+      assert.deepEqual(json(file).mcpServers.tools, {
+        url: "https://tools.example.test/mcp",
+        headers: { Authorization: "Bearer t" },
+      });
+      const toolsNow = switched.servers.find((server) => server.name === "tools")!;
+      const rejected = yield* Effect.flip(
+        setup.change({
+          action: "update",
+          name: "tools",
+          removalKey: toolsNow.removalKey,
+          config: { command: "", args: [], env: {} },
+        }),
+      );
+      assert.equal(rejected.field, "config");
+      assert.deepEqual(json(file).mcpServers.tools, {
+        url: "https://tools.example.test/mcp",
+        headers: { Authorization: "Bearer t" },
+      });
+    }),
+  );
+});
+
+test("INV-01/12: renaming or re-pointing an OAuth entry drops its stored sign-in; Pi's MCP switch blocks every change", async () => {
+  await fixture((setup, directory, url) =>
+    Effect.gen(function* () {
+      const file = join(directory, "mcp.json");
+      const store = new McpOAuthCredentialStore(
+        new FileAuthStorageBackend(join(directory, "mcp-auth.json")),
+        directory,
+      );
+      const signIn = (name: string, endpoint: string, token: string) =>
+        store.forServer(name, endpoint).save({
+          serverUrl: endpoint,
+          tokens: { access_token: token, refresh_token: `${token}-refresh`, token_type: "Bearer" },
+        });
+      // The user's own entry at the catalog endpoint is Linear's, whatever its name.
+      yield* setup.change({ action: "add", servers: [{ name: "mine", config: { url } }] });
+      signIn("mine", url, "synthetic-mine");
+      const mine = (yield* server(setup, "mine"))!;
+      assert.deepEqual([mine.catalog, mine.oauth, mine.signedIn], ["linear", true, true]);
+      assert.deepEqual(available(yield* setup.state), ["paper"]);
+      yield* setup.change({ action: "install", server: "linear" });
+      assert.equal(json(file).mcpServers.linear, undefined, "install keeps the matching entry");
+
+      const renamed = yield* setup.change({
+        action: "update",
+        name: "mine",
+        removalKey: mine.removalKey,
+        rename: "theirs",
+        config: { url, headers: {} },
+      });
+      assert.deepEqual(names(renamed), ["theirs"]);
+      assert.equal(store.tokens("mine", url), undefined, "tokens under the old name are dropped");
+      assert.equal(renamed.servers[0]!.signedIn, false);
+
+      // A catalog server whose default name another entry holds says so instead of installing.
+      save(file, { mcpServers: { linear: { url: "https://elsewhere.test/mcp" } } });
+      const named = yield* setup.state;
+      assert.deepEqual(named.available, [
+        { id: "linear", detail: "Another MCP server is named linear." },
+        { id: "paper" },
+      ]);
+      const refused = yield* Effect.flip(setup.change({ action: "install", server: "linear" }));
+      assert.equal(refused.field, "name");
+
+      // Pi's switch for all MCP: the page reports it and refuses to write.
+      writeFileSync(
+        join(directory, "settings.json"),
+        JSON.stringify({ extensions: ["-builtin:mcp"] }),
+      );
+      const off = yield* setup.state;
+      assert.match(off.problem ?? "", /switched off/);
+      assert.deepEqual([off.servers, off.available], [[], []]);
+      const text = readFileSync(file, "utf8");
+      assert.equal(
+        (yield* Effect.result(
+          setup.change({ action: "add", servers: [{ name: "docs", config: { url } }] }),
+        ))._tag,
+        "Failure",
+      );
+      assert.equal(readFileSync(file, "utf8"), text);
     }),
   );
 });

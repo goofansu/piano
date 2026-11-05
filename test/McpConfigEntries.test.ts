@@ -362,3 +362,116 @@ test("INV-12: Pi's auth order is provider, then Authorization header, then OAuth
     auth: { provider: "radius" },
   });
 });
+
+test("INV-01/12: named entries are added all or none under Pi's validation, replaced only as reviewed, and removed by name", async () => {
+  await fixture((entries, file, probes) =>
+    Effect.gen(function* () {
+      save(file, { custom: "keep", mcpServers: { other: { command: "do-not-run" } } });
+      assert.equal(entries.problem(), undefined);
+      assert.deepEqual(
+        entries.list().map((entry) => entry.name),
+        ["other"],
+      );
+      assert.equal(yield* probes(), 1);
+
+      // A taken name, a repeated name or an invalid entry refuses the whole batch, naming its field.
+      const text = readFileSync(file, "utf8");
+      for (const [servers, field, detail] of [
+        [[{ name: "other", config: { url: URL } }], "name", /named other/],
+        [
+          [
+            { name: "a", config: { url: URL } },
+            { name: "a", config: { url: URL } },
+          ],
+          "name",
+          /listed twice/,
+        ],
+        [[{ name: " ", config: { url: URL } }], "name", /Enter a name/],
+        [[{ name: "bad name", config: { url: URL } }], "name", /invalid server name/],
+        [[{ name: "empty", config: { command: " " } }], "config", /Enter a command/],
+        [
+          [
+            { name: "a", config: { url: URL } },
+            { name: "b", config: { nothing: true } },
+          ],
+          "config",
+          /b/,
+        ],
+      ] as const) {
+        const refused = yield* Effect.flip(entries.add(servers));
+        assert.equal(refused.field, field);
+        assert.match(refused.detail, detail);
+        assert.equal(readFileSync(file, "utf8"), text);
+      }
+      assert.equal(yield* probes(), 1, "a refused batch writes nothing");
+
+      yield* entries.add([
+        { name: "docs", config: { url: URL, headers: { Authorization: "Bearer t" } } },
+        { name: "notes", config: { command: COMMAND, args: ["mcp"] } },
+      ]);
+      assert.deepEqual(json(file), {
+        custom: "keep",
+        mcpServers: {
+          other: { command: "do-not-run" },
+          docs: { url: URL, headers: { Authorization: "Bearer t" } },
+          notes: { command: COMMAND, args: ["mcp"] },
+        },
+      });
+      assert.equal(yield* probes(), 2);
+      assert.deepEqual(entries.named("docs")?.config, {
+        url: URL,
+        headers: { Authorization: "Bearer t" },
+      });
+
+      // Replacing takes the reviewed entry only, under its new name when asked, and verifies the result.
+      const reviewed = entries.observe(DOCS).removalKey!;
+      const stale = yield* Effect.flip(
+        entries.update("docs", "stale", undefined, (existing) => existing),
+      );
+      assert.match(stale.detail, /changed since confirmation/);
+      const clash = yield* Effect.flip(
+        entries.update("docs", reviewed, "notes", (existing) => existing),
+      );
+      assert.equal(clash.field, "name");
+      const invalid = yield* Effect.flip(
+        entries.update("docs", reviewed, undefined, () => ({ url: "" })),
+      );
+      assert.equal(invalid.field, "config");
+      assert.ok(json(file).mcpServers.docs, "a refused replacement keeps the entry");
+      const saved = yield* entries.update("docs", reviewed, "handbook", (existing) => ({
+        ...existing,
+        timeout: 30,
+      }));
+      assert.equal(saved.name, "handbook");
+      assert.deepEqual(json(file).mcpServers, {
+        other: { command: "do-not-run" },
+        notes: { command: COMMAND, args: ["mcp"] },
+        handbook: { url: URL, headers: { Authorization: "Bearer t" }, timeout: 30 },
+      });
+
+      // Removal by name, as reviewed; `before` can keep the entry by throwing.
+      const key = entries.observe(DOCS).removalKey!;
+      const kept = yield* Effect.flip(
+        entries.removeNamed("handbook", key, () => {
+          throw new Error("credentials unreadable");
+        }),
+      );
+      assert.match(kept.detail, /credentials unreadable/);
+      assert.ok(json(file).mcpServers.handbook);
+      assert.equal((yield* entries.removeNamed("handbook", key)).name, "handbook");
+      assert.deepEqual(Object.keys(json(file).mcpServers), ["other", "notes"]);
+      assert.equal((yield* Effect.result(entries.removeNamed("handbook", key)))._tag, "Failure");
+
+      // Pi's switch for all MCP, or an unreadable file, is the page's problem rather than an entry's.
+      writeFileSync(
+        join(file, "..", "settings.json"),
+        JSON.stringify({ extensions: ["-builtin:mcp"] }),
+      );
+      assert.match(entries.problem() ?? "", /switched off/);
+      rmSync(join(file, "..", "settings.json"));
+      writeFileSync(file, "{malformed");
+      assert.match(entries.problem() ?? "", /invalid entries/);
+      assert.throws(() => entries.list());
+    }),
+  );
+});

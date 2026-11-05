@@ -260,6 +260,26 @@ test("on Settings › Webhooks the palette offers Add webhook, which opens the w
   );
 });
 
+test("on Settings › MCP the palette offers Add MCP server, which opens the MCP server editor", () => {
+  const addServer = (settings: GlobalCommandContext["settings"]) =>
+    globalCommands(onNewPage, { ...ctx, settings }).find((c) => c.label === "Add MCP server");
+  const add = addServer("mcp");
+  assert.ok(add);
+  assert.equal(add.enabled, true);
+  const calls: unknown[][] = [];
+  const effects = new Proxy({} as CommandEffects, {
+    get:
+      (_, name) =>
+      (...args: unknown[]) => {
+        calls.push([name, ...args]);
+      },
+  });
+  assert.equal(runCommand(add, effects), true);
+  assert.deepEqual(calls, [["addMcpServer"]]);
+  assert.equal(addServer(null), undefined, "a page outside Settings offers none");
+  assert.equal(addServer("webhooks"), undefined, "another Settings page offers none");
+});
+
 test("Show folder and branch is one command for the palette and the View menu, naming what it does", () => {
   const command = (folderAndBranch: boolean) =>
     globalCommands(onNewPage, { ...ctx, view: { ...ctx.view, folderAndBranch } }).find(

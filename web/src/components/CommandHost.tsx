@@ -57,6 +57,7 @@ import {
 import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
 import { useChangesWrap } from "@/lib/useChangesWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
+import { mcpServerEditor } from "@/lib/useMcpServerEditor";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
@@ -272,6 +273,7 @@ export function CommandHost({
       previewObservation.refresh();
     },
     addWebhook: () => webhookEditor.open("new"),
+    addMcpServer: () => mcpServerEditor.open("new"),
     newSkill: () => skillEditor.open(),
     newPrompt: () => promptEditor.open(),
   };

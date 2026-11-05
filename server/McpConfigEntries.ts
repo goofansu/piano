@@ -16,6 +16,7 @@ import { Data, Effect } from "effect";
 // these pinned compatibility dependencies; McpConfigEntries tests exercise the installed helpers.
 // Recheck on every Pi upgrade and replace with a public interface when one exists. Do not
 // reproduce Pi's loader or move configuration into Registry (INV-01/12).
+import { validateMcpServerConfig } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/mcp-servers.js";
 import {
   addMcpServerConfig,
   loadMcpConfig,
@@ -100,9 +101,41 @@ export const withProviderAuth = (
 
 export class McpConfigEntryError extends Data.TaggedError("McpConfigEntryError")<{
   readonly detail: string;
+  /** The form field the refusal belongs to, when a user's input caused it. */
+  readonly field?: string;
 }> {}
 
+/** A named entry to write, in Pi's `mcpServers` shape as the user or a form supplied it. */
+export interface McpNamedConfig {
+  readonly name: string;
+  readonly config: unknown;
+}
+
 export interface McpConfigEntries {
+  /** Every global entry in file order. Throws when Pi's configuration is unreadable. */
+  readonly list: () => McpServerEntry[];
+  /** Why no entry can be used or changed: Pi's MCP switched off, or an unreadable file. */
+  readonly problem: () => string | undefined;
+  /** The global entry named `name`. Throws when Pi's configuration is unreadable. */
+  readonly named: (name: string) => McpServerEntry | undefined;
+  /** Adds entries under new names, each validated by Pi, all or none: a taken or repeated name,
+   * or an invalid configuration, writes nothing. */
+  readonly add: (servers: readonly McpNamedConfig[]) => Effect.Effect<void, McpConfigEntryError>;
+  /** Replaces the entry named `name` with `configure(existing)`, under `rename` when given, only
+   * while it still matches the reviewed `removalKey`. Pi validates the result. */
+  readonly update: (
+    name: string,
+    removalKey: string,
+    rename: string | undefined,
+    configure: (existing: McpServerConfig) => McpServerConfig,
+  ) => Effect.Effect<McpServerEntry, McpConfigEntryError>;
+  /** Removes the entry named `name` only while it still matches the reviewed `removalKey`.
+   * `before` runs on the confirmed entry ahead of the write; when it throws, the entry stays. */
+  readonly removeNamed: (
+    name: string,
+    removalKey: string,
+    before?: (entry: McpServerEntry) => void,
+  ) => Effect.Effect<McpServerEntry, McpConfigEntryError>;
   /** The global entry for `catalog`, matched by endpoint or command, else by its default name.
    * Throws when Pi's configuration is unreadable or the match is ambiguous. */
   readonly find: (catalog: McpCatalogTarget) => McpServerEntry | undefined;
@@ -127,13 +160,13 @@ const sameArgs = (configured: readonly string[] | undefined, catalog: readonly s
   (configured ?? []).length === catalog.length &&
   (configured ?? []).every((arg, index) => expandHome(arg) === expandHome(catalog[index]!));
 /** The same setup as `catalog`, whatever the entry is named. */
-const isTarget = (config: McpServerConfig, catalog: McpCatalogTarget) =>
+export const isTarget = (config: McpServerConfig, catalog: McpCatalogTarget) =>
   isCommandEntry(catalog)
     ? !("url" in config) &&
       expandHome(config.command) === expandHome(catalog.command) &&
       sameArgs(config.args, catalog.args)
     : "url" in config && normalize(config.url) === normalize(catalog.url);
-const removalKey = (entry: McpServerEntry) =>
+export const removalKey = (entry: McpServerEntry) =>
   createHash("sha256")
     .update(JSON.stringify([entry.name, entry.config]))
     .digest("hex");
@@ -206,13 +239,95 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
             wrote = true;
             run();
           }),
-        catch: (cause) => new McpConfigEntryError({ detail: message(cause, fallback) }),
+        // A refusal of the user's input keeps its field; anything else reads as the operation's failure.
+        catch: (cause) =>
+          cause instanceof McpConfigEntryError
+            ? cause
+            : new McpConfigEntryError({ detail: message(cause, fallback) }),
       }).pipe(Effect.ensuring(Effect.suspend(() => (wrote ? facts.invalidate : Effect.void))));
     });
 
+  const problem = () => {
+    try {
+      globalEntries();
+      return builtinDisabled()
+        ? "MCP is switched off in Pi's settings. Enable it in Pi before continuing."
+        : undefined;
+    } catch (cause) {
+      return message(cause, "Check Pi's global MCP configuration.");
+    }
+  };
+  const named = (name: string) => globalEntries().find((entry) => entry.name === name);
+  const refuse = (detail: string, field?: string) =>
+    new McpConfigEntryError({ detail, ...(field ? { field } : {}) });
+  /** Pi's own validation of one entry, as its loader applies it. */
+  const validated = (name: string, raw: unknown) => {
+    if (!name.trim()) throw refuse("Enter a name.", "name");
+    const result = validateMcpServerConfig(name, raw);
+    if (typeof result === "string")
+      throw refuse(result, result.startsWith("invalid server name") ? "name" : "config");
+    // Pi would start an empty command and fail later; the dialog's field is where to say so.
+    if ("command" in result && !result.command.trim()) throw refuse("Enter a command.", "config");
+    return result;
+  };
+  const taken = (name: string, except?: string) => {
+    if (name !== except && named(name))
+      throw refuse(`Another MCP server is named ${name}.`, "name");
+  };
+  const reviewed = (name: string, key: string) => {
+    const entry = named(name);
+    if (!entry || removalKey(entry) !== key)
+      throw new Error("Configuration changed since confirmation.");
+    return entry;
+  };
   return {
     find,
     observe,
+    list: globalEntries,
+    problem,
+    named,
+    add: (servers) =>
+      writing((write) => {
+        const blocked = problem();
+        if (blocked) throw new Error(blocked);
+        const names = new Set<string>();
+        const entries = servers.map(({ name, config }) => {
+          if (names.has(name)) throw refuse(`${name} is listed twice.`, "name");
+          names.add(name);
+          taken(name);
+          return { name, config: validated(name, config) };
+        });
+        write(() => {
+          for (const { name, config } of entries) addMcpServerConfig(file, name, config);
+        });
+        for (const { name } of entries)
+          if (!named(name)) throw new Error("Configuration was not saved.");
+      }, "Could not save the MCP configuration."),
+    update: (name, key, rename, configure) =>
+      writing((write) => {
+        const blocked = problem();
+        if (blocked) throw new Error(blocked);
+        const existing = reviewed(name, key);
+        const next = rename ?? name;
+        taken(next, name);
+        const config = validated(next, configure(existing.config));
+        write(() => {
+          if (next !== name) removeMcpServerConfig(file, name);
+          addMcpServerConfig(file, next, config);
+        });
+        const saved = named(next);
+        if (!saved || (next !== name && named(name)))
+          throw new Error("Configuration was not saved.");
+        return saved;
+      }, "Could not save the MCP configuration."),
+    removeNamed: (name, key, before) =>
+      writing((write) => {
+        const entry = reviewed(name, key);
+        before?.(entry);
+        write(() => removeMcpServerConfig(file, name));
+        if (named(name)) throw new Error("Removal not verified.");
+        return entry;
+      }, "Could not remove the MCP configuration."),
     save: (catalog, configure) =>
       writing((write) => {
         const before = observe(catalog);
