@@ -47,7 +47,7 @@ export interface SidebarLayout<T = HTMLElement> {
   show: () => void;
   hide: () => void;
   toggle: () => void;
-  /** The desktop column's state, as the stock sidebar shortcut sets it. */
+  /** Sets the desktop column's state independently of the narrow reveal. */
   setCollapsed: (collapsed: boolean) => void;
   /** The sheet's committed state, as a swipe or its own dismissal sets it. */
   setMobileOpen: (open: boolean) => void;

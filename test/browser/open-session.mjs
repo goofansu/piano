@@ -127,6 +127,62 @@ await run(
     await page.see("Answer 6.");
     await page.capture("1-transcript");
 
+    // Cmd+B uses Piano's column/reveal controller, even from the composer. Meta is explicit:
+    // Mod on Linux is Ctrl, which must remain the browser/text field's shortcut.
+    const sidebarDraft = "Keep the Cmd+B draft";
+    const sidebarColumn = `document.querySelector('[data-slot="layout-sidebar"]')`;
+    const sidebarReveal = `document.querySelector('[data-slot="mobile-sidebar"][role="dialog"]')`;
+    await page.ab("fill", '[aria-label="Message"]', sidebarDraft);
+    const sidebarChord = async (width, narrow, label) => {
+      await page.ab("set", "viewport", String(width), "900");
+      await page.ab("focus", '[aria-label="Message"]');
+      const before = await page.evaluate(`${sidebarColumn}.getBoundingClientRect().width`);
+      for (const key of ["Control+b", "Meta+Shift+b", "Meta+Alt+b", "Meta+Control+b"]) {
+        await page.press(key);
+        assert.equal(
+          await page.evaluate(`!!${sidebarReveal}`),
+          false,
+          `${key} leaves reveal closed`,
+        );
+        assert.equal(await page.evaluate(`${sidebarColumn}.getBoundingClientRect().width`), before);
+      }
+      await page.press("Meta+b");
+      await page.until(
+        narrow ? `!!${sidebarReveal}` : `${sidebarColumn}.getBoundingClientRect().width === 0`,
+      );
+      await page.capture(`sidebar-${label}-${width}-toggled`);
+      await page.press("Meta+b");
+      await page.until(
+        `!${sidebarReveal} && ${sidebarColumn}.getBoundingClientRect().width === ${before}`,
+      );
+      assert.equal(
+        await page.evaluate(`document.activeElement?.getAttribute('aria-label')`),
+        "Message",
+      );
+      assert.equal(
+        await page.evaluate(`document.querySelector('[aria-label="Message"]').value`),
+        sidebarDraft,
+      );
+      await page.capture(`sidebar-${label}-${width}-returned`);
+    };
+    for (const width of [767, 768, 769, 1146, 1280]) {
+      await sidebarChord(width, width < 768, "default-font");
+    }
+    // Media-query rem follows the browser default font, not documentElement.style.fontSize.
+    await page.cdp(async (cdp) => {
+      await cdp("Page.setFontSizes", { fontSizes: { standard: 20 } });
+      try {
+        for (const width of [800, 959, 960, 961]) {
+          await sidebarChord(width, width < 960, "20px-font");
+        }
+      } finally {
+        await cdp("Page.setFontSizes", { fontSizes: { standard: 16 } });
+      }
+    });
+    assert.deepEqual(page.prompts(), [], "sidebar chords never submit the composer draft");
+    await page.ab("fill", '[aria-label="Message"]', "");
+    await page.ab("set", "viewport", "1280", "900");
+
     // Opening a tool reads it from its header: the output grows below the header the reader
     // clicked. A fresh transcript follows the bottom, and used to follow this growth too, so the
     // first open showed the output's tail with its header pinned at the top.

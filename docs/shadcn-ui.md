@@ -36,6 +36,7 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 | Pointer-close focus; keyboard/hover tooltips | `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/pointerClose.ts` |
 | Search/option row heights, including touch and the palette dialog | `PianoCommand` |
 | Settings sidebar tooltip policy | `PianoSidebarMenuButton` |
+| Global ⌘B routing and keyboard policy | `useSidebarLayoutController`; `AppLayout` disables the stock provider listener |
 | Narrow-viewport sidebar reveal and partial scrim | `PianoSidebarReveal`; transient finger tracking in `useSidebarSwipe`, surface styles in `index.css` |
 | Theme tokens and existing selected-sidebar styling | `index.css` |
 
@@ -75,27 +76,37 @@ its startup/hidden fallback. Trigger placement follows viewport; the project bre
 CSS `md`; rail eligibility comes from navigation/commands. Wide one-area-at-a-time keeps both the
 breadcrumb and beside-title sheet trigger. See [Quiet UI](quiet-ui.md#shared-structure).
 
-Upstream `ui/sidebar.tsx` and `hooks/use-mobile.ts` remain unchanged. The stock provider and
-Settings tooltip still use that upstream hook (`innerWidth < 768`, `max-width: 767px` events).
-Their `isMobile` can therefore disagree with CSS and the application at fractional widths or a
-non-default browser font baseline. In particular, the provider's shortcut routing and Settings
-sidebar tooltip suppression are not unified by the application query. Stock `openMobile` remains
-disconnected from Piano's reveal, as below. Neither upstream consumer owns session capacity.
+The stock provider and Settings tooltip still use upstream `hooks/use-mobile.ts`
+(`innerWidth < 768`, `max-width: 767px` events). Their `isMobile` can therefore disagree with CSS
+and the application at fractional widths or a non-default browser font baseline. This remains
+an exception for Settings sidebar tooltip suppression and stock sidebar consumers, not Piano's
+⌘B routing: `AppLayout` disables the stock listener. Stock `openMobile` remains disconnected from
+Piano's reveal, as below. Neither upstream consumer owns session capacity.
 
 ### Stock sidebar shortcut
 
-`ui/sidebar.tsx` carries the one intentional patch in `ui/`, marked `Piano patch` in its source:
-the built-in shortcut toggles on ⌘B alone. Upstream also takes Ctrl+B, which on macOS moves the
+`ui/sidebar.tsx` carries the intentional shortcut patch in `ui/`, marked `Piano patch` in its
+source: an optional `keyboardShortcut` provider prop (default `true`) can disable the listener
+entirely; when enabled, the built-in shortcut still toggles on ⌘B alone. Upstream also takes Ctrl+B, which on macOS moves the
 caret back a character in text fields and elsewhere is the browser's or a field's own, and takes
 ⌘ chords with Shift or Alt, which belong to the browser (the latter is
 [shadcn-ui/ui#11418](https://github.com/shadcn-ui/ui/pull/11418), still open). Other platforms toggle
 the sidebar from the palette or its button. Reapply the patch on every sidebar upgrade until upstream
-carries it; drop the #11418 part once that merges. The listener sits alongside Piano's Mod+K command
-palette. Its controlled `open` prop connects the shortcut to Piano's desktop sidebar, including the
-saved collapsed preference. Piano's separate narrow-viewport reveal still uses its
-layout controls; stock `openMobile` is not connected to that reveal. It composes the same Radix
-modal primitive as Sheet, but exposes stationary navigation under a translated live page rather
-than moving a sheet over it. The sidebar occupies 75% of the narrow viewport; only a claimed
+carries it; drop the #11418 part once that merges.
+
+Piano passes `keyboardShortcut={false}` from `AppLayout`. Its one global listener lives with the
+page-lifetime controller in `useSidebarLayoutController`, alongside the separate Mod+K palette
+listener. It preserves the same exact-key/modifier policy and toggles once per matching keydown,
+including held-key repeats; it does not filter editing targets or Settings. It calls `layout.toggle()`
+just like Piano's controls use that controller, so the CSS-aligned 48rem query chooses between
+collapsing/expanding the column and opening/closing the modal reveal. Two presses restore the
+original state. Narrow toggles do not change the saved desktop collapse or width preference; reveal
+focus capture, dismissal and breakpoint cleanup stay with the existing controller/modal lifecycle.
+The provider's controlled `open` still projects the desktop preference for its menu primitives,
+not keyboard routing; stock `openMobile` is not connected to Piano's reveal.
+
+The reveal composes the same Radix modal primitive as Sheet, but exposes stationary navigation
+under a translated live page rather than moving a sheet over it. The sidebar occupies 75% of the narrow viewport; only a claimed
 horizontal drag anywhere on the main content overrides touch scrolling, with browser edges,
 editing controls and horizontal scrollers excluded. Drag motion tracks the finger 1:1; on release
 the sheet comes to rest open or closed at once. The moving surfaces have compositor
@@ -112,14 +123,14 @@ and navigation. Cancellation discards pending frames and returns the surfaces to
 2. Take reviewed upstream source changes without carrying local component patches, except the
    [sidebar shortcut patch](#stock-sidebar-shortcut). Avoid
    overwriting `index.css`, app wrappers or unrelated dependencies as a side effect.
-   The `--diff` for `sidebar.tsx` always shows that patch as a hunk in `handleKeyDown` replacing
-   the `// Piano patch` comment and its `event.metaKey && !event.ctrlKey && !event.shiftKey &&
-   !event.altKey` condition with `(event.metaKey || event.ctrlKey)`. That hunk is the overwrite
-   reverting Piano, not an upstream change: after writing the file, restore the patched condition
-   and its comment, then check `git diff web/src/components/ui/sidebar.tsx` no longer touches
-   `handleKeyDown`. If the upstream condition already excludes Shift and Alt (#11418 merged), keep
-   only the Ctrl+B exclusion and update [the shortcut section](#stock-sidebar-shortcut). If it
-   excludes Ctrl+B too, drop the patch and its comment.
+   The `--diff` for `sidebar.tsx` shows removal of the `keyboardShortcut` prop, its default,
+   effect guard/dependency, and the `handleKeyDown` modifier restriction. These hunks revert Piano,
+   not upstream changes: restore both the opt-out and the patched condition/comments after writing
+   the file. Confirm `AppLayout` still disables the stock listener and only the application listener
+   handles ⌘B. If upstream supplies an equivalent opt-out, adopt it without enabling two listeners.
+   If its condition already excludes Shift and Alt (#11418 merged), keep only the Ctrl+B exclusion;
+   if it excludes Ctrl+B too, drop that condition patch/comment, not the opt-out. Update
+   [the shortcut section](#stock-sidebar-shortcut) accordingly.
 3. Check changed props, slots and internal composition against app wrappers. In particular,
    upstream composites import their own `ui/` children: they do not automatically use Piano
    wrappers. `PianoCommand` composes its own dialog, and `PianoSidebarMenuButton` its own tooltip.
@@ -128,7 +139,8 @@ and navigation. Cancellation discards pending frames and returns the surfaces to
    session menu, palette, settings, phone layout, light and dark). After it, run the repository
    gates and `npm run test:browser`, capture again into a second directory and compare the pairs.
    Then observe the rest through `agent-browser` on a scratch instance: pointer and keyboard
-   focus, Mod+K, ⌘B (and Ctrl+B, ⌘⇧B, ⌘⌥B leaving the sidebar alone), touch focus, the mobile sidebar reveal and finger tracking,
+   focus, Mod+K, ⌘B twice in wide and narrow viewports, including a 20px browser default font
+   (48rem = 960px), and Ctrl+B, ⌘⇧B, ⌘⌥B leaving the sidebar alone; touch focus, the narrow sidebar reveal and finger tracking,
    cancellation and dismissal. Physical Safari browser-edge navigation still
    requires a device check.
 

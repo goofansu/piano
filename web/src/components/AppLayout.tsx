@@ -50,6 +50,7 @@ export function AppLayout({
   };
   return (
     <SidebarProvider
+      keyboardShortcut={false}
       open={!collapsed}
       onOpenChange={(open) => layout.setCollapsed(!open)}
       className="relative h-dvh min-h-0 overflow-hidden bg-surface-0 text-ink"
