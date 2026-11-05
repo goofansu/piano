@@ -71,6 +71,7 @@ function KeyValueFields({
         <div key={index} className="flex items-center gap-2">
           <Input
             aria-label={`${addLabel} name ${index + 1}`}
+            placeholder="Name"
             value={pair.key}
             disabled={disabled}
             className="font-mono text-xs"
@@ -78,6 +79,7 @@ function KeyValueFields({
           />
           <Input
             aria-label={`${addLabel} value ${index + 1}`}
+            placeholder="Value"
             value={pair.value}
             disabled={disabled}
             autoComplete="off"
