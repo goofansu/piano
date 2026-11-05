@@ -1,9 +1,9 @@
 /** Machine-wide setup of MCP servers in Pi's global configuration, not an MCP client for sessions.
  * Pi owns the configuration format and its validation, OAuth (discovery, registration, PKCE,
  * refresh) and credential storage; this module decides which entries to add, change or remove,
- * connects catalog servers by their known endpoint, and relays Pi's sign-in prompts. A URL server
- * is saved only once Pi's own client has connected to it, signing in first when it asks; a local
- * command is saved as Pi validates it, without being started. Nothing here mutates running
+ * connects catalog servers by their known endpoint, and relays Pi's sign-in prompts. An entry is
+ * saved only once Pi's own client has connected to it: a URL server is reached, signing in first
+ * when it asks, and a local command is started and stopped again. Nothing here mutates running
  * sessions: a new session reads the updated setup. */
 import { join } from "node:path";
 import type { McpServerConfig, McpServerEntry } from "@earendil-works/pi-coding-agent";
@@ -52,8 +52,10 @@ const oauthUrl = (entry: McpServerEntry) => {
   const auth = authOf(entry.config);
   return auth._tag === "oauth" ? auth.url : undefined;
 };
-/** How long connecting to a server before saving it may take, Pi's retries included. */
+/** How long connecting to a URL server before saving it may take, Pi's retries included. */
 const CONNECT_TIMEOUT_MS = 20_000;
+/** How long a local command may take to start: `npx` or `uvx` may download the server first. */
+const START_TIMEOUT_MS = 60_000;
 
 const isAuthorization = (header: string) => header.toLowerCase() === "authorization";
 const withoutAuthorization = (headers: Record<string, string> | undefined) =>
@@ -239,8 +241,11 @@ export const McpSetupLive = Layer.effect(
         /* Nothing to find them by later; a later sign-in replaces them. */
       }
     };
-    /** Whether Pi's own client connects to `entry`, unsaved: connected, or asks for a sign-in. */
-    const reach = async (entry: McpServerEntry) => {
+    /** Whether Pi's own client connects to `entry`, unsaved: connected, asks for a sign-in, or
+     * failed with Pi's reason (a command's includes the tail of its stderr). */
+    const reach = async (
+      entry: McpServerEntry,
+    ): Promise<"connected" | "sign-in" | { readonly failed: string | undefined }> => {
       const connection = new McpServerConnection({
         entry,
         cwd: directory,
@@ -251,15 +256,15 @@ export const McpSetupLive = Layer.effect(
       });
       const timer = setTimeout(
         () => void connection.close().catch(() => undefined),
-        CONNECT_TIMEOUT_MS,
+        "url" in entry.config ? CONNECT_TIMEOUT_MS : START_TIMEOUT_MS,
       );
       try {
         await connection.getClient();
-        return "connected" as const;
+        return "connected";
       } catch {
         return connection.state === "needs-auth" && oauthUrl(entry)
-          ? ("sign-in" as const)
-          : ("failed" as const);
+          ? "sign-in"
+          : { failed: connection.error };
       } finally {
         clearTimeout(timer);
         await connection.close().catch(() => undefined);
@@ -391,36 +396,40 @@ export const McpSetupLive = Layer.effect(
       if ("url" in entry.config) credentials.remove(entry.name, entry.config.url);
     };
 
-    /** Saves `entry` with `save`, after connecting to it when it is a URL server: one that asks for
-     * a sign-in waits for it, and one that cannot be reached is refused on its URL. */
+    /** Saves `entry` with `save` once Pi's client has connected to it. A URL server that asks for
+     * a sign-in waits for it; one that cannot be reached is refused on its URL, without Pi's reason,
+     * which may hold a response body. A command that does not start is refused with Pi's reason. */
     const saveConnected = (
       entry: McpServerEntry,
       save: Effect.Effect<unknown, McpConfigEntryError>,
       fallback: string,
     ): Effect.Effect<McpSetupChange, McpSetupError> =>
-      "url" in entry.config
-        ? Effect.promise(() => reach(entry)).pipe(
-            Effect.flatMap((reached) => {
-              if (reached === "connected") return writing(save, fallback);
-              const url = oauthUrl(entry);
-              if (reached === "sign-in" && url) {
-                pending = { entry, url, save };
-                return Effect.succeed({
-                  state: snapshot(),
-                  signIn: entry.name,
-                });
-              }
-              const auth =
-                authOf(entry.config)._tag === "header" ? ", the Authorization header" : "";
-              return Effect.fail(
-                new McpSetupError({
-                  detail: `Could not connect to ${label(entry)} MCP. Check the URL${auth} and the network, then try again.`,
-                  field: "config",
-                }),
-              );
+      Effect.promise(() => reach(entry)).pipe(
+        Effect.flatMap((reached) => {
+          if (reached === "connected") return writing(save, fallback);
+          const url = oauthUrl(entry);
+          if (reached === "sign-in" && url) {
+            pending = { entry, url, save };
+            return Effect.succeed({ state: snapshot(), signIn: entry.name });
+          }
+          if (!("url" in entry.config)) {
+            const reason = reached === "sign-in" ? undefined : reached.failed;
+            return Effect.fail(
+              new McpSetupError({
+                detail: `Could not start ${label(entry)} MCP. Check the command, its arguments and environment, then try again.${reason ? `\n${reason}` : ""}`,
+                field: "config",
+              }),
+            );
+          }
+          const auth = authOf(entry.config)._tag === "header" ? ", the Authorization header" : "";
+          return Effect.fail(
+            new McpSetupError({
+              detail: `Could not connect to ${label(entry)} MCP. Check the URL${auth} and the network, then try again.`,
+              field: "config",
             }),
-          )
-        : writing(save, fallback);
+          );
+        }),
+      );
     const prepared = <A>(prepare: () => A, fallback: string) =>
       Effect.try({ try: prepare, catch: (cause) => failure(cause, fallback) });
 

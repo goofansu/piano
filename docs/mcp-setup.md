@@ -29,7 +29,9 @@ Connected list holds servers that worked when they were added:
   field with a fixed message (no response body reaches the browser), and nothing is written.
 
 The same holds for an edit that leaves a URL server: the edit is saved only once the edited
-server connects. A local command is saved as Pi validates it; Piano never starts it to check.
+server connects. A local command is saved only once Pi's client has started it: Piano runs the
+command once, stops it, and refuses one that does not start with Pi's reason (the tail of the
+command's stderr). The dialog says so while a command is entered, since saving runs it.
 
 ## Actions
 
@@ -96,8 +98,8 @@ Start a **new session** after a change; running Pi children are not reloaded.
   server that also accepts a fixed Authorization header: connecting a catalog server that is
   saved only once the pasted-redirect sign-in succeeds (including a rejected paste), stored-token
   reuse, a refused or cancelled sign-in saving nothing and leaving no tokens, an unreachable
-  server or a rejected header refused on the URL field, a local command saved without being
-  started, edits that keep Pi's other keys and the saved Authorization header and save only once
+  server or a rejected header refused on the URL field, a local command saved only once it
+  starts and stopped after the check, edits that keep Pi's other keys and the saved Authorization header and save only once
   they connect, a rename dropping stored tokens, removal after a switch to a header (with an
   unreadable credential store failing and then retrying), an entry at a catalog endpoint, a taken
   default name, and Pi's MCP switch blocking every change.

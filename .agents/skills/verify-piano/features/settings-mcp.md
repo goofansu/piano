@@ -5,7 +5,8 @@
 A URL server is reached before it is saved, so a scratch run that adds one needs a server
 that answers: a URL with no MCP server behind it (`http://127.0.0.1:9/mcp`) shows the refusal,
 and Linear or Jira reach their real endpoints and stop at the sign-in (cancel it). A local
-command is saved without being started. Catalog servers (Linear, Jira) carry their brand mark;
+command is started once and saved only if it starts: `node test/fixtures/phase0-mcp.mjs <log>`
+starts, and adding `--broken` shows the refusal. Catalog servers (Linear, Jira) carry their brand mark;
 other servers carry the server icon.
 
 ## Sub-features
@@ -18,8 +19,10 @@ other servers carry the server icon.
   run) saves the entry, which moves to Connected.
 - `add-form`: Add MCP server (header or palette) opens a dialog on its Form tab: Name, Type
   (URL / Command), URL, Authentication (Sign in if needed / Authorization header), Headers with Add header;
-  on Command: Command, Arguments (one per line), Environment with Add variable, Working directory.
-  A command toasts "<name> MCP added for new sessions." and the row appears with the server
+  on Command: Command, Arguments (one per line), Environment with Add variable, Working directory,
+  and the description "Adding runs the command once to check that it starts." A command that
+  does not start fails under the Command field ("Could not start <name> MCP. …" and Pi's reason)
+  and writes nothing. A command that starts toasts "<name> MCP added for new sessions." and the row appears with the server
   icon; a URL nothing answers fails under the URL field ("Could not connect to <name> MCP. Check
   the URL and the network, then try again.") and writes nothing; a taken name fails on the Name
   field ("Another MCP server is named <name>.").
