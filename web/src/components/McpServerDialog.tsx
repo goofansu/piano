@@ -347,18 +347,21 @@ export function McpServerDialog({
               </Field>
               <Field>
                 <FieldLabel id="mcp-kind-label">Type</FieldLabel>
-                <ToggleGroup
-                  type="single"
-                  variant="outline"
-                  spacing={0}
-                  aria-labelledby="mcp-kind-label"
-                  value={kind}
-                  disabled={busy}
-                  onValueChange={(value) => value && setKind(value as Kind)}
-                >
-                  <ToggleGroupItem value="url">URL</ToggleGroupItem>
-                  <ToggleGroupItem value="command">Command</ToggleGroupItem>
-                </ToggleGroup>
+                {/* Field stretches its children; the wrapper keeps the group's shadow to its buttons. */}
+                <div>
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    spacing={0}
+                    aria-labelledby="mcp-kind-label"
+                    value={kind}
+                    disabled={busy}
+                    onValueChange={(value) => value && setKind(value as Kind)}
+                  >
+                    <ToggleGroupItem value="url">URL</ToggleGroupItem>
+                    <ToggleGroupItem value="command">Command</ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
               </Field>
               {kind === "url" ? (
                 <>
