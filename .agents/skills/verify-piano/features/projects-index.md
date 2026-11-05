@@ -82,14 +82,14 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
 - `empty`
   - Action: on an `--empty` launch, `ab open "$WEB_URL/projects"; ab wait --text "No projects yet"`.
   - Result: no `[data-slot=item]`; "New project" is in the header.
-- `phone`
+- `phone` (on a seeded run again, not the `--empty` instance)
   - Action: `ab set viewport 390 844; ab open "$WEB_URL/projects"; ab wait --text "Verify Project";
     ab eval "document.documentElement.scrollWidth + ' ' + document.documentElement.clientWidth"`
   - Result: `390 390`. Capture `07-phone`.
 - Side effects: the index starts no Pi. Compare `start` audit counts immediately before and
   after index-only navigation (`rg -c '"command":"start"' "$AUDIT"`, treating an absent audit as
-  zero). This multi-page recipe also opens session pages, which can start catalog probes;
-  absence of `prompt` alone does not prove absence of Pi starts.
+  zero). This multi-page recipe also opens populated project homes and session pages, which can
+  start catalog probes; absence of `prompt` alone does not prove absence of Pi starts.
 
 ## Gotchas
 

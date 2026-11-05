@@ -38,8 +38,10 @@ and Chromium, first. Launch needs `node_modules` (runs `npm ci` when missing). I
 - `repo/`: a committed throwaway Git repo (`README.md`, `src/answer.ts`, `.gitignore` ignoring
   `ignored/`). Worktrees Piano creates appear beside it as `repo.<branch>`, still inside the run.
 - `pi-agent/`, `pi-sessions/`, `home/`: `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR` and
-  `HOME` for the backend, so `~/.pi`, Worktrunk's user config and the user's credentials are never
-  read or written.
+  `HOME` for the backend, keeping Pi history and home-directory configuration scratch-only.
+- `config/`, `cache/`, `state/`, `data/`: isolated XDG directories. Launch clears inherited
+  `WORKTRUNK_*` overrides and supplies an empty user/system Worktrunk config, so inherited
+  placement or hooks cannot redirect the throwaway worktrees outside this run.
 - `audit.jsonl`: every command the fake Pi received (`PIANO_TEST_AUDIT`). Only the default
   `test/browser/fake-pi.mjs` writes it; on `--fake-pi dialogs` and `ask` there is no audit, so
   prove what Pi received from its replies instead.
@@ -213,6 +215,9 @@ harness journeys clean up their own instance and browser.
   A click during motion can hit another item. After choosing or Escape, wait for the menu's
   `[role=menu]` (or the specific popover) to disappear, not every Radix popper wrapper: a tooltip
   can remain on the focused trigger.
+- A toast can cover a toolbar or row action. Dismiss its "Close toast" button, then wait for
+  `!document.querySelector('[data-sonner-toast]')` before retrying; hovering a toast pauses its
+  expiry, so waiting alone may not clear it.
 - After filling the Mod+K query, wait for `'[cmdk-list][aria-busy="false"]'` before selecting
   an option. Pending results can still display a matching row but refuse its action.
 - Opening a session or populated project home can start a Pi `probe` (audit `sessionId: "probe"`)
@@ -241,5 +246,8 @@ harness journeys clean up their own instance and browser.
 ## Keeping it current
 
 When a journey fails because the app changed (a renamed button, a moved menu item, a new route),
-update the feature file in the same change, never the assertion's intent. Use
+update the feature file in the same change, never the assertion's intent. After changing launch
+isolation, run `.agents/skills/verify-piano/scripts/test-launch-isolation.sh`: it dispatches through
+real Worktrunk with owned stand-in user settings, asserts sibling worktree placement, and cleans up
+its scratch run while retaining evidence. Use
 `/maintain-verification-skill` to bring this skill up to date after a feature lands.
