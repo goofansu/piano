@@ -1179,9 +1179,7 @@ function Tool({
     >
       <ToolDetails args={call.args} output={output} failed={failed} />
       {calls.length > 0 && <NestedCalls parentId={call.id} nested={nested} />}
-      {!nested.complete && (
-        <p className="text-xs text-warning">Some tool details are unavailable.</p>
-      )}
+      {nested.warning && <p className="text-xs text-warning">{nested.warning}</p>}
     </FoldRow>
   );
 }

@@ -283,7 +283,7 @@ export function sessionCommands(
     const sessionPath = session.state.sessionFile;
     const linked = !!ctx.pullRequest;
     const pullRequest = pullRequestView({ link: ctx.pullRequest ?? null, pullRequest: null });
-    const hasArtifacts = sessionArtifacts(session.messages).length > 0;
+    const hasArtifacts = sessionArtifacts(session.messages, session.state.artifacts).length > 0;
     commands.push(
       {
         id: "copy-working-directory",

@@ -4,6 +4,8 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { int, obj, opt, type Static, str } from "@earendil-works/pi-schema";
 import { z } from "zod";
 import {
+  artifactPublication,
+  RADIUS_ARTIFACT_PUBLICATION,
   RADIUS_ARTIFACT_CREATE_TOOL,
   RADIUS_ARTIFACT_UPDATE_TOOL,
   RADIUS_ARTIFACT_VIEW_TOOL,
@@ -228,6 +230,21 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
           throw new RadiusError(
             "The expected publication was not found; another writer may have published.",
           );
+        // Nested calls have no result entry of their own. Persist confirmation independently
+        // of the outer script's output/success, but never duplicate an operation on reconciliation.
+        if (
+          !ctx.sessionManager
+            .getBranch()
+            .some((entry) => artifactPublication(entry)?.operationKey === params.operationKey)
+        ) {
+          pi.appendEntry(RADIUS_ARTIFACT_PUBLICATION, {
+            artifactId: artifact.id,
+            title: params.title,
+            url: artifact.canonical_url,
+            revision: revision.version,
+            operationKey: params.operationKey,
+          });
+        }
         return metadata(artifact, revision.version);
       } catch (error) {
         return {

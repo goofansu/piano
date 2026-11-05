@@ -59,6 +59,26 @@ const enabled = (state: AppState, target?: typeof other) =>
     Record<SessionCommandId, boolean>
   >;
 
+test("Artifacts is available from receipts without any direct tool-result messages", () => {
+  for (const hosted of [true, false]) {
+    const selected = {
+      ...session("/repo", {
+        artifacts: [
+          {
+            artifactId: "report",
+            title: "Report",
+            url: "https://radius.pi.dev/artifacts/report",
+            revision: 1,
+            operationKey: "report",
+          },
+        ],
+      }),
+      hosted,
+    };
+    assert.equal(enabled({ ...base, session: selected }).artifacts, true);
+  }
+});
+
 test("saved session path copies without a running Pi, and is unavailable without a file", () => {
   const path = "/home/test/.pi/agent/sessions/--repo--/2026-01-01_s1.jsonl";
   const saved = { ...session("/repo", { sessionFile: path }), hosted: false };

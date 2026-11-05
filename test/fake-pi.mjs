@@ -755,6 +755,66 @@ function handle(cmd) {
         setInterval(() => {}, 1000);
         return;
       }
+      // A nested publication succeeds, then its outer script throws without printing the result.
+      const nestedArtifact = /^codemode-artifact (\S+) (\d+) (.+)$/.exec(cmd.message);
+      if (nestedArtifact) {
+        const [, artifactId, revision, title] = nestedArtifact;
+        const id = `artifact-code${messages.length}`;
+        const receipt = {
+          artifactId,
+          revision: Number(revision),
+          title,
+          url: `https://radius.example.test/a/${artifactId}`,
+          operationKey: `${artifactId}-${revision}`,
+        };
+        const asst = {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id,
+              name: "codemode",
+              arguments: {
+                code: "await tools.radius_artifact_create(document); throw new Error('after publication');",
+              },
+            },
+          ],
+          timestamp: Date.now(),
+        };
+        messages.push(asst);
+        out({ type: "message_end", message: asst });
+        out({
+          type: "entry_appended",
+          entry: { type: "custom", customType: "radius-artifact-intent-v1", data: receipt },
+        });
+        out({
+          type: "entry_appended",
+          entry: { type: "custom", customType: "radius-artifact-publication-v1", data: receipt },
+        });
+        const result = {
+          role: "toolResult",
+          toolCallId: id,
+          toolName: "codemode",
+          content: [{ type: "text", text: "after publication" }],
+          isError: true,
+          timestamp: Date.now(),
+          nestedCalls: {
+            complete: false,
+            calls: [
+              {
+                id: `${id}/1`,
+                name: "radius_artifact_create",
+                argumentsBytes: 121360,
+                status: "ok",
+              },
+            ],
+          },
+        };
+        messages.push(result);
+        out({ type: "message_end", message: result });
+        settle(result);
+        return;
+      }
       // "codemode <n> [fail <k>]": one codemode call whose script makes n nested bash/read/write
       // calls, k of them failing, as live executions each running for 150ms, then recorded in
       // its result.

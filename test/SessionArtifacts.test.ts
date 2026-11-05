@@ -67,6 +67,34 @@ test("an update lists its artifact once, under its latest title and at the top",
   ]);
 });
 
+test("receipts join legacy direct publications without duplicates or codemode output scraping", () => {
+  const messages: RenderMsg[] = [
+    ...publish(create, "Old title", confirmed("r1", "https://r.test/r1")),
+    ...publish(create, "Legacy only", confirmed("r2", "https://r.test/r2")),
+    {
+      id: "code",
+      role: "tool_result",
+      toolName: "codemode",
+      text: JSON.stringify(confirmed("not-a-receipt", "https://r.test/no")),
+    },
+  ];
+  assert.deepEqual(
+    sessionArtifacts(messages, [
+      {
+        artifactId: "r1",
+        title: "Updated title",
+        url: "https://r.test/r1",
+        revision: 2,
+        operationKey: "update",
+      },
+    ]),
+    [
+      { id: "r1", title: "Updated title", url: "https://r.test/r1" },
+      { id: "r2", title: "Legacy only", url: "https://r.test/r2" },
+    ],
+  );
+});
+
 test("failed, unconfirmed and read-only calls publish nothing", () => {
   const artifacts = sessionArtifacts([
     ...publish(create, "Failed", { status: "error", message: "Denied." }),
