@@ -38,6 +38,7 @@ export function useDraftEditor(key: DraftKey | null) {
   const append = useCallback((value: string) => drafts.append(key, value), [key]);
   return {
     key,
+    draft,
     text: draft.text,
     /** The text a send delivers; send rules read this, not `text`, so quotes alone can be sent. */
     message: draftMessage(draft).text,
@@ -79,6 +80,8 @@ interface Props {
   /** The tallest the textarea grows, in pixels. */
   maxHeight: number;
   autoFocus?: boolean;
+  /** A session may tuck the mounted editor away; New keeps it visible. */
+  visible?: boolean;
   model: ModelProps;
   /** The send key was pressed; `alt` with Alt held. The page decides whether and how it sends. */
   onSend: (alt: boolean) => void;
@@ -101,6 +104,7 @@ export function DraftEditor({
   className,
   maxHeight,
   autoFocus,
+  visible = true,
   model,
   onSend,
   onKeyDown,
@@ -109,14 +113,16 @@ export function DraftEditor({
 }: Props) {
   const { ref, text, attachments, quotes } = editor;
   const [modelOpen, setModelOpen] = useState(false);
-  useAutoGrow(ref, text, maxHeight);
-  useTypeToFocus(ref, editor.append, !disabled);
+  useAutoGrow(ref, text, maxHeight, visible);
+  useTypeToFocus(ref, editor.append, !disabled && visible);
   // A quote added from the transcript leaves the reader ready to type about it.
   const quoteCount = useRef(quotes.items.length);
   useEffect(() => {
-    if (quotes.items.length > quoteCount.current && !disabled) ref.current?.focus();
-    quoteCount.current = quotes.items.length;
-  }, [quotes.items.length, disabled, ref]);
+    if (quotes.items.length > quoteCount.current && !disabled && visible)
+      ref.current?.focus({ preventScroll: true });
+    // A hidden quote is focused only after its owner reveals the editor.
+    if (visible) quoteCount.current = quotes.items.length;
+  }, [quotes.items.length, disabled, visible, ref]);
   // Mod+/ opens the picker exactly when its trigger could.
   const pickerAvailable = modelPickerEnabled({
     disabled,

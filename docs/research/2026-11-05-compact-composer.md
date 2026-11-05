@@ -4,7 +4,16 @@ November 5, 2026. Research only, against Piano **`d2e82418040886a8f6fcf1d8027b9f
 
 **Clarified request:** mobile has less vertical space; can a pencil button open the full existing
 composer, working as it does today? This supersedes the original unfocused/empty one-line-editor
-idea. Desktop is unchanged. This note proposes a design; no implementation is approved or included.
+idea.
+
+**Implementation follow-up:** the user subsequently approved implementation, automatic collapse after
+confirmed acceptance, and reuse of the session rail's **single-area** rule (available session width
+below 849px, not device detection or the shell's 768px breakpoint). The accompanying implementation
+keeps New/project home expanded, the existing mounted editor, usage/JumpTo, and a collapsed Stop
+control. Queues, image feedback and working drafts keep the full editor visible. Only this view's
+accepted input can auto-close an unchanged empty draft; later interaction cancels that permission.
+The research below records the earlier recommendations and unresolved choices at that time;
+its recommendation to defer auto-close is superseded by this follow-up. Verification belongs to the PR.
 
 ## Recommendation
 

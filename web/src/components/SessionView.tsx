@@ -266,6 +266,7 @@ export function SessionView({ state, send }: Props) {
                 <InlineQuestion pending={pendingDialogs(state)} send={send} />
               </LocalFileContext>
               <Composer
+                single={single}
                 session={t}
                 draftKey={draftKey}
                 completion={completionTarget(state)}

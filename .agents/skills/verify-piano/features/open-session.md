@@ -29,7 +29,12 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 - `cost`: "Context usage" opens "Token and cost breakdown" with the selected response's tokens
   and cost (latest by default). "Response history" switches between tokens and cost and offers
   an "Inspect response" slider; the Session column remains the session totals.
-- `follow-up`: "Message" plus Enter sends to the same Pi session.
+- `follow-up`: "Message" plus Enter sends to the same Pi session (on touch, use Send; Enter is a newline).
+- `compact-composer`: where the session shows one area at a time (the rail is unavailable), Compose
+  opens the existing editor; Collapse composer retains the draft behind Edit draft. Blur leaves it
+  open. Its own accepted send closes an untouched empty editor, with Stop still reachable. Queues,
+  image feedback and nonempty working drafts keep it expanded; newer input or interaction cancels
+  pending auto-close. Side-by-side, New and project home keep the full editor.
 - `stop`: "Stop" aborts a running reply.
 - `nested-calls`: an opened codemode tool row lists the calls its script made, one line each
   (status dot, tool name, what it acted on) that opens to its arguments and output. More than 8
@@ -88,6 +93,16 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-loose"; ab wait --text "Answer 4."`
     restores desktop and the session for the following steps. This is viewport emulation, not
     real-phone proof.
+- `compact-composer`
+  - Action: `ab open "$WEB_URL/s/verify-loose"; ab wait --text "Answer 4.";
+    ab set viewport 390 844; ab find role button click --name Compose --exact;
+    ab fill '[aria-label="Message"]' 'Retain this draft';
+    ab find role button click --name 'Collapse composer' --exact`.
+  - Result: Edit draft replaces the editor; capture `10-draft-closed`. Press Space to reopen the
+    retained draft, then click the transcript: the editor stays open. Capture `11-draft-opened`.
+    Fill Message with `hold`, click Send, wait for Compose and Stop; capture `12-send-collapsed`.
+    Click Stop and wait for no Stop button; capture `13-collapsed-stop`. This is browser emulation,
+    not a physical keyboard check. Set viewport 1280×800 to restore the always-expanded layout.
 - `row-details`
   - Action: `ab find role button click --name "View options" --exact;
     ab find role menuitem click --name "Show" --exact;

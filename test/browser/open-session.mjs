@@ -314,6 +314,8 @@ await run(
         return button ? Number(getComputedStyle(button).opacity) : -1;
       })()`);
     await page.ab("mouse", "move", "0", "0");
+    // At this width the session has one area at a time: explicitly reveal its editor.
+    await page.click("button", "Compose");
     await page.ab("focus", '[aria-label="Message"]');
     for (const width of [1280, 390, 800]) {
       await page.ab("set", "viewport", String(width), "900");
@@ -616,5 +618,43 @@ await run(
     assert.equal(answers()[0].answer.value, "Full suite");
     await page.until("!document.querySelector('[aria-label=Question]')");
     await page.capture("15-inline-answered");
+
+    // The narrow session's critical follow-up path uses the existing editor, and closes only
+    // after its own accepted submission. Blur does not hide it or move transcript click targets.
+    await page.ab("set", "viewport", "390", "844");
+    await page.click("button", "Collapse composer");
+    await page.click("button", "Compose");
+    await page.ab("fill", '[aria-label="Message"]', "First line\nSecond line\nThird line");
+    await page.evaluate(`(() => {
+      window.composerEditor = document.querySelector('[aria-label="Message"]');
+      composerEditor.setSelectionRange(4, 9);
+      window.composerHeight = composerEditor.getBoundingClientRect().height;
+    })()`);
+    await page.click("button", "Collapse composer");
+    assert.equal(await page.evaluate("composerEditor.getClientRects().length"), 0);
+    await page.capture("17-retained-draft");
+    await page.press("Space");
+    assert.ok(
+      await page.evaluate(`document.activeElement === composerEditor &&
+      composerEditor === document.querySelector('[aria-label="Message"]') &&
+      composerEditor.selectionStart === 4 && composerEditor.selectionEnd === 9 &&
+      composerEditor.getBoundingClientRect().height === composerHeight`),
+      "Space opens the same editor with its draft, caret and measured height",
+    );
+    await page.ab("click", '[data-slot="transcript"]');
+    assert.ok(
+      await page.evaluate("composerEditor.getClientRects().length > 0"),
+      "blur leaves it open",
+    );
+    await page.capture("18-editor-retained");
+    await page.ab("fill", '[aria-label="Message"]', "hold");
+    await page.click("button", "Send");
+    await page.until("!!document.querySelector('button[aria-label=Compose]')");
+    assert.equal(await page.evaluate("composerEditor.getClientRects().length"), 0);
+    assert.equal(await page.evaluate("composerEditor.value"), "");
+    await page.capture("19-accepted-collapsed");
+    await page.click("button", "Stop");
+    await page.until("!document.querySelector('button[aria-label=Stop]')");
+    await page.capture("20-collapsed-stop");
   },
 );
