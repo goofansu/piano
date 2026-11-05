@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -501,9 +502,14 @@ export function McpServerDialog({
                       id="mcp-cwd"
                       value={cwd}
                       disabled={busy}
+                      aria-describedby="mcp-cwd-hint"
                       className="font-mono text-xs"
                       onChange={(e) => setCwd(e.target.value)}
                     />
+                    <FieldDescription id="mcp-cwd-hint" className="text-xs text-ink-3">
+                      Empty runs the command in each session's folder. Set it only when the command
+                      uses relative paths.
+                    </FieldDescription>
                   </Field>
                 </>
               )}

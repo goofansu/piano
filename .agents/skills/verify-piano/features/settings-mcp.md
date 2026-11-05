@@ -19,7 +19,7 @@ other servers carry the server icon.
   run) saves the entry, which moves to Connected.
 - `add-form`: Add MCP server (header or palette) opens a dialog on its Form tab: Name, Type
   (URL / Command), URL, Authentication (Sign in if needed / Authorization header), Headers with Add header;
-  on Command: Command, Arguments (one per line), Environment with Add variable, Working directory,
+  on Command: Command, Arguments (one per line), Environment with Add variable, Working directory (hint: "Empty runs the command in each session's folder. Set it only when the command uses relative paths."),
   and the description "Adding runs the command once to check that it starts." A command that
   does not start fails under the Command field ("Could not start MCP <name>. …" and Pi's reason)
   and writes nothing. A command that starts toasts "MCP <name> added." and the row appears with the server
