@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -199,6 +200,13 @@ export function McpServerDialog({
     .map((arg) => arg.trim())
     .filter(Boolean);
   const pasted = tab === "json" ? parseMcpServerJson(json) : undefined;
+  // Saving a local command starts it once, so say so before the user saves.
+  const startsCommand = pasted
+    ? "name" in pasted &&
+      !!pasted.config &&
+      typeof pasted.config === "object" &&
+      "command" in pasted.config
+    : tab === "form" && kind === "command";
 
   const run = (request: Parameters<typeof changeMcpSetup>[0], name: string, done: string) =>
     actions
@@ -291,9 +299,17 @@ export function McpServerDialog({
         if (!open && !busy) close();
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto" aria-describedby={undefined}>
+      <DialogContent
+        className="max-h-[90dvh] overflow-y-auto"
+        aria-describedby={startsCommand ? "mcp-starts-command" : undefined}
+      >
         <DialogHeader>
           <DialogTitle>{entry ? "Edit MCP server" : "Add MCP server"}</DialogTitle>
+          {startsCommand && (
+            <DialogDescription id="mcp-starts-command">
+              {entry ? "Saving" : "Adding"} runs the command once to check that it starts.
+            </DialogDescription>
+          )}
         </DialogHeader>
         {!entry && (
           <Tabs value={tab} onValueChange={(value) => setTab(value as "form" | "json")}>

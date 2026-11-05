@@ -98,7 +98,7 @@ export type McpServerEdit = typeof McpServerEdit.Type;
 /**
  * A change to the setup. A URL server is saved only once Piano has connected to it: `connect` (a
  * catalog server), `add` and `update` answer with `signIn` instead of saving when it needs an
- * OAuth sign-in first, and the sign-in saves it. A local command is saved as Pi validates it.
+ * OAuth sign-in first, and the sign-in saves it. A local command is saved only once it has started.
  */
 export const McpSetupRequest = Schema.Union([
   Schema.Struct({ action: Schema.Literal("connect"), server: McpCatalogId }),

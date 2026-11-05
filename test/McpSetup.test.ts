@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { Effect, Layer } from "effect";
 // The credential store McpSetup uses, so synthetic tokens are saved under Pi's own keys.
 import { FileAuthStorageBackend } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js";
@@ -348,15 +349,63 @@ test("INV-01/12: a URL server that cannot be reached, or rejects its Authorizati
   );
 });
 
-test("INV-01/12: a local command server is saved as Pi validates it, never started and never signed in to", async () => {
+/** A local stdio MCP server that logs each spawn and request; `--broken` refuses `initialize`. */
+const sentinel = fileURLToPath(new URL("fixtures/phase0-mcp.mjs", import.meta.url));
+const spawned = (log: string): { event: string; pid: number }[] =>
+  existsSync(log)
+    ? readFileSync(log, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+    : [];
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+test("INV-01/12: a local command server is saved only once Pi's client has started it, then stopped; one that does not start is refused with Pi's reason", async () => {
   await fixture((setup, directory) =>
     Effect.gen(function* () {
       const file = join(directory, "mcp.json");
+      const log = join(directory, "paper.log");
       save(file, { custom: { untouched: true }, mcpServers: {} });
-      const paper = { command: join(directory, "no-such-cli"), args: ["mcp"] };
+      const before = readFileSync(file, "utf8");
+
+      const broken = yield* Effect.flip(
+        setup.change({
+          action: "add",
+          name: "paper",
+          config: { command: process.execPath, args: [sentinel, log, "--broken"] },
+        }),
+      );
+      assert.equal(broken.field, "config");
+      assert.match(broken.detail, /^Could not start paper MCP\./);
+      assert.match(broken.detail, /PHASE0_BROKEN_SENTINEL/, "Pi's reason reaches the user");
+      const missing = yield* Effect.flip(
+        setup.change({
+          action: "add",
+          name: "paper",
+          config: { command: join(directory, "no-such-cli") },
+        }),
+      );
+      assert.equal(missing.field, "config");
+      assert.match(missing.detail, /^Could not start paper MCP\./);
+      assert.equal(readFileSync(file, "utf8"), before, "nothing is saved that did not start");
+
+      const paper = { command: process.execPath, args: [sentinel, log] };
       const added = yield* setup.change({ action: "add", name: "paper", config: paper });
       assert.equal(added.signIn, undefined);
       assert.deepEqual(json(file), { custom: { untouched: true }, mcpServers: { paper } });
+      const started = spawned(log).filter((entry) => entry.event === "initialize");
+      assert.equal(started.length, 2, "the broken attempt and the saved one each started it");
+      const pid = started.at(-1)!.pid;
+      for (let waited = 0; alive(pid) && waited < 2000; waited += 20) yield* Effect.sleep(20);
+      assert.equal(alive(pid), false, "the check stops the command it started");
+
       const saved = (yield* server(setup, "paper"))!;
       assert.deepEqual(
         [saved.catalog, saved.oauth, saved.config],
@@ -476,7 +525,7 @@ test("INV-01/12: edits keep Pi's other keys and the Authorization value on the m
       );
       assert.ok(store.tokens("manual", url));
 
-      // A command server's edit is validated by Pi, not started; a change of transport drops the
+      // A command server's edit that Pi refuses is never started; a change of transport drops the
       // other transport's keys.
       const tools = (yield* server(setup, "tools"))!;
       const rejected = yield* Effect.flip(
