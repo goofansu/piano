@@ -67,7 +67,7 @@ Keep implementation details out; name user paths, handles, required state, comma
 - [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and its
   pull request, and the desktop session rail's Environment and Outputs (no Links section or narrow rail).
 - [Settings › Skills and Prompts](./settings-skills-prompts.md): `/settings/skills` and
-  `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
+  `/settings/prompts` from the sidebar and palette; Add skill / Add prompt; View and Delete;
   empty states; the separate agent-authored approval path's real-Pi prerequisite. Providers and
   Webhooks are reached the same way but not driven here.
 - [Settings › MCP](./settings-mcp.md): `/settings/mcp` over the scratch `mcp.json`; Connect,

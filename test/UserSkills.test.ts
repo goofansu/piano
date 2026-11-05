@@ -280,7 +280,7 @@ test("a create names the field it refuses and never overwrites a skill", async (
   assert.equal(existsSync(join(directory, "ok")), false);
 });
 
-test("the New skill rule accepts only a filled, well-formed, in-bounds draft", () => {
+test("the Add skill rule accepts only a filled, well-formed, in-bounds draft", () => {
   const draft = (name: string) => checkDraft({ name, description: "D.", instructions: "I." });
   for (const name of ["a", "release-notes", "v2-api", "x".repeat(64)])
     assert.ok(draft(name).saved, name);

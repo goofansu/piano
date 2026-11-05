@@ -1,7 +1,7 @@
 /**
  * The one rule a skill and a prompt created in Piano share: a name in the Agent Skills form, a
- * description and instructions, each trimmed and within its limit. The New skill and New prompt
- * dialogs enable Create by this check, and the server refuses by it; only whether a name is free is
+ * description and instructions, each trimmed and within its limit. The Add skill and Add prompt
+ * dialogs enable Add by this check, and the server refuses by it; only whether a name is free is
  * left to the server.
  */
 import { Schema } from "effect";

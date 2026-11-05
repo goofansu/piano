@@ -66,7 +66,7 @@ interface LibraryPageKind<Entry extends { name: string; description: string; fil
   icon: LucideIcon;
   list: (signal: AbortSignal) => Promise<ReadonlyArray<Entry>>;
   remove: (name: string) => Promise<unknown>;
-  /** The New dialog, opened by the header's New command or the palette's. */
+  /** The Add dialog, opened by the header's Add command or the palette's. */
   NewDialog: (props: { close: () => void; refresh: () => void }) => ReactNode;
   /** Marks after an entry's name, such as a skill's Disable model invocation. */
   badge?: (entry: Entry) => ReactNode;
@@ -109,7 +109,7 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
   const { Noun } = LIBRARY_KINDS[kind];
   const plural = `${kind}s`;
   const observed = useObservation(plural, list);
-  // New comes from `pageCommands`, which the palette lists too; both open this editor.
+  // Add comes from `pageCommands`, which the palette lists too; both open this editor.
   const { state, run, global } = useCommands();
   const editor = editors[kind];
   const editing = editor.useOpen();
@@ -260,7 +260,7 @@ function LibraryRow({
   );
 }
 
-/** New skill: the shared draft, and whether only `/skill:<name>` loads it. */
+/** Add skill: the shared draft, and whether only `/skill:<name>` loads it. */
 function SkillEditor({ close, refresh }: { close: () => void; refresh: () => void }) {
   const [disableModelInvocation, setDisableModelInvocation] = useState(false);
   return (

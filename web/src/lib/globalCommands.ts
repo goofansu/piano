@@ -178,7 +178,7 @@ const PROJECT_MENU_IDS = {
 
 /**
  * What the open page offers in its header, as the page's own commands describe it: on Settings ›
- * Webhooks, Add webhook; on Settings › Skills, New skill; on Settings › Prompts, New prompt; on the Projects index, New project; on a project's home, its menu
+ * Webhooks, Add webhook; on Settings › Skills, Add skill; on Settings › Prompts, Add prompt; on the Projects index, New project; on a project's home, its menu
  * (`projectMenu`), manage rows then destructive (the home itself starts sessions). An open Settings
  * page covers the page beneath it, so only its own actions count. The palette lists exactly these,
  * so a page or menu that adds a header action gets its row, named as its button is, by construction.
@@ -215,7 +215,7 @@ export function pageCommands(
       return [
         {
           id: "new-skill",
-          label: "New skill",
+          label: "Add skill",
           icon: "new",
           group: "navigate",
           enabled: true,
@@ -226,7 +226,7 @@ export function pageCommands(
       return [
         {
           id: "new-prompt",
-          label: "New prompt",
+          label: "Add prompt",
           icon: "new",
           group: "navigate",
           enabled: true,
