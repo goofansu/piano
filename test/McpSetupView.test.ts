@@ -87,7 +87,25 @@ test("a row is titled by its catalog server, else by its entry name, with its ho
   );
 });
 
-test("rows and available servers wait for the first read; the catalog fills the available rows", () => {
+test("connected servers sort by their displayed names without changing Pi's order", () => {
+  const source = state([
+    docs({ name: "zebra" }),
+    http({ name: "aaa-alias" }),
+    docs({ name: "Bravo" }),
+    docs({ name: "alpha" }),
+  ]);
+  const shown = view({ state: source });
+  assert.deepEqual(
+    shown.rows?.map((row) => row.title),
+    ["alpha", "Bravo", "Linear", "zebra"],
+  );
+  assert.deepEqual(
+    source.servers.map((server) => server.name),
+    ["zebra", "aaa-alias", "Bravo", "alpha"],
+  );
+});
+
+test("rows wait for the first read; available servers sort alphabetically with their details", () => {
   const empty = view({ state: undefined });
   assert.equal(empty.rows, undefined);
   assert.equal(empty.available, undefined);
@@ -98,8 +116,8 @@ test("rows and available servers wait for the first read; the catalog fills the 
   assert.deepEqual(
     read.available?.map((row) => [row.server.name, row.detail]),
     [
-      ["Linear", "Named already."],
       ["Jira", undefined],
+      ["Linear", "Named already."],
     ],
   );
 });

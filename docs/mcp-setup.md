@@ -4,10 +4,11 @@ Open **Settings → MCP**, or choose **MCP** from Mod+K. Setup is machine-wide f
 account running Piano, like [Radius setup](radius-setup.md): the page lists Pi's global
 `mcp.json` and changes it through Pi's own helpers.
 
-**Connected** lists every entry of that file, in its order, with its endpoint's host or its
-command. A catalog server shows its brand mark; any other server shows the server icon.
-**Available** lists the catalog servers no entry is yet. The catalog in `shared/mcp.ts` holds
-hosted servers only:
+**Connected** lists every entry of that file, with its endpoint's host or its command.
+A catalog server shows its brand mark; any other server shows the server icon.
+**Available** lists the catalog servers no entry is yet. Both lists are alphabetical by the
+name shown, ignoring case; Pi's configuration order is unchanged. The catalog in `shared/mcp.ts`
+holds hosted servers only:
 
 - **Linear** (`https://mcp.linear.app/mcp`).
 - **Jira** (`https://mcp.atlassian.com/v2/mcp`).

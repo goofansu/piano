@@ -50,9 +50,9 @@ export interface McpAvailableRow {
 }
 
 export interface McpSetupView {
-  /** Pi's entries in file order; absent until the first read succeeds. */
+  /** Pi's entries alphabetically by displayed name; absent until the first read succeeds. */
   rows: readonly McpServerRow[] | undefined;
-  /** Catalog servers not configured, in catalog order; absent until the first read succeeds. */
+  /** Catalog servers not configured, alphabetically by name; absent until the first read succeeds. */
   available: readonly McpAvailableRow[] | undefined;
   /** Pi's configuration cannot be used until fixed in Pi: the page says so and offers nothing. */
   problem?: string;
@@ -91,11 +91,15 @@ export function mcpServerRow(setup: McpServerSetup): McpServerRow {
 
 export function mcpSetupView({ state, running, loading, loadFailed }: McpSetupInput): McpSetupView {
   return {
-    rows: state?.servers.map(mcpServerRow),
-    available: state?.available.flatMap((entry) => {
-      const server = catalogServer(entry.id);
-      return server ? [{ server, ...(entry.detail ? { detail: entry.detail } : {}) }] : [];
-    }),
+    rows: state?.servers
+      .map(mcpServerRow)
+      .sort((a, b) => a.title.localeCompare(b.title, "en", { sensitivity: "base" })),
+    available: state?.available
+      .flatMap((entry) => {
+        const server = catalogServer(entry.id);
+        return server ? [{ server, ...(entry.detail ? { detail: entry.detail } : {}) }] : [];
+      })
+      .sort((a, b) => a.server.name.localeCompare(b.server.name, "en", { sensitivity: "base" })),
     ...(state?.problem ? { problem: state.problem } : {}),
     disabled: running !== undefined || loading || loadFailed || !!state?.problem,
   };
