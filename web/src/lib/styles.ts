@@ -1,8 +1,8 @@
 /** Class strings shared by controls that live inside the composer card, and by rows that fold or list. */
 
-/** A quiet picker: reads as text until hovered, sits on the composer's footer row. Touch-sized on phones. */
+/** A quiet picker: reads as text until hovered. Coarse pointers keep a 44px target at any viewport width. */
 export const picker =
-  "inline-flex h-11 max-w-[16rem] items-center gap-1 rounded-md px-2 text-sm font-normal text-ink-2 hover:bg-fill-hover hover:text-ink data-[state=open]:bg-fill-hover data-[state=open]:text-ink md:h-8";
+  "inline-flex h-11 max-w-[16rem] items-center gap-1 rounded-md px-2 text-sm font-normal text-ink-2 hover:bg-fill-hover hover:text-ink data-[state=open]:bg-fill-hover data-[state=open]:text-ink md:h-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11";
 
 /** The composer footer's machine-value pickers (model, delivery): mono captions on the trigger, and menus whose
  * rows drop to the caption scale on phones, where the label scale would outsize the footer they open from. */
@@ -19,7 +19,8 @@ export const composerInput =
 /** Compact settings yield space to the primary action without wrapping to another row. */
 export const composerToolbar =
   "flex min-w-0 flex-nowrap items-center gap-1 px-2.5 pb-2.5 font-mono text-sm text-ink-2";
-export const composerAction = "ml-auto size-11 shrink-0 rounded-xl md:size-9";
+export const composerAction =
+  "ml-auto size-11 shrink-0 rounded-xl md:size-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11";
 
 /** A folding row in the transcript gutter: full width, quiet hover, a focus ring; the chevron sits at its end.
  * Its padding lies outside the flow (negative margins), so its first line stays on the gutter glyph's line
