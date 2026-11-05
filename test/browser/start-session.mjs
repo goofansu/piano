@@ -14,6 +14,47 @@ await run(
     await page.open("/new");
 
     await page.choose("Directory", "web");
+    await page.until("!document.querySelector('[aria-label^=\"Model:\"]')?.disabled");
+    await page.ab("fill", '[aria-label="First message"]', "Keep this draft");
+
+    // Wide touch screens used to inherit compact mouse targets from the viewport breakpoint.
+    // Measure the clickable elements, not their icons, and keep CDP attached during emulation.
+    await page.cdp(async (call) => {
+      const targets = () =>
+        page.evaluate(`['[aria-label="Directory"]', '[aria-label="Project"]',
+          '[aria-label^="Model:"]', '[aria-label="Send"]'].map(selector => {
+          const r = document.querySelector(selector).getBoundingClientRect();
+          return { width: r.width, height: r.height };
+        })`);
+      await page.until(
+        "matchMedia('(pointer: fine)').matches && matchMedia('(hover: hover)').matches",
+      );
+      const fine = await targets();
+      assert.deepEqual(
+        fine.map((r) => r.height),
+        [32, 32, 32, 36],
+      );
+      try {
+        await call("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+        await page.until("matchMedia('(pointer: coarse)').matches && innerWidth === 1280");
+        for (const target of await targets()) {
+          assert.ok(
+            target.width >= 44 && target.height >= 44,
+            "wide coarse target is at least 44px",
+          );
+        }
+        await page.capture("wide-coarse-targets");
+      } finally {
+        await call("Emulation.setTouchEmulationEnabled", { enabled: false });
+      }
+      await page.until("!matchMedia('(pointer: coarse)').matches");
+      assert.deepEqual(await targets(), fine, "leaving coarse input restores compact dimensions");
+      assert.equal(
+        await page.evaluate(`document.querySelector('[aria-label="First message"]').value`),
+        "Keep this draft",
+      );
+      assert.deepEqual(page.prompts(), [], "pointer changes do not send the draft");
+    });
     await page.ab("find", "role", "button", "click", "--name", "Model:");
     await page.click("option", "fake/gamma");
     await page.click("radio", "high");
@@ -46,5 +87,10 @@ await run(
     assert.equal(said, 1, "the first message shows once after a reload");
     assert.deepEqual(page.prompts(), ["Plan the launch"], "a reload never sends the message again");
     await page.capture("3-after-reload");
+  },
+  {
+    // Headless Chromium can expose no pointer at all; this journey needs a known mouse baseline.
+    browserArgs:
+      "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
   },
 );

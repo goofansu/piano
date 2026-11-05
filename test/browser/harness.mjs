@@ -142,7 +142,11 @@ export async function run(name, setup, journey, options = {}) {
   const ab = async (...args) => {
     const result = await new Promise((done, fail) => {
       const child = spawn("agent-browser", ["--session", browser, ...args], {
-        env: { ...process.env, AGENT_BROWSER_DEFAULT_TIMEOUT: "15000" },
+        env: {
+          ...process.env,
+          AGENT_BROWSER_DEFAULT_TIMEOUT: "15000",
+          ...(options.browserArgs ? { AGENT_BROWSER_ARGS: options.browserArgs } : {}),
+        },
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stdout = "";
@@ -209,8 +213,8 @@ export async function run(name, setup, journey, options = {}) {
     see: (text) => ab("wait", "--text", text),
     until: (js) => ab("wait", "--fn", js),
     capture: (step) => ab("screenshot", join(evidence, `${step}.png`)),
-    /** Count actual browser layouts across an interaction, without a machine-speed threshold. */
-    layouts: async (interaction) => {
+    /** Keep a page CDP session attached for the whole observation (emulation resets on detach). */
+    cdp: async (observe) => {
       const socket = new WebSocket(await ab("get", "cdp-url"));
       let id = 0;
       const call = (method, params = {}, sessionId) =>
@@ -243,18 +247,23 @@ export async function run(name, setup, journey, options = {}) {
           targetId: target.targetId,
           flatten: true,
         });
-        await call("Performance.enable", {}, sessionId);
+        return await observe((method, params) => call(method, params, sessionId));
+      } finally {
+        socket.close();
+      }
+    },
+    /** Count actual browser layouts across an interaction, without a machine-speed threshold. */
+    layouts: (interaction) =>
+      page.cdp(async (call) => {
+        await call("Performance.enable");
         const count = async () => {
-          const { metrics } = await call("Performance.getMetrics", {}, sessionId);
+          const { metrics } = await call("Performance.getMetrics");
           return metrics.find((m) => m.name === "LayoutCount").value;
         };
         const before = await count();
         await interaction();
         return (await count()) - before;
-      } finally {
-        socket.close();
-      }
-    },
+      }),
     /** What the fake Pis received, in order: `{ command, text?, args?, sessionId }`. */
     received: () =>
       existsSync(audit)
