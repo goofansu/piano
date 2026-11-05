@@ -75,10 +75,10 @@ export const McpSetupState = Schema.Struct({
 export type McpSetupState = typeof McpSetupState.Type;
 
 /**
- * What the dialog saves. Adding sends Pi's own `mcpServers` shape, as a form builds it or as a
- * README documents it, and Pi validates it. Editing sends the fields the dialog shows; the server
- * merges them into the entry, keeping Pi's other keys, and `authorization` left out keeps the saved
- * header, `null` removes it.
+ * What the dialog's form saves, adding or editing: the fields it shows. The server merges them
+ * into the entry (an empty one when adding), keeping Pi's other keys; the `Authorization` header
+ * is only ever `authorization`, never a row of `headers`. `authorization` left out keeps the saved
+ * header, `null` removes it. Pasted JSON is Pi's own `mcpServers` shape instead, which Pi validates.
  */
 export const McpServerEdit = Schema.Union([
   Schema.Struct({
@@ -105,7 +105,13 @@ export const McpSetupRequest = Schema.Union([
   Schema.Struct({
     action: Schema.Literal("add"),
     name: Schema.String,
-    /** Pi's own entry shape, as the form builds it or a README documents it. */
+    /** The form's fields, merged into a new entry as an edit is. */
+    form: McpServerEdit,
+  }),
+  Schema.Struct({
+    action: Schema.Literal("add"),
+    name: Schema.String,
+    /** Pi's own entry shape, as a README documents it and the user pasted it. */
     config: Schema.Unknown,
   }),
   Schema.Struct({
@@ -124,8 +130,9 @@ export const McpSetupRequest = Schema.Union([
 ]);
 export type McpSetupRequest = typeof McpSetupRequest.Type;
 
-/** A change's answer: the setup, and the entry name to sign in to when nothing was saved yet
- * because the server asked for a sign-in first. */
+/** A change's answer: the setup, and, when nothing was saved yet because the server asked for a
+ * sign-in first, the sign-in subject that saves this change. It is the change's own, not the entry
+ * name: signing in to the saved entry by name never saves a change left waiting. */
 export const McpSetupChange = Schema.Struct({
   state: McpSetupState,
   signIn: Schema.optional(Schema.String),

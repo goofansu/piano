@@ -349,6 +349,49 @@ test("a call's nested calls are those its result recorded plus live executions i
   assert.deepEqual([other!.nested.calls, other!.nested.complete], [[], true]);
 });
 
+test("omitted saved arguments do not imply missing tool results, even with live output", () => {
+  const child: ToolExecution = {
+    id: "code/1",
+    name: "radius_artifact_create",
+    args: "",
+    text: "",
+    status: "success",
+    outputKind: "unavailable",
+  };
+  const messages: RenderMsg[] = [
+    {
+      id: "a",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "code", name: "codemode", args: "{}" }],
+    },
+    {
+      id: "r",
+      role: "tool_result",
+      text: "confirmed",
+      toolCallId: "code",
+      nestedCalls: [child],
+      nestedCallsComplete: false,
+      nestedCallsIncompleteReason: "arguments",
+    },
+  ];
+  const executions: Record<string, ToolExecution>[] = [
+    {},
+    { "code/1": { ...child, args: "{}", text: "confirmed", outputKind: "final" } },
+  ];
+  for (const tools of executions) {
+    assert.equal(
+      reply(transcriptRows(messages, { tools }), "a").tools[0].nested.warning,
+      "Some tool arguments weren’t saved.",
+    );
+  }
+  messages[1] = { ...messages[1], nestedCallsIncompleteReason: undefined };
+  assert.equal(
+    reply(transcriptRows(messages), "a").tools[0].nested.warning,
+    "Some tool details are unavailable.",
+  );
+});
+
 const script = (statuses: ReadonlyArray<ToolExecution["status"]>): ToolExecution[] =>
   statuses.map((status, i) => ({
     id: `code/${i + 1}`,

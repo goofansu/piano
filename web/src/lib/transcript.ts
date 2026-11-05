@@ -80,8 +80,9 @@ export interface NestedView {
   failed: number;
   /** While the parent runs: its newest running call, else its newest call. */
   latest?: NestedCall;
-  /** False when the result says some nested calls were not recorded. */
+  /** False when Pi's saved record lost arguments, calls, or terminal statuses. */
   complete: boolean;
+  warning?: string;
 }
 
 /** One session a dispatch tool started or waited on, as the parent observed it. */
@@ -469,6 +470,7 @@ function nestedView(
   calls: ReadonlyArray<ToolExecution>,
   running: boolean,
   complete: boolean,
+  reason?: RenderMsg["nestedCallsIncompleteReason"],
 ): NestedView {
   const all = calls.map((call) => ({
     call,
@@ -497,6 +499,14 @@ function nestedView(
     failed: all.filter((c) => c.outcome === "failed").length,
     ...(latest ? { latest } : {}),
     complete,
+    ...(!complete
+      ? {
+          warning:
+            reason === "arguments"
+              ? "Some tool arguments weren’t saved."
+              : "Some tool details are unavailable.",
+        }
+      : {}),
   };
 }
 
@@ -583,6 +593,7 @@ export function transcriptRows(
         [...nested.values()],
         outcome === "running",
         result?.nestedCallsComplete !== false,
+        result?.nestedCallsIncompleteReason,
       ),
       verb,
       knownTool: !!verbs,

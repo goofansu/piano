@@ -157,6 +157,31 @@ test("create confirms a private Radius publication; update retains identity and 
       "# Original",
     );
     assert.equal(h.http.writes.length, 2, "view never mutates");
+    const receipts = h.sessionManager
+      .getBranch()
+      .filter(
+        (entry) => entry.type === "custom" && entry.customType === "radius-artifact-publication-v1",
+      );
+    assert.deepEqual(
+      receipts.map((entry) => entry.type === "custom" && entry.data),
+      [
+        {
+          artifactId: "artifact-1",
+          title: "Report",
+          url: created.url,
+          revision: 1,
+          operationKey: "report",
+        },
+        {
+          artifactId: "artifact-1",
+          title: "Report",
+          url: created.url,
+          revision: 2,
+          operationKey: "report-revision-2",
+        },
+      ],
+      "only verified publications leave small receipts; retries and views do not",
+    );
   } finally {
     h.cleanup();
   }
@@ -174,6 +199,54 @@ test("a lost create reply remains unknown across reload and never causes a dupli
     assert.equal(h.http.writes.length, 1);
     assert.equal((await h.call("create", { ...document, content: "Other" })).status, "error");
     assert.equal(h.http.writes.length, 1);
+    assert.equal(
+      h.sessionManager
+        .getBranch()
+        .some(
+          (entry) =>
+            entry.type === "custom" && entry.customType === "radius-artifact-publication-v1",
+        ),
+      false,
+      "an intent with an external commit is still not confirmation",
+    );
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("a known identity is not a receipt until confirmation reads succeed; reconciliation records it once", async () => {
+  const h = await harness();
+  const large = { ...document, content: "x".repeat(121000) };
+  const receipts = () =>
+    h.sessionManager
+      .getBranch()
+      .filter(
+        (entry) => entry.type === "custom" && entry.customType === "radius-artifact-publication-v1",
+      );
+  try {
+    h.http.wrongIdentity = true;
+    assert.equal((await h.call("create", large)).status, "unknown");
+    assert.equal(receipts().length, 0);
+    assert.ok(
+      h.sessionManager
+        .getBranch()
+        .some(
+          (entry) =>
+            entry.type === "custom" &&
+            entry.customType === "radius-artifact-intent-v1" &&
+            (entry.data as { id?: string }).id === "artifact-1",
+        ),
+    );
+    h.http.wrongIdentity = false;
+    await h.load();
+    assert.equal((await h.call("create", large)).status, "confirmed");
+    assert.equal((await h.call("create", large)).status, "confirmed");
+    assert.equal(h.http.writes.length, 1);
+    assert.equal(receipts().length, 1);
+    assert.ok(
+      JSON.stringify(receipts()).length < 1000,
+      "document content never enters the receipt",
+    );
   } finally {
     h.cleanup();
   }

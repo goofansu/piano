@@ -43,7 +43,10 @@ command's stderr). The dialog says so while a command is entered, since saving r
   takes a name, a URL or a command, and for a URL how Pi authenticates: **Sign in if needed** (Pi's MCP
   OAuth when the server asks for it) or an **Authorization header**, whose value is sent verbatim
   (`Bearer …`, `Basic …`, or a `${VAR}` reference Pi resolves on the backend); other headers, or
-  a command's arguments, environment and working directory, follow. **JSON** takes the
+  a command's arguments, environment and working directory, follow. The form saves the same
+  fields whether it adds or edits, and the server builds the entry from them; the Authorization
+  header comes only from its own field, so a Headers row named `Authorization` is dropped, as on
+  Edit. **JSON** takes the
   `mcpServers` object a server's README shows, one server at a time; it is the way to set Pi's
   keys the form does not show, such as a timeout or a pre-registered OAuth client. Pi validates
   the entry before anything is written.
@@ -89,7 +92,10 @@ Start a **new session** after a change; running Pi children are not reloaded.
 - A name is Pi's: letters, digits, `_` and `-`, unique in the file. Adding refuses a taken name
   or an entry Pi rejects, and then writes nothing.
 - Connecting before saving waits up to 20 seconds, Pi's own retries included. Only one change
-  waits for its sign-in at a time; a newer one replaces it.
+  waits for its sign-in at a time; a newer one replaces it. Only that change's own sign-in, which
+  its dialog starts and retries, saves it: an entry's Reconnect signs in to the entry as saved,
+  so a change the user walked away from is never saved later. While its sign-in runs, the entry
+  it changes cannot be edited or removed.
 - OAuth failure details can contain token responses, so the browser receives only a generic
   message. One sign-in runs at a time and expires after 15 minutes.
 
@@ -98,9 +104,11 @@ Start a **new session** after a change; running Pi children are not reloaded.
 - `test/McpSetup.test.ts` runs Pi's real client and sign-in against a loopback OAuth + MCP
   server that also accepts a fixed Authorization header: connecting a catalog server that is
   saved only once the pasted-redirect sign-in succeeds (including a rejected paste), stored-token
-  reuse, a refused or cancelled sign-in saving nothing and leaving no tokens, an unreachable
+  reuse, a refused or cancelled sign-in saving nothing and leaving no tokens, a waiting edit
+  that the entry's own Reconnect never saves, an unreachable
   server or a rejected header refused on the URL field, a local command saved only once it
-  starts and stopped after the check, edits that keep Pi's other keys and the saved Authorization header and save only once
+  starts and stopped after the check, a form add that takes the Authorization header from its
+  own field only, edits that keep Pi's other keys and the saved Authorization header and save only once
   they connect, a rename dropping stored tokens, removal after a switch to a header (with an
   unreadable credential store failing and then retrying), an entry at a catalog endpoint, a taken
   default name, and Pi's MCP switch blocking every change.

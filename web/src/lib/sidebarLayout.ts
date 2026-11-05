@@ -47,7 +47,7 @@ export interface SidebarLayout<T = HTMLElement> {
   show: () => void;
   hide: () => void;
   toggle: () => void;
-  /** Sets the desktop column's state independently of the narrow reveal. */
+  /** Sets the desktop column's state independently of the reveal; ignored while narrow. */
   setCollapsed: (collapsed: boolean) => void;
   /** The sheet's committed state, as a swipe or its own dismissal sets it. */
   setMobileOpen: (open: boolean) => void;
@@ -115,6 +115,9 @@ export function createSidebarLayout<T>(env: SidebarEnvironment<T>): SidebarLayou
   };
 
   const setCollapsed = (value: boolean) => {
+    // The column is hidden while narrow; even a direct caller must not change
+    // the desktop preference the user cannot see.
+    if (!env.desktop()) return;
     if (drag) endDrag();
     collapsed = value;
     env.write(COLLAPSED_KEY, value ? "hidden" : "shown");

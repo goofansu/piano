@@ -79,6 +79,19 @@ test("show, hide and toggle open and close the sheet below the breakpoint, leavi
   assert.equal(p.storage.has("piano.sidebar"), false);
 });
 
+test("the desktop preference changes only on a desktop viewport", () => {
+  // Direct calls must not change the hidden column's preference while narrow,
+  // independently of the shortcut's viewport-aware routing.
+  const narrow = page({ desktop: false, stored: { "piano.sidebar": "shown" } });
+  narrow.layout.setCollapsed(true);
+  assert.equal(narrow.state().collapsed, false);
+  assert.equal(narrow.storage.get("piano.sidebar"), "shown");
+  const wide = page();
+  wide.layout.setCollapsed(true);
+  assert.equal(wide.state().collapsed, true);
+  assert.equal(wide.storage.get("piano.sidebar"), "hidden");
+});
+
 test("a remembered width is used only within bounds", () => {
   assert.equal(page({ stored: { "piano.sidebarWidth": "320" } }).state().width, 320);
   for (const bad of ["1000", "50", "wide"])

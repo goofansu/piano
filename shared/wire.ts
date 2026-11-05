@@ -115,6 +115,8 @@ export const RenderMsg = Schema.Struct({
   label: Schema.optional(Schema.String),
   nestedCalls: Schema.optional(Schema.Array(ToolExecution)),
   nestedCallsComplete: Schema.optional(Schema.Boolean),
+  /** Only set when Pi's bounded record lost arguments, not calls or terminal statuses. */
+  nestedCallsIncompleteReason: Schema.optional(Schema.Literal("arguments")),
 });
 export type RenderMsg = typeof RenderMsg.Type;
 
@@ -284,7 +286,17 @@ export const SessionPreview = Schema.Struct({
 });
 export type SessionPreview = typeof SessionPreview.Type;
 
+export const ArtifactPublication = Schema.Struct({
+  artifactId: Schema.String,
+  title: Schema.String,
+  url: Schema.String,
+  revision: Schema.Number,
+  operationKey: Schema.String,
+});
+
 export const SessionState = Schema.Struct({
+  /** Confirmed publications on Pi's active branch, including before compaction. */
+  artifacts: Schema.optional(Schema.Array(ArtifactPublication)),
   sessionId: Schema.String,
   sessionFile: Schema.optional(Schema.String),
   sessionName: Schema.optional(Schema.String),

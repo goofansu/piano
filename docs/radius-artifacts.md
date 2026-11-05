@@ -6,8 +6,9 @@ viewing URL, artifact ID, revision, visibility and expiration. “Update that ar
 and URL; “View that artifact” reads the publication, not a file on the Piano host.
 
 The session header counts the artifacts a session published and lists them by title; each opens
-its Radius URL in a new tab. The list is read from the session's own tool results (a confirmed
-create or update), so it holds only what these tools published, and nothing Piano stores.
+its Radius URL in a new tab. The list reads confirmed publication receipts from Pi's active branch,
+including publications made inside codemode and before compaction. Legacy direct create/update
+results remain supported. Piano keeps no separate publication database.
 
 Artifact requests mean Radius by default. Local files are only staging unless the user explicitly
 asks for local delivery. A failed publication is never silently delivered as a local file.
@@ -100,8 +101,16 @@ different writer at the expected revision rather than claiming that writer's wor
 
 Before a mutation, Pi appends a `radius-artifact-intent-v1` entry to its own history containing the
 key, content fingerprint, publication note and known identity. A received identity is appended
-before confirmation reads. Tool results carry the usable publication metadata in content,
-structured content and details. There is no Piano database table or separate identity store.
+before confirmation reads. **An intent is not confirmation.** Only after all read-back checks pass,
+the extension appends a `radius-artifact-publication-v1` receipt containing `artifactId`, `title`,
+`url`, `revision` and `operationKey`, never document content. Each operation leaves at most one
+receipt on the active branch. Live `entry_appended` events and saved branch reads populate the
+same header and Artifacts command; a later failure in the outer codemode script does not undo a
+publication. Updates retain one entry per artifact ID; reconciling an older revision cannot
+replace a newer title. Views, failures and unconfirmed writes add no receipt.
+
+Tool results also carry usable publication metadata in content, structured content and details.
+There is no Piano database table or separate identity store.
 Intents are reconstructed from the active Pi branch, including after reload/resume; a conversation
 fork is not a fork of the external artifact. Keep identity and operation keys in conversation
 summaries when compacting. Another session needs the artifact ID and a fresh `view` before updating.
@@ -112,6 +121,17 @@ malformed create response that leaves no ID cannot be safely reconciled automati
 returns `unknown` and asks the user to inspect Radius's Artifacts page. It will not create again.
 An unresolved intent stays blocked, even if a request may never have reached Radius. Errors and
 unknowns are failed Pi tool results, not successful publication. No local-file fallback exists.
+
+## Older codemode sessions
+
+Pi's bounded nested-call records contain call metadata, not successful result bodies. Arguments
+over 8 KiB per call or 32 KiB total are omitted. Piano says “Some tool arguments weren’t saved.”
+when the saved record establishes argument-only loss; unfinished records or possible missing
+calls retain the generic details warning. This is independent of publication confirmation.
+
+Older codemode publications without receipts are not recovered automatically. Piano does not
+scrape printed script output, promote intent entries, republish, or rewrite history. Recovering
+such links requires separately authorized read-only reconciliation; this change does not perform it.
 
 ## Contract sources and verification boundary
 

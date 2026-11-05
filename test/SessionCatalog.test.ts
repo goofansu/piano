@@ -77,7 +77,11 @@ test("every sidebar grouping lists the same sessions: open folders' sessions and
   assert.deepEqual(ids(sortSessions(listed, "recent")), expected);
 
   assert.deepEqual(
-    ids(projectGroups(state.projects, listed, "recent").flatMap((g) => g.sessions)),
+    ids(
+      Object.values(projectGroups(state.projects, listed, "recent"))
+        .flat()
+        .flatMap((g) => g.sessions),
+    ),
     expected,
   );
   assert.deepEqual(

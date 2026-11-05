@@ -29,6 +29,7 @@ test("real Pi loads project-only virtual models and retained supported UI from t
       ctx.ui.setWidget('projection', ['real widget'], { placement: 'belowEditor' });
       ctx.ui.setTitle('real extension title');
       ctx.ui.setEditorText('real editor request');
+      pi.appendEntry('radius-artifact-publication-v1', { artifactId: 'live', title: 'Live report', url: 'https://radius.pi.dev/artifacts/live', revision: 1, operationKey: 'live-report' });
       ctx.ui.notify('PHASE3_READY');
     } });
   }`,
@@ -72,6 +73,15 @@ test("real Pi loads project-only virtual models and retained supported UI from t
         yield* session.act({ _tag: "prompt", text: "/phase3-state" });
         yield* Fiber.join(observed);
         const state = yield* session.state;
+        assert.deepEqual(state.artifacts, [
+          {
+            artifactId: "live",
+            title: "Live report",
+            url: "https://radius.pi.dev/artifacts/live",
+            revision: 1,
+            operationKey: "live-report",
+          },
+        ]);
         assert.equal(state.model, "phase3/auto");
         assert.equal(state.thinkingLevel, "high");
         assert.deepEqual(state.extension?.statuses, [{ key: "projection", text: "real status" }]);
@@ -192,8 +202,22 @@ test("INV-01/12: a saved peek is the Snapshot real Pi opens the same file with",
     stopReason: "stop",
     timestamp: 2,
   });
+  manager.appendCustomEntry("radius-artifact-publication-v1", {
+    artifactId: "abandoned",
+    title: "Abandoned",
+    url: "https://radius.pi.dev/artifacts/abandoned",
+    revision: 1,
+    operationKey: "abandoned",
+  });
   manager.appendMessage({ role: "user", content: "abandoned branch", timestamp: 3 });
   manager.branch(reply);
+  manager.appendCustomEntry("radius-artifact-publication-v1", {
+    artifactId: "kept",
+    title: "Kept",
+    url: "https://radius.pi.dev/artifacts/kept",
+    revision: 1,
+    operationKey: "kept",
+  });
   manager.appendContextEdit(reply, { content: `edited ${secret}` });
   manager.appendCompaction("summary", reply, 30);
   const sessionId = manager.getSessionId();
@@ -207,6 +231,7 @@ test("INV-01/12: a saved peek is the Snapshot real Pi opens the same file with",
       model: state.model,
       thinkingLevel: state.thinkingLevel,
       isStreaming: state.isStreaming,
+      artifacts: state.artifacts,
     },
     messages,
     dialogs,
@@ -221,6 +246,10 @@ test("INV-01/12: a saved peek is the Snapshot real Pi opens the same file with",
         assert.equal(opened[0]._tag, "snapshot");
         if (opened[0]._tag !== "snapshot") return;
         assert.deepEqual(facts(saved), facts(opened[0].snapshot));
+        assert.deepEqual(
+          saved.state.artifacts?.map((a) => a.artifactId),
+          ["kept"],
+        );
         assert.deepEqual(
           saved.messages.map((message) => message.text),
           ["summary", "edited [REDACTED]"],

@@ -13,6 +13,7 @@ import {
   decodeClientMessage,
   type SessionEvent,
 } from "../shared/wire.ts";
+import { sessionArtifacts } from "../web/src/lib/sessionArtifacts.ts";
 import { largeHistory } from "./fixtures/large-history.ts";
 
 const fakeCli = {
@@ -37,6 +38,53 @@ const collectUntil = <E>(
 const step = (...a: unknown[]) => {
   if (process.env.PIANO_DEBUG) console.error("[test]", ...a);
 };
+
+test("nested publication receipts reach live and reconnect snapshots despite outer script failure", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "nested-artifacts",
+      });
+      let expected = 0;
+      for (const prompt of [
+        "codemode-artifact a 1 Draft",
+        "codemode-artifact b 1 Other",
+        "codemode-artifact a 2 Final",
+        "codemode-artifact a 1 Draft",
+      ]) {
+        expected++;
+        const ready = yield* Deferred.make<void>();
+        const observed = yield* session.events.pipe(
+          Stream.tap((e) =>
+            e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+          Stream.takeUntil(
+            (e) =>
+              e._tag === "context" &&
+              e.messages.filter((m) => m.role === "tool_result").length === expected,
+          ),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Deferred.await(ready);
+        yield* session.act({ _tag: "prompt", text: prompt });
+        yield* Fiber.join(observed);
+      }
+      const [event] = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
+      assert.equal(event._tag, "snapshot");
+      if (event._tag !== "snapshot") return;
+      const { messages, state } = event.snapshot;
+      assert.deepEqual(sessionArtifacts(messages, state.artifacts), [
+        { id: "a", title: "Final", url: "https://radius.example.test/a/a" },
+        { id: "b", title: "Other", url: "https://radius.example.test/a/b" },
+      ]);
+      const results = messages.filter((m) => m.role === "tool_result");
+      assert.equal(results.length, 4);
+      assert.ok(results.every((m) => m.isError && m.nestedCallsIncompleteReason === "arguments"));
+    }).pipe(Effect.timeout("10 seconds"), Effect.scoped),
+  );
+});
 
 test("command discovery is read-only, distinguishes probe/live resources and keeps invocation precedence", async () => {
   await run(

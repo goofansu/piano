@@ -80,8 +80,9 @@ The stock provider and Settings tooltip still use upstream `hooks/use-mobile.ts`
 (`innerWidth < 768`, `max-width: 767px` events). Their `isMobile` can therefore disagree with CSS
 and the application at fractional widths or a non-default browser font baseline. This remains
 an exception for Settings sidebar tooltip suppression and stock sidebar consumers, not Piano's
-⌘B routing: `AppLayout` disables the stock listener. Stock `openMobile` remains disconnected from
-Piano's reveal, as below. Neither upstream consumer owns session capacity.
+⌘B routing: `AppLayout` disables the stock listener. The sidebar layout also refuses direct
+desktop-preference changes while narrow, independently of shortcut routing. Stock `openMobile`
+remains disconnected from Piano's reveal, as below. Neither upstream consumer owns session capacity.
 
 ### Stock sidebar shortcut
 

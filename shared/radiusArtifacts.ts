@@ -1,8 +1,53 @@
-/** The bundled radius-artifacts extension's publication contract as Piano reads it from Pi's
- * records: its tool names and the result each call returns. The extension registers its tools and
- * shapes its results from here; the session header's Artifacts menu reads a confirmed publication
- * through `publishedArtifact`, so renaming a tool or a result field cannot silently empty it. */
+/** The bundled radius-artifacts extension's publication contract: versioned confirmation
+ * receipts, tool names and results. Piano reads receipts independently of tool output, with
+ * direct results retained for legacy sessions. */
 import { arr, int, num, obj, opt, type Schema, type Static, str } from "@earendil-works/pi-schema";
+import { z } from "zod";
+
+/** Written only after the extension verifies the publication, never for an intent or view. */
+export const RADIUS_ARTIFACT_PUBLICATION = "radius-artifact-publication-v1";
+export const ArtifactPublication = z.object({
+  artifactId: z.string().min(1),
+  title: z.string().min(1).max(256),
+  url: z
+    .string()
+    .url()
+    .refine((value) => {
+      const url = new URL(value);
+      return url.protocol === "https:" && !url.username && !url.password;
+    }),
+  revision: z.number().int().positive(),
+  operationKey: z.string().min(1).max(128),
+});
+export type ArtifactPublication = z.infer<typeof ArtifactPublication>;
+
+export function artifactPublication(entry: unknown): ArtifactPublication | undefined {
+  if (!entry || typeof entry !== "object") return;
+  const { type, customType, data } = entry as Record<string, unknown>;
+  if (type !== "custom" || customType !== RADIUS_ARTIFACT_PUBLICATION) return;
+  const parsed = ArtifactPublication.safeParse(data);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/** Latest confirmed revision per identity, newest publication first. Reconciliation of an old
+ * operation must not replace a newer title or reorder the list. */
+export function withArtifactPublication(
+  publications: readonly ArtifactPublication[],
+  publication: ArtifactPublication,
+): readonly ArtifactPublication[] {
+  const previous = publications.find((p) => p.artifactId === publication.artifactId);
+  if (previous && previous.revision >= publication.revision) return publications;
+  return [publication, ...publications.filter((p) => p.artifactId !== publication.artifactId)];
+}
+
+export function artifactPublications(entries: readonly unknown[]): readonly ArtifactPublication[] {
+  let publications: readonly ArtifactPublication[] = [];
+  for (const entry of entries) {
+    const publication = artifactPublication(entry);
+    if (publication) publications = withArtifactPublication(publications, publication);
+  }
+  return publications;
+}
 
 export const RADIUS_ARTIFACT_CREATE_TOOL = "radius_artifact_create";
 export const RADIUS_ARTIFACT_UPDATE_TOOL = "radius_artifact_update";
