@@ -356,6 +356,23 @@ test("INV-01/12: a URL server that cannot be reached, or rejects its Authorizati
         timeout: 30,
       });
       assert.ok(!JSON.stringify(keyed).includes("header-token"), "no header value on the wire");
+
+      // The form adds as it edits: the header comes from its Authorization field alone, never a
+      // Headers row of that name, and empty fields are left out.
+      const formed = yield* setup.change({
+        action: "add",
+        name: "formed",
+        form: {
+          url: keyedUrl,
+          headers: { authorization: "Bearer wrong", "X-Trace": "on" },
+          authorization: "Bearer header-token",
+        },
+      });
+      assert.equal(formed.signIn, undefined);
+      assert.deepEqual(json(file).mcpServers.formed, {
+        url: keyedUrl,
+        headers: { Authorization: "Bearer header-token", "X-Trace": "on" },
+      });
     }),
   );
 });
@@ -408,7 +425,11 @@ test("INV-01/12: a local command server is saved only once Pi's client has start
       assert.equal(readFileSync(file, "utf8"), before, "nothing is saved that did not start");
 
       const paper = { command: process.execPath, args: [sentinel, log] };
-      const added = yield* setup.change({ action: "add", name: "paper", config: paper });
+      const added = yield* setup.change({
+        action: "add",
+        name: "paper",
+        form: { ...paper, env: {}, cwd: "  " },
+      });
       assert.equal(added.signIn, undefined);
       assert.deepEqual(json(file), { custom: { untouched: true }, mcpServers: { paper } });
       const started = spawned(log).filter((entry) => entry.event === "initialize");
