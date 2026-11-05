@@ -12,6 +12,24 @@ export const SidebarLayoutContext = createContext<SidebarLayout | null>(null);
 export function useSidebarLayoutController(): SidebarLayout {
   const [layout] = useState(() => createSidebarLayout(browserSidebarEnvironment));
   useEffect(() => layout.start(), [layout]);
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Cmd+B alone, including repeated keydowns, as in the patched stock provider.
+      // Route through the same CSS-aligned column/reveal controller as buttons and the palette.
+      if (
+        event.key === "b" &&
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        layout.toggle();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [layout]);
   return layout;
 }
 

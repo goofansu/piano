@@ -80,8 +80,8 @@ test("show, hide and toggle open and close the sheet below the breakpoint, leavi
 });
 
 test("the desktop preference changes only on a desktop viewport", () => {
-  // The stock provider's shortcut routes by its own breakpoint, so it can call setCollapsed
-  // while Piano's viewport is narrow; the hidden column's preference must not change then.
+  // Direct calls must not change the hidden column's preference while narrow,
+  // independently of the shortcut's viewport-aware routing.
   const narrow = page({ desktop: false, stored: { "piano.sidebar": "shown" } });
   narrow.layout.setCollapsed(true);
   assert.equal(narrow.state().collapsed, false);

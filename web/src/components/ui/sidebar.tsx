@@ -54,6 +54,7 @@ function useSidebar() {
 
 function SidebarProvider({
   defaultOpen = true,
+  keyboardShortcut = true,
   open: openProp,
   onOpenChange: setOpenProp,
   className,
@@ -62,6 +63,8 @@ function SidebarProvider({
   ...props
 }: React.ComponentProps<"div"> & {
   defaultOpen?: boolean
+  // Piano patch: applications with their own layout controller can own the shortcut.
+  keyboardShortcut?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
@@ -94,6 +97,8 @@ function SidebarProvider({
 
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
+    if (!keyboardShortcut) return
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
@@ -111,7 +116,7 @@ function SidebarProvider({
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [toggleSidebar])
+  }, [keyboardShortcut, toggleSidebar])
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
