@@ -13,6 +13,7 @@ import {
   type PreferenceStorage,
   parseJson,
 } from "./preference.ts";
+import { isProjectDone } from "./projectCommands.ts";
 import { folderFor, inSidebarGroups, type SessionEntry, sessionCatalog } from "./sessionCatalog.ts";
 import { sessionReference } from "./sessionContext.ts";
 import {
@@ -48,12 +49,17 @@ export interface PinnedSection {
  */
 export type SidebarSection = { details: SessionRowDetails | undefined } & (
   | { kind: "folder"; key: string; open: boolean; folder: FolderView; sessions: SessionEntry[] }
-  /** Active projects in order, then always the No project group (`project: null`). */
+  /**
+   * Open projects A–Z, then always the No project group (`project: null`); done projects A–Z
+   * follow in the body's `done` part.
+   */
   | {
       kind: "project";
       key: string;
       open: boolean;
       project: Project | null;
+      /** A done project's group: listed under Done, set apart as No project is. */
+      done: boolean;
       sessions: SessionEntry[];
     }
   /** Date groups start open; the rest start closed. */
@@ -62,10 +68,13 @@ export type SidebarSection = { details: SessionRowDetails | undefined } & (
   | { kind: "list"; key: string; sessions: SessionEntry[] }
 );
 
+export type ProjectSection = Extract<SidebarSection, { kind: "project" }>;
+
 export type SidebarBody =
   | { kind: "loading" }
   | { kind: "empty"; text: string }
-  | { kind: "sections"; sections: SidebarSection[] };
+  /** `done` holds done projects' groups, shown last under one Done label; empty for any other grouping. */
+  | { kind: "sections"; sections: SidebarSection[]; done: ProjectSection[] };
 
 export interface SidebarList {
   /** Null while nothing is pinned, and before the registry arrives. */
@@ -151,7 +160,9 @@ const isDateKey = (key: string) => key.startsWith("date:");
 function selectedKey(list: SidebarList): string | undefined {
   if (list.pinned?.sessions.some((s) => s.selected)) return PINNED;
   if (list.body?.kind !== "sections") return undefined;
-  const section = list.body.sections.find((s) => s.sessions.some((row) => row.selected));
+  const section = [...list.body.sections, ...list.body.done].find((s) =>
+    s.sessions.some((row) => row.selected),
+  );
   // No grouping has nothing to open.
   return section && section.kind !== "list" ? section.key : undefined;
 }
@@ -216,9 +227,9 @@ function buildList(
     pinned,
     body: pinned ? null : { kind: "empty", text },
   });
-  const sections = (list: SidebarSection[]): SidebarList => ({
+  const sections = (list: SidebarSection[], done: ProjectSection[] = []): SidebarList => ({
     pinned,
-    body: { kind: "sections", sections: list },
+    body: { kind: "sections", sections: list, done },
   });
 
   switch (view.groupBy) {
@@ -236,15 +247,16 @@ function buildList(
       );
     case "project": {
       const groups = projectGroups(state.projects, listed, view.sortBy);
-      if (state.projects.length === 0 && groups.every((g) => g.sessions.length === 0))
+      if (state.projects.length === 0 && groups.open.every((g) => g.sessions.length === 0))
         return empty(NO_SESSIONS);
-      return sections(
-        groups.map(({ project, sessions }) => {
+      const section =
+        (done: boolean) =>
+        ({ project, sessions }: (typeof groups.open)[number]): ProjectSection => {
           const key = projectKey(project?.id ?? "");
           const details = rowDetails(view, sessions);
-          return { kind: "project", key, open: isOpen(key), project, sessions, details };
-        }),
-      );
+          return { kind: "project", key, open: isOpen(key), project, done, sessions, details };
+        };
+      return sections(groups.open.map(section(false)), groups.done.map(section(true)));
     }
     case "date": {
       const groups = dateGroups(listed, view.sortBy, today);
@@ -397,9 +409,7 @@ export function createSidebarList({
         }
         // A project marked done folds its group once; reopened, it unfolds once. Either way the
         // user's later choice stands, as for any folder or project.
-        const nowDone = new Set(
-          state.projects.filter((p) => p.doneAt !== undefined).map((p) => p.id),
-        );
+        const nowDone = new Set(state.projects.filter(isProjectDone).map((p) => p.id));
         const wasDone = doneProjects;
         if (wasDone) {
           const known = new Set(ids);

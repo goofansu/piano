@@ -107,7 +107,7 @@ function sidebar(stored: Record<string, string> = {}, now = new Date(2026, 9, 2)
 const openness = (list: SidebarList) => [
   ...(list.pinned ? [[list.pinned.key, list.pinned.open]] : []),
   ...(list.body?.kind === "sections"
-    ? list.body.sections.map((s) => [s.key, "open" in s ? s.open : null])
+    ? [...list.body.sections, ...list.body.done].map((s) => [s.key, "open" in s ? s.open : null])
     : []),
 ];
 const isOpen = (list: SidebarList, key: string) =>
@@ -661,6 +661,70 @@ test("sidebar list: a project created after the registry loaded opens; existing 
     false,
     "a later refresh does not reopen it",
   );
+});
+
+test("sidebar list: done projects' groups sit apart, A–Z, under project grouping only", () => {
+  const { model } = sidebar();
+  const projects = [
+    { id: "launch", name: "Launch" },
+    { id: "zz", name: "Zz shipped", doneAt: "2026-10-01T08:00:00Z" },
+    { id: "a11y", name: "Accessibility" },
+    { id: "aa", name: "Aa shipped", doneAt: "2026-10-02T08:00:00Z" },
+  ];
+  const state: AppState = {
+    ...registry,
+    projects,
+    sessionReferences: [
+      sessionReference("/repo", "s1", { projectId: "zz", updatedAt: "2026-10-01T09:00:00Z" }),
+    ],
+  };
+  const parts = (s: AppState, groupBy: GroupBy) => {
+    const body = model.list(s, view(groupBy)).body;
+    assert.equal(body?.kind, "sections");
+    if (body?.kind !== "sections") return null;
+    return {
+      sections: body.sections.map((x) => [x.key, x.kind === "project" ? x.done : null]),
+      done: body.done.map((x) => [x.key, x.project?.name, x.done]),
+    };
+  };
+  assert.deepEqual(parts(state, "project"), {
+    sections: [
+      ["project:a11y", false],
+      ["project:launch", false],
+      ["project:", false],
+    ],
+    done: [
+      ["project:aa", "Aa shipped", true],
+      ["project:zz", "Zz shipped", true],
+    ],
+  });
+  const reopened = { ...state, projects: projects.map(({ doneAt: _, ...p }) => p) };
+  assert.deepEqual(parts(reopened, "project")?.done, [], "no done part when no project is done");
+  for (const groupBy of ["folder", "date", "none"] as const)
+    assert.deepEqual(parts(state, groupBy)?.done, [], `${groupBy} grouping has no done part`);
+});
+
+test("sidebar list: marking a project done folds its group once; reopening unfolds it once", () => {
+  const { model } = sidebar();
+  const at = (doneAt?: string): AppState => ({
+    ...registry,
+    projects: [{ id: "p1", name: "Launch", ...(doneAt ? { doneAt } : {}) }],
+  });
+  const open = (state: AppState) => isOpen(model.list(state, view("project")), "project:p1");
+  model.sync(at(), view("project"));
+  model.toggle("project:p1", true);
+  const done = at("2026-10-02T08:00:00Z");
+  model.sync(done, view("project"));
+  assert.equal(open(done), false, "marked done, the group folds");
+  model.toggle("project:p1", true);
+  model.sync({ ...done, folders: [...done.folders] }, view("project"));
+  assert.equal(open(done), true, "a later state update keeps the user's reopening");
+  model.toggle("project:p1", false);
+  model.sync(at(), view("project"));
+  assert.equal(open(at()), true, "reopened, the group unfolds");
+  model.toggle("project:p1", false);
+  model.sync({ ...at(), folders: [...registry.folders] }, view("project"));
+  assert.equal(open(at()), false, "a later state update keeps the user's collapse");
 });
 
 test("sidebar list: date sections start open, remember a collapse per browser, and open for a selected session", () => {

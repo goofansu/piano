@@ -228,21 +228,19 @@ test("sidebar view: project groups hold their members, then a No project group h
     session("/zeta", "z3", "Shipped member", 5, "shipped"),
   ];
   for (const { value: sort } of SORT_BY) {
-    const groups = projectGroups(projects, listed, sort);
+    const { open, done } = projectGroups(projects, listed, sort);
     assert.deepEqual(
-      groups.map((g) => g.project?.name ?? null),
-      [
-        "Empty project",
-        "Improve accessibility",
-        "Launch subscriptions",
-        null,
-        "Already shipped",
-        "Zz done",
-      ],
-      `open projects stay A–Z with ${sort} session sort, then No project, then done projects A–Z`,
+      open.map((g) => g.project?.name ?? null),
+      ["Empty project", "Improve accessibility", "Launch subscriptions", null],
+      `open projects stay A–Z with ${sort} session sort, then No project`,
     );
     assert.deepEqual(
-      groups.map((g) => titles(g.sessions)),
+      done.map((g) => g.project?.name ?? null),
+      ["Already shipped", "Zz done"],
+      `done projects are apart, A–Z with ${sort} session sort`,
+    );
+    assert.deepEqual(
+      [...open, ...done].map((g) => titles(g.sessions)),
       {
         name: [
           [],
@@ -264,6 +262,11 @@ test("sidebar view: project groups hold their members, then a No project group h
       `members, including closed-folder, unfiled and done-project sessions, follow ${sort} sort`,
     );
   }
+  assert.deepEqual(
+    projectGroups(projects.slice(0, 3), listed, "name").done,
+    [],
+    "no done group when no project is done",
+  );
   assert.deepEqual(
     projects.map((p) => p.id),
     ["launch", "a11y", "empty", "shipped", "zz-done"],
