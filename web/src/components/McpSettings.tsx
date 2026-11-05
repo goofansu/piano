@@ -1,19 +1,18 @@
 import type { McpCatalogId, McpSetupChange, McpSetupRequest } from "@shared/mcp";
 import { CheckCircle2Icon, ServerIcon } from "lucide-react";
-import { useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { McpServerDialog } from "@/components/McpServerDialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/PianoDialog";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/PianoDropdownMenu";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
+import { RemovalDialog } from "@/components/RemovalDialog";
 import {
   SettingsAlert,
   SettingsGroup,
@@ -39,10 +38,9 @@ import { pageCommands } from "@/lib/globalCommands";
 import {
   type McpAvailableRow,
   type McpServerRow,
-  mcpManageCopy,
+  mcpRemovalCopy,
   mcpSetupView,
 } from "@/lib/mcpSetupView";
-import { useLastShown } from "@/lib/useLastShown";
 import { mcpServerEditor, useMcpServerEditor } from "@/lib/useMcpServerEditor";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
@@ -59,19 +57,19 @@ interface SignInSubject {
 }
 
 /** Pi's global MCP servers on this machine: connect a catalog server, add the user's own, and
- * manage each (edit, disconnect or delete), all through Pi. A URL server is saved only once it
+ * manage each (edit, then disconnect or delete after confirming), all through Pi. A URL server is saved only once it
  * connects; the sign-in it asks for first opens straight away. */
 export function McpSettings() {
   const setup = useObservation("mcp", (signal) => mcpSetup({ signal }));
   // Add MCP server comes from `pageCommands`, which the palette lists too; both open this editor.
   const { state: app, run: runCommand, global } = useCommands();
   const editing = useMcpServerEditor();
-  const [managing, setManaging] = useState<McpServerRow | undefined>();
-  const actions = useSetupActions<never, SignInSubject>({
+  const actions = useSetupActions<McpServerRow, SignInSubject>({
     refresh: () => void setup.refresh(),
     success: (text) => toast.success(text),
   });
-  const { signIn } = actions;
+  const { signIn, confirmation: removing } = actions;
+  const removal = removing && mcpRemovalCopy(removing);
   const busy = actions.running !== undefined;
   const view = mcpSetupView({
     state: setup.value,
@@ -124,22 +122,25 @@ export function McpSettings() {
               saved={(reply, name) => signInAfter(reply, name)}
             />
           )}
-          <McpManageDialog
-            row={managing}
+          <RemovalDialog
+            open={!!removing}
+            title={removal?.title ?? ""}
+            description={removal?.description ?? ""}
+            action={removal?.action ?? ""}
+            progress={removal?.progress}
             busy={busy}
-            close={() => setManaging(undefined)}
-            edit={(row) => {
-              setManaging(undefined);
-              mcpServerEditor.open(row.setup);
-            }}
-            remove={(row) =>
+            cancel={actions.cancel}
+            confirm={() => {
+              if (!removing || !removal) return;
               void act(
-                { action: "remove", name: row.setup.name, removalKey: row.setup.removalKey },
-                () => mcpManageCopy(row).done,
-              ).then((reply) => {
-                if (reply) setManaging(undefined);
-              })
-            }
+                {
+                  action: "remove",
+                  name: removing.setup.name,
+                  removalKey: removing.setup.removalKey,
+                },
+                () => removal.done,
+              );
+            }}
           />
           <ProviderLoginDialog
             api={mcpLogin}
@@ -183,7 +184,8 @@ export function McpSettings() {
                     key={row.setup.name}
                     row={row}
                     disabled={view.disabled}
-                    manage={() => setManaging(row)}
+                    edit={() => mcpServerEditor.open(row.setup)}
+                    remove={() => actions.confirm(row)}
                     reconnect={() =>
                       actions.openSignIn({ id: row.setup.name, name: titleOf(row.setup.name) })
                     }
@@ -232,14 +234,16 @@ function Logo({ catalog }: { catalog: McpCatalogId | undefined }) {
 }
 
 function McpServerItem({
-  row: { title, catalog, value, ready, detail, reconnect },
+  row: { title, catalog, value, ready, detail, reconnect, editable, removeVerb },
   disabled,
-  manage,
+  edit,
+  remove,
   reconnect: signIn,
 }: {
   row: McpServerRow;
   disabled: boolean;
-  manage: () => void;
+  edit: () => void;
+  remove: () => void;
   reconnect: () => void;
 }) {
   // The name and its endpoint or command; a third line appears only for a problem the user must fix in Pi.
@@ -271,72 +275,31 @@ function McpServerItem({
             Reconnect
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          aria-label={`Manage ${title} MCP`}
-          onClick={manage}
-        >
-          Manage
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={disabled}
+              aria-label={`Manage ${title} MCP`}
+            >
+              Manage
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {editable && (
+              <>
+                <DropdownMenuItem onSelect={edit}>Edit</DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuItem variant="destructive" onSelect={remove}>
+              {removeVerb}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </ItemActions>
     </Item>
-  );
-}
-
-/** One server's Manage dialog: Edit for a server the user added, and its removal, which this
- * dialog's description states before the destructive button. It stays mounted so it can animate
- * closed. */
-function McpManageDialog({
-  row,
-  busy,
-  close,
-  edit,
-  remove,
-}: {
-  row: McpServerRow | undefined;
-  busy: boolean;
-  close: () => void;
-  edit: (row: McpServerRow) => void;
-  remove: (row: McpServerRow) => void;
-}) {
-  const shown = useLastShown(row);
-  if (!shown) return null;
-  return (
-    <Dialog
-      open={!!row}
-      onOpenChange={(next) => {
-        if (!next && !busy) close();
-      }}
-    >
-      <DialogContent className="sm:max-w-md" showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>{shown.title} MCP</DialogTitle>
-          <DialogDescription>{mcpManageCopy(shown).description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" disabled={busy} onClick={close}>
-            Cancel
-          </Button>
-          {shown.editable && (
-            <Button variant="outline" disabled={busy} onClick={() => edit(shown)}>
-              Edit
-            </Button>
-          )}
-          <Button
-            variant="destructive"
-            disabled={busy}
-            onClick={() => {
-              if (row) remove(row);
-            }}
-          >
-            {busy && <Spinner data-icon="inline-start" />}
-            {shown.removeVerb}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

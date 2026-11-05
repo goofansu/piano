@@ -27,11 +27,12 @@ other servers carry the server icon.
   "Adds <name>" once it parses, two servers read "Paste one server at a time.", and an entry Pi
   rejects fails under the field with Pi's message and writes nothing.
 - `manage`: each Connected row has Manage (and Reconnect only when an OAuth server's sign-in is
-  gone). Manage opens "<Name> MCP" with Cancel, Edit (servers the user added only) and Disconnect
-  (a URL server) or Delete (a command), its description saying what goes.
+  gone). Manage opens a menu: Edit (servers the user added only) and a separator, then
+  Disconnect (a URL server) or Delete (a command) in red.
 - `edit`: Edit opens the add dialog on the entry (no tabs); a saved Authorization header shows as
   a masked placeholder with Remove / Keep; Save toasts "<name> MCP saved for new sessions.".
-- `remove`: Disconnect or Delete removes the entry and toasts "<Name> MCP disconnected." or
+- `remove`: Disconnect or Delete asks "Disconnect <Name> MCP?" / "Delete <Name> MCP?" with
+  Cancel, then removes the entry and toasts "<Name> MCP disconnected." or
   "<Name> MCP deleted."; the entry leaves the file.
 - `problem`: with `{"extensions":["-builtin:mcp"]}` in `$RUN/pi-agent/settings.json`, the page
   shows "MCP is unavailable" with Pi's reason and every control off.

@@ -44,7 +44,7 @@ server connects. A local command is saved as Pi validates it; Piano never starts
   `mcpServers` object a server's README shows, one server at a time; it is the way to set Pi's
   keys the form does not show, such as a timeout or a pre-registered OAuth client. Pi validates
   the entry before anything is written.
-- **Manage** opens a dialog on the entry:
+- **Manage** opens a menu on the entry:
   - **Edit** (servers the user added; a catalog server's endpoint is Piano's) opens the add
     dialog on the entry: its name, transport, URL or command, headers, arguments, environment and
     working directory. The saved Authorization header shows as a masked placeholder: blank keeps
@@ -52,8 +52,8 @@ server connects. A local command is saved as Pi validates it; Piano never starts
     settings) stay as configured; a change of transport drops the other transport's keys.
     Renaming an entry, or changing its endpoint, drops the sign-in stored for the old name and
     endpoint, since Pi keys tokens by both.
-  - **Disconnect** (a URL server) or **Delete** (a local command) removes the entry and its
-    sign-in, only if the entry is unchanged since the page was read. The sign-in stored for the
+  - **Disconnect** (a URL server) or **Delete** (a local command), last in the menu, asks first
+    and then removes the entry and its sign-in, only if the entry is unchanged since the page was read. The sign-in stored for the
     entry's name and endpoint is cleared whatever the entry authenticates with now, so an entry
     switched to an Authorization header after signing in does not come back signed in. The
     sign-in is cleared before the entry; if that fails, the entry stays and the removal can be

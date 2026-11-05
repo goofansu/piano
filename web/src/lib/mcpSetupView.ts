@@ -1,6 +1,6 @@
 /**
  * What the MCP section shows and allows: one row per entry of Pi's global configuration, with its
- * ready mark and what its Manage dialog offers; one row per catalog server not connected yet; and
+ * ready mark and what its Manage menu offers; one row per catalog server not connected yet; and
  * whether its controls wait. A change, read or read failure in flight disables every row. Pure;
  * the section renders it, and shows a failed read itself.
  */
@@ -39,7 +39,7 @@ export interface McpServerRow {
   reconnect: boolean;
   /** A server the user added; a catalog server's endpoint is Piano's to choose. */
   editable: boolean;
-  /** How Manage takes it away: a URL server is disconnected, a local command deleted. */
+  /** How Manage removes it: a URL server is disconnected, a local command deleted. */
   removeVerb: "Disconnect" | "Delete";
 }
 
@@ -101,16 +101,22 @@ export function mcpSetupView({ state, running, loading, loadFailed }: McpSetupIn
   };
 }
 
-/** The Manage dialog's description, and the toast once its removal is done. */
-export function mcpManageCopy(row: Pick<McpServerRow, "title" | "removeVerb">) {
+/** The removal's confirmation, and the toast once it is done. */
+export function mcpRemovalCopy(row: Pick<McpServerRow, "title" | "removeVerb">) {
   const name = row.title;
   return row.removeVerb === "Disconnect"
     ? {
-        description: `Disconnect removes ${name} MCP and its saved sign-in from Pi on this machine.`,
+        title: `Disconnect ${name} MCP?`,
+        description: `Removes ${name} MCP and its saved sign-in from Pi on this machine.`,
+        action: "Disconnect",
+        progress: "Disconnecting…",
         done: `${name} MCP disconnected.`,
       }
     : {
-        description: `Delete removes ${name} MCP from Pi on this machine.`,
+        title: `Delete ${name} MCP?`,
+        description: `Removes ${name} MCP from Pi on this machine.`,
+        action: "Delete",
+        progress: "Deleting…",
         done: `${name} MCP deleted.`,
       };
 }

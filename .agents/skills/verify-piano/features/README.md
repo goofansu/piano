@@ -71,7 +71,7 @@ Keep implementation details out; name user paths, handles, required state, comma
   empty states; the separate agent-authored approval path's real-Pi prerequisite. Providers and
   Webhooks are reached the same way but not driven here.
 - [Settings › MCP](./settings-mcp.md): `/settings/mcp` over the scratch `mcp.json`; Connect,
-  Add MCP server by form and by JSON paste (refused when it cannot connect), Manage with Edit,
+  Add MCP server by form and by JSON paste (refused when it cannot connect), Manage's menu with Edit and
   Disconnect / Delete, and Pi's MCP switch.
 
 ## Coverage boundaries

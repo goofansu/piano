@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { McpServerSetup, McpSetupState } from "../shared/mcp.ts";
-import { type McpSetupInput, mcpManageCopy, mcpSetupView } from "../web/src/lib/mcpSetupView.ts";
+import { type McpSetupInput, mcpRemovalCopy, mcpSetupView } from "../web/src/lib/mcpSetupView.ts";
 
 const http = (setup: Partial<McpServerSetup> = {}): McpServerSetup => ({
   name: "linear",
@@ -114,13 +114,19 @@ test("a change, read, read failure or Pi problem disables the rows; the problem 
   assert.equal(problem.problem, "MCP is off.");
 });
 
-test("Manage says what its removal takes away, and the toast names what was done", () => {
-  assert.deepEqual(mcpManageCopy({ title: "Linear", removeVerb: "Disconnect" }), {
-    description: "Disconnect removes Linear MCP and its saved sign-in from Pi on this machine.",
+test("a removal asks first, naming the server and what goes, and the toast names what was done", () => {
+  assert.deepEqual(mcpRemovalCopy({ title: "Linear", removeVerb: "Disconnect" }), {
+    title: "Disconnect Linear MCP?",
+    description: "Removes Linear MCP and its saved sign-in from Pi on this machine.",
+    action: "Disconnect",
+    progress: "Disconnecting…",
     done: "Linear MCP disconnected.",
   });
-  assert.deepEqual(mcpManageCopy({ title: "tools", removeVerb: "Delete" }), {
-    description: "Delete removes tools MCP from Pi on this machine.",
+  assert.deepEqual(mcpRemovalCopy({ title: "tools", removeVerb: "Delete" }), {
+    title: "Delete tools MCP?",
+    description: "Removes tools MCP from Pi on this machine.",
+    action: "Delete",
+    progress: "Deleting…",
     done: "tools MCP deleted.",
   });
 });
