@@ -90,13 +90,13 @@ export function SessionHeader({
     </h1>
   );
   // With no rail, where the session runs sits under the title as it does under a sidebar row: the
-  // repository or folder, then the branch shortened in the middle. It shows its own text, so it
-  // does nothing on tap.
+  // folder on mobile (repository or folder on desktop), then the branch shortened in the middle.
+  // It shows its own text, so it does nothing on tap.
   const titleBlock = place ? (
     <div className="flex min-w-0 flex-col">
       {heading}
       <p className="flex min-w-0 items-center gap-1 text-xs text-ink-3">
-        <span className="truncate">{place.name}</span>
+        <span className="truncate">{mobile ? context.folderName : place.name}</span>
         {place.ref && (
           <>
             <span aria-hidden>·</span>
