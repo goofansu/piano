@@ -75,6 +75,8 @@ export interface CommandEffects {
   openPreviewDetails: () => void;
   /** Opens the webhook editor on a new webhook. */
   addWebhook: () => void;
+  /** Opens the MCP server editor on a new server. */
+  addMcpServer: () => void;
   /** Opens the skill editor on a new skill. */
   newSkill: () => void;
   /** Opens the prompt editor on a new prompt. */
@@ -162,6 +164,9 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "add-webhook":
       effects.addWebhook();
+      break;
+    case "add-mcp-server":
+      effects.addMcpServer();
       break;
     case "new-skill":
       effects.newSkill();
