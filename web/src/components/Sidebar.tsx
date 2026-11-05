@@ -143,8 +143,29 @@ export function Sidebar({ state }: Props) {
             </EmptyHeader>
           </Empty>
         );
-      case "sections":
-        return <div className="flex flex-col gap-1">{body.sections.map(section)}</div>;
+      case "sections": {
+        // Done projects' groups come last (projectGroups); one label says so for all of them.
+        const isDone = (s: SidebarSection) =>
+          s.kind === "project" && !!s.project && isProjectDone(s.project);
+        const open = body.sections.filter((s) => !isDone(s));
+        const done = body.sections.filter(isDone);
+        return (
+          <div className="flex flex-col gap-1">
+            {open.map(section)}
+            {done.length > 0 && (
+              <div role="group" aria-labelledby="sidebar-done" className="flex flex-col gap-1">
+                <div
+                  id="sidebar-done"
+                  className="px-(--glyph-pad) pt-3 pb-1 text-xs font-medium text-ink-3"
+                >
+                  Done
+                </div>
+                {done.map(section)}
+              </div>
+            )}
+          </div>
+        );
+      }
     }
   };
 
