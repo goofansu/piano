@@ -469,6 +469,28 @@ test("sidebar list: a project without members is listed with the No project grou
   assert.equal(model.list({ ...state, projects: [] }, view("project")).body?.kind, "empty");
 });
 
+test("sidebar list: done projects' sections are marked done and listed after No project", () => {
+  const { model } = sidebar();
+  const state: AppState = {
+    ...loaded,
+    projects: [
+      { id: "shipped", name: "Already shipped", doneAt: "2026-11-01T08:00:00Z" },
+      { id: "launch", name: "Launch" },
+    ],
+  };
+  const list = model.list(state, view("project"));
+  assert.equal(list.body?.kind, "sections");
+  if (list.body?.kind === "sections")
+    assert.deepEqual(
+      list.body.sections.map((s) => [s.key, s.kind === "project" && s.done]),
+      [
+        ["project:launch", false],
+        ["project:", false],
+        ["project:shipped", true],
+      ],
+    );
+});
+
 test("sidebar list: selecting a session opens the section holding it: its folder (from any worktree), its project, or Pinned", () => {
   const pinned: AppState = {
     ...registry,

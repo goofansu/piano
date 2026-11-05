@@ -637,6 +637,9 @@ export const Project = Schema.Struct({
   doneAt: Schema.optional(Schema.String),
 });
 export type Project = typeof Project.Type;
+/** Whether the project is marked done: listed under Done on the index and in the sidebar. The one
+ * reading of `doneAt` in the browser. */
+export const isProjectDone = (project: Pick<Project, "doneAt">) => project.doneAt !== undefined;
 /** A session's pull request as the registry saves it; GitHub owns the facts behind it. */
 export const SessionPullRequestLink = Schema.Struct({
   url: Schema.String,

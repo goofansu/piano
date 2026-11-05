@@ -10,6 +10,7 @@
 // Relative, not @shared: module tests load this file directly in Node.
 import {
   type ClientCommand,
+  isProjectDone,
   PROJECT_INSTRUCTIONS_MAX,
   PROJECT_NAME_MAX,
   type Project,
@@ -89,9 +90,6 @@ export interface ProjectCommand {
   destructive?: true;
   intent: ProjectCommandIntent;
 }
-
-/** Whether the project is marked done: listed under Done on the index, its group last in the sidebar. */
-export const isProjectDone = (project: Pick<Project, "doneAt">) => project.doneAt !== undefined;
 
 /**
  * What a project row offers, in order: New session in the project, Project settings (its name and

@@ -5,9 +5,8 @@
  * lives on the project's home, except done, which is the index's own grouping: done projects sit
  * in their own group below the open ones.
  */
-import type { Project } from "../../../shared/wire.ts";
+import { isProjectDone, type Project } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import { isProjectDone } from "./projectCommands.ts";
 import { sessionCatalog } from "./sessionCatalog.ts";
 import { byName } from "./sidebarView.ts";
 

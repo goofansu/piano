@@ -1,4 +1,5 @@
-import type { FolderView, Project } from "@shared/wire";
+// Relative, not @shared: module tests load this file directly in Node.
+import { type FolderView, isProjectDone, type Project } from "../../../shared/wire.ts";
 
 /** How the sidebar lists sessions: by folder, project, date, or as one list. */
 export type GroupBy = "folder" | "project" | "date" | "none";
@@ -84,6 +85,8 @@ export function folderGroups<
 export interface SessionGroup<P, S> {
   project: P | null;
   sessions: S[];
+  /** A done project's group: listed after No project, under the sidebar's Done label. */
+  done: boolean;
 }
 /**
  * Open projects A–Z, then No project, then done projects A–Z at the bottom; the selected sort
@@ -101,6 +104,7 @@ export function projectGroups<
       sessions.filter((s) => s.projectId === project.id),
       sort,
     ),
+    done: isProjectDone(project),
   });
   const az = (a: SessionGroup<P, S>, b: SessionGroup<P, S>) =>
     byName(a.project?.name ?? "", b.project?.name ?? "");
@@ -110,18 +114,10 @@ export function projectGroups<
       sessions.filter((s) => !s.projectId),
       sort,
     ),
+    done: false,
   };
-  return [
-    ...projects
-      .filter((p) => p.doneAt === undefined)
-      .map(group)
-      .sort(az),
-    ungrouped,
-    ...projects
-      .filter((p) => p.doneAt !== undefined)
-      .map(group)
-      .sort(az),
-  ];
+  const groups = projects.map(group).sort(az);
+  return [...groups.filter((g) => !g.done), ungrouped, ...groups.filter((g) => g.done)];
 }
 
 /**

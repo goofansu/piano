@@ -242,6 +242,11 @@ test("sidebar view: project groups hold their members, then a No project group h
       `open projects stay A–Z with ${sort} session sort, then No project, then done projects A–Z`,
     );
     assert.deepEqual(
+      groups.map((g) => g.done),
+      [false, false, false, false, true, true],
+      "only done projects' groups are marked done",
+    );
+    assert.deepEqual(
       groups.map((g) => titles(g.sessions)),
       {
         name: [

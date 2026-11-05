@@ -5,7 +5,7 @@
  * groups over at local midnight, so the Sidebar only renders what `list` returns and calls
  * `toggle`. Relative, not @/: module tests load this file directly in Node.
  */
-import type { FolderView, Project } from "@shared/wire";
+import { type FolderView, isProjectDone, type Project } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import {
   createPreference,
@@ -48,13 +48,15 @@ export interface PinnedSection {
  */
 export type SidebarSection = { details: SessionRowDetails | undefined } & (
   | { kind: "folder"; key: string; open: boolean; folder: FolderView; sessions: SessionEntry[] }
-  /** Active projects in order, then always the No project group (`project: null`). */
+  /** Open projects in order, then always the No project group (`project: null`), then done
+   * projects, each `done`. */
   | {
       kind: "project";
       key: string;
       open: boolean;
       project: Project | null;
       sessions: SessionEntry[];
+      done: boolean;
     }
   /** Date groups start open; the rest start closed. */
   | { kind: "date"; key: string; open: boolean; label: string; sessions: SessionEntry[] }
@@ -239,10 +241,10 @@ function buildList(
       if (state.projects.length === 0 && groups.every((g) => g.sessions.length === 0))
         return empty(NO_SESSIONS);
       return sections(
-        groups.map(({ project, sessions }) => {
+        groups.map(({ project, sessions, done }) => {
           const key = projectKey(project?.id ?? "");
           const details = rowDetails(view, sessions);
-          return { kind: "project", key, open: isOpen(key), project, sessions, details };
+          return { kind: "project", key, open: isOpen(key), project, sessions, done, details };
         }),
       );
     }
@@ -397,9 +399,7 @@ export function createSidebarList({
         }
         // A project marked done folds its group once; reopened, it unfolds once. Either way the
         // user's later choice stands, as for any folder or project.
-        const nowDone = new Set(
-          state.projects.filter((p) => p.doneAt !== undefined).map((p) => p.id),
-        );
+        const nowDone = new Set(state.projects.filter(isProjectDone).map((p) => p.id));
         const wasDone = doneProjects;
         if (wasDone) {
           const known = new Set(ids);

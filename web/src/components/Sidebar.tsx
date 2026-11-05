@@ -48,7 +48,7 @@ import type { RadioChoice } from "@/lib/commands";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
-import { isProjectDone, projectCommands } from "@/lib/projectCommands";
+import { projectCommands } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import type { SessionRowDetails, SidebarSection } from "@/lib/sidebarList";
 import { useNavigation } from "@/lib/useNavigation";
@@ -98,6 +98,7 @@ export function Sidebar({ state }: Props) {
           <ProjectGroup
             key={s.key}
             project={s.project}
+            done={s.done}
             sessions={s.sessions}
             open={s.open}
             onOpenChange={onOpenChange}
@@ -144,9 +145,8 @@ export function Sidebar({ state }: Props) {
           </Empty>
         );
       case "sections": {
-        // Done projects' groups come last (projectGroups); one label says so for all of them.
-        const isDone = (s: SidebarSection) =>
-          s.kind === "project" && !!s.project && isProjectDone(s.project);
+        // One label names every done project's group.
+        const isDone = (s: SidebarSection) => s.kind === "project" && s.done;
         const open = body.sections.filter((s) => !isDone(s));
         const done = body.sections.filter(isDone);
         return (
@@ -457,13 +457,14 @@ function SidebarGroup({
 /** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
 function ProjectGroup({
   project,
+  done,
   sessions,
   open,
   onOpenChange,
   details,
   state,
   select,
-}: GroupProps & { project: Project | null; sessions: readonly SessionEntry[] }) {
+}: GroupProps & { project: Project | null; done: boolean; sessions: readonly SessionEntry[] }) {
   const { run } = useCommands();
   const commands = project ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
@@ -472,8 +473,8 @@ function ProjectGroup({
   return (
     <SidebarGroup
       label={project?.name ?? "No project"}
-      muted={!project || isProjectDone(project)}
-      done={!!project && isProjectDone(project)}
+      muted={!project || done}
+      done={done}
       sessions={sessions}
       open={open}
       onOpenChange={onOpenChange}

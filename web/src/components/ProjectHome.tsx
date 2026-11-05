@@ -1,3 +1,4 @@
+import { isProjectDone } from "@shared/wire";
 import { cn } from "cn";
 import { GitPullRequestIcon, MoreHorizontalIcon } from "lucide-react";
 import { type ComponentProps, useRef } from "react";
@@ -27,7 +28,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
-import { isProjectDone, projectCommands } from "@/lib/projectCommands";
+import { projectCommands } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
 import { type SessionTarget, sessionRowMenu } from "@/lib/sessionCommands";
 import { useNavigation } from "@/lib/useNavigation";
