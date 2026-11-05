@@ -116,15 +116,15 @@ test("a change, read, read failure or Pi problem disables the rows; the problem 
 
 test("a removal asks first, naming the server and what goes, and the toast names what was done", () => {
   assert.deepEqual(mcpRemovalCopy({ title: "Linear", removeVerb: "Disconnect" }), {
-    title: "Disconnect Linear MCP?",
-    description: "Removes Linear MCP and its saved sign-in from Pi on this machine.",
+    title: "Disconnect MCP Linear?",
+    description: "Removes MCP Linear and its saved sign-in from Pi on this machine.",
     action: "Disconnect",
     progress: "Disconnecting…",
     done: "MCP Linear disconnected.",
   });
   assert.deepEqual(mcpRemovalCopy({ title: "tools", removeVerb: "Delete" }), {
-    title: "Delete tools MCP?",
-    description: "Removes tools MCP from Pi on this machine.",
+    title: "Delete MCP tools?",
+    description: "Removes MCP tools from Pi on this machine.",
     action: "Delete",
     progress: "Deleting…",
     done: "MCP tools deleted.",

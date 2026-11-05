@@ -164,7 +164,7 @@ test("INV-01/11/12: connecting a catalog server saves it only once its sign-in s
       const initial = yield* setup.state;
       assert.deepEqual(names(initial), ["other"]);
       assert.deepEqual(available(initial), ["linear"]);
-      assert.match((yield* Effect.flip(setup.signIn.start("linear"))).detail, /Add linear MCP/);
+      assert.match((yield* Effect.flip(setup.signIn.start("linear"))).detail, /Add MCP linear/);
 
       // The server asks for a sign-in: nothing is saved yet, and the answer says whom to sign in to.
       const before = readFileSync(file, "utf8");
@@ -313,7 +313,7 @@ test("INV-01/12: a URL server that cannot be reached, or rejects its Authorizati
       );
       assert.deepEqual(
         [unreachable.field, unreachable.detail],
-        ["config", "Could not connect to gone MCP. Check the URL and the network, then try again."],
+        ["config", "Could not connect to MCP gone. Check the URL and the network, then try again."],
       );
       const rejected = yield* Effect.flip(
         setup.change({
@@ -326,7 +326,7 @@ test("INV-01/12: a URL server that cannot be reached, or rejects its Authorizati
         [rejected.field, rejected.detail],
         [
           "config",
-          "Could not connect to keyed MCP. Check the URL, the Authorization header and the network, then try again.",
+          "Could not connect to MCP keyed. Check the URL, the Authorization header and the network, then try again.",
         ],
       );
       assert.ok(!rejected.detail.includes("wrong"), "the header value is not echoed");
@@ -383,7 +383,7 @@ test("INV-01/12: a local command server is saved only once Pi's client has start
         }),
       );
       assert.equal(broken.field, "config");
-      assert.match(broken.detail, /^Could not start paper MCP\./);
+      assert.match(broken.detail, /^Could not start MCP paper\./);
       assert.match(broken.detail, /PHASE0_BROKEN_SENTINEL/, "Pi's reason reaches the user");
       const missing = yield* Effect.flip(
         setup.change({
@@ -393,7 +393,7 @@ test("INV-01/12: a local command server is saved only once Pi's client has start
         }),
       );
       assert.equal(missing.field, "config");
-      assert.match(missing.detail, /^Could not start paper MCP\./);
+      assert.match(missing.detail, /^Could not start MCP paper\./);
       assert.equal(readFileSync(file, "utf8"), before, "nothing is saved that did not start");
 
       const paper = { command: process.execPath, args: [sentinel, log] };

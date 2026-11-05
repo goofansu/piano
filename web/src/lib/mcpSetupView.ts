@@ -106,15 +106,15 @@ export function mcpRemovalCopy(row: Pick<McpServerRow, "title" | "removeVerb">) 
   const name = row.title;
   return row.removeVerb === "Disconnect"
     ? {
-        title: `Disconnect ${name} MCP?`,
-        description: `Removes ${name} MCP and its saved sign-in from Pi on this machine.`,
+        title: `Disconnect MCP ${name}?`,
+        description: `Removes MCP ${name} and its saved sign-in from Pi on this machine.`,
         action: "Disconnect",
         progress: "Disconnecting…",
         done: `MCP ${name} disconnected.`,
       }
     : {
-        title: `Delete ${name} MCP?`,
-        description: `Removes ${name} MCP from Pi on this machine.`,
+        title: `Delete MCP ${name}?`,
+        description: `Removes MCP ${name} from Pi on this machine.`,
         action: "Delete",
         progress: "Deleting…",
         done: `MCP ${name} deleted.`,

@@ -172,7 +172,7 @@ export const McpSetupLive = Layer.effect(
       const detail =
         entry.config.enabled === false || entry.config.exposure === "hidden"
           ? {
-              detail: `${label(entry)} MCP is disabled or hidden in Pi. Enable it in Pi before continuing.`,
+              detail: `MCP ${label(entry)} is disabled or hidden in Pi. Enable it in Pi before continuing.`,
             }
           : {};
       try {
@@ -224,10 +224,10 @@ export const McpSetupLive = Layer.effect(
     });
     const signedInEntry = (name: string) => {
       const entry = entries.named(name);
-      if (!entry) throw new Error(`Add ${name} MCP before signing in.`);
+      if (!entry) throw new Error(`Add MCP ${name} before signing in.`);
       const url = oauthUrl(entry);
       // A local command, a provider token or an Authorization header: Pi needs no sign-in here.
-      if (!url) throw new Error(`${label(entry)} MCP does not sign in.`);
+      if (!url) throw new Error(`MCP ${label(entry)} does not sign in.`);
       return { entry, url, name: label(entry) };
     };
 
@@ -327,7 +327,7 @@ export const McpSetupLive = Layer.effect(
             } catch {
               return {
                 status: "error" as const,
-                message: `Could not save ${name} MCP. Refresh and try again.`,
+                message: `Could not save MCP ${name}. Refresh and try again.`,
               };
             }
             saved = true;
@@ -347,7 +347,7 @@ export const McpSetupLive = Layer.effect(
             if (connection.state !== "needs-auth")
               return {
                 status: "error",
-                message: `Could not reach ${name} MCP. Check the network and try again.`,
+                message: `Could not reach MCP ${name}. Check the network and try again.`,
               };
           }
           await signInMcpServer({
@@ -416,7 +416,7 @@ export const McpSetupLive = Layer.effect(
             const reason = reached === "sign-in" ? undefined : reached.failed;
             return Effect.fail(
               new McpSetupError({
-                detail: `Could not start ${label(entry)} MCP. Check the command, its arguments and environment, then try again.${reason ? `\n${reason}` : ""}`,
+                detail: `Could not start MCP ${label(entry)}. Check the command, its arguments and environment, then try again.${reason ? `\n${reason}` : ""}`,
                 field: "config",
               }),
             );
@@ -424,7 +424,7 @@ export const McpSetupLive = Layer.effect(
           const auth = authOf(entry.config)._tag === "header" ? ", the Authorization header" : "";
           return Effect.fail(
             new McpSetupError({
-              detail: `Could not connect to ${label(entry)} MCP. Check the URL${auth} and the network, then try again.`,
+              detail: `Could not connect to MCP ${label(entry)}. Check the URL${auth} and the network, then try again.`,
               field: "config",
             }),
           );

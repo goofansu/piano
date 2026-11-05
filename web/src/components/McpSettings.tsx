@@ -269,7 +269,7 @@ function McpServerItem({
             variant="outline"
             size="sm"
             disabled={disabled}
-            aria-label={`Reconnect ${title} MCP`}
+            aria-label={`Reconnect MCP ${title}`}
             onClick={signIn}
           >
             Reconnect
@@ -281,7 +281,7 @@ function McpServerItem({
               variant="outline"
               size="sm"
               disabled={disabled}
-              aria-label={`Manage ${title} MCP`}
+              aria-label={`Manage MCP ${title}`}
             >
               Manage
             </Button>
@@ -326,7 +326,7 @@ function McpAvailableItem({
           variant="outline"
           size="sm"
           disabled={disabled || !!detail}
-          aria-label={`Connect ${server.name} MCP`}
+          aria-label={`Connect MCP ${server.name}`}
           onClick={connect}
         >
           {connecting && <Spinner data-icon="inline-start" />}

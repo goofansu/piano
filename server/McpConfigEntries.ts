@@ -229,7 +229,7 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
         return {
           status: "blocked",
           ...identity,
-          detail: `${catalog.name} MCP is disabled or hidden in Pi. Enable it in Pi before continuing.`,
+          detail: `MCP ${catalog.name} is disabled or hidden in Pi. Enable it in Pi before continuing.`,
         };
       }
       return identity ? { status: "ready", ...identity } : { status: "missing" };

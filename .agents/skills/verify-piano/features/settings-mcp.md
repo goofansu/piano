@@ -21,9 +21,9 @@ other servers carry the server icon.
   (URL / Command), URL, Authentication (Sign in if needed / Authorization header), Headers with Add header;
   on Command: Command, Arguments (one per line), Environment with Add variable, Working directory,
   and the description "Adding runs the command once to check that it starts." A command that
-  does not start fails under the Command field ("Could not start <name> MCP. …" and Pi's reason)
+  does not start fails under the Command field ("Could not start MCP <name>. …" and Pi's reason)
   and writes nothing. A command that starts toasts "MCP <name> added." and the row appears with the server
-  icon; a URL nothing answers fails under the URL field ("Could not connect to <name> MCP. Check
+  icon; a URL nothing answers fails under the URL field ("Could not connect to MCP <name>. Check
   the URL and the network, then try again.") and writes nothing; a taken name fails on the Name
   field ("Another MCP server is named <name>.").
 - `add-json`: the JSON tab takes an `mcpServers` object with one server; the footer reads
@@ -34,7 +34,7 @@ other servers carry the server icon.
   Disconnect (a URL server) or Delete (a command) in red.
 - `edit`: Edit opens the add dialog on the entry (no tabs); a saved Authorization header shows as
   a masked placeholder with Remove / Keep; Save toasts "MCP <name> saved.".
-- `remove`: Disconnect or Delete asks "Disconnect <Name> MCP?" / "Delete <Name> MCP?" with
+- `remove`: Disconnect or Delete asks "Disconnect MCP <Name>?" / "Delete MCP <Name>?" with
   Cancel, then removes the entry and toasts "MCP <Name> disconnected." or
   "MCP <Name> deleted."; the entry leaves the file.
 - `problem`: with `{"extensions":["-builtin:mcp"]}` in `$RUN/pi-agent/settings.json`, the page
