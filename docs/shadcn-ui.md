@@ -79,8 +79,10 @@ Upstream `ui/sidebar.tsx` and `hooks/use-mobile.ts` remain unchanged. The stock 
 Settings tooltip still use that upstream hook (`innerWidth < 768`, `max-width: 767px` events).
 Their `isMobile` can therefore disagree with CSS and the application at fractional widths or a
 non-default browser font baseline. In particular, the provider's shortcut routing and Settings
-sidebar tooltip suppression are not unified by the application query. Stock `openMobile` remains
-disconnected from Piano's reveal, as below. Neither upstream consumer owns session capacity.
+sidebar tooltip suppression are not unified by the application query. Between the two breakpoints
+the provider's ⌘B calls `onOpenChange` while Piano is narrow; the sidebar layout refuses to change
+the desktop preference while narrow, so the shortcut cannot change it then. Stock `openMobile`
+remains disconnected from Piano's reveal, as below. Neither upstream consumer owns session capacity.
 
 ### Stock sidebar shortcut
 
