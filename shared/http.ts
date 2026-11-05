@@ -10,7 +10,7 @@
 import { Schema } from "effect";
 import { FileDownload, FilePreview } from "./files.ts";
 import { LIBRARY_KINDS, type LibraryKind, type LibraryKindWords } from "./library.ts";
-import { McpSetupRequest, McpSetupState } from "./mcp.ts";
+import { McpSetupChange, McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { Prompt, PromptCreate, PromptProposal, PromptUpdate } from "./prompts.ts";
 import { API_KEY_INVALID, ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
@@ -506,7 +506,7 @@ export const Endpoints = {
     path: "/api/settings/mcp",
     body: McpSetupRequest,
     invalid: "Invalid MCP setup action.",
-    response: McpReply,
+    response: McpSetupChange,
     noStore: true,
     refused: 409,
     redact: false,

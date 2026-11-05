@@ -1,4 +1,4 @@
-import type { McpServerEdit, McpServerSetup, McpSetupState } from "@shared/mcp";
+import type { McpServerEdit, McpServerSetup, McpSetupChange } from "@shared/mcp";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -36,7 +36,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ApiError, mcpSetup } from "@/lib/api";
+import { ApiError, changeMcpSetup } from "@/lib/api";
 import { useSetupActions } from "@/lib/useSetupActions";
 
 interface Pair {
@@ -112,10 +112,10 @@ function KeyValueFields({
   );
 }
 
-/** The pasted `mcpServers` JSON as entries to add, or why it cannot be read. */
-export function parseMcpServersJson(
+/** The pasted `mcpServers` JSON as the one entry to add, or why it cannot be read. */
+export function parseMcpServerJson(
   text: string,
-): { servers: { name: string; config: unknown }[] } | { error: string } | undefined {
+): { name: string; config: unknown } | { error: string } | undefined {
   if (!text.trim()) return undefined;
   let parsed: unknown;
   try {
@@ -131,8 +131,10 @@ export function parseMcpServersJson(
       ? (root.mcpServers as Record<string, unknown>)
       : root;
   const entries = Object.entries(servers);
-  if (!entries.length) return { error: "No servers to add." };
-  return { servers: entries.map(([name, config]) => ({ name, config })) };
+  if (!entries.length) return { error: "No server to add." };
+  if (entries.length > 1) return { error: "Paste one server at a time." };
+  const [[name, config]] = entries as [[string, unknown]];
+  return { name, config };
 }
 
 type Kind = "url" | "command";
@@ -141,8 +143,10 @@ type Auth = "oauth" | "header";
 /**
  * Add or edit one entry of Pi's global configuration: its fields in place, errors on the field
  * they belong to, Add or Save in the footer. Adding also takes the `mcpServers` JSON a server's
- * README shows, on its JSON tab. A saved Authorization header shows as a masked placeholder:
- * blank keeps it, typing replaces it, Remove clears it on save.
+ * README shows, one server at a time, on its JSON tab. A URL server is saved only once it
+ * connects: one that cannot is refused on its URL, and one that asks for a sign-in closes this
+ * dialog for the sign-in, which saves it. A saved Authorization header shows as a masked
+ * placeholder: blank keeps it, typing replaces it, Remove clears it on save.
  */
 export function McpServerDialog({
   entry,
@@ -155,8 +159,8 @@ export function McpServerDialog({
   close: () => void;
   /** Re-reads the list once a save settles. */
   refresh: () => void;
-  /** The setup after a successful save, with the names saved. */
-  saved: (state: McpSetupState, names: readonly string[]) => void;
+  /** The change's answer, with the entry's name, once it saved or waits for a sign-in. */
+  saved: (reply: McpSetupChange, name: string) => void;
 }) {
   const config = entry?.config;
   const [tab, setTab] = useState<"form" | "json">("form");
@@ -183,43 +187,44 @@ export function McpServerDialog({
   });
   const busy = actions.running !== undefined;
   // The server names the field a refusal belongs to; one without a field shows below the form.
-  const [errorField, setErrorField] = useState<string | undefined>();
+  // A refusal belongs to the tab that sent it, so switching tabs does not carry it over.
+  const [refusal, setErrorAt] = useState<{ tab: string; field?: string } | undefined>();
   const errorAt = (field: string | undefined) =>
-    actions.error && errorField === field ? actions.error : undefined;
+    actions.error && refusal?.tab === tab && refusal.field === field ? actions.error : undefined;
   const hasAuthorization = !!config && "url" in config && config.hasAuthorization;
   const argList = args
     .split("\n")
     .map((arg) => arg.trim())
     .filter(Boolean);
-  const pasted = tab === "json" ? parseMcpServersJson(json) : undefined;
+  const pasted = tab === "json" ? parseMcpServerJson(json) : undefined;
 
-  const run = (request: Parameters<typeof mcpSetup>[0], names: readonly string[], done: string) =>
+  const run = (request: Parameters<typeof changeMcpSetup>[0], name: string, done: string) =>
     actions
       .run({
         id: "save",
         run: () =>
-          mcpSetup(request).catch((cause: unknown) => {
-            setErrorField(cause instanceof ApiError ? cause.field : undefined);
+          changeMcpSetup(request).catch((cause: unknown) => {
+            setErrorAt({ tab, field: cause instanceof ApiError ? cause.field : undefined });
             throw cause;
           }),
-        done,
+        // A server waiting for its sign-in is not saved yet: the sign-in says when it is.
+        done: (reply) => (reply.signIn ? undefined : done),
         fallback: "Could not save MCP server.",
       })
-      .then((state) => {
-        if (!state) return;
+      .then((reply) => {
+        if (!reply) return;
         close();
-        saved(state, names);
+        saved(reply, name);
       });
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (pasted) {
       if ("error" in pasted) return;
-      const names = pasted.servers.map((server) => server.name);
       void run(
-        { action: "add", servers: pasted.servers },
-        names,
-        `${names.join(", ")} MCP added for new sessions.`,
+        { action: "add", name: pasted.name, config: pasted.config },
+        pasted.name,
+        `${pasted.name} MCP added for new sessions.`,
       );
       return;
     }
@@ -252,7 +257,7 @@ export function McpServerDialog({
           ...(trimmed !== entry.name ? { rename: trimmed } : {}),
           config: edit,
         },
-        [trimmed],
+        trimmed,
         `${trimmed} MCP saved for new sessions.`,
       );
       return;
@@ -271,8 +276,8 @@ export function McpServerDialog({
             ...(cwd.trim() ? { cwd: cwd.trim() } : {}),
           };
     void run(
-      { action: "add", servers: [{ name: trimmed, config: added }] },
-      [trimmed],
+      { action: "add", name: trimmed, config: added },
+      trimmed,
       `${trimmed} MCP added for new sessions.`,
     );
   };
@@ -489,17 +494,15 @@ export function McpServerDialog({
             </FieldGroup>
           )}
           <DialogFooter>
-            {pasted && "servers" in pasted && (
-              <span className="mr-auto self-center text-xs text-ink-3">
-                Adds {pasted.servers.map((server) => server.name).join(", ")}
-              </span>
+            {pasted && "name" in pasted && (
+              <span className="mr-auto self-center text-xs text-ink-3">Adds {pasted.name}</span>
             )}
             <Button type="button" variant="outline" disabled={busy} onClick={close}>
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={busy || (tab === "json" && !(pasted && "servers" in pasted))}
+              disabled={busy || (tab === "json" && !(pasted && "name" in pasted))}
             >
               {busy && <Spinner data-icon="inline-start" />}
               {entry ? "Save" : "Add"}

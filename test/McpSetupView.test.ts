@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { McpServerSetup, McpSetupState } from "../shared/mcp.ts";
-import {
-  type McpSetupInput,
-  mcpRemovalCopy,
-  mcpSetupView,
-  signInAfterAdd,
-  signInAfterInstall,
-} from "../web/src/lib/mcpSetupView.ts";
+import { type McpSetupInput, mcpManageCopy, mcpSetupView } from "../web/src/lib/mcpSetupView.ts";
 
 const http = (setup: Partial<McpServerSetup> = {}): McpServerSetup => ({
   name: "linear",
@@ -48,16 +42,25 @@ const view = (input: Partial<McpSetupInput> = {}) =>
   });
 const row = (setup: McpServerSetup) => view({ state: state([setup]) }).rows?.[0];
 
-test("each entry offers the actions its setup allows, in order", () => {
-  assert.deepEqual(row(http())?.actions, ["sign-in", "edit", "remove"]);
-  assert.deepEqual(row(http({ signedIn: true }))?.actions, ["sign-out", "edit", "remove"]);
-  // A configured Authorization header, or a local command, needs no sign-in.
-  assert.deepEqual(row(docs())?.actions, ["edit", "remove"]);
-  assert.deepEqual(row(tools)?.actions, ["edit", "remove"]);
-  // Disabled in Pi: nothing to sign in to, still removable and editable; the problem is shown.
+test("Manage edits only a server the user added, disconnects a URL server and deletes a local command", () => {
+  const manage = (setup: McpServerSetup) => {
+    const shown = row(setup)!;
+    return [shown.editable, shown.removeVerb];
+  };
+  assert.deepEqual(manage(http()), [false, "Disconnect"]);
+  assert.deepEqual(manage(docs()), [true, "Disconnect"]);
+  assert.deepEqual(manage(tools), [true, "Delete"]);
+});
+
+test("Reconnect appears only for an OAuth server whose sign-in is gone and that Pi can use", () => {
+  assert.equal(row(http())?.reconnect, true);
+  assert.equal(row(http({ signedIn: true }))?.reconnect, false);
+  // A configured Authorization header, or a local command, never signs in.
+  assert.equal(row(docs())?.reconnect, false);
+  assert.equal(row(tools)?.reconnect, false);
+  // Disabled in Pi: the problem is shown instead.
   const blocked = row(http({ detail: "Disabled." }));
-  assert.deepEqual(blocked?.actions, ["edit", "remove"]);
-  assert.equal(blocked?.detail, "Disabled.");
+  assert.deepEqual([blocked?.reconnect, blocked?.detail], [false, "Disabled."]);
 });
 
 test("an entry is ready once configured, and signed in when it uses OAuth", () => {
@@ -89,21 +92,21 @@ test("rows and available servers wait for the first read; the catalog fills the 
   assert.equal(empty.rows, undefined);
   assert.equal(empty.available, undefined);
   const read = view({
-    state: state([], { available: [{ id: "jira" }, { id: "paper", detail: "Named already." }] }),
+    state: state([], { available: [{ id: "linear", detail: "Named already." }, { id: "jira" }] }),
   });
   assert.deepEqual(read.rows, []);
   assert.deepEqual(
     read.available?.map((row) => [row.server.name, row.detail]),
     [
+      ["Linear", "Named already."],
       ["Jira", undefined],
-      ["Paper", "Named already."],
     ],
   );
 });
 
 test("a change, read, read failure or Pi problem disables the rows; the problem is shown", () => {
   assert.equal(view().disabled, false);
-  assert.equal(view({ running: "install" }).disabled, true);
+  assert.equal(view({ running: "connect:linear" }).disabled, true);
   assert.equal(view({ loading: true }).disabled, true);
   assert.equal(view({ loadFailed: true }).disabled, true);
   const problem = view({ state: state([], { problem: "MCP is off." }) });
@@ -111,25 +114,13 @@ test("a change, read, read failure or Pi problem disables the rows; the problem 
   assert.equal(problem.problem, "MCP is off.");
 });
 
-test("installing or adding goes on to sign in only to an entry ready and awaiting OAuth sign-in", () => {
-  assert.equal(signInAfterInstall(state([http()]), "linear")?.name, "linear");
-  assert.equal(signInAfterInstall(state([http({ name: "mine" })]), "linear")?.name, "mine");
-  assert.equal(signInAfterInstall(state([http({ signedIn: true })]), "linear"), undefined);
-  assert.equal(signInAfterInstall(state([http({ detail: "Disabled." })]), "linear"), undefined);
-  assert.equal(signInAfterInstall(state([docs()]), "linear"), undefined);
-  assert.equal(signInAfterInstall(undefined, "linear"), undefined);
-
-  const added = state([docs(), tools, http({ name: "sentry", catalog: undefined })]);
-  assert.equal(signInAfterAdd(added, ["docs", "tools", "sentry"])?.name, "sentry");
-  assert.equal(signInAfterAdd(added, ["docs", "tools"]), undefined);
-  assert.equal(signInAfterAdd(undefined, ["sentry"]), undefined);
-});
-
-test("the removal confirmation names the server", () => {
-  assert.deepEqual(mcpRemovalCopy({ title: "Linear" }), {
-    title: "Remove Linear MCP?",
-    description: "Removes Linear MCP and its saved sign-in from Pi on this machine.",
-    action: "Remove",
-    done: "Linear MCP removed for new sessions.",
+test("Manage says what its removal takes away, and the toast names what was done", () => {
+  assert.deepEqual(mcpManageCopy({ title: "Linear", removeVerb: "Disconnect" }), {
+    description: "Disconnect removes Linear MCP and its saved sign-in from Pi on this machine.",
+    done: "Linear MCP disconnected.",
+  });
+  assert.deepEqual(mcpManageCopy({ title: "tools", removeVerb: "Delete" }), {
+    description: "Delete removes tools MCP from Pi on this machine.",
+    done: "tools MCP deleted.",
   });
 });

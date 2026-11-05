@@ -1,11 +1,19 @@
-import type { McpCatalogId, McpServerSetup, McpSetupRequest, McpSetupState } from "@shared/mcp";
+import type { McpCatalogId, McpSetupChange, McpSetupRequest } from "@shared/mcp";
 import { CheckCircle2Icon, ServerIcon } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { McpServerDialog } from "@/components/McpServerDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/PianoDialog";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
-import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
 import {
   SettingsAlert,
   SettingsGroup,
@@ -25,45 +33,45 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
-import { mcpLogin, mcpSetup } from "@/lib/api";
+import { Spinner } from "@/components/ui/spinner";
+import { changeMcpSetup, mcpLogin, mcpSetup } from "@/lib/api";
 import { pageCommands } from "@/lib/globalCommands";
 import {
   type McpAvailableRow,
   type McpServerRow,
-  mcpRemovalCopy,
+  mcpManageCopy,
   mcpSetupView,
-  signInAfterAdd,
-  signInAfterInstall,
 } from "@/lib/mcpSetupView";
+import { useLastShown } from "@/lib/useLastShown";
 import { mcpServerEditor, useMcpServerEditor } from "@/lib/useMcpServerEditor";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
-// Locally bundled brand marks, one per catalog server; a server the user added shows the server icon.
+// Locally bundled brand marks, one per catalog server; any other server shows the server icon.
 const SERVER_LOGOS: Record<McpCatalogId, string> = {
   linear: "/mcp-logos.svg#linear",
   jira: "/mcp-logos.svg#jira",
-  paper: "/mcp-logos.svg#paper",
 };
-type Confirmation = { kind: "sign-out"; row: McpServerRow } | { kind: "remove"; row: McpServerRow };
 /** The sign-in dialog's subject: the entry, named as the user knows it. */
 interface SignInSubject {
   id: string;
   name: string;
 }
 
-/** Pi's global MCP servers on this machine: add, edit, sign in, sign out and remove, and add the
- * catalog's, all through Pi. */
+/** Pi's global MCP servers on this machine: connect a catalog server, add the user's own, and
+ * manage each (edit, disconnect or delete), all through Pi. A URL server is saved only once it
+ * connects; the sign-in it asks for first opens straight away. */
 export function McpSettings() {
-  const setup = useObservation("mcp", (signal) => mcpSetup(undefined, { signal }));
+  const setup = useObservation("mcp", (signal) => mcpSetup({ signal }));
   // Add MCP server comes from `pageCommands`, which the palette lists too; both open this editor.
   const { state: app, run: runCommand, global } = useCommands();
   const editing = useMcpServerEditor();
-  const actions = useSetupActions<Confirmation, SignInSubject>({
+  const [managing, setManaging] = useState<McpServerRow | undefined>();
+  const actions = useSetupActions<never, SignInSubject>({
     refresh: () => void setup.refresh(),
     success: (text) => toast.success(text),
   });
-  const { confirmation, signIn } = actions;
+  const { signIn } = actions;
   const busy = actions.running !== undefined;
   const view = mcpSetupView({
     state: setup.value,
@@ -71,21 +79,27 @@ export function McpSettings() {
     loading: setup.loading,
     loadFailed: !!setup.failure,
   });
-  const act = (request: McpSetupRequest, done: string) =>
+  const titleOf = (name: string) =>
+    view.rows?.find((row) => row.setup.name === name)?.title ?? name;
+  /** Sign in to the server a change left waiting, which the sign-in saves. */
+  const signInAfter = (reply: McpSetupChange | undefined, name: string) => {
+    if (reply?.signIn) actions.openSignIn({ id: reply.signIn, name });
+  };
+  const act = (request: McpSetupRequest, done: (reply: McpSetupChange) => string | undefined) =>
     actions.run({
-      id: request.action,
-      run: () => setup.mutate(async () => mcpSetup(request)),
+      // A connect names its server, so only that row's button turns.
+      id: request.action === "connect" ? `connect:${request.server}` : request.action,
+      run: async () => {
+        let reply: McpSetupChange | undefined;
+        await setup.mutate(async () => {
+          reply = await changeMcpSetup(request);
+          return reply.state;
+        });
+        return reply!;
+      },
       done,
       fallback: "Could not change MCP setup.",
     });
-  const openSignIn = (entry: McpServerSetup) =>
-    actions.openSignIn({
-      id: entry.name,
-      name: view.rows?.find((row) => row.setup.name === entry.name)?.title ?? entry.name,
-    });
-  const { done: removed, ...removalCopy } = mcpRemovalCopy(
-    confirmation?.kind === "remove" ? confirmation.row : undefined,
-  );
   return (
     <SettingsSectionFrame
       title="MCP"
@@ -107,35 +121,25 @@ export function McpSettings() {
               entry={editing === "new" ? undefined : editing}
               close={mcpServerEditor.close}
               refresh={() => void setup.refresh()}
-              saved={(state: McpSetupState, names) => {
-                const next = signInAfterAdd(state, names);
-                if (next) openSignIn(next);
-              }}
+              saved={(reply, name) => signInAfter(reply, name)}
             />
           )}
-          <RemovalDialog
-            open={!!confirmation}
+          <McpManageDialog
+            row={managing}
             busy={busy}
-            cancel={actions.cancel}
-            {...(confirmation?.kind === "sign-out"
-              ? signOutCopy(confirmation.row.title)
-              : removalCopy)}
-            confirm={() => {
-              if (confirmation?.kind === "remove")
-                void act(
-                  {
-                    action: "remove",
-                    name: confirmation.row.setup.name,
-                    removalKey: confirmation.row.setup.removalKey,
-                  },
-                  removed,
-                );
-              else if (confirmation)
-                void act(
-                  { action: "sign-out", name: confirmation.row.setup.name },
-                  `Signed out of ${confirmation.row.title}.`,
-                );
+            close={() => setManaging(undefined)}
+            edit={(row) => {
+              setManaging(undefined);
+              mcpServerEditor.open(row.setup);
             }}
+            remove={(row) =>
+              void act(
+                { action: "remove", name: row.setup.name, removalKey: row.setup.removalKey },
+                () => mcpManageCopy(row).done,
+              ).then((reply) => {
+                if (reply) setManaging(undefined);
+              })
+            }
           />
           <ProviderLoginDialog
             api={mcpLogin}
@@ -172,17 +176,17 @@ export function McpSettings() {
       ) : (
         <>
           {view.rows.length > 0 && (
-            <SettingsGroup id="settings-mcp-configured" title="Configured">
+            <SettingsGroup id="settings-mcp-connected" title="Connected">
               <SettingsList>
                 {view.rows.map((row) => (
                   <McpServerItem
                     key={row.setup.name}
                     row={row}
                     disabled={view.disabled}
-                    edit={() => mcpServerEditor.open(row.setup)}
-                    remove={() => actions.confirm({ kind: "remove", row })}
-                    signIn={() => openSignIn(row.setup)}
-                    signOut={() => actions.confirm({ kind: "sign-out", row })}
+                    manage={() => setManaging(row)}
+                    reconnect={() =>
+                      actions.openSignIn({ id: row.setup.name, name: titleOf(row.setup.name) })
+                    }
                   />
                 ))}
               </SettingsList>
@@ -196,14 +200,11 @@ export function McpSettings() {
                     key={row.server.id}
                     row={row}
                     disabled={view.disabled}
-                    install={() =>
-                      void act(
-                        { action: "install", server: row.server.id },
-                        `${row.server.name} MCP added.`,
-                      ).then((next) => {
-                        const entry = signInAfterInstall(next, row.server.id);
-                        if (entry) openSignIn(entry);
-                      })
+                    connecting={actions.running === `connect:${row.server.id}`}
+                    connect={() =>
+                      void act({ action: "connect", server: row.server.id }, (reply) =>
+                        reply.signIn ? undefined : `${row.server.name} MCP connected.`,
+                      ).then((reply) => signInAfter(reply, row.server.name))
                     }
                   />
                 ))}
@@ -231,19 +232,15 @@ function Logo({ catalog }: { catalog: McpCatalogId | undefined }) {
 }
 
 function McpServerItem({
-  row: { title, catalog, value, ready, detail, actions },
+  row: { title, catalog, value, ready, detail, reconnect },
   disabled,
-  edit,
-  remove,
-  signIn,
-  signOut,
+  manage,
+  reconnect: signIn,
 }: {
   row: McpServerRow;
   disabled: boolean;
-  edit: () => void;
-  remove: () => void;
-  signIn: () => void;
-  signOut: () => void;
+  manage: () => void;
+  reconnect: () => void;
 }) {
   // The name and its endpoint or command; a third line appears only for a problem the user must fix in Pi.
   return (
@@ -263,69 +260,96 @@ function McpServerItem({
         {detail && <ItemDescription className="line-clamp-none">{detail}</ItemDescription>}
       </ItemContent>
       <ItemActions className="shrink-0">
-        {actions.map((action) =>
-          action === "sign-in" ? (
-            <Button
-              key={action}
-              variant="outline"
-              size="sm"
-              disabled={disabled}
-              aria-label={`Sign in to ${title}`}
-              onClick={signIn}
-            >
-              Sign in
-            </Button>
-          ) : action === "sign-out" ? (
-            <Button
-              key={action}
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              disabled={disabled}
-              aria-label={`Sign out of ${title}`}
-              onClick={signOut}
-            >
-              Sign out
-            </Button>
-          ) : action === "edit" ? (
-            <Button
-              key={action}
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              disabled={disabled}
-              aria-label={`Edit ${title} MCP`}
-              onClick={edit}
-            >
-              Edit
-            </Button>
-          ) : (
-            <Button
-              key={action}
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              disabled={disabled}
-              aria-label={`Remove ${title} MCP`}
-              onClick={remove}
-            >
-              Remove
-            </Button>
-          ),
+        {reconnect && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            aria-label={`Reconnect ${title} MCP`}
+            onClick={signIn}
+          >
+            Reconnect
+          </Button>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          aria-label={`Manage ${title} MCP`}
+          onClick={manage}
+        >
+          Manage
+        </Button>
       </ItemActions>
     </Item>
+  );
+}
+
+/** One server's Manage dialog: Edit for a server the user added, and its removal, which this
+ * dialog's description states before the destructive button. It stays mounted so it can animate
+ * closed. */
+function McpManageDialog({
+  row,
+  busy,
+  close,
+  edit,
+  remove,
+}: {
+  row: McpServerRow | undefined;
+  busy: boolean;
+  close: () => void;
+  edit: (row: McpServerRow) => void;
+  remove: (row: McpServerRow) => void;
+}) {
+  const shown = useLastShown(row);
+  if (!shown) return null;
+  return (
+    <Dialog
+      open={!!row}
+      onOpenChange={(next) => {
+        if (!next && !busy) close();
+      }}
+    >
+      <DialogContent className="sm:max-w-md" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>{shown.title} MCP</DialogTitle>
+          <DialogDescription>{mcpManageCopy(shown).description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={close}>
+            Cancel
+          </Button>
+          {shown.editable && (
+            <Button variant="outline" disabled={busy} onClick={() => edit(shown)}>
+              Edit
+            </Button>
+          )}
+          <Button
+            variant="destructive"
+            disabled={busy}
+            onClick={() => {
+              if (row) remove(row);
+            }}
+          >
+            {busy && <Spinner data-icon="inline-start" />}
+            {shown.removeVerb}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function McpAvailableItem({
   row: { server, detail },
   disabled,
-  install,
+  connecting,
+  connect,
 }: {
   row: McpAvailableRow;
   disabled: boolean;
-  install: () => void;
+  connecting: boolean;
+  connect: () => void;
 }) {
   return (
     <Item className={settingsRow}>
@@ -339,10 +363,11 @@ function McpAvailableItem({
           variant="outline"
           size="sm"
           disabled={disabled || !!detail}
-          aria-label={`Add ${server.name} MCP`}
-          onClick={install}
+          aria-label={`Connect ${server.name} MCP`}
+          onClick={connect}
         >
-          Add
+          {connecting && <Spinner data-icon="inline-start" />}
+          Connect
         </Button>
       </ItemActions>
     </Item>

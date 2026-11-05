@@ -330,14 +330,15 @@ export const changeProviderApiKey = async (
 };
 
 export const providerLogin = signInApi(Endpoints.providerLogin);
-/** The same sign-in attempt as providers', run by Pi's MCP OAuth for a catalog server. */
+/** The same sign-in attempt as providers', run by Pi's MCP OAuth for an MCP server. */
 export const mcpLogin = signInApi(Endpoints.mcpLogin);
 
-export const mcpSetup = async (request?: McpSetupRequest, options?: RequestOptions) =>
-  (request
-    ? await call(Endpoints.changeMcpSetup, { body: request }, options)
-    : await call(Endpoints.mcpSetup, {}, options)
-  ).state;
+export const mcpSetup = async (options?: RequestOptions) =>
+  (await call(Endpoints.mcpSetup, {}, options)).state;
+/** A change to the MCP setup: the setup after it, and the server to sign in to when it waits for
+ * a sign-in before saving. */
+export const changeMcpSetup = (request: McpSetupRequest) =>
+  call(Endpoints.changeMcpSetup, { body: request });
 
 export const radiusSetup = async (
   action?: { action: RadiusSetupAction; removalKey?: string },

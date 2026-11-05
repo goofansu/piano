@@ -383,9 +383,7 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.flatMap(McpSetup, (setup) => setup.state).pipe(Effect.map((state) => ({ state }))),
     );
     yield* serve(Endpoints.changeMcpSetup, ({ body }) =>
-      Effect.flatMap(McpSetup, (setup) => setup.change(body)).pipe(
-        Effect.map((state) => ({ state })),
-      ),
+      Effect.flatMap(McpSetup, (setup) => setup.change(body)),
     );
 
     yield* serve(Endpoints.providerApiKeys, () =>

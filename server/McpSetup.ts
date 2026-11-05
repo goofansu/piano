@@ -1,9 +1,10 @@
 /** Machine-wide setup of MCP servers in Pi's global configuration, not an MCP client for sessions.
  * Pi owns the configuration format and its validation, OAuth (discovery, registration, PKCE,
  * refresh) and credential storage; this module decides which entries to add, change or remove,
- * installs catalog servers by their known endpoint or command, and relays Pi's sign-in prompts.
- * Nothing here mutates running sessions: a new session reads the updated setup. */
-import { homedir } from "node:os";
+ * connects catalog servers by their known endpoint, and relays Pi's sign-in prompts. A URL server
+ * is saved only once Pi's own client has connected to it, signing in first when it asks; a local
+ * command is saved as Pi validates it, without being started. Nothing here mutates running
+ * sessions: a new session reads the updated setup. */
 import { join } from "node:path";
 import type { McpServerConfig, McpServerEntry } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
@@ -22,18 +23,17 @@ import {
 import {
   MCP_CATALOG,
   type McpCatalogId,
-  type McpCatalogServer,
   type McpServerConfigView,
   type McpServerEdit,
   type McpServerSetup,
+  type McpSetupChange,
   type McpSetupRequest,
   type McpSetupState,
 } from "../shared/mcp.ts";
 import {
   authOf,
-  isCommandEntry,
   isTarget,
-  type McpCatalogTarget,
+  type McpCatalogEntry,
   McpConfigEntries,
   McpConfigEntryError,
   removalKey,
@@ -46,33 +46,14 @@ import {
   type SignInSource,
 } from "./SignInAttempts.ts";
 
-type CatalogServer = McpCatalogTarget & { readonly id: McpCatalogId };
+type CatalogServer = McpCatalogEntry & { readonly id: McpCatalogId };
 /** Where the entry signs in, when Pi authenticates it with MCP OAuth. */
 const oauthUrl = (entry: McpServerEntry) => {
   const auth = authOf(entry.config);
   return auth._tag === "oauth" ? auth.url : undefined;
 };
-/** The catalog as this machine reaches it: a local CLI's path is resolved against the home
- * directory of the account running Piano here, so no filesystem path is on the wire (INV-11). */
-const catalogServers = (): readonly CatalogServer[] =>
-  MCP_CATALOG.map(({ id, name, command, url }: McpCatalogServer) =>
-    command
-      ? {
-          id,
-          name,
-          command: join(
-            homedir(),
-            (process.platform === "win32" && command.windows) || command.home,
-          ),
-          args: command.args,
-        }
-      : { id, name, url },
-  );
-/** What a new catalog entry configures. */
-const configOf = (server: CatalogServer): McpServerConfig =>
-  isCommandEntry(server)
-    ? { command: server.command, args: [...server.args] }
-    : { url: server.url };
+/** How long connecting to a server before saving it may take, Pi's retries included. */
+const CONNECT_TIMEOUT_MS = 20_000;
 
 const isAuthorization = (header: string) => header.toLowerCase() === "authorization";
 const withoutAuthorization = (headers: Record<string, string> | undefined) =>
@@ -136,10 +117,10 @@ const merged = (existing: McpServerConfig, edit: McpServerEdit): McpServerConfig
 
 export const McpSetupEnvironment = Context.Reference<{
   directory: () => string;
-  /** The catalog's endpoints and resolved local commands; tests point them at a fake. */
+  /** The catalog's endpoints; tests point them at a fake. */
   servers: () => readonly CatalogServer[];
 }>("piano/McpSetupEnvironment", {
-  defaultValue: () => ({ directory: agentDir, servers: catalogServers }),
+  defaultValue: () => ({ directory: agentDir, servers: () => MCP_CATALOG }),
 });
 
 export class McpSetupError extends Data.TaggedError("McpSetupError")<{
@@ -150,9 +131,9 @@ export class McpSetup extends Context.Service<
   McpSetup,
   {
     readonly state: Effect.Effect<McpSetupState>;
-    readonly change: (request: McpSetupRequest) => Effect.Effect<McpSetupState, McpSetupError>;
-    /** Sign-in to a configured server, by its entry name; shaped as provider sign-in so the
-     * browser shares one dialog. */
+    readonly change: (request: McpSetupRequest) => Effect.Effect<McpSetupChange, McpSetupError>;
+    /** Sign-in to a configured server, or to the server a change is waiting to save, by its entry
+     * name; shaped as provider sign-in so the browser shares one dialog. */
     readonly signIn: SignInLane;
   }
 >()("piano/McpSetup") {}
@@ -229,7 +210,7 @@ export const McpSetupLive = Layer.effect(
     const writing = <A>(change: Effect.Effect<A, unknown>, detail: string) =>
       change.pipe(
         Effect.mapError((cause) => failure(cause, detail)),
-        Effect.map(snapshot),
+        Effect.map((): McpSetupChange => ({ state: snapshot() })),
       );
 
     // Its own lane, apart from provider sign-in: Pi's MCP callback reuses the registered client's port or
@@ -241,21 +222,66 @@ export const McpSetupLive = Layer.effect(
     });
     const signedInEntry = (name: string) => {
       const entry = entries.named(name);
-      if (!entry) {
-        const server = environment.servers().find((server) => server.id === name);
-        throw new Error(
-          server
-            ? `Add ${server.name} MCP before signing in.`
-            : `Add ${name} MCP before signing in.`,
-        );
-      }
+      if (!entry) throw new Error(`Add ${name} MCP before signing in.`);
       const url = oauthUrl(entry);
       // A local command, a provider token or an Authorization header: Pi needs no sign-in here.
       if (!url) throw new Error(`${label(entry)} MCP does not sign in.`);
       return { entry, url, name: label(entry) };
     };
 
-    const source = (name: string, entry: McpServerEntry, url: string): SignInSource => ({
+    /** Tokens a sign-in stored for an entry that was never saved: no saved entry can use them. */
+    const forgetUnsaved = (name: string, url: string) => {
+      const saved = entries.named(name);
+      if (saved && oauthUrl(saved) === url) return;
+      try {
+        credentials.remove(name, url);
+      } catch {
+        /* Nothing to find them by later; a later sign-in replaces them. */
+      }
+    };
+    /** Whether Pi's own client connects to `entry`, unsaved: connected, or asks for a sign-in. */
+    const reach = async (entry: McpServerEntry) => {
+      const connection = new McpServerConnection({
+        entry,
+        cwd: directory,
+        createTransport: createDefaultTransport,
+        credentials,
+        log: new McpServerLog(join(directory, "mcp.log")),
+        onTools: () => {},
+      });
+      const timer = setTimeout(
+        () => void connection.close().catch(() => undefined),
+        CONNECT_TIMEOUT_MS,
+      );
+      try {
+        await connection.getClient();
+        return "connected" as const;
+      } catch {
+        return connection.state === "needs-auth" && oauthUrl(entry)
+          ? ("sign-in" as const)
+          : ("failed" as const);
+      } finally {
+        clearTimeout(timer);
+        await connection.close().catch(() => undefined);
+      }
+    };
+    /** The one change waiting for its sign-in before it saves; a newer one replaces it. */
+    let pending:
+      | {
+          entry: McpServerEntry;
+          url: string;
+          save: Effect.Effect<unknown, McpConfigEntryError>;
+        }
+      | undefined;
+
+    /** The sign-in to `entry`, a saved one or one waiting to be saved: `save` writes it once
+     * signed in, and a sign-in that ends without saving drops the tokens it stored. */
+    const source = (
+      name: string,
+      entry: McpServerEntry,
+      url: string,
+      save?: () => Promise<unknown>,
+    ): SignInSource => ({
       message: `Connecting to ${name}…`,
       // OAuth errors may include token response bodies. Never deliver or log them.
       failure: `Sign-in to ${name} failed. Check the authorization and try again.`,
@@ -288,11 +314,30 @@ export const McpSetupLive = Layer.effect(
           log: new McpServerLog(join(directory, "mcp.log")),
           onTools: () => {},
         });
+        let saved = !save;
+        const done = async (signedIn: string) => {
+          if (save) {
+            try {
+              await save();
+            } catch {
+              return {
+                status: "error" as const,
+                message: `Could not save ${name} MCP. Refresh and try again.`,
+              };
+            }
+            saved = true;
+            return {
+              status: "success" as const,
+              message: `Connected. Start a new session to use ${name} tools.`,
+            };
+          }
+          return { status: "success" as const, message: signedIn };
+        };
         try {
           // Connecting first answers whether a sign-in is needed and records the server's challenge, as `pi mcp login` does.
           try {
             await connection.getClient();
-            return { status: "success", message: `Already signed in to ${name}.` };
+            return await done(`Already signed in to ${name}.`);
           } catch {
             if (connection.state !== "needs-auth")
               return {
@@ -331,12 +376,10 @@ export const McpSetupLive = Layer.effect(
           });
           connection.challenge = undefined;
           await connection.reconnect();
-          return {
-            status: "success",
-            message: `Signed in. Start a new session to use ${name} tools.`,
-          };
+          return await done(`Signed in. Start a new session to use ${name} tools.`);
         } finally {
           await connection.close().catch(() => undefined);
+          if (!saved) forgetUnsaved(entry.name, url);
         }
       },
     });
@@ -348,53 +391,111 @@ export const McpSetupLive = Layer.effect(
       if ("url" in entry.config) credentials.remove(entry.name, entry.config.url);
     };
 
+    /** Saves `entry` with `save`, after connecting to it when it is a URL server: one that asks for
+     * a sign-in waits for it, and one that cannot be reached is refused on its URL. */
+    const saveConnected = (
+      entry: McpServerEntry,
+      save: Effect.Effect<unknown, McpConfigEntryError>,
+      fallback: string,
+    ): Effect.Effect<McpSetupChange, McpSetupError> =>
+      "url" in entry.config
+        ? Effect.promise(() => reach(entry)).pipe(
+            Effect.flatMap((reached) => {
+              if (reached === "connected") return writing(save, fallback);
+              const url = oauthUrl(entry);
+              if (reached === "sign-in" && url) {
+                pending = { entry, url, save };
+                return Effect.succeed({
+                  state: snapshot(),
+                  signIn: entry.name,
+                });
+              }
+              const auth =
+                authOf(entry.config)._tag === "header" ? ", the Authorization header" : "";
+              return Effect.fail(
+                new McpSetupError({
+                  detail: `Could not connect to ${label(entry)} MCP. Check the URL${auth} and the network, then try again.`,
+                  field: "config",
+                }),
+              );
+            }),
+          )
+        : writing(save, fallback);
+    const prepared = <A>(prepare: () => A, fallback: string) =>
+      Effect.try({ try: prepare, catch: (cause) => failure(cause, fallback) });
+
     return McpSetup.of({
       state: Effect.sync(snapshot),
       change: (request) => {
         switch (request.action) {
-          case "install":
-            return writing(
-              Effect.try(() => catalog(request.server)).pipe(
-                // An entry already at the endpoint or command, whatever its name, is kept as the user configured it.
-                Effect.flatMap((server) =>
-                  entries.list().some((entry) => isTarget(entry.config, server))
-                    ? Effect.void
-                    : entries.add([{ name: server.id, config: configOf(server) }]),
+          case "connect": {
+            const fallback =
+              "Could not connect this MCP server. Check Pi's global configuration and file permissions, then refresh.";
+            return prepared(() => {
+              const server = catalog(request.server);
+              // An entry already at the endpoint, whatever its name, is kept as the user configured it.
+              if (entries.list().some((entry) => isTarget(entry.config, server))) return undefined;
+              return entries.prepare({
+                name: server.id,
+                config: { url: server.url },
+              });
+            }, fallback).pipe(
+              Effect.flatMap((entry) =>
+                entry
+                  ? saveConnected(
+                      entry,
+                      entries.add([{ name: entry.name, config: entry.config }]),
+                      fallback,
+                    )
+                  : Effect.succeed({ state: snapshot() }),
+              ),
+            );
+          }
+          case "add": {
+            const fallback =
+              "Could not add this MCP server. Check Pi's global configuration and file permissions, then refresh.";
+            return prepared(() => entries.prepare(request), fallback).pipe(
+              Effect.flatMap((entry) =>
+                saveConnected(
+                  entry,
+                  entries.add([{ name: entry.name, config: entry.config }]),
+                  fallback,
                 ),
               ),
-              "Could not install this MCP server. Check Pi's global configuration and file permissions, then refresh.",
             );
-          case "add":
-            return writing(
-              entries.add(request.servers),
-              "Could not add this MCP server. Check Pi's global configuration and file permissions, then refresh.",
+          }
+          case "update": {
+            const fallback =
+              "Could not save this MCP server. Its configuration may have changed. Refresh and try again.";
+            const configure = (existing: McpServerConfig) => merged(existing, request.config);
+            return prepared(() => {
+              if (attempts.busy(request.name)) throw new Error("Sign-in in progress.");
+              return entries.prepareUpdate(
+                request.name,
+                request.removalKey,
+                request.rename,
+                configure,
+              );
+            }, fallback).pipe(
+              Effect.flatMap((entry) => {
+                const before = entries.named(request.name);
+                const save = entries
+                  .update(request.name, request.removalKey, request.rename, configure)
+                  .pipe(
+                    Effect.tap((saved) =>
+                      Effect.sync(() => {
+                        // Tokens for the old name or endpoint can never be found again.
+                        const was = before && oauthUrl(before);
+                        const is = oauthUrl(saved);
+                        if (before && was && (saved.name !== before.name || is !== was))
+                          dropCredentials(before);
+                      }),
+                    ),
+                  );
+                return saveConnected(entry, save, fallback);
+              }),
             );
-          case "update":
-            return writing(
-              Effect.try(() => {
-                if (attempts.busy(request.name)) throw new Error("Sign-in in progress.");
-              }).pipe(
-                Effect.flatMap(() => {
-                  const before = entries.named(request.name);
-                  return entries
-                    .update(request.name, request.removalKey, request.rename, (existing) =>
-                      merged(existing, request.config),
-                    )
-                    .pipe(
-                      Effect.tap((saved) =>
-                        Effect.sync(() => {
-                          // Tokens for the old name or endpoint can never be found again.
-                          const was = before && oauthUrl(before);
-                          const is = oauthUrl(saved);
-                          if (before && was && (saved.name !== before.name || is !== was))
-                            dropCredentials(before);
-                        }),
-                      ),
-                    );
-                }),
-              ),
-              "Could not save this MCP server. Its configuration may have changed. Refresh and try again.",
-            );
+          }
           case "remove":
             return writing(
               Effect.try(() => {
@@ -407,25 +508,19 @@ export const McpSetupLive = Layer.effect(
               ),
               "Could not remove this MCP server. Its configuration may have changed. Refresh and confirm again.",
             );
-          case "sign-out":
-            return Effect.try({
-              try: () => {
-                if (attempts.busy()) throw new Error("Sign-in in progress.");
-                const { entry, url } = signedInEntry(request.name);
-                credentials.remove(entry.name, url);
-                return snapshot();
-              },
-              catch: () =>
-                new McpSetupError({
-                  detail:
-                    "Could not sign out. Finish any sign-in in progress and refresh before retrying.",
-                }),
-            });
         }
       },
       signIn: attempts.lane((name) =>
         Effect.try({
           try: () => {
+            const waiting = pending?.entry.name === name ? pending : undefined;
+            if (waiting) {
+              const save = () =>
+                Effect.runPromise(waiting.save).then(() => {
+                  if (pending === waiting) pending = undefined;
+                });
+              return source(label(waiting.entry), waiting.entry, waiting.url, save);
+            }
             const { entry, url, name: shown } = signedInEntry(name);
             return source(shown, entry, url);
           },
