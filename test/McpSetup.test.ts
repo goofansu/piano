@@ -151,7 +151,7 @@ test("INV-01/11/12: install, sign in by pasted redirect, sign out and uninstall 
       assert.deepEqual(available(initial), ["linear", "paper"]);
       assert.equal(yield* linear(setup), undefined);
       const notInstalled = yield* Effect.flip(setup.signIn.start("linear"));
-      assert.match(notInstalled.detail, /Install Linear MCP/);
+      assert.match(notInstalled.detail, /Add Linear MCP/);
 
       yield* setup.change({ action: "install", server: "linear" });
       assert.deepEqual(json(file), {
@@ -303,7 +303,7 @@ test("INV-01/12: a local command server configures its CLI, never signs in, and 
       save(file, { custom: { untouched: true }, mcpServers: { other: { command: "do-not-run" } } });
       // Nothing to sign in to, installed or not: Pi starts a local command without OAuth.
       assert.equal(yield* server(setup, "paper"), undefined);
-      assert.match((yield* Effect.flip(setup.signIn.start("paper"))).detail, /Install Paper MCP/);
+      assert.match((yield* Effect.flip(setup.signIn.start("paper"))).detail, /Add Paper MCP/);
 
       // Installing configures the relay; it does not install or look for the CLI, which an
       // isolated home (as the browser harness uses) does not have.

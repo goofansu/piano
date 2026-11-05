@@ -25,9 +25,9 @@ command. A catalog server shows its brand mark; a server the user added shows th
   `mcpServers` object a server's README shows, with one or several servers, and adds them all or
   none. Pi validates every entry before it is written. After adding, a server that signs in opens
   the sign-in dialog straight away.
-- **Install** adds a catalog server under its catalog name, with its endpoint or local command.
-  An entry already at that endpoint or command, whatever its name, counts as installed and is
-  kept as configured. A catalog server whose default name another entry holds says so instead.
+- **Add** (in Available) adds a catalog server under its catalog name, with its endpoint or
+  local command. An entry already at that endpoint or command, whatever its name, counts as
+  added and is kept as configured. A catalog server whose default name another entry holds says so instead.
 - **Edit** opens the same dialog on the entry: its name, transport, URL or command, headers,
   arguments, environment and working directory. The saved Authorization header shows as a masked
   placeholder: blank keeps it, typing replaces it, Remove clears it. Pi's other keys (exposure,
@@ -38,9 +38,8 @@ command. A catalog server shows its brand mark; a server the user added shows th
   tokens in Pi's `mcp-auth.json`. Piano usually runs on another machine than the browser, so
   the redirect to Pi's loopback callback may fail to load; paste that page's address into the
   dialog. Piano checks the pasted address against the attempt, so a wrong paste asks again.
-- **Sign out** deletes the stored tokens. **Uninstall** (a catalog server) and **Remove** (any
-  other) delete the entry and its sign-in, after confirmation, and only if the entry is unchanged
-  since the page was read. The sign-in stored for the entry's name and endpoint is cleared
+- **Sign out** deletes the stored tokens. **Remove** deletes the entry and its sign-in, after
+  confirmation, and only if the entry is unchanged since the page was read. The sign-in stored for the entry's name and endpoint is cleared
   whatever the entry authenticates with now, so an entry switched to an Authorization header
   after signing in does not reinstall signed in. The sign-in is cleared before the entry; if that
   fails, the entry stays and the removal can be retried. Other servers' sign-ins are kept.

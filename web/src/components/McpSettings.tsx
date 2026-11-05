@@ -52,7 +52,7 @@ interface SignInSubject {
   name: string;
 }
 
-/** Pi's global MCP servers on this machine: add, edit, sign in, sign out and remove, and install the
+/** Pi's global MCP servers on this machine: add, edit, sign in, sign out and remove, and add the
  * catalog's, all through Pi. */
 export function McpSettings() {
   const setup = useObservation("mcp", (signal) => mcpSetup(undefined, { signal }));
@@ -199,7 +199,7 @@ export function McpSettings() {
                     install={() =>
                       void act(
                         { action: "install", server: row.server.id },
-                        `${row.server.name} MCP installed.`,
+                        `${row.server.name} MCP added.`,
                       ).then((next) => {
                         const entry = signInAfterInstall(next, row.server.id);
                         if (entry) openSignIn(entry);
@@ -231,7 +231,7 @@ function Logo({ catalog }: { catalog: McpCatalogId | undefined }) {
 }
 
 function McpServerItem({
-  row: { title, catalog, value, ready, detail, actions, removeVerb },
+  row: { title, catalog, value, ready, detail, actions },
   disabled,
   edit,
   remove,
@@ -306,10 +306,10 @@ function McpServerItem({
               size="sm"
               className="text-muted-foreground"
               disabled={disabled}
-              aria-label={`${removeVerb} ${title} MCP`}
+              aria-label={`Remove ${title} MCP`}
               onClick={remove}
             >
-              {removeVerb}
+              Remove
             </Button>
           ),
         )}
@@ -339,10 +339,10 @@ function McpAvailableItem({
           variant="outline"
           size="sm"
           disabled={disabled || !!detail}
-          aria-label={`Install ${server.name} MCP`}
+          aria-label={`Add ${server.name} MCP`}
           onClick={install}
         >
-          Install
+          Add
         </Button>
       </ItemActions>
     </Item>

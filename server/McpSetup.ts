@@ -245,7 +245,7 @@ export const McpSetupLive = Layer.effect(
         const server = environment.servers().find((server) => server.id === name);
         throw new Error(
           server
-            ? `Install ${server.name} MCP before signing in.`
+            ? `Add ${server.name} MCP before signing in.`
             : `Add ${name} MCP before signing in.`,
         );
       }
