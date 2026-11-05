@@ -22,7 +22,7 @@ other servers carry the server icon.
   on Command: Command, Arguments (one per line), Environment with Add variable, Working directory,
   and the description "Adding runs the command once to check that it starts." A command that
   does not start fails under the Command field ("Could not start <name> MCP. …" and Pi's reason)
-  and writes nothing. A command that starts toasts "<name> MCP added for new sessions." and the row appears with the server
+  and writes nothing. A command that starts toasts "MCP <name> added." and the row appears with the server
   icon; a URL nothing answers fails under the URL field ("Could not connect to <name> MCP. Check
   the URL and the network, then try again.") and writes nothing; a taken name fails on the Name
   field ("Another MCP server is named <name>.").
@@ -33,9 +33,9 @@ other servers carry the server icon.
   gone). Manage opens a menu: Edit (servers the user added only) and a separator, then
   Disconnect (a URL server) or Delete (a command) in red.
 - `edit`: Edit opens the add dialog on the entry (no tabs); a saved Authorization header shows as
-  a masked placeholder with Remove / Keep; Save toasts "<name> MCP saved for new sessions.".
+  a masked placeholder with Remove / Keep; Save toasts "MCP <name> saved.".
 - `remove`: Disconnect or Delete asks "Disconnect <Name> MCP?" / "Delete <Name> MCP?" with
-  Cancel, then removes the entry and toasts "<Name> MCP disconnected." or
-  "<Name> MCP deleted."; the entry leaves the file.
+  Cancel, then removes the entry and toasts "MCP <Name> disconnected." or
+  "MCP <Name> deleted."; the entry leaves the file.
 - `problem`: with `{"extensions":["-builtin:mcp"]}` in `$RUN/pi-agent/settings.json`, the page
   shows "MCP is unavailable" with Pi's reason and every control off.

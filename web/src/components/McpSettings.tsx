@@ -205,7 +205,7 @@ export function McpSettings() {
                     connecting={actions.running === `connect:${row.server.id}`}
                     connect={() =>
                       void act({ action: "connect", server: row.server.id }, (reply) =>
-                        reply.signIn ? undefined : `${row.server.name} MCP connected.`,
+                        reply.signIn ? undefined : `MCP ${row.server.name} connected.`,
                       ).then((reply) => signInAfter(reply, row.server.name))
                     }
                   />

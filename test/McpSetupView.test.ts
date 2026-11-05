@@ -120,13 +120,13 @@ test("a removal asks first, naming the server and what goes, and the toast names
     description: "Removes Linear MCP and its saved sign-in from Pi on this machine.",
     action: "Disconnect",
     progress: "Disconnecting…",
-    done: "Linear MCP disconnected.",
+    done: "MCP Linear disconnected.",
   });
   assert.deepEqual(mcpRemovalCopy({ title: "tools", removeVerb: "Delete" }), {
     title: "Delete tools MCP?",
     description: "Removes tools MCP from Pi on this machine.",
     action: "Delete",
     progress: "Deleting…",
-    done: "tools MCP deleted.",
+    done: "MCP tools deleted.",
   });
 });

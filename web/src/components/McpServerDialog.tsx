@@ -234,7 +234,7 @@ export function McpServerDialog({
       void run(
         { action: "add", name: pasted.name, config: pasted.config },
         pasted.name,
-        `${pasted.name} MCP added for new sessions.`,
+        `MCP ${pasted.name} added.`,
       );
       return;
     }
@@ -268,7 +268,7 @@ export function McpServerDialog({
           config: edit,
         },
         trimmed,
-        `${trimmed} MCP saved for new sessions.`,
+        `MCP ${trimmed} saved.`,
       );
       return;
     }
@@ -285,11 +285,7 @@ export function McpServerDialog({
             ...(Object.keys(record(env)).length ? { env: record(env) } : {}),
             ...(cwd.trim() ? { cwd: cwd.trim() } : {}),
           };
-    void run(
-      { action: "add", name: trimmed, config: added },
-      trimmed,
-      `${trimmed} MCP added for new sessions.`,
-    );
+    void run({ action: "add", name: trimmed, config: added }, trimmed, `MCP ${trimmed} added.`);
   };
 
   return (

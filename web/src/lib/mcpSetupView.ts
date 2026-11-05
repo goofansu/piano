@@ -110,13 +110,13 @@ export function mcpRemovalCopy(row: Pick<McpServerRow, "title" | "removeVerb">) 
         description: `Removes ${name} MCP and its saved sign-in from Pi on this machine.`,
         action: "Disconnect",
         progress: "Disconnecting…",
-        done: `${name} MCP disconnected.`,
+        done: `MCP ${name} disconnected.`,
       }
     : {
         title: `Delete ${name} MCP?`,
         description: `Removes ${name} MCP from Pi on this machine.`,
         action: "Delete",
         progress: "Deleting…",
-        done: `${name} MCP deleted.`,
+        done: `MCP ${name} deleted.`,
       };
 }
