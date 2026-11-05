@@ -98,13 +98,13 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 12);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 13);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
         .all()
         .map((c) => c.name),
-      ["id", "name", "position", "instructions"],
+      ["id", "name", "position", "instructions", "done_at"],
     );
     assert.equal(backup.prepare("PRAGMA user_version").get()!.user_version, 1);
     assert.equal(
@@ -479,7 +479,7 @@ for (const version of [4, 5, 6]) {
     assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 12);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 13);
       assert.deepEqual(
         stored
           .prepare(
@@ -600,6 +600,60 @@ test("INV-01: the title mirrors Pi's name, else the start name or first prompt; 
   assert.equal(named?.title, "Named by Pi", "a later prompt never replaces Pi's name");
   assert.deepEqual(named?.stats, stats, "a name alone keeps the cached statistics");
   assert.equal(await entry("unregistered"), undefined, "mirroring never creates a reference");
+});
+
+test("a project marked done keeps its members untouched, reopens when a session starts in it, and survives reopening the database", async (t) => {
+  const f = fixture(t),
+    cwd = join(f.root, "folder");
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.saveProject({ id: "launch", name: "Launch", instructions: "Be brief." });
+      yield* r.addSession(cwd, "one", "Original", "launch");
+      const before = yield* r.get;
+      yield* r.setProjectDone("launch", true);
+      const done = yield* r.get;
+      const project = done.projects[0]!;
+      assert.equal(project.name, "Launch");
+      assert.equal(
+        project.instructions,
+        "Be brief.",
+        "done changes nothing else about the project",
+      );
+      assert.ok(project.doneAt && !Number.isNaN(Date.parse(project.doneAt)), "done records when");
+      assert.deepEqual(done.sessions, before.sessions, "its sessions are untouched");
+      const at = project.doneAt;
+      yield* r.setProjectDone("launch", true);
+      assert.equal((yield* r.get).projects[0]!.doneAt, at, "marking done again keeps the time");
+
+      yield* r.assignProject(cwd, "one", "launch");
+      assert.equal(
+        (yield* r.get).projects[0]!.doneAt,
+        at,
+        "filing a session in it does not reopen it",
+      );
+      yield* r.addSession(cwd, "two", "New work", "launch");
+      assert.equal(
+        (yield* r.get).projects[0]!.doneAt,
+        undefined,
+        "a session started in it reopens it",
+      );
+
+      yield* r.setProjectDone("launch", false);
+      assert.equal(
+        (yield* r.get).projects[0]!.doneAt,
+        undefined,
+        "reopening an open project is a no-op",
+      );
+      yield* r.setProjectDone("launch", true);
+      const failure = yield* r.setProjectDone("missing", true).pipe(Effect.flip);
+      assert.equal(failure.detail, "Project is unavailable. Refresh and try again.");
+    }),
+  );
+  const reopened = await f.get();
+  assert.ok(reopened.projects[0]!.doneAt, "done is saved, not held in memory");
+  await f.run(Effect.flatMap(Registry, (r) => r.setProjectDone("launch", false)));
+  assert.equal((await f.get()).projects[0]!.doneAt, undefined, "reopen is saved too");
 });
 
 test("INV-01: initial membership never changes an existing reference or restricts later reassignment", async (t) => {

@@ -62,10 +62,37 @@ test("the index lists every project, newest member activity first, with its fold
   ]);
 });
 
+test("done projects leave the list for the Done group, most recently marked done first, members and all", () => {
+  const doneAt: Record<string, string> = {
+    verify: "2026-11-01T08:00:00Z",
+    alpha: "2026-11-03T08:00:00Z",
+  };
+  const s: AppState = {
+    ...state,
+    projects: state.projects.map((p) => (doneAt[p.id] ? { ...p, doneAt: doneAt[p.id] } : p)),
+  };
+  const index = projectsIndex(s);
+  assert.equal(index.kind, "index");
+  assert.deepEqual(
+    index.rows.map((r) => r.project.name),
+    ["Launch subscriptions", "Zed"],
+    "the list keeps only open projects, in its usual order",
+  );
+  assert.deepEqual(
+    index.done.map((r) => [r.project.name, r.count, r.updatedAt]),
+    [
+      ["Alpha", 0, undefined],
+      ["Verify Project", 3, at(30)],
+    ],
+    "a done project keeps its members and its facts; the newest done comes first, not the most active",
+  );
+});
+
 test("the index waits for the registry rather than showing an empty list", () => {
   assert.deepEqual(projectsIndex({ ...state, registryLoaded: false }), { kind: "loading" });
   assert.deepEqual(projectsIndex({ ...state, projects: [], sessionReferences: [] }), {
     kind: "index",
     rows: [],
+    done: [],
   });
 });

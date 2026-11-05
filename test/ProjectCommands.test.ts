@@ -43,20 +43,44 @@ test("the sidebar's menu leaves out the current project; the New page keeps it",
   assert.deepEqual(newPage(launch), ["Billing", "Launch"], "the current project is not repeated");
 });
 
-test("a project offers New session in project, Project settings and Delete; New session opens its home", () => {
+test("a project offers New session in project, Project settings, Mark project done and Delete; New session opens its home", () => {
   assert.deepEqual(
     projectCommands(state, launch).map((c) => c.label),
-    ["New session in project", "Project settings", "Delete project"],
+    ["New session in project", "Project settings", "Mark project done", "Delete project"],
   );
   assert.deepEqual(byId(launch)["new-session"]?.intent, { kind: "open-project", projectId: "p1" });
   assert.deepEqual(byId(launch).settings?.intent, { kind: "project-settings", projectId: "p1" });
+  assert.deepEqual(byId(launch).done?.intent, {
+    kind: "send",
+    command: { _tag: "set_project_done", id: "p1", done: true },
+  });
   assert.deepEqual(byId(launch).delete?.intent, { kind: "delete-project", project: launch });
 });
 
-test("a project's menu holds Project settings, with Delete project set apart as its one destructive row", () => {
+test("a done project offers Reopen project in the same row, sending the reverse change", () => {
+  const done: Project = { ...launch, doneAt: "2026-11-05T09:00:00Z" };
+  const commands = byId(done, { ...state, projects: [done, billing] });
+  assert.equal(commands.done?.label, "Reopen project");
+  assert.notEqual(commands.done?.icon, byId(launch).done?.icon, "the icon says which way it goes");
+  assert.deepEqual(commands.done?.intent, {
+    kind: "send",
+    command: { _tag: "set_project_done", id: "p1", done: false },
+  });
+  assert.deepEqual(
+    projectCommands(state, done).map((c) => c.label),
+    ["New session in project", "Project settings", "Reopen project", "Delete project"],
+    "the rest of the row is unchanged",
+  );
+});
+
+test("a project's menu holds Project settings and Mark project done, with Delete project set apart as its one destructive row", () => {
   const labels = (commands: readonly { label: string }[]) => commands.map((c) => c.label);
   const menu = projectMenu(projectCommands(state, launch));
-  assert.deepEqual(labels(menu.manage), ["Project settings"], "New session is not a menu row");
+  assert.deepEqual(
+    labels(menu.manage),
+    ["Project settings", "Mark project done"],
+    "New session is not a menu row",
+  );
   assert.deepEqual(labels(menu.destructive), ["Delete project"]);
   assert.ok(
     menu.manage.every((c) => !c.destructive),
@@ -68,6 +92,7 @@ test("a project's menu holds Project settings, with Delete project set apart as 
   const offline = projectMenu(projectCommands({ ...state, connected: false }, launch));
   assert.equal(offline.destructive[0]?.enabled, false, "deleting waits for a connection");
   assert.equal(offline.manage[0]?.enabled, true, "settings opens a dialog without one");
+  assert.equal(offline.manage[1]?.enabled, false, "marking done changes the registry, so it waits");
 });
 
 test("deleting waits for a connection; opening the home or settings does not", () => {

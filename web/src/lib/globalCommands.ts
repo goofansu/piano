@@ -48,6 +48,7 @@ export type GlobalCommandId =
   | "new-skill"
   | "new-prompt"
   | "project-settings"
+  | "project-done"
   | "delete-project"
   | "trust"
   | "toggle-sidebar"
@@ -168,6 +169,7 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
 /** Each row a project's menu lists, by its palette ID; a row the menu adds fails here until named. */
 const PROJECT_MENU_IDS = {
   settings: "project-settings",
+  done: "project-done",
   delete: "delete-project",
 } as const satisfies Record<ProjectMenuCommandId, GlobalCommandId>;
 

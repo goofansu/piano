@@ -50,6 +50,7 @@ export type ProjectCommandId =
   | "new-session"
   | "open-project"
   | "settings"
+  | "done"
   | "delete"
   | "new-project"
   | "assign";
@@ -59,6 +60,8 @@ export type ProjectCommandIcon =
   | "new"
   | "new-project"
   | "settings"
+  | "done"
+  | "reopen"
   | "delete"
   | "folder"
   | "remove";
@@ -87,14 +90,19 @@ export interface ProjectCommand {
   intent: ProjectCommandIntent;
 }
 
+/** Whether the project is marked done: listed under Done on the index, its group last in the sidebar. */
+export const isProjectDone = (project: Pick<Project, "doneAt">) => project.doneAt !== undefined;
+
 /**
  * What a project row offers, in order: New session in the project, Project settings (its name and
- * instructions), then Delete. Enablement, one rule per command:
+ * instructions), Mark project done (Reopen project for a done one), then Delete. Enablement, one
+ * rule per command:
  * - new session, settings: always; each only opens a page or dialog, whose changes wait for a
  *   connection.
- * - delete: connected, since it changes the registry.
+ * - done, delete: connected, since each changes the registry.
  */
 export function projectCommands(state: AppState, project: Project): ProjectCommand[] {
+  const done = isProjectDone(project);
   return [
     {
       id: "new-session",
@@ -111,6 +119,16 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
       icon: "settings",
       enabled: true,
       intent: { kind: "project-settings", projectId: project.id },
+    },
+    {
+      id: "done",
+      label: done ? "Reopen project" : "Mark project done",
+      icon: done ? "reopen" : "done",
+      enabled: state.connected,
+      intent: {
+        kind: "send",
+        command: { _tag: "set_project_done", id: project.id, done: !done },
+      },
     },
     {
       id: "delete",
@@ -134,7 +152,7 @@ export interface ProjectMenuSections {
 }
 
 const MENU_SECTIONS = {
-  manage: ["settings"],
+  manage: ["settings", "done"],
   destructive: ["delete"],
 } as const satisfies Record<keyof ProjectMenuSections, readonly ProjectCommandId[]>;
 

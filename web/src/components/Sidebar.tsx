@@ -48,7 +48,7 @@ import type { RadioChoice } from "@/lib/commands";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
-import { projectCommands } from "@/lib/projectCommands";
+import { isProjectDone, projectCommands } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import type { SessionRowDetails, SidebarSection } from "@/lib/sidebarList";
 import { useNavigation } from "@/lib/useNavigation";
@@ -443,10 +443,11 @@ function ProjectGroup({
   const commands = project ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
   // The group's name only folds it; its New session in project button opens the project's home.
+  // A done project reads as quietly as No project: its sessions are listed, the project is set aside.
   return (
     <SidebarGroup
       label={project?.name ?? "No project"}
-      muted={!project}
+      muted={!project || isProjectDone(project)}
       sessions={sessions}
       open={open}
       onOpenChange={onOpenChange}

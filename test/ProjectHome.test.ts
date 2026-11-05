@@ -117,6 +117,11 @@ test("on a project's home, Mod+K offers its menu's Project settings and Delete p
     projectId: "p1",
   });
   const project = home.projects.find((p) => p.id === "p1");
+  assert.equal(row(home, "project-done")?.label, "Mark project done");
+  assert.deepEqual(row(home, "project-done")?.intent, {
+    kind: "send",
+    command: { _tag: "set_project_done", id: "p1", done: true },
+  });
   assert.equal(row(home, "delete-project")?.label, "Delete project");
   assert.deepEqual(row(home, "delete-project")?.intent, { kind: "delete-project", project });
   assert.equal(row(home, "delete-project")?.enabled, true);

@@ -86,20 +86,24 @@ export interface SessionGroup<P, S> {
   sessions: S[];
 }
 /**
- * Projects always A–Z, then No project; the selected sort applies only to sessions inside each group.
- * A member whose folder was closed is still listed (see the session catalog), so it still appears.
+ * Open projects A–Z, then No project, then done projects A–Z at the bottom; the selected sort
+ * applies only to sessions inside each group. A member whose folder was closed is still listed
+ * (see the session catalog), so it still appears, and a done project's members are listed as any
+ * other's: done is the project's state, not theirs.
  */
 export function projectGroups<
-  P extends Pick<Project, "id" | "name">,
+  P extends Pick<Project, "id" | "name" | "doneAt">,
   S extends SessionLike & { projectId?: string },
 >(projects: readonly P[], sessions: readonly S[], sort: SortBy): Array<SessionGroup<P, S>> {
-  const groups = projects.map((project): SessionGroup<P, S> => ({
+  const group = (project: P): SessionGroup<P, S> => ({
     project,
     sessions: sortSessions(
       sessions.filter((s) => s.projectId === project.id),
       sort,
     ),
-  }));
+  });
+  const az = (a: SessionGroup<P, S>, b: SessionGroup<P, S>) =>
+    byName(a.project?.name ?? "", b.project?.name ?? "");
   const ungrouped: SessionGroup<P, S> = {
     project: null,
     sessions: sortSessions(
@@ -108,8 +112,15 @@ export function projectGroups<
     ),
   };
   return [
-    ...groups.sort((a, b) => byName(a.project?.name ?? "", b.project?.name ?? "")),
+    ...projects
+      .filter((p) => p.doneAt === undefined)
+      .map(group)
+      .sort(az),
     ungrouped,
+    ...projects
+      .filter((p) => p.doneAt !== undefined)
+      .map(group)
+      .sort(az),
   ];
 }
 

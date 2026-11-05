@@ -65,9 +65,15 @@ instruction selection. Separate concurrent writing tasks still need separate wor
 - Deleting a project removes the project and unlinks its sessions, which stay registered and move to
   No project. It is not session archive or delete, abort, process release, checkout removal,
   verification, approval or proof that the outcome was achieved; running work and direct session
-  access remain available. Projects had an archive state at first; it was retired because finished
-  projects were rarely revisited, and opening a registry older than version 9 brings each archived
-  project back as an ordinary one with its members.
+  access remain available.
+- Marking a project done (`doneAt`) is the reversible way to set a finished outcome aside without
+  deleting its grouping: the index lists it under Done and the sidebar's project grouping puts it
+  last, while its sessions keep their state, their Pi and their places in the sidebar and the
+  palette. Reopen undoes it, and a session started in a done project reopens it; nothing marks a
+  project done by itself. Projects had a hidden archive state at first; it was retired in registry
+  version 9 because finished projects were rarely revisited once hidden, and opening an older
+  registry brings each archived project back as an ordinary one with its members. Done differs
+  in staying visible and one click from open.
 - Unlinking a session does not delete it. Closing a repository does not cascade-delete the outcome
   project or its associations. A missing checkout/history is an explicit unavailable state, not
   a reason to silently recreate or drop the reference. Explicit session-reference removal must also

@@ -47,11 +47,19 @@ the page's one primary action in the header.
   session count ("piano, api · 3 sessions"; "No sessions yet" for an empty project), and the
   time of its last activity at the end. The row opens the home and carries no status glyph: the
   index is for scanning what exists and when it last moved, and per-session state lives on the
-  home. On hover it shows the sidebar's project menu (Project settings, Delete project); deleting
-  from it stays on the index, and deleting from the project's home lands here.
+  home. On hover it shows the sidebar's project menu (Project settings, Mark project done,
+  Delete project); deleting from it stays on the index, and deleting from the project's home
+  lands here.
 - **Order:** last activity first, from the newest member's `updatedAt`, the registry field that
   already exists so "a project's recency follows its members".
-- **Empty state:** one line, "No projects yet"; New project stays in the header.
+- **Done:** a project marked done leaves the list for a "Done" group beneath it, folded with its
+  count until opened, its rows the most recently marked done first with that time at the end.
+  Its menu offers Reopen project in place of Mark project done. Done is the project's state
+  only: its sessions keep theirs, stay in the sidebar and the palette, and a session started
+  from its home reopens it. Nothing marks a project done by itself, so the index never changes
+  under the user. Delete remains the only way to remove the grouping.
+- **Empty state:** one line, "No projects yet", only while no project exists; an index whose
+  projects are all done shows the Done group alone. New project stays in the header.
 - **No project:** the index lists projects only. Sessions without one stay reachable from the
   sidebar and from session search, and each session's menu offers "Add to project". A row with
   no home to open would be a dead row.
@@ -65,8 +73,10 @@ Keeps its two jobs, start work here and read the project's work, and takes Linea
 - **Header:** one line, "Projects / Verify Project", the same shadcn Breadcrumb as the session
   header's: "Projects" is the way up to the index and the project's name is the `h1`. No context
   line: the session count moved to the Sessions heading, and the folders are on each row. The
-  `…` menu stays at the end with Project settings and Delete project. (A context line with the
-  folders and the count was considered and dropped: it repeated what the rows show.)
+  `…` menu stays at the end with Project settings, Mark project done (Reopen project once done)
+  and Delete project. A done project's title is followed by "Done", the home's one statement of
+  it. (A context line with the folders and the count was considered and dropped: it repeated
+  what the rows show.)
 - **Composer:** unchanged, first in the column: a session started here joins the project and runs
   in the most recent member's folder.
 - **Sessions:** a titled group, as a Settings page's (`SettingsGroup`), "Sessions" with the count
@@ -95,6 +105,8 @@ as one band. The mark sits in the footer beside Settings. Collapsed, there is no
 pane takes the width, and its header's show control, with a breathing dot while any session works,
 brings the sidebar back. It is the current row, with the active fill, while the index is open. Grouping by
 project is unchanged: a group's name still folds it, and its hover action still opens the home.
+Done projects' groups come last, after No project, muted as that group is, and fold once when
+the project is marked done; their sessions are listed as any other's.
 Below the breakpoint the row sits in the sidebar sheet, so the index is one tap from any screen.
 
 ### Session header
@@ -124,9 +136,12 @@ already. No new global shortcut.
 | 2 min ago | value | `timeAgo`, as the home uses it. |
 | 14 / 20,000 | value | The Instructions count on both project dialogs; red past the limit. |
 | Open, Merged | state | Later, with the Pull requests group. |
+| Mark project done, Reopen project | control's name | One row of the project menu, in every place the menu appears, and the palette on the home. |
+| Done (index group, home title) | state | Once per screen: the index says it by grouping, the home beside the title. |
+| Project marked done, Project reopened | feedback | The toast the server answers with. |
 
-Feedback stays where it is: a project saved or deleted answers with its toast; opening a row
-answers by navigating.
+Feedback stays where it is: a project saved, marked done or deleted answers with its toast;
+opening a row answers by navigating.
 
 ## Not taken, and why
 

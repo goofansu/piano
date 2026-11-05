@@ -1,12 +1,14 @@
 import type { Project } from "@shared/wire";
 import { cn } from "cn";
 import {
+  CircleCheckIcon,
   FolderIcon,
   FolderInputIcon,
   FolderMinusIcon,
   type LucideIcon,
   MoreHorizontalIcon,
   PlusIcon,
+  RotateCcwIcon,
   SettingsIcon,
   SquarePenIcon,
   Trash2Icon,
@@ -48,6 +50,8 @@ const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   new: SquarePenIcon,
   "new-project": PlusIcon,
   settings: SettingsIcon,
+  done: CircleCheckIcon,
+  reopen: RotateCcwIcon,
   delete: Trash2Icon,
   folder: FolderIcon,
   remove: FolderMinusIcon,
