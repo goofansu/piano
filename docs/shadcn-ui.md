@@ -62,13 +62,12 @@ Three independent signals retain distinct owners:
   by `SessionView`, crosses at 849 CSS px (448 + 400 + 1). Zero means unmeasured/hidden and keeps
   the previous mode. `navigation.ts` alone projects visible areas, rail and tabs; preferred Surface
   width does not choose the mode.
-- `viewportLayout.ts` owns the application's 768px presentation breakpoint. `sidebarLayout.ts`
-  subscribes to `min-width: 768px` for column/reveal; `useNarrowViewport.ts` preserves the header's
-  former upstream-hook semantics: initial false, `innerWidth < 768`, and a `max-width: 767px`
-  subscription. These subscriptions deliberately are not normalized across fractional widths.
-  Header subscriptions are independent of sidebar state, which may not change on a crossing.
-  CSS `md`/48rem remains the styling owner; its correspondence to 768px assumes the default
-  16px media-query baseline, not arbitrary browser font settings.
+- `viewportLayout.ts` owns the application's presentation query, `min-width: 48rem`, matching
+  CSS `md`. Its shared read/subscription serves sidebar column/reveal and `useNarrowViewport.ts`;
+  narrow is the logical complement, with no fractional-width gap or rounded `innerWidth` read.
+  Media-query rem uses the browser's default font baseline (768px at 16px, 960px at 20px), not
+  the page's root font-size. The header retains its initial false value until its effect reads
+  the query. Its subscription stays independent of sidebar state, which may not change on a crossing.
 - Pointer capability owns touch sizing and input behavior, not either layout decision.
 
 The header uses a sheet/context line for one-area-at-a-time **or** a narrow viewport, retaining
@@ -77,7 +76,11 @@ CSS `md`; rail eligibility comes from navigation/commands. Wide one-area-at-a-ti
 breadcrumb and beside-title sheet trigger. See [Quiet UI](quiet-ui.md#shared-structure).
 
 Upstream `ui/sidebar.tsx` and `hooks/use-mobile.ts` remain unchanged. The stock provider and
-Settings tooltip still use that upstream hook. It is not the application session-capacity owner.
+Settings tooltip still use that upstream hook (`innerWidth < 768`, `max-width: 767px` events).
+Their `isMobile` can therefore disagree with CSS and the application at fractional widths or a
+non-default browser font baseline. In particular, the provider's shortcut routing and Settings
+sidebar tooltip suppression are not unified by the application query. Stock `openMobile` remains
+disconnected from Piano's reveal, as below. Neither upstream consumer owns session capacity.
 
 ### Stock sidebar shortcut
 

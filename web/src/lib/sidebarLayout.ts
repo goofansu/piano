@@ -7,7 +7,7 @@
  * touch handling stay in the DOM; nothing here depends on React or the browser.
  */
 import { readStorage, writeStorage } from "./storage.ts";
-import { WIDE_VIEWPORT_QUERY } from "./viewportLayout.ts";
+import { isWideViewport, subscribeViewport } from "./viewportLayout.ts";
 
 export const SIDEBAR_WIDTH = { min: 208, max: 480, default: 288, collapseBelow: 160 };
 
@@ -228,12 +228,8 @@ export function createSidebarLayout<T>(env: SidebarEnvironment<T>): SidebarLayou
 
 /** The real breakpoint, storage and focus. Globals are read only when called, so this module loads in Node. */
 export const browserSidebarEnvironment: SidebarEnvironment<HTMLElement> = {
-  desktop: () => matchMedia(WIDE_VIEWPORT_QUERY).matches,
-  onBreakpoint: (listener) => {
-    const media = matchMedia(WIDE_VIEWPORT_QUERY);
-    media.addEventListener("change", listener);
-    return () => media.removeEventListener("change", listener);
-  },
+  desktop: isWideViewport,
+  onBreakpoint: subscribeViewport,
   read: readStorage,
   write: writeStorage,
   focused: () => (document.activeElement instanceof HTMLElement ? document.activeElement : null),
