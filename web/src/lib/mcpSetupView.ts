@@ -1,8 +1,8 @@
 /**
  * What the MCP section shows and allows: one row per entry of Pi's global configuration, with its
- * ready mark and the actions it offers; one row per catalog server not configured yet; and whether
- * its controls wait. A change, read or read failure in flight disables every row. Pure; the
- * section renders it, and shows a failed read itself.
+ * ready mark and what its Manage menu offers; one row per catalog server not connected yet; and
+ * whether its controls wait. A change, read or read failure in flight disables every row. Pure;
+ * the section renders it, and shows a failed read itself.
  */
 import {
   MCP_CATALOG,
@@ -15,16 +15,13 @@ import {
 export interface McpSetupInput {
   /** Pi's setup as last read; absent until the first read succeeds. */
   state: McpSetupState | undefined;
-  /** The id of the setup change in flight, such as "install" or "sign-out". */
+  /** The id of the setup change in flight, such as "connect" or "remove". */
   running: string | undefined;
   /** A read of the setup is in flight. */
   loading: boolean;
   /** The last read failed and no read is in flight. */
   loadFailed: boolean;
 }
-
-/** A configured row's controls, in the order they appear. */
-export type McpServerAction = "sign-in" | "sign-out" | "edit" | "remove";
 
 export interface McpServerRow {
   setup: McpServerSetup;
@@ -38,12 +35,17 @@ export interface McpServerRow {
   ready: boolean;
   /** A configuration problem the user must fix in Pi. */
   detail?: string;
-  actions: readonly McpServerAction[];
+  /** Its sign-in expired or was removed: Reconnect signs in again. */
+  reconnect: boolean;
+  /** A server the user added; a catalog server's endpoint is Piano's to choose. */
+  editable: boolean;
+  /** How Manage removes it: a URL server is disconnected, a local command deleted. */
+  removeVerb: "Disconnect" | "Delete";
 }
 
 export interface McpAvailableRow {
   server: McpCatalogServer;
-  /** Why Add is not offered as is. */
+  /** Why Connect is not offered as is. */
   detail?: string;
 }
 
@@ -74,9 +76,6 @@ export const configValue = (setup: McpServerSetup): string => {
 
 export function mcpServerRow(setup: McpServerSetup): McpServerRow {
   const catalog = catalogServer(setup.catalog);
-  const actions: McpServerAction[] = [];
-  if (!setup.detail && setup.oauth) actions.push(setup.signedIn ? "sign-out" : "sign-in");
-  actions.push("edit", "remove");
   return {
     setup,
     title: catalog?.name ?? setup.name,
@@ -84,7 +83,9 @@ export function mcpServerRow(setup: McpServerSetup): McpServerRow {
     value: configValue(setup),
     ready: !setup.detail && (!setup.oauth || setup.signedIn),
     ...(setup.detail ? { detail: setup.detail } : {}),
-    actions,
+    reconnect: !setup.detail && setup.oauth && !setup.signedIn,
+    editable: !catalog,
+    removeVerb: "url" in setup.config ? "Disconnect" : "Delete",
   };
 }
 
@@ -100,40 +101,22 @@ export function mcpSetupView({ state, running, loading, loadFailed }: McpSetupIn
   };
 }
 
-/** Whether the entry is ready but awaits an OAuth sign-in. */
-const awaitsSignIn = (setup: McpServerSetup | undefined) =>
-  !!setup && !setup.detail && setup.oauth && !setup.signedIn;
-
-/**
- * Installing is the decision to use the server: after an install, sign in straight away when Pi
- * reports the catalog server's entry ready but awaiting an OAuth sign-in. Returns the entry to
- * sign in to.
- */
-export function signInAfterInstall(
-  state: McpSetupState | undefined,
-  server: McpCatalogId,
-): McpServerSetup | undefined {
-  const installed = state?.servers.find((setup) => setup.catalog === server);
-  return awaitsSignIn(installed) ? installed : undefined;
-}
-
-/** After adding entries, the first of them awaiting an OAuth sign-in, if any. */
-export function signInAfterAdd(
-  state: McpSetupState | undefined,
-  names: readonly string[],
-): McpServerSetup | undefined {
-  return names
-    .map((name) => state?.servers.find((setup) => setup.name === name))
-    .find(awaitsSignIn);
-}
-
-/** The removal dialog's wording and the toast once it is done. */
-export function mcpRemovalCopy(row: Pick<McpServerRow, "title"> | undefined) {
-  const name = row?.title;
-  return {
-    title: `Remove ${name} MCP?`,
-    description: `Removes ${name} MCP and its saved sign-in from Pi on this machine.`,
-    action: "Remove",
-    done: `${name} MCP removed for new sessions.`,
-  };
+/** The removal's confirmation, and the toast once it is done. */
+export function mcpRemovalCopy(row: Pick<McpServerRow, "title" | "removeVerb">) {
+  const name = row.title;
+  return row.removeVerb === "Disconnect"
+    ? {
+        title: `Disconnect ${name} MCP?`,
+        description: `Removes ${name} MCP and its saved sign-in from Pi on this machine.`,
+        action: "Disconnect",
+        progress: "Disconnecting…",
+        done: `${name} MCP disconnected.`,
+      }
+    : {
+        title: `Delete ${name} MCP?`,
+        description: `Removes ${name} MCP from Pi on this machine.`,
+        action: "Delete",
+        progress: "Deleting…",
+        done: `${name} MCP deleted.`,
+      };
 }

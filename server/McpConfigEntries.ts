@@ -121,6 +121,16 @@ export interface McpConfigEntries {
   /** Adds entries under new names, each validated by Pi, all or none: a taken or repeated name,
    * or an invalid configuration, writes nothing. */
   readonly add: (servers: readonly McpNamedConfig[]) => Effect.Effect<void, McpConfigEntryError>;
+  /** The entry `add` would write for `server`, validated by Pi and checked against taken names,
+   * without writing it. */
+  readonly prepare: (server: McpNamedConfig) => McpServerEntry;
+  /** The entry `update` would write, without writing it. */
+  readonly prepareUpdate: (
+    name: string,
+    removalKey: string,
+    rename: string | undefined,
+    configure: (existing: McpServerConfig) => McpServerConfig,
+  ) => McpServerEntry;
   /** Replaces the entry named `name` with `configure(existing)`, under `rename` when given, only
    * while it still matches the reviewed `removalKey`. Pi validates the result. */
   readonly update: (
@@ -280,10 +290,41 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
       throw new Error("Configuration changed since confirmation.");
     return entry;
   };
+  /** Pi's loader shape for a validated entry, in the only file Piano writes. */
+  const entryOf = (name: string, config: McpServerConfig): McpServerEntry => ({
+    name,
+    config,
+    source: file,
+    scope: "global",
+  });
+  /** Runs a check that writes nothing, refusing as `writing` does. */
+  const checking = <A>(run: () => A, fallback: string) => {
+    try {
+      const blocked = problem();
+      if (blocked) throw new Error(blocked);
+      return run();
+    } catch (cause) {
+      throw cause instanceof McpConfigEntryError
+        ? cause
+        : new McpConfigEntryError({ detail: message(cause, fallback) });
+    }
+  };
   return {
     find,
     observe,
     list: globalEntries,
+    prepare: ({ name, config }) =>
+      checking(() => {
+        taken(name);
+        return entryOf(name, validated(name, config));
+      }, "Could not read the MCP configuration."),
+    prepareUpdate: (name, key, rename, configure) =>
+      checking(() => {
+        const existing = reviewed(name, key);
+        const next = rename ?? name;
+        taken(next, name);
+        return entryOf(next, validated(next, configure(existing.config)));
+      }, "Could not read the MCP configuration."),
     problem,
     named,
     add: (servers) =>
