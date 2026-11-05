@@ -30,8 +30,9 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
   and cost (latest by default). "Response history" switches between tokens and cost and offers
   an "Inspect response" slider; the Session column remains the session totals.
 - `follow-up`: "Message" plus Enter sends to the same Pi session (on touch, use Send; Enter is a newline).
-- `compact-composer`: where the session shows one area at a time (the rail is unavailable), Compose
-  opens the existing editor; Collapse composer retains the draft behind Edit draft. Blur leaves it
+- `compact-composer`: where the session shows one area at a time (the rail is unavailable), the
+  composer card folds to one row: the pencil with "Compose", or with the draft's first line once
+  Collapse composer has retained one (Edit draft). Compose opens the existing editor. Blur leaves it
   open. Its own accepted send closes an untouched empty editor, with Stop still reachable. Queues,
   image feedback and nonempty working drafts keep it expanded; newer input or interaction cancels
   pending auto-close. Side-by-side, New and project home keep the full editor.
@@ -98,7 +99,8 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab set viewport 390 844; ab find role button click --name Compose --exact;
     ab fill '[aria-label="Message"]' 'Retain this draft';
     ab find role button click --name 'Collapse composer' --exact`.
-  - Result: Edit draft replaces the editor; capture `10-draft-closed`. Press Space to reopen the
+  - Result: the folded card shows `Retain this draft` beside the pencil (Edit draft); capture
+    `10-draft-closed`. Press Space to reopen the
     retained draft, then click the transcript: the editor stays open. Capture `11-draft-opened`.
     Fill Message with `hold`, click Send, wait for Compose and Stop; capture `12-send-collapsed`.
     Click Stop and wait for no Stop button; capture `13-collapsed-stop`. This is browser emulation,

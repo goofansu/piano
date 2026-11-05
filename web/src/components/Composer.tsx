@@ -39,10 +39,16 @@ import {
   observeDraft,
 } from "@/lib/composerDisclosure";
 import { contextFigures } from "@/lib/contextUsage";
-import { drafts, type DraftKey } from "@/lib/messageDraft";
+import { type Draft, type DraftKey, drafts } from "@/lib/messageDraft";
 import { createPreference } from "@/lib/preference";
 import type { SessionNotice } from "@/lib/sessionNotices";
-import { composerAction, composerInput, footerPicker, footerPickerMenu } from "@/lib/styles";
+import {
+  composerAction,
+  composerCard,
+  composerInput,
+  footerPicker,
+  footerPickerMenu,
+} from "@/lib/styles";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { usePreference } from "@/lib/usePreference";
@@ -71,6 +77,13 @@ const queueModePreference = createPreference<DeliveryMode>({
   decode: (raw) => (raw === "follow-up" ? "follow-up" : "steering"),
   encode: (mode) => mode,
 });
+
+/** The folded card's one line: the draft's first line of text, or its name while it holds only quotes or images. */
+function draftPreview(draft: Draft): string | undefined {
+  const line = draft.text.split("\n").find((l) => l.trim());
+  if (line) return line.trim();
+  return draftNeedsReview(draft) ? "Edit draft" : undefined;
+}
 
 /**
  * The composer: a layer-1 card that lines up with the transcript column. It owns the session's
@@ -188,6 +201,7 @@ export function Composer({
     });
   };
   const figures = contextFigures(usage?.context, catalog, model);
+  const preview = draftPreview(editor.draft);
   const queue = queuePanel(queuedMessages, streaming);
 
   if (readOnly) {
@@ -203,21 +217,33 @@ export function Composer({
     <div className="px-(--gutter) pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-3">
       <div ref={surface} className="mx-auto w-full max-w-3xl">
         {!expanded && (
-          <div className="flex items-center justify-between">
-            <IconButton
-              ref={launcher}
-              size="header"
-              label={draftNeedsReview(editor.draft) ? "Edit draft" : "Compose"}
-              aria-expanded={false}
-              aria-controls={editorId}
-              disabled={disabled}
-              onClick={() => changeOpen(true)}
-            >
-              <PencilIcon />
-            </IconButton>
+          <div className="flex items-center gap-2">
+            {/* The same card, folded to one row: the draft's first line waits where it was typed;
+                an empty editor shows the launcher's name. The card's focus-within ring stands in
+                for the button's own, as it does for the textarea. */}
+            <div className={cn(composerCard, "flex min-w-0 flex-1")}>
+              <Button
+                ref={launcher}
+                variant="ghost"
+                aria-label={draftNeedsReview(editor.draft) ? "Edit draft" : "Compose"}
+                aria-expanded={false}
+                aria-controls={editorId}
+                disabled={disabled}
+                onClick={() => changeOpen(true)}
+                className={cn(
+                  "h-11 min-w-0 flex-1 justify-start gap-3 rounded-[inherit] px-4 text-base font-normal hover:bg-transparent focus-visible:border-transparent focus-visible:ring-0 md:h-10 md:px-5 md:text-sm",
+                  preview ? "text-ink" : "text-ink-3 hover:text-ink-2",
+                )}
+              >
+                <PencilIcon className="text-ink-3" aria-hidden />
+                <span className="truncate">{preview ?? "Compose"}</span>
+              </Button>
+            </div>
             {showStop && (
               <IconButton
-                size="header"
+                size="icon"
+                variant="outline"
+                className={composerAction}
                 label={control.label}
                 disabled={!control.enabled}
                 onClick={() => sendCommand(STOP)}
