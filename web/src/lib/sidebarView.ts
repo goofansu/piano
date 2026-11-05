@@ -1,4 +1,5 @@
 import type { FolderView, Project } from "@shared/wire";
+import { isProjectDone } from "./projectCommands.ts";
 
 /** How the sidebar lists sessions: by folder, project, date, or as one list. */
 export type GroupBy = "folder" | "project" | "date" | "none";
@@ -86,7 +87,7 @@ export interface SessionGroup<P, S> {
   sessions: S[];
 }
 /**
- * Open projects A–Z, then No project, then done projects A–Z at the bottom; the selected sort
+ * Open projects A–Z, then No project; done projects A–Z apart, for the bottom. The selected sort
  * applies only to sessions inside each group. A member whose folder was closed is still listed
  * (see the session catalog), so it still appears, and a done project's members are listed as any
  * other's: done is the project's state, not theirs.
@@ -94,7 +95,11 @@ export interface SessionGroup<P, S> {
 export function projectGroups<
   P extends Pick<Project, "id" | "name" | "doneAt">,
   S extends SessionLike & { projectId?: string },
->(projects: readonly P[], sessions: readonly S[], sort: SortBy): Array<SessionGroup<P, S>> {
+>(
+  projects: readonly P[],
+  sessions: readonly S[],
+  sort: SortBy,
+): { open: Array<SessionGroup<P, S>>; done: Array<SessionGroup<P, S>> } {
   const group = (project: P): SessionGroup<P, S> => ({
     project,
     sessions: sortSessions(
@@ -111,17 +116,16 @@ export function projectGroups<
       sort,
     ),
   };
-  return [
-    ...projects
-      .filter((p) => p.doneAt === undefined)
-      .map(group)
-      .sort(az),
-    ungrouped,
-    ...projects
-      .filter((p) => p.doneAt !== undefined)
-      .map(group)
-      .sort(az),
-  ];
+  return {
+    open: [
+      ...projects
+        .filter((p) => !isProjectDone(p))
+        .map(group)
+        .sort(az),
+      ungrouped,
+    ],
+    done: projects.filter(isProjectDone).map(group).sort(az),
+  };
 }
 
 /**
