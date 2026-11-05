@@ -124,8 +124,9 @@ export const McpSetupRequest = Schema.Union([
 ]);
 export type McpSetupRequest = typeof McpSetupRequest.Type;
 
-/** A change's answer: the setup, and the entry name to sign in to when nothing was saved yet
- * because the server asked for a sign-in first. */
+/** A change's answer: the setup, and, when nothing was saved yet because the server asked for a
+ * sign-in first, the sign-in subject that saves this change. It is the change's own, not the entry
+ * name: signing in to the saved entry by name never saves a change left waiting. */
 export const McpSetupChange = Schema.Struct({
   state: McpSetupState,
   signIn: Schema.optional(Schema.String),

@@ -132,6 +132,16 @@ const until = (setup: McpSetup["Service"], done: (state: ProviderLoginState) => 
       yield* Effect.sleep(5);
     }
   }).pipe(Effect.timeout("10 seconds"));
+/** Starts a sign-in once the lane is free: a cancelled attempt holds it until its run ends. */
+const startWhenFree = (setup: McpSetup["Service"], subject: string) =>
+  Effect.gen(function* () {
+    for (;;) {
+      const result = yield* Effect.result(setup.signIn.start(subject));
+      if (result._tag === "Success" || !/already in progress/.test(result.failure.detail))
+        return result;
+      yield* Effect.sleep(5);
+    }
+  }).pipe(Effect.timeout("10 seconds"));
 /** The entry named `name`, or undefined when Pi's file has none. */
 const server = (setup: McpSetup["Service"], name: string) =>
   Effect.map(setup.state, (state) => state.servers.find((server) => server.name === name));
@@ -169,11 +179,11 @@ test("INV-01/11/12: connecting a catalog server saves it only once its sign-in s
       // The server asks for a sign-in: nothing is saved yet, and the answer says whom to sign in to.
       const before = readFileSync(file, "utf8");
       const connecting = yield* setup.change({ action: "connect", server: "linear" });
-      assert.equal(connecting.signIn, "linear");
+      assert.ok(connecting.signIn);
       assert.deepEqual(names(connecting.state), ["other"]);
       assert.equal(readFileSync(file, "utf8"), before);
 
-      yield* setup.signIn.start("linear");
+      yield* setup.signIn.start(connecting.signIn);
       const waiting = yield* until(setup, (state) => !!state.prompt && !!state.url);
       assert.equal(new URL(waiting.url!).origin, new URL(url).origin);
       // A mistyped paste asks again instead of ending the sign-in.
@@ -227,15 +237,16 @@ test("INV-01/12: a sign-in that is refused or cancelled saves nothing and leaves
       save(file, { mcpServers: {} });
       const store = credentialStore(directory);
 
-      assert.equal((yield* setup.change({ action: "connect", server: "linear" })).signIn, "linear");
-      yield* setup.signIn.start("linear");
+      const { signIn } = yield* setup.change({ action: "connect", server: "linear" });
+      assert.ok(signIn);
+      yield* setup.signIn.start(signIn);
       const refused = yield* approve(setup, "denied");
       assert.equal(refused.status, "error");
       assert.deepEqual(json(file), { mcpServers: {} });
       assert.equal(store.tokens("linear", url), undefined);
 
       // Trying again signs in to the same waiting server; cancelling it saves nothing either.
-      yield* setup.signIn.start("linear");
+      yield* setup.signIn.start(signIn);
       const waiting = yield* until(setup, (state) => !!state.prompt);
       yield* setup.signIn.cancel(waiting.id);
       yield* Effect.sleep(50);
@@ -243,7 +254,7 @@ test("INV-01/12: a sign-in that is refused or cancelled saves nothing and leaves
       assert.equal(yield* linear(setup), undefined);
 
       // A later sign-in still saves it.
-      yield* setup.signIn.start("linear");
+      yield* setup.signIn.start(signIn);
       assert.equal((yield* approve(setup)).status, "success");
       assert.equal((yield* linear(setup))?.signedIn, true);
     }),
@@ -297,7 +308,7 @@ test("INV-01/12: removing clears the endpoint's sign-in after a switch to a head
       assert.equal(store.tokens("notes", notes)?.access_token, "synthetic-notes");
 
       // Connecting again asks for a new sign-in: nothing of the old one is reused.
-      assert.equal((yield* setup.change({ action: "connect", server: "linear" })).signIn, "linear");
+      assert.ok((yield* setup.change({ action: "connect", server: "linear" })).signIn);
     }),
   );
 });
@@ -498,9 +509,29 @@ test("INV-01/12: edits keep Pi's other keys and the Authorization value on the m
         removalKey: handbook.removalKey,
         config: { url, headers: {}, authorization: null },
       });
-      assert.equal(cleared.signIn, "handbook");
+      assert.ok(cleared.signIn);
       assert.equal(readFileSync(file, "utf8"), saved);
-      yield* setup.signIn.start("handbook");
+
+      // Left waiting, the change is saved only by its own sign-in: while that runs the entry
+      // cannot be removed, and once it is cancelled the saved entry's own sign-in (Reconnect)
+      // never saves it.
+      yield* setup.signIn.start(cleared.signIn);
+      const asking = yield* until(setup, (state) => !!state.prompt);
+      const removing = yield* Effect.flip(
+        setup.change({ action: "remove", name: "handbook", removalKey: handbook.removalKey }),
+      );
+      assert.match(removing.detail, /Could not remove/);
+      yield* setup.signIn.cancel(asking.id);
+      const reconnect = yield* startWhenFree(setup, "handbook");
+      assert.equal(
+        reconnect._tag,
+        "Failure",
+        "Reconnect does not start the waiting change's sign-in",
+      );
+      if (reconnect._tag === "Failure") assert.match(reconnect.failure.detail, /does not sign in/);
+      assert.equal(readFileSync(file, "utf8"), saved);
+
+      assert.equal((yield* startWhenFree(setup, cleared.signIn))._tag, "Success");
       assert.equal((yield* approve(setup)).status, "success");
       assert.deepEqual(json(file).mcpServers.handbook, { url, timeout: 30 });
       assert.equal((yield* server(setup, "handbook"))?.signedIn, true);
@@ -514,9 +545,9 @@ test("INV-01/12: edits keep Pi's other keys and the Authorization value on the m
         rename: "manual",
         config: { url, headers: {} },
       });
-      assert.equal(renamed.signIn, "manual");
+      assert.ok(renamed.signIn);
       assert.ok(store.tokens("handbook", url), "nothing changes before the sign-in");
-      yield* setup.signIn.start("manual");
+      yield* setup.signIn.start(renamed.signIn);
       assert.equal((yield* approve(setup)).status, "success");
       assert.equal(
         store.tokens("handbook", url),
