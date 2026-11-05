@@ -383,6 +383,7 @@ const Chevron = ({ open }: { open: boolean }) => (
 function SidebarGroup({
   label,
   muted = false,
+  done = false,
   title,
   "aria-label": ariaLabel,
   className,
@@ -397,6 +398,8 @@ function SidebarGroup({
   label: string;
   /** A group that stands for the absence of one (No project) reads quieter. */
   muted?: boolean;
+  /** A done project's group: its name drops to regular weight, quieter without losing contrast. */
+  done?: boolean;
   /** The trigger's tooltip, for a name that shortens something longer (a folder's path). */
   title?: string;
   "aria-label"?: string;
@@ -428,7 +431,8 @@ function SidebarGroup({
             <span
               data-motion="yield"
               className={cn(
-                "min-w-0 flex-1 truncate text-sm font-medium",
+                "min-w-0 flex-1 truncate text-sm",
+                done ? "font-normal" : "font-medium",
                 muted ? "text-ink-3" : "text-ink-2",
               )}
             >
@@ -469,6 +473,7 @@ function ProjectGroup({
     <SidebarGroup
       label={project?.name ?? "No project"}
       muted={!project || isProjectDone(project)}
+      done={!!project && isProjectDone(project)}
       sessions={sessions}
       open={open}
       onOpenChange={onOpenChange}
