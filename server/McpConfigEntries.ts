@@ -1,6 +1,6 @@
 /** One catalog entry in Pi's global `mcp.json`: finding it, adding or merging it, and removing it.
  * Pi owns the file format and its loader; this module wraps Pi's helpers with the rules both
- * machine-wide setups share (INV-01/12): match by endpoint or local command, refuse duplicates
+ * machine-wide setups share (INV-01/12): match a catalog entry by endpoint, refuse duplicates
  * and name clashes, report Pi's disable switches, bind removal to the configuration the user
  * reviewed, and read how Pi authenticates an entry. Callers keep their own policy for what a ready
  * entry must contain. */
@@ -23,28 +23,14 @@ import {
   removeMcpServerConfig,
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
-import { expandHome } from "./PiEnv.ts";
 
-/** What a setup offers: `id` is the entry's default name, `name` its label, `url` its endpoint. */
+/** What a setup offers: `id` is the entry's default name, `name` its label, `url` its endpoint.
+ * A configured entry is matched by its endpoint, so a renamed entry is still the same setup. */
 export interface McpCatalogEntry {
   readonly id: string;
   readonly name: string;
   readonly url: string;
 }
-
-/** A setup Pi starts as a local command, with the executable already resolved for this machine. */
-export interface McpCatalogCommandEntry {
-  readonly id: string;
-  readonly name: string;
-  readonly command: string;
-  readonly args: readonly string[];
-}
-
-/** Either kind of setup. A configured entry is matched by its endpoint, or by its command and
- * arguments, so a renamed entry is still recognised as the same setup. */
-export type McpCatalogTarget = McpCatalogEntry | McpCatalogCommandEntry;
-export const isCommandEntry = (target: McpCatalogTarget): target is McpCatalogCommandEntry =>
-  "command" in target;
 
 /** The entry as Pi would load it. `removalKey` identifies the reviewed configuration. */
 export type McpConfigObservation =
@@ -146,36 +132,29 @@ export interface McpConfigEntries {
     removalKey: string,
     before?: (entry: McpServerEntry) => void,
   ) => Effect.Effect<McpServerEntry, McpConfigEntryError>;
-  /** The global entry for `catalog`, matched by endpoint or command, else by its default name.
+  /** The global entry for `catalog`, matched by endpoint, else by its default name.
    * Throws when Pi's configuration is unreadable or the match is ambiguous. */
-  readonly find: (catalog: McpCatalogTarget) => McpServerEntry | undefined;
-  readonly observe: (catalog: McpCatalogTarget) => McpConfigObservation;
+  readonly find: (catalog: McpCatalogEntry) => McpServerEntry | undefined;
+  readonly observe: (catalog: McpCatalogEntry) => McpConfigObservation;
   /** Writes `configure(existing)` under the existing name, or the default name when missing.
    * `configure` returns undefined when the entry already satisfies the caller; nothing is written. */
   readonly save: (
-    catalog: McpCatalogTarget,
+    catalog: McpCatalogEntry,
     configure: (existing: McpServerEntry | undefined) => McpServerConfig | undefined,
   ) => Effect.Effect<void, McpConfigEntryError>;
   /** Removes the entry only when it still matches the reviewed `removalKey`, and checks it is gone.
    * `before` runs on the confirmed entry ahead of the write; when it throws, the entry stays. */
   readonly remove: (
-    catalog: McpCatalogTarget,
+    catalog: McpCatalogEntry,
     removalKey: string,
     before?: (entry: McpServerEntry) => void,
   ) => Effect.Effect<McpServerEntry, McpConfigEntryError>;
 }
 
 const normalize = (url: string) => url.replace(/\/+$/, "");
-const sameArgs = (configured: readonly string[] | undefined, catalog: readonly string[]) =>
-  (configured ?? []).length === catalog.length &&
-  (configured ?? []).every((arg, index) => expandHome(arg) === expandHome(catalog[index]!));
 /** The same setup as `catalog`, whatever the entry is named. */
-export const isTarget = (config: McpServerConfig, catalog: McpCatalogTarget) =>
-  isCommandEntry(catalog)
-    ? !("url" in config) &&
-      expandHome(config.command) === expandHome(catalog.command) &&
-      sameArgs(config.args, catalog.args)
-    : "url" in config && normalize(config.url) === normalize(catalog.url);
+export const isTarget = (config: McpServerConfig, catalog: McpCatalogEntry) =>
+  "url" in config && normalize(config.url) === normalize(catalog.url);
 export const removalKey = (entry: McpServerEntry) =>
   createHash("sha256")
     .update(JSON.stringify([entry.name, entry.config]))
@@ -195,12 +174,12 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
       throw new Error("Check Pi's global mcp.json for invalid entries before continuing.");
     return loaded.servers.filter((entry) => entry.scope === "global");
   };
-  const find = (catalog: McpCatalogTarget) => {
+  const find = (catalog: McpCatalogEntry) => {
     const entries = globalEntries();
     const matches = entries.filter((entry) => isTarget(entry.config, catalog));
     if (matches.length > 1)
       throw new Error(
-        `Several MCP entries use ${catalog.name}'s ${isCommandEntry(catalog) ? "command" : "endpoint"}. Keep one in Pi's mcp.json before continuing.`,
+        `Several MCP entries use ${catalog.name}'s endpoint. Keep one in Pi's mcp.json before continuing.`,
       );
     const entry = matches[0] ?? entries.find((entry) => entry.name === catalog.id);
     if (entry && !matches.length)
@@ -217,7 +196,7 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
       throw new Error("Check Pi's settings.json for invalid entries before continuing.");
     return disabled;
   };
-  const observe = (catalog: McpCatalogTarget): McpConfigObservation => {
+  const observe = (catalog: McpCatalogEntry): McpConfigObservation => {
     try {
       const entry = find(catalog);
       const identity = entry && { entry, removalKey: removalKey(entry) };
