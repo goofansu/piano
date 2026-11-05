@@ -159,14 +159,13 @@ function PaneHeader({ title, onBack }: { title: string; onBack: () => void }) {
 }
 
 /**
- * The phone session menu: a bottom sheet of the desktop "…" menu's actions, one level deep. The
- * header's second line says where the session runs, and the rail's other facts (Outputs,
- * Environment's copy menus, the session ID) are desktop work that is not here. Before the
- * actions, only what a phone acts on: the linked pull request, opened on GitHub, and Preview while
- * a preview is known. Add to project pushes the project picker. A row that goes elsewhere in the
+ * The session menu for one-area-at-a-time or a narrow viewport: a bottom sheet, one level deep.
+ * The header's second line says where the session runs. The sheet includes the linked pull
+ * request and known Preview, not the rail's Outputs or Environment copy menus, nor the dropdown
+ * menu's session ID. Add to project pushes the project picker. A row that goes elsewhere in the
  * session (Preview) calls `onLeave`, which closes the sheet and leaves focus to that destination.
  */
-export function MobileSessionSheet({
+export function SessionMenuSheet({
   onLeave,
   onDismissFocus,
 }: {

@@ -1,16 +1,15 @@
 /**
- * The page's sidebar: on desktop a collapsible, resizable column whose state is remembered; below
- * the breakpoint a sheet revealed over the page. One controller owns the committed state
- * (collapsed, remembered width, sheet open), the transient resize drag, and where focus returns
- * when the sheet closes. Show, hide and toggle mean the right thing at either breakpoint, so
+ * The page's sidebar: on wide viewports a collapsible, resizable column with remembered state;
+ * below the viewport breakpoint a modal reveal under the translated page. One controller owns
+ * the committed state (collapsed, remembered width, reveal open), the transient resize drag,
+ * and where focus returns when the reveal closes. Show, hide and toggle dispatch by viewport, so
  * pages, the palette and keyboard shortcuts call them without knowing which applies. Pointer and
  * touch handling stay in the DOM; nothing here depends on React or the browser.
  */
 import { readStorage, writeStorage } from "./storage.ts";
+import { WIDE_VIEWPORT_QUERY } from "./viewportLayout.ts";
 
 export const SIDEBAR_WIDTH = { min: 208, max: 480, default: 288, collapseBelow: 160 };
-/** Where the sheet gives way to the column; matches Tailwind's `md`. */
-export const DESKTOP_QUERY = "(min-width: 768px)";
 
 const COLLAPSED_KEY = "piano.sidebar";
 const WIDTH_KEY = "piano.sidebarWidth";
@@ -22,7 +21,7 @@ export interface SidebarLayoutState {
   width: number;
   /** A resize drag is in progress. */
   resizing: boolean;
-  /** The sheet is open below the breakpoint. */
+  /** The modal reveal is open below the viewport breakpoint; not a device/input classification. */
   mobileOpen: boolean;
 }
 
@@ -229,9 +228,9 @@ export function createSidebarLayout<T>(env: SidebarEnvironment<T>): SidebarLayou
 
 /** The real breakpoint, storage and focus. Globals are read only when called, so this module loads in Node. */
 export const browserSidebarEnvironment: SidebarEnvironment<HTMLElement> = {
-  desktop: () => matchMedia(DESKTOP_QUERY).matches,
+  desktop: () => matchMedia(WIDE_VIEWPORT_QUERY).matches,
   onBreakpoint: (listener) => {
-    const media = matchMedia(DESKTOP_QUERY);
+    const media = matchMedia(WIDE_VIEWPORT_QUERY);
     media.addEventListener("change", listener);
     return () => media.removeEventListener("change", listener);
   },

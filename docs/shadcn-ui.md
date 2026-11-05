@@ -36,7 +36,7 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 | Pointer-close focus; keyboard/hover tooltips | `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/pointerClose.ts` |
 | Search/option row heights, including touch and the palette dialog | `PianoCommand` |
 | Settings sidebar tooltip policy | `PianoSidebarMenuButton` |
-| Mobile sidebar reveal and partial scrim | `PianoSidebarReveal`; transient finger tracking in `useSidebarSwipe`, surface styles in `index.css` |
+| Narrow-viewport sidebar reveal and partial scrim | `PianoSidebarReveal`; transient finger tracking in `useSidebarSwipe`, surface styles in `index.css` |
 | Theme tokens and existing selected-sidebar styling | `index.css` |
 
 Wrappers merge only Piano's changes, not copies of upstream class lists. Custom button/badge/alert
@@ -53,6 +53,32 @@ narrow. The scroll rule deliberately overrides inline display; the motion reset 
 all upstream motion. The sidebar's existing selected-row CSS already owns its color;
 no duplicate class patch is needed.
 
+### Responsive ownership
+
+Use [one-area-at-a-time and side-by-side](glossary.md) for session layouts, not device names.
+Three independent signals retain distinct owners:
+
+- `panelLayout.ts` owns capacity: the actual areas-container width after sidebar/insets, observed
+  by `SessionView`, crosses at 849 CSS px (448 + 400 + 1). Zero means unmeasured/hidden and keeps
+  the previous mode. `navigation.ts` alone projects visible areas, rail and tabs; preferred Surface
+  width does not choose the mode.
+- `viewportLayout.ts` owns the application's 768px presentation breakpoint. `sidebarLayout.ts`
+  subscribes to `min-width: 768px` for column/reveal; `useNarrowViewport.ts` preserves the header's
+  former upstream-hook semantics: initial false, `innerWidth < 768`, and a `max-width: 767px`
+  subscription. These subscriptions deliberately are not normalized across fractional widths.
+  Header subscriptions are independent of sidebar state, which may not change on a crossing.
+  CSS `md`/48rem remains the styling owner; its correspondence to 768px assumes the default
+  16px media-query baseline, not arbitrary browser font settings.
+- Pointer capability owns touch sizing and input behavior, not either layout decision.
+
+The header uses a sheet/context line for one-area-at-a-time **or** a narrow viewport, retaining
+its startup/hidden fallback. Trigger placement follows viewport; the project breadcrumb follows
+CSS `md`; rail eligibility comes from navigation/commands. Wide one-area-at-a-time keeps both the
+breadcrumb and beside-title sheet trigger. See [Quiet UI](quiet-ui.md#shared-structure).
+
+Upstream `ui/sidebar.tsx` and `hooks/use-mobile.ts` remain unchanged. The stock provider and
+Settings tooltip still use that upstream hook. It is not the application session-capacity owner.
+
 ### Stock sidebar shortcut
 
 `ui/sidebar.tsx` carries the one intentional patch in `ui/`, marked `Piano patch` in its source:
@@ -63,14 +89,14 @@ caret back a character in text fields and elsewhere is the browser's or a field'
 the sidebar from the palette or its button. Reapply the patch on every sidebar upgrade until upstream
 carries it; drop the #11418 part once that merges. The listener sits alongside Piano's Mod+K command
 palette. Its controlled `open` prop connects the shortcut to Piano's desktop sidebar, including the
-saved collapsed preference. Piano's separate mobile reveal still uses its
+saved collapsed preference. Piano's separate narrow-viewport reveal still uses its
 layout controls; stock `openMobile` is not connected to that reveal. It composes the same Radix
 modal primitive as Sheet, but exposes stationary navigation under a translated live page rather
-than moving a sheet over it. The sidebar occupies 75% of the mobile viewport; only a claimed
+than moving a sheet over it. The sidebar occupies 75% of the narrow viewport; only a claimed
 horizontal drag anywhere on the main content overrides touch scrolling, with browser edges,
 editing controls and horizontal scrollers excluded. Drag motion tracks the finger 1:1; on release
 the sheet comes to rest open or closed at once. The moving surfaces have compositor
-hints (the live page only on mobile). During a drag, `useSidebarSwipe` batches surface-only style
+hints (the live page only below the viewport breakpoint). During a drag, `useSidebarSwipe` batches surface-only style
 writes into animation frames; React owns mounting and the settled endpoint.
 Do not update inherited motion variables per frame: that invalidates styles across the transcript
 and navigation. Cancellation discards pending frames and returns the surfaces to CSS settling.

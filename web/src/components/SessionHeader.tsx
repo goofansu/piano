@@ -9,7 +9,6 @@ import {
 } from "@/components/CommandHost";
 import { IconButton } from "@/components/IconButton";
 import { MiddleEllipsis } from "@/components/MiddleEllipsis";
-import { MobileSessionSheet } from "@/components/MobileSessionSheet";
 import { PaneHeader } from "@/components/Pane";
 import { PianoButton } from "@/components/PianoButton";
 import {
@@ -24,6 +23,7 @@ import {
 import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
 import { ArtifactsMenu } from "@/components/SessionArtifacts";
+import { SessionMenuSheet } from "@/components/SessionMenuSheet";
 import { type PullRequestControl, PullRequestLinkDialog } from "@/components/SessionPullRequest";
 import { surfaceTabNames } from "@/components/SurfaceArea";
 import {
@@ -34,13 +34,13 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext, sessionPlace } from "@/lib/sessionContext";
+import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
-/** The title (with its menu on desktop), shrinking to fit before the controls. */
+/** The title (with its menu on wide viewports), shrinking to fit before the controls. */
 const titleGroup = "flex min-w-0 items-center gap-0.5";
 
 export function SessionHeader({
@@ -53,11 +53,11 @@ export function SessionHeader({
   /** The link dialog stays mounted even when Changes is hidden (the palette can open it). */
   pullRequest: PullRequestControl;
 }) {
-  const mobile = useIsMobile();
-  // One area at a time there is no rail: the session menu is a sheet, and the title's second line
-  // says where the session runs.
+  const narrowViewport = useNarrowViewport();
+  // Menu kind/context follow area capacity, plus the narrow-viewport startup/hidden fallback.
+  // Placement follows viewport alone; the breadcrumb follows CSS md. Keep these separate.
   const { single } = useNavigation();
-  const sheet = mobile || single;
+  const sheet = narrowViewport || single;
   const [sheetOpen, setSheetOpen] = useState(false);
   // The sheet closes when the areas stop taking turns: it unmounts for the dropdown then, and
   // must not reappear by itself when they take turns again.
@@ -113,7 +113,7 @@ export function SessionHeader({
   const sessionMenu = sheet ? (
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger asChild>{menuButton}</SheetTrigger>
-      <MobileSessionSheet
+      <SessionMenuSheet
         key={sessionId}
         onLeave={() => setSheetOpen(false)}
         onDismissFocus={menuTrigger}
@@ -176,17 +176,17 @@ export function SessionHeader({
   return (
     <>
       {/* Outside the transcript scroller: stays visible without an overlay or scroll listener.
-       * One line: the project crumb and the title with its menu, then its controls at the end.
+       * Project crumb and title/menu, then controls at the end. The sheet adds context below.
        * Where the session runs is in the session rail and, when shown, the sidebar row; one area
        * at a time, with no rail, it is the title's second line. */}
       <PaneHeader>
         {cwd ? (
-          // Match header buttons by pointer capability: a landscape phone is wide but still touch.
+          // Match header buttons by pointer capability, independent of viewport and area capacity.
           <div className="flex h-8 min-w-0 flex-1 items-center pointer-coarse:h-11">
             {openProject && projectMenu?.current ? (
-              <Breadcrumb className={cn(titleGroup, mobile && "h-full")}>
+              <Breadcrumb className={cn(titleGroup, narrowViewport && "h-full")}>
                 <BreadcrumbList className="min-w-0 flex-nowrap gap-1.5 sm:gap-1.5">
-                  {/* The crumb is the way up; on phones the sheet's project page covers it. */}
+                  {/* Keep the crumb at md even one-area-at-a-time; below md use the sheet's project page. */}
                   <BreadcrumbItem className="hidden min-w-0 max-w-32 shrink-0 md:inline-flex">
                     <BreadcrumbLink asChild>
                       <button
@@ -204,14 +204,14 @@ export function SessionHeader({
                   </BreadcrumbSeparator>
                   <BreadcrumbItem className="min-w-0 gap-0.5">
                     {titleBlock}
-                    {!mobile && sessionMenu}
+                    {!narrowViewport && sessionMenu}
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
             ) : (
-              <div className={cn(titleGroup, mobile && "h-full")}>
+              <div className={cn(titleGroup, narrowViewport && "h-full")}>
                 {titleBlock}
-                {!mobile && sessionMenu}
+                {!narrowViewport && sessionMenu}
               </div>
             )}
           </div>
@@ -229,7 +229,7 @@ export function SessionHeader({
           <ArtifactsMenu state={state} />
           <ChangesToggle />
           <SessionRailToggle />
-          {mobile && sessionMenu}
+          {narrowViewport && sessionMenu}
         </div>
       </PaneHeader>
       <PullRequestLinkDialog pr={pullRequest} fallbackTrigger={menuTrigger} />
@@ -290,7 +290,7 @@ function ChangesToggle() {
   );
 }
 
-/** The selectable session ID at the top of the desktop session menu. */
+/** The selectable session ID at the top of the dropdown session menu. */
 export function SessionDetails({
   sessionId,
   className,
