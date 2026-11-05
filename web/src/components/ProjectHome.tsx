@@ -15,6 +15,7 @@ import {
 import { ProjectCommandsMenu } from "@/components/Projects";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { SettingsGroup, SettingsList, settingsRow } from "@/components/SettingsSectionFrame";
+import { StatusBadge } from "@/components/StatusBadge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -140,7 +141,11 @@ export function ProjectHome({
                 {project.name}
               </h1>
               {/* The home's one statement of the project's state; the index says it by grouping. */}
-              {isProjectDone(project) && <span className="shrink-0 text-xs text-ink-3">Done</span>}
+              {isProjectDone(project) && (
+                <StatusBadge variant="secondary" className="shrink-0">
+                  Done
+                </StatusBadge>
+              )}
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
