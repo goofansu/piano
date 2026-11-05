@@ -44,6 +44,7 @@ Earlier documents call a project an "outcome project".
 | Term | Meaning |
 | --- | --- |
 | Project membership | An explicit association between a session and a project, independent of the session's execution location. |
+| Done (project) | The user's reversible mark that a project's outcome is finished: the index lists it under Done and the sidebar groups it last. It changes nothing about its sessions, which keep their own state and their Pi; a session started in it reopens it. Not verification, approval or archive. |
 | Shared project context | Background and reference material supplied to member sessions to support the project's outcome; a later capability. |
 | Shared project instructions | Project-scoped guidance supplied to member sessions, distinct from background material and subject to explicit application rules; a later capability. |
 

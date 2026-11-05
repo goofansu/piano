@@ -629,6 +629,12 @@ export const Project = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), trimmedFit(PROJECT_NAME_MAX)),
   /** Added to Pi's system prompt for the project's sessions whenever Piano starts their Pi. */
   instructions: Schema.optional(ProjectInstructions),
+  /**
+   * When the user marked the project done; absent while it is open. Organization only: its
+   * sessions keep their state, their Pi and their place in the sidebar. A session started in it
+   * reopens it.
+   */
+  doneAt: Schema.optional(Schema.String),
 });
 export type Project = typeof Project.Type;
 /** A session's pull request as the registry saves it; GitHub owns the facts behind it. */
@@ -929,6 +935,11 @@ export const ClientMessage = Schema.Union([
     sessionId: Schema.String,
     projectId: Schema.NullOr(Schema.String),
   }),
+  /**
+   * Mark a known project done, or reopen it, answered with a toast. Its sessions are untouched;
+   * an unknown project is refused.
+   */
+  Schema.TaggedStruct("set_project_done", { id: Schema.String, done: Schema.Boolean }),
   Schema.TaggedStruct("remove_folder", { path: Schema.String }),
   /** Save Pi's project-trust decision for a directory; Pi applies it when a session starts there. */
   Schema.TaggedStruct("set_trust", { path: Schema.String, trusted: Schema.Boolean }),

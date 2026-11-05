@@ -215,6 +215,8 @@ test("sidebar view: project groups hold their members, then a No project group h
     { id: "launch", name: "Launch subscriptions" },
     { id: "a11y", name: "Improve accessibility" },
     { id: "empty", name: "Empty project" },
+    { id: "shipped", name: "Already shipped", doneAt: "2026-11-01T08:00:00Z" },
+    { id: "zz-done", name: "Zz done", doneAt: "2026-11-02T08:00:00Z" },
   ];
   const listed = [
     session("/zeta", "z1", "Zeta old", 1, "launch"),
@@ -223,13 +225,21 @@ test("sidebar view: project groups hold their members, then a No project group h
     { ...session("/closed", "gone", "Closed folder member", 9, "a11y"), folderPath: undefined },
     session("/beta-2", "c1", "Carol", 7),
     session("/beta-10", "b1", undefined, 8),
+    session("/zeta", "z3", "Shipped member", 5, "shipped"),
   ];
   for (const { value: sort } of SORT_BY) {
     const groups = projectGroups(projects, listed, sort);
     assert.deepEqual(
       groups.map((g) => g.project?.name ?? null),
-      ["Empty project", "Improve accessibility", "Launch subscriptions", null],
-      `project groups stay A–Z with ${sort} session sort; No project stays last`,
+      [
+        "Empty project",
+        "Improve accessibility",
+        "Launch subscriptions",
+        null,
+        "Already shipped",
+        "Zz done",
+      ],
+      `open projects stay A–Z with ${sort} session sort, then No project, then done projects A–Z`,
     );
     assert.deepEqual(
       groups.map((g) => titles(g.sessions)),
@@ -239,20 +249,24 @@ test("sidebar view: project groups hold their members, then a No project group h
           ["Beta titled", "Closed folder member"],
           ["Zeta new", "Zeta old"],
           ["Carol", undefined],
+          ["Shipped member"],
+          [],
         ],
         recent: [
           [],
           ["Closed folder member", "Beta titled"],
           ["Zeta new", "Zeta old"],
           [undefined, "Carol"],
+          ["Shipped member"],
+          [],
         ],
       }[sort],
-      `members, including closed-folder and unfiled sessions, follow ${sort} sort`,
+      `members, including closed-folder, unfiled and done-project sessions, follow ${sort} sort`,
     );
   }
   assert.deepEqual(
     projects.map((p) => p.id),
-    ["launch", "a11y", "empty"],
+    ["launch", "a11y", "empty", "shipped", "zz-done"],
     "input order is preserved",
   );
 });

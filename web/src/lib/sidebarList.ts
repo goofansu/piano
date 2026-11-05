@@ -278,6 +278,8 @@ export function createSidebarList({
   let revealed: string | null = null;
   /** Project ids already seen once the registry loaded; null before then. */
   let projects: ReadonlySet<string> | null = null;
+  /** Of those, the ones marked done at the last sync; null before the registry loaded. */
+  let doneProjects: ReadonlySet<string> | null = null;
   const listeners = new Set<() => void>();
   let cache: {
     facts: Pick<
@@ -393,6 +395,21 @@ export function createSidebarList({
           projects = new Set(ids);
           if (seen) setOpen(ids.filter((id) => !seen.has(id)).map(projectKey), true);
         }
+        // A project marked done folds its group once; reopened, it unfolds once. Either way the
+        // user's later choice stands, as for any folder or project.
+        const nowDone = new Set(
+          state.projects.filter((p) => p.doneAt !== undefined).map((p) => p.id),
+        );
+        const wasDone = doneProjects;
+        if (wasDone) {
+          const known = new Set(ids);
+          setOpen([...nowDone].filter((id) => !wasDone.has(id)).map(projectKey), false);
+          setOpen(
+            [...wasDone].filter((id) => known.has(id) && !nowDone.has(id)).map(projectKey),
+            true,
+          );
+        }
+        doneProjects = nowDone;
       }
     },
     toggle: (key, value) => setOpen([key], value),

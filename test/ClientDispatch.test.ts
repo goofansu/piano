@@ -751,6 +751,10 @@ const refusals: {
     { _tag: "assign_project", cwd, sessionId: "x", projectId: null },
     { _tag: "error", message: "REFUSED" },
   ],
+  set_project_done: [
+    { _tag: "set_project_done", id: "p", done: true },
+    { _tag: "error", message: "REFUSED" },
+  ],
   remove_folder: [
     { _tag: "remove_folder", path: cwd },
     { _tag: "error", message: "REFUSED" },
@@ -1059,6 +1063,16 @@ const confirmations: ReadonlyArray<{
     done: { _tag: "update_project", id: "next", name: "Later" },
     toast: "Project saved",
     fails: [{ _tag: "update_project", id: "missing", name: "X" }, /Project is unavailable/],
+  },
+  {
+    done: { _tag: "set_project_done", id: "next", done: true },
+    toast: "Project marked done",
+    fails: [{ _tag: "set_project_done", id: "missing", done: true }, /Project is unavailable/],
+  },
+  {
+    done: { _tag: "set_project_done", id: "next", done: false },
+    toast: "Project reopened",
+    fails: [{ _tag: "set_project_done", id: "missing", done: false }, /Project is unavailable/],
   },
   {
     done: { _tag: "assign_project", cwd, sessionId: "kept", projectId: "launch" },

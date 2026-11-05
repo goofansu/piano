@@ -26,7 +26,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
-import { projectCommands } from "@/lib/projectCommands";
+import { isProjectDone, projectCommands } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
 import { type SessionTarget, sessionRowMenu } from "@/lib/sessionCommands";
 import { useNavigation } from "@/lib/useNavigation";
@@ -135,10 +135,12 @@ export function ProjectHome({
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator className="text-ink-3/60">/</BreadcrumbSeparator>
-            <BreadcrumbItem className="min-w-0">
+            <BreadcrumbItem className="min-w-0 gap-2">
               <h1 aria-current="page" className="min-w-0 truncate text-sm font-medium text-ink">
                 {project.name}
               </h1>
+              {/* The home's one statement of the project's state; the index says it by grouping. */}
+              {isProjectDone(project) && <span className="shrink-0 text-xs text-ink-3">Done</span>}
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>

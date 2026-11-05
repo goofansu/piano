@@ -299,6 +299,12 @@ export class Registry extends Context.Service<
       id: string,
       change: { readonly name?: string; readonly instructions?: string | null },
     ) => Effect.Effect<void, RegistryError>;
+    /**
+     * Mark a known project done (`doneAt` now) or reopen it (no `doneAt`), touching nothing
+     * else: its sessions keep their state and their Pi. Already so is a no-op; an unknown project
+     * is refused.
+     */
+    readonly setProjectDone: (id: string, done: boolean) => Effect.Effect<void, RegistryError>;
     /** Remove a project in one write; its sessions stay registered and move to No project. */
     readonly deleteProject: (id: string) => Effect.Effect<void, RegistryError>;
     readonly assignProject: (
@@ -561,6 +567,16 @@ export const RegistryLive = Layer.effect(
             }),
           };
         }),
+      setProjectDone: (id, done) =>
+        update((d) => {
+          const project = d.projects.find((p) => p.id === id);
+          if (!project)
+            throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
+          if (done === (project.doneAt !== undefined)) return d;
+          const { doneAt: _, ...open } = project;
+          const next = done ? { ...open, doneAt: now() } : open;
+          return { ...d, projects: d.projects.map((p) => (p.id === id ? next : p)) };
+        }),
       deleteProject: (id) =>
         update((d) => {
           if (!d.projects.some((p) => p.id === id))
@@ -631,8 +647,15 @@ export const RegistryLive = Layer.effect(
               detail: "Project is unavailable. Choose a current project before starting.",
             });
           const t = now();
+          // A session started in a done project reopens it: new work means the outcome is not done.
+          const projects = d.projects.map((p) => {
+            if (p.id !== projectId || p.doneAt === undefined) return p;
+            const { doneAt: _, ...open } = p;
+            return open;
+          });
           return {
             ...d,
+            projects,
             sessions: [
               ...d.sessions,
               {

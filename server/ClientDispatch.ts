@@ -284,6 +284,12 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       unanswered: plainError,
       confirmed: "Project saved",
     },
+    set_project_done: {
+      admission: "ordinary",
+      run: ({ id, done }) => registry.setProjectDone(id, done),
+      unanswered: plainError,
+      confirmed: ({ done }) => Effect.succeed(done ? "Project marked done" : "Project reopened"),
+    },
     // Add to project and Move to project both send this, so the toast names where it went.
     assign_project: {
       admission: "ordinary",
