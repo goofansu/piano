@@ -78,8 +78,9 @@ const configView = (config: McpServerConfig): McpServerConfigView =>
         ...(config.cwd !== undefined ? { cwd: config.cwd } : {}),
       };
 
-/** The dialog's fields merged into the entry: Pi's other keys stay; a change of transport drops
- * the other transport's keys; an `authorization` left out keeps the saved header. */
+/** The dialog's fields merged into the entry, or into an empty one when adding: Pi's other keys
+ * stay; a change of transport drops the other transport's keys; the `Authorization` header comes
+ * from `authorization` alone, and left out keeps the saved one. */
 const merged = (existing: McpServerConfig, edit: McpServerEdit): McpServerConfig => {
   const { type: _type, ...kept } = existing as McpServerConfig & { type?: string };
   if ("url" in edit) {
@@ -113,7 +114,7 @@ const merged = (existing: McpServerConfig, edit: McpServerEdit): McpServerConfig
     command: edit.command,
     ...(edit.args.length ? { args: [...edit.args] } : {}),
     ...(Object.keys(edit.env).length ? { env: { ...edit.env } } : {}),
-    ...(edit.cwd ? { cwd: edit.cwd } : {}),
+    ...(edit.cwd?.trim() ? { cwd: edit.cwd.trim() } : {}),
   } as McpServerConfig;
 };
 
@@ -476,7 +477,9 @@ export const McpSetupLive = Layer.effect(
           case "add": {
             const fallback =
               "Could not add this MCP server. Check Pi's global configuration and file permissions, then refresh.";
-            return prepared(() => entries.prepare(request), fallback).pipe(
+            const config =
+              "form" in request ? merged({} as McpServerConfig, request.form) : request.config;
+            return prepared(() => entries.prepare({ name: request.name, config }), fallback).pipe(
               Effect.flatMap((entry) =>
                 saveConnected(
                   entry,

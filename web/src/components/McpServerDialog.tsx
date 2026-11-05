@@ -240,53 +240,36 @@ export function McpServerDialog({
       return;
     }
     const trimmed = name.trim();
+    // Adding and editing send the same fields; the server merges them into the entry.
+    const form: McpServerEdit =
+      kind === "url"
+        ? {
+            url,
+            headers: record(headers),
+            ...(auth === "header"
+              ? clearAuthorization
+                ? { authorization: null }
+                : authorization
+                  ? { authorization }
+                  : {}
+              : { authorization: null }),
+          }
+        : { command, args: argList, env: record(env), ...(cwd.trim() ? { cwd: cwd.trim() } : {}) };
     if (entry) {
-      const edit: McpServerEdit =
-        kind === "url"
-          ? {
-              url,
-              headers: record(headers),
-              ...(auth === "header"
-                ? clearAuthorization
-                  ? { authorization: null }
-                  : authorization
-                    ? { authorization }
-                    : {}
-                : { authorization: null }),
-            }
-          : {
-              command,
-              args: argList,
-              env: record(env),
-              ...(cwd.trim() ? { cwd: cwd.trim() } : {}),
-            };
       void run(
         {
           action: "update",
           name: entry.name,
           removalKey: entry.removalKey,
           ...(trimmed !== entry.name ? { rename: trimmed } : {}),
-          config: edit,
+          config: form,
         },
         trimmed,
         `MCP ${trimmed} saved.`,
       );
       return;
     }
-    const headerRecord = {
-      ...(auth === "header" && authorization ? { Authorization: authorization } : {}),
-      ...record(headers),
-    };
-    const added =
-      kind === "url"
-        ? { url, ...(Object.keys(headerRecord).length ? { headers: headerRecord } : {}) }
-        : {
-            command,
-            ...(argList.length ? { args: argList } : {}),
-            ...(Object.keys(record(env)).length ? { env: record(env) } : {}),
-            ...(cwd.trim() ? { cwd: cwd.trim() } : {}),
-          };
-    void run({ action: "add", name: trimmed, config: added }, trimmed, `MCP ${trimmed} added.`);
+    void run({ action: "add", name: trimmed, form }, trimmed, `MCP ${trimmed} added.`);
   };
 
   return (
