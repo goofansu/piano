@@ -4,7 +4,11 @@
  * (`extensions/radius-artifacts`) whose result its shared contract (`shared/radiusArtifacts.ts`)
  * reads as confirmed, so a failed or unconfirmed publication is never listed.
  */
-import { isPublishingTool, publishedArtifact } from "../../../shared/radiusArtifacts.ts";
+import {
+  type ArtifactPublication,
+  isPublishingTool,
+  publishedArtifact,
+} from "../../../shared/radiusArtifacts.ts";
 import type { RenderMsg } from "../../../shared/wire.ts";
 
 export interface SessionArtifact {
@@ -32,13 +36,20 @@ const text = (value: unknown) => (typeof value === "string" && value ? value : u
  * Every artifact the conversation published, each once, newest publication first: an update moves
  * its artifact to the top and gives it that publication's title and URL.
  */
-export function sessionArtifacts(messages: ReadonlyArray<RenderMsg>): SessionArtifact[] {
-  // The header and the command list both ask on every render; the store replaces the array on change.
-  const cached = derived.get(messages);
-  if (cached) return cached;
-  const found = derive(messages);
-  derived.set(messages, found);
-  return found;
+export function sessionArtifacts(
+  messages: ReadonlyArray<RenderMsg>,
+  publications: readonly ArtifactPublication[] = [],
+): SessionArtifact[] {
+  // Legacy direct results remain discoverable; codemode output is never scraped. Receipts
+  // survive compaction and carry the title even when Pi omitted large nested arguments.
+  const legacy = derived.get(messages) ?? derive(messages);
+  derived.set(messages, legacy);
+  if (!publications.length) return legacy;
+  const ids = new Set(publications.map((p) => p.artifactId));
+  return [
+    ...publications.map((p) => ({ id: p.artifactId, title: p.title, url: p.url })),
+    ...legacy.filter((p) => !ids.has(p.id)),
+  ];
 }
 
 const derived = new WeakMap<ReadonlyArray<RenderMsg>, SessionArtifact[]>();

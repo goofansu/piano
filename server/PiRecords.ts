@@ -19,6 +19,7 @@ import {
 } from "../shared/askUser.ts";
 import { imageType } from "../shared/attachments.ts";
 import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../shared/dispatch.ts";
+import { artifactPublication, withArtifactPublication } from "../shared/radiusArtifacts.ts";
 import { turnEnding } from "../shared/turnEnding.ts";
 import type {
   Dialog,
@@ -74,7 +75,13 @@ export interface RawMessage {
   output?: string;
   nestedCalls?: {
     complete: boolean;
-    calls: { id: string; name: string; arguments?: unknown; status: string }[];
+    calls: {
+      id: string;
+      name: string;
+      arguments?: unknown;
+      argumentsBytes?: number;
+      status: string;
+    }[];
   };
   details?: unknown;
 }
@@ -220,6 +227,25 @@ export function serializeMessage(
         outputKind: "unavailable",
       })),
       nestedCallsComplete: msg.nestedCalls?.complete,
+      // Pi 1.5's recorder caps calls at 256. At that limit, omitted arguments cannot
+      // establish that no calls were also dropped. Unknown/unfinished statuses stay generic.
+      nestedCallsIncompleteReason:
+        msg.nestedCalls?.complete === false &&
+        msg.nestedCalls.calls.length < 256 &&
+        msg.nestedCalls.calls.some(
+          (c) =>
+            c.arguments === undefined &&
+            typeof c.argumentsBytes === "number" &&
+            c.argumentsBytes > 0,
+        ) &&
+        msg.nestedCalls.calls.every(
+          (c) =>
+            (c.status === "ok" || c.status === "error") &&
+            (c.arguments !== undefined ||
+              (typeof c.argumentsBytes === "number" && c.argumentsBytes > 0)),
+        )
+          ? "arguments"
+          : undefined,
     };
   else if (msg.role === "compactionSummary" || msg.role === "branchSummary")
     result = {
@@ -376,6 +402,7 @@ export interface PiSessionFacts {
   readonly messages: ReadonlyArray<RawMessage>;
   /** The session that dispatched this one, from every entry on any branch ({@link dispatchedFromOf}). */
   readonly dispatchedFrom: string | undefined;
+  readonly artifacts?: SessionState["artifacts"];
 }
 
 /** The one projection of a Pi session into a Snapshot, with the session that dispatched it. A live session adds its run's own state (compacting only if Pi says so, nothing
@@ -384,6 +411,7 @@ export const snapshotOf = (facts: PiSessionFacts): Snapshot => {
   const state = {
     ...stateFactsOf(facts.state),
     dispatchedFrom: facts.dispatchedFrom,
+    artifacts: facts.artifacts ?? [],
   };
   return {
     state:
@@ -767,6 +795,7 @@ export class PiProjector {
   >();
   /** Pi's message count as last read back plus the messages ended since: the next one's position. */
   private messages = 0;
+  private artifacts: NonNullable<SessionState["artifacts"]> = [];
   private turnRetry = false;
   private summaryRetry = false;
   private extension: NonNullable<SessionState["extension"]> = { statuses: [], widgets: [] };
@@ -790,6 +819,7 @@ export class PiProjector {
    * for subsequent live records. */
   snapshot(facts: PiSessionFacts): Snapshot {
     this.messages = facts.messages.length;
+    this.artifacts = facts.artifacts ?? [];
     return snapshotOf(facts);
   }
 
@@ -802,6 +832,12 @@ export class PiProjector {
 
   record(raw: PiRecord, receivedAt: number): RecordProjection {
     switch (raw.type) {
+      case "entry_appended": {
+        const receipt = artifactPublication(raw.entry);
+        if (!receipt) return project();
+        this.artifacts = withArtifactPublication(this.artifacts, receipt);
+        return project([], { artifacts: this.artifacts });
+      }
       case "agent_start":
         this.liveRun = true;
         this.responseSucceeded = false;

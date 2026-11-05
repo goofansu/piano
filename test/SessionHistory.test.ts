@@ -68,6 +68,99 @@ const runtime = ManagedRuntime.make(PiSessionsLive.pipe(Layer.provide(NodeServic
 after(() => runtime.dispose());
 const history = await runtime.runPromise(Effect.map(PiSessions, (sessions) => sessions.history));
 
+test("saved artifacts follow the active branch, survive compaction, and never promote intents", async () => {
+  const file = seed(cwd, "artifact-receipts", "artifact receipts");
+  const receipt = {
+    artifactId: "artifact-1",
+    title: "Report",
+    url: "https://radius.pi.dev/artifacts/artifact-1",
+    revision: 1,
+    operationKey: "report",
+  };
+  const entries = [
+    {
+      type: "custom",
+      id: "abandoned",
+      parentId: "saved",
+      customType: "radius-artifact-publication-v1",
+      data: { ...receipt, artifactId: "other" },
+    },
+    {
+      type: "custom",
+      id: "receipt",
+      parentId: "saved",
+      customType: "radius-artifact-publication-v1",
+      data: receipt,
+    },
+    {
+      type: "custom",
+      id: "intent",
+      parentId: "receipt",
+      customType: "radius-artifact-intent-v1",
+      data: { ...receipt, artifactId: "unconfirmed" },
+    },
+    {
+      type: "compaction",
+      id: "compact",
+      parentId: "intent",
+      firstKeptEntryId: "compact",
+      summary: "Compacted",
+      tokensBefore: 100,
+    },
+  ];
+  appendFileSync(
+    file,
+    entries.map((e) => JSON.stringify({ ...e, timestamp: "2026-10-05T00:00:02Z" })).join("\n") +
+      "\n",
+  );
+  const before = readFileSync(file, "utf8");
+  const snapshot = await run(history.peek("artifact-receipts", file));
+  assert.deepEqual(snapshot.state.artifacts, [receipt]);
+  assert.equal(readFileSync(file, "utf8"), before, "reading never rewrites history");
+});
+
+test("saved nested-call omissions distinguish arguments from missing calls or unfinished work", async () => {
+  const call = {
+    id: "code/1",
+    name: "radius_artifact_create",
+    status: "ok",
+    argumentsBytes: 121360,
+  };
+  for (const [name, calls, reason] of [
+    ["arguments", [call], "arguments"],
+    ["unfinished", [{ ...call, status: "unfinished" }], undefined],
+    ["missing-details", [{ ...call, argumentsBytes: undefined }], undefined],
+    [
+      "call-limit",
+      Array.from({ length: 256 }, (_, i) => ({ ...call, id: `code/${i}` })),
+      undefined,
+    ],
+  ] as const) {
+    const file = seed(cwd, name, name);
+    appendFileSync(
+      file,
+      JSON.stringify({
+        type: "message",
+        id: "result",
+        parentId: "saved",
+        timestamp: "2026-10-05T00:00:02Z",
+        message: {
+          role: "toolResult",
+          toolName: "codemode",
+          toolCallId: "code",
+          content: [],
+          isError: false,
+          timestamp: 2,
+          nestedCalls: { complete: false, calls },
+        },
+      }) + "\n",
+    );
+    const snapshot = await run(history.peek(name, file));
+    assert.equal(snapshot.messages.at(-1)?.nestedCallsIncompleteReason, reason, name);
+    assert.equal(snapshot.messages.at(-1)?.nestedCallsComplete, false);
+  }
+});
+
 test("large saved history with tiny active context leaves the server thread responsive", async (t) => {
   const file = join(sessions, "large-projection.jsonl");
   largeHistory(file, "large-projection", cwd);

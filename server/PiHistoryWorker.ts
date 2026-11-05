@@ -1,22 +1,28 @@
 /** Read-only saved-history projection. Full files/SDK entries never cross back to the server:
- * a reply is a Snapshot, an exported branch, or the dispatching session ID. */
+ * a reply is a Snapshot, an exported branch, or small session metadata. */
 import { readFileSync } from "node:fs";
 import { parentPort } from "node:worker_threads";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
-import type { Snapshot } from "../shared/wire.ts";
+import { artifactPublications } from "../shared/radiusArtifacts.ts";
+import type { Snapshot, SessionState } from "../shared/wire.ts";
 import { compileRedaction, projectSnapshot } from "./DisplayProjection.ts";
 import { getImagePreview, type ImagePreview } from "./ImagePreviews.ts";
 import { savedSession } from "./PiHistoryFile.ts";
 import { dispatchedFromOf, type PiSessionFacts, type RawMessage, snapshotOf } from "./PiRecords.ts";
 
+export type HistoryMetadata = {
+  readonly dispatchedFrom: string | undefined;
+  readonly artifacts: NonNullable<SessionState["artifacts"]>;
+};
+
 export type HistoryRequest = {
-  readonly operation: "peek" | "export" | "dispatchedFrom";
+  readonly operation: "peek" | "export" | "metadata";
   readonly path: string;
   readonly sessionId: string;
 };
 export type HistoryReply =
   | {
-      readonly value: Snapshot | string | undefined;
+      readonly value: Snapshot | HistoryMetadata | string | undefined;
       readonly images?: ReadonlyArray<ImagePreview>;
     }
   | { readonly error: true };
@@ -44,6 +50,7 @@ const savedFacts = (sm: SessionManager, path: string, sessionId: string): PiSess
     },
     messages: context.messages as RawMessage[],
     dispatchedFrom: dispatchedFromOf(sm.getEntries()),
+    artifacts: artifactPublications(sm.getBranch()),
   };
 };
 
@@ -62,8 +69,13 @@ parentPort!.on("message", ({ operation, path, sessionId }: HistoryRequest) => {
         return image ? [{ id, ...image }] : [];
       });
       reply = { value, images };
-    } else if (operation === "dispatchedFrom") {
-      reply = { value: dispatchedFromOf(manager.getEntries()) };
+    } else if (operation === "metadata") {
+      reply = {
+        value: {
+          dispatchedFrom: dispatchedFromOf(manager.getEntries()),
+          artifacts: artifactPublications(manager.getBranch()),
+        },
+      };
     } else {
       const header = manager.getHeader();
       const branch = manager.getBranch();

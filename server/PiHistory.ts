@@ -21,6 +21,7 @@ import type { Snapshot } from "../shared/wire.ts";
 import { agentDir, directoryPath, sessionDirFor } from "./PiEnv.ts";
 import { fileVersion } from "./PiHistoryFile.ts";
 import { PiHistoryJobs } from "./PiHistoryJobs.ts";
+import type { HistoryMetadata } from "./PiHistoryWorker.ts";
 import { PiSessionError } from "./PiTransport.ts";
 
 /** Where a session's Pi history is, across the spellings of its checkout. */
@@ -42,14 +43,14 @@ export interface PiHistory {
   /** The active branch of a session file as a Snapshot, with Run usage from every entry, or an empty
    * one without a file. Safe while Pi writes it. */
   readonly peek: (sessionId: string, file: string | undefined) => Effect.Effect<Snapshot>;
-  /** The session that dispatched this one, from every entry of its file on any branch. Pi's
+  /** The dispatcher (any branch) and confirmed artifacts (active branch, before compaction too). Pi's
    * `get_entries` answers in one RPC line, which a long compacted history can push past the line
    * limit; the file has none. Read off the server thread; fails when the file is unreadable or
    * the history worker is unavailable or overloaded. */
-  readonly dispatchedFrom: (
+  readonly metadata: (
     sessionId: string,
     file: string,
-  ) => Effect.Effect<string | undefined, PiSessionError>;
+  ) => Effect.Effect<HistoryMetadata, PiSessionError>;
   /** Read-only, redacted JSONL of Pi's saved active branch; no agent or extra runtime metadata. */
   readonly exportBranch: (
     sessionId: string,
@@ -140,15 +141,12 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
     if ("value" in reply) return reply.value as string;
     return yield* rejected("This session has no readable saved conversation to share.");
   });
-  const dispatchedFrom = Effect.fn("PiHistory.dispatchedFrom")(function* (
-    sessionId: string,
-    file: string,
-  ) {
+  const metadata = Effect.fn("PiHistory.metadata")(function* (sessionId: string, file: string) {
     const reply = yield* Effect.promise(() =>
-      jobs.read({ operation: "dispatchedFrom", path: file, sessionId }),
+      jobs.read({ operation: "metadata", path: file, sessionId }),
     );
-    if ("value" in reply) return reply.value as string | undefined;
-    return yield* rejected(`Cannot read the dispatching session from Pi history ${file}.`);
+    if ("value" in reply) return reply.value as HistoryMetadata;
+    return yield* rejected(`Cannot read session metadata from Pi history ${file}.`);
   });
 
   const headers = new Map<string, { version: string; info: Pick<SessionHeader, "id" | "cwd"> }>();
@@ -238,7 +236,7 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
     Effect.map(listed(directoryPath(cwd)), (infos) => new Set(infos.map((info) => info.id)));
 
   return {
-    dispatchedFrom,
+    metadata,
     exportBranch,
     locate,
     sessionIds,

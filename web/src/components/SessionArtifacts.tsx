@@ -19,7 +19,7 @@ import type { AppState } from "@/store";
  * its artifact in a new tab. The palette's Artifacts command opens the same menu.
  */
 export function ArtifactsMenu({ state }: { state: AppState }) {
-  const artifacts = sessionArtifacts(state.session?.messages ?? []);
+  const artifacts = sessionArtifacts(state.session?.messages ?? [], state.session?.state.artifacts);
   const [open, setOpen] = useState(false);
   useEffect(() => artifactsMenu.subscribe(() => setOpen(true)), []);
   if (!artifacts.length) return null;

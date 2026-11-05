@@ -348,23 +348,33 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
     const sessionScope = yield* Effect.scope;
     const recoveryMs = yield* PiDialogRecoveryMs;
 
-    // The dispatching session, from every entry so far. Pi's get_entries answers in one RPC line,
+    // Saved metadata: dispatcher from every entry, artifacts from the active branch.
+    // Pi's get_entries answers in one RPC line,
     // which a long compacted history pushes past the line limit, closing the child. Once Pi has
     // saved the session, `history` reads its file off the server thread; before that, Pi holds no
     // conversation and its reply is small.
-    const readDispatchedFrom = (file: string | undefined) =>
+    const readMetadata = (file: string | undefined) =>
       file && existsSync(file)
-        ? history.dispatchedFrom(spec.sessionId, file)
-        : child.read(piReadbacks.entries()).pipe(Effect.map(dispatchedFromOf));
+        ? history.metadata(spec.sessionId, file)
+        : child.read(piReadbacks.entries()).pipe(
+            Effect.map((entries) => ({
+              dispatchedFrom: dispatchedFromOf(entries),
+              // Before the first persisted turn there are no saved publications. Live
+              // append events buffered during readiness are drained below.
+              artifacts: [],
+            })),
+          );
 
-    // Ready check, then the dispatching session from the file Pi opened, racing the child exiting
-    // early. The transcript is not read here: the context refresh below reads it once, after
-    // records are drained. The dispatcher is best effort: a failed read opens without it.
-    const [state, dispatchedFrom] = yield* child.read(piReadbacks.state).pipe(
+    // Ready check, then metadata from the file Pi opened, racing the child exiting early.
+    // The transcript is not projected here: the context refresh below reads it once, after
+    // records are drained. Metadata is best effort: a failed read opens without it.
+    const [state, metadata] = yield* child.read(piReadbacks.state).pipe(
       Effect.flatMap((state) =>
-        readDispatchedFrom(state.sessionFile).pipe(
-          Effect.catchTag("PiSessionError", () => Effect.succeed(undefined)),
-          Effect.map((dispatchedFrom) => [state, dispatchedFrom] as const),
+        readMetadata(state.sessionFile).pipe(
+          Effect.catchTag("PiSessionError", () =>
+            Effect.succeed({ dispatchedFrom: undefined, artifacts: [] }),
+          ),
+          Effect.map((metadata) => [state, metadata] as const),
         ),
       ),
       // Readiness failure wins too: race waits for a first success and would
@@ -382,7 +392,12 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
     // contain a finalized message whose message_end is still awaiting an extension. Project
     // records onto an empty provisional transcript; the context refresh reconciles it before
     // exposing it.
-    const opened = projector.snapshot({ source: "live", state, messages: [], dispatchedFrom });
+    const opened = projector.snapshot({
+      source: "live",
+      state,
+      messages: [],
+      ...metadata,
+    });
     if (opened.state.sessionId !== spec.sessionId)
       return yield* new PiSessionError({
         reason: "protocol",
