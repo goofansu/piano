@@ -1,8 +1,8 @@
 # Start a session
 
-The New page (`/new`, or `/projects/<id>/new` inside a project) asks "What should we work on?":
-the user chooses a folder, optionally a model, effort and project, types the first message and
-sends it. Piano starts Pi in that folder, opens `/s/<sessionId>` and shows Pi's reply. A reload keeps
+The New page asks "What should we work on?" at `/new`, or shows the project name at
+`/projects/<id>/new`. The user chooses a folder, optionally a model, effort and project, types
+the first message and sends it. Piano starts Pi in that folder, opens `/s/<sessionId>` and shows Pi's reply. A reload keeps
 the session without sending the message again; a message that cannot be sent keeps the draft.
 
 ## Sub-features
@@ -32,7 +32,7 @@ the session without sending the message again; a message that cannot be sent kee
 
 ## Driving it with agent-browser
 
-Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
+Preconditions: a fresh seeded launch with the default browser fake, `. "$RUN/run.env"`, doctor passed;
 `ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Run the harness journey first; it covers model, effort,
 project and reload on its own scratch instance, with its own folders and models (not the seed's).
 

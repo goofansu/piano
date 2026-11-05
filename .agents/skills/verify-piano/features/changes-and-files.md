@@ -2,9 +2,10 @@
 
 From a session the user sees what changed in its workspace: Changes, in the Surface area beside
 the Agent area (or under its own tab where the areas take turns), shows the Git diff of
-the session's folder or worktree against HEAD (per-file additions and removals, new files, a diff
-per file), and the desktop session rail (turned on or off for every session from the header, and
-sharing the right side with the Surface area: whichever came in last shows), shows where the
+the session's folder or worktree using its selected comparison (Uncommitted against HEAD, or
+branch changes against the target's merge base), and the desktop session rail (turned on or off
+for every session from the header, sharing the right side with the Surface area: whichever came
+in last shows), shows where the
 session runs as the Environment section (Folder, or Repository once GitHub is known, then Branch,
 or the commit when HEAD is detached), Outputs, the files Pi wrote or edited in this session, each
 opening a file viewer. Plain conversation URLs do not create rail entries. Published Radius
@@ -15,11 +16,14 @@ the palette (Mod+K) does not search individual outputs.
 
 - `changes-open`: on desktop the header's "Changes" toggle opens the Surface area and is
   pressed while Changes shows, then named "Hide changes", which closes that tab; the palette's
-  "Changes" focuses it without rereading, collapsing or hiding it. Below 849px of session width
-  the header button stays named "Changes", without a pressed state, and opens/focuses the area.
-  The tab bar shows only while something is open (`Agent | Changes`, `Agent | README.md`);
-  "Hide changes" in the view's toolbar closes it. Side by side, the header's end holds "Show session rail" / "Hide session rail" and
-  this toggle. One area at a time, the rail control is absent; the session menu opens a sheet
+  "Changes" focuses the already-visible view without rereading, collapsing or hiding it. Showing
+  a hidden or closed view refreshes it. Below 849px of session width the header button stays named
+  "Changes", without a pressed state, and opens/focuses the area. Side by side, tablist "Surface
+  views" contains Changes and open files, with "Hide changes" beside the Changes tab; the header
+  ends with "Show session rail" / "Hide session rail" and the Changes toggle. One area at a time,
+  tablist "Session views" includes Agent (`Agent | Changes`, `Agent | README.md`), and
+  "Hide changes" is in the view's toolbar. The tab bar appears only while a Surface tab is open.
+  One area at a time, the rail control is absent; the session menu opens a sheet
   ([`open-session.md`](./open-session.md) `phone-menu`).
 - `changes-scope`: the toolbar starts with the comparison menu, "Comparison: Uncommitted" by
   default (visible text `Uncommitted`), or "Comparison: <target>" (`main`, `origin/main`):
@@ -30,7 +34,7 @@ the palette (Mod+K) does not search individual outputs.
   / Expand all, Wrap (pressed while on) and Refresh changes; a failed refresh keeps the previous
   list with "Refresh failed. Showing previous changes." and the reason.
 - `pull-request-link`: with no PR linked, the toolbar starts its actions with a ghost icon button,
-  "Pull request", before Expand / Collapse all. It opens the existing link dialog (URL field, Link,
+  "Pull request", before Expand / Collapse all. It opens the existing link dialog ("PR URL" field, Link,
   Find from branch). Once linked, the button gives way to the PR row below. Removing the link
   brings the button back. Keyboard dismissal returns focus to the visible PR control.
 - `pull-request-row`: region "Pull request" under the toolbar, only while the session has a
@@ -43,15 +47,17 @@ the palette (Mod+K) does not search individual outputs.
   Ordinary status reads do not promise an error toast; explicit link/discovery failures do. Its "Pull request
   actions" menu: Open pull request, Change link…, Find from branch, Remove link
   (toasts "Pull request linked" / "Pull request link removed"). PR linking is absent from both
-  session menus. The palette's "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": URL
+  session menus. The palette's "Pull request" opens Changes for a linked session, else the link dialog ("Pull request": "PR URL"
   field, Link, Find from branch; "No open PR found for this branch." when none); like Changes, it
   is disabled with Changes' reason where Changes cannot open.
 - `local-work-row`: without a linked pull request, the same place under the toolbar holds region
   "Local work" with only "<n> commits not pushed" and "Edits not committed", each while nonzero,
-  and no row at all when both are; so after a commit the Uncommitted view says "No changes" above
-  nothing while the row still says "1 commit not pushed". Both rows keep these facts under a
-  comparison that cannot be read (a saved "main" once the checkout is on main). Commits are counted against the
-  branch's remote-tracking ref, so a repo without one never shows that fact.
+  and no row when there are neither. After a commit, Uncommitted can say "No changes" below
+  a row still saying "1 commit not pushed". Both rows keep these facts under a comparison that
+  cannot be read (a saved "main" once the checkout is on main). Commits are counted against the
+  locally held remote-tracking ref that a push would update, not necessarily the configured
+  upstream; without that ref there is no commit count. The seed has no remote, so this case
+  needs a scratch remote and an initial push.
 - `changes-list`: list "Changed files" with one collapsible row per file
   (`<path>[, new | , deleted], <n> added, <n> removed: collapse`), the path on one line (its
   directory truncated first), the file name green when new (untracked) and red, struck through,
@@ -150,8 +156,9 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
 
 - Fake Pi makes no tool calls, so Outputs is only reachable through the seeded, hand-written
   history; report it as such. A real Pi write is not exercised.
-- The Files list hides paths ignored by the workspace's `.gitignore` (the throwaway repo ignores
-  `ignored/`).
+- After a successful workspace observation, Outputs filters ignored, removed and outside-workspace
+  paths (the throwaway repo ignores `ignored/`). Without a successful observation, the written
+  paths remain visible.
 - The Surface area is `[data-slot=surface-area]`; hidden, it stays mounted but `inert` (so its
   scroll survives), so select the shown one with `:not([inert])`.
 - "Changes" is the header's icon, the narrow tabs and the palette; neither the session header's menu nor

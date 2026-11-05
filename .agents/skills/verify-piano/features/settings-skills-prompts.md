@@ -100,8 +100,9 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab find role option click --name "New prompt" --exact; ab wait '[role=dialog]'`
   - Result: the New prompt dialog opens. Capture `07-palette-new`; Escape closes it.
     Search `prompt` or `skill` for `Prompts` / `Skills`; the query `settings` does not match them.
-- Side effects: Skills and Prompts pages start no Pi. A new session's fake-Pi `start` audit gains
-  `--prompt-template "$RUN/db/prompts"` and `--skill "$RUN/db/skills"` (paths under the run's
+- Side effects: Settings CRUD starts no user session. A cold Settings deep link can start a
+  catalog `probe` for the underlying directory; count probes separately. A new session's fake-Pi
+  `start` audit gains `--prompt-template "$RUN/db/prompts"` and `--skill "$RUN/db/skills"` (paths under the run's
   database dir); proving a template reaches Pi needs a real or scripted model, not fake Pi.
 
 ## Gotchas

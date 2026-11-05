@@ -55,7 +55,7 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
 - `list`
   - Command: `node scripts/dispatch-session.ts list --project verify`
   - Result: one line for `verify-plan` with `"projectId":"verify"`, `"lastAnswer":"Answer 4."`
-    (from the baseline; a later prompt to it replaces that), and `pullRequest.number` 222.
+    (from the baseline; a later prompt to it replaces that), and `changes.pullRequest.number` 222.
 - `follow-up`
   - Command: `printf "one more" > "$RUN/more.txt"; node scripts/dispatch-session.ts follow-up <sessionId from start.json> "$RUN/more.txt"; echo $?`
   - Result: exit 0 with `"delivery": "follow-up"`, `"submission": "started"` and `link`; the
@@ -69,16 +69,20 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
 - Then open the worktree session's link (not the follow-up session):
   `ab open <link from worktree.json>; ab wait --text "echo: dispatch hello"`; capture
   `01-dispatched`.
-- `needs-input` (relaunch with `.agents/skills/verify-piano/scripts/launch.sh --fake-pi dialogs`)
+- `needs-input` (separate dialogs run)
+  - Preconditions: clean up the old run, launch with
+    `.agents/skills/verify-piano/scripts/launch.sh --fake-pi dialogs`, assign the newly printed
+    `RUN`, source its `run.env`, and run doctor on that run before dispatching.
   - Command: `echo "ask for a value" > "$RUN/ask.txt"; node scripts/dispatch-session.ts "$RUN/ask.txt" "$REPO"`,
     then `status <id>`.
   - Result: `status` reports `"disposition": "needs_input"` and `"needs": {"title": "Enter a
     value", "kind": "input", "link": "<link>"}`. `ab open <link>` shows region "Question" titled "Enter a value"
-    with textbox "Enter a value" (the title, via `aria-labelledby`), "Cancel" and "Send answer";
+    with textbox "Enter a value" (the title, via `aria-labelledby`), "Cancel" and "Send answer".
+    Capture `02-needs-input` now, before answering. Then
     `ab find role textbox fill --name "Enter a value" --exact 42;
     ab find role button click --name "Send answer" --exact` answers it: the dialog closes, the
     transcript shows `you said 42`, and `status` reports `"disposition": "settled"`. Capture
-    `02-needs-input` and `03-answered`.
+    `03-answered` after observing that reply.
 
 ## Gotchas
 

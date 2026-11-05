@@ -48,7 +48,12 @@ for p in "$PORT" "$WEB_PORT"; do
   [ -z "$(listeners "$p")" ] || die "port $p is already in use"
 done
 
-mkdir -p "$RUN"/home "$RUN"/pi-agent "$RUN"/pi-sessions "$RUN"/db "$RUN"/logs "$EVIDENCE"
+mkdir -p "$RUN"/home "$RUN"/pi-agent "$RUN"/pi-sessions "$RUN"/db "$RUN"/logs "$EVIDENCE" \
+  "$RUN"/config/worktrunk "$RUN"/config/system "$RUN"/cache "$RUN"/state "$RUN"/data
+# HOME alone does not isolate Worktrunk: XDG paths, explicit config paths and WORKTRUNK_* option
+# overrides can still select the user's settings, hooks and worktree placement.
+for name in ${!WORKTRUNK_@}; do unset "$name"; done
+printf '' > "$RUN/config/worktrunk/config.toml"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
 # The throwaway repository Piano registers; worktrees Piano creates land beside it, inside $RUN.
@@ -96,6 +101,10 @@ cd "$ROOT"
 # for PIANO_API_SOCKET.
 detach env -u PIANO_API_SOCKET \
   HOME="$RUN/home" HOST=127.0.0.1 PORT="$PORT" PIANO_DB_PATH="$DB" \
+  XDG_CONFIG_HOME="$RUN/config" XDG_CONFIG_DIRS="$RUN/config/system" \
+  XDG_CACHE_HOME="$RUN/cache" XDG_STATE_HOME="$RUN/state" XDG_DATA_HOME="$RUN/data" \
+  WORKTRUNK_CONFIG_PATH="$RUN/config/worktrunk/config.toml" \
+  WORKTRUNK_SYSTEM_CONFIG_PATH="$RUN/config/worktrunk/config.toml" \
   PI_CODING_AGENT_DIR="$RUN/pi-agent" PI_CODING_AGENT_SESSION_DIR="$RUN/pi-sessions" PI_OFFLINE=1 \
   PIANO_ALLOWED_ORIGINS="$WEB_URL,$API_URL" PIANO_PI_CLI="$PI_CLI" PIANO_PI_ARGS= \
   PIANO_TEST_AUDIT="$RUN/audit.jsonl" \

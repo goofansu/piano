@@ -26,14 +26,16 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 - `row-details`: View options → Show → "Folder and branch" (off by default, remembered per
   browser; the palette's "Show folder and branch" / "Hide folder and branch") adds a line under
   each sidebar row with its folder and branch (only the branch where the group names the folder).
-- `cost`: "Context usage" opens "Token and cost breakdown" with the reply's tokens and cost.
+- `cost`: "Context usage" opens "Token and cost breakdown" with the selected response's tokens
+  and cost (latest by default). "Response history" switches between tokens and cost and offers
+  an "Inspect response" slider; the Session column remains the session totals.
 - `follow-up`: "Message" plus Enter sends to the same Pi session.
 - `stop`: "Stop" aborts a running reply.
 - `nested-calls`: an opened codemode tool row lists the calls its script made, one line each
   (status dot, tool name, what it acted on) that opens to its arguments and output. More than 8
   fold to the last 8 behind "Show all <n> tool calls" (" · <k> failed" in red when any failed),
-  which turns into "Show last 8 tool calls" once opened; a running call older than the last 8
-  stays in view, and an opened fold stays open while calls arrive. Closed, the row's header
+  which turns into "Show last 8 tool calls" once opened (keeping the failure suffix); a running
+  call older than the last 8 stays in view, and an opened fold stays open while calls arrive. Closed, the row's header
   carries the progress instead: while running the call the script is on, and always
   "<n> calls" (" · <k> failed" in red). Drive it on
   `--fake-pi dialogs` from `/new` (its fake Pi cannot continue a seeded session): the first
@@ -103,6 +105,14 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 - `follow-up`
   - Action: `ab fill '[aria-label="Message"]' "second"; ab press Enter; ab wait --text "echo: second"`
   - Result: the reply renders; the audit has `{"command":"prompt","text":"second","sessionId":"verify-loose"}`.
+- `cost` response history (after `follow-up`)
+  - Action: `ab find role button click --name "Context usage" --exact;
+    ab wait '[aria-label="Token and cost breakdown"]';
+    ab find role radio click --name "Show cost history" --exact;
+    ab click '[aria-label="Inspect response"] [role=slider]'; ab press Home`.
+  - Result: "Response 1 / 2" is selected; Response cost remains `$0.0063`, Session cost `$0.0126`
+    (both fake responses have the same usage). Capture `02b-response-history`, then
+    `ab find role radio click --name "Show tokens history" --exact; ab press Escape`.
 - `stop`
   - Action: `ab fill '[aria-label="Message"]' "hold"; ab press Enter; ab wait '[aria-label="Stop"]';
     ab find role button click --name "Stop" --exact`
@@ -126,9 +136,11 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     `ab eval "document.querySelector('[role=menuitem]')?.getAttribute('href')"` rather than opening
     this fake URL. `ab press Escape; ab wait --fn "!document.querySelector('[role=menu]')"`.
   - Update: `ab fill '[aria-label="Message"]' 'artifact verify confirmed Revised report';
-    ab press Enter; ab wait --text 'Revised report';
+    ab press Enter; ab wait --fn "!document.querySelector('[aria-label=Stop]')";
     ab find role button click --name 'Artifacts: 1' --exact`.
-    The same URL now has title `Revised report`, still one entry. Capture `09-artifact-update`.
+    Then `ab wait --fn "document.querySelector('[role=menuitem][href=\"https://radius.example.test/a/verify\"]')?.textContent === 'Revised report'"`.
+    The same URL now has title `Revised report`, still one entry. Waiting for page text alone
+    would also match the submitted prompt. Capture `09-artifact-update`.
     Escape, then Mod+K → query `artifacts` → wait for the palette to settle → "Artifacts"
     opens the same menu. This proves rendering of fake confirmed tool results, not Radius
     publication or authenticated access.

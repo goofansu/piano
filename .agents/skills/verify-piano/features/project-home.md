@@ -20,9 +20,9 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   and a red "Delete", the sidebar row's menu ([`open-session.md`](./open-session.md)
   `archive-delete`). Archive toasts "Session archived" and the row leaves, the count dropping;
   Delete asks "Delete session?" and toasts "Session deleted". The page stays.
-- `new-in-project`: the composer above the cards ("First message") starts in the folder of the
-  most recently active member, at the folder's own checkout;
-  sending opens the new session, which joins the project.
+- `new-in-project`: the composer above the cards ("First message") defaults to the folder-root
+  checkout of the most recently active non-archived member whose folder is open; otherwise it
+  asks "Choose a folder". Sending opens the new session, which joins the project.
 - `header`: the pane header is one breadcrumb line, "Projects / <name>", the name being the `h1`,
   and ends with "Project menu for <name>": "Project settings", then a red "Delete project".
 - `crumb`: the header's "Projects" button opens the Projects index at `/projects`.
@@ -35,7 +35,8 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   on the seed, red past the limit with Save off), Save off until a field changes; saving closes it
   and toasts "Project saved". Scope selectors to `[role=dialog]`: the page's composer is a
   `textarea` too. What reaches Pi needs the real Pi: fake Pi ignores the extension, so check the
-  model's request with a scripted loopback model, as `test/fixtures/RealPiDispatch.ts` does.
+  model's request with a scripted loopback model. `test/fixtures/RealPiDispatch.ts` is an
+  infrastructure example, not an existing project-instruction assertion.
 - `delete`: "Delete project" (the header menu, the sidebar's project menu, the Projects index's row
   menu, Mod+K on the home) asks first, saying how many sessions move to "No project"; confirming
   toasts "Project deleted", and on the project's own home or New page leaves for `/projects`.
@@ -93,9 +94,11 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     ab wait "[cmdk-input]"; ab fill "[cmdk-input]" "open project";
     ab wait '[cmdk-list][aria-busy="false"]'; ab find role option click --name "Open project: Verify Project" --exact;
     ab wait --url "**/projects/verify"`
-  - Result: `/projects/verify`; beside it, "Move to project: New project". On `/s/verify-loose`
-    (no project) the query `project` offers no "Open project" row, only "Add to project: ..."
-    rows (New project, Empty Project, Verify Project).
+  - Result: `/projects/verify`. Before choosing the navigation row, the palette also offered
+    "Move to project: New project". On `/s/verify-loose` (no project), query `project`: the
+    Session commands group offers "Add to project: ..." rows (New project, Empty Project,
+    Verify Project), but no "Open project" row. Global commands such as "Projects" and
+    "Group by project" can still match.
 - `settings`
   - Action: on `/projects/verify`, `ab click 'main [aria-label="Project menu for Verify Project"]';
     ab find role menuitem click --name "Project settings" --exact; ab wait "[role=dialog]";
