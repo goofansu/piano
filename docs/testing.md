@@ -14,9 +14,10 @@ coverage percentage.
 3. Make one coherent change, run the relevant check and inspect the actual outcome. When adding
    behavior tests, work in small red/green increments instead of speculative test batches.
 4. Retain evidence tied to the tested revision (including dirty changes), environment and commands,
-   on the PR: summarize it in the description and attach output, screenshots or recordings with
-   `gh pr comment --attach`. Do not commit evidence to the repository; see
-   [Completion evidence](#completion-evidence).
+   on the PR: summarize it in the description and include output, screenshots or recordings through
+   a supported publication route. On exe.dev, follow [PR evidence](development-on-exe-dev.md#pr-evidence)
+   for publication limits and the non-blocking fallback. Do not commit evidence to the repository;
+   see [Completion evidence](#completion-evidence).
    For regressions, show failure before the fix and success after it when feasible; verify that the
    failure was the intended defect, not a broken fixture or missing dependency.
 5. Stop when the acceptance claim and relevant risk are covered and required gates pass. Broaden
