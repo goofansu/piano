@@ -115,9 +115,10 @@ export const RenderMsg = Schema.Struct({
   errorMessage: Schema.optional(Schema.String),
   label: Schema.optional(Schema.String),
   nestedCalls: Schema.optional(Schema.Array(ToolExecution)),
-  nestedCallsComplete: Schema.optional(Schema.Boolean),
-  /** Only set when Pi's bounded record lost arguments, not calls or terminal statuses. */
-  nestedCallsIncompleteReason: Schema.optional(Schema.Literal("arguments")),
+  /** What Pi's bounded record of the nested calls lost; absent when it lost nothing. "arguments":
+   * every call and terminal status is present, and only inputs marked `argsOmitted` are gone.
+   * "details": calls, statuses or inputs may be missing. */
+  nestedCallsLost: Schema.optional(Schema.Literals(["arguments", "details"])),
 });
 export type RenderMsg = typeof RenderMsg.Type;
 

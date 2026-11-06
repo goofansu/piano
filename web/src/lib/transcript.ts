@@ -471,8 +471,7 @@ const NESTED_TAIL = 8;
 function nestedView(
   calls: ReadonlyArray<ToolExecution>,
   running: boolean,
-  complete: boolean,
-  reason?: RenderMsg["nestedCallsIncompleteReason"],
+  lost: RenderMsg["nestedCallsLost"],
 ): NestedView {
   const all = calls.map((call) => ({
     call,
@@ -503,10 +502,8 @@ function nestedView(
       : {}),
     failed: all.filter((c) => c.outcome === "failed").length,
     ...(latest ? { latest } : {}),
-    complete,
-    ...(!complete && reason !== "arguments"
-      ? { warning: "Some tool details are unavailable." }
-      : {}),
+    complete: lost === undefined,
+    ...(lost === "details" ? { warning: "Some tool details are unavailable." } : {}),
   };
 }
 
@@ -589,12 +586,7 @@ export function transcriptRows(
       result,
       outcome,
       ...(output !== undefined ? { output } : {}),
-      nested: nestedView(
-        [...nested.values()],
-        outcome === "running",
-        result?.nestedCallsComplete !== false,
-        result?.nestedCallsIncompleteReason,
-      ),
+      nested: nestedView([...nested.values()], outcome === "running", result?.nestedCallsLost),
       verb,
       knownTool: !!verbs,
       summary: summarize(call.args),
