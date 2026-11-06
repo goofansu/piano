@@ -1022,7 +1022,8 @@ export class PreviewAdapter {
       record.readyAt = Date.now() / 1000;
       await save(path, record);
     }
-    // Running, never answered yet, and young: a cold start, not a failure.
+    // A 4xx/5xx response is not readiness; keep checking within the warm-up window. Once an
+    // app has been ready, losing readiness must not make it look like a fresh cold start.
     const warming =
       !ready &&
       !record.readyAt &&

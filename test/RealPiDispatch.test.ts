@@ -1,14 +1,10 @@
 /**
- * Session dispatch against the real installed Pi: a parent Pi, launched by a scratch Piano, uses
- * Piano's bundled `piano-dispatch` extension to start a child session from a self-contained brief and to read the
- * child's answer back. Only the model is a local script; there are no credentials, no model credits
- * and no external traffic.
+ * Dispatch through the installed Pi CLI and a scratch Piano. Unlike fake-protocol tests, this
+ * checks tool registration, recovery of the child handle from model-visible tool history, and
+ * Piano's ownership of both parent and child processes. The child receives a self-contained brief,
+ * not the parent's conversation, and the parent reads its answer through the wait tool.
  *
- * This is the boundary where the claim actually lives. The fake-protocol tests prove Piano's
- * message handling and the adapter's attribution, but only a real Pi can show that a
- * Piano-launched session is declared the dispatch tools at all, that a handle written into the
- * tool's visible text survives Pi's tool history well enough to address the child, and that the
- * child is a second Piano-owned session rather than a process some extension spawned itself.
+ * Only the model is scripted over loopback; no credentials, model credits or external traffic.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -62,7 +58,6 @@ test(
         reported._tag === "session" && reported.event._tag === "message_end"
           ? reported.event.message.text
           : "";
-      // The whole round trip: brief out through the start tool, answer back through the wait tool.
       assert.match(text, new RegExp(fixture.report.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
       const requests = fixture.requests();
@@ -135,7 +130,6 @@ test(
         "a session started by a person names no dispatcher",
       );
 
-      // One owner: Piano starts every Pi, and each session has exactly one process.
       const sessions = fixture.spawns().filter((spawned) => spawned.sessionId !== null);
       const sessionIds = sessions.map((spawned) => spawned.sessionId);
       assert.deepEqual(

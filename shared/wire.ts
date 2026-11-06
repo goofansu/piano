@@ -1,10 +1,9 @@
 /**
  * Wire vocabulary shared by the server and the React client.
  *
- * SessionEvent / SessionAction are the native language of the PiSessions module:
- * a browser client consumes SessionEvents and produces SessionActions, and the
- * WebSocket layer is a pass-through. Everything is an effect Schema so both
- * sides decode with the same definitions.
+ * SessionEvent / SessionAction describe the PiSessions interface, not Pi's RPC protocol.
+ * The WebSocket protocol below wraps session traffic with selection, delivery and registry
+ * messages. Shared Effect schemas keep decoding consistent on both sides of that boundary.
  */
 import { Schema, type Types } from "effect";
 import {

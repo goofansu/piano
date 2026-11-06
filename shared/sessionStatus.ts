@@ -14,7 +14,8 @@ import type { Dialog, SessionClosure, SessionState, Snapshot } from "./wire.ts";
  * What a live session is doing, from its retained state alone: waiting on a dialog, holding work
  * Pi or Piano is still carrying out, idle after an input or dialog answer Piano could not confirm
  * delivering (Pi may act on it or never do anything), or idle with nothing pending. Only an idle
- * session can be done, and only once its host also confirms quiescence.
+ * session can be settled, and only once its host also confirms quiescence. Settlement says
+ * nothing about whether the task succeeded.
  */
 export type LiveActivity =
   | { readonly _tag: "needs_input"; readonly dialog: Dialog }
@@ -123,8 +124,9 @@ export const isAnswer = (message: Snapshot["messages"][number]): boolean =>
   turnEnding(message.stopReason) === "completed";
 
 /**
- * The last turn's final reply, at most `limit` (default LAST_ANSWER_CHARS): the last assistant
- * message after the last user message, when it is an answer. Null otherwise.
+ * The last turn's final reply, limited to `limit` UTF-16 code units (default LAST_ANSWER_CHARS).
+ * Only the last assistant message after the last user message is considered; return null if it
+ * is absent or not an answer, rather than falling back to an earlier reply.
  */
 export function lastAnswerOf(snapshot: Snapshot, limit = LAST_ANSWER_CHARS): string | null {
   const messages = snapshot.messages;

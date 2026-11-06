@@ -1,4 +1,4 @@
-/** Node 24's WebSocket accepts Undici's options, including an explicit Origin header. */
+/** Connects the dispatch tools to their launching Piano; no endpoint comes from tool input. */
 import { SESSION_ORIGIN, SESSION_WS_URL } from "../../shared/dispatch.ts";
 import { isLoopbackHostname } from "../../shared/loopback.ts";
 import type { SocketEnvironment } from "../../web/src/lib/ws.ts";
@@ -41,8 +41,8 @@ export function nodeSocketEnvironment(config: DispatchConfiguration): SocketEnvi
     url: () => config.url,
     nonce: () => crypto.randomUUID(),
     open: (url, events) => {
-      // The shared browser transport brings DOM typings into this program; its constructor
-      // declaration omits Node's supported options overload (covered by DispatchSocket.test).
+      // Node's WebSocket accepts Undici's options, including Origin, but the shared transport's
+      // DOM typings omit that overload. DispatchSocket.test covers the runtime constructor.
       const NodeWebSocket = WebSocket as unknown as {
         new (url: string, options: { headers: Record<string, string> }): WebSocket;
       };

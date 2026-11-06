@@ -1,15 +1,12 @@
 /**
- * Answering the extension dialogs Pi raises (select / confirm / input / editor), one at a time.
- * Which dialog is shown: the head of the selected session's queue, none during a resync, and
- * answerable only on a settled attachment (`sessionReady`). How it is answered: at most once per
- * attachment, never after its deadline or while disconnected, and closing it counts as cancelling.
- * Pi sends no closure acknowledgement, so nothing is ever resent automatically. A later attachment
- * whose snapshot still lists the dialog shows the server never claimed an answer (it claims one per
- * dialog and rejects any other), so the person may answer it again. Abort is the user's escape
- * hatch: it follows the same rule and, by rule, is still offered after the deadline. How it
- * reads: which surface asks it, its title and deadline wording are decided here, not per component.
- * What the person has typed or chosen is kept here too, for as long as the question stays open.
- * Nothing here depends on React.
+ * Client policy for Pi's extension dialogs: queue selection, answer delivery, receipts and drafts.
+ * Only the head of a settled session attachment can be answered; a resync hides the queue until
+ * its replacement snapshot arrives. Components render the resulting views without deciding policy.
+ *
+ * Sent or uncertain answers are never replayed automatically. A fresh attachment may offer an
+ * unresolved dialog again; the server still enforces one terminal claim per dialog. Ordinary
+ * dialogs have no Pi consumption acknowledgement, while tool-owned answers are confirmed by the
+ * stored tool result. Draft replies survive view changes but not a page reload.
  */
 import type { ClientCommand, Dialog, DialogResolution } from "@shared/wire";
 // Relative, not @shared/: module tests load this file directly in Node.

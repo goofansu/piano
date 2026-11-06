@@ -1,5 +1,6 @@
-// Supervisor main process, not an independent lifetime owner. Never launch without the live
-// generation's connection; EOF is a kernel death signal even when Piano cannot run finalizers.
+// Supervisor main process, not an independent lifetime owner. Launch only after the live
+// generation admits this connection; losing it triggers cleanup even if Piano exits without
+// running finalizers.
 import { execFileSync, spawn } from "node:child_process";
 import { renameSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
