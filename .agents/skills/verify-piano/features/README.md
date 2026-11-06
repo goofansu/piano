@@ -55,13 +55,14 @@ Keep implementation details out; name user paths, handles, required state, comma
   choices, the first message and reply, reload without resending, a kept draft when not sent.
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
   home; read history and cost; follow up; stop a running reply; archive and delete from the row's
-  menu; the narrow session-menu sheet and its project picker; the published-artifact menu.
+  menu; responsive sidebar controls; the narrow session-menu sheet and its project picker;
+  the published-artifact menu, including codemode receipts.
 - [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
   per project with folders, count, last activity and the project menu; New project in the header;
-  empty and phone.
+  Done / Reopen and the folded Done group; empty and phone.
 - [Project home](./project-home.md): `/projects/<id>` from the sidebar, palette and session
   header; member rows and their Archive / Delete, order, PR number, new session in the project,
-  settings, empty, deleted and missing projects.
+  settings, Done badge / Reopen and sidebar grouping; empty, deleted and missing projects.
 - [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
   `follow-up`, `status` and `list --project`, its refusals, and a dialog that needs input.
 - [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and its
@@ -71,8 +72,9 @@ Keep implementation details out; name user paths, handles, required state, comma
   empty states; the separate agent-authored approval path's real-Pi prerequisite. Providers and
   Webhooks are reached the same way but not driven here.
 - [Settings › MCP](./settings-mcp.md): `/settings/mcp` over the scratch `mcp.json`; Connect,
-  Add MCP server by form and by JSON paste (refused when it cannot connect), Manage's menu with Edit and
-  Disconnect / Delete, and Pi's MCP switch.
+  Add MCP server by form and JSON paste (URL/startup refusals and local command success),
+  Manage → Edit / Delete, Connect cancellation, and Pi's MCP switch. Authenticated URL-server
+  management is a separate prerequisite.
 
 ## Coverage boundaries
 
