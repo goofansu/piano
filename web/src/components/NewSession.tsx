@@ -89,7 +89,6 @@ export function NewSession({ state, client, chooseDirectory, onProjectChange }: 
             chooseDirectory={chooseDirectory}
             onProjectChange={onProjectChange}
             className="shrink-0"
-            inputClassName="new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5"
           />
         </div>
       </div>
@@ -109,14 +108,12 @@ export function NewSessionComposer({
   chooseDirectory,
   onProjectChange,
   className,
-  inputClassName,
 }: {
   state: AppState;
   client: WorktreeClient;
   chooseDirectory: (cwd: string) => void;
   onProjectChange?: (projectId?: string) => void;
   className?: string;
-  inputClassName?: string;
 }) {
   const { send } = client;
   const { run } = useCommands();
@@ -185,7 +182,10 @@ export function NewSessionComposer({
           attachmentsDisabled={!state.connected}
           autoFocus={!window.matchMedia("(pointer: coarse)").matches}
           label="First message"
-          inputClassName={cn(composerInput, inputClassName)}
+          inputClassName={cn(
+            composerInput,
+            "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5",
+          )}
           maxHeight={288}
           model={{
             models,
