@@ -636,9 +636,14 @@ export const ProjectInstructions = Schema.String.check(
   Schema.isMinLength(1),
   trimmedFit(PROJECT_INSTRUCTIONS_MAX),
 );
+/**
+ * A name as the client sends it: creating or renaming stops at the limit. A stored name is read as
+ * it is, so a database written under an earlier, longer limit still opens; it fits again once renamed.
+ */
+export const ProjectName = Schema.String.check(Schema.isMinLength(1), trimmedFit(PROJECT_NAME_MAX));
 export const Project = Schema.Struct({
   id: Schema.String.check(Schema.isMinLength(1)),
-  name: Schema.String.check(Schema.isMinLength(1), trimmedFit(PROJECT_NAME_MAX)),
+  name: Schema.String.check(Schema.isMinLength(1)),
   /** Added to Pi's system prompt for the project's sessions whenever Piano starts their Pi. */
   instructions: Schema.optional(ProjectInstructions),
   /**
@@ -926,7 +931,7 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("save_project", {
     project: Schema.Struct({
       id: Project.fields.id,
-      name: Project.fields.name,
+      name: ProjectName,
       instructions: Schema.optional(ProjectInstructions),
     }),
     assign: Schema.optional(Schema.Struct({ cwd: Schema.String, sessionId: Schema.String })),
@@ -939,7 +944,7 @@ export const ClientMessage = Schema.Union([
    */
   Schema.TaggedStruct("update_project", {
     id: Schema.String,
-    name: Schema.optional(Project.fields.name),
+    name: Schema.optional(ProjectName),
     instructions: Schema.optional(Schema.NullOr(ProjectInstructions)),
   }),
   Schema.TaggedStruct("assign_project", {

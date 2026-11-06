@@ -974,6 +974,30 @@ test("a start name over the title limit is refused like a rename", () => {
   assert.throws(() => decodeClientMessage(act("t".repeat(10_000))));
 });
 
+test("INV-01: a database holding a project name over today's limit still opens", async (t) => {
+  // The limit guards what the client sends; a name saved under an earlier, longer limit is read as it is.
+  const f = fixture(t);
+  const name = "n".repeat(PROJECT_NAME_MAX + 1);
+  seedRegistry(f.dbPath, {
+    version: 2,
+    folders: [],
+    worktrees: [],
+    workspaces: [],
+    projects: [{ id: "long", name }],
+    sessions: [],
+  });
+  const data = await f.get();
+  assert.deepEqual(
+    data.projects.map((p) => p.name),
+    [name],
+  );
+  // Renaming it must fit the limit; the stored name stays until then.
+  const rename = (next: string) =>
+    JSON.stringify({ _tag: "update_project", id: "long", name: next });
+  assert.throws(() => decodeClientMessage(rename(name)));
+  assert.doesNotThrow(() => decodeClientMessage(rename("n".repeat(PROJECT_NAME_MAX))));
+});
+
 test("a project name fits the wire limit as the registry saves it: trimmed", () => {
   const save = (name: string) =>
     JSON.stringify({ _tag: "save_project", project: { id: "p", name } });
