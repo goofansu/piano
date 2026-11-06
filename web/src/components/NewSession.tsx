@@ -74,9 +74,11 @@ export function NewSession({ state, client, chooseDirectory, onProjectChange }: 
       <PaneShowSidebar />
       <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-(--gutter) pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:py-16">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
+          {/* Below md the mark alone fills the space above the composer: the project control
+           * beneath already names the project, and a long name would wrap into a wall of text. */}
           <div className="new-session-welcome flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
-            <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex" />
-            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">
+            <PianoMark className="size-12 rounded-2xl md:mb-5" />
+            <h1 className="hidden text-xl font-medium tracking-tight md:block md:text-[2rem]">
               {project?.name ?? "What should we work on?"}
             </h1>
             <p className="mt-2 hidden text-base text-ink-2 md:block">
