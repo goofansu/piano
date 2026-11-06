@@ -85,6 +85,7 @@ const languages: Record<string, string> = {
   css: "css",
   scss: "scss",
   html: "html",
+  htm: "html",
   xml: "xml",
   svg: "xml",
   sh: "shellscript",
@@ -251,7 +252,10 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
     return {
       preview: {
         ...identity,
-        kind: claimed === "markdown" || claimed === "svg" ? claimed : ("text" as const),
+        kind:
+          claimed === "markdown" || claimed === "svg" || claimed === "html"
+            ? claimed
+            : ("text" as const),
         language:
           specialLanguages[basename(requested).toLowerCase()] ??
           languages[extname(requested).slice(1).toLowerCase()] ??

@@ -34,10 +34,19 @@ const FilePdf = lazy(() =>
   })),
 );
 
+const FileHtml = lazy(() =>
+  import("@/components/FileHtml").catch(() => ({
+    default: () => (
+      <Notice>Could not load the HTML viewer. Turn off Preview to read the source.</Notice>
+    ),
+  })),
+);
+
 type Preview = Awaited<ReturnType<typeof workspaceFile>>;
 
 const KIND_ICON: Record<Preview["kind"], typeof FileIcon> = {
   markdown: FileTextIcon,
+  html: FileCodeIcon,
   text: FileCodeIcon,
   svg: ImageIcon,
   image: ImageIcon,
@@ -158,7 +167,7 @@ export function WorkspaceFile({
       }
       actions={
         <>
-          {result?.kind === "markdown" && (
+          {(result?.kind === "markdown" || result?.kind === "html") && (
             <div className="flex items-center gap-2 px-3">
               <Label htmlFor={previewId}>Preview</Label>
               <Switch
@@ -193,7 +202,14 @@ export function WorkspaceFile({
       {status && <Notice>{status}</Notice>}
       {result && (
         <section aria-label="File contents" className="flex min-h-full flex-col">
-          {"bytes" in result ? (
+          {result.kind === "html" && workspaceId && (
+            <div hidden={mode !== "preview"}>
+              <Suspense fallback={<Notice>Opening HTML…</Notice>}>
+                <FileHtml content={result.content} path={result.path} workspaceId={workspaceId} />
+              </Suspense>
+            </div>
+          )}
+          {result.kind === "html" && mode === "preview" ? null : "bytes" in result ? (
             result.kind === "pdf" ? (
               <Suspense fallback={<Notice>Opening PDF…</Notice>}>
                 <FilePdf bytes={result.bytes} />

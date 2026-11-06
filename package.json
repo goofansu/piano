@@ -29,9 +29,12 @@
   },
   "devDependencies": {
     "@shadcn/lint": "^0.2.5",
+    "@types/css-tree": "^3.2.0",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^26.6.5",
     "concurrently": "^10.0.6",
     "husky": "9.1.7",
+    "jsdom": "^31.0.0",
     "oxfmt": "^0.75.0",
     "oxlint": "^1.90.0",
     "stylelint": "^17.16.0",
