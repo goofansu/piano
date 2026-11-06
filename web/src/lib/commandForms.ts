@@ -21,6 +21,7 @@ import {
   EMPTY_PROJECT_DRAFT,
   findProject,
   type ProjectDraft,
+  type ProjectDraftCheck,
   projectSettingsSave,
 } from "./projectCommands.ts";
 import { inSidebarGroups, sessionCatalog, sessionLabel } from "./sessionCatalog.ts";
@@ -34,6 +35,8 @@ export interface FormAnswer {
   allowed: boolean;
   /** What submitting sends; present exactly when an allowed registry form. */
   command?: ClientCommand;
+  /** Project settings field feedback, from the same decision as its save. */
+  projectCheck?: ProjectDraftCheck;
   /**
    * The page submitting opens once the server confirms the change. A new project not created for a
    * session opens its home, or the New page for it when the New page's project picker created it; a

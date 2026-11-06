@@ -378,6 +378,7 @@ export function CommandHost({
       />
       <ProjectSettingsDialog
         open={projectSettings}
+        check={answer.projectCheck}
         draft={forms.projectDraft}
         setDraft={forms.editProject}
         allowed={answer.allowed}
