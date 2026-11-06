@@ -11,8 +11,8 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 
 - `open-from-header`: the session header's project button opens the session's project home.
 - `open-from-sidebar`: with sidebar Group by Project, the group's "New session in <name>" button.
-- `project-menu`: the group's "Project menu for <name>" holds "Project settings", then a red
-  "Delete project", as the home's header menu does.
+- `project-menu`: the group's "Project menu for <name>" holds "Project settings", "Mark project
+  done" ("Reopen project" once done), then a red "Delete project", as the home's header menu does.
 - `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
 - `member-cards`: one `[data-slot=item]` row (`role=listitem`) per non-archived member session in
   the Sessions group's hairline list; its title button opens `/s/<id>`.
@@ -24,7 +24,10 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   checkout of the most recently active non-archived member whose folder is open; otherwise it
   asks "Choose a folder". Sending opens the new session, which joins the project.
 - `header`: the pane header is one breadcrumb line, "Projects / <name>", the name being the `h1`,
-  and ends with "Project menu for <name>": "Project settings", then a red "Delete project".
+  and ends with "Project menu for <name>" (see `project-menu`). A done project has a Done badge
+  beside its name; its composer and sessions remain available.
+- `done`: Mark project done keeps the home open and its sessions intact. On the project-grouped
+  sidebar its group moves below the Done label; Reopen project restores it among the open groups.
 - `crumb`: the header's "Projects" button opens the Projects index at `/projects`.
 - `sessions-heading`: the `h2` "Sessions" above the rows carries their count ("Sessions 1"); the
   header shows no count.
@@ -99,6 +102,18 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     Session commands group offers "Add to project: ..." rows (New project, Empty Project,
     Verify Project), but no "Open project" row. Global commands such as "Projects" and
     "Group by project" can still match.
+- `done`
+  - Action: on `/projects/verify`, `ab click 'main [aria-label="Project menu for Verify Project"]';
+    ab find role menuitem click --name "Mark project done" --exact;
+    ab wait --fn "document.querySelector('main header').innerText.includes('Done')"`.
+  - Result: the header has a Done badge, `Plan the verification` remains in Sessions, and the
+    composer remains. With Group by Project, navigation "Sessions" has a Done label before the
+    Verify Project group. Capture `09-done-home`. If arriving from the index's `done` recipe,
+    start with this observation rather than marking it again.
+  - Reopen: `ab click 'main [aria-label="Project menu for Verify Project"]';
+    ab find role menuitem click --name "Reopen project" --exact;
+    ab wait --fn "!document.querySelector('main header').innerText.includes('Done')"`.
+    Capture `10-reopened`. The project returns to the open list/groups without changing membership.
 - `settings`
   - Action: on `/projects/verify`, `ab click 'main [aria-label="Project menu for Verify Project"]';
     ab find role menuitem click --name "Project settings" --exact; ab wait "[role=dialog]";

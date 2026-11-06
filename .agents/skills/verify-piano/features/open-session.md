@@ -8,10 +8,13 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 ## Sub-features
 
 - `open-from-sidebar`: click the session's row in navigation "Sessions".
+- `sidebar-layout`: Hide sidebar / Show sidebar, the palette's Toggle sidebar and Cmd+B toggle
+  the sidebar. Cmd+B is `Meta+b` even on Linux, not Control+B. A narrow viewport uses a sheet;
+  opening or dismissing that sheet preserves the desktop column preference on widening.
 - `history`: the saved user message and reply render; "Jump to message" lists them.
 - `header`: on desktop, one line: the project crumb ("Project: <name>", only for a member session) and the
-  title with "Session information and actions" beside it; at its end "Show session rail" and
-  "Changes". Where the session runs is in the session rail and, when shown, the sidebar row; the
+  title with "Session information and actions" beside it; at its end "Changes" then
+  "Show session rail". Where the session runs is in the session rail and, when shown, the sidebar row; the
   pull request is read in Changes. The session's state is the sidebar row's; the header only
   carries it as screen-reader `role=status` text ("Ready", "Not running").
 - `phone-menu`: one area at a time, the header shows folder/repository and branch below the title;
@@ -68,6 +71,14 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab wait --text "Answer 4."`
   - Result: `What is 2 + 2? (Loose session)` and `Answer 4.` visible; the header text reads
     `Loose session` / `Not running`. Capture `01-opened`.
+- `sidebar-layout` (desktop sidebar initially visible)
+  - Action: `ab press Meta+b; ab wait '[aria-label="Show sidebar"]'`; capture `12-sidebar-hidden`.
+    `ab press Meta+b; ab wait '[aria-label="Hide sidebar"]'` restores the desktop column.
+    `ab set viewport 700 800; ab find role button click --name "Show sidebar" --exact;
+    ab wait '[role=dialog]'`; capture `13-sidebar-sheet`.
+  - Result: Escape dismisses only the sheet. `ab press Escape;
+    ab wait --fn "!document.querySelector('[role=dialog]')"; ab set viewport 1280 800;
+    ab wait '[aria-label="Hide sidebar"]'` restores the visible column. Capture `14-sidebar-restored`.
 - `phone-menu`
   - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
     ab set viewport 700 800;
@@ -144,6 +155,18 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     Escape, then Mod+K → query `artifacts` → wait for the palette to settle → "Artifacts"
     opens the same menu. This proves rendering of fake confirmed tool results, not Radius
     publication or authenticated access.
+- `artifacts` from codemode receipts (separate fresh session on `--fake-pi dialogs`)
+  - Action: on `/new`, send `codemode-artifact verify-receipt 1 Nested report` through First
+    message and Send, as above. Then `ab wait '[data-artifacts-trigger]';
+    ab find role button click --name 'Artifacts: 1' --exact`.
+  - Result: despite the enclosing codemode call failing after publication, the menu has the
+    confirmed receipt's title `Nested report` and URL `https://radius.example.test/a/verify-receipt`.
+    Capture `15-receipt-menu`; do not open this fake URL.
+  - Update: Escape, wait for the menu to close, send
+    `codemode-artifact verify-receipt 2 Revised nested report` through Message. Open `Artifacts: 1`
+    again and `ab wait --fn "document.querySelector('[role=menuitem][href=\"https://radius.example.test/a/verify-receipt\"]')?.textContent === 'Revised nested report'"`.
+    Capture `16-receipt-update`: one entry, same URL, revised title. The palette path above opens
+    this same menu. This proves handling of fake Pi publication receipts, not a Radius write.
 
 ## Gotchas
 

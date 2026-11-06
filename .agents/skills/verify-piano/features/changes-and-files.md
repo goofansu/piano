@@ -20,7 +20,7 @@ the palette (Mod+K) does not search individual outputs.
   a hidden or closed view refreshes it. Below 849px of session width the header button stays named
   "Changes", without a pressed state, and opens/focuses the area. Side by side, tablist "Surface
   views" contains Changes and open files, with "Hide changes" beside the Changes tab; the header
-  ends with "Show session rail" / "Hide session rail" and the Changes toggle. One area at a time,
+  ends with the Changes toggle followed by "Show session rail" / "Hide session rail". One area at a time,
   tablist "Session views" includes Agent (`Agent | Changes`, `Agent | README.md`), and
   "Hide changes" is in the view's toolbar. The tab bar appears only while a Surface tab is open.
   One area at a time, the rail control is absent; the session menu opens a sheet
@@ -69,7 +69,7 @@ the palette (Mod+K) does not search individual outputs.
   The area hides only if no other tab remains. A header click keeps focus on that header button;
   closing from inside restores lost focus to a remaining tab, otherwise the rail/menu trigger.
   Reopening Changes preserves its scroll and expanded files.
-- `details-open`: the list icon left of "Changes" in the header, named "Show session rail" / "Hide session
+- `details-open`: the list icon after "Changes" in the header, named "Show session rail" / "Hide session
   rail", turns the session rail on or off; it stays on
   across sessions and reloads, hides while a Surface tab shows, and returns when the last one
   closes; turned on over open tabs, it hides them until the rail goes off. It is offered even

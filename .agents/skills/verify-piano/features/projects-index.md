@@ -2,20 +2,23 @@
 
 `/projects` lists every project as one hairline-divided row: its name, the folders its sessions run
 in with the session count ("repo · 1 session", or "No sessions yet"), and when a member last moved,
-newest activity first with empty projects last by name. A row opens the project's home and
+newest activity first with empty projects last by name. Done projects sit in a collapsed "Done"
+group below the open projects, dated by when they were marked done. A row opens the project's home and
 carries the sidebar's project menu, revealed while pointed at; the header's "New project" opens
 the New project dialog. Rows carry no status: session state lives on the home. The page reads
 only what the browser already holds.
 
 ## Sub-features
 
-- `rows`: one `[data-slot=item]` row per project, in order of newest member activity; archived
+- `rows`: one `[data-slot=item]` row per open project, in order of newest member activity; archived
   sessions neither count nor date a project; clicking a row opens `/projects/<id>`.
 - `context`: a row's second line is `<folders> · <n> session(s)`, each folder named once, or
-  `No sessions yet`; the time at the row's end is absent for an empty project.
-- `row-menu`: "Project menu for <name>" over the row's end holds "Project settings", then a red
-  "Delete project", as on the project home ([`project-home.md`](./project-home.md) `settings`,
+  `No sessions yet`; the time at the row's end is absent for an empty open project.
+- `row-menu`: "Project menu for <name>" over the row's end holds "Project settings", "Mark project
+  done" ("Reopen project" once done), then a red "Delete project", as on the project home ([`project-home.md`](./project-home.md) `settings`,
   `delete`); deleting from here keeps the index open.
+- `done`: Mark project done moves the row into the folded Done group without archiving its
+  sessions. Expand "Done <n>" to open its home or use Reopen project to return it to the open list.
 - `sidebar-row`: the sidebar's "Projects" row under New session opens the index and reads as the
   current row (`aria-current=page`) while it is open.
 - `palette-row`: Mod+K offers "Projects" under Global commands on every screen, Settings included;
@@ -52,7 +55,16 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
 - `row-menu`
   - Action: back on `/projects`, `ab click 'main [aria-label="Project menu for Verify Project"]';
     ab snapshot -i | rg menuitem; ab press Escape`
-  - Result: menuitems `Project settings`, `Delete project`.
+  - Result: menuitems `Project settings`, `Mark project done`, `Delete project`.
+- `done` (seeded project, before creating other projects)
+  - Action: `ab click 'main [aria-label="Project menu for Verify Project"]';
+    ab find role menuitem click --name "Mark project done" --exact; ab wait --text "Done"`.
+    Capture `03-done-folded`, then `ab find role button click --name "Done 1" --exact;
+    ab wait '[aria-label="Done projects"]'`.
+  - Result: Verify Project is under Done, still with `repo · 1 session`; Empty Project remains
+    in the open list. Capture `04-done-expanded`. Open its title button as in `rows`: the home
+    shows a Done badge and its session. Reopen through that home's menu (see
+    [`project-home.md`](./project-home.md) `done`), then return to `/projects` for the next steps.
 - `sidebar-row`
   - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
     ab find role button click --name "Projects" --exact; ab wait --url "**/projects"`
