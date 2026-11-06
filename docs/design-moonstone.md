@@ -263,8 +263,8 @@ favicon and the home-screen icons. `web/src/components/PianoMark.tsx` draws it i
   `prefers-color-scheme: dark`. A 16px favicon draws one unit per pixel. It stays the same while a
   session works; progress shows in the app, not the tab icon.
 - **App icons.** The home-screen icons (`apple-touch-icon.png` 180, `icon-192.png`, `icon-512.png`,
-  `icon-maskable-512.png`) need a background, so they draw the app's light-theme tile: a `#f7f5f2`
-  glyph (`--brand-ink`) on a navy `#2c3e57` tile (`--brand`), at 16 of 28 units. The apple-touch
+  `icon-maskable-512.png`) need a background, so the glyph sits on a tile at 16 of 28 units, as in
+  the app, in the favicon's two colours: a `#f6f6f6` glyph on a `#111` tile. The apple-touch
   and maskable icons are full-bleed squares; the 192 and 512 icons have a 6/28 corner radius.
 - **Animation.** None for the icons; the keys in the app play (see the next section).
 
