@@ -30,7 +30,7 @@ export default function FileHtml({
       },
       () => {
         if (!controller.signal.aborted)
-          setError("Could not preview this HTML file. Choose Source to read it.");
+          setError("Could not preview this HTML file. Turn off Preview to read the source.");
       },
     );
     return () => controller.abort();

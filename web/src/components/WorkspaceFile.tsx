@@ -36,7 +36,9 @@ const FilePdf = lazy(() =>
 
 const FileHtml = lazy(() =>
   import("@/components/FileHtml").catch(() => ({
-    default: () => <Notice>Could not load the HTML viewer. Choose Source to read it.</Notice>,
+    default: () => (
+      <Notice>Could not load the HTML viewer. Turn off Preview to read the source.</Notice>
+    ),
   })),
 );
 
@@ -165,7 +167,7 @@ export function WorkspaceFile({
       }
       actions={
         <>
-          {result?.kind === "markdown" && (
+          {(result?.kind === "markdown" || result?.kind === "html") && (
             <div className="flex items-center gap-2 px-3">
               <Label htmlFor={previewId}>Preview</Label>
               <Switch
@@ -175,12 +177,12 @@ export function WorkspaceFile({
               />
             </div>
           )}
-          {(result?.kind === "svg" || result?.kind === "html") && (
+          {result?.kind === "svg" && (
             <PianoViewToggle
               type="single"
               value={mode}
               onValueChange={(value) => value && setMode(value)}
-              aria-label={result.kind === "html" ? "HTML view" : "SVG view"}
+              aria-label="SVG view"
             >
               <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
               <PianoViewToggleItem value="source">Source</PianoViewToggleItem>

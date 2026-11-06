@@ -17,7 +17,7 @@ Click the original link again to reread; **Preview / Source** only changes prese
 | Format | Preview | Maximum file size |
 | --- | --- | --- |
 | UTF-8 Markdown (`.md`, `.markdown`) | Rendered Markdown, with Source toggle | 1 MiB |
-| UTF-8 HTML (`.html`, `.htm`) | Isolated static document, with Preview / Source | 1 MiB |
+| UTF-8 HTML (`.html`, `.htm`) | Isolated static document, with the same Preview switch as Markdown | 1 MiB |
 | UTF-8 source, JSON, YAML, logs, unknown text | Shiki highlighting when recognized; otherwise plain text | 1 MiB |
 | UTF-8 SVG (`.svg`) | Native image on a light background, with Source toggle | 1 MiB |
 | PNG, JPEG, GIF, WebP | Native image | 10 MiB |
@@ -61,7 +61,8 @@ output to 32 MiB of characters, and asynchronous preparation to ten seconds. The
 limits also apply. Missing, refused or over-budget resources are omitted; whole-document limits
 leave Source available. These are resource bounds, not protection against every expensive browser
 layout or image decoder. A view toggle does not reread resources; clicking the original file link
-does. Closing the file or changing its owner aborts preparation and discards its document.
+does. The Preview switch works as it does for Markdown: on shows the document, off shows source.
+Closing the file or changing its owner aborts preparation and discards its document.
 
 ### Text, Markdown and PDF
 
