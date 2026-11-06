@@ -14,10 +14,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Quality gates
+  checks:
+    name: Static checks
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Clean install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      # oxlint, stylelint, then oxfmt --check; do not run auto-fixes in CI.
+      - name: Lint and formatting
+        run: npm run lint
+      - name: Build
+        run: npm run build
+
+  tests:
+    name: Module tests (${{ matrix.shard }}/4)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      # Finish every shard even when another fails, retaining the full suite's evidence.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,15 +72,27 @@ jobs:
           "$RUNNER_TEMP/worktrunk/wt" --version
       - name: Clean install
         run: npm ci
-      - name: Typecheck
-        run: npm run typecheck
-      # oxlint, stylelint, then oxfmt --check; do not run auto-fixes in CI.
-      - name: Lint and formatting
-        run: npm run lint
+      # Same preload and file glob as npm test. Node partitions all files across the shards;
+      # keep options before the glob (npm test -- --test-shard=... would not shard).
       - name: Test (fake Pi, no model credentials)
-        run: npm test
-      - name: Build
-        run: npm run build
+        run: node --test --test-shard=${{ matrix.shard }}/4 --import ./test/setup.ts 'test/**/*.test.ts'
+
+  # Preserve the existing required-check name. A skipped/cancelled/failed dependency must
+  # never turn into a passing (or skipped) gate, including a failure in just one matrix leg.
+  quality:
+    name: Quality gates
+    needs: [checks, tests]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Require every quality check
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+        run: |
+          test "$CHECKS_RESULT" = success
+          test "$TESTS_RESULT" = success
 
   browser:
     name: Critical paths

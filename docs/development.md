@@ -44,13 +44,28 @@ real Worktrunk and needs `wt` 0.80.0 or later on `PATH`. The critical-path brows
 ## CI and merging
 
 [Quality CI](../.github/workflows/quality.yml) runs on every pull request, every push to `main` and
-every merge-queue candidate, on Node 24. The quality job runs `npm ci`, `npm run typecheck`,
-`npm run lint`, `npm test` and `npm run build`, with the latest Worktrunk release, checked against
-the checksum file published with it. A second job runs `npm run test:browser`. CI gets no model
-secrets.
+every merge-queue candidate, on Node 24. Independent jobs run:
+
+- **Static checks:** `npm ci`, `npm run typecheck`, `npm run lint` and `npm run build`.
+- **Module tests (1–4/4):** each runs `npm ci` and one native Node test shard, using the same
+  preload and file glob as `npm test`. Every shard installs the latest Worktrunk release, checked
+  against its published checksum. All shards finish even if another fails.
+- **Critical paths:** `npm ci` and `npm run test:browser`, retaining journey screenshots.
+
+**Quality gates** keeps its existing check name and passes only when static checks and every module
+shard succeed; failed, cancelled or skipped dependencies cannot pass it. CI gets no model secrets.
+The extra runners trade aggregate runner time for a shorter feedback path; no test selection or
+result caching is used. New test files join the shards automatically. To reproduce a shard locally:
+
+```sh
+node --test --test-shard=1/4 --import ./test/setup.ts 'test/**/*.test.ts'
+```
+
+Keep the preload and glob aligned with `npm test`. Options must precede the glob; appending
+`--test-shard` with `npm test --` does not shard the suite. `npm test` still runs the whole suite locally.
 
 No branch protection enforces these jobs: the owner canceled it (PIN-17). Before you merge, check
-that **Quality gates** passed on the latest commit.
+that **Quality gates** and **Critical paths** passed on the latest commit.
 
 The Piano host must be private: reachable only by its trusted developer, on loopback or through a
 private authenticated proxy such as exe.dev's (INV-11). Development has no privacy requirement;
