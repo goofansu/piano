@@ -5,10 +5,6 @@ import { mayPreviewAsImage, previewImage } from "./previewImage.ts";
 export const markdownImageLimit = 8;
 export const markdownImageBytes = 20 * 1024 * 1024;
 
-/** Replies resolve from the workspace root; Markdown files resolve from their own directory. */
-export const relativeToDocument = (document: string, path: string) =>
-  path.startsWith("/") ? path : `${document.slice(0, document.lastIndexOf("/") + 1)}${path}`;
-
 export interface MarkdownImageIo {
   /** Reads a path as the document wrote it; the caller resolves it against its document. */
   readonly read: (path: string, signal: AbortSignal) => Promise<FilePreview>;

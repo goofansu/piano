@@ -88,8 +88,11 @@ Relative local stylesheets and images are read through the same workspace-file s
 unrestricted browser fetching. CSS imports resolve relative to their stylesheet, with cycles stopped;
 CSS `url()` images and HTML `img` sources become embedded PNG, JPEG, GIF, WebP or image-mode SVG.
 Absolute paths, schemes (including user-supplied data/blob URLs), protocol-relative references,
-remote resources and `srcset` are not automatic reads. Relative `..` references are supported;
-existing file resolution can follow symlinks and leave the workspace, as it does for Markdown.
+remote resources and `srcset` are not automatic reads. A reference names the same file it would as
+a Markdown or HTML link (`web/src/lib/file-link.ts`): `%XX` escapes decode, any other `%` is part
+of the name; a decoded reference that is absolute, holds a `\` or starts with a scheme is refused.
+Relative `..` references are supported; existing file resolution can follow symlinks and leave the workspace, as it does
+for Markdown.
 CSS is parsed, not rewritten with URL regular expressions. Unsupported loading functions (including
 `image-set`), font faces, unsupported at-rules and parser-recovered CSS fail closed. Simple and
 media-qualified imports are supported; imports with `layer()` or `supports()` qualifiers are not.

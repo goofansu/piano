@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FilePreview } from "../shared/files.ts";
-import { markdownImageLoader, relativeToDocument } from "../web/src/lib/markdownImageLoader.ts";
+import { markdownImageLoader } from "../web/src/lib/markdownImageLoader.ts";
 
 const MiB = 1024 * 1024;
 
@@ -128,10 +128,4 @@ test("disposing an owner aborts its read and revokes every Blob URL it made", as
   await first.settle();
   assert.deepEqual(first.reads, ["a.png", "b.png"]);
   assert.equal(first.live.size, 0);
-});
-
-test("a Markdown file resolves relative images from its own directory", () => {
-  assert.equal(relativeToDocument("docs/guide.md", "shots/a.png"), "docs/shots/a.png");
-  assert.equal(relativeToDocument("", "a.png"), "a.png");
-  assert.equal(relativeToDocument("docs/guide.md", "/tmp/a.png"), "/tmp/a.png");
 });

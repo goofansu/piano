@@ -222,12 +222,31 @@ test("automatic resource references cannot select absolute paths, protocols or e
     "https%3a%2f%2fevil.invalid/a",
     "%5c%5cevil.invalid/a",
     "a%00.png",
-    "%zz",
     "#fragment",
   ];
   const output = parse(await prepare(references.map((src) => `<img src="${src}">`).join("")));
   assert.equal(output.querySelectorAll("img").length, references.length);
   assert.equal(output.querySelector("[src]"), null);
+});
+
+test("HTML images name the files Markdown and HTML links name", async () => {
+  const reads: string[] = [];
+  const read: HtmlPreviewReadFile = async (path) => {
+    reads.push(path);
+    return imageFile(path);
+  };
+  const output = parse(
+    await prepare(
+      '<img src="100%.png"><img src="2024-01-01T10:00.png"><img src="caf%C3%A9.png">',
+      read,
+    ),
+  );
+  assert.deepEqual(reads, [
+    "/work/reports/100%.png",
+    "/work/reports/2024-01-01T10:00.png",
+    "/work/reports/café.png",
+  ]);
+  assert.equal(output.querySelectorAll("img[src^='data:image/png']").length, 3);
 });
 
 test("missing and wrong-kind resources disappear without discarding readable content", async () => {

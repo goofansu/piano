@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { workspaceFile } from "@/lib/api";
+import { relativeToDocument } from "@/lib/file-link";
 import { markdownImages } from "@/lib/markdown";
-import {
-  type MarkdownImageLoader,
-  markdownImageLoader,
-  relativeToDocument,
-} from "@/lib/markdownImageLoader";
+import { type MarkdownImageLoader, markdownImageLoader } from "@/lib/markdownImageLoader";
 
 const empty: ReadonlyMap<string, string> = new Map();
 

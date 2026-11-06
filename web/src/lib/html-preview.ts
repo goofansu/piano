@@ -1,13 +1,12 @@
 import * as css from "css-tree";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import type { FilePreview } from "../../../shared/files.ts";
-import { localFilePath } from "./file-link.ts";
+import { automaticReference, documentReference } from "./file-link.ts";
 import {
   htmlPreviewBridge,
   type HtmlPreviewDocument,
   type HtmlPreviewLink,
 } from "./html-preview-bridge.ts";
-import { relativeToDocument } from "./markdownImageLoader.ts";
 
 /** The existing workspace file reader, already bound to the selected workspace. */
 export type HtmlPreviewReadFile = (path: string, signal: AbortSignal) => Promise<FilePreview>;
@@ -53,29 +52,6 @@ const policy = [
   "base-uri 'none'",
   "form-action 'none'",
 ].join("; ");
-
-/** Only relative local references are automatic reads. The file seam still owns authorization. */
-function localPath(base: string, reference: string): string | undefined {
-  if (reference.length > 4096) return undefined;
-  let value = reference.trim().split(/[?#]/, 1)[0]!;
-  try {
-    value = decodeURIComponent(value);
-  } catch {
-    return undefined;
-  }
-  if (
-    !value ||
-    /[\\:]/.test(value) ||
-    [...value].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) ||
-    value.startsWith("/")
-  )
-    return undefined;
-  // Do not collapse link/..: the server follows symlinks before resolving their parent.
-  return `${base.slice(0, base.lastIndexOf("/") + 1)}${value}`
-    .split("/")
-    .filter((part) => part !== ".")
-    .join("/");
-}
 
 function dataUrl(bytes: Uint8Array, mime: string): string {
   let binary = "";
@@ -162,7 +138,7 @@ export async function prepareHtmlPreview(
   };
 
   const image = async (reference: string, base: string): Promise<string | undefined> => {
-    const resource = localPath(base, reference);
+    const resource = automaticReference(base, reference);
     if (!resource) return undefined;
     if (!images.has(resource)) {
       const file = await read(resource);
@@ -247,7 +223,7 @@ export async function prepareHtmlPreview(
           if (!url || (url.type !== "Url" && url.type !== "String") || extra.length) return "";
           // Simple imports and media-qualified imports; layer()/supports() imports fail closed.
           if (media && media.type !== "MediaQueryList") return "";
-          const resource = localPath(base, url.value);
+          const resource = automaticReference(base, url.value);
           if (!resource || ancestors.has(resource)) return "";
           const file = await read(resource);
           if (!file || (file.kind !== "text" && file.kind !== "markdown")) return "";
@@ -323,7 +299,7 @@ export async function prepareHtmlPreview(
             new Set(),
           );
         else {
-          const resource = localPath(path, attributeValue("href") ?? "");
+          const resource = automaticReference(path, attributeValue("href") ?? "");
           if (resource) {
             const file = await read(resource);
             if (file && (file.kind === "text" || file.kind === "markdown"))
@@ -378,8 +354,8 @@ export async function prepareHtmlPreview(
                 /* Invalid web URLs remain text, never local paths. */
               }
             } else {
-              const file = localFilePath(href);
-              if (file) link = { kind: "file", path: relativeToDocument(path, file) };
+              const file = documentReference(path, href);
+              if (file) link = { kind: "file", path: file };
             }
             if (link) {
               clean.setAttribute("data-piano-link", String(links.length));
