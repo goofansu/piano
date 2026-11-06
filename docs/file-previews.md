@@ -4,7 +4,10 @@ Click a local Markdown link such as `[guide](docs/guide.md)` in a session to ope
 the Surface area beside the conversation, where Changes opens too. Side by side the area is
 resizable from its left edge and remembers its width; where the areas take turns, the file gets
 Each file opens in a tab of its own, added at the end; a file already open is read again in its
-tab. Closing a tab shows its neighbour; one area at a time, closing a file opened from the
+tab. After a successful read, tabs adopt the server-resolved path and merge duplicate spellings,
+keeping the first tab's position. The browser does not collapse `..` before reading: a directory
+symlink can change its destination. Failed reads keep the requested path.
+Closing a tab shows its neighbour; one area at a time, closing a file opened from the
 conversation returns there. Links in the conversation use the session's working directory;
 links and images in a Markdown or HTML preview use that document's directory. Paths may leave the
 workspace: `../sibling-worktree/evidence.md` and absolute paths such as `/tmp/abc.md` open the

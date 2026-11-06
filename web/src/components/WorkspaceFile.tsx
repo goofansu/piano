@@ -73,7 +73,7 @@ export function WorkspaceFile({
   workspaceId: string | undefined;
   file: Extract<SurfaceTab, { kind: "file" }>;
 }) {
-  const { openFile } = useNavigation();
+  const { openFile, resolveFile } = useNavigation();
   const previewId = useId();
   const [result, setResult] = useState<Preview>();
   const [mode, setMode] = useState("preview");
@@ -93,6 +93,7 @@ export function WorkspaceFile({
         if (controller.signal.aborted) return;
         setResult(result);
         setStatus("");
+        resolveFile(file, result.path);
       },
       (error: unknown) => {
         if (!controller.signal.aborted)
@@ -104,7 +105,7 @@ export function WorkspaceFile({
       },
     );
     return () => controller.abort();
-  }, [file, workspaceId]);
+  }, [file, workspaceId, resolveFile]);
   const [binary, setBinary] = useState<{ result: typeof result; url: string }>();
   useEffect(() => {
     setBinary(undefined);

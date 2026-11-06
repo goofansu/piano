@@ -4,6 +4,7 @@ import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import {
   type AddressBar,
+  activeTab,
   addressFor,
   createNavigation,
   initialView,
@@ -1108,7 +1109,79 @@ test("a file opens as one tab however its path is spelled", () => {
   );
 });
 
-test("a path through `..` keeps its spelling: the directory before it may be a symlink", () => {
+test("following an HTML sibling link reuses the reference file tab", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("reference/0001-codemode-map.html");
+  p.navigation.openFile("lessons/0001-why-codemode.html");
+  p.navigation.openFile("lessons/../reference/0001-codemode-map.html", "surface");
+  const request = activeTab(p.navigation.getState().surface);
+  assert.ok(request && typeof request !== "string");
+  // WorkspaceFile reports the successful read's path, not a lexical guess at `..`.
+  p.navigation.resolveFile(request, "reference/0001-codemode-map.html");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["file:reference/0001-codemode-map.html", "file:lessons/0001-why-codemode.html"],
+    active: "file:reference/0001-codemode-map.html",
+    area: "surface",
+  });
+});
+
+test("resolved aliases keep tab order and the latest link's return area, not completion order", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.setSingle(true);
+  p.navigation.openFile("lessons/../reference/map.html", "agent");
+  const alias = activeTab(p.navigation.getState().surface);
+  assert.ok(alias && typeof alias !== "string");
+  p.navigation.openChanges();
+  p.navigation.openFile("reference/map.html", "surface");
+  p.navigation.resolveFile(alias, "reference/map.html");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:reference/map.html", "changes"]);
+  p.navigation.closeTab("file:reference/map.html");
+  assert.equal(shownTabs(p.navigation).area, "surface", "latest link wins, even if it read first");
+});
+
+test("resolved file reads do not reopen closed tabs, steal focus or affect another session", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  const open = () => {
+    p.navigation.openFile("lessons/../reference/map.html");
+    const file = activeTab(p.navigation.getState().surface);
+    assert.ok(file && typeof file !== "string");
+    return file;
+  };
+  const old = open();
+  const current = open();
+  p.navigation.resolveFile(old, "reference/map.html");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:lessons/../reference/map.html"]);
+  p.navigation.openChanges();
+  p.navigation.resolveFile(current, "reference/map.html");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["file:reference/map.html", "changes"],
+    active: "changes",
+    area: "surface",
+  });
+  const closed = open();
+  p.navigation.closeTab("file:lessons/../reference/map.html");
+  const before = shownTabs(p.navigation);
+  p.navigation.resolveFile(closed, "reference/map.html");
+  assert.deepEqual(shownTabs(p.navigation), before);
+  const previousSession = open();
+  p.navigation.select("/scratch", "b");
+  p.selected("b");
+  open();
+  const next = shownTabs(p.navigation);
+  p.navigation.resolveFile(previousSession, "reference/map.html");
+  assert.deepEqual(shownTabs(p.navigation), next);
+});
+
+test("a path through `..` keeps its spelling until the server resolves the directory symlink", () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
@@ -1119,6 +1192,10 @@ test("a path through `..` keeps its spelling: the directory before it may be a s
   p.navigation.openFile("alias/../README.md");
   p.navigation.openFile("/scratch/alias/../README.md");
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:alias/../README.md"]);
+  const file = activeTab(p.navigation.getState().surface);
+  assert.ok(file && typeof file !== "string");
+  p.navigation.resolveFile(file, "/sibling/README.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:/sibling/README.md"]);
 });
 
 test("one area at a time, closing a file opened from the Agent area returns there", () => {
