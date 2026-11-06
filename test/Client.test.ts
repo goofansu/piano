@@ -320,7 +320,7 @@ test("notifications: applied session notices notify; rejected frames do not", ()
   ]);
 });
 
-test("answer acceptance notifies once, only after confirmation; duplicate frames and snapshots stay quiet", () => {
+test("answer acceptance stays in session state without a toast, including duplicate frames and snapshots", () => {
   const h = harness();
   h.status(true);
   h.client.select("/scratch", "a");
@@ -342,7 +342,7 @@ test("answer acceptance notifies once, only after confirmation; duplicate frames
   });
   h.server(h.event(2, receipt("pending")));
   h.server(h.event(3, receipt("written")));
-  assert.deepEqual(h.notes, [], "a write alone never earns an acceptance toast");
+  assert.deepEqual(h.notes, []);
   h.server(h.event(4, receipt("accepted")));
   h.server(h.event(4, receipt("accepted")));
   h.server(h.event(5, receipt("accepted")));
@@ -352,7 +352,11 @@ test("answer acceptance notifies once, only after confirmation; duplicate frames
       snapshot: { state: receipt("accepted").state, messages: [], dialogs: [] },
     }),
   );
-  assert.deepEqual(h.notes, [["Answer accepted", "success"]]);
+  assert.deepEqual(h.notes, [], "the session already displays the accepted answer");
+  assert.deepEqual(
+    h.client.getState().session?.state.dialogResolution,
+    receipt("accepted").state.dialogResolution,
+  );
 });
 
 test("trust changes on screen notify once; initial results and other directories stay quiet", () => {
