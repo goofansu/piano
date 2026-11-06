@@ -57,7 +57,7 @@ step reaches a public endpoint; the command fixture and refused URLs below stay 
     `ab find role button click --name "Add MCP server" --exact;
     ab find role textbox fill --name "Name" --exact verify-url;
     ab find role textbox fill --name "URL" --exact 'http://127.0.0.1:9/mcp'`.
-    Capture `02-url-draft`, then `ab find role button click --name "Add" --exact;
+    Capture `02-url-draft`, then `ab find role button click --name "Connect" --exact;
     ab wait --text "Could not connect to MCP verify-url."`.
   - Result: refusal under URL, dialog stays open, no saved verify-url entry. Capture
     `03-url-refused`; `ab press Escape`.
@@ -67,7 +67,7 @@ step reaches a public endpoint; the command fixture and refused URLs below stay 
     ab find role radio click --name "Command" --exact;
     ab find role textbox fill --name "Command" --exact node;
     ab find role textbox fill --name "Arguments One per line" --exact "$(printf '%s\n%s' "$ROOT/test/fixtures/phase0-mcp.mjs" "$RUN/mcp-command.log")"`.
-    Capture `04-command-draft`, then `ab find role button click --name "Add" --exact;
+    Capture `04-command-draft`, then `ab find role button click --name "Connect" --exact;
     ab wait '[aria-label="Manage MCP verify-command"]'`.
   - Result: toast `MCP verify-command added.`, Connected row, and `verify-command` in
     `$RUN/pi-agent/mcp.json`. Capture `05-command-added`; keep a copy of that file as side-effect
@@ -98,7 +98,7 @@ step reaches a public endpoint; the command fixture and refused URLs below stay 
     ab find role textbox fill --name "mcpServers JSON" --exact '{"mcpServers":{"one":{"url":"http://127.0.0.1:9/mcp"},"two":{"url":"http://127.0.0.1:9/mcp"}}}';
     ab wait --text "Paste one server at a time."`; capture `10-json-multiple`.
     Replace it with `ab find role textbox fill --name "mcpServers JSON" --exact '{"mcpServers":{"verify-json":{"url":"http://127.0.0.1:9/mcp"}}}';
-    ab find role button click --name "Add" --exact;
+    ab find role button click --name "Connect" --exact;
     ab wait --text "Could not connect to MCP verify-json."`.
   - Result: no saved entry; capture `11-json-refused`; `ab press Escape`.
 - `connect` (public network required; no sign-in completion)
