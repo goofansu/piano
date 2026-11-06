@@ -81,7 +81,7 @@ test("nested publication receipts reach live and reconnect snapshots despite out
       ]);
       const results = messages.filter((m) => m.role === "tool_result");
       assert.equal(results.length, 4);
-      assert.ok(results.every((m) => m.isError && m.nestedCallsIncompleteReason === "arguments"));
+      assert.ok(results.every((m) => m.isError && m.nestedCallsLost === "arguments"));
     }).pipe(Effect.timeout("10 seconds"), Effect.scoped),
   );
 });

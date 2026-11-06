@@ -333,7 +333,7 @@ test("a call's nested calls are those its result recorded plus live executions i
       toolCallId: "task",
       text: "",
       nestedCalls: [recorded],
-      nestedCallsComplete: false,
+      nestedCallsLost: "details",
     },
   ];
   const [task, other] = reply(transcriptRows(history, { tools }), "a").tools;
@@ -372,8 +372,7 @@ test("omitted saved inputs are contextual, not a codemode warning or a tool fail
       text: "confirmed",
       toolCallId: "code",
       nestedCalls: [child],
-      nestedCallsComplete: false,
-      nestedCallsIncompleteReason: "arguments",
+      nestedCallsLost: "arguments",
     },
   ];
   const executions: Record<string, ToolExecution>[] = [
@@ -392,7 +391,7 @@ test("omitted saved inputs are contextual, not a codemode warning or a tool fail
   }
   messages[1] = {
     ...messages[1],
-    nestedCallsIncompleteReason: undefined,
+    nestedCallsLost: "details",
     nestedCalls: [
       { ...child, status: "error" },
       { ...child, id: "code/2", argsOmitted: undefined, status: "incomplete" },

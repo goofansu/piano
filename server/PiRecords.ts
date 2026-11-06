@@ -85,6 +85,43 @@ export interface RawMessage {
   };
   details?: unknown;
 }
+type RawNestedCall = NonNullable<RawMessage["nestedCalls"]>["calls"][number];
+/** Pi kept the call but dropped its input to stay within a history size budget. */
+const inputOmitted = (c: RawNestedCall) =>
+  c.arguments === undefined && typeof c.argumentsBytes === "number" && c.argumentsBytes > 0;
+/** Pi 1.5's recorder caps nested calls at 256: a record at the cap may have dropped calls. */
+const NESTED_CALL_LIMIT = 256;
+
+/** A tool result's nested calls and what Pi's bounded record of them lost. Only "arguments" when
+ * every call is present with a terminal status and each lost input is a known size omission;
+ * unknown or unfinished statuses, or a record at the call limit, may hide more: "details". */
+function nestedCallsOf(
+  record: RawMessage["nestedCalls"],
+  toolCallId: string | undefined,
+): Pick<RenderMsg, "nestedCalls" | "nestedCallsLost"> {
+  if (!record) return {};
+  const nestedCalls = record.calls.map((c): ToolExecution => ({
+    id: c.id,
+    parentId: c.id.includes("/") ? c.id.slice(0, c.id.lastIndexOf("/")) : toolCallId,
+    name: c.name,
+    args: argsOf(c.arguments),
+    ...(inputOmitted(c) ? { argsOmitted: "size" as const } : {}),
+    writtenPath: writtenPath(c.name, c.arguments),
+    status: c.status === "ok" ? "success" : c.status === "error" ? "error" : "incomplete",
+    text: "",
+    outputKind: "unavailable",
+  }));
+  if (record.complete) return { nestedCalls };
+  const onlyInputs =
+    record.calls.length < NESTED_CALL_LIMIT &&
+    record.calls.some(inputOmitted) &&
+    record.calls.every(
+      (c) =>
+        (c.status === "ok" || c.status === "error") &&
+        (c.arguments !== undefined || inputOmitted(c)),
+    );
+  return { nestedCalls, nestedCallsLost: onlyInputs ? "arguments" : "details" };
+}
 const argsOf = (args: unknown) => (args === undefined ? "" : JSON.stringify(args, null, 2));
 function textOf(content: string | RawContent[] | undefined, separator = ""): string {
   if (typeof content === "string") return content;
@@ -216,41 +253,7 @@ export function serializeMessage(
       toolCallId: msg.toolCallId,
       isError: msg.isError,
       usage: usageOf(msg.usage),
-      nestedCalls: msg.nestedCalls?.calls.map((c) => ({
-        id: c.id,
-        parentId: c.id.includes("/") ? c.id.slice(0, c.id.lastIndexOf("/")) : msg.toolCallId,
-        name: c.name,
-        args: argsOf(c.arguments),
-        ...(c.arguments === undefined &&
-        typeof c.argumentsBytes === "number" &&
-        c.argumentsBytes > 0
-          ? { argsOmitted: "size" as const }
-          : {}),
-        writtenPath: writtenPath(c.name, c.arguments),
-        status: c.status === "ok" ? "success" : c.status === "error" ? "error" : "incomplete",
-        text: "",
-        outputKind: "unavailable",
-      })),
-      nestedCallsComplete: msg.nestedCalls?.complete,
-      // Pi 1.5's recorder caps calls at 256. At that limit, omitted arguments cannot
-      // establish that no calls were also dropped. Unknown/unfinished statuses stay generic.
-      nestedCallsIncompleteReason:
-        msg.nestedCalls?.complete === false &&
-        msg.nestedCalls.calls.length < 256 &&
-        msg.nestedCalls.calls.some(
-          (c) =>
-            c.arguments === undefined &&
-            typeof c.argumentsBytes === "number" &&
-            c.argumentsBytes > 0,
-        ) &&
-        msg.nestedCalls.calls.every(
-          (c) =>
-            (c.status === "ok" || c.status === "error") &&
-            (c.arguments !== undefined ||
-              (typeof c.argumentsBytes === "number" && c.argumentsBytes > 0)),
-        )
-          ? "arguments"
-          : undefined,
+      ...nestedCallsOf(msg.nestedCalls, msg.toolCallId),
     };
   else if (msg.role === "compactionSummary" || msg.role === "branchSummary")
     result = {
