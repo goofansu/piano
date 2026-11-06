@@ -78,9 +78,9 @@ export const socketLimits = {
  * frames. ws.send itself has no backpressure, so frames carry increasing delivery IDs
  * and the browser acknowledges cumulatively, avoiding stop-and-wait RTT per token.
  * Holds at most queue limits + one staging frame waiting for credit + the window.
- * Every limit breach or missing acknowledgement resolves `closed` exactly once with
- * the reason and close code; the caller closes the socket. Requires a Scope that
- * outlives delivery; the writer fiber and acknowledgement deadlines live in it.
+ * Overflow, write failure and missed acknowledgements request closure through `closed`;
+ * the first reason wins. The caller must close the socket and end the owning Scope:
+ * resolving `closed` alone does not stop the writer or its acknowledgement timers.
  */
 export const makeSocketDelivery = Effect.fnUntraced(function* <A, E>(
   write: (text: string) => Effect.Effect<void, E>,
@@ -129,7 +129,7 @@ export const makeSocketDelivery = Effect.fnUntraced(function* <A, E>(
     Effect.forkScoped,
   );
   return {
-    /** Never blocks the producer; overflow closes delivery instead. */
+    /** Never waits for socket credit; overflow requests closure through `closed`. */
     offer: outbox.offer,
     /** Cumulative: acknowledges every pending frame up to `id`. Unknown or stale IDs are ignored. */
     ack: Effect.fnUntraced(function* (id: number) {
@@ -144,9 +144,8 @@ export const makeSocketDelivery = Effect.fnUntraced(function* <A, E>(
       credit = yield* Deferred.make<void>();
       yield* Deferred.succeed(available, undefined);
     }),
-    /** Ends delivery with a close reason; the first reason wins. */
+    /** Request closure; the first reason wins. */
     close,
-    /** Resolves with the first reason delivery ended. */
     closed: Deferred.await(closedWith),
   };
 });

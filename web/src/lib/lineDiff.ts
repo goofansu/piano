@@ -1,7 +1,8 @@
 /**
  * A line diff of two texts in the Changes view's shape (`DiffFile`), for a proposal that replaces a
- * saved skill or prompt. Both texts are bounded by the draft rule, so a plain LCS over the lines
- * between the common head and tail is cheap; past `CELLS` the middle reads as replaced whole.
+ * saved skill or prompt. Only the unmatched middle needs a longest common subsequence (LCS)
+ * search. When its line-pair count exceeds `CELLS`, report the middle as wholly replaced rather
+ * than doing quadratic work to find a smaller diff.
  */
 import type { DiffFile, DiffHunk, DiffLine } from "./diff.ts";
 
@@ -29,7 +30,7 @@ function edits(before: string[], after: string[]): DiffLine[] {
   const b = after.slice(head, after.length - tail);
   const middle: Array<{ kind: "context" | "add" | "del"; text: string }> = [];
   if (a.length * b.length <= CELLS) {
-    // lcs[i][j]: the longest common run of a[i..] and b[j..].
+    // lcs[i * width + j] is the LCS length of a[i..] and b[j..]; matches need not be adjacent.
     const width = b.length + 1;
     const lcs = new Uint32Array((a.length + 1) * width);
     for (let i = a.length - 1; i >= 0; i--)
@@ -72,7 +73,8 @@ function edits(before: string[], after: string[]): DiffLine[] {
   );
 }
 
-/** `previous` → `next` as one file's hunks, `CONTEXT` lines around each change. */
+/** Display hunks with `CONTEXT` lines around changes. Final newline presence is ignored and
+ * `raw` is empty: this is not a patch to apply. */
 export function lineDiff(path: string, previous: string, next: string): DiffFile {
   const lines = edits(linesOf(previous), linesOf(next));
   const hunks: DiffHunk[] = [];
