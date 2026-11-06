@@ -628,7 +628,7 @@ export const sameWorkspace = (a: Workspace, b: Workspace) =>
  * counted as saved: a value fits when its trimmed length does.
  */
 const trimmedFit = (max: number) => Schema.makeFilter((t: string) => t.trim().length <= max);
-export const PROJECT_NAME_MAX = 200;
+export const PROJECT_NAME_MAX = 80;
 export const SESSION_TITLE_MAX = 200;
 const sessionTitleFit = trimmedFit(SESSION_TITLE_MAX);
 export const PROJECT_INSTRUCTIONS_MAX = 20_000;
