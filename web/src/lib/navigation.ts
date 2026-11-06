@@ -7,11 +7,13 @@
  * render timing.
  */
 import { type AppState, type Page, sessionKey } from "../store.ts";
+import type { workspaceFile } from "./api.ts";
 import type { Client } from "./client.ts";
 import type { Preference } from "./preference.ts";
 import { findProject } from "./projectCommands.ts";
 import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
 import { sessionLabel } from "./sessionCatalog.ts";
+import { checkoutMissingAt, workspaceFor } from "./sessionContext.ts";
 
 /** The session's own views in the Surface area, one tab each. */
 export type SurfaceView = "changes" | "preview";
@@ -20,7 +22,18 @@ export type SurfaceView = "changes" | "preview";
  * One tab in the selected session's Surface area: one of its views, or a file a link opened. A
  * file remembers the area its latest link was in, so closing it one area at a time returns there.
  */
-export type SurfaceTab = SurfaceView | { kind: "file"; path: string; from: SessionArea };
+export type SurfaceTab = SurfaceView | FileTab;
+
+type FileLocation = { kind: "file"; path: string; from: SessionArea };
+
+/** A disposable file acquisition. `key` retains the viewer through path adoption, not a new open.
+ * Only its location is remembered across reloads; bytes and request identity never are. */
+export interface FileTab extends FileLocation {
+  key: number;
+  workspaceId: string | undefined;
+  result?: Awaited<ReturnType<typeof workspaceFile>>;
+  status: string;
+}
 
 /** Whether a tab is one of the session's views rather than an open file. */
 export const isView = (tab: SurfaceTab): tab is SurfaceView => typeof tab === "string";
@@ -49,7 +62,8 @@ function filePath(path: string, cwd: string | undefined): string {
 }
 
 /** A tab's identity: one per view, and one tab per file path. */
-export const tabKey = (tab: SurfaceTab): string => (isView(tab) ? tab : `file:${tab.path}`);
+export const tabKey = (tab: SurfaceView | FileLocation): string =>
+  typeof tab === "string" ? tab : `file:${tab.path}`;
 
 /** The tab shown, if the area is open. */
 export const activeTab = (surface: Surface | null): SurfaceTab | undefined =>
@@ -172,6 +186,8 @@ export interface SurfaceMemory {
 export interface NavigationOptions {
   client: Pick<Client, "getState" | "subscribe" | "select" | "dispatch">;
   address: AddressBar;
+  /** The workspace HTTP read; navigation owns its lifetime together with the tab. */
+  readFile: typeof workspaceFile;
   /** Without one, a reload starts every session on its Agent area. */
   memory?: SurfaceMemory;
   /** Whether the session rail is on; without one it starts off and lasts for this navigation only. */
@@ -216,8 +232,6 @@ export interface Navigation {
    * already open; without one (the palette), the area shown one at a time, or Agent side by side.
    */
   openFile: (path: string, from?: SessionArea) => void;
-  /** Adopts a successful file read's server-resolved path; stale/closed requests do nothing. */
-  resolveFile: (file: Extract<SurfaceTab, { kind: "file" }>, path: string) => void;
   /** Shows an open tab by its key. */
   selectTab: (key: string) => void;
   /**
@@ -380,14 +394,14 @@ const panelOwner = (s: AppState) => (s.session ? sessionKey(s.session) : null);
  * rail covered the tabs, so the right side comes back as it was left. */
 interface KeptSurface {
   owner: string;
-  surface: Surface | null;
+  surface: { tabs: (SurfaceView | FileLocation)[]; active: string } | null;
   area: SessionArea;
   covered: boolean;
 }
 
 const isArea = (value: unknown): value is SessionArea => value === "agent" || value === "surface";
 
-const isTab = (value: unknown): value is SurfaceTab =>
+const isTab = (value: unknown): value is SurfaceView | FileLocation =>
   value === "changes" ||
   (typeof value === "object" &&
     value !== null &&
@@ -399,7 +413,7 @@ const isTab = (value: unknown): value is SurfaceTab =>
 function decodeKept(
   raw: string | null,
   owner: string,
-): { surface: Surface; area: SessionArea; covered: boolean } | null {
+): { surface: NonNullable<KeptSurface["surface"]>; area: SessionArea; covered: boolean } | null {
   if (raw === null) return null;
   let value: Partial<KeptSurface> | null;
   try {
@@ -431,6 +445,7 @@ function decodeKept(
 export function createNavigation({
   client,
   address,
+  readFile,
   memory,
   rail: railPreference,
   moved = () => {},
@@ -494,7 +509,12 @@ export function createNavigation({
         owner
           ? JSON.stringify({
               owner,
-              surface: state.surface,
+              surface: state.surface && {
+                ...state.surface,
+                tabs: state.surface.tabs.map((tab) =>
+                  isView(tab) ? tab : { kind: tab.kind, path: tab.path, from: tab.from },
+                ),
+              },
               area: state.area,
               covered: state.covered,
             } satisfies KeptSurface)
@@ -505,9 +525,33 @@ export function createNavigation({
     }
   };
   const listeners = new Set<() => void>();
-  // Completion order must not change which link's area closing a merged file returns to.
-  const fileRequests = new WeakMap<object, number>();
+  // Explicit-open order, independent of completion or checkout recovery order.
+  const fileRequests = new WeakMap<FileTab, number>();
   let fileRequest = 0;
+  let fileKey = 0;
+  let fileWorkspace: string | undefined;
+  let fileCheckoutMissing = false;
+  let fileContext: unknown[] = [];
+  const reads = new Map<number, AbortController>();
+  const newFile = (file: FileLocation, order = ++fileRequest): FileTab => {
+    const tab: FileTab = {
+      kind: "file",
+      path: file.path,
+      from: file.from,
+      key: ++fileKey,
+      workspaceId: fileWorkspace,
+      status: fileWorkspace
+        ? "Opening…"
+        : "Workspace unavailable. Refresh folders and try the link again.",
+    };
+    fileRequests.set(tab, order);
+    return tab;
+  };
+  const updateFile = (file: FileTab, patch: Partial<FileTab>): FileTab => {
+    const tab = { ...file, ...patch };
+    fileRequests.set(tab, fileRequests.get(file) ?? 0);
+    return tab;
+  };
 
   /**
    * Applies what a move changes. A move that changes nothing is no move: the state keeps its
@@ -575,12 +619,20 @@ export function createNavigation({
         // rail still over the tabs it covered, unless it has since been turned off.
         const back = next ? recall(next) : null;
         set({
-          surface: back?.surface ?? null,
+          surface: back
+            ? {
+                ...back.surface,
+                tabs: back.surface.tabs.map((tab) =>
+                  typeof tab === "string" ? tab : newFile(tab),
+                ),
+              }
+            : null,
           area: back?.area ?? "agent",
           covered: !!back?.covered && state.rail,
           pullRequest: false,
         });
       }
+      syncFiles();
       remember();
     } finally {
       depth--;
@@ -674,6 +726,95 @@ export function createNavigation({
     show({ tabs: tabs.includes(view) ? tabs : [...tabs, view], active: view });
   };
 
+  /** Reads and tab reconciliation share one owner, so adopting a path cannot acquire it again. */
+  function syncFiles() {
+    const c = client.getState();
+    const inputs = [
+      c.workspaces,
+      c.sessionReferences,
+      c.session?.cwd,
+      c.session?.state.checkoutMissing,
+    ];
+    // Streaming projections do not change filesystem availability or scan the session catalog.
+    if (inputs.some((input, i) => input !== fileContext[i])) {
+      fileContext = inputs;
+      const workspaceId = workspaceFor(c, c.session?.cwd)?.id;
+      const missing = !!c.session && checkoutMissingAt(c, c.session.cwd);
+      if (fileWorkspace !== workspaceId || fileCheckoutMissing !== missing) {
+        fileWorkspace = workspaceId;
+        fileCheckoutMissing = missing;
+        if (state.surface)
+          set({
+            surface: {
+              ...state.surface,
+              tabs: state.surface.tabs.map((tab) =>
+                isView(tab)
+                  ? tab
+                  : newFile(
+                      { kind: "file", path: tab.path, from: tab.from },
+                      fileRequests.get(tab),
+                    ),
+              ),
+            },
+          });
+      }
+    }
+    const files = state.surface?.tabs.filter((tab): tab is FileTab => !isView(tab)) ?? [];
+    for (const [key, controller] of reads) {
+      if (!files.some((file) => file.key === key)) {
+        controller.abort();
+        reads.delete(key);
+      }
+    }
+    for (const file of files) {
+      if (!file.workspaceId || reads.has(file.key) || file.result || file.status !== "Opening…")
+        continue;
+      const controller = new AbortController();
+      reads.set(file.key, controller);
+      void readFile(file.workspaceId, file.path, { signal: controller.signal }).then(
+        (result) => completeFile(file.key, controller, { result, status: "" }),
+        (error: unknown) =>
+          completeFile(file.key, controller, {
+            status:
+              error instanceof Error
+                ? error.message
+                : "Could not read this file. Try the link again.",
+          }),
+      );
+    }
+  }
+
+  function completeFile(
+    key: number,
+    controller: AbortController,
+    patch: Pick<FileTab, "status" | "result">,
+  ) {
+    if (controller.signal.aborted) return;
+    batch(() => {
+      const surface = state.surface;
+      const file = surface?.tabs.find((tab): tab is FileTab => !isView(tab) && tab.key === key);
+      if (!surface || !file) return;
+      const path = patch.result?.path ?? file.path;
+      const matches = surface.tabs.filter(
+        (tab): tab is FileTab => !isView(tab) && (tab === file || tab.path === path),
+      );
+      const latest = matches.reduce((a, b) =>
+        (fileRequests.get(a) ?? 0) > (fileRequests.get(b) ?? 0) ? a : b,
+      );
+      // The latest explicit open keeps both its acquisition and return area, even if still pending.
+      const resolved = updateFile(latest, latest === file ? { ...patch, path } : { path });
+      const first = surface.tabs.indexOf(matches[0]);
+      set({
+        surface: {
+          tabs: surface.tabs.flatMap((tab, index) =>
+            index === first ? [resolved] : !isView(tab) && matches.includes(tab) ? [] : [tab],
+          ),
+          active: surface.active === tabKey(file) ? tabKey(resolved) : surface.active,
+        },
+      });
+    });
+  }
+
   return {
     getState: () => state,
     subscribe: (listener) => {
@@ -699,6 +840,8 @@ export function createNavigation({
       return () => {
         stopClient();
         stopPop();
+        for (const read of reads.values()) read.abort();
+        reads.clear();
       };
     },
     select,
@@ -722,41 +865,11 @@ export function createNavigation({
     openFile: (spelled, from = state.layout.agent ? "agent" : "surface") => {
       const path = filePath(spelled, client.getState().session?.cwd);
       const tabs = state.surface?.tabs ?? [];
-      // A fresh tab object for an open file: the viewer reads it again, as clicking a link did,
-      // and closing it returns to the area of this, the latest, link.
-      const tab: SurfaceTab = { kind: "file", path, from };
-      fileRequests.set(tab, ++fileRequest);
+      const tab = newFile({ kind: "file", path, from });
       const key = tabKey(tab);
       const at = tabs.findIndex((t) => tabKey(t) === key);
       show({ tabs: at < 0 ? [...tabs, tab] : tabs.with(at, tab), active: key });
     },
-    resolveFile: (file, path) =>
-      batch(() => {
-        const surface = state.surface;
-        // Object identity binds the result to this open request, not a later click or session.
-        if (!surface?.tabs.includes(file) || file.path === path) return;
-        const key = `file:${path}`;
-        const matches = surface.tabs.filter(
-          (tab): tab is Extract<SurfaceTab, { kind: "file" }> =>
-            !isView(tab) && (tab === file || tabKey(tab) === key),
-        );
-        const latest = matches.reduce((a, b) =>
-          (fileRequests.get(a) ?? 0) > (fileRequests.get(b) ?? 0) ? a : b,
-        );
-        const resolved: SurfaceTab = { ...latest, path };
-        fileRequests.set(resolved, fileRequests.get(latest) ?? 0);
-        // Keep the first tab's position, whether the alias or the resolved name opened first.
-        const first = surface.tabs.indexOf(matches[0]);
-        const tabs = surface.tabs.flatMap((tab, index) =>
-          index === first ? [resolved] : tab === file || tabKey(tab) === key ? [] : [tab],
-        );
-        set({
-          surface: {
-            tabs,
-            active: surface.active === tabKey(file) ? key : surface.active,
-          },
-        });
-      }),
     selectTab: (key) => {
       if (!state.surface?.tabs.some((tab) => tabKey(tab) === key)) return;
       show({ ...state.surface, active: key });

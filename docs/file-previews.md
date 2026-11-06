@@ -5,8 +5,10 @@ the Surface area beside the conversation, where Changes opens too. Side by side 
 resizable from its left edge and remembers its width; where the areas take turns, the file gets
 Each file opens in a tab of its own, added at the end; a file already open is read again in its
 tab. After a successful read, tabs adopt the server-resolved path and merge duplicate spellings,
-keeping the first tab's position. The browser does not collapse `..` before reading: a directory
-symlink can change its destination. Failed reads keep the requested path.
+keeping the first tab's position and the latest explicit open's acquisition and return area,
+regardless of completion order. Adopting the path retains the successful read, not another request.
+The browser does not collapse `..` before reading: a directory symlink can change its destination.
+Failed reads keep the requested path.
 Closing a tab shows its neighbour; one area at a time, closing a file opened from the
 conversation returns there. Links in the conversation use the session's working directory;
 links and images in a Markdown or HTML preview use that document's directory. Paths may leave the
@@ -177,10 +179,11 @@ Markdown does not execute raw HTML; remote embedded resources are not fetched. P
 links, forms and XFA are disabled: document actions and scripts are not run. No document is uploaded
 to a third-party viewer (INV-11).
 
-The session supplies a stable workspace ID and explicit link-click request. The common preview
-module owns acquisition, cancellation, errors and Blob URLs; format renderers only consume acquired
-content. Repeat clicks reread, background workspace snapshots do not. Closing or changing session,
-workspace or file invalidates old reads; media stops, workers are released and Blob URLs are revoked
+Navigation owns the file tab's acquisition, cancellation, errors and server-resolved identity as
+one disposable lifetime. The viewer consumes that acquisition and owns presentation resources such
+as Blob URLs; format renderers only consume acquired content. Only tab locations survive a browser
+reload, never acquired content. Repeat clicks reread, background workspace snapshots do not. Closing
+or changing session, workspace or file invalidates old reads; media stops, workers are released and Blob URLs are revoked
 when their consumers are removed (INV-07). Renderer controls do not register new global shortcuts.
 
 ## Dependencies and verification

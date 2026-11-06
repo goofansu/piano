@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
+import { workspaceFile } from "./api.ts";
 import {
   browserAddressBar,
   browserSurfaceMemory,
@@ -26,6 +27,7 @@ export function useNavigationController(
     createNavigation({
       client,
       address: browserAddressBar,
+      readFile: workspaceFile,
       memory: browserSurfaceMemory,
       rail: railPreference,
       moved,

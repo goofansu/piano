@@ -8,6 +8,7 @@ import { act, createElement, type ComponentType, type Context } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { createServer } from "vite";
+import { workspaceFile } from "../web/src/lib/api.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { createNavigation, type Navigation } from "../web/src/lib/navigation.ts";
 import { initialState, type AppState } from "../web/src/store.ts";
@@ -117,6 +118,7 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
   });
   const navigation = createNavigation({
     client,
+    readFile: workspaceFile,
     address: {
       location: () => ({ pathname: "/s/session", search: "" }),
       push: () => {},
