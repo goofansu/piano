@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import { after, afterEach, before, test } from "node:test";
 import { JSDOM } from "jsdom";
@@ -38,8 +39,31 @@ const noRead: HtmlPreviewReadFile = async (path) => {
   throw new Error("A disallowed resource reached the file reader");
 };
 const prepare = (html: string, read: HtmlPreviewReadFile = noRead) =>
-  prepareHtmlPreview(html, "/work/reports/report.html", read, new AbortController().signal);
+  prepareHtmlPreview(html, "/work/reports/report.html", read, new AbortController().signal).then(
+    (preview) => preview.srcDoc,
+  );
 const parse = (html: string) => new JSDOM(html).window.document;
+
+test("user links have a parent-owned destination table, never navigable frame URLs", async () => {
+  const preview = await prepareHtmlPreview(
+    `<a href="../reference/map.html">Map</a><a href="https://example.com/source">Source</a>
+     <a href="#proof">Evidence</a><a href="javascript:alert(1)">Bad</a>
+     <a href="//evil.invalid">Bad</a><a href="data:text/html,attack">Bad</a>
+     <a data-piano-link="0" data-piano-fragment="proof">Forged</a>`,
+    "/work/lessons/lesson.html",
+    noRead,
+    new AbortController().signal,
+  );
+  assert.deepEqual(preview.links, [
+    { kind: "file", path: "/work/lessons/../reference/map.html" },
+    { kind: "web", url: "https://example.com/source" },
+  ]);
+  const output = parse(preview.srcDoc);
+  assert.equal(output.querySelector("[href],[target],[ping],[download]"), null);
+  assert.equal(output.querySelectorAll('a[role="link"][tabindex="0"]').length, 3);
+  assert.equal(output.querySelectorAll("script").length, 1, "only the trusted bridge is present");
+  assert.equal(output.querySelectorAll("a")[6]!.hasAttribute("data-piano-link"), false);
+});
 
 test("static text and details survive, while executable, navigable and form surfaces do not", async () => {
   const result = await prepare(`<!doctype html><html><head>
@@ -64,9 +88,7 @@ test("static text and details survive, while executable, navigable and form surf
   assert.equal(output.querySelector(".prose")?.textContent, "Still readable");
   assert.match(output.body.textContent!, /Form explanation/);
   assert.equal(
-    output.querySelector(
-      "script,base,link,form,input,button,iframe,object,embed,svg,math,template",
-    ),
+    output.querySelector("base,link,form,input,button,iframe,object,embed,svg,math,template"),
     null,
   );
   assert.equal(
@@ -78,7 +100,13 @@ test("static text and details survive, while executable, navigable and form surf
     .querySelector('meta[http-equiv="Content-Security-Policy"]')
     ?.getAttribute("content");
   assert.match(csp!, /default-src 'none'/);
-  assert.match(csp!, /script-src 'none'/);
+  const scripts = output.querySelectorAll("script");
+  assert.equal(scripts.length, 1);
+  assert.doesNotMatch(scripts[0]!.textContent!, /executed/);
+  const hash = createHash("sha256").update(scripts[0]!.textContent!).digest("base64");
+  assert.ok(csp!.includes(`script-src 'sha256-${hash}'`));
+  assert.match(csp!, /script-src-attr 'none'/);
+  assert.doesNotMatch(csp!, /unsafe-eval|nonce-/);
   assert.match(csp!, /form-action 'none'/);
   assert.equal(output.querySelector('meta[http-equiv="refresh"]'), null);
 });

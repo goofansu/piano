@@ -1,6 +1,13 @@
 import * as css from "css-tree";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import type { FilePreview } from "../../../shared/files.ts";
+import { localFilePath } from "./file-link.ts";
+import {
+  htmlPreviewBridge,
+  type HtmlPreviewDocument,
+  type HtmlPreviewLink,
+} from "./html-preview-bridge.ts";
+import { relativeToDocument } from "./markdownImageLoader.ts";
 
 /** The existing workspace file reader, already bound to the selected workspace. */
 export type HtmlPreviewReadFile = (path: string, signal: AbortSignal) => Promise<FilePreview>;
@@ -33,7 +40,8 @@ const functions = new Set(
 );
 const policy = [
   "default-src 'none'",
-  "script-src 'none'",
+  "script-src-attr 'none'",
+  "script-src __BRIDGE_HASH__",
   "style-src 'unsafe-inline'",
   "img-src data:",
   "font-src 'none'",
@@ -78,9 +86,10 @@ function dataUrl(bytes: Uint8Array, mime: string): string {
 
 /**
  * Prepare a static, network-free HTML document. Browser-only; never attaches source nodes to the
- * live DOM. MUST be consumed as iframe srcdoc with sandbox="" (no allowances), never innerHTML.
- * All hrefs are removed, including fragments: srcdoc inherits its parent's base URL, so even a
- * hash is not reliably a same-document navigation. Details/summary remain native and interactive.
+ * live DOM. MUST be consumed as iframe srcdoc with sandbox="allow-scripts" ONLY, never innerHTML.
+ * Only the fixed, CSP-hashed bridge runs; all authored code and hrefs are removed. The caller
+ * owns a validated click listener and resolves indices against the returned destination table.
+ * Fragments scroll without navigation. Details/summary remain native and interactive.
  *
  * Reads are sequential, cached per preparation, limited to 32 files / 20 MiB and ten seconds.
  * CSS imports have an eight-level bound; HTML has 20k-node / 64-level bounds. Unavailable or
@@ -93,9 +102,20 @@ export async function prepareHtmlPreview(
   path: string,
   readFile: HtmlPreviewReadFile,
   signal: AbortSignal,
-): Promise<string> {
+): Promise<HtmlPreviewDocument> {
   signal.throwIfAborted();
   if (content.length > maxHtml) throw new Error("HTML preview exceeds the size limit.");
+  const token = crypto.randomUUID();
+  const links: HtmlPreviewLink[] = [];
+  const hash = btoa(
+    String.fromCharCode(
+      ...new Uint8Array(
+        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(htmlPreviewBridge)),
+      ),
+    ),
+  );
+  signal.throwIfAborted();
+  const documentPolicy = policy.replace("__BRIDGE_HASH__", `'sha256-${hash}'`);
   const controller = new AbortController();
   const abort = () => controller.abort(signal.reason);
   signal.addEventListener("abort", abort, { once: true });
@@ -328,7 +348,7 @@ export async function prepareHtmlPreview(
       if (!tags.has(tag)) return;
       const clean = owner.createElement(tag);
       if (tag === "head")
-        clean.innerHTML = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"><meta name="referrer" content="no-referrer">`;
+        clean.innerHTML = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${documentPolicy}"><meta name="referrer" content="no-referrer">`;
       for (const attribute of element.attrs) {
         if (
           attributes.has(attribute.name) &&
@@ -336,6 +356,41 @@ export async function prepareHtmlPreview(
           attribute.value.length <= 4096
         )
           clean.setAttribute(attribute.name, attribute.value);
+      }
+      if (tag === "a") {
+        const href = attributeValue("href")?.trim();
+        if (href !== undefined && href.length <= 4096) {
+          if (href.startsWith("#")) {
+            try {
+              clean.setAttribute("data-piano-fragment", decodeURIComponent(href.slice(1)));
+            } catch {
+              /* An invalid fragment remains text. */
+            }
+          } else {
+            let link: HtmlPreviewLink | undefined;
+            // Match explicit Markdown web links: HTTP(S), a new tab, no opener or referrer.
+            if (/^https?:\/\//i.test(href)) {
+              try {
+                const url = new URL(href);
+                if (url.protocol === "http:" || url.protocol === "https:")
+                  link = { kind: "web", url: url.href };
+              } catch {
+                /* Invalid web URLs remain text, never local paths. */
+              }
+            } else {
+              const file = localFilePath(href);
+              if (file) link = { kind: "file", path: relativeToDocument(path, file) };
+            }
+            if (link) {
+              clean.setAttribute("data-piano-link", String(links.length));
+              links.push(link);
+            }
+          }
+          if (clean.hasAttribute("data-piano-link") || clean.hasAttribute("data-piano-fragment")) {
+            clean.setAttribute("role", "link");
+            clean.setAttribute("tabindex", "0");
+          }
+        }
       }
       const inlineStyle = attributeValue("style");
       if (inlineStyle) {
@@ -351,9 +406,19 @@ export async function prepareHtmlPreview(
     };
     for (const child of source.childNodes) await append(child, output.content, 0);
     active.throwIfAborted();
+    if (output.content.querySelector("a[data-piano-link],a[data-piano-fragment]")) {
+      const style = owner.createElement("style");
+      style.textContent =
+        ":where(a[data-piano-link],a[data-piano-fragment]){color:LinkText;text-decoration:underline;cursor:pointer}";
+      output.content.querySelector("head")!.appendChild(style);
+    }
+    const bridge = owner.createElement("script");
+    bridge.setAttribute("data-piano-token", token);
+    bridge.textContent = htmlPreviewBridge;
+    output.content.querySelector("body")!.appendChild(bridge);
     const body = output.innerHTML;
     if (body.length > maxOutput) throw new Error("HTML preview exceeds the resource limit.");
-    return `<!doctype html>${body}`;
+    return { srcDoc: `<!doctype html>${body}`, token, links };
   } finally {
     clearTimeout(timer);
     signal.removeEventListener("abort", abort);
