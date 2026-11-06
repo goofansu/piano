@@ -22,7 +22,7 @@ import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { workspaceFileDownload } from "@/lib/api";
-import { relativeToDocument } from "@/lib/markdownImageLoader";
+import { relativeToDocument } from "@/lib/file-link";
 import type { FileTab } from "@/lib/navigation";
 import { previewImage } from "@/lib/previewImage";
 import { useMarkdownImages } from "@/lib/useMarkdownImages";
