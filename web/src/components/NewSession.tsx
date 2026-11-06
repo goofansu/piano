@@ -64,20 +64,20 @@ interface Props {
   onProjectChange: (projectId?: string) => void;
 }
 
-/** New session: a welcome above the composer. */
+/** New session: a welcome above the composer. The project control names the project; the headline does not repeat it. */
 export function NewSession({ state, client, chooseDirectory, onProjectChange }: Props) {
-  // The project a session started here joins names the page.
-  const project = findProject(state, startPage(state.view)?.projectId);
   return (
     <>
       {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
       <PaneShowSidebar />
       <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-(--gutter) pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:py-16">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
+          {/* Below md the mark alone fills the space above the composer: the project control
+           * beneath already names the project, and a long name would wrap into a wall of text. */}
           <div className="new-session-welcome flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
-            <PianoMark className="mb-5 hidden size-12 rounded-2xl md:inline-flex" />
-            <h1 className="text-xl font-medium tracking-tight md:text-[2rem]">
-              {project?.name ?? "What should we work on?"}
+            <PianoMark className="size-12 rounded-2xl md:mb-5" />
+            <h1 className="hidden text-xl font-medium tracking-tight md:block md:text-[2rem]">
+              What should we work on?
             </h1>
             <p className="mt-2 hidden text-base text-ink-2 md:block">
               A little progress starts with an idea.
@@ -158,18 +158,23 @@ export function NewSessionComposer({
   return (
     <>
       <div className={className}>
-        {/* Left: where the session runs, with that directory's trust beside it. Right: which project it joins. */}
-        <div className="mb-2 flex min-w-0 items-center gap-1">
-          <div className="min-w-0 shrink">
-            <DirectorySelect
-              state={state}
-              value={cwd}
-              onChange={chooseDirectory}
-              onBrowse={() => setPickerOpen(true)}
-              client={client}
-            />
+        {/* Left: where the session runs, with that directory's trust beside it. Right: which project it
+         * joins. Below md the pane is the whole screen and the row wraps instead, each control the
+         * size of its name, so a long folder, branch or project name never crowds the others out. */}
+        <div className="mb-2 flex min-w-0 items-center gap-1 max-md:flex-wrap max-md:gap-y-0.5">
+          {/* The directory and its trust stay on one line: the branch gives way, never the trust. */}
+          <div className="flex min-w-0 max-w-full shrink items-center gap-1">
+            <div className="min-w-0 shrink">
+              <DirectorySelect
+                state={state}
+                value={cwd}
+                onChange={chooseDirectory}
+                onBrowse={() => setPickerOpen(true)}
+                client={client}
+              />
+            </div>
+            {trust && <TrustToggle command={trust} run={run} />}
           </div>
-          {trust && <TrustToggle command={trust} run={run} />}
           {onProjectChange && (
             <ProjectSelect state={state} value={projectId} onChange={onProjectChange} />
           )}
@@ -259,7 +264,7 @@ function ProjectSelect({
           aria-label="Project"
           className={cn(
             picker,
-            "ml-auto max-w-[45%] shrink-0",
+            "ml-auto max-w-[45%] shrink-0 max-md:ml-0 max-md:max-w-full",
             current ? "text-ink-2" : "text-ink-3",
           )}
         >
@@ -332,7 +337,7 @@ function TrustToggle({
       ) : (
         <ShieldOffIcon data-icon="inline-start" />
       )}
-      <span className="max-[360px]:hidden">{trusted ? "Trusted" : "Untrusted"}</span>
+      <span>{trusted ? "Trusted" : "Untrusted"}</span>
     </Button>
   );
 }
@@ -387,7 +392,8 @@ function DirectorySelect({
             <span>Choose a folder</span>
           ) : trigger.kind === "checkout" ? (
             <>
-              <span className="truncate font-mono">{trigger.folder}</span>
+              {/* The folder keeps its name; a long branch truncates first, as in the session header. */}
+              <span className="max-w-[12rem] shrink-0 truncate font-mono">{trigger.folder}</span>
               {trigger.branchLabel && (
                 <BranchLabel branch={trigger.branchLabel} className="text-ink-3" />
               )}
