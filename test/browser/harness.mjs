@@ -190,7 +190,11 @@ export async function run(name, setup, journey, options = {}) {
       }
     },
     open: (path) => ab("open", `${web}${path}`),
-    evaluate: async (js) => JSON.parse(await ab("eval", js)),
+    evaluate: async (js) => {
+      const result = await ab("eval", js);
+      // A no-return script prints the non-JSON literal undefined.
+      return result === "undefined" ? undefined : JSON.parse(result);
+    },
     /** Click the control a user would: by its role and accessible name. */
     click: (role, label) => ab("find", "role", role, "click", "--name", label, "--exact"),
     /** Open a picker, pick one option, and wait until the picker has closed. */

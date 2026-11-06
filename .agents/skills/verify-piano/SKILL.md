@@ -205,10 +205,6 @@ harness journeys clean up their own instance and browser.
 
 ## Gotchas
 
-- The harness and this skill both require the installed agent-browser version documented in
-  [Develop](../../../README.md#develop). When upgrading, update development setup and CI together,
-  then check the critical paths and one proof run (launch, doctor, drive, cleanup).
-
 - Radix menus and popovers open on pointer events: use `ab.sh ... click` / `find ... click`, never
   a DOM `.click()` from `eval`. Before clicking a submenu item, wait for its entrance animation:
   `ab.sh "$RUN" wait --fn "[...document.querySelectorAll('[role=menu]')].every(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))"`.
