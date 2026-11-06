@@ -146,7 +146,7 @@ type Auth = "oauth" | "header";
 
 /**
  * Add or edit one entry of Pi's global configuration: its fields in place, errors on the field
- * they belong to, Add or Save in the footer. Adding also takes the `mcpServers` JSON a server's
+ * they belong to, Connect or Save in the footer. Adding also takes the `mcpServers` JSON a server's
  * README shows, one server at a time, on its JSON tab. A URL server is saved only once it
  * connects: one that cannot is refused on its URL, and one that asks for a sign-in closes this
  * dialog for the sign-in, which saves it. A saved Authorization header shows as a masked
@@ -511,7 +511,7 @@ export function McpServerDialog({
               disabled={busy || (tab === "json" && !(pasted && "name" in pasted))}
             >
               {busy && <Spinner data-icon="inline-start" />}
-              {entry ? "Save" : "Add"}
+              {entry ? "Save" : "Connect"}
             </Button>
           </DialogFooter>
         </form>
