@@ -68,6 +68,8 @@ export const ToolExecution = Schema.Struct({
   name: Schema.String,
   args: Schema.String,
   writtenPath: Schema.optional(Schema.String),
+  /** Saved input omitted by Pi’s per-call or total history size budget, not unknown input. */
+  argsOmitted: Schema.optional(Schema.Literal("size")),
   text: Schema.String,
   status: Schema.Literals(["running", "success", "error", "incomplete"]),
   outputKind: Schema.Literals(["latest-update", "final", "unavailable"]),

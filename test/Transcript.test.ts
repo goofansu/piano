@@ -349,11 +349,12 @@ test("a call's nested calls are those its result recorded plus live executions i
   assert.deepEqual([other!.nested.calls, other!.nested.complete], [[], true]);
 });
 
-test("omitted saved arguments do not imply missing tool results, even with live output", () => {
+test("omitted saved inputs are contextual, not a codemode warning or a tool failure", () => {
   const child: ToolExecution = {
     id: "code/1",
     name: "radius_artifact_create",
     args: "",
+    argsOmitted: "size",
     text: "",
     status: "success",
     outputKind: "unavailable",
@@ -380,15 +381,32 @@ test("omitted saved arguments do not imply missing tool results, even with live 
     { "code/1": { ...child, args: "{}", text: "confirmed", outputKind: "final" } },
   ];
   for (const tools of executions) {
+    const tool = reply(transcriptRows(messages, { tools }), "a").tools[0];
+    assert.equal(tool.nested.warning, undefined);
+    assert.equal(tool.outcome, "done");
+    assert.equal(tool.nested.calls[0].outcome, "done");
     assert.equal(
-      reply(transcriptRows(messages, { tools }), "a").tools[0].nested.warning,
-      "Some tool arguments weren’t saved.",
+      tool.nested.calls[0].inputNote,
+      tools[child.id] ? undefined : "Input too large to retain in history.",
     );
   }
-  messages[1] = { ...messages[1], nestedCallsIncompleteReason: undefined };
-  assert.equal(
-    reply(transcriptRows(messages), "a").tools[0].nested.warning,
-    "Some tool details are unavailable.",
+  messages[1] = {
+    ...messages[1],
+    nestedCallsIncompleteReason: undefined,
+    nestedCalls: [
+      { ...child, status: "error" },
+      { ...child, id: "code/2", argsOmitted: undefined, status: "incomplete" },
+    ],
+  };
+  const tool = reply(transcriptRows(messages), "a").tools[0];
+  assert.equal(tool.nested.warning, "Some tool details are unavailable.");
+  assert.deepEqual(
+    tool.nested.calls.map(({ outcome, inputNote }) => ({ outcome, inputNote })),
+    [
+      { outcome: "failed", inputNote: "Input too large to retain in history." },
+      { outcome: "incomplete", inputNote: undefined },
+    ],
+    "known size omissions remain contextual even when other details are unknown",
   );
 });
 

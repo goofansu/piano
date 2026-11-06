@@ -221,6 +221,11 @@ export function serializeMessage(
         parentId: c.id.includes("/") ? c.id.slice(0, c.id.lastIndexOf("/")) : msg.toolCallId,
         name: c.name,
         args: argsOf(c.arguments),
+        ...(c.arguments === undefined &&
+        typeof c.argumentsBytes === "number" &&
+        c.argumentsBytes > 0
+          ? { argsOmitted: "size" as const }
+          : {}),
         writtenPath: writtenPath(c.name, c.arguments),
         status: c.status === "ok" ? "success" : c.status === "error" ? "error" : "incomplete",
         text: "",
