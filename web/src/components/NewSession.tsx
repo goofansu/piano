@@ -64,10 +64,8 @@ interface Props {
   onProjectChange: (projectId?: string) => void;
 }
 
-/** New session: a welcome above the composer. */
+/** New session: a welcome above the composer. The project control names the project; the headline does not repeat it. */
 export function NewSession({ state, client, chooseDirectory, onProjectChange }: Props) {
-  // The project a session started here joins names the page.
-  const project = findProject(state, startPage(state.view)?.projectId);
   return (
     <>
       {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
@@ -79,7 +77,7 @@ export function NewSession({ state, client, chooseDirectory, onProjectChange }: 
           <div className="new-session-welcome flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="size-12 rounded-2xl md:mb-5" />
             <h1 className="hidden text-xl font-medium tracking-tight md:block md:text-[2rem]">
-              {project?.name ?? "What should we work on?"}
+              What should we work on?
             </h1>
             <p className="mt-2 hidden text-base text-ink-2 md:block">
               A little progress starts with an idea.
