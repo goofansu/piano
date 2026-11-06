@@ -87,7 +87,8 @@ test("file reads accept explicit external paths, stay bounded and never guess an
       ["output.log", "text", ""],
       ["image.svg", "svg", "xml"],
       ["image.SVG", "svg", "xml"],
-      ["index.html", "text", "html"],
+      ["index.html", "html", "html"],
+      ["index.HTM", "html", "html"],
     ]) {
       const content = name.toLowerCase().endsWith("svg")
         ? '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
@@ -319,6 +320,8 @@ test("every name that claims a preview kind previews as that kind, so its icon m
     const samples: Record<string, Buffer> = {
       md: Buffer.from("# Notes\n"),
       markdown: Buffer.from("# Notes\n"),
+      html: Buffer.from("<!doctype html><h1>Notes</h1>"),
+      htm: Buffer.from("<!doctype html><h1>Notes</h1>"),
       svg: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
       png: Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"),
       jpg: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
@@ -338,7 +341,7 @@ test("every name that claims a preview kind previews as that kind, so its icon m
     };
     assert.deepEqual(Object.keys(samples).sort(), Object.keys(previewKindsByExtension).sort());
     for (const [extension, bytes] of Object.entries(samples)) {
-      const binary = !["md", "markdown", "svg"].includes(extension);
+      const binary = !["md", "markdown", "html", "htm", "svg"].includes(extension);
       for (const name of [`sample.${extension}`, `SAMPLE.${extension.toUpperCase()}`]) {
         await writeFile(join(a, name), binary ? Buffer.concat([bytes, Buffer.alloc(64)]) : bytes);
         assert.equal((await read(name)).kind, previewKindByName(name), name);

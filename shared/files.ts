@@ -4,7 +4,7 @@ const identity = { workspaceId: Schema.String, path: Schema.String };
 export const FilePreview = Schema.Union([
   Schema.Struct({
     ...identity,
-    kind: Schema.Literals(["markdown", "text", "svg"]),
+    kind: Schema.Literals(["markdown", "html", "text", "svg"]),
     language: Schema.String,
     content: Schema.String,
   }),
@@ -27,6 +27,8 @@ export type PreviewKind = FilePreview["kind"];
 export const previewKindsByExtension: Readonly<Record<string, PreviewKind>> = {
   md: "markdown",
   markdown: "markdown",
+  html: "html",
+  htm: "html",
   svg: "svg",
   png: "image",
   jpg: "image",

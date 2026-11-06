@@ -17,6 +17,7 @@ Click the original link again to reread; **Preview / Source** only changes prese
 | Format | Preview | Maximum file size |
 | --- | --- | --- |
 | UTF-8 Markdown (`.md`, `.markdown`) | Rendered Markdown, with Source toggle | 1 MiB |
+| UTF-8 HTML (`.html`, `.htm`) | Isolated static document, with Preview / Source | 1 MiB |
 | UTF-8 source, JSON, YAML, logs, unknown text | Shiki highlighting when recognized; otherwise plain text | 1 MiB |
 | UTF-8 SVG (`.svg`) | Native image on a light background, with Source toggle | 1 MiB |
 | PNG, JPEG, GIF, WebP | Native image | 10 MiB |
@@ -29,7 +30,40 @@ MP3, Opus/Vorbis Ogg, H.264/AAC MP4 and VP8/VP9 WebM; availability varies by bro
 A decoder failure asks you to convert the original. Media never autoplays. SVG previews use a Blob
 URL in an `<img>`, never inline SVG, an object or an iframe; scripts, event handlers and external
 resources are disabled by browser image mode. Source stays
-available even when the image cannot decode. HTML and MDX are not executed.
+available even when the image cannot decode. HTML scripts and MDX are not executed.
+
+### Static HTML
+
+HTML opens as a document, not an app: no server, managed preview, or public file URL. The browser
+parses it with a non-browser HTML parser, rebuilds allowed HTML and CSS in a detached, inert template,
+and places the result in an opaque-origin `srcdoc` iframe with an **empty sandbox** and restrictive CSP. Neither document
+scripts nor a Piano script bridge run. Scripts, event attributes, embedded frames/objects, forms
+and form controls, inline SVG/MathML, refreshes and base URLs are removed. Native `details` and
+`summary` remain interactive. CSP permits only inline styles and bundled data images; network,
+fonts, media, scripts and form actions are denied. The frame has no popup, download or navigation
+privileges. Document links remain text, not navigation: even fragment links are removed because
+`srcdoc` inherits the parent's base URL. Open another file from its conversation link instead.
+
+Relative local stylesheets and images are read through the same workspace-file seam, never by
+unrestricted browser fetching. CSS imports resolve relative to their stylesheet, with cycles stopped;
+CSS `url()` images and HTML `img` sources become embedded PNG, JPEG, GIF, WebP or image-mode SVG.
+Absolute paths, schemes (including user-supplied data/blob URLs), protocol-relative references,
+remote resources and `srcset` are not automatic reads. Relative `..` references are supported;
+existing file resolution can follow symlinks and leave the workspace, as it does for Markdown.
+CSS is parsed, not rewritten with URL regular expressions. Unsupported loading functions (including
+`image-set`), font faces, unsupported at-rules and parser-recovered CSS fail closed. Simple and
+media-qualified imports are supported; imports with `layer()` or `supports()` qualifiers are not.
+
+Preparation permits at most 32 distinct resource reads, 20 MiB of acquired resource bytes,
+eight stylesheet import levels, 256 KiB of characters per CSS input and 1 MiB of CSS characters
+in total. HTML is bounded to 20,000 visited nodes / 64 levels, CSS structure is bounded, embedded
+output to 32 MiB of characters, and asynchronous preparation to ten seconds. The normal per-file
+limits also apply. Missing, refused or over-budget resources are omitted; whole-document limits
+leave Source available. These are resource bounds, not protection against every expensive browser
+layout or image decoder. A view toggle does not reread resources; clicking the original file link
+does. Closing the file or changing its owner aborts preparation and discards its document.
+
+### Text, Markdown and PDF
 
 Highlighting uses a disposable worker, lazy grammars/themes, at most 65,536 characters and
 2,000 characters per line, and a three-second work budget. Larger files stay readable as source,
@@ -118,8 +152,10 @@ separate lazy chunks. Generated `web/public/pdfjs/` assets are ignored, copied f
 included in builds. When upgrading React-PDF, verify `npm ls react-pdf pdfjs-dist`, the emitted
 worker and asset versions, and a scratch-browser PDF render.
 
-Module checks cover file classification/limits/path resolution, text redaction, binary transport and
-safe Markdown placeholders. Browser evidence for PIN-32 covers the four format groups, nested
-links/images, toggle without reread, repeat clicks, late completion, an actual background workspace
+Module checks cover file classification/limits/path resolution, text redaction, binary transport,
+safe Markdown placeholders and HTML sanitization, resource resolution/budgets and cancellation.
+HTML's actual sandbox, native disclosures and no-network behavior also require scratch-browser
+observations; a DOM test alone does not prove browser isolation. Browser evidence for PIN-32 covers
+the four format groups, nested links/images, toggle without reread, repeat clicks, late completion, an actual background workspace
 refresh, session/workspace changes, media disposal/codec failure, PDF errors and mobile/keyboard use.
 See [testing policy](testing.md) for evidence scope (INV-09).

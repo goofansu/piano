@@ -34,10 +34,17 @@ const FilePdf = lazy(() =>
   })),
 );
 
+const FileHtml = lazy(() =>
+  import("@/components/FileHtml").catch(() => ({
+    default: () => <Notice>Could not load the HTML viewer. Choose Source to read it.</Notice>,
+  })),
+);
+
 type Preview = Awaited<ReturnType<typeof workspaceFile>>;
 
 const KIND_ICON: Record<Preview["kind"], typeof FileIcon> = {
   markdown: FileTextIcon,
+  html: FileCodeIcon,
   text: FileCodeIcon,
   svg: ImageIcon,
   image: ImageIcon,
@@ -168,12 +175,12 @@ export function WorkspaceFile({
               />
             </div>
           )}
-          {result?.kind === "svg" && (
+          {(result?.kind === "svg" || result?.kind === "html") && (
             <PianoViewToggle
               type="single"
               value={mode}
               onValueChange={(value) => value && setMode(value)}
-              aria-label="SVG view"
+              aria-label={result.kind === "html" ? "HTML view" : "SVG view"}
             >
               <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>
               <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
@@ -193,7 +200,14 @@ export function WorkspaceFile({
       {status && <Notice>{status}</Notice>}
       {result && (
         <section aria-label="File contents" className="flex min-h-full flex-col">
-          {"bytes" in result ? (
+          {result.kind === "html" && workspaceId && (
+            <div hidden={mode !== "preview"}>
+              <Suspense fallback={<Notice>Opening HTML…</Notice>}>
+                <FileHtml content={result.content} path={result.path} workspaceId={workspaceId} />
+              </Suspense>
+            </div>
+          )}
+          {result.kind === "html" && mode === "preview" ? null : "bytes" in result ? (
             result.kind === "pdf" ? (
               <Suspense fallback={<Notice>Opening PDF…</Notice>}>
                 <FilePdf bytes={result.bytes} />
