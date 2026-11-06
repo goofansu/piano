@@ -14,7 +14,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/co
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { pageCommands } from "@/lib/globalCommands";
-import { projectCommands } from "@/lib/projectCommands";
+import { isProjectDone, projectCommands } from "@/lib/projectCommands";
 import { type ProjectsIndexRow, projectsIndex, projectsIndexContext } from "@/lib/projectsIndex";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
@@ -59,6 +59,7 @@ function ProjectRow({
       <ItemActions className="text-xs text-ink-3">
         {time && (
           <time data-motion="aside" dateTime={time}>
+            {isProjectDone(row.project) && "Completed "}
             {timeAgo(time, now)}
           </time>
         )}
