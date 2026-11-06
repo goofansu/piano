@@ -1,9 +1,11 @@
 /**
- * One save of a skill or a prompt, as the browser's Settings page saves it: Piano's proposal first
- * (the file it would write, or the refusal the save would get), then the user's decision, then
- * Piano's own HTTP endpoints. Nothing is written without the user's
- * Save, and a cancellation or a stop writes nothing (INV-04, INV-11). No Pi here: the extension
- * supplies the dialog and the request, so a test supplies them too.
+ * Saves a Piano-owned skill or prompt only after the user approves the proposed file (INV-04/11).
+ * Cancellation before approval writes nothing. Once approval is accepted, the save request is
+ * not tied to the tool's abort signal: stopping the tool must not interrupt an approved write.
+ * Updates include the reviewed file so the server can refuse a concurrent edit.
+ *
+ * The extension supplies the dialog and HTTP transport; this module neither loads Pi resources
+ * nor writes files directly.
  */
 import { DRAFT_FIELDS, isName, NAME_RULE } from "../../shared/drafts.ts";
 import { type Endpoint, Endpoints, readRefusal } from "../../shared/http.ts";
@@ -103,8 +105,8 @@ export async function saveToLibrary(
 ): Promise<LibraryResult> {
   const endpoints = ENDPOINTS[kind];
   const name = draft.name.trim();
-  // Piano says what the save would write, or refuses it as the save would, before anything is
-  // asked: the user is never asked to approve a save Piano would refuse.
+  // Validate before asking for approval. The server checks again on save because name
+  // availability and file contents may change while the proposal is open.
   const proposed = await deps.request(endpoints.propose.path, {
     method: endpoints.propose.method,
     headers: { "content-type": "application/json" },
@@ -142,7 +144,8 @@ export async function saveToLibrary(
   };
   // An update replaces only the file the user approved a change to: one changed since is refused.
   const body = proposal.previous !== undefined ? { ...saved, previous: proposal.previous } : saved;
-  // Once approved, the save is not abandoned half-way: the user's Save is carried out.
+  // Deliberately omit the abort signal after approval. A lost response can still leave a saved
+  // file, so transport failure must not be treated as proof that nothing was written.
   const response = await deps.request(endpoint.path, {
     method: endpoint.method,
     headers: { "content-type": "application/json" },

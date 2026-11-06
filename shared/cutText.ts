@@ -1,7 +1,8 @@
 /**
- * `text` cut to at most `max` UTF-16 units, never between the two halves of a surrogate pair: a
- * lone half shows as a replacement character and is not well-formed Unicode in JSON. A character
- * straddling the limit is left out whole. Text within the limit is returned as is.
+ * Return a prefix of at most `max` UTF-16 code units; `max` must be a nonnegative integer.
+ * If the cut would leave a high surrogate at the end, omit it rather than split a surrogate
+ * pair. Text within the limit is unchanged; this does not repair malformed input or preserve
+ * whole grapheme clusters.
  */
 export const cutText = (text: string, max: number): string => {
   if (text.length <= max) return text;

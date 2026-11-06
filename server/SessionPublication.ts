@@ -1,11 +1,10 @@
 /**
- * SessionPublication: one open session's snapshot and its live frames (INV-05: a snapshot and the
- * frames after it share one ordered boundary). It owns the snapshot fold, the lock, sequence
- * numbers and the cursor, subscriber attachment and the closure announcement. Under the lock a
- * subscriber attaches and receives the current snapshot with its cursor, then every later frame
- * in order. Publish never waits on a browser: a subscriber that falls behind fails
- * DeliveryOverflow and attaches again. Internal to PiSessions, which owns the child, the projector
- * and actions; SessionReadbacks and SessionDialogs land their work through it.
+ * Publishes one open session as a snapshot followed by ordered live frames, with no gap or overlap
+ * at attachment (INV-05). Slow subscribers fail with DeliveryOverflow rather than delaying
+ * publication; callers must reattach for a current snapshot.
+ *
+ * Internal to PiSessions. Actions, readbacks and dialogs share this publication boundary;
+ * process ownership and protocol translation remain outside it.
  */
 import { isDeepStrictEqual } from "node:util";
 import { Effect, Fiber, Ref, Semaphore, Stream } from "effect";
@@ -23,7 +22,6 @@ export interface SessionPublicationOptions {
   readonly initial: Snapshot;
 }
 
-/** A published state change: the state before it and after it. */
 export type StateChangeListener = (previous: SessionState, next: SessionState) => void;
 
 const transactionBrand: unique symbol = Symbol("PublicationTransaction");
@@ -59,9 +57,10 @@ export interface SessionPublication {
   readonly snapshot: Effect.Effect<Snapshot>;
   readonly state: Effect.Effect<SessionState>;
   readonly dialogs: Effect.Effect<ReadonlyArray<Dialog>>;
-  /** True once subscribers have been told Pi is gone. */
+  /** True once a caller has claimed the closure announcement, even before it publishes it. */
   readonly announced: () => boolean;
-  /** Mark Pi as gone; true only for the first caller, which publishes the closure. */
+  /** Claim the closure announcement. Only the first caller gets true and must publish the
+   * closure itself; this method changes the flag but sends no frame. */
   readonly announce: () => boolean;
   /** The snapshot with its cursor, then contiguous live frames until `closed`. `present` sets the
    * snapshot's state from the retained one, under the lock. Pending partials flush under that

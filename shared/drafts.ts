@@ -53,9 +53,9 @@ export interface FieldCheck {
 export interface DraftCheck extends Record<DraftField, FieldCheck> {
   /** The name is filled but breaks `NAME`. */
   malformedName: boolean;
-  /** The first field the server refuses, with what it says; none when the draft can be saved. */
+  /** The first invalid field, in DRAFT_FIELDS order; undefined when local validation passes. */
   problem: { field: DraftField; detail: string } | undefined;
-  /** The trimmed draft, when it can be saved. */
+  /** The trimmed draft when local validation passes; name availability is still server-owned. */
   saved: Draft | undefined;
 }
 

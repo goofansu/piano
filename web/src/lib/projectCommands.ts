@@ -1,11 +1,7 @@
 /**
- * Project policy for the client, described once: which projects a picker offers, what a project's
- * row offers (each command with whether it is available now and what running it means), whether a
- * project's menu sets apart (`projectMenu`), whether a project draft may be saved and which field writes exceed their limits, creating a
- * project and moving a session between projects (`sessionProjectMenu`), and whether a session can
- * start in a project. The sidebar, the session's Project menu, the phone sheet, the command palette
- * and the New session page render these and hand them to the one command host instead of each
- * deciding.
+ * Shared client policy for project commands, membership choices and draft validation. Returns
+ * descriptors rather than executing commands, so menus, pickers and the palette use the same
+ * availability rules and hand effects to the command host.
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import {
@@ -227,11 +223,13 @@ export function checkProjectDraft(draft: ProjectDraft, opened?: ProjectDraft): P
 }
 
 /**
- * Saving the settings dialog: one registry change carrying each field that differs from the project
- * as the dialog opened on it (`opened`; as saved now without it), trimmed, so a field changed
- * elsewhere meanwhile keeps that change. Only intended writes face today's limits; the returned
- * check also supplies the dialog's field feedback. Blank instructions clear them. Nothing to send,
- * a deleted project or no connection leave Save off. The server answers the save.
+ * Build a settings update containing only fields changed from `opened` (the current saved project
+ * when omitted). Untouched fields are not sent, preserving concurrent edits to those fields;
+ * this is not conflict detection for fields the user also edited.
+ *
+ * Validate only intended writes against today's limits and return their field feedback. Blank
+ * instructions clear them. No changed fields, a missing project, invalid input or a disconnected
+ * client returns `allowed: false`. This function sends nothing; the server validates the update.
  */
 export function projectSettingsSave(
   state: AppState,

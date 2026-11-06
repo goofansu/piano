@@ -1,11 +1,10 @@
 /**
- * SessionReadbacks: Pi readbacks and their freshness (INV-03: agent state comes from Pi facts;
- * INV-05: older observations never overwrite newer ones). A readback started before an operation,
- * a fact change or Pi output must not overwrite what is newer than it. This module owns one worker
- * per readback kind, the coalescing of requests, the context retry rule and each readback's error
- * field. Internal to PiSessions, which owns the child and reports new operations here and asks
- * for readbacks. Readbacks land through the session's SessionPublication, whose state changes this
- * module hears to keep its fact versions.
+ * Refreshes session facts from Pi without overwriting newer operations, published metadata or
+ * output (INV-03/05). Requests coalesce per readback kind; context reads raced by Pi output have a
+ * bounded retry budget. Failures are exposed in the corresponding session-state error fields.
+ *
+ * Internal to PiSessions, which supplies the transport reads and operation boundaries. Results
+ * and freshness checks share SessionPublication's lock with other session updates.
  */
 import { Clock, Effect, type Scope } from "effect";
 import type { SessionEvent } from "../shared/wire.ts";
@@ -48,7 +47,7 @@ export interface SessionReadbacks {
   readonly supersede: () => ReadbackOperation;
   /** The current operation, for work that continues it rather than starting a new one. */
   readonly operation: () => ReadbackOperation;
-  /** No readback worker is running. */
+  /** No scheduled worker is running; direct `refresh` calls are not counted. */
   readonly idle: () => boolean;
 }
 
@@ -77,9 +76,8 @@ export const makeSessionReadbacks = ({
       if (next[field] !== previous[field]) factVersions[field] += 1;
   });
 
-  /** Canonical projected context and billed cost from Pi, not partial response usage.
-   * Refresh at persisted boundaries, never per token/delta. Best effort.
-   */
+  // Usage describes persisted context and billed cost, not partial response deltas. Output
+  // arriving during the read makes the context figure last-known, even if the read succeeds.
   const refreshStats = Effect.gen(function* () {
     const version = ++statsVersion;
     const modelVersion = factVersions.model;

@@ -19,7 +19,7 @@ const git = (cwd: string, ...args: string[]) =>
     env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
   }).trim();
 
-/** Two registered projects: one with `.agents/skills`, one plain. Pi's agent dir is isolated so the real trust file is untouched. */
+/** Two registered folders: one with `.agents/skills`, one plain. Pi's agent dir is isolated so the real trust file is untouched. */
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(realpathSync(tmpdir()), "piano-trust-")),
     skilled = join(root, "skilled"),

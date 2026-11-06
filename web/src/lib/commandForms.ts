@@ -1,14 +1,11 @@
 /**
- * The forms `runCommand` opens (see `CommandForm`) and their one lifecycle: `open` a form, edit its
- * input (a session title, or a project draft), `submit` or `cancel` it. Submitting re-checks the
- * form's rule, since the connection, the session's attachment or the project may have changed while
- * the form was open, and a form closes only after its answer was sent; a refused answer, or one the
- * connection is known not to have sent, leaves it open with its input. Project settings starts from the project as saved when it opens. Sharing is a phase of its form (confirm, publishing, shared or failed) and publishes
- * at most once per opening. A new project not created for a session opens once it is saved: its
- * home, or the New page for it when the New page's project picker created it. That page, and the
- * Projects index a deleted project's page gives way to, waits for the page's state to show the change (`settle`);
- * a server error or a dropped connection first leaves the user where they are.
- * `CommandHost` and the dialogs render this state and nothing else. Nothing here depends on React.
+ * Owns command-form drafts, validation and submission independently of React. Submission checks
+ * current state again: a connection, session attachment or project can change while a form is open.
+ * Known non-delivery keeps the input; uncertain delivery closes the form to prevent blind replay.
+ *
+ * Sharing publishes at most once per opening and keeps its result visible. Project navigation
+ * waits for the registry change to appear in client state, not merely for the command to be sent.
+ * CommandHost and the dialogs render this state and supply its effects.
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { SessionShare } from "../../../shared/share.ts";
@@ -33,7 +30,7 @@ import type { SendDisposition } from "./ws.ts";
 export interface FormAnswer {
   /** The form may be submitted now; otherwise its submit control is disabled. */
   allowed: boolean;
-  /** What submitting sends; present exactly when an allowed registry form. */
+  /** The socket command for an allowed non-share form; sharing uses HTTP instead. */
   command?: ClientCommand;
   /** Project settings field feedback, from the same decision as its save. */
   projectCheck?: ProjectDraftCheck;
@@ -136,7 +133,8 @@ export function answerForm(
       const id = newId();
       return {
         allowed: true,
-        // One message, so the project, its instructions and its new session arrive in one registry write.
+        // Create the project and assign the existing session atomically; a separate move could
+        // leave the session unassigned if the connection drops between commands.
         command: {
           _tag: "save_project",
           project: { id, name, ...(instructions ? { instructions } : {}) },
@@ -307,7 +305,6 @@ export interface CommandForms {
   hear: (message: ServerMessage) => void;
 }
 
-/** The forms whose input is a project draft rather than a title. */
 const editsProject = (form: CommandForm) =>
   form.kind === "project" || form.kind === "project-settings";
 

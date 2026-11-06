@@ -1,18 +1,14 @@
 /**
- * One reader of facts from outside the registry, run single-flight: a request while a read is in
- * flight queues exactly one more read, however many requests arrive during it. The sidebar's Git
- * worktree discovery and its session availability both follow this rule, so it is decided here
- * once, together with who waits for what.
- *
- * A read may ask whether a newer request arrived since it started (`superseded`) and answer
- * `false` to install nothing; the read that request already queued then answers the waiters. A
- * read that fails or dies logs a warning under `name` and counts as installed: the last
- * observation stands, a later request retries, and nobody waiting on `request(done)` hangs.
+ * Serializes reads of external facts. Requests arriving during a read coalesce into one trailing
+ * read, so each requester can wait for an observation begun after its request without starting
+ * competing reads. Used for sidebar Git discovery and session availability.
  */
 import { Deferred, Effect, type Scope } from "effect";
 
 export interface CoalescedReader {
-  /** Ask for a read. `done` resolves once a read that started after this request has installed. */
+  /** Schedule a read without waiting for it. If supplied, `done` resolves after a read begun
+   * after this request installs a result or fails. Failure leaves the last observation intact;
+   * completion is not proof of a fresh result. */
   readonly request: (done?: Deferred.Deferred<void>) => Effect.Effect<void>;
 }
 
@@ -20,9 +16,10 @@ export interface CoalescedReaderOptions {
   /** Names the reader in the warning a failed read logs. */
   readonly name: string;
   /**
-   * One read, answering whether it installed its result. Answer `false` only when `superseded()`
-   * is true or after making a request of your own: nothing else would start the read the waiters
-   * are then left to.
+   * Return true after installing a result. Return false only if another read is already queued
+   * (`superseded()` is true, or this callback requested one); waiters then await that read.
+   * Failures and defects are logged under `name` and release waiters as if a result was installed.
+   * There is no automatic retry after failure.
    */
   readonly read: (superseded: () => boolean) => Effect.Effect<boolean, unknown>;
   /** Reads are forked here, so they end with their owner. */

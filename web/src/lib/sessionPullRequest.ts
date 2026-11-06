@@ -1,17 +1,13 @@
 /**
- * The selected session's pull request link: one live observation of it plus the surface that
- * shows it. The registry decides whether a session is linked, and the session catalog carries its
- * link, so only a linked session is read: on selection, focus, work edges and stale opens.
- * Linked PR details poll while shown until definitively closed/merged, including recovery from
- * unavailable status; selecting an unlinked session costs no GitHub call.
- * Work starting or stopping means a change within the observed session, never the
- * selection of one mid-turn. When the work of a session never searched for a pull request
- * stops, it is searched once in the background; the registry keeps what that finds and the
- * catalog reports it. Reads are silent; only an explicit
- * change blocks the controls or reports. The caller supplies Changes visibility and link-dialog
- * intent; this module owns the surface they imply, across selections and completed actions.
- * A link that appears closes the link form, not the visible row's polling; background reads never
- * reset an edit in progress. Nothing here depends on React.
+ * Observes the selected session's pull request and manages its link/details/edit view. The
+ * registry owns the association; GitHub reads add live facts but never decide whether it is linked.
+ * Linked details poll while visible until closed or merged; an unavailable status keeps polling.
+ * Unlinked sessions skip detail reads, though an idle, never-searched session may trigger discovery
+ * when work stops or Changes opens (see `observe`).
+ *
+ * Background reads are silent and preserve edits in progress. Explicit changes report their
+ * outcomes and block controls while pending. The caller supplies visibility and dialog intent;
+ * this module handles selection changes and reconciles the view without depending on React.
  */
 import type {
   SessionPullRequestLink as RegistryLink,
