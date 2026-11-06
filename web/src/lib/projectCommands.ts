@@ -1,7 +1,7 @@
 /**
  * Project policy for the client, described once: which projects a picker offers, what a project's
  * row offers (each command with whether it is available now and what running it means), whether a
- * project's menu sets apart (`projectMenu`), whether a project draft may be saved and which fields are over their limits (`checkProjectDraft`, creating and editing alike), creating a
+ * project's menu sets apart (`projectMenu`), whether a project draft may be saved and which field writes exceed their limits, creating a
  * project and moving a session between projects (`sessionProjectMenu`), and whether a session can
  * start in a project. The sidebar, the session's Project menu, the phone sheet, the command palette
  * and the New session page render these and hand them to the one command host instead of each
@@ -182,11 +182,12 @@ export interface ProjectDraft {
 /** The draft New project opens with. */
 export const EMPTY_PROJECT_DRAFT: ProjectDraft = { name: "", instructions: "" };
 
-/** A draft field's length against its limit, counted as the server saves it: trimmed. */
+/** A draft field's trimmed length and whether writing it would exceed its limit. */
 export interface ProjectFieldCheck {
   /** The field's length once trimmed, in UTF-16 code units as the browser counts them. */
   length: number;
   max: number;
+  /** An intended write exceeds the limit; an unchanged stored value is not a write. */
   over: boolean;
 }
 
@@ -198,52 +199,62 @@ export interface ProjectDraftCheck {
   saved: ProjectDraft | undefined;
 }
 
-const fieldCheck = (saved: string, max: number): ProjectFieldCheck => ({
+const fieldCheck = (saved: string, max: number, writing: boolean): ProjectFieldCheck => ({
   length: saved.length,
   max,
-  over: saved.length > max,
+  over: writing && saved.length > max,
 });
 
 /**
  * The one rule for saving a project draft, whether it creates a project or changes one, and what the
- * dialogs show of it: each field's trimmed length against its limit (`PROJECT_NAME_MAX`,
- * `PROJECT_INSTRUCTIONS_MAX`), and the trimmed draft as saved when the name is not blank and no field
- * is over its limit. Blank instructions are saveable: the project has none.
+ * dialogs show of it. Creation writes every field; settings writes only fields differing from
+ * `opened`. Stored values may predate today's limits, so unchanged fields do not block an edit.
+ * Blank instructions clear them; a name write cannot be blank. Lengths count trimmed text.
  */
-export function checkProjectDraft(draft: ProjectDraft): ProjectDraftCheck {
+export function checkProjectDraft(draft: ProjectDraft, opened?: ProjectDraft): ProjectDraftCheck {
   const name = draft.name.trim();
   const instructions = draft.instructions.trim();
   const checks = {
-    name: fieldCheck(name, PROJECT_NAME_MAX),
-    instructions: fieldCheck(instructions, PROJECT_INSTRUCTIONS_MAX),
+    name: fieldCheck(name, PROJECT_NAME_MAX, name !== opened?.name),
+    instructions: fieldCheck(
+      instructions,
+      PROJECT_INSTRUCTIONS_MAX,
+      instructions !== opened?.instructions,
+    ),
   };
-  const savable = name && !checks.name.over && !checks.instructions.over;
+  const savable = (name === opened?.name || name) && !checks.name.over && !checks.instructions.over;
   return { ...checks, saved: savable ? { name, instructions } : undefined };
 }
 
 /**
  * Saving the settings dialog: one registry change carrying each field that differs from the project
  * as the dialog opened on it (`opened`; as saved now without it), trimmed, so a field changed
- * elsewhere meanwhile keeps that change. A draft `checkProjectDraft` refuses (no `saved`) cannot be
- * saved; blank instructions clear them. Nothing to send, a deleted project or no connection leave
- * Save off. The server answers the save.
+ * elsewhere meanwhile keeps that change. Only intended writes face today's limits; the returned
+ * check also supplies the dialog's field feedback. Blank instructions clear them. Nothing to send,
+ * a deleted project or no connection leave Save off. The server answers the save.
  */
 export function projectSettingsSave(
   state: AppState,
   projectId: string,
   draft: ProjectDraft,
   opened?: ProjectDraft,
-): { allowed: false } | { allowed: true; command: ClientCommand } {
+): { projectCheck: ProjectDraftCheck } & (
+  | { allowed: false }
+  | { allowed: true; command: ClientCommand }
+) {
   const project = findProject(state, projectId);
-  const { saved } = checkProjectDraft(draft);
-  if (!project || !state.connected || !saved) return { allowed: false };
-  const base = opened ?? { name: project.name, instructions: project.instructions ?? "" };
+  const base =
+    opened ?? (project && { name: project.name, instructions: project.instructions ?? "" });
+  const projectCheck = checkProjectDraft(draft, base);
+  const { saved } = projectCheck;
+  if (!project || !state.connected || !saved || !base) return { allowed: false, projectCheck };
   const { name, instructions } = saved;
   const renamed = name !== base.name;
   const instructed = instructions !== base.instructions;
-  if (!renamed && !instructed) return { allowed: false };
+  if (!renamed && !instructed) return { allowed: false, projectCheck };
   return {
     allowed: true,
+    projectCheck,
     command: {
       _tag: "update_project",
       id: project.id,

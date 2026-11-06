@@ -11,7 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { checkProjectDraft, type ProjectDraft } from "@/lib/projectCommands";
+import {
+  checkProjectDraft,
+  type ProjectDraft,
+  type ProjectDraftCheck,
+} from "@/lib/projectCommands";
 
 /**
  * A project's settings: its name and instructions, saved together. A view over the command host's
@@ -23,6 +27,7 @@ export function ProjectSettingsDialog({
   draft,
   setDraft,
   allowed,
+  check,
   submit,
   close,
 }: {
@@ -30,6 +35,7 @@ export function ProjectSettingsDialog({
   draft: ProjectDraft;
   setDraft: (draft: ProjectDraft) => void;
   allowed: boolean;
+  check: ProjectDraftCheck | undefined;
   submit: () => void;
   close: () => void;
 }) {
@@ -47,7 +53,7 @@ export function ProjectSettingsDialog({
           <DialogHeader>
             <DialogTitle>Project settings</DialogTitle>
           </DialogHeader>
-          <ProjectFields id={id} draft={draft} setDraft={setDraft} />
+          <ProjectFields id={id} draft={draft} setDraft={setDraft} check={check} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close}>
               Cancel
@@ -65,20 +71,21 @@ export function ProjectSettingsDialog({
 /**
  * A project's two fields, Name and Instructions, as the New project and Project settings dialogs
  * both show them: one shape for creating and editing a project. Each field's count and invalid state
- * are `checkProjectDraft`'s, the rule that also decides whether the dialog may save.
+ * come from the save decision. Without a settings decision, check the full draft for creation.
  */
 export function ProjectFields({
   id,
   draft,
   setDraft,
   nameRef,
+  check = checkProjectDraft(draft),
 }: {
   id: string;
   draft: ProjectDraft;
   setDraft: (draft: ProjectDraft) => void;
   nameRef?: Ref<HTMLInputElement>;
+  check?: ProjectDraftCheck;
 }) {
-  const check = checkProjectDraft(draft);
   return (
     <FieldGroup>
       <Field>

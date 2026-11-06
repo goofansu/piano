@@ -6,6 +6,7 @@ import {
   decodeClientMessage,
   type FolderView,
   type Project,
+  PROJECT_NAME_MAX,
   SESSION_TITLE_MAX,
   type SessionReference,
   type SessionState,
@@ -710,16 +711,60 @@ test("Project settings starts from the project as saved and sends only what chan
   assert.deepEqual(sent[1], { _tag: "update_project", id: "p1", instructions: null });
 });
 
-test("Project settings keeps a change another tab saved while it was open", () => {
+test("Project settings edits and clears instructions without rewriting an unchanged legacy name", () => {
+  const name = "n".repeat(PROJECT_NAME_MAX + 1);
+  for (const instructions of ["  After\n", "  "]) {
+    const { subject, sent, setState } = forms();
+    setState({ ...withWorkspace, projects: [{ id: "p1", name, instructions: "Before" }] });
+    subject.open({ kind: "project-settings", projectId: "p1" });
+    assert.equal(subject.submit(), false, "an untouched legacy project is a no-op");
+    assert.equal(subject.answer().projectCheck?.name.over, false);
+    subject.editProject({ name: ` ${name} `, instructions });
+    assert.equal(subject.answer().allowed, true);
+    assert.equal(subject.answer().projectCheck?.name.over, false);
+    assert.equal(subject.submit(), true);
+    assert.deepEqual(sent, [
+      {
+        _tag: "update_project",
+        id: "p1",
+        instructions: instructions.trim() || null,
+      },
+    ]);
+  }
+});
+
+test("Project settings refuses an over-limit rename even with new instructions, but accepts shortening", () => {
+  const name = "n".repeat(PROJECT_NAME_MAX + 2);
   const { subject, sent, setState } = forms();
-  setState({ ...withWorkspace, projects: [{ id: "p1", name: "Alpha" }] });
+  setState({ ...withWorkspace, projects: [{ id: "p1", name, instructions: "Before" }] });
   subject.open({ kind: "project-settings", projectId: "p1" });
-  // Another tab renames the project; this dialog still shows Alpha.
-  setState({ ...withWorkspace, projects: [{ id: "p1", name: "Beta" }] });
-  assert.equal(subject.submit(), false, "an untouched dialog has nothing to save");
-  subject.editProject({ name: "Alpha", instructions: "New" });
+  for (const instructions of ["Before", "After"]) {
+    subject.editProject({ name: name.slice(1), instructions });
+    assert.equal(subject.answer().projectCheck?.name.over, true);
+    assert.equal(subject.submit(), false);
+    assert.deepEqual(sent, []);
+  }
+  subject.editProject({ name: " Short name ", instructions: "Before" });
+  assert.equal(subject.answer().projectCheck?.name.over, false);
   assert.equal(subject.submit(), true);
-  assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", instructions: "New" }]);
+  assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", name: "Short name" }]);
+  subject.open({ kind: "project", dialog: {} });
+  subject.editProject({ name, instructions: "After" });
+  assert.equal(subject.submit(), false, "creation still writes and validates the full name");
+});
+
+test("Project settings keeps a change another tab saved while it was open", () => {
+  for (const name of ["Alpha", "n".repeat(PROJECT_NAME_MAX + 1)]) {
+    const { subject, sent, setState } = forms();
+    setState({ ...withWorkspace, projects: [{ id: "p1", name }] });
+    subject.open({ kind: "project-settings", projectId: "p1" });
+    // Another tab renames the project; this dialog still shows the opened name.
+    setState({ ...withWorkspace, projects: [{ id: "p1", name: "Beta" }] });
+    assert.equal(subject.submit(), false, "an untouched dialog has nothing to save");
+    subject.editProject({ name, instructions: "New" });
+    assert.equal(subject.submit(), true);
+    assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", instructions: "New" }]);
+  }
 });
 
 test("Project settings for a project deleted while open stays open and sends nothing", () => {

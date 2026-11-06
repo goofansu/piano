@@ -110,7 +110,10 @@ test("saving project settings sends one change with each changed field, trimmed;
     ...state,
     projects: [{ ...launch, instructions: "Answer in French." }],
   };
-  const save = (draft: ProjectDraft, s = guided) => projectSettingsSave(s, "p1", draft);
+  const save = (draft: ProjectDraft, s = guided) => {
+    const { projectCheck: _projectCheck, ...decision } = projectSettingsSave(s, "p1", draft);
+    return decision;
+  };
   assert.deepEqual(save({ name: " Relaunch ", instructions: "Answer in French." }), {
     allowed: true,
     command: { _tag: "update_project", id: "p1", name: "Relaunch" },
