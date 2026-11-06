@@ -203,7 +203,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
       label: "Start Piano session",
       promptSnippet: "Start a Piano session, optionally in a new worktree",
       promptGuidelines: [
-        "Handoff: when piano_start_session gives the child the whole deliverable, check creation and submission, return its Open session link, and end the parent turn. The child owns follow-up questions and delivery.",
+        "After dispatch: when piano_start_session gives the child the whole deliverable, check creation and submission, return its Open session link, and end the parent turn. The child owns follow-up questions and delivery.",
         "piano_session_status only reads: use it whenever you need to know what a Piano session is doing, dispatched or not.",
       ],
       description:

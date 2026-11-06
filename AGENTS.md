@@ -91,6 +91,10 @@ explanation in `docs/` and link to it from the guide that needs it.
 
 ## Branches
 
+Investigate in the current session before dispatching implementation. Inspect the affected code and
+checks until you can name the observed problem, implementation scope, and acceptance check. Include
+those findings in the child’s brief. Explicitly delegated research may start directly in a child.
+
 Develop each new change in a dedicated branch and worktree. A session already assigned the change
 in its dedicated worktree performs the work there. Otherwise, use `piano_start_session` when
 available to dispatch the change into a new worktree. When unavailable, or when the user asks to
