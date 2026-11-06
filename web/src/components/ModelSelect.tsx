@@ -214,6 +214,7 @@ export function ModelSelect({
         >
           <PickerSearch
             ref={search}
+            divider={false}
             value={query}
             onValueChange={setQuery}
             aria-label="Search models"
