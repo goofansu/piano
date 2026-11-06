@@ -103,6 +103,41 @@ link is recorded in the child's own Pi history as a `piano.dispatch` custom entr
 reaches the model. `piano-dispatch` writes it when the child's session first starts, and Pi saves
 it with the first reply, so a child whose first prompt failed before any reply may have no backlink.
 
+## Project inheritance
+
+`piano_start_session` defaults to `inheritProject: true`: the child joins the parent’s current
+Piano **project** (named session group), not its folder, repository or workspace. Piano reads
+membership from its database when it handles creation, before resolving/creating the destination
+checkout. Changing `cwd` or requesting a new worktree does not change that membership.
+Set `"inheritProject": false` to start ungrouped; the parent backlink is still recorded.
+An ungrouped parent yields an ungrouped child, even if other sessions in the checkout are grouped.
+
+This is a one-time initial association. Moving the parent later does not move existing children.
+The usual project-member launch behavior applies, including current project instructions and
+reopening a done project; no parent transcript, model or effort settings are copied.
+
+A registered parent can be stopped, archived or have unavailable history/checkout: only its saved
+membership is needed. If a supplied parent ID is missing or matches multiple registered sessions,
+Piano refuses before creating a folder, worktree or child rather than guessing or silently dropping
+the grouping. Use a uniquely listed parent, or explicitly opt out. A project deleted before this
+lookup has already ungrouped the parent; deletion after lookup but before child registration
+refuses creation under the ordinary project-availability check (a worktree may already exist).
+An unreachable Piano follows the connection-failure rules below; it cannot infer membership locally.
+
+The terminal script has no parent by default and starts ungrouped; it does not infer one from
+`PI_SESSION_ID` or the shell’s cwd. Supply `--parent-session <sessionId>` to record the backlink
+and inherit that parent’s current project. Add `--no-inherit-project` to retain the backlink but
+start ungrouped. Both flags belong only to start. For example:
+
+```bash
+node scripts/dispatch-session.ts brief.txt /path/to/repo --parent-session <sessionId>
+node scripts/dispatch-session.ts brief.txt /path/to/repo --parent-session <sessionId> --no-inherit-project
+```
+
+On the `create_session` protocol, `inheritProject` is an optional boolean defaulting to true
+when `options.dispatchedFrom` names a parent. An explicit `projectId` takes precedence (ordinary
+UI creation is unchanged). With no parent and no explicit project, creation remains ungrouped.
+
 ## Setup and checkout choice
 
 Piano loads its bundled `piano-dispatch` extension when it starts Pi, using Pi's normal `--extension` mechanism.

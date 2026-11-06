@@ -61,6 +61,8 @@ export interface CreateSpec {
   readonly cwd: string;
   /** Initial project; it must be active, checked before anything is registered. */
   readonly projectId?: string;
+  /** Without explicit projectId, inherit options.dispatchedFrom’s current project by default. */
+  readonly inheritProject?: boolean;
   readonly options: StartOptions;
   /** Create this new branch's worktree from `cwd`'s repository and start the session there. */
   readonly worktree?: WorktreeRequest;
@@ -462,14 +464,33 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
 
       const create = Effect.fn("SessionHosts.create")(
         function* (spec: CreateSpec) {
-          const cwd = yield* destination(spec);
           const { model, thinkingLevel, name, dispatchedFrom } = spec.options;
+          let projectId = spec.projectId;
+          // Snapshot Piano-owned membership before any checkout effects, never from cwd or Pi’s
+          // launch environment. A saved/archived parent is enough; its history need not be readable.
+          if (
+            projectId === undefined &&
+            spec.inheritProject !== false &&
+            dispatchedFrom !== undefined
+          ) {
+            const parents = (yield* registry.get).sessions.filter(
+              (session) => session.sessionId === dispatchedFrom,
+            );
+            if (parents.length !== 1)
+              return yield* new SessionNotCreated({
+                detail:
+                  "Cannot inherit project: parent session is unlisted or ambiguous. Choose a listed parent or set inheritProject to false to start ungrouped.",
+                checkoutUnconfirmed: false,
+              });
+            projectId = parents[0]!.projectId;
+          }
+          const cwd = yield* destination({ ...spec, projectId });
           // Only a fresh server-generated ID may create a reference. Registration and initial
           // membership survive a disconnected requester, as acquisition is server-owned.
           const { session } = yield* start(
             { cwd, sessionId: randomUUID(), model, thinkingLevel, name, dispatchedFrom },
             notCreated,
-            { projectId: spec.projectId },
+            { projectId },
           );
           return session;
         },

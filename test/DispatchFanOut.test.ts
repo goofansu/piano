@@ -349,6 +349,7 @@ test(
       ).details as StartToolResult;
       assert.equal(fanned.creation, "created", JSON.stringify(fanned));
       assert.equal(fanned.worktree?.branch, "task-e");
+      assert.equal((await status(fanned.handle!.sessionId)).projectId, "fan-out");
       assert.equal(git(fanned.cwd, "branch", "--show-current"), "task-e");
       // A missing directory refuses a start without a worktree just as one with a worktree.
       const missing = join(root, "missing");

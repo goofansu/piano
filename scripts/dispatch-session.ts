@@ -29,6 +29,8 @@ Options:
   --worktree BRANCH     Create a new worktree on new branch BRANCH from <cwd>'s repository and
                         start the session there; a failure creates no session
   --hooks               With --worktree, run approved Worktrunk hooks (default: off)
+  --parent-session ID   Record the dispatching session and inherit its current Piano project
+  --no-inherit-project  Start ungrouped, keeping the parent backlink if supplied
   --steer               With follow-up, steer the current run at Pi's next tool boundary instead
                         of waiting for it to finish
   --project ID          With list, the project whose active sessions to read
@@ -68,6 +70,8 @@ function argumentsFromCommandLine() {
         origin: { type: "string" },
         worktree: { type: "string" },
         hooks: { type: "boolean" },
+        "parent-session": { type: "string" },
+        "no-inherit-project": { type: "boolean" },
         steer: { type: "boolean" },
         project: { type: "string" },
       },
@@ -111,6 +115,13 @@ async function main() {
     return config;
   };
   const command = positionals[0];
+  if (
+    ["follow-up", "status", "list"].includes(command ?? "") &&
+    (values["parent-session"] !== undefined || values["no-inherit-project"] !== undefined)
+  )
+    throw new CliError(2, "--parent-session and --no-inherit-project belong to start");
+  const parentSession = values["parent-session"]?.trim();
+  if (parentSession === "") throw new CliError(2, "--parent-session must not be empty");
   if (values.steer && command !== "follow-up")
     throw new CliError(2, "--steer belongs to follow-up");
   if (command === "follow-up") {
@@ -185,6 +196,8 @@ async function main() {
       {
         prompt,
         cwd,
+        dispatchedFrom: parentSession,
+        inheritProject: values["no-inherit-project"] ? false : undefined,
         ...(worktree ? { worktree: { branch: worktree, hooks: values.hooks } } : {}),
       },
       nodeSocketEnvironment(configured()),

@@ -60,6 +60,8 @@ export interface StartRequest {
   readonly worktree?: WorktreeRequest;
   /** The dispatching session, recorded in the new one's history for its backlink. */
   readonly dispatchedFrom?: string;
+  /** Inherit current membership from dispatchedFrom; defaults to true. */
+  readonly inheritProject?: boolean;
 }
 
 export type {
@@ -284,7 +286,7 @@ export function startSession(
   environment: SocketEnvironment,
   signal?: AbortSignal,
 ): Promise<StartResult> {
-  const { cwd, prompt, dispatchedFrom, worktree } = request;
+  const { cwd, prompt, dispatchedFrom, worktree, inheritProject } = request;
   return observe<StartResult>(
     environment,
     { deadlineMs: START_DEADLINE_MS + (worktree ? WORKTREE_CREATION_MS : 0), signal },
@@ -367,6 +369,7 @@ export function startSession(
               selectionId,
               cwd,
               options: { dispatchedFrom },
+              ...(inheritProject === undefined ? {} : { inheritProject }),
               ...(worktree ? { worktree } : {}),
               text: prompt,
             });
