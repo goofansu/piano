@@ -28,6 +28,9 @@ test("Piano's extensions are resolved from the installation, never from the sess
     installed("piano-ask-user"),
     installed("piano-library"),
     installed("radius-artifacts"),
+    fileURLToPath(
+      new URL("../node_modules/@earendil-works/pi-claude-code/src/index.ts", import.meta.url),
+    ),
   ];
   assert.deepEqual(defaultPiCli().extensions, expected);
   // A session runs in the user's repository, so the launch must not follow the process cwd there.
