@@ -10,20 +10,33 @@ User and repository instructions decide when to dispatch; the tools describe how
 observe sessions. Repository instructions can require dispatch without a separate user request
 (INV-13). Piano's own contributor workflow lives in [AGENTS.md](../AGENTS.md#branches).
 
+## Prepare the brief
+
+Choose a bounded task and how its result will be checked, following user and repository
+instructions. Reuse supplied findings; inspect missing context in the current session until
+implementation has a concrete scope. Research, diagnosis or review can be delegated directly
+with a question, boundaries and expected evidence. This is guidance for a useful brief, not a
+runtime planning gate or a required skill.
+
+State what the child owns and what remains in the parent, including follow-up questions and
+delivery. A dispatched child carries out its assigned task; further dispatch is for distinct
+subtasks or a user-requested handoff.
+
 ## Handoff or dependency
 
-Choose by what remains for the parent after dispatch:
+Choose from the responsibility stated in the brief, not merely from having started a session:
 
 - **Handoff:** the child owns the whole deliverable, including follow-up questions and delivery.
-  Check creation and submission, return the child's **Open session** link, and end the parent turn.
-  Moving implementation into a required worktree is a handoff when no parent work remains.
+  Inspect creation, submission and detail. For a created child, return its **Open session** link
+  with any blocker and end the parent turn only when no work or requested completion report remains
+  there. Moving implementation into a required worktree does not by itself determine ownership.
 - **Dependency:** remaining parent work consumes the child's result, such as combining independent
   reviews or applying research findings. Do independent work first, then wait when blocked. Also
   wait when the user explicitly asks for completion to be reported in the parent. Merely relaying
   the child's summary does not create a dependency.
 
-State the child's responsibility in the brief. If a child needs user input, direct the user to its
-question rather than asking it again in the parent; the answer belongs in the child session.
+If any dispatch tool reports `needs_input`, direct the user to that session's question
+rather than asking it again here; the answer belongs in the session that asked.
 
 A pending wait resumes its parent when it returns. Child completion does not start another parent
 turn after a handoff: point to the child for progress and delivery rather than promising an
@@ -177,9 +190,10 @@ the new branch's worktree through Worktrunk, as the New page does, from the fold
 repository (the main checkout of a linked worktree, otherwise the checkout's root), registers it
 under that folder and starts the child there. The sidebar lists it under the folder with its branch,
 and its **Changes** shows only its own diff. Hooks are off unless `"hooks": true`, which runs
-approved Worktrunk hooks. Give each concurrent writing task its own worktree (INV-07). A start
-whose worktree cannot be created reports `creation: "refused"` with the reason in `detail`, creates
-no session and never falls back to `cwd` itself; the reasons include:
+approved Worktrunk hooks. Isolate concurrent writers in separate workspaces (INV-07), using
+worktrees for Git changes. A start whose worktree cannot be created reports `creation: "refused"`
+with the reason in `detail`, creates no session and never falls back to `cwd` itself; the reasons
+include:
 
 - a branch that already exists, or a name Git does not accept as a new branch;
 - a repository hook that needs approval when `hooks` is true (approve it with
@@ -256,8 +270,9 @@ the rechecks run out, the deadline passes or another session's attention ends th
 Settlement means execution stopped, **not that the task or its checks succeeded**. An input handled
 without a new assistant answer returns `null`. `answer` follows the rule `lastAnswer` reads by: the
 text of an interrupted or failed reply is not an answer, so a `cancelled` or `failed` wait returns
-`null` with the reason in `detail`. The parent should assess the child's answer and
-reported evidence rather than treating settlement as verification.
+`null` with the reason in `detail`. Assess each result's status, answer and detail, and evaluate
+reported evidence against the task. After an attention outcome, continue waiting only for
+still-needed, running children with their existing handles; an early return did not stop them.
 
 Observation is scoped to the fresh session's initial submission and live host generation. Input
 equality uses opaque, process-keyed evidence computed by the server before display redaction,
@@ -277,8 +292,10 @@ observation. Inspect the child directly when an exact result cannot be establish
 <sessionId>`, reads what one session is doing and what it needs, without waiting or opening it.
 `list --project <projectId>` reads every active (not archived) session of a project and prints one
 JSON object per line. Any session Piano lists can be read, from any process, after a lost reply or a
-Piano restart: the ID is enough. Each read is one answer; read again to observe later. Reading
-never starts Pi and stores nothing.
+Piano restart: the ID is enough. Use a one-time read for current status or when an old wait handle
+can no longer be used. For completion with a valid dispatch handle, use `piano_wait_sessions`
+rather than polling. Current status does not attribute an answer to an earlier dispatch.
+Reading never starts Pi, resumes work or resends input, and stores nothing.
 
 ```json
 {
