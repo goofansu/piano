@@ -158,9 +158,11 @@ export function NewSessionComposer({
   return (
     <>
       <div className={className}>
-        {/* Left: where the session runs, with that directory's trust beside it. Right: which project it joins. */}
-        <div className="mb-2 flex min-w-0 items-center gap-1">
-          <div className="min-w-0 shrink">
+        {/* Left: where the session runs, with that directory's trust beside it. Right: which project it
+         * joins. Below md the pane is the whole screen and the row wraps instead, each control the
+         * size of its name, so a long folder, branch or project name never crowds the others out. */}
+        <div className="mb-2 flex min-w-0 items-center gap-1 max-md:flex-wrap max-md:gap-y-0.5">
+          <div className="min-w-0 shrink max-md:max-w-full">
             <DirectorySelect
               state={state}
               value={cwd}
@@ -259,7 +261,7 @@ function ProjectSelect({
           aria-label="Project"
           className={cn(
             picker,
-            "ml-auto max-w-[45%] shrink-0",
+            "ml-auto max-w-[45%] shrink-0 max-md:ml-0 max-md:max-w-full",
             current ? "text-ink-2" : "text-ink-3",
           )}
         >
@@ -332,7 +334,7 @@ function TrustToggle({
       ) : (
         <ShieldOffIcon data-icon="inline-start" />
       )}
-      <span className="max-[360px]:hidden">{trusted ? "Trusted" : "Untrusted"}</span>
+      <span>{trusted ? "Trusted" : "Untrusted"}</span>
     </Button>
   );
 }
@@ -387,7 +389,8 @@ function DirectorySelect({
             <span>Choose a folder</span>
           ) : trigger.kind === "checkout" ? (
             <>
-              <span className="truncate font-mono">{trigger.folder}</span>
+              {/* The folder keeps its name; a long branch truncates first, as in the session header. */}
+              <span className="max-w-[12rem] shrink-0 truncate font-mono">{trigger.folder}</span>
               {trigger.branchLabel && (
                 <BranchLabel branch={trigger.branchLabel} className="text-ink-3" />
               )}
