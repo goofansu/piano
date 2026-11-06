@@ -721,8 +721,9 @@ await run(
     // Radix checks a radio that arrow focus reaches only while the key is still down, and
     // agent-browser releases it before that deferred focus: wait for each key's own effect, and
     // let Space, which belongs to the focused radio, make the choice.
+    const choice = { "Quick checks": "'Quick checks'", "Full suite": "'Full suite'" };
     const radio = (name, checked) =>
-      `[...document.querySelectorAll('[role=radio]')].some((r) => r === document.activeElement && r.getAttribute('aria-checked') === '${checked}' && document.querySelector('label[for="' + r.id + '"]')?.innerText.trim() === ${JSON.stringify(name)})`;
+      `[...document.querySelectorAll('[role=radio]')].some((r) => r === document.activeElement && r.getAttribute('aria-checked') === '${checked}' && document.querySelector('label[for="' + r.id + '"]')?.innerText.trim() === ${choice[name]})`;
     await page.click("radio", "Quick checks");
     await page.until(radio("Quick checks", true));
     await page.press("ArrowDown");

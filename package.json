@@ -50,6 +50,9 @@
     "source-map-js": "^1.2.2",
     "mermaid": {
       "katex": "^0.18.2"
+    },
+    "@ts-morph/common": {
+      "minimatch": "^11.0.1"
     }
   },
   "allowScripts": {
