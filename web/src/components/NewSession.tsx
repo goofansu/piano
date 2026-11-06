@@ -408,7 +408,12 @@ function DirectorySelect({
       ) : (
         <PickerContent aria-label="Choose a folder" searchRef={search}>
           <Command>
-            <PickerSearch ref={search} aria-label="Search folders" placeholder="Search folders" />
+            <PickerSearch
+              ref={search}
+              divider={false}
+              aria-label="Search folders"
+              placeholder="Search folders"
+            />
             <CommandList className="max-h-[min(18rem,60dvh)]">
               <CommandEmpty>No folder matches.</CommandEmpty>
               {roots.length > 0 && (
