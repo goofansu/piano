@@ -220,7 +220,7 @@ export function SessionPanel({
         {files.map((file) =>
           view(
             tabKey(file),
-            <WorkspaceFile file={file} active={shown && active === tabKey(file)} />,
+            <WorkspaceFile file={file} active={navigation.shownTab === tabKey(file)} />,
             file.key,
           ),
         )}
