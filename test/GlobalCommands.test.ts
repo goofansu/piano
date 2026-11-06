@@ -197,9 +197,9 @@ test("on the Projects index the palette offers New project, which opens the New 
   );
 });
 
-test("on Settings › Skills the palette offers Add skill, which opens the skill editor", () => {
+test("on Settings › Skills the palette offers New skill, which opens the skill editor", () => {
   const newSkill = (settings: GlobalCommandContext["settings"]) =>
-    globalCommands(onNewPage, { ...ctx, settings }).find((c) => c.label === "Add skill");
+    globalCommands(onNewPage, { ...ctx, settings }).find((c) => c.label === "New skill");
   const create = newSkill("skills");
   assert.ok(create);
   const calls: unknown[][] = [];
@@ -215,9 +215,9 @@ test("on Settings › Skills the palette offers Add skill, which opens the skill
   assert.equal(newSkill("webhooks"), undefined, "another Settings page offers none");
 });
 
-test("on Settings › Prompts the palette offers Add prompt, which opens the prompt editor", () => {
+test("on Settings › Prompts the palette offers New prompt, which opens the prompt editor", () => {
   const newPrompt = (settings: GlobalCommandContext["settings"]) =>
-    globalCommands(onNewPage, { ...ctx, settings }).find((c) => c.label === "Add prompt");
+    globalCommands(onNewPage, { ...ctx, settings }).find((c) => c.label === "New prompt");
   const create = newPrompt("prompts");
   assert.ok(create);
   const calls: unknown[][] = [];
@@ -233,9 +233,9 @@ test("on Settings › Prompts the palette offers Add prompt, which opens the pro
   assert.equal(newPrompt("webhooks"), undefined, "another Settings page offers none");
 });
 
-test("on Settings › Webhooks the palette offers Add webhook, which opens the webhook editor", () => {
+test("on Settings › Webhooks the palette offers New webhook, which opens the webhook editor", () => {
   const addWebhook = (settings: GlobalCommandContext["settings"], state = onNewPage) =>
-    globalCommands(state, { ...ctx, settings }).find((c) => c.label === "Add webhook");
+    globalCommands(state, { ...ctx, settings }).find((c) => c.label === "New webhook");
   const add = addWebhook("webhooks");
   assert.ok(add);
   const calls: unknown[][] = [];

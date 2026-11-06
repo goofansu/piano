@@ -1,11 +1,11 @@
 import type { Webhook } from "@shared/webhooks";
 import { useEffect, useSyncExternalStore } from "react";
 
-/** The webhook the editor is open on: `"new"` for Add webhook, a webhook for Edit, `null` when closed. */
+/** The webhook the editor is open on: `"new"` for New webhook, a webhook for Edit, `null` when closed. */
 export type WebhookEditing = Webhook | "new" | null;
 
 /**
- * The page's one webhook editor, so Add webhook opens the same dialog whether the Webhooks header
+ * The page's one webhook editor, so New webhook opens the same dialog whether the Webhooks header
  * or the command palette ran it.
  */
 export const webhookEditor = (() => {

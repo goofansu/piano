@@ -8,9 +8,9 @@ await run(
   () => ({}),
   async (page) => {
     await page.open("/settings/webhooks");
-    await page.click("button", "Add webhook");
+    await page.click("button", "New webhook");
     await page.ab("fill", "#webhook-url", "https://example.com/webhook");
-    await page.click("button", "Add webhook");
+    await page.click("button", "Create webhook");
     await page.until('!document.querySelector("[role=dialog]")');
     await page.click("button", "Webhook actions example.com");
     await page.click("menuitem", "Edit");

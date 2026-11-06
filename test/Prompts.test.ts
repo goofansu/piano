@@ -347,7 +347,7 @@ test("a name Pi loads from a folder its settings list is refused; one it turns o
 test("a prompt placed by hand under a name Piano would not create is listed and deleted as Pi loads it", async () => {
   const dir = join(root, "by-hand", "prompts");
   mkdirSync(dir, { recursive: true });
-  // Pi offers this as /Review; Add prompt would refuse the name, but the file is Piano's to delete.
+  // Pi offers this as /Review; New prompt would refuse the name, but the file is Piano's to delete.
   writeFileSync(join(dir, "Review.md"), "Review by hand\n");
   writeFileSync(join(dir, "elsewhere-target.md"), "Linked\n");
   symlinkSync(join(dir, "elsewhere-target.md"), join(dir, "link.md"));

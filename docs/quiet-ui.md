@@ -26,6 +26,16 @@ passes these checks:
 - **Details on demand:** internal state and diagnostics go in on-demand details, if anywhere; a
   persistent warning appears only for a problem the user can act on.
 
+## Button names
+
+- **New** opens creation; use `New <noun>` for the entry button, matching palette command and
+  dialog title (for example, New project, New skill, New prompt, New webhook).
+- **Create** confirms creation; use `Create <noun>` and success feedback `<Noun> created`.
+  Edits keep **Save** and `<Noun> saved`.
+- **Add** configures or imports an existing resource (Add MCP server, Add key), inserts an
+  inline row (Add header, Add variable), or makes an association (Add to project, Add to chat).
+  Choose the verb by the action, not by replacing every Add.
+
 ## Shared structure
 
 Shared structure, so every pane reads as one app: one header shape on the session, the right

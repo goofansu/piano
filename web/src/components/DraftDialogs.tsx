@@ -1,5 +1,5 @@
 /**
- * The dialogs Settings › Skills and Settings › Prompts share: Add skill and Add prompt edit one
+ * The dialogs Settings › Skills and Settings › Prompts share: New skill and New prompt edit one
  * draft (`checkDraft`, the rule the server applies), and View shows the file exactly as saved.
  */
 import { checkDraft, DRAFT_FIELDS, type Draft, type DraftField, NAME_RULE } from "@shared/drafts";
@@ -25,7 +25,7 @@ import { ApiError } from "@/lib/api";
 import { useSetupActions } from "@/lib/useSetupActions";
 
 /**
- * A page's one Add dialog, so it opens the same dialog whether the page's header or the command
+ * A page's one creation dialog, so it opens the same dialog whether the page's header or the command
  * palette ran it. `useOpen` reads it while the page is mounted; leaving the page closes it.
  */
 export function draftEditor() {
@@ -56,7 +56,7 @@ export function draftEditor() {
 export const skillEditor = draftEditor();
 export const promptEditor = draftEditor();
 
-/** Add skill or Add prompt: Add stays off until the draft passes the rule the server applies. */
+/** New skill or New prompt: Create stays off until the draft passes the server’s rule. */
 export function NewDraftDialog({
   kind,
   create,
@@ -64,7 +64,7 @@ export function NewDraftDialog({
   close,
   refresh,
 }: {
-  /** What is created, lowercase: "skill" names the title, Add button, ids and messages. */
+  /** What is created, lowercase: "skill" names the title, Create button, ids and messages. */
   kind: LibraryKind;
   /** Saves the trimmed draft; a refusal naming a field shows on that field. */
   create: (draft: Draft) => Promise<unknown>;
@@ -123,7 +123,7 @@ export function NewDraftDialog({
         <FieldLabel htmlFor={`${kind}-${id}`}>{label}</FieldLabel>
         {control(!!error || check[id].over)}
         {/* The count, as New project's instructions: it counts the trimmed text, and over the limit
-         * (a paste into a field that takes no maxLength) it turns red and Add stays off. */}
+         * (a paste into a field that takes no maxLength) it turns red and Create stays off. */}
         {counted && (
           <FieldDescription
             id={`${kind}-${id}-count`}
@@ -148,7 +148,7 @@ export function NewDraftDialog({
     >
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Add {kind}</DialogTitle>
+          <DialogTitle>New {kind}</DialogTitle>
           <DialogDescription>
             Saved in Piano. Sessions started from now can use it.
           </DialogDescription>
@@ -212,7 +212,7 @@ export function NewDraftDialog({
             </Button>
             <Button type="submit" disabled={busy || !check.saved}>
               {busy && <Spinner data-icon="inline-start" />}
-              Add {kind}
+              Create {kind}
             </Button>
           </DialogFooter>
         </form>
