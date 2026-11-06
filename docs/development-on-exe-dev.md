@@ -81,6 +81,19 @@ No specific skill package, invocation sequence or document template is required 
 Skill execution does not establish verification: retain the actual test/browser evidence and the
 requirement and revision it supports. See INV-09 and INV-13.
 
+## PR evidence
+
+The GitHub proxy rejects `gh pr comment --attach` with “attaching files is not supported on GitHub
+Enterprise Server”. Include textual results directly in the PR. For screenshots or recordings,
+use a supported publication route when available; before reporting delivery, verify that the link
+in the PR shows the intended visual evidence and is accessible to reviewers.
+
+If publication is unavailable, retain the captures locally and continue commit → push → open PR
+without pausing for delivery instructions. State in the PR and completion summary: “Visual evidence
+captured locally; not published.” Local paths are staging, not delivered evidence; textual results
+do not substitute for visual evidence. This fallback permits PR creation, not a claim that required
+visual evidence has been delivered or verification requirements have been waived.
+
 ## Scratch verification
 
 Follow [the `verify-piano` skill](../.agents/skills/verify-piano/SKILL.md): leave the user's running instance and real registry alone. Use a throwaway
