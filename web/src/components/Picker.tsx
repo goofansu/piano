@@ -36,9 +36,18 @@ export function PickerContent({
 }
 
 /** A picker's search row: the input takes the width and any action buttons sit at its end. */
-export function PickerSearch({ children, ...props }: ComponentProps<typeof CommandInput>) {
+export function PickerSearch({
+  children,
+  divider = true,
+  ...props
+}: ComponentProps<typeof CommandInput> & { divider?: boolean }) {
   return (
-    <div className="flex items-center border-b border-line [&>[data-slot=command-input-wrapper]]:min-w-0 [&>[data-slot=command-input-wrapper]]:flex-1 [&>[data-slot=command-input-wrapper]]:border-b-0">
+    <div
+      className={cn(
+        "flex items-center [&>[data-slot=command-input-wrapper]]:min-w-0 [&>[data-slot=command-input-wrapper]]:flex-1 [&>[data-slot=command-input-wrapper]]:border-b-0",
+        divider && "border-b border-line",
+      )}
+    >
       <CommandInput {...props} />
       {children && <div className="mr-1 flex shrink-0 items-center text-ink-3">{children}</div>}
     </div>
