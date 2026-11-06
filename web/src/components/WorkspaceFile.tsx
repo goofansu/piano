@@ -21,9 +21,9 @@ import { PianoViewToggle, PianoViewToggleItem } from "@/components/PianoViewTogg
 import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { workspaceFile, workspaceFileDownload } from "@/lib/api";
+import { workspaceFileDownload } from "@/lib/api";
 import { relativeToDocument } from "@/lib/markdownImageLoader";
-import type { SurfaceTab } from "@/lib/navigation";
+import type { FileTab } from "@/lib/navigation";
 import { previewImage } from "@/lib/previewImage";
 import { useMarkdownImages } from "@/lib/useMarkdownImages";
 import { useNavigation } from "@/lib/useNavigation";
@@ -42,7 +42,7 @@ const FileHtml = lazy(() =>
   })),
 );
 
-type Preview = Awaited<ReturnType<typeof workspaceFile>>;
+type Preview = NonNullable<FileTab["result"]>;
 
 const KIND_ICON: Record<Preview["kind"], typeof FileIcon> = {
   markdown: FileTextIcon,
@@ -61,51 +61,13 @@ export function FileTabIcon({ path, className }: { path: string; className?: str
   return <Icon className={className} aria-hidden />;
 }
 
-/** A file a local link opened, read-only, in the Surface area.
- * The owner keys it by session, workspace, path and whether the checkout is there, so new
- * destinations never flash old content and a checkout going or coming back rereads it. */
-export function WorkspaceFile({
-  workspaceId,
-  file,
-  active,
-}: {
-  active: boolean;
-  workspaceId: string | undefined;
-  file: Extract<SurfaceTab, { kind: "file" }>;
-}) {
-  const { openFile, resolveFile } = useNavigation();
+/** Presents a navigation-owned acquisition, keyed by `file.key`, not its adopted path.
+ * Renderers own only disposable presentation resources; they never initiate the file read. */
+export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab }) {
+  const { openFile } = useNavigation();
+  const { result, status, workspaceId } = file;
   const previewId = useId();
-  const [result, setResult] = useState<Preview>();
   const [mode, setMode] = useState("preview");
-  const [status, setStatus] = useState("Opening…");
-  // A sidebar snapshot replaces workspace objects; only a new identity or link click rereads.
-  useEffect(() => {
-    const controller = new AbortController();
-    setResult(undefined);
-    setMode("preview");
-    setStatus("Opening…");
-    if (!workspaceId) {
-      setStatus("Workspace unavailable. Refresh folders and try the link again.");
-      return;
-    }
-    void workspaceFile(workspaceId, file.path, { signal: controller.signal }).then(
-      (result) => {
-        if (controller.signal.aborted) return;
-        setResult(result);
-        setStatus("");
-        resolveFile(file, result.path);
-      },
-      (error: unknown) => {
-        if (!controller.signal.aborted)
-          setStatus(
-            error instanceof Error
-              ? error.message
-              : "Could not read this file. Try the link again.",
-          );
-      },
-    );
-    return () => controller.abort();
-  }, [file, workspaceId, resolveFile]);
   const [binary, setBinary] = useState<{ result: typeof result; url: string }>();
   useEffect(() => {
     setBinary(undefined);

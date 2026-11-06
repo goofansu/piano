@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
+import type { workspaceFile } from "../web/src/lib/api.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import {
   type AddressBar,
@@ -85,7 +86,37 @@ function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
   });
   let moves = 0;
   let reads = 0;
+  type Preview = Awaited<ReturnType<typeof workspaceFile>>;
+  const fileReads: {
+    workspaceId: string;
+    path: string;
+    signal: AbortSignal;
+    finish: (path: string, content?: string) => Promise<Preview>;
+    fail: (message: string) => Promise<void>;
+  }[] = [];
   const navigation = createNavigation({
+    readFile: (workspaceId, path, options) =>
+      new Promise((resolve, reject) => {
+        fileReads.push({
+          workspaceId,
+          path,
+          signal: options!.signal!,
+          finish: async (resolved, content = "read content") => {
+            const result: Preview = {
+              workspaceId,
+              kind: "text",
+              path: resolved,
+              content,
+              language: "text",
+            };
+            resolve(result);
+            return result;
+          },
+          fail: async (message) => {
+            reject(new Error(message));
+          },
+        });
+      }),
     client: {
       ...client,
       getState: () => {
@@ -99,16 +130,20 @@ function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
     moved: () => moves++,
   });
   client.start();
-  navigation.start();
+  const stopNavigation = navigation.start();
   handlers!.onStatus(true);
   const server = (m: ServerMessage) => handlers!.onMessage(m);
-  const registry = () =>
+  const registry = (workspaceId: string | undefined = "workspace", missing = false) =>
     server({
       _tag: "registry",
       folders: [],
+      workspaces: workspaceId ? [{ id: workspaceId, folder: "/scratch", path: "/scratch" }] : [],
       projects: [{ id: "p1", name: "Launch" }],
       sessionReferences: [
-        sessionReference("/scratch", "a", { title: "Alpha" }),
+        sessionReference("/scratch", "a", {
+          title: "Alpha",
+          ...(missing ? { unavailable: "checkout" as const } : {}),
+        }),
         sessionReference("/scratch", "b", { title: "Beta" }),
       ],
     });
@@ -127,6 +162,8 @@ function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
     ...address,
     client,
     navigation,
+    fileReads,
+    stopNavigation,
     server,
     registry,
     selected,
@@ -1109,7 +1146,7 @@ test("a file opens as one tab however its path is spelled", () => {
   );
 });
 
-test("following an HTML sibling link reuses the reference file tab", () => {
+test("following an HTML sibling link reuses the reference file tab and retains its one read", async () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
@@ -1119,8 +1156,13 @@ test("following an HTML sibling link reuses the reference file tab", () => {
   p.navigation.openFile("lessons/../reference/0001-codemode-map.html", "surface");
   const request = activeTab(p.navigation.getState().surface);
   assert.ok(request && typeof request !== "string");
-  // WorkspaceFile reports the successful read's path, not a lexical guess at `..`.
-  p.navigation.resolveFile(request, "reference/0001-codemode-map.html");
+  const result = await p.fileReads[2].finish("reference/0001-codemode-map.html");
+  const resolved = activeTab(p.navigation.getState().surface);
+  assert.ok(resolved && typeof resolved !== "string");
+  assert.equal(resolved.result, result, "keep the acquired content, not a second read");
+  assert.equal(resolved.key, request.key, "adoption retains the viewer lifetime");
+  assert.equal(p.fileReads.length, 3);
+  assert.equal(p.fileReads[0].signal.aborted, true, "the superseded canonical read is cancelled");
   assert.deepEqual(shownTabs(p.navigation), {
     tabs: ["file:reference/0001-codemode-map.html", "file:lessons/0001-why-codemode.html"],
     active: "file:reference/0001-codemode-map.html",
@@ -1128,7 +1170,7 @@ test("following an HTML sibling link reuses the reference file tab", () => {
   });
 });
 
-test("resolved aliases keep tab order and the latest link's return area, not completion order", () => {
+test("resolved aliases keep tab order and the latest link's return area, not completion order", async () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
@@ -1139,29 +1181,32 @@ test("resolved aliases keep tab order and the latest link's return area, not com
   assert.ok(alias && typeof alias !== "string");
   p.navigation.openChanges();
   p.navigation.openFile("reference/map.html", "surface");
-  p.navigation.resolveFile(alias, "reference/map.html");
+  const latest = await p.fileReads[1].finish("reference/map.html", "latest content");
+  await p.fileReads[0].finish("reference/map.html", "older content");
+  const resolved = activeTab(p.navigation.getState().surface);
+  assert.ok(resolved && typeof resolved !== "string");
+  assert.equal(resolved.result, latest);
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:reference/map.html", "changes"]);
   p.navigation.closeTab("file:reference/map.html");
   assert.equal(shownTabs(p.navigation).area, "surface", "latest link wins, even if it read first");
 });
 
-test("resolved file reads do not reopen closed tabs, steal focus or affect another session", () => {
+test("resolved file reads do not reopen closed tabs, steal focus or affect another session", async () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
   p.selected("a");
   const open = () => {
     p.navigation.openFile("lessons/../reference/map.html");
-    const file = activeTab(p.navigation.getState().surface);
-    assert.ok(file && typeof file !== "string");
-    return file;
+    return p.fileReads.at(-1)!;
   };
   const old = open();
   const current = open();
-  p.navigation.resolveFile(old, "reference/map.html");
+  assert.equal(old.signal.aborted, true);
+  await old.finish("reference/map.html");
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:lessons/../reference/map.html"]);
   p.navigation.openChanges();
-  p.navigation.resolveFile(current, "reference/map.html");
+  await current.finish("reference/map.html");
   assert.deepEqual(shownTabs(p.navigation), {
     tabs: ["file:reference/map.html", "changes"],
     active: "changes",
@@ -1170,18 +1215,20 @@ test("resolved file reads do not reopen closed tabs, steal focus or affect anoth
   const closed = open();
   p.navigation.closeTab("file:lessons/../reference/map.html");
   const before = shownTabs(p.navigation);
-  p.navigation.resolveFile(closed, "reference/map.html");
+  assert.equal(closed.signal.aborted, true);
+  await closed.finish("reference/map.html");
   assert.deepEqual(shownTabs(p.navigation), before);
   const previousSession = open();
   p.navigation.select("/scratch", "b");
   p.selected("b");
   open();
   const next = shownTabs(p.navigation);
-  p.navigation.resolveFile(previousSession, "reference/map.html");
+  assert.equal(previousSession.signal.aborted, true);
+  await previousSession.finish("reference/map.html");
   assert.deepEqual(shownTabs(p.navigation), next);
 });
 
-test("a path through `..` keeps its spelling until the server resolves the directory symlink", () => {
+test("a path through `..` keeps its spelling until the server resolves the directory symlink", async () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
@@ -1194,8 +1241,126 @@ test("a path through `..` keeps its spelling until the server resolves the direc
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:alias/../README.md"]);
   const file = activeTab(p.navigation.getState().surface);
   assert.ok(file && typeof file !== "string");
-  p.navigation.resolveFile(file, "/sibling/README.md");
+  assert.equal(p.fileReads.at(-1)!.path, "alias/../README.md");
+  await p.fileReads.at(-1)!.finish("/sibling/README.md");
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:/sibling/README.md"]);
+});
+
+test("an alias resolving while a newer canonical read waits keeps that request, not the older bytes", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("docs/../note.txt", "agent");
+  p.navigation.openChanges();
+  p.navigation.openFile("note.txt", "surface");
+  const latest = activeTab(p.navigation.getState().surface);
+  assert.ok(latest && typeof latest !== "string");
+  await p.fileReads[0].finish("note.txt", "older bytes");
+  const pending = activeTab(p.navigation.getState().surface);
+  assert.ok(pending && typeof pending !== "string");
+  assert.equal(pending.key, latest.key);
+  assert.equal(pending.result, undefined);
+  assert.equal(pending.from, "surface");
+  assert.equal(p.fileReads[1].signal.aborted, false);
+  const result = await p.fileReads[1].finish("note.txt", "latest bytes");
+  assert.equal(pending.key, (activeTab(p.navigation.getState().surface) as typeof pending).key);
+  assert.equal((activeTab(p.navigation.getState().surface) as typeof pending).result, result);
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:note.txt", "changes"]);
+  assert.equal(p.fileReads.length, 2);
+});
+
+test("a retained acquisition is not persisted or reread by tab selection; an explicit link click rereads", async () => {
+  let kept: string | null = null;
+  const p = page("/new", {
+    read: () => kept,
+    write: (value) => {
+      kept = value;
+    },
+  });
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("docs/../note.txt");
+  const result = await p.fileReads[0].finish("note.txt", "acquired bytes");
+  const file = activeTab(p.navigation.getState().surface);
+  assert.ok(file && typeof file !== "string");
+  assert.equal(file.result, result);
+  p.navigation.openChanges();
+  p.navigation.selectTab("file:note.txt");
+  p.registry();
+  assert.equal(activeTab(p.navigation.getState().surface), file);
+  assert.equal(p.fileReads.length, 1);
+  assert.ok(kept);
+  assert.deepEqual(JSON.parse(kept).surface.tabs[0], {
+    kind: "file",
+    path: "note.txt",
+    from: "agent",
+  });
+  // Reload restores locations only, with a fresh acquisition.
+  const reloaded = page("/s/a", { read: () => kept, write: () => {} });
+  reloaded.registry();
+  reloaded.selected("a");
+  assert.equal(reloaded.fileReads.length, 1);
+  assert.equal(reloaded.fileReads[0].path, "note.txt");
+  p.navigation.openFile("docs/../note.txt");
+  assert.equal(p.fileReads.length, 2);
+  const fresh = await p.fileReads[1].finish("note.txt", "fresh bytes");
+  const reopened = activeTab(p.navigation.getState().surface);
+  assert.ok(reopened && typeof reopened !== "string");
+  assert.equal(reopened.result, fresh);
+  assert.notEqual(reopened.key, file.key);
+  assert.equal(p.fileReads.length, 2, "path adoption must not become a third request");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:note.txt", "changes"]);
+});
+
+test("failed reads keep their requested path and only another click retries", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("docs/../missing.txt");
+  await p.fileReads[0].fail("File not found");
+  const file = activeTab(p.navigation.getState().surface);
+  assert.ok(file && typeof file !== "string");
+  assert.equal(file.path, "docs/../missing.txt");
+  assert.equal(file.status, "File not found");
+  assert.equal(file.result, undefined);
+  p.registry();
+  p.navigation.selectTab("file:docs/../missing.txt");
+  assert.equal(p.fileReads.length, 1);
+  p.navigation.openFile("docs/../missing.txt");
+  assert.equal(p.fileReads.length, 2);
+});
+
+test("checkout and workspace changes replace acquisitions; stopping navigation cancels pending reads", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("note.txt");
+  const original = p.fileReads[0];
+  p.registry("workspace", true);
+  assert.equal(original.signal.aborted, true);
+  assert.equal(p.fileReads.length, 2);
+  await original.finish("wrong.txt");
+  await p.fileReads[1].fail("Checkout removed");
+  p.registry("workspace", false);
+  assert.equal(p.fileReads.length, 3);
+  const recovered = await p.fileReads[2].finish("note.txt");
+  const file = activeTab(p.navigation.getState().surface);
+  assert.ok(file && typeof file !== "string");
+  assert.equal(file.result, recovered);
+  p.registry("other-workspace");
+  const changed = activeTab(p.navigation.getState().surface);
+  assert.ok(changed && typeof changed !== "string");
+  assert.equal(changed.result, undefined);
+  assert.notEqual(changed.key, file.key);
+  assert.equal(p.fileReads[3].workspaceId, "other-workspace");
+  p.stopNavigation();
+  assert.equal(p.fileReads[3].signal.aborted, true);
+  await p.fileReads[3].finish("wrong.txt");
+  assert.equal(activeTab(p.navigation.getState().surface), changed);
 });
 
 test("one area at a time, closing a file opened from the Agent area returns there", () => {
