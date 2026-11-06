@@ -44,11 +44,51 @@ cannot supply or shadow them. The flags come before the session arguments, so a 
 | `piano-ask-user` | Asks the user questions through Piano: [`ask_user`](#user-questions). |
 | `piano-library` | Saves a skill or a prompt in Piano's folders after the user's Save: [`piano_save_skill` and `piano_save_prompt`](#saving-from-a-session). |
 | `radius-artifacts` | When Radius is signed in, publishes, updates and views [Radius artifacts](radius-artifacts.md). Also usable as a standalone Pi package. |
+| `pi-claude-code` | Offers Claude Code models through an externally installed, signed-in Claude CLI. See [Claude Code](#claude-code). |
 
-Each follows Pi's multi-file layout under `extensions/<name>/`: `index.ts` is the extension, and a
+Piano's first-party extensions follow Pi's multi-file layout under `extensions/<name>/`: `index.ts` is the extension, and a
 module beside it, such as `piano-dispatch/SessionDispatch.ts`, is a supporting module, not a
 separately discovered extension. They stay bundled with Piano and use the application's existing
 dependencies and shared protocol.
+
+### Claude Code
+
+Piano bundles [`@earendil-works/pi-claude-code`](https://github.com/earendil-works/pi-claude-code)
+as a dependency pinned to upstream commit `d5b5e04c314d3452d357174d16d10dda34daa2d2`
+(version 0.1.0). It loads the installed extension directly, without installing a Pi package at
+startup or changing global Pi settings. Pi run outside Piano is unaffected.
+
+**Avoid duplicate installations.** If the same plugin is also installed in user or project Pi
+settings, Pi can load both copies: paths are deduplicated, not package identity across separate
+installations. Provider registrations can override each other, status commands get numbered
+suffixes, and initial model availability can be inconsistent. Piano does not suppress or remove
+the other copy. Use only the bundled copy in the Pi environment used by Piano; if standalone Pi
+needs a separate installation, keep that in a separate Pi environment.
+
+Claude Code installation and authentication remain external. Install Claude Code separately and
+run `claude auth login` in a terminal as the user running Piano. Its executable must be on the
+Piano backend's `PATH`, or set `PI_CLAUDE_CODE_COMMAND` to its absolute path. For a nondefault
+Claude configuration directory, set `PI_CLAUDE_CODE_CONFIG_DIR`; the plugin passes it to Claude
+as `CLAUDE_CONFIG_DIR`. Piano does not copy or manage Claude credentials.
+
+Open a new session and choose a `claude-code/...` model in the model picker
+(upstream provider name: **Claude Code Subscription (Experimental)**).
+The plugin hides these models when the CLI is missing or signed out; other providers remain
+available. `/claude-code-status` checks the executable and login without generating a reply.
+Sign in through the CLI, not Piano's provider sign-in flow. If availability is stale, refresh the
+model list or open a new session.
+
+Pi still owns conversation history and tool execution. The plugin uses `claude -p` for inference
+and a local loopback relay; Claude Code does not execute the tools. It ignores `ANTHROPIC_API_KEY`
+in its Claude children and rejects conflicting auth-token, proxy or cloud-backend overrides rather
+than silently changing authentication or billing.
+
+This provider is experimental and subject to Anthropic's subscription limits and billing-policy
+changes; it does not provide unlimited or guaranteed subscription usage. See the
+[upstream caveats](https://github.com/earendil-works/pi-claude-code#usage-and-billing).
+Model discovery can make Claude catalog/feature-flag and telemetry requests but sends no generation
+request or conversation history. Set `DISABLE_TELEMETRY=1` before starting Piano to opt out of
+that telemetry; this can reduce the discovered model catalog.
 
 ## Piano's prompts and skills
 
