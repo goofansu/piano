@@ -125,9 +125,12 @@ unknowns are failed Pi tool results, not successful publication. No local-file f
 ## Older codemode sessions
 
 Pi's bounded nested-call records contain call metadata, not successful result bodies. Arguments
-over 8 KiB per call or 32 KiB total are omitted. Piano says “Some tool arguments weren’t saved.”
-when the saved record establishes argument-only loss; unfinished records or possible missing
-calls retain the generic details warning. This is independent of publication confirmation.
+over 8 KiB per call or 32 KiB total are omitted. Argument-only loss adds no overall codemode
+warning. Opening an affected nested tool call shows the quiet input note “Input too large to
+retain in history.” only when Pi recorded a size omission and no live input is available. Unknown
+missing input is not labelled as a size omission. Unfinished records or possible missing calls
+retain the generic details warning. Input retention changes neither tool success/failure nor
+publication confirmation.
 
 Older codemode publications without receipts are not recovered automatically. Piano does not
 scrape printed script output, promote intent entries, republish, or rewrite history. Recovering

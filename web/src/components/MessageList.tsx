@@ -1084,7 +1084,7 @@ function NestedCalls({ parentId, nested }: { parentId: string; nested: NestedVie
 }
 
 /** One call a script made: its dot, name and what it acted on, opening to its arguments and output. */
-function NestedCall({ line: { call, outcome, summary } }: { line: NestedCallLine }) {
+function NestedCall({ line: { call, outcome, summary, inputNote } }: { line: NestedCallLine }) {
   return (
     <FoldRow
       glyph={<span className={cn("block size-2 rounded-full", DOT[outcome])} />}
@@ -1104,6 +1104,8 @@ function NestedCall({ line: { call, outcome, summary } }: { line: NestedCallLine
       stateKey={call.id}
       ruled={false}
     >
+      {/* Plain input-retention state, not an Alert; it belongs only in these details. */}
+      {inputNote && <p className="text-ink-3">{inputNote}</p>}
       <ToolDetails
         args={call.args}
         output={stripAnsi(call.text)}

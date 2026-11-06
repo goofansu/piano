@@ -126,14 +126,18 @@ test("saved nested-call omissions distinguish arguments from missing calls or un
     status: "ok",
     argumentsBytes: 121360,
   };
-  for (const [name, calls, reason] of [
-    ["arguments", [call], "arguments"],
-    ["unfinished", [{ ...call, status: "unfinished" }], undefined],
-    ["missing-details", [{ ...call, argumentsBytes: undefined }], undefined],
+  for (const [name, calls, reason, argsOmitted] of [
+    ["arguments", [call], "arguments", "size"],
+    ["total-budget", [{ ...call, argumentsBytes: 100 }], "arguments", "size"],
+    ["unfinished", [{ ...call, status: "unfinished" }], undefined, "size"],
+    ["missing-details", [{ ...call, argumentsBytes: undefined }], undefined, undefined],
+    ["zero-bytes", [{ ...call, argumentsBytes: 0 }], undefined, undefined],
+    ["retained-input", [{ ...call, arguments: {} }], undefined, undefined],
     [
       "call-limit",
       Array.from({ length: 256 }, (_, i) => ({ ...call, id: `code/${i}` })),
       undefined,
+      "size",
     ],
   ] as const) {
     const file = seed(cwd, name, name);
@@ -158,6 +162,7 @@ test("saved nested-call omissions distinguish arguments from missing calls or un
     const snapshot = await run(history.peek(name, file));
     assert.equal(snapshot.messages.at(-1)?.nestedCallsIncompleteReason, reason, name);
     assert.equal(snapshot.messages.at(-1)?.nestedCallsComplete, false);
+    assert.equal(snapshot.messages.at(-1)?.nestedCalls?.[0].argsOmitted, argsOmitted, name);
   }
 });
 

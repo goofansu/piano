@@ -64,6 +64,8 @@ export type QuestionAnswers = AskUserOutcome;
 export interface NestedCall {
   call: ToolExecution;
   outcome: ToolOutcome;
+  /** Input retention detail, shown only inside this call’s disclosure. */
+  inputNote?: string;
   /** The command, path or pattern it acted on. */
   summary: string;
 }
@@ -476,6 +478,9 @@ function nestedView(
     call,
     outcome: nestedOutcome(call.status),
     summary: summarize(call.args),
+    ...(!call.args && call.argsOmitted === "size"
+      ? { inputNote: "Input too large to retain in history." }
+      : {}),
   }));
   const tail = all.length - NESTED_TAIL;
   const folded = all.filter((c, i) => i >= tail || c.outcome === "running");
@@ -499,13 +504,8 @@ function nestedView(
     failed: all.filter((c) => c.outcome === "failed").length,
     ...(latest ? { latest } : {}),
     complete,
-    ...(!complete
-      ? {
-          warning:
-            reason === "arguments"
-              ? "Some tool arguments weren’t saved."
-              : "Some tool details are unavailable.",
-        }
+    ...(!complete && reason !== "arguments"
+      ? { warning: "Some tool details are unavailable." }
       : {}),
   };
 }
