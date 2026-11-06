@@ -194,6 +194,17 @@ await run(
         const pre = document.querySelector('${tailTool} [data-slot="tool-output"] pre');
         return { header: h.top - t.top, output: pre ? pre.getBoundingClientRect().top - t.top : null };
       })()`);
+    // After the viewport changes above the transcript re-measures and briefly leaves the bottom,
+    // and its Scroll to bottom button flickers over this last row. Wait until it has stayed
+    // pinned for half a second.
+    await page.until(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      const pinned = t.scrollHeight - t.scrollTop - t.clientHeight < 2 &&
+        !document.querySelector('[aria-label="Scroll to bottom"]');
+      if (!pinned) return (window.pinnedSince = 0), false;
+      window.pinnedSince ||= performance.now();
+      return performance.now() - window.pinnedSince > 500;
+    })()`);
     const closedTool = await tailToolGeometry();
     await page.ab("click", `${tailTool} [data-slot="collapsible-trigger"]`);
     await page.until(`document.querySelector('${tailTool}').dataset.state === 'open'`);

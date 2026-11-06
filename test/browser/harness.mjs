@@ -208,6 +208,31 @@ export async function run(name, setup, journey, options = {}) {
         );
         key = `${mod}${key.slice(3)}`;
       }
+      // On macOS, agent-browser 0.41's Meta and Control chords leave Chrome repeating thousands
+      // of keydowns, and a later chord hangs or blanks the page. CDP key events fire exactly once.
+      const parts = key.split("+");
+      if (process.platform === "darwin" && parts.some((p) => p === "Meta" || p === "Control")) {
+        const letter = parts.pop();
+        assert.match(letter, /^[a-z]$/i, `CDP chords press one letter, not ${letter}`);
+        const bits = { Alt: 1, Control: 2, Meta: 4, Shift: 8 };
+        const modifiers = parts.reduce((sum, part) => sum | bits[part], 0);
+        const code = { key: letter, code: `Key${letter.toUpperCase()}` };
+        const keyCode = letter.toUpperCase().charCodeAt(0);
+        return page.cdp(async (call) => {
+          await call("Input.dispatchKeyEvent", {
+            type: "rawKeyDown",
+            ...code,
+            windowsVirtualKeyCode: keyCode,
+            modifiers,
+          });
+          await call("Input.dispatchKeyEvent", {
+            type: "keyUp",
+            ...code,
+            windowsVirtualKeyCode: keyCode,
+            modifiers,
+          });
+        });
+      }
       return ab("press", key);
     },
     see: (text) => ab("wait", "--text", text),
