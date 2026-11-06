@@ -226,6 +226,7 @@ export function SessionPanel({
               key={`${workspace?.id}:${key}:${file.path}:${checkoutMissing}`}
               workspaceId={workspace?.id}
               file={file}
+              active={shown && active === tabKey(file)}
             />,
           ),
         )}

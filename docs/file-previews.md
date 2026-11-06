@@ -6,7 +6,7 @@ resizable from its left edge and remembers its width; where the areas take turns
 Each file opens in a tab of its own, added at the end; a file already open is read again in its
 tab. Closing a tab shows its neighbour; one area at a time, closing a file opened from the
 conversation returns there. Links in the conversation use the session's working directory;
-links and images in a Markdown preview use that document's directory. Paths may leave the
+links and images in a Markdown or HTML preview use that document's directory. Paths may leave the
 workspace: `../sibling-worktree/evidence.md` and absolute paths such as `/tmp/abc.md` open the
 specified file, including through symlinks. Piano does not search other worktrees for a missing
 file. There is no directory browser or path entry.
@@ -36,13 +36,48 @@ available even when the image cannot decode. HTML scripts and MDX are not execut
 
 HTML opens as a document, not an app: no server, managed preview, or public file URL. The browser
 parses it with a non-browser HTML parser, rebuilds allowed HTML and CSS in a detached, inert template,
-and places the result in an opaque-origin `srcdoc` iframe with an **empty sandbox** and restrictive CSP. Neither document
-scripts nor a Piano script bridge run. Scripts, event attributes, embedded frames/objects, forms
-and form controls, inline SVG/MathML, refreshes and base URLs are removed. Native `details` and
-`summary` remain interactive. CSP permits only inline styles and bundled data images; network,
-fonts, media, scripts and form actions are denied. The frame has no popup, download or navigation
-privileges. Document links remain text, not navigation: even fragment links are removed because
-`srcdoc` inherits the parent's base URL. Open another file from its conversation link instead.
+and places the result in an opaque-origin `srcdoc` iframe with a restrictive CSP and
+`sandbox="allow-scripts"` **only**. The one executable script is Piano's fixed click bridge,
+authorized by its exact SHA-256 CSP hash; document-authored code never runs. Scripts, event
+attributes, embedded frames/objects, forms and form controls, inline SVG/MathML, refreshes and
+base URLs are removed. Native `details` and `summary` remain interactive. CSP otherwise permits
+only inline styles and bundled data images; network, fonts, media, workers, script attributes,
+eval and form actions are denied. There is no same-origin, popup, download, form or top-navigation
+allowance, and no authored frame-navigation surface.
+
+#### User-clicked links and the trust boundary
+
+Every `href` is still removed, including fragments: `srcdoc` inherits the parent's base URL, so
+allowing even `#section` would not reliably stay in the document. Supported anchors instead become
+keyboard-focusable links without a browser destination. A real primary click (including a modified
+primary click) or Enter activates them; no context-menu destination or middle-click behavior is
+provided. Local paths follow Markdown's file-link policy (including absolute paths and local
+`file:` URLs) and open a Surface tab through the existing workspace-file navigation. HTTP(S) links
+follow explicit Markdown links' policy: a new browser tab, no opener and no referrer. Other schemes,
+protocol-relative links and invalid URLs remain text. Local link query strings and cross-file
+fragments are discarded, as in Markdown; a destination file opens at its normal initial position.
+
+A same-document `#id` link decodes the fragment and scrolls/focuses that ID inside the frame;
+`#` scrolls to the top. Neither changes the frame URL, browser history or Piano route. Missing IDs
+have no effect; legacy named anchors and fragment-driven CSS `:target` are not supported.
+
+The bridge contains no interpolated document text, eval, network calls or inbound message handler.
+Sanitization strips all authored bridge attributes; preparation alone assigns link indices. The
+bridge captures that table before interaction and accepts only trusted browser click/Enter events,
+not scripted dispatch or `.click()`. For local/web links it sends exactly a type, per-preparation
+random token and integer index. The parent accepts only trusted message events from the **exact
+current iframe WindowProxy**, with opaque `"null"` origin, matching token, exact message shape
+and an in-range index. An opaque origin alone is not identity. Destinations and workspace IDs never
+come from messages: the parent looks up an already validated destination in its own table. The
+frame cannot access Piano's DOM, storage or API. CSS/resource bundling never gains a network grant.
+
+Each document generation gets a new iframe and token. Listener disposal is synchronous at React
+commit on owner/content change or close; hidden tabs, the session rail/Agent view and Source mode
+also disable message admission. Preparation aborts on disposal and late results are discarded.
+Returning to a retained tab or toggling Preview back on reuses its prepared bytes, not new reads.
+The sandbox's script allowance is solely for this bridge, not permission to run HTML applications;
+changes to its source, CSP, sanitation or message/lifecycle checks require renewed browser security
+observations.
 
 Relative local stylesheets and images are read through the same workspace-file seam, never by
 unrestricted browser fetching. CSS imports resolve relative to their stylesheet, with cycles stopped;
@@ -155,8 +190,9 @@ worker and asset versions, and a scratch-browser PDF render.
 
 Module checks cover file classification/limits/path resolution, text redaction, binary transport,
 safe Markdown placeholders and HTML sanitization, resource resolution/budgets and cancellation.
-HTML's actual sandbox, native disclosures and no-network behavior also require scratch-browser
-observations; a DOM test alone does not prove browser isolation. Browser evidence for PIN-32 covers
+HTML's actual sandbox, trusted user-click handling, fragments, native disclosures, no-network
+behavior, forged-message rejection and stale disposal also require scratch-browser observations;
+a DOM test alone does not prove browser isolation. Browser evidence for PIN-32 covers
 the four format groups, nested links/images, toggle without reread, repeat clicks, late completion, an actual background workspace
 refresh, session/workspace changes, media disposal/codec failure, PDF errors and mobile/keyboard use.
 See [testing policy](testing.md) for evidence scope (INV-09).

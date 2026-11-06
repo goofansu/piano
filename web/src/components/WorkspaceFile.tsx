@@ -67,7 +67,9 @@ export function FileTabIcon({ path, className }: { path: string; className?: str
 export function WorkspaceFile({
   workspaceId,
   file,
+  active,
 }: {
+  active: boolean;
   workspaceId: string | undefined;
   file: Extract<SurfaceTab, { kind: "file" }>;
 }) {
@@ -205,7 +207,12 @@ export function WorkspaceFile({
           {result.kind === "html" && workspaceId && (
             <div hidden={mode !== "preview"}>
               <Suspense fallback={<Notice>Opening HTML…</Notice>}>
-                <FileHtml content={result.content} path={result.path} workspaceId={workspaceId} />
+                <FileHtml
+                  content={result.content}
+                  path={result.path}
+                  workspaceId={workspaceId}
+                  active={active && mode === "preview"}
+                />
               </Suspense>
             </div>
           )}
