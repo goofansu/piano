@@ -164,16 +164,19 @@ export function NewSessionComposer({
          * joins. Below md the pane is the whole screen and the row wraps instead, each control the
          * size of its name, so a long folder, branch or project name never crowds the others out. */}
         <div className="mb-2 flex min-w-0 items-center gap-1 max-md:flex-wrap max-md:gap-y-0.5">
-          <div className="min-w-0 shrink max-md:max-w-full">
-            <DirectorySelect
-              state={state}
-              value={cwd}
-              onChange={chooseDirectory}
-              onBrowse={() => setPickerOpen(true)}
-              client={client}
-            />
+          {/* The directory and its trust stay on one line: the branch gives way, never the trust. */}
+          <div className="flex min-w-0 max-w-full shrink items-center gap-1">
+            <div className="min-w-0 shrink">
+              <DirectorySelect
+                state={state}
+                value={cwd}
+                onChange={chooseDirectory}
+                onBrowse={() => setPickerOpen(true)}
+                client={client}
+              />
+            </div>
+            {trust && <TrustToggle command={trust} run={run} />}
           </div>
-          {trust && <TrustToggle command={trust} run={run} />}
           {onProjectChange && (
             <ProjectSelect state={state} value={projectId} onChange={onProjectChange} />
           )}
