@@ -1086,6 +1086,61 @@ test("INV-01/02: a project deleted after preflight refuses registration before P
   );
 });
 
+test("dispatch reads saved membership without opening the parent and refuses ambiguous identity", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      const missing = join(root, "unavailable-parent-checkout");
+      yield* registry.saveProject({
+        id: "parent-project",
+        name: "Parent project",
+        instructions: "Answer in French.",
+      });
+      yield* registry.addSession(missing, "saved-parent", undefined, "parent-project");
+      const child = yield* hosts.create({ cwd, options: { dispatchedFrom: "saved-parent" } });
+      assert.equal(
+        (yield* registry.get).sessions.find((s) => s.sessionId === child.spec.sessionId)?.projectId,
+        "parent-project",
+      );
+      assert.deepEqual(
+        records(child.spec.sessionId)
+          .filter((r) => r.event === "spawn")
+          .map((r) => r.instructions),
+        ["Answer in French."],
+      );
+      assert.deepEqual(
+        records("saved-parent"),
+        [],
+        "inheritance never opens the unavailable parent",
+      );
+
+      yield* registry.addSession(cwd, "saved-parent");
+      const before = yield* registry.get;
+      const failure = yield* hosts
+        .create({ cwd, options: { dispatchedFrom: "saved-parent" } })
+        .pipe(Effect.flip);
+      assert.ok(failure instanceof SessionNotCreated);
+      assert.match(failure.detail, /parent session is unlisted or ambiguous/);
+      assert.deepEqual(
+        yield* registry.get,
+        before,
+        "ambiguous identity has no registration effects",
+      );
+      const loose = yield* hosts.create({
+        cwd,
+        inheritProject: false,
+        options: { dispatchedFrom: "saved-parent" },
+      });
+      assert.equal(
+        (yield* registry.get).sessions.find((s) => s.sessionId === loose.spec.sessionId)?.projectId,
+        undefined,
+      );
+    }),
+    { registry: "dispatch-saved-membership" },
+  );
+});
+
 test("a member session's Pi gets its project's instructions at each launch; other sessions get none", async () => {
   await run(
     Effect.gen(function* () {

@@ -984,6 +984,8 @@ export const ClientMessage = Schema.Union([
     selectionId: Schema.String,
     cwd: Schema.String,
     projectId: Schema.optional(Schema.String),
+    /** Without explicit projectId, inherit dispatchedFrom’s current membership by default. */
+    inheritProject: Schema.optional(Schema.Boolean),
     options: StartOptions,
     /** Create this new worktree from `cwd`'s repository and start the session there instead. */
     worktree: Schema.optional(WorktreeRequest),

@@ -73,6 +73,12 @@ const StartParameters = obj({
   prompt: str({ minLength: 1, description: "Self-contained work brief" }),
   cwd: opt(str({ minLength: 1 })),
   worktree: opt(Worktree),
+  inheritProject: opt(
+    bool({
+      description:
+        "Inherit the parent’s current Piano project (named session group), independent of cwd/worktree. Defaults to true; false starts ungrouped.",
+    }),
+  ),
 });
 const StartOutput = obj({
   cwd: str(),
@@ -200,7 +206,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
         "piano_session_status only reads: use it whenever you need to know what a Piano session is doing, dispatched or not.",
       ],
       description:
-        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. cwd defaults to this checkout; a relative cwd is resolved from this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there. A missing cwd, a non-Git cwd or a branch that exists refuses the start and creates no session. Worktrunk hooks are skipped unless worktree.hooks is true; then an unapproved hook refuses the start, and a failed hook may leave the new checkout on disk (see detail). Always uses normal new-session model and effort defaults, not the parent's settings. Returns creation (created; refused, when no session exists because Piano refused the start or never received it; or uncertain, when one may), submission (what Pi did with the brief: started, queued, handled, needs_input, rejected, not_sent or uncertain), a handle to pass unchanged to piano_wait_sessions, the created worktree, and an Open session link. Creation/admission is not completion. refused with submission not_sent means nothing was started: fix the cause in detail before dispatching again. On uncertain creation or delivery inspect Piano before trying again: never automatically repeat dispatch.",
+        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. It inherits this session’s current Piano project (named session group, not folder) at dispatch time, independent of cwd/worktree; inheritProject: false starts ungrouped. An ungrouped parent yields an ungrouped child; an unlisted or ambiguous parent refuses inheritance before creating anything. Later parent moves do not move existing children. cwd defaults to this checkout; a relative cwd is resolved from this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there. A missing cwd, a non-Git cwd or a branch that exists refuses the start and creates no session. Worktrunk hooks are skipped unless worktree.hooks is true; then an unapproved hook refuses the start, and a failed hook may leave the new checkout on disk (see detail). Always uses normal new-session model and effort defaults, not the parent's settings. Returns creation (created; refused, when no session exists because Piano refused the start or never received it; or uncertain, when one may), submission (what Pi did with the brief: started, queued, handled, needs_input, rejected, not_sent or uncertain), a handle to pass unchanged to piano_wait_sessions, the created worktree, and an Open session link. Creation/admission is not completion. refused with submission not_sent means nothing was started: fix the cause in detail before dispatching again. On uncertain creation or delivery inspect Piano before trying again: never automatically repeat dispatch.",
       parameters: StartParameters,
       outputSchema: StartOutput,
       async execute(_id, params: Static<typeof StartParameters>, signal, _update, ctx) {
@@ -212,6 +218,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
               prompt: params.prompt,
               cwd: dispatchDirectory(params.cwd, ctx.cwd),
               worktree: params.worktree,
+              inheritProject: params.inheritProject,
               dispatchedFrom: ctx.sessionManager.getSessionId(),
             },
             environment,

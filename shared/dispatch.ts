@@ -104,6 +104,8 @@ export interface StartArguments {
   readonly cwd?: string;
   /** Create a new worktree from `cwd`'s repository and start the session there. */
   readonly worktree?: WorktreeRequest;
+  /** Inherit the parent’s current Piano project (not its checkout); defaults to true. */
+  readonly inheritProject?: boolean;
 }
 
 /** The wait tool's arguments: handles exactly as a start returned them. */
