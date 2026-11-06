@@ -1151,7 +1151,7 @@ function Tool({
           <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>
             {verb}
             {!knownTool && (
-              <span className="ml-1 font-mono font-normal text-ink-2">{call.name}</span>
+              <span className="ml-2 font-mono font-normal text-ink-2">{call.name}</span>
             )}
           </span>
           {summary && (

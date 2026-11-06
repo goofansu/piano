@@ -54,10 +54,14 @@ const messages = [
   assistant([{ type: "text", text: "Reply: the CSRF token is stale." }]),
   assistant([call("run", "bash", { command: "npm test" })]),
   result("run", "bash", "ok"),
+  assistant([call("read", "read", { path: ".agents/skills/verify-piano/SKILL.md" })]),
+  result("read", "read", "# Verify Piano"),
   // A codemode call whose script made more nested calls than its fold shows.
-  assistant([call("script", "code", { code: "for (const f of files) await bash(`wc -l ${f}`);" })]),
+  assistant([
+    call("script", "codemode", { code: "for (const f of files) await bash(`wc -l ${f}`);" }),
+  ]),
   {
-    ...result("script", "code", "12 calls"),
+    ...result("script", "codemode", "12 calls"),
     nestedCalls: {
       complete: true,
       calls: Array.from({ length: 12 }, (_, i) => ({
@@ -155,6 +159,7 @@ const expected = [
   "Question: why does login fail?",
   "Reply: the CSRF token is stale.",
   "Ran",
+  "Read",
   "Called",
   "Answers",
   "Review the login fix.",
@@ -302,8 +307,33 @@ await run(
     // Tool edges align optically: measure the painted SVG path (including its round stroke),
     // not just its viewBox. Equal CSS padding would leave the chevron farther in than the dot.
     const edges = [];
+    const summaryGaps = [];
     for (const width of [1280, 390]) {
       await page.ab("set", "viewport", String(width), "4000");
+      // Measure the text boundary, not literal spaces: generic names and specialized details
+      // use different markup but must leave the same horizontal gap after their verb.
+      const gaps = await page.evaluate(`(() => ['codemode', 'read', 'bash'].map(name => {
+        const header = document.querySelector('[aria-label="' + name + ' tool call"] [data-slot="tool-header"]');
+        const walker = document.createTreeWalker(header, NodeFilter.SHOW_TEXT, {
+          acceptNode: n => n.textContent.trim() ? 1 : 2,
+        });
+        const rect = node => {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          return range.getBoundingClientRect();
+        };
+        const verb = rect(walker.nextNode()), detail = rect(walker.nextNode());
+        return { name, gap: detail.left - verb.right };
+      }))()`);
+      summaryGaps.push({ width, gaps });
+      writeFileSync(
+        join(process.argv[2] ?? ".scratch/browser/transcript-rows", "summary-gaps.json"),
+        JSON.stringify(summaryGaps, null, 2),
+      );
+      assert.ok(
+        Math.max(...gaps.map((row) => row.gap)) - Math.min(...gaps.map((row) => row.gap)) <= 0.1,
+        `inconsistent verb-to-detail gaps at ${width}px: ${JSON.stringify(gaps)}`,
+      );
       const edge = await page.evaluate(`(() => {
         const group = document.querySelector('${tool}');
         const trigger = group.querySelector('[data-slot="tool-header"] button');
