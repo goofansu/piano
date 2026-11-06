@@ -11,7 +11,6 @@ import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
-import { answerReceipt } from "./piDialogs.ts";
 import { projectStartDirectory } from "./projectHome.ts";
 import { focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
@@ -216,7 +215,6 @@ export function createClient({
     // Decide before applying: a frame the projection rejects must not notify either.
     const notifySession = m._tag === "session" && sessionDelivery(state, m) === "apply";
     const wasResync = state.resync;
-    const previousAnswer = state.session?.state.dialogResolution;
     const notice =
       m._tag === "trust" ? trustNotice(state, focusedDirectory(state)?.cwd, m) : undefined;
     apply({ type: "server", message: m });
@@ -231,16 +229,6 @@ export function createClient({
         `Created ${m.result.branch} from ${m.result.creation.baseBranch} · hooks ${m.result.creation.hooks}`,
         "success",
       );
-    else if (
-      notifySession &&
-      m._tag === "session" &&
-      m.event._tag === "state" &&
-      m.event.state.dialogResolution &&
-      answerReceipt(m.event.state.dialogResolution).accepted &&
-      (previousAnswer?.id !== m.event.state.dialogResolution.id ||
-        previousAnswer.delivery !== "accepted")
-    )
-      notify("Answer accepted", "success");
     else if (notifySession && m._tag === "session" && m.event._tag === "notice")
       notify(m.event.message, m.event.level);
     else if (

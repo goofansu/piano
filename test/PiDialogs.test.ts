@@ -239,7 +239,6 @@ test("a receipt is shown by delivery and ownership; an answer-less one is a stat
     status: null,
     details: false,
     notice: null,
-    accepted: false,
   };
   const card = (
     label: string,
@@ -260,12 +259,8 @@ test("a receipt is shown by delivery and ownership; an answer-less one is a stat
       { toolCallId: "call-1" },
       card("Sent, waiting for Pi…", "busy"),
     ],
-    ["accepted", { delivery: "accepted" }, { ...quiet, accepted: true }],
-    [
-      "accepted, owned",
-      { delivery: "accepted", toolCallId: "call-1" },
-      { ...quiet, accepted: true },
-    ],
+    ["accepted", { delivery: "accepted" }, quiet],
+    ["accepted, owned", { delivery: "accepted", toolCallId: "call-1" }, quiet],
     [
       "rejected",
       { delivery: "rejected", toolCallId: "call-1" },
@@ -289,7 +284,6 @@ test("a receipt is shown by delivery and ownership; an answer-less one is a stat
     const receipt = ended("cancelled", delivery);
     assert.equal(receipt.notice, null, delivery);
     assert.equal(receipt.card, false);
-    assert.equal(receipt.accepted, false, "only an answer is announced");
   }
   for (const delivery of ["pending", "uncertain", "not-sent"] as const)
     assert.deepEqual(ended("cancelled", delivery).notice, {

@@ -61,7 +61,7 @@ export function pendingDialogs(state: AppState): PendingDialogs {
 /** A status dot's tone; the subset of `StatusTone` an answer receipt uses. */
 export type AnswerTone = "busy" | "warn" | "err" | "muted";
 
-/** How a dialog resolution is reported, decided once for the answer card, notices and toasts. */
+/** How a dialog resolution is reported, decided once for the answer card and notices. */
 export interface AnswerReceipt {
   /** The last answer stays above the composer. */
   card: boolean;
@@ -73,8 +73,6 @@ export interface AnswerReceipt {
    * cancellation reached Pi. The server retires the receipt, and so the line, when the next run
    * starts. */
   notice: { tone: "quiet"; title: string } | null;
-  /** The answer was confirmed; announced once per resolution. */
-  accepted: boolean;
 }
 
 const deliveryStatus: Record<
@@ -115,7 +113,6 @@ export function answerReceipt(resolution: DialogResolution): AnswerReceipt {
       answer || cancelled
         ? null
         : { tone: "quiet", title: `Dialog ${resolution.reason}: ${resolution.detail}` },
-    accepted: delivery === "accepted" && !!answer,
   };
 }
 
