@@ -275,7 +275,7 @@ const dispositionOf = (
 /**
  * Creates a session in `cwd` and sends `prompt` as its first input, then returns as soon as Pi's
  * handling of that input is known — including when Pi answers with a dialog, which it cannot
- * resolve on its own. `create_session` is sent exactly once: a connection lost before the session
+ * resolve on its own. `create_session` is sent at most once: a connection lost before the session
  * is named leaves creation uncertain rather than creating a second session, and a loss after it
  * only re-attaches by identity. Until the frame is handed to an open socket nothing can exist, so
  * a socket that never opens, a deadline or an abort before then reports `refused` / `not_sent`.
@@ -685,11 +685,12 @@ function attribute(
     : { answer: null, attribution: "no-output", message: last };
 }
 
-/** What the live facts say, and whether anything more can arrive without a person acting. */
+/** A wait's current report and whether observation should stop. */
 interface Reading {
   readonly status: WaitStatus;
   readonly detail?: string;
-  /** Nothing more will arrive on its own. */
+  /** Finish this observation, subject to `needsQuiescence`; a mismatch can end it while the
+   * session keeps running. */
   readonly terminal: boolean;
   /**
    * Terminal only once the host confirms it has no pending work. Until then the session is

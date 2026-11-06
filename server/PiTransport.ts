@@ -70,9 +70,11 @@ export interface PiTransport {
     options: { readonly lane: PiLane; readonly dispatched?: Deferred.Deferred<void> },
   ) => Effect.Effect<A, PiSessionError>;
   /** A readback's query, its reply decoded; a reply of the wrong shape fails as "protocol".
-   * Ordinary lane; a query changes nothing, so its timeout leaves no pending work. */
+   * Uses the ordinary lane. A missing reply does not mark an uncertain mutation, but unresolved
+   * stdin delivery can still leave pending work. */
   readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
-  /** A record Pi sends no response to, such as a dialog answer. */
+  /** Write an unacknowledged record, such as a dialog answer. Success means stdin accepted the
+   * bytes, not that Pi consumed them. A failure may still mean delivery unless `notSent` is set. */
   readonly write: (
     record: Record<string, unknown>,
     options: { readonly lane: PiLane },

@@ -18,15 +18,18 @@ export interface RunOptions {
   readonly command: string;
   readonly args: readonly string[];
   readonly cwd?: string;
-  /** Defaults to `childEnvironment()`; a caller's own environment starts from it too. */
+  /** Complete replacement environment; defaults to `childEnvironment()`. Build overrides from
+   * that helper to avoid inheriting another session's launch variables. */
   readonly env?: NodeJS.ProcessEnv;
-  /** Stdin always closes after this, so a headless prompt fails rather than waits. */
+  /** Stdin receives this then EOF; omitted input sends EOF immediately. Ignored in group mode. */
   readonly input?: Buffer | string;
-  /** Stdout byte limit (default 8 MiB). Exceeding it fails unless `truncate` keeps the head. */
+  /** Maximum retained stdout bytes (default 8 MiB). */
   readonly limit?: number;
+  /** Discard excess stdout and wait for exit; otherwise excess output terminates the command. */
   readonly truncate?: boolean;
   /** Exit codes that count as success (default `[0]`). */
   readonly okCodes?: readonly number[];
+  /** Milliseconds before termination starts; omitted means no deadline. */
   readonly timeout?: number;
   /** Own a process group with output discarded; termination includes descendants in that group.
    * Otherwise only the direct child is owned: callers spawning descendants must use `group`
@@ -44,7 +47,7 @@ export class SubprocessError extends Data.TaggedError("SubprocessError")<{
   readonly reason: "start" | "exit" | "limit" | "timeout" | "aborted";
   readonly command: string;
   readonly code: number | null;
-  /** The first 16 KiB of stderr. */
+  /** At most 16,384 UTF-16 code units of decoded stderr, kept from the beginning. */
   readonly stderr: string;
   readonly limit: number;
   readonly cause?: unknown;

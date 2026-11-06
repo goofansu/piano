@@ -12,7 +12,7 @@ export interface ObservationState<T> {
   /** The identity `value` and `error` belong to; `null` while idle. */
   key: string | null;
   value: T | undefined;
-  /** The last read's failure for this key, kept until a read or mutation succeeds. */
+  /** The last read's failure for this key; cleared by a successful read or a mutation returning a value. */
   error: string | undefined;
   /** The failure worth showing: `error` once settled, hidden while a re-read is in flight. */
   failure: string | undefined;
@@ -45,20 +45,24 @@ export interface Observation<T> {
   getState: () => ObservationState<T>;
   subscribe: (listener: () => void) => () => void;
   /**
-   * Follow `key`. A different key discards the old one's value and work; `enabled: false` keeps
-   * the value but aborts reads and stops refreshing. Becoming enabled reads the key afresh.
+   * Follow `key`. A different key discards the old value and aborts its work. Disabling the same
+   * key keeps its value and in-flight mutation, but aborts reads and stops refreshing.
    */
   observe: (key: string | null, enabled?: boolean) => void;
-  /** Reads now, superseding an in-flight read. Resolves with the value it published, if any. */
+  /** Read now only while started, enabled and not mutating, superseding any older read. Returns
+   * the published value, or undefined for a skipped, superseded or failed read. Current read
+   * failures update `error` rather than reject. */
   refresh: () => Promise<T | undefined>;
   /** Reads after `ms` unless called again first; `ms <= 0` reads now. */
   refreshSoon: (ms: number) => void;
   /** Re-evaluate the polling interval after external policy changes, without starting a read. */
   reschedule: () => void;
   /**
-   * Runs a change for the current key with the value it applies to. Its result (if not
-   * `undefined`) becomes the value unless the key changed or another mutation started meanwhile;
-   * it resolves with that applied value. A failure rejects and leaves the value alone.
+   * Run with the current key's value, even while reads are paused; no key skips `run`. Supersedes
+   * prior work and resolves with the applied result, publishing only non-undefined results.
+   * A later key change, mutation or stop discards this result or error and resolves undefined.
+   * Otherwise a failure rejects without changing the value. Abort signals `run`; it cannot undo
+   * side effects the callback already performed.
    */
   mutate: (
     run: (signal: AbortSignal, previous: T | undefined) => Promise<T | undefined>,
