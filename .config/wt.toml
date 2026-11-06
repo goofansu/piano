@@ -1,4 +1,6 @@
 # Copies only the gitignored paths `.worktreeinclude` lists (`node_modules/`); without that file
-# it copies nothing, as Claude Code desktop does, rather than every gitignored path.
-[[post-start]]
+# it copies nothing, as Claude Code desktop does, rather than every gitignored path. pre-start
+# blocks `wt switch -c` until the copy finishes; a post-start copy runs in the background, and a
+# command run right after creation could see a half-copied `node_modules`.
+[[pre-start]]
 copy = "wt step copy-ignored --require-include"
