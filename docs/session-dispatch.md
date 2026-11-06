@@ -1,14 +1,34 @@
 # Dispatch work to another session
 
 In a Piano conversation, ask: **“Dispatch this work in a new session.”** The agent can use
-`piano_start_session` to send a self-contained brief, `piano_wait_sessions` to observe the result
-and `piano_session_status` to read any session's status by its ID.
+`piano_start_session` to send a self-contained brief, `piano_wait_sessions` when the parent needs
+the result, and `piano_session_status` to read any session's status by its ID.
 The child is an ordinary session: it appears in the sidebar, has an **Open session** link, and can
 be opened and continued without taking the parent away from its conversation.
 
 User and repository instructions decide when to dispatch; the tools describe how to start and
 observe sessions. Repository instructions can require dispatch without a separate user request
 (INV-13). Piano's own contributor workflow lives in [AGENTS.md](../AGENTS.md#branches).
+
+## Handoff or dependency
+
+Choose by what remains for the parent after dispatch:
+
+- **Handoff:** the child owns the whole deliverable, including follow-up questions and delivery.
+  Check creation and submission, return the child's **Open session** link, and end the parent turn.
+  Moving implementation into a required worktree is a handoff when no parent work remains.
+- **Dependency:** remaining parent work consumes the child's result, such as combining independent
+  reviews or applying research findings. Do independent work first, then wait when blocked. Also
+  wait when the user explicitly asks for completion to be reported in the parent. Merely relaying
+  the child's summary does not create a dependency.
+
+State the child's responsibility in the brief. If a child needs user input, direct the user to its
+question rather than asking it again in the parent; the answer belongs in the child session.
+
+A pending wait resumes its parent when it returns. Child completion does not start another parent
+turn after a handoff: point to the child for progress and delivery rather than promising an
+automatic update in the parent. Ending the parent turn leaves the child running (INV-02); successful
+creation and submission establish a handoff, not completion of the task (INV-03).
 
 ## From a terminal (Linux and macOS)
 
@@ -211,7 +231,8 @@ result. Creation alone is not prompt admission: the tool waits for the initial i
 If a session was created but its prompt failed or needs a dialog answered, the result retains its
 link. Resolve supported dialogs in the child's ordinary Piano UI.
 
-Pass the returned handle unchanged to wait and omit `timeoutMs`. One call stays open until all
+When [waiting is needed](#handoff-or-dependency), pass the returned handle unchanged to
+`piano_wait_sessions` and omit `timeoutMs`. One call stays open until all
 sessions complete or any needs attention (needs input, failure, cancellation or unavailable facts).
 Do not poll with repeated short waits or status reads when waiting for completion. For an explicitly
 bounded observation only, `timeoutMs` accepts 1000–60000 milliseconds and returns partial results
@@ -223,8 +244,6 @@ answer Piano could not confirm delivering is unknown, with the reason in `detail
 is not a child failure. Cancelling a wait or closing the parent only stops observation; it does not
 stop the child or its siblings. When one session needs attention, wait returns the other sessions'
 current observations promptly rather than keeping the parent blocked; their work continues.
-A pending tool call resumes its parent when it returns; there is no automatic wake-up after the
-parent's turn has ended.
 
 Healthy execution has no wait deadline. An initial selection or recovery after connection loss or
 missed frames must produce a current snapshot within 30 seconds, otherwise wait returns `unknown`.
@@ -251,9 +270,6 @@ missing observations or unreadable projections can prevent attribution;
 the result explains the limitation and links to the session. Handles live in normal Pi tool history,
 not a durable job or per-turn receipt database. Reopening a parent does not restore a lost execution
 observation. Inspect the child directly when an exact result cannot be established.
-
-There is no automatic parent wakeup. The parent receives results while explicitly waiting; child
-completion by itself does not start another parent turn.
 
 ## Status by session ID
 
