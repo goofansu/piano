@@ -1,10 +1,10 @@
 # Prompts
 
-Open **Settings → Prompts**, or choose **Add prompt** from Mod+K on that page. A prompt is a
+Open **Settings → Prompts**, or choose **New prompt** from Mod+K on that page. A prompt is a
 [Pi prompt template](https://pi.dev/docs/latest/prompt-templates): its name becomes a `/name`
 command in the composer and its description shows in completion. Its instructions take Pi's substitutions (`$1`, `$@`, `${1:-default}`, …), expanded by Pi.
 
-- **Add prompt** stays off until the name, description and instructions are filled and within their
+- **Create prompt** stays off until the name, description and instructions are filled and within their
   limits, the same check the server applies (`checkDraft` in `shared/drafts.ts`). It saves
   `<name>.md` in Piano's prompts folder, `prompts/` beside the [registry database](configuration.md#environment-variables)
   (`~/.local/share/piano/prompts/` by default). Names, descriptions and instructions follow the

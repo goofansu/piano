@@ -234,7 +234,7 @@ What Piano takes from it, in Moonstone's palette:
 - **Instant, unobtrusive feedback** (§3): a dot breathes while something is in progress; a refresh
   control turns its own icon while it reads; a test delivery answers with a toast that names the
   HTTP status.
-- **Self-evident, so fewer words.** A control says what it does and no more ("Details", "Add
+- **Self-evident, so fewer words.** A control says what it does and no more ("Details", "New
   webhook", "Save"); the checks every added string passes are [quiet UI](quiet-ui.md#checks).
 - **Confirm what cannot be undone.** Deleting a webhook asks first, as Delete session does.
 

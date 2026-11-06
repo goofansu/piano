@@ -109,7 +109,7 @@ const testToast = (result: WebhookDelivery) => {
 
 export function WebhookSettings() {
   const observed = useObservation("webhooks", (signal) => listWebhooks({ signal }));
-  // Add webhook comes from `pageCommands`, which the palette lists too; both open this editor.
+  // New webhook comes from `pageCommands`, which the palette lists too; both open this editor.
   const { state, run, global } = useCommands();
   const editing = useWebhookEditor();
   // Row changes answer with a toast, failures included; only a failed load stays on the page.
@@ -190,7 +190,7 @@ export function WebhookSettings() {
             </EmptyMedia>
             <EmptyTitle className="text-base">No webhooks</EmptyTitle>
             <EmptyDescription>
-              Add one to be told when a session finishes or waits.
+              Create one to be told when a session finishes or waits.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -348,7 +348,7 @@ function WebhookEditor({
           setErrorField(WEBHOOK_FIELDS.find((known) => known === field));
           throw cause;
         }),
-      done: hook ? "Webhook saved" : "Webhook added",
+      done: hook ? "Webhook saved" : "Webhook created",
       fallback: "Could not save webhook.",
     });
     if (saved) close();
@@ -362,7 +362,7 @@ function WebhookEditor({
     >
       <DialogContent className="max-h-[90dvh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>{hook ? "Edit webhook" : "Add webhook"}</DialogTitle>
+          <DialogTitle>{hook ? "Edit webhook" : "New webhook"}</DialogTitle>
         </DialogHeader>
         <form className="flex flex-col gap-6" onSubmit={(e) => void submit(e)}>
           <FieldGroup>
@@ -454,7 +454,7 @@ function WebhookEditor({
             </Button>
             <Button type="submit" disabled={busy}>
               {busy && <Spinner data-icon="inline-start" />}
-              {hook ? "Save" : "Add webhook"}
+              {hook ? "Save" : "Create webhook"}
             </Button>
           </DialogFooter>
         </form>

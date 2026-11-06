@@ -11,30 +11,30 @@ sidebar's Settings opens Providers; the palette lists each section by name.
 - `open-settings`: the sidebar's Settings opens `/settings/providers`; Mod+K offers Providers,
   MCP, Skills, Prompts and Webhooks (and Radius under Providers); address bar `/settings/skills`,
   `/settings/prompts`.
-- `skills-empty`: `/settings/skills` headed Skills with Add skill; with none, "No skills".
-- `new-skill`: Add skill (header or palette) opens a dialog: Name, Description (live count
-  "0 / 1,024"), Instructions ("0 / 20,000"), "Disable model invocation", Cancel and Add skill;
-  description text "Saved in Piano. Sessions started from now can use it."; Add skill stays
+- `skills-empty`: `/settings/skills` headed Skills with New skill; with none, "No skills".
+- `new-skill`: New skill (header or palette) opens a dialog: Name, Description (live count
+  "0 / 1,024"), Instructions ("0 / 20,000"), "Disable model invocation", Cancel and Create skill;
+  description text "Saved in Piano. Sessions started from now can use it."; Create skill stays
   off until Name, Description and Instructions are valid; success toasts "Skill created" and the
   row appears (name mono, description under it).
 - `skill-row-actions`: "Skill actions <name>" holds View then a red Delete. View shows the
   skill's SKILL.md with "Copy skill"; Delete asks "Delete skill?" (`<name> is removed. Sessions
   started from now no longer load it.`) and toasts "Skill deleted".
-- `prompts-empty`: `/settings/prompts` headed Prompts with Add prompt; with none, "No prompts".
-- `new-prompt`: Add prompt opens a dialog shaped as Add skill (Name, Description "0 / 1,024",
-  Instructions "0 / 20,000", Cancel, Add prompt; no Disable model invocation). Add prompt
+- `prompts-empty`: `/settings/prompts` headed Prompts with New prompt; with none, "No prompts".
+- `new-prompt`: New prompt opens a dialog shaped as New skill (Name, Description "0 / 1,024",
+  Instructions "0 / 20,000", Cancel, Create prompt; no Disable model invocation). Create prompt
   stays off until the three fields are valid; success toasts "Prompt created" and the row shows
   name plus description.
 - `prompt-row-actions`: "Prompt actions <name>" holds View then a red Delete. View shows the
   prompt file with "Copy prompt"; Delete asks "Delete prompt?" with the same "sessions started
   from now" wording and toasts "Prompt deleted".
-- `palette-new`: on Skills, Mod+K offers "Add skill"; on Prompts, "Add prompt". From other
+- `palette-new`: on Skills, Mod+K offers "New skill"; on Prompts, "New prompt". From other
   screens, search `skill` / `prompt` to open that Settings section first.
 
 ## How to get to it (user POV)
 
 - Sidebar: Settings (lands on Providers), then the Settings sections nav → Skills or Prompts.
-- Palette: Mod+K, choose Skills / Prompts / Add skill / Add prompt.
+- Palette: Mod+K, choose Skills / Prompts / New skill / New prompt.
 - Address bar: `/settings/skills`, `/settings/prompts`.
 
 ## Driving it with agent-browser
@@ -48,19 +48,19 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab find role button click --name "Settings" --exact; ab wait --url "**/settings/**"`
   - Result: URL is `/settings/providers`. Capture `01-providers`.
   - Action: `ab open "$WEB_URL/settings/skills"; ab wait --text "Skills"`
-  - Result: title `Settings - Piano`, main starts `Skills` / `Add skill`.
+  - Result: title `Settings - Piano`, main starts `Skills` / `New skill`.
 - `skills-empty` and `new-skill`
   - Action: on `/settings/skills`, `ab wait --text "No skills";
-    ab find role button click --name "Add skill" --exact; ab wait "[role=dialog]"`
-  - Result: dialog reads `Add skill` / `Saved in Piano…` / `Name` / `Description` /
+    ab find role button click --name "New skill" --exact; ab wait "[role=dialog]"`
+  - Result: dialog reads `New skill` / `Saved in Piano…` / `Name` / `Description` /
     `0 / 1,024` / `Instructions` / `0 / 20,000` / `Disable model invocation` / `Cancel` /
-    `Add skill`. Capture `02-new-skill`. Escape closes it without saving; reopen with
-    `ab find role button click --name "Add skill" --exact` before the next step.
-  - Action: in the open Add skill dialog,
+    `Create skill`. Capture `02-new-skill`. Escape closes it without saving; reopen with
+    `ab find role button click --name "New skill" --exact` before the next step.
+  - Action: in the open New skill dialog,
     `ab find role textbox fill --name "Name" --exact "verify-skill";
     ab find role textbox fill --name "Description" --exact "Maintain verification";
     ab find role textbox fill --name "Instructions" --exact "Reply with OK.";
-    ab find role button click --name "Add skill" --exact; ab wait --text "verify-skill"`
+    ab find role button click --name "Create skill" --exact; ab wait --text "verify-skill"`
   - Result: toast `Skill created`; the row reads `verify-skill` / `Maintain verification`.
     Capture `02b-skill-created`.
 - `skill-row-actions`
@@ -74,13 +74,13 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab wait --text "No skills"`. Capture `02e-skill-deleted`.
 - `prompts-empty` and `new-prompt`
   - Action: `ab open "$WEB_URL/settings/prompts"; ab wait --text "No prompts";
-    ab find role button click --name "Add prompt" --exact; ab wait "[role=dialog]";
+    ab find role button click --name "New prompt" --exact; ab wait "[role=dialog]";
     ab find role textbox fill --name "Name" --exact "verify-prompt";
     ab find role textbox fill --name "Description" --exact "A short verify prompt";
     ab find role textbox fill --name "Instructions" --exact "Reply with OK.";
-    ab find role button click --name "Add prompt" --exact;
+    ab find role button click --name "Create prompt" --exact;
     ab wait --text "verify-prompt"`
-  - Result: before Add, the dialog matches Add skill minus Disable model invocation; after,
+  - Result: before Create, the dialog matches New skill minus Disable model invocation; after,
     toast `Prompt created` and main lists `verify-prompt` / `A short verify prompt`. Capture
     `03-prompt-created`. Creating writes a file beside the scratch database; continue with
     `prompt-row-actions` before relaunching for a clean seed.
@@ -96,9 +96,9 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     `05-prompt-delete`, `06-prompt-deleted`.
 - `palette-new`
   - Action: on `/settings/prompts`, `ab press Control+k; ab wait "[cmdk-input]";
-    ab fill "[cmdk-input]" "add prompt"; ab wait '[cmdk-list][aria-busy="false"]';
-    ab find role option click --name "Add prompt" --exact; ab wait '[role=dialog]'`
-  - Result: the Add prompt dialog opens. Capture `07-palette-new`; Escape closes it.
+    ab fill "[cmdk-input]" "new prompt"; ab wait '[cmdk-list][aria-busy="false"]';
+    ab find role option click --name "New prompt" --exact; ab wait '[role=dialog]'`
+  - Result: the New prompt dialog opens. Capture `07-palette-new`; Escape closes it.
     Search `prompt` or `skill` for `Prompts` / `Skills`; the query `settings` does not match them.
 - Side effects: Settings CRUD starts no user session. A cold Settings deep link can start a
   catalog `probe` for the underlying directory; count probes separately. A new session's fake-Pi
@@ -110,7 +110,7 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 - Pi's own prompt and skill folders are not listed; only Piano-created ones appear.
 - "Sessions started from now" means no automatic refresh of an already-running session's set;
   Pi's explicit `/reload` is a separate path, not proved by this CRUD recipe.
-- Name and Description are required; Add stays off while either is empty or over the limit.
+- Name and Description are required; Create stays off while either is empty or over the limit.
 - The create toast covers the row's actions button until it leaves; wait
   `!document.querySelector('[data-sonner-toast]')` before opening the menu.
 - The browser fake discovers saved prompt/skill names for slash-completion, but does not expand

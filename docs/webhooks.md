@@ -1,6 +1,6 @@
 # Webhooks
 
-Open **Settings → Webhooks** (or **Webhooks** in the Mod+K command palette), then **Add webhook**.
+Open **Settings → Webhooks** (or **Webhooks** in the Mod+K command palette), then **New webhook**.
 Enter a public HTTPS receiver URL, optionally a Bearer token of at least 8 visible ASCII characters
 (shorter ones would redact ordinary words from payloads), and select at least one event. HTTP,
 loopback, private and special-use IP addresses are not allowed. URLs cannot contain credentials
