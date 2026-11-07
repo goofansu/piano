@@ -12,7 +12,7 @@ import {
   WebhookIcon,
 } from "lucide-react";
 import { PaneHeader } from "@/components/Pane";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import type { SettingsSectionIconName } from "@/lib/routes";
@@ -169,21 +169,17 @@ export function SettingsLoadFailure({
   retry: () => void;
 }) {
   return (
-    <Alert variant="destructive">
+    <Alert
+      variant="destructive"
+      className="flex items-center gap-2.5 [&>svg]:shrink-0 [&>svg]:translate-y-0"
+    >
       <AlertCircleIcon />
-      <AlertTitle>{title}</AlertTitle>
-      <AlertAction>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={retrying}
-          aria-busy={retrying}
-          onClick={retry}
-        >
-          {retrying && <Spinner data-icon="inline-start" />}
-          Retry
-        </Button>
-      </AlertAction>
+      <AlertTitle className="min-w-0 flex-1">{title}</AlertTitle>
+      {/* Keep Retry in flow so its height and busy width contribute to the alert's layout. */}
+      <Button variant="outline" size="sm" disabled={retrying} aria-busy={retrying} onClick={retry}>
+        {retrying && <Spinner data-icon="inline-start" />}
+        Retry
+      </Button>
     </Alert>
   );
 }
