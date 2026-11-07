@@ -35,6 +35,18 @@ passes these checks:
 - **Add** configures or imports an existing resource (Add MCP server, Add key), inserts an
   inline row (Add header, Add variable), or makes an association (Add to project, Add to chat).
   Choose the verb by the action, not by replacing every Add.
+- The entry button, its palette row and the dialog's confirm share one verb and noun ("Add MCP
+  server" opens a dialog whose button is "Add MCP server").
+- A creation entry button (New project, New webhook, New skill, New prompt, Add MCP server)
+  carries the plus icon; the pen icon belongs to New session alone.
+- A toast names the change with no trailing period ("Webhook saved", "Signed out of Radius"); a
+  switch answers "<Noun> turned on" / "<Noun> turned off"; a failure begins "Could not …". A copy
+  from a menu answers with a toast ("Branch copied"); a copy button answers in place, its icon
+  turning to a check (`CopyButton`, `useCopy`).
+- A list or picker with no match says "No <noun> matches."; an empty page section says
+  "No <nouns> yet".
+- A control beside a value acts on that value, and its name says so ("Copy branch" beside the
+  branch, "Copy directory path" beside the directory).
 
 ## Shared structure
 
@@ -47,10 +59,33 @@ and replaces the breadcrumb as the route to project actions;
 one status glyph, `StatusDot`, for every state (an app preview, a webhook delivery), breathing
 (`pulse`) only while something is in progress, and each state shown once: the sidebar row owns a
 session's state, so the header repeats nothing; a refresh control turns its own icon while it
-reads; a Settings page listing things (providers, webhooks) is `SettingsGroup`s and
-`SettingsList`s of hairline-divided rows with `outline` row actions and its one primary action
-in its header; editing one thing's few fields (Project settings) is a dialog opened where the
-thing is shown, its fields in place and Save in its footer.
+reads; a page listing things (providers, webhooks, the Projects index) is `SettingsGroup`s and
+`SettingsList`s of hairline-divided rows (`settingsRow` draws the hairline, each row is a
+`listitem`) in one `max-w-2xl` column on `PaneBody`, with no fill behind the list, its one
+primary action in its header, and a configured thing's actions in its row's `RowActions` as a
+ghost ⋯ menu (the verb that configures a thing, Sign in, Add key, Connect, stays an `outline`
+text button); a state in a row is `StatusDot` beside its word ("Signed in", "Ready"), never an
+icon alone; an empty list is one `Empty` line, the section's icon and "No <nouns> yet", at
+`py-8`; a row's second line is `text-xs`; editing one thing's few fields (Project settings) is a
+dialog opened where the thing is shown, its fields in place and Save in its footer.
+
+A session row's menu is one menu wherever the row appears (the sidebar, a project's home):
+Rename, Pin, the project items, then Archive and Delete last after a separator; the palette's
+Session commands end the same way, Delete red. A branch under a session's title is a quiet sans
+label; elsewhere a branch, path, file name or model id is mono, and a folder's name is sans.
+
+## Dialogs
+
+A form dialog (New project, New webhook, Add MCP server, an API key, Rename) shows the close
+control and a Cancel button, puts Cancel first in its footer, keeps its confirm button disabled
+until its required fields are filled, and while busy keeps the button's label and shows a
+`Spinner` as `data-icon="inline-start"` before it (never "Saving…"). A dialog with several
+fields is `sm:max-w-xl`; one with one field, or a confirmation, is `sm:max-w-md`. A
+confirmation is `RemovalDialog`: no close control, outside clicks blocked, "<Verb> <noun>?" as
+its title, one line that says what stops, and the verb as its button; its words are the
+action's (a Delete says "deleted", not "removed"). Field group titles inside a form are
+`FieldLegend variant="label"`, the size of the other labels. Fields carry no example
+placeholders.
 
 ## Icon buttons and row actions
 
@@ -79,6 +114,10 @@ upgrading shadcn, read [the ownership and upgrade guide](shadcn-ui.md); review e
 An outgoing link in Settings is a `SettingsExternalLink` (text followed by the external-link icon,
 opened in a new tab); a button that leaves Piano ends with the same icon as `data-icon="inline-end"`.
 
+A project's icon is the target; the folder icon means a folder (an added root) and nothing else,
+so "Open project", "Move to project" and a project picker's rows show the target, "Remove from
+project" the circle-minus, and "No project" the circle-off.
+
 Branding icons use [Simple Icons](https://simpleicons.org/). Bundle SVGs locally, preserve source
 and license attribution, and use `currentColor` to match the UI; see `web/public/mcp-logos.svg`.
 
@@ -88,6 +127,9 @@ The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the ke
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Global commands
 and Session commands (only with a selected session). A session's outputs are read in its
 session rail, not searched from the palette. A feature that adds an action the sidebar or header offers also adds
-a row in the appropriate command group, named as its button is.
+a row in the appropriate command group, named as its button is, including a toggle, whose row
+reads its state ("Hide sidebar" while the sidebar is shown, "Show sidebar" while it is hidden). An
+icon button's label, its tooltip and the palette's name for the same surface are one string
+("Search sessions and commands").
 Global shortcuts are Mod+K (palette) and Sidebar's ⌘B (not Ctrl+B); the composer alone binds Mod+/ to
 its model picker. Other actions are reached through the palette or their control.
