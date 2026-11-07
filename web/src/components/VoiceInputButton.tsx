@@ -5,8 +5,8 @@ import { toast } from "sonner";
 import type { DraftEditorState } from "@/components/DraftEditor";
 import { IconButton } from "@/components/IconButton";
 import { Spinner } from "@/components/ui/spinner";
-import { ApiError, sessionCommands, transcribe, voiceInput } from "@/lib/api";
-import { useObservation } from "@/lib/useObservation";
+import { ApiError, sessionCommands, transcribe } from "@/lib/api";
+import { useVoiceInput, voiceInputSettings } from "@/lib/useVoiceInput";
 import { insertDictation, recordingType, type VoiceSession, voiceHints } from "@/lib/voiceInput";
 
 type Phase = "idle" | "starting" | "recording" | "transcribing";
@@ -52,9 +52,8 @@ export function VoiceInputButton({
   live?: { workspaceId: string; sessionId: string };
   disabled: boolean;
 }) {
-  const voice = useObservation("voice-input", (signal) => voiceInput({ signal }), {
-    focus: true,
-  });
+  // Shared with Settings: turning voice input on or off there shows or hides this at once.
+  const voice = useVoiceInput();
   const [phase, setPhase] = useState<Phase>("idle");
   const recording = useRef<Recording | null>(null);
   const aborted = useRef<AbortController | null>(null);
@@ -125,7 +124,7 @@ export function VoiceInputButton({
         error instanceof ApiError ? error.message : "Could not transcribe the recording.",
       );
       // A refusal may mean voice input changed elsewhere: read it again.
-      void voice.refresh();
+      void voiceInputSettings.refresh();
     } finally {
       if (aborted.current === controller) aborted.current = null;
       setPhase("idle");

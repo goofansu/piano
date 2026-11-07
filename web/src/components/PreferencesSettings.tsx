@@ -34,18 +34,18 @@ import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { saveVoiceInput, voiceInput } from "@/lib/api";
-import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
+import { useVoiceInput, voiceInputSettings } from "@/lib/useVoiceInput";
 
 /** Why the key dialog is open: turning voice input on, or replacing the saved key. */
 type KeyEditing = "turn-on" | "replace";
 
 export function PreferencesSettings() {
-  const observed = useObservation("voice-input", (signal) => voiceInput({ signal }));
+  // The same state every composer reads, so a save here shows or hides their mic at once.
+  const observed = useVoiceInput();
   const [editing, setEditing] = useState<KeyEditing>();
   const actions = useSetupActions<"remove-key">({
-    refresh: () => void observed.refresh(),
+    refresh: () => void voiceInputSettings.refresh(),
     success: (text) => toast.success(text),
   });
   const busy = actions.running !== undefined;
@@ -58,7 +58,7 @@ export function PreferencesSettings() {
     }
     void actions.run({
       id: "voice-input",
-      run: () => saveVoiceInput({ enabled }),
+      run: () => voiceInputSettings.save({ enabled }),
       done: enabled ? "Voice input on" : "Voice input off",
       fallback: "Could not save voice input.",
     });
@@ -75,7 +75,7 @@ export function PreferencesSettings() {
               voice={voice}
               editing={editing}
               close={() => setEditing(undefined)}
-              refresh={() => void observed.refresh()}
+              refresh={() => void voiceInputSettings.refresh()}
             />
           )}
           <RemovalDialog
@@ -89,7 +89,7 @@ export function PreferencesSettings() {
             confirm={() =>
               void actions.run({
                 id: "remove-key",
-                run: () => saveVoiceInput({ enabled: false, key: null }),
+                run: () => voiceInputSettings.save({ enabled: false, key: null }),
                 done: "OpenAI API key removed",
                 fallback: "Could not remove API key.",
               })
@@ -102,7 +102,7 @@ export function PreferencesSettings() {
         <SettingsLoadFailure
           title="Could not load preferences"
           retrying={observed.loading}
-          retry={() => void observed.refresh()}
+          retry={() => void voiceInputSettings.refresh()}
         />
       ) : !voice ? (
         <SettingsSkeleton label="Loading preferences…">
@@ -205,7 +205,10 @@ function OpenAiKeyEditor({
             void actions.run({
               id: "save-key",
               run: async () => {
-                await saveVoiceInput({ enabled: turningOn || voice.enabled, key: key.trim() });
+                await voiceInputSettings.save({
+                  enabled: turningOn || voice.enabled,
+                  key: key.trim(),
+                });
                 setKey("");
                 close();
               },
