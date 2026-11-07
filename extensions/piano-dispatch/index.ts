@@ -146,6 +146,9 @@ export type SchemaChecks = [
   Holds<Describes<typeof StatusOutput, SessionStatus>>,
 ];
 
+const INPUT_GUIDELINE =
+  "If piano_start_session, piano_session_status or piano_wait_sessions reports needs_input, link to that session so the user answers there rather than repeating its question here.";
+
 export default function pianoDispatch(pi: ExtensionAPI) {
   // Registered before the configuration check, so Pi always knows the flag Piano may pass.
   pi.registerFlag(DISPATCHED_FROM_FLAG, {
@@ -203,11 +206,13 @@ export default function pianoDispatch(pi: ExtensionAPI) {
       label: "Start Piano session",
       promptSnippet: "Start a Piano session, optionally in a new worktree",
       promptGuidelines: [
-        "Handoff: when piano_start_session gives the child the whole deliverable, check creation and submission, return its Open session link, and end the parent turn. The child owns follow-up questions and delivery.",
-        "piano_session_status only reads: use it whenever you need to know what a Piano session is doing, dispatched or not.",
+        "Before piano_start_session, follow user and project instructions to choose a bounded task and define its completion check. Reuse supplied findings; inspect missing context here until you can scope implementation. Research, diagnosis or review may be delegated directly: name the question, boundaries and expected evidence.",
+        "In the piano_start_session brief, state whether the child owns the whole deliverable or returns a result for work you retain. A dispatched child carries out its assigned task; further dispatch is for distinct subtasks or a user-requested handoff. Isolate concurrent writers in separate workspaces, using worktrees for Git changes.",
+        "Whole-deliverable handoff: after piano_start_session returns, inspect creation, submission and detail. For a created child that owns follow-up questions and delivery, return its Open session link with any blocker and end the parent turn only when no work or requested completion report remains here. Child completion does not start another parent turn.",
+        INPUT_GUIDELINE,
       ],
       description:
-        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant decisions/files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. It inherits this session’s current Piano project (named session group, not folder) at dispatch time, independent of cwd/worktree; inheritProject: false starts ungrouped. An ungrouped parent yields an ungrouped child; an unlisted or ambiguous parent refuses inheritance before creating anything. Later parent moves do not move existing children. cwd defaults to this checkout; a relative cwd is resolved from this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there. A missing cwd, a non-Git cwd or a branch that exists refuses the start and creates no session. Worktrunk hooks are skipped unless worktree.hooks is true; then an unapproved hook refuses the start, and a failed hook may leave the new checkout on disk (see detail). Always uses normal new-session model and effort defaults, not the parent's settings. Returns creation (created; refused, when no session exists because Piano refused the start or never received it; or uncertain, when one may), submission (what Pi did with the brief: started, queued, handled, needs_input, rejected, not_sent or uncertain), a handle for optional observation with piano_wait_sessions, the created worktree, and an Open session link. Creation/admission is not completion. refused with submission not_sent means nothing was started: fix the cause in detail before dispatching again. On uncertain creation or delivery inspect Piano before trying again: never automatically repeat dispatch.",
+        "Dispatch work to a fresh, visible Piano session. Supply a non-empty, self-contained brief: objective, relevant findings, decisions and files, constraints, expected output and necessary checks. The new conversation does not inherit this transcript. It inherits this session’s current Piano project (named session group, not folder) at dispatch time, independent of cwd/worktree; inheritProject: false starts ungrouped. An ungrouped parent yields an ungrouped child; an unlisted or ambiguous parent refuses inheritance before creating anything. Later parent moves do not move existing children. cwd defaults to this checkout; a relative cwd is resolved from this checkout. worktree: { branch } makes Piano create a new worktree on that new branch from cwd's repository and start the session there. With worktree, a missing cwd, a non-Git cwd or a branch that exists refuses the start and creates no session. Worktrunk hooks are skipped unless worktree.hooks is true; then an unapproved hook refuses the start, and a failed hook may leave the new checkout on disk (see detail). Always uses normal new-session model and effort defaults, not the parent's settings. Returns creation (created; refused, when no session exists because Piano refused the start or never received it; or uncertain, when one may), submission (what Pi did with the brief: started, queued, handled, needs_input, rejected, not_sent or uncertain), a handle for optional observation with piano_wait_sessions, the created worktree, and an Open session link. Creation/admission is not completion. refused with submission not_sent means nothing was started: fix the cause in detail before dispatching again. created with submission rejected or not_sent means the session exists without an accepted brief: report its link and the delivery failure. On uncertain creation or delivery inspect Piano before trying again: never automatically repeat dispatch.",
       parameters: StartParameters,
       outputSchema: StartOutput,
       async execute(_id, params: Static<typeof StartParameters>, signal, _update, ctx) {
@@ -239,8 +244,12 @@ export default function pianoDispatch(pi: ExtensionAPI) {
       name: STATUS_TOOL,
       label: "Piano session status",
       promptSnippet: "Read a Piano session's status by its ID",
+      promptGuidelines: [
+        "Use piano_session_status for a one-time status read by session ID, including after a lost reply or when a wait handle can no longer be used. For completion with a valid dispatch handle, use piano_wait_sessions rather than polling.",
+        INPUT_GUIDELINE,
+      ],
       description:
-        "Read what a Piano session is doing and what it needs, by session ID, without waiting or opening it. Works for any session Piano lists, after a lost reply or a Piano restart. Returns disposition (running, needs_input, settled, exited or unknown) with since, what a needs_input session asks for, the last turn's final answer (bounded) or null, changes (branch, changed file count, linked pull request) and the session link. settled means execution stopped, not that the task succeeded; unknown means live facts are gone and history proves no ending. One read: call again to observe later.",
+        "Read what a Piano session is doing and what it needs, by session ID, without waiting or opening it. Works for any session Piano lists, after a lost reply or a Piano restart. Returns disposition (running, needs_input, settled, exited or unknown) with since, what a needs_input session asks for, the last turn's final answer (bounded) or null, changes (branch, changed file count, linked pull request) and the session link. settled means execution stopped, not that the task succeeded; unknown means delivery or completion could not be established. Reads only: never starts Pi, resumes work or resends input. Current status does not attribute an answer to an earlier dispatch.",
       parameters: StatusParameters,
       outputSchema: StatusOutput,
       async execute(_id, params: Static<typeof StatusParameters>, signal) {
@@ -262,7 +271,9 @@ export default function pianoDispatch(pi: ExtensionAPI) {
       promptSnippet:
         "Wait for a child result needed by the parent or explicitly requested by the user",
       promptGuidelines: [
-        "Dependency: use piano_wait_sessions when remaining parent work consumes a child's result, or the user explicitly asks for completion to be reported in the parent. Do independent work first, then wait when blocked. Relaying a child's summary alone is a handoff, not a dependency. If a child needs user input, link to its question so it is answered there.",
+        "Dependency: use piano_wait_sessions when remaining parent work consumes a child's result, or the user explicitly asks for completion to be reported in the parent. Do independent work first, then wait when blocked. Relaying a child's summary alone is a handoff, not a dependency.",
+        "After piano_wait_sessions returns, inspect each result's status, answer and detail and evaluate the reported checks against the task. An attention outcome can leave other children running; continue waiting only for still-needed, running children using their existing handles.",
+        INPUT_GUIDELINE,
       ],
       description:
         "Observe a dependency or explicitly requested completion using the exact handles returned by piano_start_session. Omit timeoutMs: one call stays open until all sessions finish or any needs input, fails, is cancelled or becomes unobservable. Do not poll with repeated short waits or status reads when you need completion. Only set timeoutMs (1000–60000) for an explicitly bounded observation. Returns every handle's current result with running, settled, failed, cancelled, needs_input or unknown status, answer or null, and Open session links. ending=deadline is an observation limit, not child failure. Cancelling this wait only closes observation; children keep running. Lost connections and unreadable state have bounded recovery. Later input, a restarted host or missing evidence may prevent attribution; inspect that session instead. Settlement does not certify task/check success, handled input may have no answer, and child completion does not wake a parent whose turn has ended. When called through codemode, await the call and omit the script timeout too.",
