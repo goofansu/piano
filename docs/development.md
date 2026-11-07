@@ -10,11 +10,8 @@ Piano declares Node.js `>=24` in the root `package.json`. Use the latest Node 24
 locked dependencies currently require at least 24.15.0 within that major. The root range is a
 major-version floor, not a promise that every Node 24 patch satisfies every dependency.
 
-The committed `.npmrc` enables `engine-strict`, so ordinary `npm install` and `npm ci` from the
-repository root reject incompatible Node versions instead of only warning. This is npm install-time
-policy, not a startup guard or a security boundary: `--force` or `--engine-strict=false` can bypass
-it, other package managers may behave differently, and switching Node after installation is not
-checked by `npm start`.
+This is a requirement declaration, not enforcement: npm normally warns about incompatible Node
+versions during installation. Piano does not enable `engine-strict` or add a startup version guard.
 
 ## Formatting and lint
 
