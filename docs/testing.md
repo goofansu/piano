@@ -101,7 +101,7 @@ a different purpose.
 
 Browser evidence for a change is an observation through `agent-browser` on a scratch instance,
 kept in the PR; it does not become a committed script. Install agent-browser and Chromium as
-specified in [Develop](../README.md#develop); journeys use the CLI on `PATH`. The committed browser
+specified in [development setup](development.md#setup); journeys use the CLI on `PATH`. The committed browser
 tests are only the critical paths, which must keep working on every change and run in CI:
 
 - `test/browser/start-session.mjs`: choose a folder, model, effort and project; send the first

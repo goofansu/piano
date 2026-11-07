@@ -1,8 +1,51 @@
-# Development checks and policy
+# Development setup and checks
 
-How Piano's formatting, lint, CI and dependency policy work. For setup, see the
-[README](../README.md#develop). For what to test, see
-[evidence-based development and testing](testing.md).
+How to develop Piano, with its formatting, lint, CI and dependency policy.
+For what to test, see [evidence-based development and testing](testing.md).
+
+## Setup
+
+Clone the repository and enter its directory as shown in [Use](../README.md#use).
+Use Node.js 24, npm and Git, with [Worktrunk](https://worktrunk.dev) (`wt`) 0.80.0 or later on
+`PATH`. Piano supports the latest Worktrunk release. Development also requires `agent-browser`
+on `PATH` and its Chromium browser. You maintain the installed version; Piano's browser harness
+and verification scripts use it directly. Install Chromium before running browser checks:
+
+```bash
+agent-browser install
+```
+
+Install dependencies and start the backend and UI together:
+
+```bash
+npm install
+npm run dev
+```
+
+Open <http://localhost:5173>. Vite proxies API and WebSocket requests to the backend on 7070.
+Model credentials are needed for real sessions, but not for the fake-Pi tests.
+
+`npm run dev` restarts the backend when server files change, which stops running sessions. To
+restart by hand instead, run `npm run build` and `npm start`. To run the two processes in separate
+terminals, use `npm run dev:server` and `npm run dev:web`.
+
+Before you commit code or dependency changes, run:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+```
+
+Documentation-only changes need document and link review, not tests or an app run.
+
+The code lives in `server/` (backend), `web/` (React UI), `shared/` (wire schemas) and `test/`.
+Read these next:
+
+- [Development direction](README.md): architecture, invariants and roadmap.
+- [Evidence-based development and testing](testing.md): what to test and how.
+- [Quiet UI](quiet-ui.md): the rules every screen, string and control follows.
+- [AGENTS.md](../AGENTS.md): the rules coding agents follow in this repository.
 
 ## Formatting and lint
 
