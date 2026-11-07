@@ -80,9 +80,16 @@ function recentWithin(recent: readonly string[], budget: number) {
   return kept;
 }
 
-/** Inline code from recent messages: the identifiers a reply to them is most likely to say. */
+/**
+ * Inline code from recent messages: the identifiers a reply to them is most likely to say. A plain
+ * lowercase word (`list`, `true`) is left out: as a keyword it would pull ordinary speech toward it.
+ */
 const codeSpans = (texts: readonly string[]) =>
-  texts.flatMap((text) => [...text.matchAll(/`([^`\n]{2,80})`/g)].map((m) => m[1]!));
+  texts.flatMap((text) =>
+    [...text.matchAll(/`([^`\n]{2,80})`/g)]
+      .map((m) => m[1]!.trim())
+      .filter((span) => !/^[a-z]+$/.test(span)),
+  );
 
 /** A keyword OpenAI accepts: one line, without angle brackets. */
 const keyword = (raw: string) => {

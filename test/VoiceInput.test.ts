@@ -178,6 +178,7 @@ test("transcription sends the recording and session hints to OpenAI with the sav
           recent: [
             "Please wire the composer.",
             "I changed `useDraftEditor` and the `VoiceInputLive` layer.",
+            "The button uses size `list` and `min-h-8`; `npm test` passes.",
           ],
           files: ["web/src/components/Composer.tsx"],
           commands: ["verify-piano"],
@@ -217,8 +218,13 @@ test("transcription sends the recording and session hints to OpenAI with the sav
     "Composer.tsx",
     "/verify-piano",
     "feat/voice-input",
+    "min-h-8",
+    "npm test",
   ])
     assert.ok(keywords.includes(expected), `keywords include ${expected}`);
+  // A plain word in backticks would pull ordinary speech toward it; the prompt still carries it.
+  assert.ok(!keywords.includes("list"), "plain lowercase words are not keywords");
+  assert.ok(prompt.includes("size `list`"));
   for (const word of keywords) assert.ok(!/[<>\r\n]/.test(word), `keyword ${word} is one line`);
 });
 
