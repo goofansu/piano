@@ -118,10 +118,7 @@ export function CodePatch({ patch, label }: { patch: string; label: string }) {
   return (
     <section aria-label={label} className="border-t border-line">
       <Pool>
-        <PatchDiff
-          patch={patch}
-          options={{ ...options, diffStyle: "unified" }}
-        />
+        <PatchDiff patch={patch} options={{ ...options, diffStyle: "unified" }} />
       </Pool>
     </section>
   );
