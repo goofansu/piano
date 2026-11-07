@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { markdownImages } from "../web/src/lib/markdown.ts";
 import { renderMarkdown } from "./fixtures/markdown.ts";
 
 // Assertions cover semantic output, not incidental Streamdown wrappers or whitespace.
-test("README's tab-indented fenced commands stay inside their numbered step", () => {
-  const html = renderMarkdown(readFileSync("README.md", "utf8"));
+test("tab-indented fenced commands stay inside their numbered step", () => {
+  const source =
+    "1. Install dependencies:\n\n\t```bash\n\tnpm install\n\tnpm run build\n\tnpm start\n\t```\n\n2. Open the app.";
+  const html = renderMarkdown(source);
   assert.match(
     html,
     /<li>\s*<p>Install dependencies[\s\S]*?<pre><code>npm install\nnpm run build\nnpm start<\/code><\/pre>[\s\S]*?<\/li>/,
@@ -19,6 +20,7 @@ test("README's tab-indented fenced commands stay inside their numbered step", ()
       out,
       /<ol start="2">[\s\S]*?<li>[\s\S]*?<pre><code>npm install<\/code><\/pre>[\s\S]*?<\/li>/,
     );
+    assert.ok(!out.includes("```bash"));
   }
 });
 
