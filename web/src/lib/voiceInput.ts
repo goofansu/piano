@@ -3,29 +3,21 @@
  * the draft. The server turns the hints into OpenAI's prompt.
  */
 // Relative, not @shared: module tests load this file directly in Node.
-import type { VoiceHints } from "../../../shared/voiceInput.ts";
-
-const SHORT = 512;
+import { MAX_HINT_LENGTH, RECORDING_TYPES, type VoiceHints } from "../../../shared/voiceInput.ts";
 
 const named = (value: string | undefined) =>
-  value?.trim() ? value.trim().slice(0, SHORT) : undefined;
+  value?.trim() ? value.trim().slice(0, MAX_HINT_LENGTH) : undefined;
 
-/** Where a message is dictated: the names voice input spells by. */
-export interface VoiceSession {
-  project?: string;
-  folder?: string;
-  branch?: string;
-  title?: string;
-}
+const FIELDS = ["project", "folder", "branch", "session"] as const;
 
-/** What a recording tells the server about where it is dictated. */
-export function voiceHints(session: VoiceSession): VoiceHints {
-  return {
-    ...(named(session.project) && { project: named(session.project) }),
-    ...(named(session.folder) && { folder: named(session.folder) }),
-    ...(named(session.branch) && { branch: named(session.branch) }),
-    ...(named(session.title) && { session: named(session.title) }),
-  };
+/** What a recording sends: each name trimmed and clipped to what the server accepts, blanks left out. */
+export function voiceHints(place: VoiceHints): VoiceHints {
+  return Object.fromEntries(
+    FIELDS.flatMap((field) => {
+      const name = named(place[field]);
+      return name ? [[field, name]] : [];
+    }),
+  );
 }
 
 /**
@@ -51,7 +43,5 @@ export function insertDictation(
 
 /** The first recording format this browser makes that OpenAI reads; undefined lets it choose. */
 export function recordingType(isSupported: (type: string) => boolean): string | undefined {
-  return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"].find(
-    (type) => isSupported(type),
-  );
+  return RECORDING_TYPES.find((r) => r.requested && isSupported(r.mimeType))?.mimeType;
 }

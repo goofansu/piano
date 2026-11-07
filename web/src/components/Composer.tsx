@@ -1,4 +1,5 @@
 import { isWorking } from "@shared/sessionProjection";
+import type { VoiceHints } from "@shared/voiceInput";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { ContextDetails } from "@/components/ContextDetails";
@@ -36,7 +37,6 @@ import { composerAction, composerInput, footerPicker, footerPickerMenu } from "@
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { usePreference } from "@/lib/usePreference";
-import type { VoiceSession } from "@/lib/voiceInput";
 import type { SessionView } from "@/store";
 
 interface Props {
@@ -46,7 +46,7 @@ interface Props {
   draftKey: DraftKey | null;
   completion?: CompletionContext;
   /** Where the session runs, for voice input's spelling hints. */
-  place?: VoiceSession;
+  place?: VoiceHints;
   /** Local drafting is unavailable (for example, before a session has loaded). */
   disabled: boolean;
   /** The session cannot take input now; model picks stay local until the next send. */

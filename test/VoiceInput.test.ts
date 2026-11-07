@@ -12,7 +12,12 @@ import {
   VoiceInput,
   VoiceInputLive,
 } from "../server/VoiceInput.ts";
-import type { TranscriptionRequest, VoiceHints } from "../shared/voiceInput.ts";
+import {
+  RECORDING_TYPES,
+  type TranscriptionRequest,
+  type VoiceHints,
+} from "../shared/voiceInput.ts";
+import { recordingType } from "../web/src/lib/voiceInput.ts";
 
 const root = mkdtempSync(join(tmpdir(), "piano-voice-"));
 after(() => rmSync(root, { recursive: true, force: true }));
@@ -340,5 +345,26 @@ test("a version-13 database upgrades with voice input off, then saves it", async
     assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 14);
   } finally {
     upgraded.close();
+  }
+});
+
+test("every format the composer may record in is uploaded to OpenAI", async () => {
+  await run(
+    "formats",
+    Effect.flatMap(VoiceInput, (v) => v.save({ enabled: true, key: KEY })),
+  );
+  // Each format the composer picks when a browser supports only that one.
+  const chosen = RECORDING_TYPES.map((r) => recordingType((t) => t === r.mimeType)).filter(
+    (type): type is string => type !== undefined,
+  );
+  assert.ok(chosen.length > 0);
+  for (const mimeType of chosen) {
+    const sent: Sent[] = [];
+    await run(
+      "formats",
+      Effect.flatMap(VoiceInput, (v) => v.transcribe(recording({}, mimeType))),
+      openAi(sent),
+    );
+    assert.equal(sent.length, 1, mimeType);
   }
 });

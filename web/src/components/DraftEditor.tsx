@@ -1,3 +1,4 @@
+import type { VoiceHints } from "@shared/voiceInput";
 import type { ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import {
@@ -25,7 +26,6 @@ import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
-import type { VoiceSession } from "@/lib/voiceInput";
 import type { SendDisposition } from "@/lib/ws";
 
 /**
@@ -94,10 +94,10 @@ interface Props {
    * Where the message is spoken, read when a recording stops: the names voice input spells by.
    * The mic shows beside Attach in every composer while voice input is on.
    */
-  voice?: () => VoiceSession;
+  voice?: () => VoiceHints;
 }
 
-const noVoiceContext = (): VoiceSession => ({});
+const noVoiceContext = (): VoiceHints => ({});
 
 /** The composer card both the New page and a session use: images, the slash-completing textarea, attach and model controls. */
 export function DraftEditor({

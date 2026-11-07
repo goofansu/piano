@@ -108,7 +108,7 @@ export function SessionView({ state, send }: Props) {
       ?.name,
     folder: context.folderName,
     branch: context.branch,
-    title: context.title,
+    session: context.title,
   };
   const { commands } = useSessionCommands();
   // The area tabs show where the Agent command is offered; only then is each area their panel.
