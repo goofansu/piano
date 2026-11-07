@@ -126,6 +126,13 @@ export function NewSessionComposer({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const folder = folderFor(state, cwd);
+  // Where the first message is spoken: the names voice input spells by. No conversation yet; the
+  // card reads slash commands only from a running session, never by starting Pi.
+  const place = {
+    project: findProject(state, projectId)?.name,
+    folder: folder?.name,
+    branch: folder?.worktrees.find((w) => w.path === cwd)?.branch ?? undefined,
+  };
   const trust = trustCommand(state, cwd);
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
@@ -196,6 +203,7 @@ export function NewSessionComposer({
             noDirectory: !cwd,
           }}
           onSend={submit}
+          voice={() => ({ ...place, messages: [] })}
           actions={
             <Button
               size="icon"

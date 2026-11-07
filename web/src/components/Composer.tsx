@@ -17,7 +17,6 @@ import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { Client } from "@/lib/client";
 import {
   composerControl,
@@ -155,14 +154,7 @@ export function Composer({
           onEffortChange,
         }}
         onSend={send}
-        voice={
-          <VoiceInputButton
-            editor={editor}
-            session={() => ({ ...place, messages })}
-            live={completion?.session}
-            disabled={disabled}
-          />
-        }
+        voice={() => ({ ...place, messages })}
         onKeyDown={(e) => {
           if (e.key === "Escape" && control.escape) {
             e.preventDefault();

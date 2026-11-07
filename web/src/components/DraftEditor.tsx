@@ -17,6 +17,7 @@ import {
 import { ModelSelect } from "@/components/ModelSelect";
 import { QuoteChips, type QuoteDraft } from "@/components/Quotes";
 import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
+import { VoiceInputButton } from "@/components/VoiceInputButton";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
 import { type DraftKey, type DraftMessage, draftMessage, drafts } from "@/lib/messageDraft";
 import type { ModelCatalogView } from "@/lib/modelCatalogs";
@@ -24,6 +25,7 @@ import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
+import type { VoiceSession } from "@/lib/voiceInput";
 import type { SendDisposition } from "@/lib/ws";
 
 /**
@@ -88,9 +90,15 @@ interface Props {
   above?: ReactNode;
   /** The toolbar's end, after the model picker: the page's send control and its options. */
   actions: ReactNode;
-  /** Beside Attach: the page's voice input, when it offers one. */
-  voice?: ReactNode;
+  /**
+   * Where the message is spoken, read when a recording stops: the names and conversation voice
+   * input spells by. The mic shows beside Attach in every composer while voice input is on;
+   * without this, a recording carries only the draft.
+   */
+  voice?: () => Omit<VoiceSession, "commands">;
 }
+
+const noVoiceContext = (): Omit<VoiceSession, "commands"> => ({ messages: [] });
 
 /** The composer card both the New page and a session use: images, the slash-completing textarea, attach and model controls. */
 export function DraftEditor({
@@ -161,7 +169,12 @@ export function DraftEditor({
       />
       <div className={composerToolbar}>
         <AttachButton draft={attachments} disabled={attachmentsDisabled} />
-        {voice}
+        <VoiceInputButton
+          editor={editor}
+          session={voice ?? noVoiceContext}
+          live={completion?.session}
+          disabled={disabled}
+        />
         <ModelSelect
           open={modelOpen}
           onOpenChange={setModelOpen}
