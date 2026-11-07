@@ -1,12 +1,27 @@
 import { LIBRARY_KINDS, type LibraryProposal } from "@shared/library";
 import type { Dialog } from "@shared/wire";
-import { useId, useMemo } from "react";
-import { Hunks } from "@/components/Changes";
+import { lazy, Suspense, useId, useState } from "react";
 import { DraftFileText } from "@/components/DraftDialogs";
 import { Button } from "@/components/ui/button";
 import type { Client } from "@/lib/client";
-import { lineDiff } from "@/lib/lineDiff";
+import { ScrollRootContext } from "@/lib/scrollRoot";
 import { useDialogAnswer } from "@/lib/useDialogAnswer";
+
+const CodeTextDiff = lazy(() =>
+  import("@/components/Code").then(
+    ({ CodeTextDiff }) => ({ default: CodeTextDiff }),
+    () => ({
+      default: () => (
+        <p className="px-3 py-2 text-xs text-ink-3">
+          Could not load the diff viewer. Reload Piano and try again.
+        </p>
+      ),
+    }),
+  ),
+);
+
+/** Texts that differ only in a final newline have no text changes. */
+const sameLines = (a: string, b: string) => a.replace(/\n$/, "") === b.replace(/\n$/, "");
 
 /**
  * What a save tool would write, asked where `ask_user` asks: the new file as plain text, or a diff
@@ -33,10 +48,7 @@ export function LibraryProposalCard({
   );
   const { kind, change, name, file, previous } = proposal;
   const { fileLabel } = LIBRARY_KINDS[kind];
-  const diff = useMemo(
-    () => (previous === undefined ? undefined : lineDiff(`${name} ${fileLabel}`, previous, file)),
-    [previous, file, name, fileLabel],
-  );
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   return (
     <section aria-label="Proposal" className="px-(--gutter) pt-3">
       <form
@@ -52,13 +64,27 @@ export function LibraryProposalCard({
           {change === "create" ? "New" : "Update"} {kind}:{" "}
           <span className="font-mono font-normal">{name}</span>
         </h2>
-        {diff ? (
-          diff.hunks.length ? (
-            <div className="max-h-[min(20rem,40dvh)] overflow-y-auto overscroll-contain rounded-md border border-line [&>div]:border-t-0">
-              <Hunks file={diff} />
+        {previous !== undefined ? (
+          sameLines(previous, file) ? (
+            dialog.concealed ? null : (
+              <p className="text-sm text-ink-3">No text changes.</p>
+            )
+          ) : (
+            <div
+              ref={setScroller}
+              className="max-h-[min(20rem,40dvh)] overflow-y-auto overscroll-contain rounded-md border border-line [&>section]:border-t-0"
+            >
+              <ScrollRootContext value={scroller}>
+                <Suspense fallback={null}>
+                  <CodeTextDiff
+                    name={name}
+                    before={previous}
+                    after={file}
+                    label={`Diff of ${name} ${fileLabel}`}
+                  />
+                </Suspense>
+              </ScrollRootContext>
             </div>
-          ) : dialog.concealed ? null : (
-            <p className="text-sm text-ink-3">No text changes.</p>
           )
         ) : (
           <DraftFileText kind={kind} name={name} file={file} className="max-h-[min(20rem,40dvh)]" />

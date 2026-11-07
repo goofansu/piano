@@ -428,7 +428,7 @@ const CodePatch = lazy(() =>
 );
 
 /** One file's patch, as `@pierre/diffs` renders it with the shared wrap preference. */
-export function Hunks({ file }: { file: DiffFile }) {
+function Hunks({ file }: { file: DiffFile }) {
   return (
     <Suspense fallback={null}>
       <CodePatch patch={file.raw} label={`Diff of ${file.path}`} />
