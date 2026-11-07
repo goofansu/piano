@@ -3,6 +3,8 @@
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, readdirSync, writeFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
+// Oversized output fixtures follow Piano's inbound budget, so a policy change edits one constant.
+import { inboundLimits } from "../server/InboundCapacity.ts";
 
 const args = process.argv.slice(2);
 // Simulate a personal extension remembering its project_trust decision during startup.
@@ -145,9 +147,15 @@ const drain = () => {
     if (line.trim()) handle(JSON.parse(line));
   }
 };
+// slow-reader: Pi takes at least 1 ms per 4 KiB of input (256 ms per MiB) on any machine, as
+// Pi's own reader does for a long line on a slow one.
+const slowReader = sessionId === "slow-reader";
 process.stdin.on("data", (d) => {
   buf += dec.write(d);
   drain();
+  if (!slowReader || stdinPausedUntil) return;
+  process.stdin.pause();
+  setTimeout(() => stdinPausedUntil || process.stdin.resume(), d.length / 4096);
 });
 process.stdin.on("end", () => {
   out({ type: "bye" });
@@ -167,12 +175,13 @@ function handle(cmd) {
   switch (cmd.type) {
     case "get_state":
       if (sessionId === "capacity-records") {
-        for (let n = 0; n < 257; n++) out({ type: "future_event", n });
+        for (let n = 0; n <= inboundLimits.records.messages; n++) out({ type: "future_event", n });
         return; // No readiness response: nothing consumes records until open completes.
       }
       if (sessionId === "capacity-record-bytes") {
-        for (let n = 0; n < 3; n++)
-          out({ type: "future_event", text: "x".repeat(28 * 1024 * 1024) });
+        // Each record fits one RPC line; together they exceed the pending record bytes.
+        const text = "x".repeat(Math.ceil(inboundLimits.records.bytes / 3));
+        for (let n = 0; n < 3; n++) out({ type: "future_event", text });
         return;
       }
       if (args.includes("--silence-readiness")) return; // alive, but never ready
@@ -534,7 +543,7 @@ function handle(cmd) {
         return capacityCount();
       }
       if (cmd.message === "capacity oversized-line") {
-        process.stdout.write("x".repeat(80 * 1024 * 1024 + 1));
+        process.stdout.write("x".repeat(inboundLimits.rpcLineBytes + 1));
         return; // Intentionally no newline and no response.
       }
       if (cmd.message === "capacity fragmented") {

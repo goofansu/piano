@@ -48,8 +48,9 @@ their patched `node_modules`. The patch installer and its npm postinstall hook h
 - **50 MiB combined:** an iPhone 11 screenshot is about 3 MB, so ten of them need about 30 MB; the
   former 20 MiB total refused that batch. 50 MiB allows ten images averaging 5 MiB or five at the
   per-image maximum, and keeps the count from multiplying the per-image limit (100 MiB).
-- **Transport cost:** base64 expands 50 MiB to about **67 MiB**, so the WebSocket message and Pi
-  RPC line limits rose from 32 MiB to 80 MiB ([runtime input limits](runtime-input-limits.md)).
+- **Transport cost:** base64 expands 50 MiB to about **67 MiB**. The WebSocket message, Pi RPC
+  line and queue byte limits derive from the total attachment limit, and Pi's acknowledgement
+  deadline grows with the bytes written ([runtime input limits](runtime-input-limits.md)).
   JSON parsing, browser previews, process I/O and decoding can hold additional copies; the total
   upload cap is not a claim that memory consumption is only 50 MiB.
 - **Not 20 MiB each:** the per-image limit stays at 10 MiB, which already covers phone photos.
