@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Schema } from "effect";
-import { VoiceHints } from "../shared/voiceInput.ts";
+import { MAX_HINT_LENGTH, VoiceHints } from "../shared/voiceInput.ts";
 import { insertDictation, recordingType, voiceHints } from "../web/src/lib/voiceInput.ts";
 
 test("hints carry the names of where a message is dictated", () => {
@@ -9,7 +9,7 @@ test("hints carry the names of where a message is dictated", () => {
     project: " Piano ",
     folder: "piano",
     branch: "feat/voice-input",
-    title: "Voice",
+    session: " Voice",
   });
   assert.deepEqual(hints, {
     project: "Piano",
@@ -23,8 +23,12 @@ test("hints carry the names of where a message is dictated", () => {
 });
 
 test("long names stay inside what the server accepts", () => {
-  const hints = voiceHints({ folder: "f".repeat(2000), title: "t".repeat(2000) });
+  const long = "f".repeat(MAX_HINT_LENGTH + 1);
+  const hints = voiceHints({ folder: long, session: "t".repeat(MAX_HINT_LENGTH * 4) });
   assert.ok(Schema.is(VoiceHints)(hints), "hints decode on the server");
+  // A name longer than the limit is clipped to it, not dropped.
+  assert.equal(hints.folder, long.slice(0, MAX_HINT_LENGTH));
+  assert.equal(hints.session?.length, MAX_HINT_LENGTH);
 });
 
 test("a transcript lands at the cursor, a space apart from the words beside it", () => {

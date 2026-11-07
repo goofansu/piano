@@ -6,6 +6,7 @@
 import { Context, Data, Effect, Layer, Semaphore } from "effect";
 import {
   MAX_AUDIO_BYTES,
+  RECORDING_TYPES,
   TRANSCRIPTION_MODEL,
   type Transcription,
   type TranscriptionRequest,
@@ -71,22 +72,15 @@ export function transcriptionPrompt(hints: VoiceHints): string {
     : TRANSCRIPTION_INSTRUCTION;
 }
 
+/** The media type without its parameters, lowercased: what OpenAI's file extension stands for. */
+const baseType = (mimeType: string) => mimeType.split(";")[0]!.trim().toLowerCase();
+
+const extensions = new Map(RECORDING_TYPES.map((r) => [baseType(r.mimeType), r.extension]));
+
 /** The media type and file name OpenAI recognizes a recording by: it reads the extension. */
 function upload(mimeType: string) {
-  const type = mimeType.split(";")[0]!.trim().toLowerCase();
-  const extension: Record<string, string> = {
-    "audio/webm": "webm",
-    "video/webm": "webm",
-    "audio/mp4": "mp4",
-    "video/mp4": "mp4",
-    "audio/x-m4a": "m4a",
-    "audio/m4a": "m4a",
-    "audio/mpeg": "mp3",
-    "audio/wav": "wav",
-    "audio/x-wav": "wav",
-    "audio/ogg": "ogg",
-  };
-  const ext = extension[type];
+  const type = baseType(mimeType);
+  const ext = extensions.get(type);
   return ext ? { type, name: `recording.${ext}` } : undefined;
 }
 

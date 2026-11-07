@@ -1,3 +1,4 @@
+import type { VoiceHints } from "@shared/voiceInput";
 import { MicIcon, SquareIcon } from "lucide-react";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
@@ -8,7 +9,7 @@ import { ApiError, transcribe } from "@/lib/api";
 import { createDictation } from "@/lib/dictation";
 import { drafts } from "@/lib/messageDraft";
 import { useVoiceInput, voiceInputSettings } from "@/lib/useVoiceInput";
-import { recordingType, type VoiceSession } from "@/lib/voiceInput";
+import { recordingType } from "@/lib/voiceInput";
 
 const base64 = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -66,7 +67,7 @@ export function VoiceInputButton({
 }: {
   editor: DraftEditorState;
   /** Read when a recording stops, so its hints are the session as it is then. */
-  session: () => VoiceSession;
+  session: () => VoiceHints;
   disabled: boolean;
 }) {
   // Shared with Settings: turning voice input on or off there shows or hides this at once.

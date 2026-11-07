@@ -14,10 +14,9 @@
  * Browser APIs, the transcription request and toasts are injected. Nothing here depends on React.
  */
 // Relative, not @shared: module tests load this file directly in Node.
-import { MAX_RECORDING_MS } from "../../../shared/voiceInput.ts";
-import type { VoiceHints } from "../../../shared/voiceInput.ts";
+import { MAX_RECORDING_MS, type VoiceHints } from "../../../shared/voiceInput.ts";
 import type { DraftKey, Drafts } from "./messageDraft.ts";
-import { insertDictation, type VoiceSession, voiceHints } from "./voiceInput.ts";
+import { insertDictation, voiceHints } from "./voiceInput.ts";
 
 export type DictationPhase = "idle" | "starting" | "recording" | "transcribing";
 
@@ -66,7 +65,7 @@ export interface DictationOptions {
 
 export interface DictationStart {
   /** Where the draft is spoken, read when the recording stops; only that session's names. */
-  session: () => VoiceSession;
+  session: () => VoiceHints;
   /** The draft's textarea while it is the one shown, else null. */
   field: () => DictationField | null;
 }
