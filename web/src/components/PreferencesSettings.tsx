@@ -194,7 +194,8 @@ function OpenAiKeyEditor({
         <DialogHeader>
           <DialogTitle>OpenAI API key</DialogTitle>
           <DialogDescription>
-            Voice input sends recordings and session context to OpenAI.
+            Voice input sends recordings and session context to OpenAI. A restricted key needs Model
+            capabilities → Audio set to Request.
           </DialogDescription>
         </DialogHeader>
         <form

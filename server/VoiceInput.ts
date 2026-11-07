@@ -170,11 +170,15 @@ function upload(mimeType: string) {
 const openAiRefusal = (status: number) =>
   status === 401
     ? refused("OpenAI rejected the API key. Replace it in Settings > Preferences.")
-    : status === 429
-      ? refused("OpenAI's rate limit or quota was reached. Try again later.")
-      : status === 413
-        ? refused("The recording is too long. Record a shorter message.")
-        : refused(`OpenAI could not transcribe the recording (${status}).`);
+    : status === 403
+      ? refused(
+          "OpenAI refused the request. A restricted key needs Model capabilities → Audio set to Request.",
+        )
+      : status === 429
+        ? refused("OpenAI's rate limit or quota was reached. Try again later.")
+        : status === 413
+          ? refused("The recording is too long. Record a shorter message.")
+          : refused(`OpenAI could not transcribe the recording (${status}).`);
 
 export const VoiceInputLive = Layer.effect(
   VoiceInput,
