@@ -6,6 +6,7 @@ import {
   PlugIcon,
   RadiusIcon,
   ServerIcon,
+  SlidersHorizontalIcon,
   SparklesIcon,
   SquareSlashIcon,
   WebhookIcon,
@@ -23,6 +24,7 @@ const ICONS: Record<SettingsSectionIconName, LucideIcon> = {
   skill: SparklesIcon,
   prompt: SquareSlashIcon,
   webhook: WebhookIcon,
+  preferences: SlidersHorizontalIcon,
 };
 
 /** A Settings section's icon, as navigation and the command palette show it. */

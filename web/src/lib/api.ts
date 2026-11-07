@@ -329,6 +329,14 @@ export const changeProviderApiKey = async (
   await call(Endpoints.changeProviderApiKey, { body });
 };
 
+// Voice input
+
+export const voiceInput = (options?: RequestOptions) => call(Endpoints.voiceInput, {}, options);
+export const saveVoiceInput = (body: typeof Endpoints.saveVoiceInput.body.Type) =>
+  call(Endpoints.saveVoiceInput, { body });
+export const transcribe = (body: typeof Endpoints.transcribe.body.Type, options?: RequestOptions) =>
+  call(Endpoints.transcribe, { body }, options);
+
 export const providerLogin = signInApi(Endpoints.providerLogin);
 /** The same sign-in attempt as providers', run by Pi's MCP OAuth for an MCP server. */
 export const mcpLogin = signInApi(Endpoints.mcpLogin);

@@ -36,6 +36,7 @@ import {
   sessionActivity,
   sessionContext,
   sessionPane,
+  sessionProject,
   sessionWorking,
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
@@ -99,7 +100,16 @@ export function SessionView({ state, send }: Props) {
   );
   useLibraryToasts(t?.tools);
   const input = state.pendingCreate;
-  const { workspace, pullRequestTarget, draftKey, pullRequest: link } = sessionContext(state);
+  const context = sessionContext(state);
+  const { workspace, pullRequestTarget, draftKey, pullRequest: link } = context;
+  // Where a dictated message is spoken: the names voice input spells by.
+  const place = {
+    project: sessionProject(state, t?.sessionId ? { cwd: t.cwd, sessionId: t.sessionId } : null)
+      ?.name,
+    folder: context.folderName,
+    branch: context.branch,
+    title: context.title,
+  };
   const { commands } = useSessionCommands();
   // The area tabs show where the Agent command is offered; only then is each area their panel.
   const areaTabs = !!commands.find((c) => c.id === "agent")?.enabled;
@@ -269,6 +279,7 @@ export function SessionView({ state, send }: Props) {
                 session={t}
                 draftKey={draftKey}
                 completion={completionTarget(state)}
+                place={place}
                 disabled={!draftKey || input?.outcome === "starting"}
                 actionsDisabled={pane.composerDisabled}
                 readOnly={readOnly}

@@ -113,6 +113,12 @@ export interface StoredWebhook {
   readonly createdAt: string;
 }
 
+/** Voice input and the OpenAI key only it uses: private, outside RegistryData like webhooks. */
+export interface StoredVoiceInput {
+  readonly enabled: boolean;
+  readonly key: string | null;
+}
+
 export interface RegistryData {
   readonly version: 2;
   readonly projects: ReadonlyArray<Project>;
@@ -260,6 +266,8 @@ export class Registry extends Context.Service<
     readonly webhooks: Effect.Effect<readonly StoredWebhook[], RegistryError>;
     readonly saveWebhook: (hook: StoredWebhook) => Effect.Effect<void, RegistryError>;
     readonly removeWebhook: (id: string) => Effect.Effect<void, RegistryError>;
+    readonly voiceInput: Effect.Effect<StoredVoiceInput, RegistryError>;
+    readonly saveVoiceInput: (voice: StoredVoiceInput) => Effect.Effect<void, RegistryError>;
     /**
      * Hear about every write that changes the data, for the listener's scope. The writer
      * waits for its listeners, so whatever they publish is out before the write returns;
@@ -476,6 +484,16 @@ export const RegistryLive = Layer.effect(
         yield* Effect.try({
           try: () => database.removeWebhook(id),
           catch: () => new RegistryError({ detail: "Could not delete webhook." }),
+        });
+      }),
+      voiceInput: Effect.try({
+        try: database.voiceInput,
+        catch: () => new RegistryError({ detail: "Could not read voice input." }),
+      }),
+      saveVoiceInput: Effect.fn("Registry.saveVoiceInput")(function* (voice) {
+        yield* Effect.try({
+          try: () => database.saveVoiceInput(voice),
+          catch: () => new RegistryError({ detail: "Could not save voice input." }),
         });
       }),
       onChange: (listener) =>
