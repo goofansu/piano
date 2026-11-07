@@ -1,22 +1,14 @@
-import { MAX_RECORDING_MS } from "@shared/voiceInput";
 import { MicIcon, SquareIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import type { DraftEditorState } from "@/components/DraftEditor";
 import { IconButton } from "@/components/IconButton";
 import { Spinner } from "@/components/ui/spinner";
 import { ApiError, transcribe } from "@/lib/api";
+import { createDictation } from "@/lib/dictation";
+import { drafts } from "@/lib/messageDraft";
 import { useVoiceInput, voiceInputSettings } from "@/lib/useVoiceInput";
-import { insertDictation, recordingType, type VoiceSession, voiceHints } from "@/lib/voiceInput";
-
-type Phase = "idle" | "starting" | "recording" | "transcribing";
-
-interface Recording {
-  recorder: MediaRecorder;
-  stream: MediaStream;
-  chunks: Blob[];
-  limit: ReturnType<typeof setTimeout>;
-}
+import { recordingType, type VoiceSession } from "@/lib/voiceInput";
 
 const base64 = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -26,17 +18,46 @@ const base64 = (blob: Blob) =>
     reader.readAsDataURL(blob);
   });
 
-const microphoneRefusal = (error: unknown) =>
-  error instanceof DOMException && error.name === "NotAllowedError"
-    ? "Allow microphone access to use voice input."
-    : error instanceof DOMException && error.name === "NotFoundError"
-      ? "No microphone found."
-      : "Could not start recording.";
+/** The page's dictations, one per draft, recorded with this browser's microphone. */
+const dictation = createDictation({
+  drafts,
+  supported: () => !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined",
+  microphone: () => navigator.mediaDevices.getUserMedia({ audio: true }),
+  record: (stream, events) => {
+    const type = recordingType((t) => MediaRecorder.isTypeSupported(t));
+    const recorder = type
+      ? new MediaRecorder(stream as MediaStream, { mimeType: type })
+      : new MediaRecorder(stream as MediaStream);
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) events.data(event.data);
+    };
+    recorder.onstop = events.stop;
+    return {
+      get state() {
+        return recorder.state;
+      },
+      get mimeType() {
+        return recorder.mimeType || type || "";
+      },
+      start: () => recorder.start(),
+      stop: () => recorder.stop(),
+    };
+  },
+  transcribe: async (audio, hints) =>
+    (await transcribe({ audio: await base64(audio), mimeType: audio.type, hints })).text,
+  failed: (error) => {
+    toast.error(error instanceof ApiError ? error.message : "Could not transcribe the recording.");
+    // A refusal may mean voice input changed elsewhere: read it again.
+    void voiceInputSettings.refresh();
+  },
+  notify: { info: (message) => toast.info(message), error: (message) => toast.error(message) },
+  nextFrame: (run) => requestAnimationFrame(run),
+});
 
 /**
  * The composer's microphone, shown while voice input is on: press to record, press again to put
  * the transcript into the draft at the cursor. Recording and transcribing stay in this browser
- * tab; the transcript is never sent on its own.
+ * tab; the transcript is never sent on its own. See `createDictation` for which draft it lands in.
  */
 export function VoiceInputButton({
   editor,
@@ -50,129 +71,26 @@ export function VoiceInputButton({
 }) {
   // Shared with Settings: turning voice input on or off there shows or hides this at once.
   const voice = useVoiceInput();
-  const [phase, setPhase] = useState<Phase>("idle");
-  const recording = useRef<Recording | null>(null);
-  const aborted = useRef<AbortController | null>(null);
-  const latest = useRef({ editor, session });
-  latest.current = { editor, session };
+  const { key, ref } = editor;
+  const phase = useSyncExternalStore(dictation.subscribe, () => dictation.phase(key));
+  // What the composer shows now; a dictation reads it only while it still shows that draft.
+  const shown = useRef({ key, session });
+  shown.current = { key, session };
 
-  const release = () => {
-    const current = recording.current;
-    recording.current = null;
-    if (!current) return;
-    clearTimeout(current.limit);
-    for (const track of current.stream.getTracks()) track.stop();
-  };
-  // Leaving the session stops the microphone and drops a transcript nobody would see land.
-  useEffect(
-    () => () => {
-      const current = recording.current;
-      if (current && current.recorder.state !== "inactive") {
-        current.recorder.onstop = null;
-        current.recorder.stop();
-      }
-      release();
-      aborted.current?.abort();
-    },
-    [],
-  );
-
-  const finish = async (chunks: Blob[], type: string) => {
-    const audio = new Blob(chunks, { type });
-    if (audio.size === 0) {
-      setPhase("idle");
-      return;
-    }
-    setPhase("transcribing");
-    const controller = new AbortController();
-    aborted.current = controller;
-    try {
-      const hints = voiceHints(latest.current.session());
-      const { text } = await transcribe(
-        { audio: await base64(audio), mimeType: type, hints },
-        { signal: controller.signal },
-      );
-      if (controller.signal.aborted) return;
-      if (!text) {
-        toast.info("No speech was heard.");
-        return;
-      }
-      // Where the cursor is now: typing may have moved it while OpenAI answered.
-      const { editor: now } = latest.current;
-      const input = now.ref.current;
-      const at = input
-        ? { start: input.selectionStart, end: input.selectionEnd }
-        : { start: now.text.length, end: now.text.length };
-      const next = insertDictation(now.text, at, text);
-      now.setText(next.text);
-      requestAnimationFrame(() => {
-        const target = latest.current.editor.ref.current;
-        if (!target) return;
-        target.focus();
-        target.setSelectionRange(next.caret, next.caret);
-      });
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      toast.error(
-        error instanceof ApiError ? error.message : "Could not transcribe the recording.",
-      );
-      // A refusal may mean voice input changed elsewhere: read it again.
-      void voiceInputSettings.refresh();
-    } finally {
-      if (aborted.current === controller) aborted.current = null;
-      setPhase("idle");
-    }
-  };
-
-  const start = async () => {
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      toast.error("This browser cannot record audio here. Voice input needs HTTPS or localhost.");
-      return;
-    }
-    setPhase("starting");
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (error) {
-      setPhase("idle");
-      toast.error(microphoneRefusal(error));
-      return;
-    }
-    const type = recordingType((t) => MediaRecorder.isTypeSupported(t));
-    const recorder = type
-      ? new MediaRecorder(stream, { mimeType: type })
-      : new MediaRecorder(stream);
-    const chunks: Blob[] = [];
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) chunks.push(event.data);
-    };
-    recorder.onstop = () => {
-      release();
-      void finish(chunks, recorder.mimeType || type || "audio/webm");
-    };
-    recording.current = {
-      recorder,
-      stream,
-      chunks,
-      limit: setTimeout(() => {
-        if (recorder.state !== "inactive") {
-          toast.info("Recording stopped at 10 minutes.");
-          recorder.stop();
-        }
-      }, MAX_RECORDING_MS),
-    };
-    recorder.start();
-    setPhase("recording");
-  };
-
-  const stop = () => {
-    const current = recording.current;
-    if (current && current.recorder.state !== "inactive") current.recorder.stop();
-  };
+  // Showing another draft, or leaving, stops the microphone and drops what was not yet stopped.
+  useEffect(() => () => dictation.cancel(key), [key]);
 
   if (!voice.value?.enabled && phase === "idle") return null;
   const recordingNow = phase === "recording";
   const busy = phase === "starting" || phase === "transcribing";
+  const start = () => {
+    const own = session;
+    const here = () => shown.current.key === key;
+    return dictation.start(key, {
+      session: () => (here() ? shown.current.session() : own()),
+      field: () => (here() ? ref.current : null),
+    });
+  };
   return (
     <IconButton
       size="icon-sm"
@@ -184,7 +102,7 @@ export function VoiceInputButton({
       aria-pressed={recordingNow}
       aria-busy={busy || undefined}
       disabled={busy || (disabled && !recordingNow)}
-      onClick={() => (recordingNow ? stop() : void start())}
+      onClick={() => (recordingNow ? dictation.stop(key) : void start())}
     >
       {busy ? <Spinner /> : recordingNow ? <SquareIcon className="fill-current" /> : <MicIcon />}
     </IconButton>
