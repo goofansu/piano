@@ -1,16 +1,8 @@
-import type { VoiceInputState } from "@shared/voiceInput";
 import { MoreHorizontalIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import { PianoButton } from "@/components/PianoButton";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/PianoDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,12 +19,8 @@ import {
   SettingsSkeleton,
   settingsRow,
 } from "@/components/SettingsSectionFrame";
-import { Button } from "@/components/ui/button";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useSetupActions } from "@/lib/useSetupActions";
 import { useVoiceInput, voiceInputSettings } from "@/lib/useVoiceInput";
@@ -71,9 +59,15 @@ export function PreferencesSettings() {
       dialogs={
         <>
           {editing && voice && (
-            <OpenAiKeyEditor
-              voice={voice}
-              editing={editing}
+            <ApiKeyDialog
+              title="OpenAI API key"
+              description="Voice input sends recordings and session context to OpenAI. A restricted key needs Model capabilities → Audio set to Request."
+              // Saving a key while turning on also turns voice input on; replacing keeps it as is.
+              save={(key) =>
+                voiceInputSettings.save({ enabled: editing === "turn-on" || voice.enabled, key })
+              }
+              done={editing === "turn-on" ? "Voice input on" : "OpenAI API key saved"}
+              fallback="Could not save API key."
               close={() => setEditing(undefined)}
               refresh={() => void voiceInputSettings.refresh()}
             />
@@ -156,98 +150,5 @@ export function PreferencesSettings() {
         </SettingsList>
       )}
     </SettingsSectionFrame>
-  );
-}
-
-function OpenAiKeyEditor({
-  voice,
-  editing,
-  close,
-  refresh,
-}: {
-  voice: VoiceInputState;
-  editing: KeyEditing;
-  close: () => void;
-  refresh: () => void;
-}) {
-  // Never load the old key, retain it outside this dialog, or put it in browser storage.
-  const [key, setKey] = useState("");
-  const actions = useSetupActions({
-    refresh,
-    success: (text) => toast.success(text),
-    failure: "keep",
-  });
-  const busy = actions.running !== undefined;
-  const turningOn = editing === "turn-on";
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !busy) close();
-      }}
-    >
-      <DialogContent
-        className="sm:max-w-md"
-        showCloseButton={false}
-        onInteractOutside={(event) => event.preventDefault()}
-      >
-        <DialogHeader>
-          <DialogTitle>OpenAI API key</DialogTitle>
-          <DialogDescription>
-            Voice input sends recordings and session context to OpenAI. A restricted key needs Model
-            capabilities → Audio set to Request.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="flex flex-col gap-6"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (busy || !key.trim()) return;
-            void actions.run({
-              id: "save-key",
-              run: async () => {
-                await voiceInputSettings.save({
-                  enabled: turningOn || voice.enabled,
-                  key: key.trim(),
-                });
-                setKey("");
-                close();
-              },
-              done: turningOn ? "Voice input on" : "OpenAI API key saved",
-              fallback: "Could not save API key.",
-            });
-          }}
-        >
-          <FieldGroup>
-            <Field data-disabled={busy} data-invalid={!!actions.error || undefined}>
-              <FieldLabel htmlFor="openai-api-key">API key</FieldLabel>
-              <Input
-                id="openai-api-key"
-                type="password"
-                autoComplete="new-password"
-                spellCheck={false}
-                autoCapitalize="none"
-                maxLength={8192}
-                required
-                disabled={busy}
-                aria-invalid={!!actions.error || undefined}
-                value={key}
-                onChange={(event) => setKey(event.target.value)}
-              />
-              {actions.error && <FieldError role="alert">{actions.error}</FieldError>}
-            </Field>
-          </FieldGroup>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={close}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy || !key.trim()}>
-              {busy && <Spinner data-icon="inline-start" />}
-              {busy ? "Saving…" : "Save"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

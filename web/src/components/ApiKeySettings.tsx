@@ -3,15 +3,8 @@ import { cn } from "cn";
 import { MoreHorizontalIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import { PianoButton } from "@/components/PianoButton";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/PianoDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,11 +24,8 @@ import {
 } from "@/components/SettingsSectionFrame";
 import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { changeProviderApiKey, providerApiKeys } from "@/lib/api";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
@@ -136,8 +126,12 @@ export function ApiKeySettings() {
         </SettingsList>
       )}
       {editing && (
-        <ApiKeyEditor
-          provider={editing}
+        <ApiKeyDialog
+          title={`${editing.name} API key`}
+          description="Saved in Pi on this machine. Start a new session to use it."
+          save={(key) => changeProviderApiKey({ action: "save", provider: editing.id, key })}
+          done={`${editing.name} API key saved`}
+          fallback="Could not save API key."
           close={() => setEditing(undefined)}
           refresh={() => void observed.refresh()}
         />
@@ -161,89 +155,5 @@ export function ApiKeySettings() {
         }}
       />
     </SettingsGroup>
-  );
-}
-
-function ApiKeyEditor({
-  provider,
-  close,
-  refresh,
-}: {
-  provider: ApiKeyProvider;
-  close: () => void;
-  refresh: () => void;
-}) {
-  // Never load the old key, retain it outside this dialog, or put it in browser storage.
-  const [key, setKey] = useState("");
-  const actions = useSetupActions({ refresh, success: (text) => toast.success(text) });
-  const busy = actions.running !== undefined;
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !busy) close();
-      }}
-    >
-      <DialogContent
-        className="sm:max-w-md"
-        showCloseButton={false}
-        onInteractOutside={(event) => event.preventDefault()}
-      >
-        <DialogHeader>
-          <DialogTitle>{provider.name} API key</DialogTitle>
-          <DialogDescription>
-            Saved in Pi on this machine. Start a new session to use it.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="flex flex-col gap-6"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (busy || !key.trim()) return;
-            void actions.run({
-              id: provider.id,
-              run: async () => {
-                await changeProviderApiKey({
-                  action: "save",
-                  provider: provider.id,
-                  key: key.trim(),
-                });
-                setKey("");
-                close();
-              },
-              done: `${provider.name} API key saved`,
-              fallback: "Could not save API key.",
-            });
-          }}
-        >
-          <FieldGroup>
-            <Field data-disabled={busy}>
-              <FieldLabel htmlFor="provider-api-key">API key</FieldLabel>
-              <Input
-                id="provider-api-key"
-                type="password"
-                autoComplete="new-password"
-                spellCheck={false}
-                autoCapitalize="none"
-                maxLength={8192}
-                required
-                disabled={busy}
-                value={key}
-                onChange={(event) => setKey(event.target.value)}
-              />
-            </Field>
-          </FieldGroup>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={close}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy || !key.trim()}>
-              {busy && <Spinner data-icon="inline-start" />}
-              {busy ? "Saving…" : "Save"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
