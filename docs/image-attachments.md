@@ -1,15 +1,15 @@
 # Image attachment policy
 
-Decision: **accepted, 2026-10-06**. Supersedes the initial 5 MiB-per-image / 10 MiB-total
-upload policy. This is a Piano input-safety policy, not a new Pi or provider restriction.
+Decision: **accepted, 2026-10-06; count raised to ten and total to 50 MiB, 2026-11-07**. Supersedes the
+initial 5 MiB-per-image / 10 MiB-total upload policy. This is a Piano input-safety policy, not a new Pi or provider restriction.
 
 ## Limits
 
 | Constraint | Limit |
 | --- | --- |
 | Original file size | **10 MiB per image** (10,485,760 bytes) |
-| Image count | **4 per message** |
-| Combined original file size | **20 MiB per message** (20,971,520 bytes) |
+| Image count | **10 per message** |
+| Combined original file size | **50 MiB per message** (52,428,800 bytes) |
 | Formats | PNG, JPEG/JPG, WebP, GIF |
 
 All three limits apply together; exact boundaries are accepted. Sizes count the original binary
@@ -44,14 +44,15 @@ their patched `node_modules`. The patch installer and its npm postinstall hook h
 - **10 MiB each:** accommodates typical screenshots and phone photos with fewer manual compression
   steps. The earlier 5 MiB limit rejected files that Pi can successfully resize; the
   [Pi research](research/2026-10-06-pi-image-restrictions.md) demonstrated this with an 8.24 MiB PNG.
-- **Four images:** retains a focused, useful allowance for comparisons and multi-screen bug reports
-  while limiting simultaneous decoding and model-input growth.
-- **20 MiB combined:** allows two maximum-size files or four averaging 5 MiB. The separate total cap
-  prevents four 10 MiB files from doubling the intended transfer budget.
-- **Not 20 MiB each / ten images / 50 MiB combined:** that earlier suggestion was unnecessarily
-  generous for the coding workflow. Base64 alone expands 50 MiB to about 67 MiB, versus about
-  **27 MiB** for this decision. JSON parsing, browser previews, process I/O and decoding can hold
-  additional copies; the total upload cap is not a claim that memory consumption is only 20 MiB.
+- **Ten images:** four was too few for multi-screen bug reports and step-by-step screenshots.
+- **50 MiB combined:** an iPhone 11 screenshot is about 3 MB, so ten of them need about 30 MB; the
+  former 20 MiB total refused that batch. 50 MiB allows ten images averaging 5 MiB or five at the
+  per-image maximum, and keeps the count from multiplying the per-image limit (100 MiB).
+- **Transport cost:** base64 expands 50 MiB to about **67 MiB**, so the WebSocket message and Pi
+  RPC line limits rose from 32 MiB to 80 MiB ([runtime input limits](runtime-input-limits.md)).
+  JSON parsing, browser previews, process I/O and decoding can hold additional copies; the total
+  upload cap is not a claim that memory consumption is only 50 MiB.
+- **Not 20 MiB each:** the per-image limit stays at 10 MiB, which already covers phone photos.
 
 ## Pi owns model preparation
 
@@ -82,7 +83,9 @@ parent and checks the installed Pi accepts an image.
 ## Verification and future changes
 
 - A boundary regression failed under the former limits, then passed with 10 MiB each / 20 MiB total.
-  It checks exact boundaries, one-byte overflow, four images and rejection of five.
+  It checks exact boundaries, one-byte overflow, the maximum image count and rejection of one more.
+  It now checks ten and eleven images and a 50 MiB total; the 2026-10-06 evidence below is for
+  the former four-image / 20 MiB policy.
 - `npm test`: **57 passed**. `npm run typecheck`: passed.
 - `test/browser-attachments.mjs` through `npx agent-browser` on scratch ports 7271/7272: passed.
   Two distinct, valid PNGs of exactly 10 MiB each traversed browser → WebSocket → fake Pi → preview

@@ -333,8 +333,8 @@ test("PIN-132: a message the wire cannot encode is not sent and keeps the socket
         inputId: "a-1",
       },
     }) as ClientMessage;
-  assert.equal(h.connection.send(act(5)), "not-sent");
+  assert.equal(h.connection.send(act(11)), "not-sent");
   assert.ok(!h.last().sent.some((m) => m._tag === "act"));
   assert.ok(!h.last().closed, "the socket stays up");
-  assert.equal(h.connection.send(act(4)), "sent", "the same message within the limit goes");
+  assert.equal(h.connection.send(act(10)), "sent", "the same message within the limit goes");
 });

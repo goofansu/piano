@@ -2,13 +2,14 @@
  * Rejected input is never queued for later execution. Keep the lease until the
  * admitted work ends, including work whose browser has disconnected. */
 export const inboundLimits = {
-  // Allows the existing 20 MiB image batch after base64 encoding, plus JSON/text.
-  frameBytes: 32 * 1024 * 1024,
-  rpcLineBytes: 32 * 1024 * 1024,
-  records: { messages: 256, bytes: 32 * 1024 * 1024 },
-  client: { messages: 8, bytes: 64 * 1024 * 1024 },
-  requests: { messages: 32, bytes: 64 * 1024 * 1024 },
-  writes: { messages: 32, bytes: 64 * 1024 * 1024 },
+  // Allows the 50 MiB image batch after base64 encoding (about 67 MiB), plus JSON/text.
+  frameBytes: 80 * 1024 * 1024,
+  rpcLineBytes: 80 * 1024 * 1024,
+  records: { messages: 256, bytes: 80 * 1024 * 1024 },
+  // Room for two maximum-size prompts at once in each ordinary lane.
+  client: { messages: 8, bytes: 160 * 1024 * 1024 },
+  requests: { messages: 32, bytes: 160 * 1024 * 1024 },
+  writes: { messages: 32, bytes: 160 * 1024 * 1024 },
   control: { messages: 8, bytes: 32 * 1024 * 1024 },
 } as const;
 

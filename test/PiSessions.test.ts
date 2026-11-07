@@ -727,24 +727,24 @@ test("upload wire rejects unsupported kinds, oversized payloads and malformed ba
     [{ ...image, mimeType: "image/svg+xml" }],
     [{ ...image, data: "not base64" }],
     [{ ...image, data: "" }],
-    Array(5).fill(image),
+    Array(11).fill(image),
     [{ ...image, data: "A".repeat(4 * Math.ceil((10 * 1024 * 1024) / 3) + 4) }],
   ])
     assert.throws(() => decodeClientMessage(command(attachments)));
 });
 
-test("upload limits accept 10 MiB per image and 20 MiB total, but not one byte more", () => {
+test("upload limits accept 10 MiB per image and 50 MiB total, but not one byte more", () => {
   const sized = (bytes: number): Attachment => ({
     ...image,
     data: Buffer.alloc(bytes).toString("base64"),
   });
   const accepts = Schema.is(Attachments);
   const ten = sized(10 * 1024 * 1024);
-  assert.equal(accepts([ten, ten]), true, "exact per-image and aggregate boundaries");
+  assert.equal(accepts(Array(5).fill(ten)), true, "exact per-image and aggregate boundaries");
   assert.equal(
-    accepts(Array(4).fill(sized(5 * 1024 * 1024))),
+    accepts(Array(10).fill(sized(5 * 1024 * 1024))),
     true,
-    "four images at the total boundary",
+    "ten images at the total boundary",
   );
   assert.equal(
     accepts([sized(10 * 1024 * 1024 + 1)]),
@@ -752,11 +752,11 @@ test("upload limits accept 10 MiB per image and 20 MiB total, but not one byte m
     "per-image overflow even when base64 length is unchanged",
   );
   assert.equal(
-    accepts([ten, ten, sized(1)]),
+    accepts([...Array(5).fill(ten), sized(1)]),
     false,
     "aggregate overflow with individually valid images",
   );
-  assert.equal(accepts(Array(5).fill(image)), false, "count policy stays at four");
+  assert.equal(accepts(Array(11).fill(image)), false, "count policy stays at ten");
 });
 
 test("handled input acknowledges consumption without starting work or inventing history", async () => {

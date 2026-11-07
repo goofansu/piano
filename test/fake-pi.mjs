@@ -172,7 +172,7 @@ function handle(cmd) {
       }
       if (sessionId === "capacity-record-bytes") {
         for (let n = 0; n < 3; n++)
-          out({ type: "future_event", text: "x".repeat(12 * 1024 * 1024) });
+          out({ type: "future_event", text: "x".repeat(28 * 1024 * 1024) });
         return;
       }
       if (args.includes("--silence-readiness")) return; // alive, but never ready
@@ -534,7 +534,7 @@ function handle(cmd) {
         return capacityCount();
       }
       if (cmd.message === "capacity oversized-line") {
-        process.stdout.write("x".repeat(32 * 1024 * 1024 + 1));
+        process.stdout.write("x".repeat(80 * 1024 * 1024 + 1));
         return; // Intentionally no newline and no response.
       }
       if (cmd.message === "capacity fragmented") {

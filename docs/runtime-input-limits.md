@@ -6,11 +6,11 @@ per-Pi-child limits, not global quotas or a security sandbox.
 
 | Boundary | Ordinary capacity | Reserved control capacity |
 | --- | --- | --- |
-| Browser work, per connection | 8 in-flight requests / 64 MiB serialized input | 8 requests / 32 MiB |
-| Session actions, per child | 32 in-flight actions / 64 MiB | 8 actions / 32 MiB |
-| Pi RPC requests awaiting completion | 32 requests / 64 MiB | 8 requests / 32 MiB |
-| Pi stdin writes not yet accepted by the sink | 32 writes / 64 MiB | 8 writes / 32 MiB |
-| Pi output awaiting projection | 256 records / 32 MiB | No reserved lane; overflow fails the child |
+| Browser work, per connection | 8 in-flight requests / 160 MiB serialized input | 8 requests / 32 MiB |
+| Session actions, per child | 32 in-flight actions / 160 MiB | 8 actions / 32 MiB |
+| Pi RPC requests awaiting completion | 32 requests / 160 MiB | 8 requests / 32 MiB |
+| Pi stdin writes not yet accepted by the sink | 32 writes / 160 MiB | 8 writes / 32 MiB |
+| Pi output awaiting projection | 256 records / 80 MiB | No reserved lane; overflow fails the child |
 
 Both count and byte limits apply. Control means dialog answers/cancellation, Abort,
 Stop and queue restoration; at the RPC boundary this is UI responses, `abort` and
@@ -18,14 +18,14 @@ Stop and queue restoration; at the RPC boundary this is UI responses, `abort` an
 stopped reading. Delivery acknowledgements and heartbeat pings are handled promptly
 without acquiring ordinary-work capacity, so a pending prompt cannot starve them.
 
-- **WebSocket messages:** 32 MiB including all fragments. The Node `ws` parser enforces
+- **WebSocket messages:** 80 MiB including all fragments. The Node `ws` parser enforces
   this while assembling messages; `WsClient` also checks before JSON decoding.
   Oversized messages close with code 1009. Compression is disabled. The platform's
   pausable socket reader backpressures buffered messages at its high-water mark.
-- **RPC lines/input:** 32 MiB. Output framing counts raw bytes before UTF-8 decoding,
-  JSON parsing, or waiting for a newline. This permits the existing 20 MiB image
-  upload batch after base64 encoding plus JSON overhead, without an unlimited text
-  allowance. The newline on a stdin write counts toward the input limit.
+- **RPC lines/input:** 80 MiB. Output framing counts raw bytes before UTF-8 decoding,
+  JSON parsing, or waiting for a newline. This permits the 50 MiB image upload batch
+  after base64 encoding (about 67 MiB) plus JSON overhead, without an unlimited text
+  allowance. Each ordinary lane holds two such prompts. The newline on a stdin write counts toward the input limit.
 - **Excess ordinary/control work:** reject immediately, without changing selection,
   queuing for later, or sending that input to Pi. The browser receives an error;
   there is no automatic resend. Capacity is released when the work finishes, not
