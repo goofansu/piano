@@ -182,7 +182,7 @@ export function WebhookSettings() {
             <EmptyMedia variant="icon">
               <WebhookIcon />
             </EmptyMedia>
-            <EmptyTitle>No webhooks</EmptyTitle>
+            <EmptyTitle>No webhooks yet</EmptyTitle>
           </EmptyHeader>
         </Empty>
       ) : (

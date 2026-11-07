@@ -183,7 +183,7 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
             <EmptyMedia variant="icon">
               <Icon />
             </EmptyMedia>
-            <EmptyTitle>{`No ${plural}`}</EmptyTitle>
+            <EmptyTitle>{`No ${plural} yet`}</EmptyTitle>
           </EmptyHeader>
         </Empty>
       ) : (
