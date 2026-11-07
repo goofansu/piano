@@ -146,7 +146,7 @@ type Auth = "oauth" | "header";
 
 /**
  * Add or edit one entry of Pi's global configuration: its fields in place, errors on the field
- * they belong to, Connect or Save in the footer. Adding also takes the `mcpServers` JSON a server's
+ * they belong to, Add MCP server or Save in the footer. Adding also takes the `mcpServers` JSON a server's
  * README shows, one server at a time, on its JSON tab. A URL server is saved only once it
  * connects: one that cannot is refused on its URL, and one that asks for a sign-in closes this
  * dialog for the sign-in, which saves it. A saved Authorization header shows as a masked
@@ -209,6 +209,12 @@ export function McpServerDialog({
       "command" in pasted.config
     : tab === "form" && kind === "command";
 
+  // The confirm waits for the required fields, as New project does.
+  const complete =
+    tab === "json"
+      ? !!pasted && "name" in pasted
+      : !!name.trim() && !!(kind === "url" ? url.trim() : command.trim());
+
   const run = (request: Parameters<typeof changeMcpSetup>[0], name: string, done: string) =>
     actions
       .run({
@@ -235,7 +241,7 @@ export function McpServerDialog({
       void run(
         { action: "add", name: pasted.name, config: pasted.config },
         pasted.name,
-        `MCP ${pasted.name} added.`,
+        "MCP server added",
       );
       return;
     }
@@ -265,11 +271,11 @@ export function McpServerDialog({
           config: form,
         },
         trimmed,
-        `MCP ${trimmed} saved.`,
+        "MCP server saved",
       );
       return;
     }
-    void run({ action: "add", name: trimmed, form }, trimmed, `MCP ${trimmed} added.`);
+    void run({ action: "add", name: trimmed, form }, trimmed, "MCP server added");
   };
 
   return (
@@ -280,7 +286,7 @@ export function McpServerDialog({
       }}
     >
       <DialogContent
-        className="max-h-[90dvh] overflow-y-auto"
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
         aria-describedby={startsCommand ? "mcp-starts-command" : undefined}
       >
         <DialogHeader>
@@ -432,7 +438,7 @@ export function McpServerDialog({
                     </Field>
                   )}
                   <FieldSet>
-                    <FieldLegend>Headers</FieldLegend>
+                    <FieldLegend variant="label">Headers</FieldLegend>
                     <KeyValueFields
                       list={headers}
                       onChange={setHeaders}
@@ -469,7 +475,7 @@ export function McpServerDialog({
                     />
                   </Field>
                   <FieldSet>
-                    <FieldLegend>Environment</FieldLegend>
+                    <FieldLegend variant="label">Environment</FieldLegend>
                     <KeyValueFields
                       list={env}
                       onChange={setEnv}
@@ -506,12 +512,9 @@ export function McpServerDialog({
             <Button type="button" variant="outline" disabled={busy} onClick={close}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={busy || (tab === "json" && !(pasted && "name" in pasted))}
-            >
+            <Button type="submit" disabled={busy || !complete}>
               {busy && <Spinner data-icon="inline-start" />}
-              {entry ? "Save" : "Connect"}
+              {entry ? "Save" : "Add MCP server"}
             </Button>
           </DialogFooter>
         </form>

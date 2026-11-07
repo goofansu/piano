@@ -11,7 +11,7 @@ import {
   SquareSlashIcon,
   WebhookIcon,
 } from "lucide-react";
-import { PaneHeader } from "@/components/Pane";
+import { PaneBody, PaneHeader } from "@/components/Pane";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -66,7 +66,7 @@ export function SettingsSectionFrame({
           {title}
         </h1>
       </PaneHeader>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-6 md:px-8 md:py-8">
+      <PaneBody>
         <section
           id={sectionId}
           aria-labelledby={titleId}
@@ -74,7 +74,7 @@ export function SettingsSectionFrame({
         >
           {children}
         </section>
-      </div>
+      </PaneBody>
       {dialogs}
     </section>
   );
@@ -113,7 +113,8 @@ export function SettingsGroup({
 
 /**
  * Rows in one bordered list, split by hairlines rather than spaced as cards, as Linear's settings
- * lists are. Rows are `Item`s with `settingsRow`.
+ * lists are. Rows are `Item`s with `settingsRow`. Each row's hairline is its own bottom border:
+ * `Item` draws a transparent border on every side, which a `divide-*` colour cannot win against.
  */
 export function SettingsList({
   className,
@@ -124,7 +125,8 @@ export function SettingsList({
     <div
       role="list"
       className={cn(
-        "flex flex-col divide-y divide-line overflow-hidden rounded-lg border border-line",
+        "flex flex-col overflow-hidden rounded-lg border border-line",
+        "*:border-x-0 *:border-t-0 *:border-b *:border-b-line *:last:border-b-0",
         className,
       )}
       {...props}

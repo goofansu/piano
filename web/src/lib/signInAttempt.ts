@@ -241,9 +241,11 @@ function safeUrl(raw: string | undefined): string | undefined {
 
 export interface SignInDialogView {
   title: string;
-  description: string;
+  /** The dialog's one line beneath its title; absent when the prompt's field says it all. */
+  description: string | undefined;
   /** The attempt succeeded; `message` is then the success detail. */
   success: boolean;
+  /** Pi's progress or instructions; absent while a typed prompt's label already says them. */
   message: string | undefined;
   /** The sign-in page to open, only when the attempt runs and it is a safe http(s) link. */
   url: string | undefined;
@@ -252,6 +254,8 @@ export interface SignInDialogView {
   deviceCode: string | undefined;
   /** The running attempt's question; its form replaces the footer. */
   prompt: LoginPrompt | undefined;
+  /** The prompt's field label: "Method" for a choice, else Pi's question in Piano's words. */
+  label: string | undefined;
   busy: boolean;
   /** Something is in flight and no prompt is showing. */
   loading: boolean;
@@ -260,6 +264,12 @@ export interface SignInDialogView {
   /** Absent while a prompt shows its own Cancel and Continue. */
   footer: { dismissLabel: string; dismissPrimary: boolean; retry: boolean } | undefined;
 }
+
+/** Pi's question as a field label: "sign-in" where Pi says "login", without its trailing colon. */
+const promptLabel = (message: string) =>
+  message
+    .replace(/\blog ?in\b/gi, (word) => (word[0] === "L" ? "Sign-in" : "sign-in"))
+    .replace(/:\s*$/, "");
 
 /** What the sign-in dialog shows. Pure; the component renders it. */
 export function signInDialogView({
@@ -278,20 +288,25 @@ export function signInDialogView({
   const url = running ? safeUrl(attempt.url) : undefined;
   const id = attempt?.provider ?? provider;
   const name = providers.find((candidate) => candidate.id === id)?.name ?? id;
+  const select = prompt?.type === "select";
   return {
     title: `Sign in to ${name}`,
-    description:
-      prompt?.type === "select"
-        ? "Choose a sign-in method."
-        : url && !prompt
-          ? "Waiting for authorization…"
-          : "Follow the steps to connect your account.",
+    description: select
+      ? // The one fact the choice's names leave out.
+        (prompt.options?.length ?? 0) > 1
+        ? "On another machine, choose a device-code or copy-code method."
+        : undefined
+      : url && !prompt
+        ? "Waiting for authorization…"
+        : "Follow the steps to connect your account.",
     success,
-    message: attempt?.message,
+    // A typed prompt's label repeats Pi's instructions, so the field says them once.
+    message: prompt && !select ? undefined : attempt?.message,
     url,
     link: url ? (prompt ? "body" : "footer") : null,
     deviceCode: attempt?.userCode,
     prompt,
+    label: prompt && (select ? "Method" : promptLabel(prompt.message)),
     busy,
     loading: busy && !prompt,
     alert: error || connectionError || undefined,

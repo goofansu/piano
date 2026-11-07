@@ -23,7 +23,6 @@ import {
   settingsRow,
 } from "@/components/SettingsSectionFrame";
 import { StatusDot } from "@/components/StatusDot";
-import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { changeProviderApiKey, providerApiKeys } from "@/lib/api";
@@ -40,7 +39,7 @@ export function ApiKeySettings() {
   const removing = actions.confirmation;
   const busy = actions.running !== undefined;
   return (
-    <SettingsGroup id="settings-api-keys" title="API Keys">
+    <SettingsGroup id="settings-api-keys" title="API keys">
       {observed.error ? (
         <SettingsLoadFailure
           title="Could not load API keys"
@@ -110,7 +109,7 @@ export function ApiKeySettings() {
                 </>
               ) : (
                 <ItemActions>
-                  <Button
+                  <PianoButton
                     variant="outline"
                     size="sm"
                     disabled={busy}
@@ -118,7 +117,7 @@ export function ApiKeySettings() {
                     onClick={() => setEditing(provider)}
                   >
                     Add key
-                  </Button>
+                  </PianoButton>
                 </ItemActions>
               )}
             </Item>
@@ -127,7 +126,7 @@ export function ApiKeySettings() {
       )}
       {editing && (
         <ApiKeyDialog
-          title={`${editing.name} API key`}
+          title={`${editing.saved ? "Replace" : "Add"} ${editing.name} API key`}
           description="Saved in Pi on this machine. Start a new session to use it."
           save={(key) => changeProviderApiKey({ action: "save", provider: editing.id, key })}
           done={`${editing.name} API key saved`}

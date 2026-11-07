@@ -28,7 +28,7 @@ export function ApiKeyDialog({
   close,
   refresh,
 }: {
-  /** Names whose key it is, such as "OpenAI API key". */
+  /** Names the change and whose key it is, such as "Add OpenAI API key". */
   title: string;
   /** The one line only words can carry: where the key is kept or what it is sent to. */
   description: string;
@@ -59,7 +59,7 @@ export function ApiKeyDialog({
     >
       <DialogContent
         className="sm:max-w-md"
-        showCloseButton={false}
+        showCloseButton={!busy}
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>
@@ -108,7 +108,7 @@ export function ApiKeyDialog({
             </Button>
             <Button type="submit" disabled={busy || !key.trim()}>
               {busy && <Spinner data-icon="inline-start" />}
-              {busy ? "Saving…" : "Save"}
+              Save
             </Button>
           </DialogFooter>
         </form>
