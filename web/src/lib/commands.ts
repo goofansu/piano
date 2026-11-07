@@ -67,7 +67,7 @@ export interface CommandEffects {
   setAppearance: (appearance: Appearance) => void;
   setView: (change: Partial<SidebarView>) => void;
   setMessagesOnly: (on: boolean) => void;
-  setChangesWrap: (on: boolean) => void;
+  setCodeWrap: (on: boolean) => void;
   copy: (value: string, label: string) => void;
   openForm: (form: CommandForm) => void;
   /** Opens `url` in a new tab, without giving it this page. */
@@ -136,9 +136,8 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
     case "session-rail":
       effects.toggleRail();
       break;
-    case "wrap-changes":
-      effects.setChangesWrap(intent.on);
-      effects.openChanges();
+    case "wrap-code":
+      effects.setCodeWrap(intent.on);
       break;
     case "agent":
       effects.showAgent();
