@@ -1,16 +1,25 @@
+import { MAX_ATTACHMENT_BYTES } from "../shared/attachments.ts";
+
+const MiB = 1024 * 1024;
+/** JSON envelope, prompt text and other fields that travel beside the base64 images. */
+const MESSAGE_TEXT_ALLOWANCE_BYTES = 16 * MiB;
+/** The largest single inbound message: a full attachment batch after base64 encoding
+ * (about 67 MiB for 50 MiB) plus the text allowance. One WebSocket frame, one Pi RPC line and
+ * the pending Pi output all admit one such message; derive any transport cap from this. */
+const MAX_MESSAGE_BYTES = 4 * Math.ceil(MAX_ATTACHMENT_BYTES / 3) + MESSAGE_TEXT_ALLOWANCE_BYTES;
+
 /** Non-waiting admission: ordinary work cannot occupy the reserved control lane.
  * Rejected input is never queued for later execution. Keep the lease until the
  * admitted work ends, including work whose browser has disconnected. */
 export const inboundLimits = {
-  // Allows the 50 MiB image batch after base64 encoding (about 67 MiB), plus JSON/text.
-  frameBytes: 80 * 1024 * 1024,
-  rpcLineBytes: 80 * 1024 * 1024,
-  records: { messages: 256, bytes: 80 * 1024 * 1024 },
-  // Room for two maximum-size prompts at once in each ordinary lane.
-  client: { messages: 8, bytes: 160 * 1024 * 1024 },
-  requests: { messages: 32, bytes: 160 * 1024 * 1024 },
-  writes: { messages: 32, bytes: 160 * 1024 * 1024 },
-  control: { messages: 8, bytes: 32 * 1024 * 1024 },
+  frameBytes: MAX_MESSAGE_BYTES,
+  rpcLineBytes: MAX_MESSAGE_BYTES,
+  records: { messages: 256, bytes: MAX_MESSAGE_BYTES },
+  // Room for two maximum-size messages at once in each ordinary lane.
+  client: { messages: 8, bytes: 2 * MAX_MESSAGE_BYTES },
+  requests: { messages: 32, bytes: 2 * MAX_MESSAGE_BYTES },
+  writes: { messages: 32, bytes: 2 * MAX_MESSAGE_BYTES },
+  control: { messages: 8, bytes: 32 * MiB },
 } as const;
 
 export function makeInboundCapacity(

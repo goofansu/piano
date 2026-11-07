@@ -34,12 +34,24 @@ export class PiSessionError extends Data.TaggedError("PiSessionError")<{
 export const refusedUnsent = (reason: PiSessionError["reason"], detail: string) =>
   new PiSessionError({ reason, detail, notSent: true });
 
-/** Host acknowledgement deadline, not a deadline for model work or extension execution. */
+/** Base host acknowledgement deadline, not a deadline for model work or extension execution.
+ * A request of 1 MiB or more adds time for Pi to read it (`deliveryDeadline`). */
 export const PiRequestTimeoutMs = Context.Reference<number>("piano/PiRequestTimeoutMs", {
   defaultValue: () => 30_000,
 });
 
 const encoder = new TextEncoder();
+
+const MiB = 1024 * 1024;
+/** Extra acknowledgement time per whole MiB a request writes. Pi's JSONL reader rescans its buffer
+ * for every stdin chunk, so a line's read time grows faster than its size: on an exe.dev VM a
+ * 28 MiB line took about 4.5 s and a 67 MiB line (a full attachment batch) about 23 s, roughly
+ * 0.35 s per MiB at the largest size. One second per MiB leaves about three times that on a slower
+ * machine, before the base deadline is added. Requests under 1 MiB keep the base deadline. */
+const PI_INPUT_MS_PER_MIB = 1000;
+/** The stdin write and acknowledgement deadline for a request of `bytes`. */
+const deliveryDeadline = (base: number, bytes: number) =>
+  base + Math.floor(bytes / MiB) * PI_INPUT_MS_PER_MIB;
 
 // Validate only the envelope; PiRecords owns payload interpretation. Unknown
 // event types and extra fields remain forward compatible, not malformed input.
@@ -438,7 +450,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     }
     yield* Deferred.await(done).pipe(
       Effect.timeoutOrElse({
-        duration: timeoutMs,
+        duration: deliveryDeadline(timeoutMs, size),
         orElse: () =>
           Effect.fail(
             new PiSessionError({
@@ -480,16 +492,17 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     const id = `q${seq}`;
     pending.set(id, d);
     debug("request", id, command.type);
+    const deadline = deliveryDeadline(timeoutMs, size);
     return yield* write({ id, ...command }, { lane }).pipe(
       Effect.ensuring(dispatched ? Deferred.succeed(dispatched, undefined) : Effect.void),
       Effect.andThen(Deferred.await(d)),
       Effect.timeoutOrElse({
-        duration: timeoutMs,
+        duration: deadline,
         orElse: () =>
           Effect.fail(
             new PiSessionError({
               reason: "timeout",
-              detail: `Pi did not acknowledge ${command.type} within ${timeoutMs}ms. Delivery may have occurred; inspect the session before sending again.`,
+              detail: `Pi did not acknowledge ${command.type} within ${deadline}ms. Delivery may have occurred; inspect the session before sending again.`,
             }),
           ),
       }),

@@ -50,7 +50,7 @@ export type SessionCommandId =
   | "artifacts"
   | "session-rail"
   | "agent"
-  | "wrap-changes"
+  | "wrap-code"
   | "pull-request"
   | "show-preview"
   | "open-preview"
@@ -67,6 +67,7 @@ export type SessionCommandId =
 export type SessionCommandIcon =
   | "copy"
   | "changes"
+  | "wrap"
   | "artifacts"
   | "list"
   | "agent"
@@ -96,7 +97,8 @@ export type SessionCommandIntent =
   | { kind: "session-rail" }
   /** Show the Agent area in a single-view layout. */
   | { kind: "agent" }
-  | { kind: "wrap-changes"; on: boolean }
+  /** Turn wrapping of long code lines, in Changes and a file's source alike, on or off. */
+  | { kind: "wrap-code"; on: boolean }
   /** Read a linked pull request in Changes, or link one in its dialog. */
   | { kind: "pull-request"; linked: boolean }
   /** Open the app in a new tab. */
@@ -255,14 +257,15 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - new session here: the checkout is present.
  * - copy session path: saved history has supplied its file path; no live Pi needed.
  * - copy git branch, commit SHA, repository name: listed only while the session has one.
- * - other copy commands and Messages only: always (session ID requires an ID).
+ * - other copy commands, Wrap and Messages only: always (session ID requires an ID). Wrap is one
+ *   remembered preference for Changes and a file's source, so it never depends on what is shown.
  */
 export function sessionCommands(
   state: AppState,
   target?: SessionTarget,
   options: {
     messagesOnly?: boolean;
-    changesWrap?: boolean;
+    codeWrap?: boolean;
     radiusSignedIn?: boolean;
     /** The session's layout as navigation has it; by default side by side with only Agent. */
     layout?: SessionLayout;
@@ -396,14 +399,13 @@ export function sessionCommands(
         intent: { kind: "agent" },
       },
       {
-        id: "wrap-changes",
+        id: "wrap-code",
         label: "Wrap",
-        detail: "Changes",
-        icon: "changes",
-        enabled: ctx.canOpenChanges,
-        checked: options.changesWrap ?? false,
+        icon: "wrap",
+        enabled: true,
+        checked: options.codeWrap ?? false,
         keywords: ["wrap lines"],
-        intent: { kind: "wrap-changes", on: !options.changesWrap },
+        intent: { kind: "wrap-code", on: !options.codeWrap },
       },
       {
         id: "pull-request",

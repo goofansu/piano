@@ -18,6 +18,7 @@ import {
   SquarePenIcon,
   TextCursorInputIcon,
   Trash2Icon,
+  WrapTextIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
@@ -79,6 +80,7 @@ async function copySessionValue(value: string, label: string) {
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   copy: CopyIcon,
   changes: FileDiffIcon,
+  wrap: WrapTextIcon,
   artifacts: ShapesIcon,
   list: ListIcon,
   agent: MessagesSquareIcon,
@@ -106,7 +108,7 @@ interface CommandsValue {
   run: (command: Command) => void;
   messagesOnly: boolean;
   layout: SessionLayout;
-  changesWrap: boolean;
+  codeWrap: boolean;
   state: AppState;
   radiusSignedIn: boolean;
   global: GlobalCommandContext;
@@ -122,12 +124,12 @@ export function useCommands() {
 
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
-  const { state, run, messagesOnly, changesWrap, radiusSignedIn, layout } = useCommands();
+  const { state, run, messagesOnly, codeWrap, radiusSignedIn, layout } = useCommands();
   const observed = useSyncExternalStore(previewObservation.subscribe, previewObservation.getState);
   return {
     commands: sessionCommands(state, target, {
       messagesOnly,
-      changesWrap,
+      codeWrap,
       radiusSignedIn,
       layout,
       previewObservation: observed,
@@ -211,7 +213,7 @@ export function CommandHost({
     layout,
   } = useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
-  const [changesWrap, setChangesWrap] = useCodeWrap();
+  const [codeWrap, setCodeWrap] = useCodeWrap();
   const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
   const { view, setView } = useSidebarView();
   const { theme, setTheme } = useTheme();
@@ -260,7 +262,7 @@ export function CommandHost({
     toggleSidebar: sidebar.toggle,
     setView,
     setMessagesOnly,
-    setChangesWrap,
+    setCodeWrap,
     setAppearance: setTheme,
     copy: (value, label) => void copySessionValue(value, label),
     openForm: (form) => {
@@ -287,7 +289,7 @@ export function CommandHost({
         run,
         messagesOnly,
         layout,
-        changesWrap,
+        codeWrap,
         state,
         radiusSignedIn,
         // The one global command context; "system" is next-themes' default before it reads storage.
