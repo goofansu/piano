@@ -46,7 +46,7 @@ interface Props {
   draftKey: DraftKey | null;
   completion?: CompletionContext;
   /** Where the session runs, for voice input's spelling hints. */
-  place?: Omit<VoiceSession, "messages" | "commands">;
+  place?: VoiceSession;
   /** Local drafting is unavailable (for example, before a session has loaded). */
   disabled: boolean;
   /** The session cannot take input now; model picks stay local until the next send. */
@@ -154,7 +154,7 @@ export function Composer({
           onEffortChange,
         }}
         onSend={send}
-        voice={() => ({ ...place, messages })}
+        voice={() => place ?? {}}
         onKeyDown={(e) => {
           if (e.key === "Escape" && control.escape) {
             e.preventDefault();

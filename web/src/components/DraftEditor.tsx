@@ -91,14 +91,13 @@ interface Props {
   /** The toolbar's end, after the model picker: the page's send control and its options. */
   actions: ReactNode;
   /**
-   * Where the message is spoken, read when a recording stops: the names and conversation voice
-   * input spells by. The mic shows beside Attach in every composer while voice input is on;
-   * without this, a recording carries only the draft.
+   * Where the message is spoken, read when a recording stops: the names voice input spells by.
+   * The mic shows beside Attach in every composer while voice input is on.
    */
-  voice?: () => Omit<VoiceSession, "commands">;
+  voice?: () => VoiceSession;
 }
 
-const noVoiceContext = (): Omit<VoiceSession, "commands"> => ({ messages: [] });
+const noVoiceContext = (): VoiceSession => ({});
 
 /** The composer card both the New page and a session use: images, the slash-completing textarea, attach and model controls. */
 export function DraftEditor({
@@ -169,12 +168,7 @@ export function DraftEditor({
       />
       <div className={composerToolbar}>
         <AttachButton draft={attachments} disabled={attachmentsDisabled} />
-        <VoiceInputButton
-          editor={editor}
-          session={voice ?? noVoiceContext}
-          live={completion?.session}
-          disabled={disabled}
-        />
+        <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
         <ModelSelect
           open={modelOpen}
           onOpenChange={setModelOpen}

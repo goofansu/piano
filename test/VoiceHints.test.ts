@@ -2,70 +2,29 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Schema } from "effect";
 import { VoiceHints } from "../shared/voiceInput.ts";
-import type { RenderMsg } from "../shared/wire.ts";
 import { insertDictation, recordingType, voiceHints } from "../web/src/lib/voiceInput.ts";
 
-const message = (id: string, role: RenderMsg["role"], text: string): RenderMsg => ({
-  id,
-  role,
-  text,
-});
-
-test("hints carry the session's names, its latest messages and the files it wrote", () => {
-  const messages: RenderMsg[] = [
-    message("1", "user", "first question"),
-    message("2", "assistant", "first answer"),
-    message("3", "user", "second question"),
-    {
-      ...message("4", "assistant", ""),
-      toolCalls: [{ id: "call-1", name: "write", args: "{}", writtenPath: "src/Voice.ts" }],
-    },
-    { ...message("5", "tool_result", "ok"), toolCallId: "call-1", toolName: "write" },
-    message("6", "assistant", "I wrote `Voice.ts`."),
-    message("7", "user", "  "),
-  ];
-  const hints = voiceHints(
-    {
-      project: "Piano",
-      folder: "piano",
-      branch: "feat/voice-input",
-      title: "Voice",
-      messages,
-      commands: ["verify-piano"],
-    },
-    "Now rename",
-  );
+test("hints carry the names of where a message is dictated", () => {
+  const hints = voiceHints({
+    project: " Piano ",
+    folder: "piano",
+    branch: "feat/voice-input",
+    title: "Voice",
+  });
   assert.deepEqual(hints, {
     project: "Piano",
     folder: "piano",
     branch: "feat/voice-input",
     session: "Voice",
-    draft: "Now rename",
-    // The four newest messages with words, oldest first: tool output and blank drafts are not speech context.
-    recent: ["first question", "first answer", "second question", "I wrote `Voice.ts`."],
-    files: ["src/Voice.ts"],
-    commands: ["verify-piano"],
   });
   assert.ok(Schema.is(VoiceHints)(hints));
+  // A blank name is left out rather than sent empty.
+  assert.deepEqual(voiceHints({ folder: "piano", branch: "  " }), { folder: "piano" });
 });
 
-test("long sessions stay inside what the server accepts", () => {
-  const long = "word ".repeat(5000);
-  const messages = Array.from({ length: 30 }, (_, i) =>
-    message(String(i), i % 2 ? "assistant" : "user", `${long} end ${i}`),
-  );
-  const hints = voiceHints(
-    {
-      messages,
-      folder: "f".repeat(2000),
-      commands: Array.from({ length: 900 }, (_, i) => `command-${i}`),
-    },
-    long,
-  );
+test("long names stay inside what the server accepts", () => {
+  const hints = voiceHints({ folder: "f".repeat(2000), title: "t".repeat(2000) });
   assert.ok(Schema.is(VoiceHints)(hints), "hints decode on the server");
-  assert.equal(hints.recent?.length, 4);
-  // A long reply keeps its end, which is what the speaker answers.
-  assert.ok(hints.recent?.at(-1)?.endsWith("end 29"));
 });
 
 test("a transcript lands at the cursor, a space apart from the words beside it", () => {

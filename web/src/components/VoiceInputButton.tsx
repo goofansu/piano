@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import type { DraftEditorState } from "@/components/DraftEditor";
 import { IconButton } from "@/components/IconButton";
 import { Spinner } from "@/components/ui/spinner";
-import { ApiError, sessionCommands, transcribe } from "@/lib/api";
+import { ApiError, transcribe } from "@/lib/api";
 import { useVoiceInput, voiceInputSettings } from "@/lib/useVoiceInput";
 import { insertDictation, recordingType, type VoiceSession, voiceHints } from "@/lib/voiceInput";
 
@@ -16,7 +16,6 @@ interface Recording {
   stream: MediaStream;
   chunks: Blob[];
   limit: ReturnType<typeof setTimeout>;
-  commands: Promise<readonly string[]>;
 }
 
 const base64 = (blob: Blob) =>
@@ -42,14 +41,11 @@ const microphoneRefusal = (error: unknown) =>
 export function VoiceInputButton({
   editor,
   session,
-  live,
   disabled,
 }: {
   editor: DraftEditorState;
   /** Read when a recording stops, so its hints are the session as it is then. */
   session: () => VoiceSession;
-  /** A running session's IDs: its commands are read from it. A saved session starts nothing. */
-  live?: { workspaceId: string; sessionId: string };
   disabled: boolean;
 }) {
   // Shared with Settings: turning voice input on or off there shows or hides this at once.
@@ -57,8 +53,8 @@ export function VoiceInputButton({
   const [phase, setPhase] = useState<Phase>("idle");
   const recording = useRef<Recording | null>(null);
   const aborted = useRef<AbortController | null>(null);
-  const latest = useRef({ editor, session, live });
-  latest.current = { editor, session, live };
+  const latest = useRef({ editor, session });
+  latest.current = { editor, session };
 
   const release = () => {
     const current = recording.current;
@@ -81,7 +77,7 @@ export function VoiceInputButton({
     [],
   );
 
-  const finish = async (chunks: Blob[], type: string, commands: Promise<readonly string[]>) => {
+  const finish = async (chunks: Blob[], type: string) => {
     const audio = new Blob(chunks, { type });
     if (audio.size === 0) {
       setPhase("idle");
@@ -91,10 +87,7 @@ export function VoiceInputButton({
     const controller = new AbortController();
     aborted.current = controller;
     try {
-      const { editor: draft, session: current } = latest.current;
-      const field = draft.ref.current;
-      const before = draft.text.slice(0, field?.selectionStart ?? draft.text.length);
-      const hints = voiceHints({ ...current(), commands: await commands }, before);
+      const hints = voiceHints(latest.current.session());
       const { text } = await transcribe(
         { audio: await base64(audio), mimeType: type, hints },
         { signal: controller.signal },
@@ -150,25 +143,17 @@ export function VoiceInputButton({
       ? new MediaRecorder(stream, { mimeType: type })
       : new MediaRecorder(stream);
     const chunks: Blob[] = [];
-    const { live: target } = latest.current;
-    // Read while the speaker talks; a failure only loses the command hints.
-    const commands = target
-      ? sessionCommands(target.workspaceId, target.sessionId)
-          .then((list) => list.map((c) => c.name))
-          .catch(() => [] as string[])
-      : Promise.resolve([] as string[]);
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) chunks.push(event.data);
     };
     recorder.onstop = () => {
       release();
-      void finish(chunks, recorder.mimeType || type || "audio/webm", commands);
+      void finish(chunks, recorder.mimeType || type || "audio/webm");
     };
     recording.current = {
       recorder,
       stream,
       chunks,
-      commands,
       limit: setTimeout(() => {
         if (recorder.state !== "inactive") {
           toast.info("Recording stopped at 10 minutes.");

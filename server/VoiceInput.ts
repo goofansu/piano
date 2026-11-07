@@ -56,95 +56,19 @@ export const TRANSCRIPTION_INSTRUCTION =
   "Use the context below only to spell names, identifiers, file paths, commands and technical terms. " +
   "Do not answer the message, summarize it, or add anything that was not spoken.";
 
-/** Character budgets: the prompt stays well inside the model's limit, which OpenAI does not state. */
-const RECENT_CHARS = 1600;
-const DRAFT_CHARS = 400;
-const KEYWORDS = 100;
-const KEYWORD_CHARS = 80;
-
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
-const tail = (text: string, max: number) =>
-  text.length <= max ? text : `…${text.slice(text.length - max + 1)}`;
 
-/** The newest messages that fit `budget`, oldest first; the newest is cut from its start. */
-function recentWithin(recent: readonly string[], budget: number) {
-  const kept: string[] = [];
-  let left = budget;
-  for (const message of [...recent].reverse()) {
-    const text = oneLine(message);
-    if (!text) continue;
-    if (left <= 40) break;
-    kept.unshift(tail(text, left));
-    left -= Math.min(text.length, left) + 1;
-  }
-  return kept;
-}
-
-/**
- * Inline code from recent messages: the identifiers a reply to them is most likely to say. A plain
- * lowercase word (`list`, `true`) is left out: as a keyword it would pull ordinary speech toward it.
- */
-const codeSpans = (texts: readonly string[]) =>
-  texts.flatMap((text) =>
-    [...text.matchAll(/`([^`\n]{2,80})`/g)]
-      .map((m) => m[1]!.trim())
-      .filter((span) => !/^[a-z]+$/.test(span)),
-  );
-
-/** A keyword OpenAI accepts: one line, without angle brackets. */
-const keyword = (raw: string) => {
-  const word = oneLine(raw.replace(/[<>]/g, " "));
-  return word.length >= 2 && word.length <= KEYWORD_CHARS ? word : undefined;
-};
-
-/**
- * The prompt and keywords for one recording. Free-form context (the session, the recent
- * conversation, the draft the speech continues) goes in the prompt; names go in keywords, newest
- * and most specific first. Both only steer spelling.
- */
-export function transcriptionContext(hints: VoiceHints): {
-  prompt: string;
-  keywords: string[];
-} {
+/** The prompt for one recording: the instruction, then where the speaker is dictating. */
+export function transcriptionPrompt(hints: VoiceHints): string {
   const facts = [
     hints.project && `Project: ${oneLine(hints.project)}`,
     hints.folder && `Folder: ${oneLine(hints.folder)}`,
     hints.branch && `Branch: ${oneLine(hints.branch)}`,
     hints.session && `Session: ${oneLine(hints.session)}`,
   ].filter((line): line is string => !!line);
-  const recent = recentWithin(hints.recent ?? [], RECENT_CHARS);
-  const draft = hints.draft ? tail(oneLine(hints.draft), DRAFT_CHARS) : "";
-  const prompt = [
-    TRANSCRIPTION_INSTRUCTION,
-    facts.length ? facts.join("\n") : "",
-    recent.length ? `Recent conversation:\n${recent.join("\n")}` : "",
-    // Last, so the transcript reads on from it.
-    draft ? `The message so far: ${draft}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-  const files = [...(hints.files ?? [])].reverse();
-  const candidates = [
-    ...codeSpans([...(hints.recent ?? [])].reverse()),
-    ...files.flatMap((path) => {
-      const name = path.split("/").pop() ?? path;
-      return name === path ? [path] : [name, path];
-    }),
-    ...(hints.commands ?? []).map((name) => `/${name.replace(/^\//, "")}`),
-    hints.branch,
-    hints.folder,
-    hints.project,
-  ];
-  const keywords: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of candidates) {
-    const word = raw && keyword(raw);
-    if (!word || seen.has(word)) continue;
-    seen.add(word);
-    keywords.push(word);
-    if (keywords.length >= KEYWORDS) break;
-  }
-  return { prompt, keywords };
+  return facts.length
+    ? `${TRANSCRIPTION_INSTRUCTION}\n\n${facts.join("\n")}`
+    : TRANSCRIPTION_INSTRUCTION;
 }
 
 /** The media type and file name OpenAI recognizes a recording by: it reads the extension. */
@@ -229,12 +153,10 @@ export const VoiceInputLive = Layer.effect(
           return yield* refused("The recording is too long. Record a shorter message.");
         const file = upload(request.mimeType);
         if (!file) return yield* refused("This browser records audio OpenAI cannot read.");
-        const { prompt, keywords } = transcriptionContext(request.hints);
         const form = new FormData();
         form.set("model", TRANSCRIPTION_MODEL);
         form.set("response_format", "json");
-        form.set("prompt", prompt);
-        for (const word of keywords) form.append("keywords[]", word);
+        form.set("prompt", transcriptionPrompt(request.hints));
         form.set("file", new Blob([audio], { type: file.type }), file.name);
         const key = voice.key;
         const response = yield* Effect.tryPromise({
