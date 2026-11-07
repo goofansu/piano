@@ -274,3 +274,36 @@ test("oversized Pi input is rejected before delivery; fragmented UTF-8 records s
     }).pipe(Effect.scoped, Effect.timeout("10 seconds")),
   );
 });
+
+// Pi's JSONL reader takes time that grows with a line's size, so a large prompt can need longer
+// than the base deadline to reach Pi. This fake Pi reads at most 4 MiB a second, so the 4 MiB image
+// (about 5.3 MiB of base64) cannot arrive within the 1 s base on any machine.
+test("INV-03: a large prompt Pi reads slower than the base deadline is delivered, not uncertain", async () => {
+  // PNG signature plus zeros: Piano admits it by its type; fake Pi only echoes it.
+  const png = Buffer.alloc(4 * 1024 * 1024);
+  png.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  const attachment = {
+    kind: "image" as const,
+    name: "zeros.png",
+    mimeType: "image/png" as const,
+    data: png.toString("base64"),
+  };
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "slow-reader",
+      });
+      const started = Date.now();
+      yield* session.act({ _tag: "prompt", text: "large", attachments: [attachment] });
+      const elapsed = Date.now() - started;
+      // Otherwise the fixture no longer exercises the size-aware part of the deadline.
+      assert.ok(elapsed > 1000, `fake Pi read the prompt in ${elapsed}ms`);
+      assert.equal((yield* session.state).closure, undefined);
+    }).pipe(
+      Effect.provideService(PiRequestTimeoutMs, 1000),
+      Effect.scoped,
+      Effect.timeout("30 seconds"),
+    ),
+  );
+});
