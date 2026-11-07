@@ -47,6 +47,15 @@ Read these next:
 - [Quiet UI](quiet-ui.md): the rules every screen, string and control follows.
 - [AGENTS.md](../AGENTS.md): the rules coding agents follow in this repository.
 
+## Node.js version
+
+Piano declares Node.js `>=24` in the root `package.json`. Use the latest Node 24 patch: the
+locked dependencies currently require at least 24.15.0 within that major. The root range is a
+major-version floor, not a promise that every Node 24 patch satisfies every dependency.
+
+This is a requirement declaration, not enforcement: npm normally warns about incompatible Node
+versions during installation. Piano does not enable `engine-strict` or add a startup version guard.
+
 ## Formatting and lint
 
 Piano formats with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and lints with
