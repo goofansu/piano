@@ -4,7 +4,6 @@ import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   RefreshCwIcon,
-  WrapTextIcon,
 } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
 import {
@@ -15,8 +14,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { Button } from "@/components/ui/button";
+import { WrapButton } from "@/components/WrapButton";
 import type { ChangesSheetView, ScopeView } from "@/lib/changesView";
-import { useChangesWrap } from "@/lib/useChangesWrap";
 
 /**
  * The comparison, at the toolbar's start: Uncommitted or the actual target ref, with the same
@@ -82,7 +81,6 @@ export function ChangesActions({
   refresh: () => void;
   toggleEvery: () => void;
 }) {
-  const [wrap, setWrap] = useChangesWrap();
   return (
     <>
       <IconButton
@@ -93,16 +91,7 @@ export function ChangesActions({
       >
         {sheet.everyCollapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
       </IconButton>
-      {/* The remembered wrap preference, filled while on, as the header's rail toggle is. */}
-      <IconButton
-        size="header"
-        label="Wrap"
-        aria-pressed={wrap}
-        onClick={() => setWrap(!wrap)}
-        className="aria-pressed:bg-muted"
-      >
-        <WrapTextIcon />
-      </IconButton>
+      <WrapButton />
       <IconButton
         size="header"
         label={sheet.refreshing ? "Refreshing changes…" : "Refresh changes"}

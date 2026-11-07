@@ -87,7 +87,9 @@ the palette (Mod+K) does not search individual outputs.
   appears only once it has a row. There is no Links section.
 - `file-viewer`: an Outputs row opens the file in a tab of its own at the strip's end (tab = file
   name, toolbar = path, "Close <file name>" on the tab, or in the toolbar where one area shows at
-  a time); opening it again shows the same tab.
+  a time); opening it again shows the same tab. While source text shows (a text file, or a
+  document with Preview off), the toolbar has Wrap, pressed while on: the same preference as
+  Changes' Wrap, so turning it on in one wraps the other.
 
 ## How to get to it (user POV)
 

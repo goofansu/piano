@@ -55,7 +55,7 @@ import {
   sessionCommands,
 } from "@/lib/sessionCommands";
 import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
-import { useChangesWrap } from "@/lib/useChangesWrap";
+import { useCodeWrap } from "@/lib/useCodeWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { mcpServerEditor } from "@/lib/useMcpServerEditor";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
@@ -211,7 +211,7 @@ export function CommandHost({
     layout,
   } = useNavigation();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
-  const [changesWrap, setChangesWrap] = useChangesWrap();
+  const [changesWrap, setChangesWrap] = useCodeWrap();
   const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
   const { view, setView } = useSidebarView();
   const { theme, setTheme } = useTheme();

@@ -1,7 +1,7 @@
 import type { ChangeFile, ChangesScope, Comparison, Workspace } from "@shared/wire";
 import { cn } from "cn";
 import { FileDiffIcon, GitPullRequestIcon, MessageSquarePlusIcon } from "lucide-react";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChangesActions, ChangesScopeMenu, ChangesStaleNote } from "@/components/ChangesHeader";
 import { DisclosureChevron } from "@/components/Disclosure";
@@ -31,9 +31,7 @@ import {
   toggleEvery,
   toggleFile,
 } from "@/lib/changesView";
-import { type DiffFile, type DiffLine, lineCount } from "@/lib/diff";
-import { lineBlocks } from "@/lib/lineBlocks";
-import { useChangesWrap } from "@/lib/useChangesWrap";
+import { type DiffFile, lineCount } from "@/lib/diff";
 import { useObservation } from "@/lib/useObservation";
 import type { SessionView } from "@/store";
 
@@ -416,113 +414,24 @@ function FileSection({
   );
 }
 
-/** Hand-written: no shadcn component renders a unified diff. Numbers, marks and tints follow the transcript's tokens. */
-export function Hunks({ file }: { file: DiffFile }) {
-  const [wrap] = useChangesWrap();
-  // Fixed-layout wrapping must still leave room for large line numbers (not just two digits).
-  const digits = useMemo(() => {
-    let largest = 99;
-    for (const hunk of file.hunks)
-      for (const line of hunk.lines) largest = Math.max(largest, line.old ?? 0, line.new ?? 0);
-    return String(largest).length;
-  }, [file]);
-  // Each block is its own table so the browser can skip blocks off screen (`lazy-lines`); the
-  // shared column widths keep them aligned. Unwrapped, every block takes the widest one's width.
-  const blocks = useMemo(
-    () =>
-      lineBlocks(
-        file.hunks.flatMap((hunk): DiffRow[] => [
-          { header: hunk.header },
-          ...hunk.lines.map((line) => ({ line })),
-        ]),
+const CodePatch = lazy(() =>
+  import("@/components/Code").then(
+    ({ CodePatch }) => ({ default: CodePatch }),
+    () => ({
+      default: () => (
+        <p className="border-t border-line px-3 py-2 text-xs text-ink-3">
+          Could not load the diff viewer. Reload Piano and try again.
+        </p>
       ),
-    [file],
-  );
-  return (
-    <div className="overflow-x-auto border-t border-line">
-      <section
-        aria-label={`Diff of ${file.path}`}
-        className={cn("font-mono text-xs leading-5", !wrap && "w-max min-w-full")}
-      >
-        {blocks.map((block) => (
-          <div
-            key={block.start}
-            className="lazy-lines"
-            style={{ "--lines": block.items.length } as CSSProperties}
-          >
-            <table className={cn("w-full border-collapse", wrap && "table-fixed")}>
-              <colgroup>
-                <col style={{ width: `calc(${digits}ch + 1rem)` }} />
-                <col style={{ width: `calc(${digits}ch + 1rem)` }} />
-                <col />
-              </colgroup>
-              <tbody>
-                {block.items.map((row, i) => (
-                  // Index keys: a diff's rows are positional and never reorder.
-                  <DiffRowView key={i} row={row} wrap={wrap} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
-      </section>
-    </div>
-  );
-}
+    }),
+  ),
+);
 
-type DiffRow = { header: string } | { line: DiffLine };
-
-function DiffRowView({ row, wrap }: { row: DiffRow; wrap: boolean }) {
-  if ("header" in row)
-    return (
-      <tr className="bg-fill text-ink-3">
-        <td
-          colSpan={3}
-          className={cn(
-            "select-none px-3 py-0.5",
-            wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "whitespace-pre",
-          )}
-        >
-          {row.header}
-        </td>
-      </tr>
-    );
-  const { line } = row;
+/** One file's patch, as `@pierre/diffs` renders it with the shared wrap preference. */
+export function Hunks({ file }: { file: DiffFile }) {
   return (
-    <tr
-      className={cn(
-        line.kind === "add" && "bg-ok/10",
-        line.kind === "del" && "bg-err/10",
-        line.kind === "meta" && "text-ink-3",
-      )}
-    >
-      <td className="select-none pl-2 pr-1 text-right align-top text-ink-3 tabular-nums">
-        {line.old ?? ""}
-      </td>
-      <td className="select-none pr-2 text-right align-top text-ink-3 tabular-nums">
-        {line.new ?? ""}
-      </td>
-      <td className="pr-3 align-top">
-        <span className={cn(wrap ? "grid grid-cols-[1rem_minmax(0,1fr)]" : "whitespace-pre")}>
-          <span
-            className={cn(
-              "inline-block w-4 select-none",
-              line.kind === "add" ? "text-ok" : line.kind === "del" ? "text-err" : "text-ink-3",
-            )}
-          >
-            {line.kind === "add"
-              ? "+"
-              : line.kind === "del"
-                ? "−"
-                : line.kind === "meta"
-                  ? "\\"
-                  : " "}
-          </span>
-          <span className={cn(wrap && "whitespace-pre-wrap [overflow-wrap:anywhere]")}>
-            {line.text}
-          </span>
-        </span>
-      </td>
-    </tr>
+    <Suspense fallback={null}>
+      <CodePatch patch={file.raw} label={`Diff of ${file.path}`} />
+    </Suspense>
   );
 }
