@@ -23,7 +23,7 @@ Click the original link again to reread; **Preview / Source** only changes prese
 | --- | --- | --- |
 | UTF-8 Markdown (`.md`, `.markdown`) | Rendered Markdown, with Source toggle | 1 MiB |
 | UTF-8 HTML (`.html`, `.htm`) | Isolated static document, with the same Preview switch as Markdown | 1 MiB |
-| UTF-8 source, JSON, YAML, logs, unknown text | Shiki highlighting when recognized; otherwise plain text | 1 MiB |
+| UTF-8 source, JSON, YAML, logs, unknown text | Numbered source from `@pierre/diffs` (Shiki highlighting when recognized), with Wrap | 1 MiB |
 | UTF-8 SVG (`.svg`) | Native image on a light background, with Source toggle | 1 MiB |
 | PNG, JPEG, GIF, WebP | Native image | 10 MiB |
 | MP3, WAV, Ogg audio (`.ogg`, `.oga`, `.opus`), FLAC, M4A | Native audio controls | 20 MiB |
@@ -192,8 +192,9 @@ when their consumers are removed (INV-07). Renderer controls do not register new
 ## Dependencies and verification
 
 Vite self-hosts the worker, CMaps, standard fonts and WASM from the locked PDF.js package. The
-renderer loads only for PDFs; the highlighting worker uses ES modules so languages/themes remain
-separate lazy chunks. Generated `web/public/pdfjs/` assets are ignored, copied for development and
+renderer loads only for PDFs. Source text and Changes diffs share one renderer, `@pierre/diffs`
+(`web/src/components/Code.tsx`), loaded only when code shows; its Shiki worker pool uses ES
+modules so languages/themes remain separate lazy chunks, and one Wrap preference serves both. Generated `web/public/pdfjs/` assets are ignored, copied for development and
 included in builds. When upgrading React-PDF, verify `npm ls react-pdf pdfjs-dist`, the emitted
 worker and asset versions, and a scratch-browser PDF render.
 

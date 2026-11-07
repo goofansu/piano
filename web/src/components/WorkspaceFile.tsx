@@ -13,7 +13,6 @@ import { lazy, Suspense, useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { FileNotice as Notice } from "@/components/FileNotice";
 import { FilePath } from "@/components/FilePath";
-import { FileText } from "@/components/FileText";
 import { IconButton } from "@/components/IconButton";
 import { LocalFileContext, Markdown } from "@/components/Markdown";
 import { NativeFile } from "@/components/NativeFile";
@@ -21,6 +20,7 @@ import { PianoViewToggle, PianoViewToggleItem } from "@/components/PianoViewTogg
 import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { WrapButton } from "@/components/WrapButton";
 import { workspaceFileDownload } from "@/lib/api";
 import { relativeToDocument } from "@/lib/file-link";
 import type { FileTab } from "@/lib/navigation";
@@ -32,6 +32,15 @@ const FilePdf = lazy(() =>
   import("@/components/FilePdf").catch(() => ({
     default: () => <Notice>Could not load the PDF viewer. Reload Piano and try again.</Notice>,
   })),
+);
+
+const CodeFile = lazy(() =>
+  import("@/components/Code").then(
+    ({ CodeFile }) => ({ default: CodeFile }),
+    () => ({
+      default: () => <Notice>Could not load the source viewer. Reload Piano and try again.</Notice>,
+    }),
+  ),
 );
 
 const FileHtml = lazy(() =>
@@ -108,6 +117,11 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
     }
   };
   const path = result?.path ?? file.path;
+  // Source text is on screen: a text file, or a document whose preview is off.
+  const source =
+    !!result &&
+    !("bytes" in result) &&
+    !(mode === "preview" && ["markdown", "html", "svg"].includes(result.kind));
   return (
     <SurfaceFrame
       tab={file}
@@ -153,6 +167,7 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
               <PianoViewToggleItem value="source">Source</PianoViewToggleItem>
             </PianoViewToggle>
           )}
+          {source && <WrapButton />}
           <IconButton
             size="header"
             label="Download file"
@@ -205,7 +220,9 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
               />
             </LocalFileContext>
           ) : (
-            <FileText content={result.content} language={result.language} />
+            <Suspense fallback={<Notice>Opening source…</Notice>}>
+              <CodeFile name={result.path} content={result.content} language={result.language} />
+            </Suspense>
           )}
         </section>
       )}

@@ -10,6 +10,7 @@ import { IconButton } from "@/components/IconButton";
 import { type SurfaceTab, tabKey } from "@/lib/navigation";
 import { clampPanelWidth, PANEL_WIDTH, readPanelWidth, writePanelWidth } from "@/lib/panelLayout";
 import { trackPointerDrag } from "@/lib/pointerDrag";
+import { ScrollRootContext } from "@/lib/scrollRoot";
 import { useNavigation } from "@/lib/useNavigation";
 
 /** The viewers own native button and media keys, not the composer's type-to-focus hook. */
@@ -58,6 +59,7 @@ export function SurfaceFrame({
   const names = surfaceTabNames(tab);
   const close = () => closeTab(tabKey(tab));
   const toolbar = status !== undefined || actions !== undefined || single;
+  const [body, setBody] = useState<HTMLDivElement | null>(null);
   return (
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape closes the tab from anywhere inside it.
     <section
@@ -87,8 +89,8 @@ export function SurfaceFrame({
         </div>
       )}
       {below}
-      <div data-slot="panel-body" className="relative min-h-0 flex-1 overflow-auto">
-        {children}
+      <div ref={setBody} data-slot="panel-body" className="relative min-h-0 flex-1 overflow-auto">
+        <ScrollRootContext value={body}>{children}</ScrollRootContext>
       </div>
     </section>
   );

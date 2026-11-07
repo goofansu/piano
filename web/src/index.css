@@ -490,43 +490,6 @@
   }
 }
 
-/* A file's source in the Surface area: numbered lines straight on the sheet, not a boxed code
- * block, in the toolbar's small monospace. The highlighter drops its theme background
- * (lib/file-highlight); token colours stay. */
-.file-source pre {
-  padding: 0.75rem 1rem 1rem 0;
-  @apply font-mono text-xs;
-  line-height: 1.6;
-  counter-reset: line;
-  tab-size: 2;
-}
-/* The base layer sizes every `code`; here the lines take the view's size. */
-.file-source code {
-  font-size: inherit;
-  line-height: inherit;
-}
-.file-source .line::before {
-  counter-increment: line;
-  content: counter(line);
-}
-/* Plain source numbers each block of lines in a gutter column of its own. */
-.file-source .line::before,
-.file-source .file-gutter {
-  display: inline-block;
-  flex: none;
-  width: 3.25rem;
-  padding-right: 1rem;
-  text-align: right;
-  color: var(--ink-3);
-  user-select: none;
-}
-/* A block of `--lines` rows of a long file or diff (lib/lineBlocks). Off screen it is skipped by
- * layout and paint and holds an estimated height until first shown, then its real one. */
-.lazy-lines {
-  content-visibility: auto;
-  contain-intrinsic-block-size: auto calc(var(--lines) * 1lh);
-}
-
 /* Markdown from the assistant. The gutter glyph sits outside; this sets only the text. */
 .prose-chat {
   overflow-wrap: anywhere;
