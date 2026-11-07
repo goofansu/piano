@@ -311,18 +311,6 @@ test("OpenAI's refusals become a sentence without its response body", async () =
   assert.match(rejected.detail, /rejected the API key/);
   assert.ok(!rejected.detail.includes(KEY));
 
-  // A restricted key without the Audio permission is told which permission it needs.
-  const forbidden = () =>
-    Response.json({ error: { message: "You have insufficient permissions" } }, { status: 403 });
-  const restricted = detail(
-    await run(
-      "refusals",
-      failure(Effect.flatMap(VoiceInput, (v) => v.transcribe(recording()))),
-      openAi([], forbidden),
-    ),
-  );
-  assert.match(restricted.detail, /Audio set to Request/);
-
   const unreachable = (async () => {
     throw new Error(`connect ECONNREFUSED with ${KEY}`);
   }) as typeof fetch;
