@@ -88,6 +88,8 @@ interface Props {
   above?: ReactNode;
   /** The toolbar's end, after the model picker: the page's send control and its options. */
   actions: ReactNode;
+  /** Beside Attach: the page's voice input, when it offers one. */
+  voice?: ReactNode;
 }
 
 /** The composer card both the New page and a session use: images, the slash-completing textarea, attach and model controls. */
@@ -106,6 +108,7 @@ export function DraftEditor({
   onKeyDown,
   above,
   actions,
+  voice,
 }: Props) {
   const { ref, text, attachments, quotes } = editor;
   const [modelOpen, setModelOpen] = useState(false);
@@ -158,6 +161,7 @@ export function DraftEditor({
       />
       <div className={composerToolbar}>
         <AttachButton draft={attachments} disabled={attachmentsDisabled} />
+        {voice}
         <ModelSelect
           open={modelOpen}
           onOpenChange={setModelOpen}

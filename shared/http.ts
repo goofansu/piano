@@ -16,6 +16,12 @@ import { API_KEY_INVALID, ApiKeyProvider, ProviderApiKeyChange } from "./provide
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
 import { UserSkill, UserSkillCreate, UserSkillProposal, UserSkillUpdate } from "./skills.ts";
+import {
+  Transcription,
+  TranscriptionRequest,
+  VoiceInputSave,
+  VoiceInputState,
+} from "./voiceInput.ts";
 import { Webhook, WebhookDelivery, WebhookSave } from "./webhooks.ts";
 import {
   ChangesScope,
@@ -511,6 +517,36 @@ export const Endpoints = {
     refused: 409,
     redact: false,
     fallback: "Could not change MCP setup.",
+  }),
+  voiceInput: endpoint({
+    method: "GET",
+    path: "/api/settings/voice-input",
+    response: VoiceInputState,
+    noStore: true,
+    refused: 400,
+    fallback: "Could not load voice input.",
+  }),
+  /** The key travels only in this body and is never answered back. */
+  saveVoiceInput: endpoint({
+    method: "PUT",
+    path: "/api/settings/voice-input",
+    body: VoiceInputSave,
+    invalid: "Invalid voice input setting.",
+    response: VoiceInputState,
+    noStore: true,
+    refused: 400,
+    fallback: "Could not save voice input.",
+  }),
+  /** A recording and the session hints that steer its spelling; the transcript is display text. */
+  transcribe: endpoint({
+    method: "POST",
+    path: "/api/voice/transcribe",
+    body: TranscriptionRequest,
+    invalid: "The recording could not be sent. Record a shorter message.",
+    response: Transcription,
+    noStore: true,
+    refused: 502,
+    fallback: "Could not transcribe the recording.",
   }),
   providerApiKeys: endpoint({
     method: "GET",

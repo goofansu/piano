@@ -8,6 +8,7 @@ import { LibrarySettings } from "@/components/LibrarySettings";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoButton } from "@/components/PianoButton";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
+import { PreferencesSettings } from "@/components/PreferencesSettings";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RadiusSection } from "@/components/RadiusSection";
 import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
@@ -118,6 +119,7 @@ export function SettingsPage({
     skills: () => <LibrarySettings kind="skill" />,
     prompts: () => <LibrarySettings kind="prompt" />,
     webhooks: () => <WebhookSettings />,
+    preferences: () => <PreferencesSettings />,
   };
   return pages[page]();
 }

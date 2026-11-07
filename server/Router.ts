@@ -29,6 +29,7 @@ import { SessionSharing } from "./SessionSharing.ts";
 import { SidebarView } from "./SidebarView.ts";
 import type { SignInError, SignInLane, SignInState } from "./SignInAttempts.ts";
 import { UserSkills } from "./UserSkills.ts";
+import { VoiceInput } from "./VoiceInput.ts";
 import { Webhooks } from "./Webhooks.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { downloadWorkspaceFile, readWorkspaceFile } from "./WorkspaceFiles.ts";
@@ -317,6 +318,14 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.flatMap(SessionHosts, (hosts) => hosts.commands(session.cwd, session.sessionId)).pipe(
         Effect.map((commands) => ({ commands })),
       ),
+    );
+
+    yield* serve(Endpoints.voiceInput, () => Effect.flatMap(VoiceInput, (voice) => voice.state));
+    yield* serve(Endpoints.saveVoiceInput, ({ body }) =>
+      Effect.flatMap(VoiceInput, (voice) => voice.save(body)),
+    );
+    yield* serve(Endpoints.transcribe, ({ body }) =>
+      Effect.flatMap(VoiceInput, (voice) => voice.transcribe(body)),
     );
 
     yield* serve(Endpoints.webhooks, () => Effect.flatMap(Webhooks, (hooks) => hooks.list));

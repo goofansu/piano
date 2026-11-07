@@ -2,7 +2,7 @@
 import { chmodSync, closeSync, lstatSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
-import type { RegistryData, StoredWebhook } from "./Registry.ts";
+import type { RegistryData, StoredVoiceInput, StoredWebhook } from "./Registry.ts";
 
 const schema = `
   CREATE TABLE registry_meta (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL);
@@ -330,7 +330,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 10 &&
         version !== 11 &&
         version !== 12 &&
-        version !== 13
+        version !== 13 &&
+        version !== 14
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -399,6 +400,15 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           db.exec("ALTER TABLE projects ADD COLUMN done_at TEXT;");
         db.exec("PRAGMA user_version = 13;");
       }
+      // Version 14 adds preferences: one row, holding voice input and the OpenAI key only voice
+      // input uses. A database created since already has the table.
+      if (Number(version) < 14)
+        db.exec(`CREATE TABLE IF NOT EXISTS preferences (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          voice_input INTEGER NOT NULL DEFAULT 0 CHECK (voice_input IN (0, 1)),
+          openai_api_key TEXT,
+          CHECK (voice_input = 0 OR openai_api_key IS NOT NULL)
+        ) STRICT; INSERT OR IGNORE INTO preferences (id) VALUES (1); PRAGMA user_version = 14;`);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -472,6 +482,22 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
       removeWebhook: (id: string) =>
         write(() => {
           db.prepare("DELETE FROM webhooks WHERE id = ?").run(id);
+        }),
+      voiceInput: (): StoredVoiceInput => {
+        const row = db
+          .prepare("SELECT voice_input, openai_api_key FROM preferences WHERE id = 1")
+          .get();
+        return {
+          enabled: Boolean(row?.voice_input),
+          key: (row?.openai_api_key as string | null | undefined) ?? null,
+        };
+      },
+      saveVoiceInput: (voice: StoredVoiceInput) =>
+        write(() => {
+          db.prepare(
+            `INSERT INTO preferences (id, voice_input, openai_api_key) VALUES (1, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET voice_input=excluded.voice_input, openai_api_key=excluded.openai_api_key`,
+          ).run(Number(voice.enabled), voice.key);
         }),
       close: () => db.close(),
       save: (before: RegistryData, after: RegistryData) => write(() => persist(db, before, after)),

@@ -23,6 +23,7 @@ export const SETTINGS_SECTIONS = [
   { id: "skills", label: "Skills", icon: "skill", page: "skills" },
   { id: "prompts", label: "Prompts", icon: "prompt", page: "prompts" },
   { id: "webhooks", label: "Webhooks", icon: "webhook", page: "webhooks" },
+  { id: "preferences", label: "Preferences", icon: "preferences", page: "preferences" },
 ] as const satisfies readonly {
   id: string;
   label: string;

@@ -17,6 +17,7 @@ import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { Client } from "@/lib/client";
 import {
   composerControl,
@@ -36,6 +37,7 @@ import { composerAction, composerInput, footerPicker, footerPickerMenu } from "@
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { usePreference } from "@/lib/usePreference";
+import type { VoiceSession } from "@/lib/voiceInput";
 import type { SessionView } from "@/store";
 
 interface Props {
@@ -44,6 +46,8 @@ interface Props {
   /** `null` while the session is loading; the composer is disabled then. */
   draftKey: DraftKey | null;
   completion?: CompletionContext;
+  /** Where the session runs, for voice input's spelling hints. */
+  place?: Omit<VoiceSession, "messages" | "commands">;
   /** Local drafting is unavailable (for example, before a session has loaded). */
   disabled: boolean;
   /** The session cannot take input now; model picks stay local until the next send. */
@@ -68,6 +72,7 @@ export function Composer({
   session: t,
   draftKey,
   completion,
+  place,
   disabled,
   actionsDisabled,
   readOnly,
@@ -150,6 +155,14 @@ export function Composer({
           onEffortChange,
         }}
         onSend={send}
+        voice={
+          <VoiceInputButton
+            editor={editor}
+            session={() => ({ ...place, messages })}
+            live={completion?.session}
+            disabled={disabled}
+          />
+        }
         onKeyDown={(e) => {
           if (e.key === "Escape" && control.escape) {
             e.preventDefault();
