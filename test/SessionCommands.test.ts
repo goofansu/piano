@@ -101,7 +101,7 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     artifacts: false,
     "session-rail": true,
     agent: false,
-    "wrap-changes": true,
+    "wrap-code": true,
     "pull-request": true,
     "messages-only": true,
     rename: true,
@@ -242,19 +242,21 @@ test("Messages only is off by default; running it toggles, and it is checked whi
   );
 });
 
-test("Wrap reflects the diff preference and is only available for an inspectable selected workspace", () => {
-  const command = (state: AppState, changesWrap?: boolean) =>
-    sessionCommands(state, undefined, { changesWrap }).find((c) => c.id === "wrap-changes")!;
+test("Wrap reflects the code wrap preference and is available whatever Changes can do", () => {
+  const command = (state: AppState, codeWrap?: boolean) =>
+    sessionCommands(state, undefined, { codeWrap }).find((c) => c.id === "wrap-code")!;
   assert.equal(command(base).checked, false);
-  assert.deepEqual(command(base).intent, { kind: "wrap-changes", on: true });
+  assert.deepEqual(command(base).intent, { kind: "wrap-code", on: true });
   assert.equal(command(base, true).checked, true);
-  assert.deepEqual(command(base, true).intent, { kind: "wrap-changes", on: false });
-  assert.equal(command({ ...base, workspaces: [] }).enabled, false);
-  assert.equal(
-    command({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) }).enabled,
-    false,
-  );
-  assert.ok(!sessionCommands(base, other).some((c) => c.id === "wrap-changes"));
+  assert.deepEqual(command(base, true).intent, { kind: "wrap-code", on: false });
+  // A file's source wraps too, so Wrap stays available where Changes cannot open.
+  const noWorkspace = { ...base, workspaces: [] };
+  const missing = { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) };
+  for (const state of [noWorkspace, missing]) {
+    assert.equal(command(state).enabled, true);
+    assert.equal(command(state).detail, undefined);
+  }
+  assert.ok(!sessionCommands(base, other).some((c) => c.id === "wrap-code"));
 });
 
 const headerIds = ({ details, manage, display, destructive }: SessionHeaderMenu) => [
