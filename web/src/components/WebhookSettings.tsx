@@ -38,13 +38,7 @@ import {
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import {
   Field,
   FieldError,
@@ -183,15 +177,12 @@ export function WebhookSettings() {
           </SettingsSkeleton>
         )
       ) : observed.value.length === 0 ? (
-        <Empty className="border border-dashed border-line py-10">
+        <Empty className="py-8">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <WebhookIcon />
             </EmptyMedia>
-            <EmptyTitle className="text-base">No webhooks</EmptyTitle>
-            <EmptyDescription>
-              Create one to be told when a session finishes or waits.
-            </EmptyDescription>
+            <EmptyTitle>No webhooks</EmptyTitle>
           </EmptyHeader>
         </Empty>
       ) : (
