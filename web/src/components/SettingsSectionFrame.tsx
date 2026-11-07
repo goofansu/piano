@@ -64,11 +64,11 @@ export function SettingsSectionFrame({
           {title}
         </h1>
       </PaneHeader>
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-6 md:px-8 md:py-8">
         <section
           id={sectionId}
           aria-labelledby={titleId}
-          className="mx-auto flex max-w-2xl flex-col gap-6"
+          className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6"
         >
           {children}
         </section>

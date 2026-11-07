@@ -178,12 +178,12 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
           </SettingsSkeleton>
         )
       ) : observed.value.length === 0 ? (
-        <Empty className="border border-dashed border-line py-10">
+        <Empty className="py-8">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <Icon />
             </EmptyMedia>
-            <EmptyTitle className="text-base">{`No ${plural}`}</EmptyTitle>
+            <EmptyTitle>{`No ${plural} yet`}</EmptyTitle>
           </EmptyHeader>
         </Empty>
       ) : (
