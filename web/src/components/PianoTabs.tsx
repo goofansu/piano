@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import { type ComponentProps, type RefObject, useEffect, useRef } from "react";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { wheelSideways } from "@/lib/wheelSideways";
 
 export { Tabs } from "@/components/ui/tabs";
 
@@ -23,13 +24,6 @@ function useSelectedInView(list: RefObject<HTMLDivElement | null>) {
     else if (end > element.scrollLeft + element.clientWidth)
       element.scrollLeft = end - element.clientWidth;
   });
-}
-
-/** A plain mouse wheel only scrolls vertically, and a tab list has nothing to scroll that way. */
-function wheelSideways(event: React.WheelEvent<HTMLDivElement>) {
-  const list = event.currentTarget;
-  if (Math.abs(event.deltaY) > Math.abs(event.deltaX) && list.scrollWidth > list.clientWidth)
-    list.scrollLeft += event.deltaY;
 }
 
 /**

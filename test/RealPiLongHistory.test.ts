@@ -19,7 +19,7 @@ import { DISPATCH_ENTRY } from "../shared/dispatch.ts";
 import { createPiCompatibilityFixture } from "./fixtures/PiCompatibility.ts";
 
 const messageBytes = 64 * 1024;
-const groups = 66;
+const groups = 165;
 const perGroup = 8;
 
 test(
@@ -69,7 +69,7 @@ test(
           const preview = yield* hosts.read(cwd, id);
           assert.ok(preview._tag === "saved");
           const previewText = preview.snapshot.messages.map((m) => m.text).join("\n");
-          assert.match(previewText, /SUMMARY_65/);
+          assert.match(previewText, new RegExp(`SUMMARY_${groups - 1}`));
           assert.match(previewText, /FINAL_SMALL_PROMPT/);
 
           const session = yield* hosts.open({ cwd, sessionId: id });

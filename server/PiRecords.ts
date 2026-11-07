@@ -17,7 +17,12 @@ import {
   askUserPrompt,
   askUserQuestions,
 } from "../shared/askUser.ts";
-import { imageType } from "../shared/attachments.ts";
+import {
+  imageType,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS,
+  MAX_IMAGE_BYTES,
+} from "../shared/attachments.ts";
 import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../shared/dispatch.ts";
 import { artifactPublication, withArtifactPublication } from "../shared/radiusArtifacts.ts";
 import { turnEnding } from "../shared/turnEnding.ts";
@@ -670,8 +675,7 @@ export function piExchangeFor(
       const { attachments } = action;
       if (attachments?.length && !imagesValid(attachments))
         return {
-          rejected:
-            "Invalid image attachments. Use PNG, JPEG, GIF or WebP, up to 10 MiB each and 20 MiB total (4 images).",
+          rejected: `Invalid image attachments. Use PNG, JPEG, GIF or WebP, up to ${MAX_IMAGE_BYTES / 2 ** 20} MiB each and ${MAX_ATTACHMENT_BYTES / 2 ** 20} MiB total (${MAX_ATTACHMENTS} images).`,
         };
       return {
         command: {

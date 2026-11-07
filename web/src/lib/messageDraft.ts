@@ -49,8 +49,8 @@ export interface ImageDraft {
 /** The draft has something to send: visible text or an image. */
 export const hasContent = (draft: { text: string; images: Pick<ImageDraft, "items"> }) =>
   draft.text.trim().length > 0 || draft.images.items.length > 0;
-const TOO_MANY = "Attach up to 4 images per message.";
-const TOO_LARGE = "Images must total 20 MiB or less.";
+const TOO_MANY = `Attach up to ${MAX_ATTACHMENTS} images per message.`;
+const TOO_LARGE = `Images must total ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB or less.`;
 /**
  * Why `items` cannot be sent as one message, or "" when they can. A draft can hold more than the
  * limits allow (refused input returned while images were added): it stays editable until an image
@@ -84,7 +84,7 @@ export type ImageCheck =
 
 /**
  * Whether `files` may join a draft that already holds `current`, per docs/image-attachments.md:
- * at most four images and 20 MiB together, each non-empty, up to 10 MiB, with a PNG, JPEG, GIF
+ * at most ten images and 50 MiB together, each non-empty, up to 10 MiB, with a PNG, JPEG, GIF
  * or WebP signature its declared type (if any) agrees with. All or none are accepted.
  */
 export function checkImages(

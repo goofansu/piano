@@ -47,29 +47,48 @@ test("each image may be up to exactly 10 MiB of original bytes and must not be e
   assert.match(rejected(checkImages([], [png("empty.png", 0)])) ?? "", /empty\.png/);
 });
 
-test("a message holds four images totalling at most 20 MiB, counting those already in the draft", () => {
-  assert.equal(checkImages([held(1), held(1)], [png("c.png", 1), png("d.png", 1)]).ok, true);
+test("a message holds ten images totalling at most 50 MiB, counting those already in the draft", () => {
+  assert.equal(
+    checkImages(
+      Array.from({ length: 8 }, () => held(1)),
+      [png("i.png", 1), png("j.png", 1)],
+    ).ok,
+    true,
+  );
   assert.match(
-    rejected(checkImages([held(1), held(1), held(1)], [png("d.png", 1), png("e.png", 1)])) ?? "",
-    /up to 4 images/,
+    rejected(
+      checkImages(
+        Array.from({ length: 9 }, () => held(1)),
+        [png("j.png", 1), png("k.png", 1)],
+      ),
+    ) ?? "",
+    /up to 10 images/,
   );
   assert.match(
     rejected(
       checkImages(
         [],
-        [1, 2, 3, 4, 5].map((i) => png(`${i}.png`, 1)),
+        Array.from({ length: 11 }, (_, i) => png(`${i}.png`, 1)),
       ),
     ) ?? "",
-    /up to 4 images/,
+    /up to 10 images/,
   );
   assert.equal(
-    checkImages([held(10 * MiB)], [png("b.png", 10 * MiB)]).ok,
+    checkImages(
+      Array.from({ length: 4 }, () => held(10 * MiB)),
+      [png("e.png", 10 * MiB)],
+    ).ok,
     true,
-    "two maximum-size images fit exactly",
+    "five maximum-size images fit exactly",
   );
   assert.match(
-    rejected(checkImages([held(10 * MiB)], [png("b.png", 10 * MiB - 2), png("c.png", 3)])) ?? "",
-    /total 20 MiB/,
+    rejected(
+      checkImages(
+        Array.from({ length: 4 }, () => held(10 * MiB)),
+        [png("e.png", 10 * MiB - 2), png("f.png", 3)],
+      ),
+    ) ?? "",
+    /total 50 MiB/,
   );
 });
 
@@ -394,11 +413,11 @@ test("PIN-132: refused images returned while another is added stay editable past
   const page = source();
   const drafts = createDrafts();
   drafts.follow(page);
-  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "five-images" });
-  drafts.setText(key, "four shots");
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "eleven-images" });
+  drafts.setText(key, "ten shots");
   await drafts.addImages(
     key,
-    ["1", "2", "3", "4"].map((n) => pngFile(`${n}.png`)),
+    Array.from({ length: 10 }, (_, i) => pngFile(`${i + 1}.png`)),
     encode,
   );
   let inputId = "";
@@ -409,9 +428,9 @@ test("PIN-132: refused images returned while another is added stay editable past
     }),
     true,
   );
-  // The writer adds a fifth while the server's refusal is on its way; the check sees one image.
+  // The writer adds an eleventh while the server's refusal is on its way; the check sees one image.
   let finish!: () => void;
-  const reading = drafts.addImages(key, [pngFile("5.png")], async (file) => {
+  const reading = drafts.addImages(key, [pngFile("11.png")], async (file) => {
     await new Promise<void>((resolve) => {
       finish = resolve;
     });
@@ -423,12 +442,12 @@ test("PIN-132: refused images returned while another is added stay editable past
   finish();
   await reading;
   const draft = drafts.get(key);
-  assert.equal(draft.text, "four shots\n\nand one more");
+  assert.equal(draft.text, "ten shots\n\nand one more");
   assert.deepEqual(
     draft.images.items.map((a) => a.name),
-    ["1.png", "2.png", "3.png", "4.png", "5.png"],
+    Array.from({ length: 11 }, (_, i) => `${i + 1}.png`),
   );
-  assert.match(draft.images.error, /up to 4 images/);
+  assert.match(draft.images.error, /up to 10 images/);
   assert.equal(drafts.sendable(key), false);
   assert.equal(
     drafts.submit(key, () => assert.fail("a message over the limit is not delivered")),
