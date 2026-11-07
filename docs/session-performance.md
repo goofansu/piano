@@ -1,7 +1,7 @@
 # Session page performance baseline
 
 Run the opt-in diagnostic from the checkout (Node 24, installed dependencies and Chromium for
-agent-browser). It uses the installed `agent-browser` from [development setup](../README.md#develop);
+agent-browser). It uses the installed `agent-browser` from [development setup](development.md#setup);
 Critical paths CI is unchanged.
 
 ```sh
