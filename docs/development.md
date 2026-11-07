@@ -4,6 +4,18 @@ How Piano's formatting, lint, CI and dependency policy work. For setup, see the
 [README](../README.md#develop). For what to test, see
 [evidence-based development and testing](testing.md).
 
+## Node.js version
+
+Piano declares Node.js `>=24` in the root `package.json`. Use the latest Node 24 patch: the
+locked dependencies currently require at least 24.15.0 within that major. The root range is a
+major-version floor, not a promise that every Node 24 patch satisfies every dependency.
+
+The committed `.npmrc` enables `engine-strict`, so ordinary `npm install` and `npm ci` from the
+repository root reject incompatible Node versions instead of only warning. This is npm install-time
+policy, not a startup guard or a security boundary: `--force` or `--engine-strict=false` can bypass
+it, other package managers may behave differently, and switching Node after installation is not
+checked by `npm start`.
+
 ## Formatting and lint
 
 Piano formats with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and lints with
