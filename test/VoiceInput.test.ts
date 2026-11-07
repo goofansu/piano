@@ -160,7 +160,7 @@ test("a key with spaces or a command prefix is refused at the key field", async 
   );
 });
 
-test("transcription sends the recording and session hints to OpenAI with the saved key", async () => {
+test("transcription sends the recording to OpenAI with the saved key and where it was dictated", async () => {
   const sent: Sent[] = [];
   await run(
     "send",
@@ -174,15 +174,7 @@ test("transcription sends the recording and session hints to OpenAI with the sav
           project: "Piano",
           folder: "piano",
           branch: "feat/voice-input",
-          session: "Add voice input",
-          recent: [
-            "Please wire the composer.",
-            "I changed `useDraftEditor` and the `VoiceInputLive` layer.",
-            "The button uses size `list` and `min-h-8`; `npm test` passes.",
-          ],
-          files: ["web/src/components/Composer.tsx"],
-          commands: ["verify-piano"],
-          draft: "Next, rename",
+          session: "Add voice\n  input",
         }),
       ),
     ),
@@ -198,63 +190,31 @@ test("transcription sends the recording and session hints to OpenAI with the sav
   assert.equal(file.name, "recording.webm");
   assert.equal(Buffer.from(await file.arrayBuffer()).toString(), "fake audio bytes");
 
+  // The prompt is an instruction followed by where the speaker is, one name per line.
   const prompt = String(request!.form.get("prompt"));
-  for (const expected of [
-    "Piano",
-    "feat/voice-input",
-    "Add voice input",
-    "I changed `useDraftEditor`",
-    "Next, rename",
-  ])
-    assert.ok(prompt.includes(expected), `prompt carries ${expected}`);
   assert.ok(
-    prompt.indexOf("Please wire the composer.") < prompt.indexOf("I changed"),
-    "recent messages stay in order",
+    prompt.endsWith(
+      "\n\nProject: Piano\nFolder: piano\nBranch: feat/voice-input\nSession: Add voice input",
+    ),
+    prompt,
   );
-  const keywords = request!.form.getAll("keywords[]").map(String);
-  for (const expected of [
-    "useDraftEditor",
-    "VoiceInputLive",
-    "Composer.tsx",
-    "/verify-piano",
-    "feat/voice-input",
-    "min-h-8",
-    "npm test",
-  ])
-    assert.ok(keywords.includes(expected), `keywords include ${expected}`);
-  // A plain word in backticks would pull ordinary speech toward it; the prompt still carries it.
-  assert.ok(!keywords.includes("list"), "plain lowercase words are not keywords");
-  assert.ok(prompt.includes("size `list`"));
-  for (const word of keywords) assert.ok(!/[<>\r\n]/.test(word), `keyword ${word} is one line`);
+  assert.deepEqual(request!.form.getAll("keywords[]"), [], "no keyword hints");
 });
 
-test("long hints are bounded and keep the newest message", async () => {
+test("a recording with no names is sent with the instruction alone", async () => {
   const sent: Sent[] = [];
   await run(
-    "bounded",
+    "bare",
     Effect.flatMap(VoiceInput, (v) => v.save({ enabled: true, key: KEY })),
   );
-  const old = `${"old words ".repeat(700)}`;
-  const newest = `${"filler ".repeat(500)}the newest message ends with \`finalIdentifier\``;
   await run(
-    "bounded",
-    Effect.flatMap(VoiceInput, (v) =>
-      v.transcribe(
-        recording({
-          recent: [old, newest],
-          files: Array.from({ length: 200 }, (_, i) => `src/file${i}.ts`),
-          draft: "d".repeat(7000),
-        }),
-      ),
-    ),
+    "bare",
+    Effect.flatMap(VoiceInput, (v) => v.transcribe(recording())),
     openAi(sent),
   );
   const prompt = String(sent[0]!.form.get("prompt"));
-  assert.ok(prompt.length < 3000, `prompt is ${prompt.length} characters`);
-  assert.ok(prompt.includes("finalIdentifier"));
-  const keywords = sent[0]!.form.getAll("keywords[]").map(String);
-  assert.ok(keywords.length <= 100);
-  assert.equal(keywords[0], "finalIdentifier");
+  assert.ok(prompt.startsWith("Transcribe the speaker's words exactly."), prompt);
+  assert.ok(!/Project:|Folder:|Branch:|Session:/.test(prompt), prompt);
 });
 
 test("transcription is refused without calling OpenAI while voice input is off", async () => {

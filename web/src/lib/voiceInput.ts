@@ -1,54 +1,30 @@
 /**
- * Voice input in the composer: the session hints a recording carries, and where its transcript
- * lands in the draft. The server turns the hints into OpenAI's prompt and keywords.
+ * Voice input in the composer: the hints a recording carries, and where its transcript lands in
+ * the draft. The server turns the hints into OpenAI's prompt.
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import type { VoiceHints } from "../../../shared/voiceInput.ts";
-import type { RenderMsg } from "../../../shared/wire.ts";
-import { sessionFiles } from "./sessionFiles.ts";
 
-const RECENT_MESSAGES = 4;
-const RECENT_CHARS = 2000;
-const DRAFT_CHARS = 2000;
 const SHORT = 512;
 
-const head = (text: string, max: number) => (text.length <= max ? text : text.slice(0, max));
-const tail = (text: string, max: number) =>
-  text.length <= max ? text : text.slice(text.length - max);
 const named = (value: string | undefined) =>
-  value?.trim() ? head(value.trim(), SHORT) : undefined;
+  value?.trim() ? value.trim().slice(0, SHORT) : undefined;
 
+/** Where a message is dictated: the names voice input spells by. */
 export interface VoiceSession {
   project?: string;
   folder?: string;
   branch?: string;
   title?: string;
-  messages: ReadonlyArray<RenderMsg>;
-  /** Slash command names, when the session's commands are at hand. */
-  commands?: ReadonlyArray<string>;
 }
 
-/** What a recording tells the server about where it is dictated: the session and the draft before the cursor. */
-export function voiceHints(session: VoiceSession, draftBeforeCursor: string): VoiceHints {
-  const recent = session.messages
-    .filter((m) => (m.role === "user" || m.role === "assistant") && m.text.trim())
-    .slice(-RECENT_MESSAGES)
-    // The end of a long reply is what the speaker answers.
-    .map((m) => tail(m.text.trim(), RECENT_CHARS));
-  const files = sessionFiles(session.messages)
-    .map((file) => head(file.placed ?? file.path, SHORT))
-    .slice(-200);
-  const commands = (session.commands ?? []).map((name) => head(name, SHORT)).slice(0, 500);
-  const draft = tail(draftBeforeCursor, DRAFT_CHARS);
+/** What a recording tells the server about where it is dictated. */
+export function voiceHints(session: VoiceSession): VoiceHints {
   return {
     ...(named(session.project) && { project: named(session.project) }),
     ...(named(session.folder) && { folder: named(session.folder) }),
     ...(named(session.branch) && { branch: named(session.branch) }),
     ...(named(session.title) && { session: named(session.title) }),
-    ...(draft.trim() && { draft }),
-    ...(recent.length && { recent }),
-    ...(files.length && { files }),
-    ...(commands.length && { commands }),
   };
 }
 
