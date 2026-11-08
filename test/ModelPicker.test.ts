@@ -167,3 +167,16 @@ test("efforts follow the shown model and pause while a chosen model is on its wa
   assert.equal(view({ value: "openai/gpt-y", chosen: "openai/gpt-y" }).effortEnabled, true);
   assert.equal(view({ disabled: true }).effortEnabled, false);
 });
+
+test("Pi's default effort counts as what the default model accepts", () => {
+  // Pi saved xhigh, but claude-x stops at high: using the default shows high.
+  const xhigh = catalog({ defaultThinkingLevel: "xhigh" });
+  const used = view({ catalog: xhigh, value: "anthropic/claude-x", effort: "high" });
+  assert.equal(used.isDefault, true, "the default, clamped");
+  assert.equal(used.canUseDefault, false, "nothing left to return to");
+  assert.equal(used.defaultLabel, "claude-x · high");
+  // An effort Pi does not name is no default to return to.
+  const unknown = view({ catalog: catalog({ defaultThinkingLevel: "turbo" }), effort: "high" });
+  assert.equal(unknown.canUseDefault, false);
+  assert.equal(unknown.defaultLabel, null);
+});
