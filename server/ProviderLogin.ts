@@ -10,7 +10,7 @@ import {
   ModelRuntime,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { Context, Data, Effect, Layer, Schema } from "effect";
+import { Context, Data, Effect, Layer } from "effect";
 import { readApiKey } from "../shared/literalSecret.ts";
 import {
   API_KEY_PROVIDERS,
@@ -217,10 +217,8 @@ export const ProviderLoginLive = Layer.effect(
         },
         catch: () => new ProvidersError({ detail: "Could not load API keys." }),
       }),
-      changeApiKey: Effect.fn("ProviderLogin.changeApiKey")(function* (input) {
-        const change = yield* Schema.decodeUnknownEffect(ProviderApiKeyChange)(input).pipe(
-          Effect.mapError(() => new SignInError({ detail: "Invalid API key request." })),
-        );
+      // The router has decoded the body against ProviderApiKeyChange; the change trusts its type.
+      changeApiKey: Effect.fn("ProviderLogin.changeApiKey")(function* (change) {
         // Pi stores the key and sends it in every model request's headers: refuse what cannot go.
         const read = change.action === "save" ? readApiKey(change.key) : undefined;
         if (read?.refusal !== undefined) return yield* new SignInError({ detail: read.refusal });

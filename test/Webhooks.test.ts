@@ -486,10 +486,6 @@ test("URL and token validation refuse unsafe transport without echoing secrets",
         assert.equal(JSON.stringify(result).includes("private-canary"), false);
       }
       assert.equal(
-        (yield* hooks.save({ ...input, events: [] }).pipe(Effect.result))._tag,
-        "Failure",
-      );
-      assert.equal(
         (yield* hooks
           .save({ ...input, token: "private-canary\r\nInjected: yes" })
           .pipe(Effect.result))._tag,

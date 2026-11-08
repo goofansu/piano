@@ -1,7 +1,7 @@
 /** Best-effort integration delivery. One bounded owner; no history, retries or Git reads. */
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
-import { Clock, Context, Data, Deferred, Effect, Layer, Queue, Schema, Semaphore } from "effect";
+import { Clock, Context, Data, Deferred, Effect, Layer, Queue, Semaphore } from "effect";
 import { cutText } from "../shared/cutText.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
 import { readLiteralSecret } from "../shared/literalSecret.ts";
@@ -352,10 +352,8 @@ export const WebhooksLive = Layer.effect(
       list,
       // Read-modify-write under one lock, removal included, so a save never acts on a row read
       // before another change: what it omits keeps the stored value, and a removed hook stays gone.
-      save: Effect.fn("Webhooks.save")(function* (raw) {
-        const input = yield* Schema.decodeUnknownEffect(WebhookSave)(raw).pipe(
-          Effect.mapError(() => refused("Enter a URL and select at least one event.")),
-        );
+      // The router has decoded the body against WebhookSave; the save trusts its type.
+      save: Effect.fn("Webhooks.save")(function* (input) {
         const url = input.url === undefined ? undefined : yield* receiverUrl(input.url);
         // Sent as a bearer header: the same literal rule as an API key, and empty clears it.
         let token = input.token;
