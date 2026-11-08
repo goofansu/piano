@@ -38,7 +38,7 @@ test("Radius addresses the Providers page, and is offered once in navigation", (
   );
   assert.ok(
     SETTINGS_SECTIONS.some((section) => section.id === "radius"),
-    "the palette still offers Radius by name",
+    "the Radius deep-link address remains supported",
   );
   assert.equal(settingsPage("radius"), "providers", "/settings/radius opens Providers");
   assert.equal(settingsPage("providers"), "providers");

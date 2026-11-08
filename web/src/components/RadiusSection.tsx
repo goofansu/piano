@@ -24,9 +24,9 @@ import { useRadiusSetup } from "@/lib/useRadiusSetup";
  * Radius on the Providers page: the account, and what Pi may use from it. Radius is here rather
  * than in the provider list because signing in is only the first of its steps.
  *
- * `reveal` is navigation's request count for the address and palette row that name Radius
+ * `reveal` is navigation's request count for the deep-link address that names Radius
  * directly: each new request scrolls to this first section. Counting requests rather than reading
- * a flag lets the same row asked for twice reveal Radius twice.
+ * a flag lets repeated navigation to the address reveal Radius again.
  */
 export function RadiusSection({ reveal }: { reveal?: number }) {
   const setup = useRadiusSetup();

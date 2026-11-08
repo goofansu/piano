@@ -10,11 +10,10 @@
  */
 
 /**
- * The Settings destinations, in the order the command palette offers them. Each one addresses a
- * page; Radius is a section of the Providers page rather than a page of its own, so `/settings/radius`
- * and its palette row open Providers with the Radius section revealed. A destination is added here once:
- * Settings navigation, the route parser and the palette's rows all read this list. A destination
- * carries no search words: the palette already matches the label the user reads.
+ * The Settings destinations, including section deep links. Radius is a section of Providers,
+ * so `/settings/radius` opens that page with the Radius section revealed. The route parser reads
+ * every destination; Settings navigation and the command palette list only `SETTINGS_PAGES`.
+ * A destination carries no search words: the palette already matches the label the user reads.
  */
 export const SETTINGS_SECTIONS = [
   { id: "providers", label: "Providers", icon: "plug", page: "providers" },
@@ -31,7 +30,7 @@ export const SETTINGS_SECTIONS = [
   page: string;
 }[];
 
-/** Settings navigation lists one row per page, so Radius appears only inside Providers. */
+/** Settings navigation and global commands list pages, so Radius appears only inside Providers. */
 export const SETTINGS_PAGES = SETTINGS_SECTIONS.filter((section) => section.id === section.page);
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["id"];

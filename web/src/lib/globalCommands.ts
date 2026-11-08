@@ -22,7 +22,7 @@ import {
   projectMenu,
 } from "./projectCommands.ts";
 import {
-  SETTINGS_SECTIONS,
+  SETTINGS_PAGES,
   type SettingsSection,
   type SettingsSectionIconName,
   settingsPage,
@@ -217,7 +217,7 @@ export function pageCommands(
 
 /**
  * Global commands, in the palette's order: Home or Settings (whichever is not open), each Settings
- * section, New session, Projects, the open page's header actions (`pageCommands`), trust for the
+ * page, New session, Projects, the open page's header actions (`pageCommands`), trust for the
  * directory the main pane is about, Hide or Show sidebar, the appearances, then each sidebar grouping and sort, with the current one of each checked.
  */
 export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
@@ -242,7 +242,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
           enabled: true,
           intent: { kind: "settings" },
         },
-    ...SETTINGS_SECTIONS.map((s): GlobalCommand => ({
+    ...SETTINGS_PAGES.map((s): GlobalCommand => ({
       id: `settings-${s.id}`,
       label: s.label,
       icon: s.icon,

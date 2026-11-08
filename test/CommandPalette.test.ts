@@ -312,7 +312,8 @@ test("search uses direct command synonyms, not related topics or opposite displa
   assert.ok(!matches("settings").includes("trust"));
   assert.ok(!matches("session").includes("home"));
   assert.deepEqual(matches("messages"), ["messages-only"]);
-  assert.deepEqual(matches("radius"), ["settings-radius"]);
+  assert.deepEqual(matches("radius"), []);
+  assert.deepEqual(matches("providers"), ["settings-providers"]);
   assert.deepEqual(matches("web search"), []);
   assert.deepEqual(matches("diff"), ["changes"]);
   assert.deepEqual(matches("theme"), ["appearance-light", "appearance-dark", "appearance-system"]);

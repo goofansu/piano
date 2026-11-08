@@ -1,11 +1,11 @@
 # Radius setup in Piano
 
-Open **Settings → Providers** and use the **Radius** section, or choose **Radius** from
+Open **Settings → Providers** and use the **Radius** section, or choose **Providers** from
 Mod+K. `/settings/radius` stays a working address: it opens Providers with the Radius
-section revealed, as the palette row does. Radius appears first, followed by **Other providers**,
-with no duplicate Radius provider row. **Tools and web search** folds the MCP and web-search
-steps away and reports where they stand while folded; its expanded content includes the setup guide. Setup is
-machine-wide for the OS account running Piano, not a browser account or a Project.
+section revealed. Radius appears first, followed by **Accounts** and **API keys**,
+with no duplicate Radius provider row. The Radius section includes its account, MCP and web-search
+controls and the setup guide. Setup is machine-wide for the OS account running Piano, not a
+browser account or a Project.
 
 1. **Sign in to Radius.** Uses the existing Pi-backed provider OAuth dialog. Pi owns
    credential storage and refresh; no token is returned to the settings page.
@@ -71,8 +71,8 @@ also lose newer associations; the stable-link guarantee depends on keeping Piano
 ## Boundaries and recovery
 
 - Radius lives on the Providers page rather than in its own Settings page; the provider list
-  excludes it so it is offered once. Settings navigation lists one row per page, while the
-  palette keeps a Radius row.
+  excludes it so it is offered once. Settings navigation and the palette list one row per page,
+  with no standalone Radius command.
 - Provider OAuth continues to use `ProviderLogin`. Sign-in and sign-out are both
   available directly in step 1; switching accounts does not require leaving Radius.
   Signing out removes the provider credential, not the saved MCP or extension setup.
@@ -123,13 +123,13 @@ Relevant invariants: INV-01/02/04/07/09/10/11/12.
   credentials and unrelated entries, and serialize installs against uninstalls. Existing
   `ProviderLogin` tests cover OAuth interaction/persistence and terminal claims.
 - `test/Routes.test.ts` and `test/GlobalCommands.test.ts`: Radius addresses the Providers page,
-  navigation lists one row per page, and the palette still offers Radius by name.
-- `test/browser-radius-setup.mjs`: agent-browser against an isolated scratch backend
+  navigation and the palette list pages without a standalone Radius command.
+- Original browser verification (the former `test/browser-radius-setup.mjs`): agent-browser against an isolated scratch backend
   and Vite; real config writes and Pi install CLI with a controlled fake npm executable.
   Only the browser OAuth HTTP boundary is simulated. Checks sign-in, MCP setup,
   install navigation/duplicate requests, failure/retry, reload readback, Mod+K,
   request failure recovery, progress reported while the tools are folded away (including mid-install),
-  the `/settings/radius` address and palette row revealing the section, a Radius-only catalog showing
+  the `/settings/radius` address and the then-present palette row revealing the section, a Radius-only catalog showing
   no empty-list placeholder, and mobile descriptions without truncation. Removal checks
   cover cancellation, changed-target rejection, signed-out cleanup, real Pi remove CLI
   through fake npm, uninstall failure/retry and duplicate/opposing requests.

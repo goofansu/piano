@@ -164,14 +164,17 @@ test("each View-menu radio reports exactly one current choice, by its short labe
   ]);
 });
 
-test("the palette keeps a Radius row, which opens Providers", () => {
-  const radius = globalCommands(onNewPage, ctx).find((command) => command.label === "Radius");
-  assert.deepEqual(radius?.intent, { kind: "settings", section: "radius" });
-  assert.equal(
-    labels(onNewPage).filter((label) => label === "Radius").length,
-    1,
-    "Radius is offered once",
-  );
+test("Settings commands offer pages, not nested sections such as Radius", () => {
+  for (const settings of [null, ...SETTINGS_SECTIONS.map((s) => s.id)]) {
+    const commands = globalCommands(onNewPage, { ...ctx, settings }).filter((command) =>
+      command.id.startsWith("settings-"),
+    );
+    assert.deepEqual(
+      commands.map((command) => command.label),
+      ["Providers", "MCP", "Skills", "Prompts", "Webhooks", "Preferences"],
+    );
+    assert.deepEqual(commands[0]?.intent, { kind: "settings", section: "providers" });
+  }
 });
 
 test("on the Projects index the palette offers New project, which opens the New project dialog", () => {
