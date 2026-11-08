@@ -96,9 +96,9 @@ export function PreferencesSettings() {
             <ListRow
               title="Voice input"
               titleId="voice-input-title"
-              value={
-                // As tall as the key menu's button, so saving a key does not move the row. The switch
-                // is the row's value: it steps aside beneath the revealed ⋯.
+              actions={
+                // Keep the switch beside the key menu, never beneath its revealed hit target.
+                // Match the menu's height so saving a key does not move the row vertically.
                 <span className="flex min-h-8 items-center pointer-coarse:min-h-11">
                   <Switch
                     size="sm"

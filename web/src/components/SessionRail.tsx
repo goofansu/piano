@@ -288,8 +288,8 @@ function EnvironmentRow({
           {href && (
             <DropdownMenuItem asChild>
               <a href={href} target="_blank" rel="noreferrer">
+                <ExternalLinkIcon aria-hidden />
                 Open {menu}
-                <ExternalLinkIcon data-icon="inline-end" aria-hidden />
               </a>
             </DropdownMenuItem>
           )}

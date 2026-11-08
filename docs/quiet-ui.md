@@ -101,7 +101,9 @@ composer's Attach and Send, Scroll to bottom, the session menu sheet's) and a bu
 revealed while it is pointed at, focused or has its menu open, its text fading or its value
 stepping aside beneath them, so the row reserves no empty slot. A list row is `ListRow`, which
 places them (its ⋯ ends where an in-flow action would, on the row's padding) and decides the fade
-and the step aside; beside a call to action (Install, Reconnect) its ⋯ stays in the row's flow.
+and the step aside; beside a call to action (Install, Reconnect) or an interactive control (a
+switch), its ⋯ stays in the row's flow. Interactive controls use `ListRow.actions`, not `value`:
+their hit targets must stay stationary and separate from the menu.
 
 ## Components
 
@@ -117,6 +119,7 @@ upgrading shadcn, read [the ownership and upgrade guide](shadcn-ui.md); review e
 
 An outgoing link in Settings is a `SettingsExternalLink` (text followed by the external-link icon,
 opened in a new tab); a button that leaves Piano ends with the same icon as `data-icon="inline-end"`.
+In a menu with leading action icons, external links use that same leading column so labels align.
 
 A project's icon is the target; the folder icon means a folder (an added root) and nothing else,
 so "Open project", "Move to project" and a project picker's rows show the target, "Remove from

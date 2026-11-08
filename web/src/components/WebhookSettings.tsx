@@ -204,8 +204,8 @@ function WebhookRow({
       data-active={hook.active}
       title={<span className="truncate">{name}</span>}
       titleClassName={hook.active ? undefined : "text-ink-2"}
-      // The switch is the row's value: it steps aside beneath the revealed ⋯.
-      value={
+      // Interactive controls keep their own hit targets beside the menu.
+      actions={
         <Switch
           size="sm"
           aria-label={`Active ${name}`}
