@@ -7,6 +7,21 @@ import { IconButton } from "@/components/IconButton";
 const CONFIRMED_MS = 2000;
 
 /**
+ * Writes `text` to the clipboard; a refusal toasts `failure`. Resolves whether the clipboard took
+ * it. Every copy in Piano goes through here: a control through `useCopy`, which confirms in place;
+ * a command, which has no control to flip, toasts its own success when this resolves `true`.
+ */
+export async function copyText(text: string, failure: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    toast.error(failure);
+    return false;
+  }
+}
+
+/**
  * Copies `text` on `copy()`: `copied` holds for two seconds after the clipboard takes it; a
  * refused copy clears it and toasts `failure`. Every copy control decides through this.
  */
@@ -17,15 +32,7 @@ export function useCopy(text: string, failure: string) {
     const timer = setTimeout(() => setCopied(false), CONFIRMED_MS);
     return () => clearTimeout(timer);
   }, [copied]);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-      toast.error(failure);
-    }
-  };
+  const copy = async () => setCopied(await copyText(text, failure));
   return { copied, copy };
 }
 

@@ -19,6 +19,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { useCommands, useSessionCommands } from "@/components/CommandHost";
+import { copyText } from "@/components/CopyButton";
 import { IconButton } from "@/components/IconButton";
 import { PianoButton } from "@/components/PianoButton";
 import {
@@ -83,12 +84,7 @@ export function useSeenPreview(state: AppState) {
 }
 
 async function copyLink(url: string) {
-  try {
-    await navigator.clipboard.writeText(url);
-    toast.success("Preview link copied");
-  } catch {
-    toast.error("Could not copy the preview link.");
-  }
+  if (await copyText(url, "Could not copy the preview link.")) toast.success("Preview link copied");
 }
 
 /** The selected session's preview commands, run through the host like any other surface's. */
