@@ -11,7 +11,7 @@ import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
  * policy as other app controls.
  */
 const row =
-  "gap-1.5 font-medium text-ink-2 data-[active=true]:bg-(--selected) data-[active=true]:text-ink hover:data-[active=true]:bg-(--selected)";
+  "gap-1.5 text-ink-2 data-[active=true]:bg-(--selected) data-[active=true]:text-ink hover:data-[active=true]:bg-(--selected)";
 
 export function PianoSidebarMenuButton({
   tooltip,
