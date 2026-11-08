@@ -1,29 +1,23 @@
 import type { ApiKeyProvider } from "@shared/providerApiKeys";
-import { cn } from "cn";
-import { MoreHorizontalIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import { PianoButton } from "@/components/PianoButton";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
-import { RowActions, rowActionsWidth } from "@/components/RowActions";
+import { ListRow, RowMenu } from "@/components/RowActions";
 import {
   SettingsGroup,
   SettingsList,
   SettingsLoadFailure,
   SettingsSkeleton,
-  settingsRow,
 } from "@/components/SettingsSectionFrame";
 import { StatusDot } from "@/components/StatusDot";
-import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { ItemMedia } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { changeProviderApiKey, providerApiKeys } from "@/lib/api";
 import { useObservation } from "@/lib/useObservation";
@@ -55,60 +49,44 @@ export function ApiKeySettings() {
       ) : (
         <SettingsList>
           {observed.value.map((provider) => (
-            <Item
+            <ListRow
               key={provider.id}
-              role="listitem"
-              data-row
-              className={cn(settingsRow, "relative", rowActionsWidth.list[provider.saved ? 1 : 0])}
-            >
-              <ItemMedia variant="icon">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <use href={`/provider-logos/${provider.logo}.svg#logo`} />
-                </svg>
-              </ItemMedia>
-              <ItemContent className="min-w-0">
-                <ItemTitle>{provider.name}</ItemTitle>
-              </ItemContent>
-              {provider.saved ? (
-                <>
-                  <ItemActions
-                    data-motion="aside"
-                    className="shrink-0 gap-1.5 text-muted-foreground"
-                  >
+              media={
+                <ItemMedia variant="icon">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <use href={`/provider-logos/${provider.logo}.svg#logo`} />
+                  </svg>
+                </ItemMedia>
+              }
+              title={provider.name}
+              value={
+                provider.saved && (
+                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <StatusDot tone="ok" />
-                    <span className="text-sm">Saved</span>
-                  </ItemActions>
-                  <RowActions className="right-3">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <PianoButton
-                          variant="ghost"
-                          size="list"
-                          aria-label={`${provider.name} API key actions`}
-                          disabled={busy}
-                        >
-                          <MoreHorizontalIcon />
-                        </PianoButton>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuGroup>
-                          <DropdownMenuItem onSelect={() => setEditing(provider)}>
-                            Replace key
-                          </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onSelect={() => actions.confirm(provider)}
-                        >
-                          Remove key
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </RowActions>
-                </>
-              ) : (
-                <ItemActions>
+                    Saved
+                  </span>
+                )
+              }
+              menu={
+                provider.saved && (
+                  <RowMenu label={`${provider.name} API key actions`} disabled={busy}>
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem onSelect={() => setEditing(provider)}>
+                        Replace key
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => actions.confirm(provider)}
+                    >
+                      Remove key
+                    </DropdownMenuItem>
+                  </RowMenu>
+                )
+              }
+              actions={
+                !provider.saved && (
                   <PianoButton
                     variant="outline"
                     size="sm"
@@ -118,9 +96,9 @@ export function ApiKeySettings() {
                   >
                     Add key
                   </PianoButton>
-                </ItemActions>
-              )}
-            </Item>
+                )
+              }
+            />
           ))}
         </SettingsList>
       )}

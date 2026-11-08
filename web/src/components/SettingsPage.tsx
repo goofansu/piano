@@ -1,6 +1,5 @@
 import type { OAuthProvider } from "@shared/wire";
-import { cn } from "cn";
-import { HomeIcon, MoreHorizontalIcon, PlugIcon } from "lucide-react";
+import { HomeIcon, PlugIcon } from "lucide-react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { ApiKeySettings } from "@/components/ApiKeySettings";
@@ -8,18 +7,13 @@ import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
 import { LibrarySettings } from "@/components/LibrarySettings";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoButton } from "@/components/PianoButton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/PianoDropdownMenu";
+import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
 import { PreferencesSettings } from "@/components/PreferencesSettings";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RadiusSection } from "@/components/RadiusSection";
 import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
-import { RowActions, rowActionsWidth } from "@/components/RowActions";
+import { ListRow, RowMenu, RowStatus } from "@/components/RowActions";
 import {
   SettingsGroup,
   SettingsList,
@@ -27,11 +21,9 @@ import {
   SettingsSectionFrame,
   SettingsSectionIcon,
   SettingsSkeleton,
-  settingsRow,
 } from "@/components/SettingsSectionFrame";
-import { StatusDot } from "@/components/StatusDot";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { ItemMedia } from "@/components/ui/item";
 import {
   SidebarContent,
   SidebarGroup,
@@ -207,57 +199,35 @@ function ProvidersSettings({
             ) : (
               <SettingsList>
                 {body.rows.map(({ provider, logo, action }) => (
-                  <Item
+                  <ListRow
                     key={provider.id}
-                    role="listitem"
-                    data-row
-                    className={cn(
-                      settingsRow,
-                      "relative",
-                      rowActionsWidth.list[provider.signedIn ? 1 : 0],
-                    )}
-                  >
-                    {logo && (
-                      <ItemMedia variant="icon">
-                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                          <use href={`/provider-logos/${logo}.svg#logo`} />
-                        </svg>
-                      </ItemMedia>
-                    )}
-                    <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
-                      <ItemTitle>{provider.name}</ItemTitle>
-                      {provider.signedIn && (
-                        <p className="flex items-center gap-1.5 text-xs text-ink-3">
-                          <StatusDot tone="ok" />
-                          Signed in
-                        </p>
-                      )}
-                    </ItemContent>
-                    {action.intent === "confirm-sign-out" ? (
-                      <RowActions className="top-1/2 right-3 -translate-y-1/2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <PianoButton
-                              variant="ghost"
-                              size="list"
-                              aria-label={`${provider.name} account actions`}
-                              disabled={!action.enabled}
-                            >
-                              <MoreHorizontalIcon />
-                            </PianoButton>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onSelect={() => actions.confirm(provider)}
-                            >
-                              Sign out
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </RowActions>
-                    ) : (
-                      <ItemActions className="shrink-0">
+                    media={
+                      logo && (
+                        <ItemMedia variant="icon">
+                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <use href={`/provider-logos/${logo}.svg#logo`} />
+                          </svg>
+                        </ItemMedia>
+                      )
+                    }
+                    title={provider.name}
+                    menu={
+                      action.intent === "confirm-sign-out" && (
+                        <RowMenu
+                          label={`${provider.name} account actions`}
+                          disabled={!action.enabled}
+                        >
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => actions.confirm(provider)}
+                          >
+                            Sign out
+                          </DropdownMenuItem>
+                        </RowMenu>
+                      )
+                    }
+                    actions={
+                      action.intent !== "confirm-sign-out" && (
                         <PianoButton
                           variant="outline"
                           size="sm"
@@ -267,9 +237,11 @@ function ProvidersSettings({
                         >
                           {action.label}
                         </PianoButton>
-                      </ItemActions>
-                    )}
-                  </Item>
+                      )
+                    }
+                  >
+                    {provider.signedIn && <RowStatus>Signed in</RowStatus>}
+                  </ListRow>
                 ))}
               </SettingsList>
             )}

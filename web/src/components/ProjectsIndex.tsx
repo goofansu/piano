@@ -5,12 +5,12 @@ import { useCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { PaneBody, PaneHeader, PaneHeading } from "@/components/Pane";
 import { ProjectCommandsMenu } from "@/components/Projects";
-import { RowActions, rowActionsWidth } from "@/components/RowActions";
-import { SettingsList, settingsRow } from "@/components/SettingsSectionFrame";
+import { ListRow } from "@/components/RowActions";
+import { SettingsList } from "@/components/SettingsSectionFrame";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
+import { ItemDescription } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { pageCommands } from "@/lib/globalCommands";
@@ -21,7 +21,7 @@ import type { AppState } from "@/store";
 
 /**
  * One project's row: the way to its home, its context line, a time at the end and the sidebar's
- * project menu revealed as there (`RowActions`), the time stepping aside for it. `time` is the
+ * project menu revealed as there (`ListRow`), the time stepping aside for it. `time` is the
  * newest member activity for an open project and when it was marked done under Done.
  */
 function ProjectRow({
@@ -38,41 +38,28 @@ function ProjectRow({
   const { openProject } = useNavigation();
   const { run } = useCommands();
   return (
-    <Item
-      data-row
-      role="listitem"
-      className={cn(settingsRow, rowActionsWidth.list[1], "relative hover:bg-fill-hover")}
-    >
-      <ItemContent className="min-w-0 gap-0.5">
-        <ItemTitle className="w-full min-w-0">
-          {/* No row primitive opens on click beside a menu: the name's button stretches over the row. */}
-          <button
-            type="button"
-            className="min-w-0 flex-1 truncate text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
-            onClick={() => openProject(row.project.id)}
-          >
-            {row.project.name}
-          </button>
-        </ItemTitle>
-        <ItemDescription className="truncate text-xs">{projectsIndexContext(row)}</ItemDescription>
-      </ItemContent>
-      <ItemActions className="text-xs text-ink-3">
-        {time && (
-          <time data-motion="aside" dateTime={time}>
+    <ListRow
+      title={row.project.name}
+      open={{ onOpen: () => openProject(row.project.id) }}
+      value={
+        time && (
+          <time dateTime={time} className="text-xs text-ink-3">
             {isProjectDone(row.project) && "Done "}
             {timeAgo(time, now)}
           </time>
-        )}
-        <RowActions className="top-1/2 right-4 -translate-y-1/2">
-          <ProjectCommandsMenu
-            project={row.project}
-            commands={projectCommands(state, row.project)}
-            run={run}
-            size="list"
-          />
-        </RowActions>
-      </ItemActions>
-    </Item>
+        )
+      }
+      menu={
+        <ProjectCommandsMenu
+          project={row.project}
+          commands={projectCommands(state, row.project)}
+          run={run}
+          size="list"
+        />
+      }
+    >
+      <ItemDescription className="truncate text-xs">{projectsIndexContext(row)}</ItemDescription>
+    </ListRow>
   );
 }
 

@@ -6,13 +6,11 @@ import {
   type WebhookEvent,
   type WebhookField,
 } from "@shared/webhooks";
-import { cn } from "cn";
-import { MoreHorizontalIcon, WebhookIcon } from "lucide-react";
+import { WebhookIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
-import { PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
   DialogContent,
@@ -21,23 +19,19 @@ import {
   DialogTitle,
 } from "@/components/PianoDialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
-import { RowActions, rowActionsWidth } from "@/components/RowActions";
+import { ListRow, RowMenu, RowStatus } from "@/components/RowActions";
 import {
   SettingsList,
   SettingsLoadFailure,
   SettingsSectionFrame,
   SettingsSkeleton,
-  settingsRow,
 } from "@/components/SettingsSectionFrame";
-import { StatusDot, type StatusTone } from "@/components/StatusDot";
+import type { StatusTone } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -56,7 +50,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
+import { ItemDescription } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -242,26 +236,12 @@ function WebhookRow({
   const name = host(hook.url);
   const delivery = deliveryFace(hook.lastDelivery, now);
   return (
-    <Item
-      role="listitem"
-      data-row
-      className={cn(settingsRow, rowActionsWidth.list[1], "relative")}
+    <ListRow
       data-active={hook.active}
-    >
-      <ItemContent className="min-w-0 gap-0.5">
-        <ItemTitle className={hook.active ? undefined : "text-ink-2"}>
-          <span className="truncate">{name}</span>
-        </ItemTitle>
-        <ItemDescription className="line-clamp-none font-mono text-xs">
-          {hook.events.join(" · ")}
-        </ItemDescription>
-        <p role="status" className="flex items-center gap-1.5 text-xs text-ink-3">
-          <StatusDot tone={delivery.tone} />
-          {delivery.text}
-        </p>
-      </ItemContent>
-      {/* The switch is the row's value: it steps aside beneath the revealed ⋯. */}
-      <ItemActions data-motion="aside" className="shrink-0">
+      title={<span className="truncate">{name}</span>}
+      titleClassName={hook.active ? undefined : "text-ink-2"}
+      // The switch is the row's value: it steps aside beneath the revealed ⋯.
+      value={
         <Switch
           size="sm"
           aria-label={`Active ${name}`}
@@ -269,32 +249,27 @@ function WebhookRow({
           disabled={disabled}
           onCheckedChange={setActive}
         />
-      </ItemActions>
-      <RowActions className="top-1/2 right-4 -translate-y-1/2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <PianoButton
-              variant="ghost"
-              size="list"
-              aria-label={`Webhook actions ${name}`}
-              disabled={disabled}
-            >
-              <MoreHorizontalIcon />
-            </PianoButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuGroup>
-              <DropdownMenuItem onSelect={edit}>Edit</DropdownMenuItem>
-              <DropdownMenuItem onSelect={test}>Test</DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={remove}>
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </RowActions>
-    </Item>
+      }
+      menu={
+        <RowMenu label={`Webhook actions ${name}`} disabled={disabled}>
+          <DropdownMenuGroup>
+            <DropdownMenuItem onSelect={edit}>Edit</DropdownMenuItem>
+            <DropdownMenuItem onSelect={test}>Test</DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onSelect={remove}>
+            Delete
+          </DropdownMenuItem>
+        </RowMenu>
+      }
+    >
+      <ItemDescription className="line-clamp-none font-mono text-xs">
+        {hook.events.join(" · ")}
+      </ItemDescription>
+      <RowStatus role="status" tone={delivery.tone}>
+        {delivery.text}
+      </RowStatus>
+    </ListRow>
   );
 }
 

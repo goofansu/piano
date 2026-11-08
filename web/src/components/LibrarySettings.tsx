@@ -1,8 +1,7 @@
 import { LIBRARY_KINDS, type LibraryKind } from "@shared/library";
 import type { Prompt } from "@shared/prompts";
 import type { UserSkill } from "@shared/skills";
-import { cn } from "cn";
-import { type LucideIcon, MoreHorizontalIcon, SparklesIcon, SquareSlashIcon } from "lucide-react";
+import { type LucideIcon, SparklesIcon, SquareSlashIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
@@ -13,27 +12,20 @@ import {
   skillEditor,
 } from "@/components/DraftDialogs";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
-import { PianoButton } from "@/components/PianoButton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/PianoDropdownMenu";
+import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
-import { RowActions, rowActionsWidth } from "@/components/RowActions";
+import { ListRow, RowMenu } from "@/components/RowActions";
 import {
   SettingsList,
   SettingsLoadFailure,
   SettingsSectionFrame,
   SettingsSkeleton,
-  settingsRow,
 } from "@/components/SettingsSectionFrame";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
+import { ItemDescription } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -225,50 +217,21 @@ function LibraryRow({
   remove: () => void;
 }) {
   return (
-    <Item
-      role="listitem"
-      data-row
-      className={cn(settingsRow, rowActionsWidth.list[1], "relative hover:bg-fill-hover")}
+    <ListRow
+      title={name}
+      titleClassName="font-mono"
+      open={{ onOpen: view, disabled }}
+      badge={badge}
+      menu={
+        <RowMenu label={`${Noun} actions ${name}`} disabled={disabled}>
+          <DropdownMenuItem variant="destructive" onSelect={remove}>
+            Delete
+          </DropdownMenuItem>
+        </RowMenu>
+      }
     >
-      <ItemContent className="min-w-0 gap-0.5">
-        <ItemTitle className="w-full min-w-0 font-mono">
-          {/* As a project row: no row primitive opens on click beside a menu, so the name's button stretches over the row. */}
-          <button
-            type="button"
-            className="min-w-0 truncate text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
-            disabled={disabled}
-            onClick={view}
-          >
-            {name}
-          </button>
-          {badge}
-        </ItemTitle>
-        {/* The revealed ⋯ covers the row's end, so the description fades beneath it. The mask sits
-            here, not on the content, where it would clip the name button's stretched focus ring. */}
-        <ItemDescription data-motion="yield" className="text-xs">
-          {description}
-        </ItemDescription>
-      </ItemContent>
-      <RowActions className="top-1/2 right-4 -translate-y-1/2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <PianoButton
-              variant="ghost"
-              size="list"
-              aria-label={`${Noun} actions ${name}`}
-              disabled={disabled}
-            >
-              <MoreHorizontalIcon />
-            </PianoButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem variant="destructive" onSelect={remove}>
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </RowActions>
-    </Item>
+      <ItemDescription className="text-xs">{description}</ItemDescription>
+    </ListRow>
   );
 }
 
