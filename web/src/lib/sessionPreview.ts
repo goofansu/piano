@@ -65,9 +65,8 @@ export function sessionHasPreview(state: AppState, target: SessionRef): boolean 
 
 export type PreviewTone = "ready" | "pending" | "problem" | "idle";
 
-/** How inspection names an app: a short label, a dot tone, and one line of status. */
+/** How inspection names an app: a dot tone and one line of status. */
 export interface PreviewFace {
-  label: string;
   tone: PreviewTone;
   status: string;
 }
@@ -82,26 +81,25 @@ export function previewHost(url: string): string {
 }
 
 export function previewFace(preview: SessionPreview): PreviewFace {
-  if (preview.url) return { label: "Preview", tone: "ready", status: "Running" };
+  if (preview.url) return { tone: "ready", status: "Running" };
   switch (preview.state) {
     case "starting":
-      return { label: "Starting…", tone: "pending", status: "Starting" };
+      return { tone: "pending", status: "Starting" };
     case "stopping":
-      return { label: "Stopping…", tone: "pending", status: "Stopping" };
+      return { tone: "pending", status: "Stopping" };
     // Its process runs and has not answered yet; Piano keeps checking.
     case "running":
-      if (preview.warming)
-        return { label: "Warming up…", tone: "pending", status: "Running, warming up" };
+      if (preview.warming) return { tone: "pending", status: "Running, warming up" };
       // Its process runs, but the local check got no usable answer within its warm-up window.
-      return { label: "Not ready", tone: "problem", status: "Running, not answering" };
+      return { tone: "problem", status: "Running, not answering" };
     case "failed":
-      return { label: "Failed", tone: "problem", status: "Failed" };
+      return { tone: "problem", status: "Failed" };
     case "exited":
-      return { label: "Exited", tone: "idle", status: "Exited" };
+      return { tone: "idle", status: "Exited" };
     case "not-loaded":
-      return { label: "Stopped", tone: "idle", status: "Not running" };
+      return { tone: "idle", status: "Not running" };
     case "unknown":
-      return { label: "Unknown", tone: "problem", status: "Status unavailable" };
+      return { tone: "problem", status: "Status unavailable" };
   }
 }
 
