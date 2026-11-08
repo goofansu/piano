@@ -90,7 +90,7 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
   badge,
 }: LibraryPageKind<Entry>) {
   const { Noun } = LIBRARY_KINDS[kind];
-  const plural = `${kind}s`;
+  const plural = `${kind}s` as const;
   const observed = useObservation(plural, list);
   // New comes from `pageCommands` (the header and the palette); both open this editor.
   const editor = editors[kind];
@@ -104,7 +104,7 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
   const busy = actions.running !== undefined;
   return (
     <SettingsSectionFrame
-      title={`${Noun}s`}
+      section={plural}
       actions={<PageHeaderActions page="settings" />}
       dialogs={
         <>

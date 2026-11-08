@@ -11,7 +11,13 @@ import type { workspaceFile } from "./api.ts";
 import type { Client } from "./client.ts";
 import type { Preference } from "./preference.ts";
 import { findProject } from "./projectCommands.ts";
-import { parseRoute, type Route, routePath, type SettingsSection } from "./routes.ts";
+import {
+  DEFAULT_SETTINGS_SECTION,
+  parseRoute,
+  type Route,
+  routePath,
+  type SettingsSection,
+} from "./routes.ts";
 import { sessionLabel } from "./sessionCatalog.ts";
 import { checkoutMissingAt, workspaceFor } from "./sessionContext.ts";
 
@@ -865,7 +871,7 @@ export function createNavigation({
     openNew: (cwd, projectId) => open({ kind: "new", cwd, projectId }),
     openProjects: () => open({ kind: "projects" }),
     openProject: (projectId) => open({ kind: "project", projectId }),
-    openSettings: (section = "providers") =>
+    openSettings: (section = DEFAULT_SETTINGS_SECTION) =>
       batch(() => {
         wanted = null;
         set({ settings: section });

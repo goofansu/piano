@@ -180,9 +180,8 @@ export function pageCommands(
   settings: SettingsSection | null = null,
 ): GlobalCommand[] {
   if (settings) {
-    const page = settings;
-    if (!isEditorPage(page)) return [];
-    const { id, label, editor } = PAGE_EDITORS[page];
+    if (!isEditorPage(settings)) return [];
+    const { id, label, editor } = PAGE_EDITORS[settings];
     return [
       {
         id,
@@ -190,7 +189,7 @@ export function pageCommands(
         icon: "create",
         group: "navigate",
         enabled: editor.available(),
-        intent: { kind: "page-editor", page },
+        intent: { kind: "page-editor", page: settings },
       },
     ];
   }

@@ -98,7 +98,7 @@ export function McpSettings() {
     });
   return (
     <SettingsSectionFrame
-      title="MCP"
+      section="mcp"
       actions={<PageHeaderActions page="settings" />}
       dialogs={
         <>

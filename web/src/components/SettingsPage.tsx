@@ -126,9 +126,7 @@ function ProvidersSettings() {
     });
   return (
     <SettingsSectionFrame
-      title="Providers"
-      titleId="settings-providers-title"
-      sectionId="settings-providers"
+      section="providers"
       dialogs={
         <>
           <RemovalDialog
