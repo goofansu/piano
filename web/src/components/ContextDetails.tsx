@@ -82,6 +82,7 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
           <ToggleGroup
             type="single"
             size="sm"
+            spacing={0}
             variant="outline"
             value={metric}
             onValueChange={(value) => {
