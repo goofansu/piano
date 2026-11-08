@@ -17,17 +17,18 @@ sidebar's Settings opens Providers; the palette lists each section by name.
   description text "Saved in Piano. Sessions started from now can use it."; Create skill stays
   off until Name, Description and Instructions are valid; success toasts "Skill created" and the
   row appears (name mono, description under it).
-- `skill-row-actions`: "Skill actions <name>" holds View then a red Delete. View shows the
-  skill's SKILL.md with "Copy skill"; Delete asks "Delete skill?" (`<name> is removed. Sessions
-  started from now no longer load it.`) and toasts "Skill deleted".
+- `skill-row-actions`: the row's name button opens View, which shows the skill's SKILL.md with
+  "Copy skill"; "Skill actions <name>" (shown while the row is pointed at or focused) holds a red
+  Delete, which asks "Delete skill?" (`Sessions started from now no longer load <name>.`) and
+  toasts "Skill deleted".
 - `prompts-empty`: `/settings/prompts` headed Prompts with New prompt; with none, "No prompts".
 - `new-prompt`: New prompt opens a dialog shaped as New skill (Name, Description "0 / 1,024",
   Instructions "0 / 20,000", Cancel, Create prompt; no Disable model invocation). Create prompt
   stays off until the three fields are valid; success toasts "Prompt created" and the row shows
   name plus description.
-- `prompt-row-actions`: "Prompt actions <name>" holds View then a red Delete. View shows the
-  prompt file with "Copy prompt"; Delete asks "Delete prompt?" with the same "sessions started
-  from now" wording and toasts "Prompt deleted".
+- `prompt-row-actions`: the row's name button opens View, which shows the prompt file with
+  "Copy prompt"; "Prompt actions <name>" holds a red Delete, which asks "Delete prompt?" with the
+  same "sessions started from now" wording and toasts "Prompt deleted".
 - `palette-new`: on Skills, Mod+K offers "New skill"; on Prompts, "New prompt". From other
   screens, search `skill` / `prompt` to open that Settings section first.
 
@@ -65,8 +66,7 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     Capture `02b-skill-created`.
 - `skill-row-actions`
   - Action: `ab wait --fn "!document.querySelector('[data-sonner-toast]')";
-    ab find role button click --name "Skill actions verify-skill" --exact;
-    ab find role menuitem click --name "View" --exact; ab wait '[role=dialog]'`
+    ab find role button click --name "verify-skill" --exact; ab wait '[role=dialog]'`
   - Result: the dialog shows the complete SKILL.md and "Copy skill". Capture `02c-skill-view`.
     `ab press Escape; ab find role button click --name "Skill actions verify-skill" --exact;
     ab find role menuitem click --name "Delete" --exact; ab wait --text "Delete skill?"`;
@@ -87,11 +87,10 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 - `prompt-row-actions`
   - Action: after `new-prompt`, wait out the create toast first
     (`ab wait --fn "!document.querySelector('[data-sonner-toast]')"`), then
-    `ab find role button click --name "Prompt actions verify-prompt" --exact;
-    ab find role menuitem click --name "View" --exact; ab wait "[role=dialog]"`
+    `ab find role button click --name "verify-prompt" --exact; ab wait "[role=dialog]"`
   - Result: the View dialog is titled with the prompt name and offers "Copy prompt" (and Close).
     Escape, then Delete through the same menu; confirm on "Delete prompt?" /
-    `verify-prompt is removed. Sessions started from now no longer load it.`: toast
+    `Sessions started from now no longer load verify-prompt.`: toast
     `Prompt deleted`, and "No prompts" again when it was the only one. Capture `04-prompt-view`,
     `05-prompt-delete`, `06-prompt-deleted`.
 - `palette-new`
