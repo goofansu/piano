@@ -55,19 +55,45 @@ jobs:
           cache: npm
       # The module suite includes a real Worktrunk lifecycle test, not just fake CLI tests.
       # Piano supports the latest Worktrunk, so CI tests the latest release, checked against
-      # the checksum file published with it.
-      - name: Install the latest Worktrunk
+      # the checksum file published with it. The binary is cached per release: release
+      # downloads have returned 504 for an hour at a time, and each release downloads once.
+      - name: Find the latest Worktrunk release
+        id: worktrunk
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for delay in 2 4 8 16 32 0; do
+            tag=$(gh api repos/max-sixty/worktrunk/releases/latest --jq .tag_name) && break
+            [ "$delay" = 0 ] && exit 1
+            sleep "$delay"
+          done
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Restore Worktrunk ${{ steps.worktrunk.outputs.tag }}
+        id: worktrunk-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/worktrunk
+          key: worktrunk-x86_64-unknown-linux-musl-${{ steps.worktrunk.outputs.tag }}
+      - name: Download Worktrunk ${{ steps.worktrunk.outputs.tag }}
+        if: steps.worktrunk-cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          TAG: ${{ steps.worktrunk.outputs.tag }}
         run: |
           cd "$RUNNER_TEMP"
           asset=worktrunk-x86_64-unknown-linux-musl.tar.xz
           for file in "$asset" "$asset.sha256"; do
-            curl --fail --location --silent --show-error --retry 3 --remote-name \
-              "https://github.com/max-sixty/worktrunk/releases/latest/download/$file"
+            curl --fail --location --silent --show-error --remote-name \
+              --retry 8 --retry-all-errors --retry-max-time 300 \
+              "https://github.com/max-sixty/worktrunk/releases/download/$TAG/$file"
           done
           sha256sum --check "$asset.sha256"
           mkdir -p worktrunk
           tar -xJf "$asset" --strip-components=1 -C worktrunk
+      - name: Put Worktrunk on PATH
+        shell: bash
+        run: |
           echo "$RUNNER_TEMP/worktrunk" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/worktrunk/wt" --version
       - name: Clean install
