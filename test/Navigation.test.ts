@@ -1170,6 +1170,30 @@ test("following an HTML sibling link reuses the reference file tab and retains i
   });
 });
 
+test("a spelling that resolved to an open file rereads it in its tab, without adding one", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("reference/map.html");
+  await p.fileReads[0].finish("reference/map.html");
+  p.navigation.openFile("lessons/../reference/map.html");
+  await p.fileReads[1].finish("reference/map.html");
+  p.navigation.openFile("lessons/../reference/map.html");
+  assert.deepEqual(
+    shownTabs(p.navigation).tabs,
+    ["file:reference/map.html"],
+    "a known spelling reuses its tab while the read is pending",
+  );
+  assert.equal(p.fileReads.length, 3, "an explicit open still rereads");
+  assert.equal(p.fileReads[2].path, "lessons/../reference/map.html", "as the link spelled it");
+  const result = await p.fileReads[2].finish("reference/map.html", "newer content");
+  const after = activeTab(p.navigation.getState().surface);
+  assert.ok(after && typeof after !== "string");
+  assert.equal(after.result, result);
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:reference/map.html"]);
+});
+
 test("resolved aliases keep tab order and the latest link's return area, not completion order", async () => {
   const p = page("/new");
   p.registry();
@@ -1212,8 +1236,9 @@ test("resolved file reads do not reopen closed tabs, steal focus or affect anoth
     active: "changes",
     area: "surface",
   });
+  // The spelling resolved there, so it rereads in that tab.
   const closed = open();
-  p.navigation.closeTab("file:lessons/../reference/map.html");
+  p.navigation.closeTab("file:reference/map.html");
   const before = shownTabs(p.navigation);
   assert.equal(closed.signal.aborted, true);
   await closed.finish("reference/map.html");
@@ -1244,6 +1269,13 @@ test("a path through `..` keeps its spelling until the server resolves the direc
   assert.equal(p.fileReads.at(-1)!.path, "alias/../README.md");
   await p.fileReads.at(-1)!.finish("/sibling/README.md");
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:/sibling/README.md"]);
+  p.navigation.openFile("alias/../README.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:/sibling/README.md"]);
+  assert.equal(
+    p.fileReads.at(-1)!.path,
+    "alias/../README.md",
+    "the server follows the symlink again",
+  );
 });
 
 test("an alias resolving while a newer canonical read waits keeps that request, not the older bytes", async () => {

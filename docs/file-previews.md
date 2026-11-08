@@ -7,6 +7,7 @@ Each file opens in a tab of its own, added at the end; a file already open is re
 tab. After a successful read, tabs adopt the server-resolved path and merge duplicate spellings,
 keeping the first tab's position and the latest explicit open's acquisition and return area,
 regardless of completion order. Adopting the path retains the successful read, not another request.
+A spelling that has resolved to an open tab is read again in that tab, not opened beside it.
 The browser does not collapse `..` before reading: a directory symlink can change its destination.
 Failed reads keep the requested path.
 Closing a tab shows its neighbour; one area at a time, closing a file opened from the

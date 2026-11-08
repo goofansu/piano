@@ -31,6 +31,12 @@ type FileLocation = { kind: "file"; path: string; from: SessionArea };
 export interface FileTab extends FileLocation {
   key: number;
   workspaceId: string | undefined;
+  /** The spelling this acquisition reads: `path`, or a known alias a link used. */
+  requested: string;
+  /** Other spellings whose reads resolved to `path`, so opening one again rereads in this tab. */
+  aliases: readonly string[];
+  /** The read has yet to start or finish; `status` then says so in words. */
+  pending: boolean;
   result?: Awaited<ReturnType<typeof workspaceFile>>;
   status: string;
 }
@@ -533,13 +539,19 @@ export function createNavigation({
   let fileCheckoutMissing = false;
   let fileContext: unknown[] = [];
   const reads = new Map<number, AbortController>();
-  const newFile = (file: FileLocation, order = ++fileRequest): FileTab => {
+  const newFile = (
+    file: FileLocation,
+    { requested = file.path, aliases = [] as readonly string[], order = ++fileRequest } = {},
+  ): FileTab => {
     const tab: FileTab = {
       kind: "file",
       path: file.path,
       from: file.from,
       key: ++fileKey,
       workspaceId: fileWorkspace,
+      requested,
+      aliases,
+      pending: !!fileWorkspace,
       status: fileWorkspace
         ? "Opening…"
         : "Workspace unavailable. Refresh folders and try the link again.",
@@ -752,7 +764,11 @@ export function createNavigation({
                   ? tab
                   : newFile(
                       { kind: "file", path: tab.path, from: tab.from },
-                      fileRequests.get(tab),
+                      {
+                        requested: tab.requested,
+                        aliases: tab.aliases,
+                        order: fileRequests.get(tab),
+                      },
                     ),
               ),
             },
@@ -767,11 +783,10 @@ export function createNavigation({
       }
     }
     for (const file of files) {
-      if (!file.workspaceId || reads.has(file.key) || file.result || file.status !== "Opening…")
-        continue;
+      if (!file.workspaceId || !file.pending || reads.has(file.key)) continue;
       const controller = new AbortController();
       reads.set(file.key, controller);
-      void readFile(file.workspaceId, file.path, { signal: controller.signal }).then(
+      void readFile(file.workspaceId, file.requested, { signal: controller.signal }).then(
         (result) => completeFile(file.key, controller, { result, status: "" }),
         (error: unknown) =>
           completeFile(file.key, controller, {
@@ -794,15 +809,25 @@ export function createNavigation({
       const surface = state.surface;
       const file = surface?.tabs.find((tab): tab is FileTab => !isView(tab) && tab.key === key);
       if (!surface || !file) return;
-      const path = patch.result?.path ?? file.path;
+      // A failed read keeps the spelling it was asked by.
+      const path = patch.result?.path ?? file.requested;
       const matches = surface.tabs.filter(
         (tab): tab is FileTab => !isView(tab) && (tab === file || tab.path === path),
       );
       const latest = matches.reduce((a, b) =>
         (fileRequests.get(a) ?? 0) > (fileRequests.get(b) ?? 0) ? a : b,
       );
+      // The spellings that resolved here, this read's included, so opening one again finds this tab.
+      const aliases = [
+        ...new Set([file.requested, ...matches.flatMap((tab) => tab.aliases)]),
+      ].filter((alias) => alias !== path);
       // The latest explicit open keeps both its acquisition and return area, even if still pending.
-      const resolved = updateFile(latest, latest === file ? { ...patch, path } : { path });
+      const resolved = updateFile(
+        latest,
+        latest === file
+          ? { ...patch, path, requested: path, aliases, pending: false }
+          : { path, aliases },
+      );
       const first = surface.tabs.indexOf(matches[0]);
       set({
         surface: {
@@ -863,9 +888,15 @@ export function createNavigation({
       if (!state.single) setRail(!state.layout.rail);
     },
     openFile: (spelled, from = state.layout.agent ? "agent" : "surface") => {
-      const path = filePath(spelled, client.getState().session?.cwd);
+      const requested = filePath(spelled, client.getState().session?.cwd);
       const tabs = state.surface?.tabs ?? [];
-      const tab = newFile({ kind: "file", path, from });
+      const files = tabs.filter((t): t is FileTab => !isView(t));
+      // The tab of that path, else the tab this spelling resolved to before: reread in place.
+      const known =
+        files.find((t) => t.path === requested) ?? files.find((t) => t.aliases.includes(requested));
+      const tab = known
+        ? newFile({ kind: "file", path: known.path, from }, { requested, aliases: known.aliases })
+        : newFile({ kind: "file", path: requested, from });
       const key = tabKey(tab);
       const at = tabs.findIndex((t) => tabKey(t) === key);
       show({ tabs: at < 0 ? [...tabs, tab] : tabs.with(at, tab), active: key });
