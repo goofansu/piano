@@ -11,7 +11,8 @@ header's Changes control wearing the pull request's face; see
 the one-line header with its menu on the title, is built on `session-header-polish`; the views
 below remain a proposal. Terms follow [the glossary](glossary.md); workspace identity and
 lifetimes stay under INV-01 and INV-07, and a preview stays Pi's process under
-[ADR 0003](adr/0003-pi-owned-preview-lifetime.md).
+[ADR 0003](adr/0003-pi-owned-preview-lifetime.md). The embedded Preview proposal below is also
+superseded: managed apps now open only in external tabs; see [current app inspection](live-previews.md).
 
 ## Decision
 
@@ -73,7 +74,7 @@ With one view open the strip still shows, so closing is one place.
   this tab instead of its menu. A blocked frame cannot be told from a slow one, so Piano shows
   no framing message: the browser's own page shows in the frame, and **More preview actions →
   Not working here?** offers **Open in new tab** (see
-  [live previews](live-previews.md#something-does-nothing-when-clicked)).
+  [current external app access](live-previews.md#external-app-access); the recovery UI described here is retired).
 - **Pull request** stays the popover over the sidebar; a view is a later step if the popover's
   files and diff want room.
 - **Navigation state:** `sidebar: SidebarPanel | null` becomes `views: View[]` plus the active

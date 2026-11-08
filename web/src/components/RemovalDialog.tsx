@@ -26,6 +26,7 @@ export function RemovalDialog({
   destructive = true,
   cancel,
   confirm,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   title: string;
@@ -41,6 +42,7 @@ export function RemovalDialog({
   destructive?: boolean;
   cancel: () => void;
   confirm: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   return (
     <Dialog
@@ -52,6 +54,7 @@ export function RemovalDialog({
       <DialogContent
         className="sm:max-w-md"
         showCloseButton={false}
+        onCloseAutoFocus={onCloseAutoFocus}
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>

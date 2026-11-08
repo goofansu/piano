@@ -147,7 +147,7 @@ function RailSections({ state }: { state: AppState }) {
       </RailSection>
       {preview && (
         <RailSection title="App" {...group("app")}>
-          <PreviewRailRow preview={preview} />
+          <PreviewRailRow key={preview.instanceId} preview={preview} />
         </RailSection>
       )}
       {files.length > 0 && (

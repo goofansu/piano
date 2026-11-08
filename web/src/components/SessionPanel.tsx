@@ -1,4 +1,4 @@
-import { AppWindowIcon, FileDiffIcon, XIcon } from "lucide-react";
+import { FileDiffIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ChangesPanel } from "@/components/Changes";
 import { IconButton } from "@/components/IconButton";
@@ -9,7 +9,6 @@ import {
   PianoStripTabTrigger,
   Tabs,
 } from "@/components/PianoTabs";
-import { PreviewPanel } from "@/components/SessionPreview";
 import type { PullRequestControl } from "@/components/SessionPullRequest";
 import { SurfaceColumn, surfaceTabNames } from "@/components/SurfaceArea";
 import { FileTabIcon, WorkspaceFile } from "@/components/WorkspaceFile";
@@ -42,8 +41,6 @@ export function SurfaceTabTrigger({
       icon={
         tab === "changes" ? (
           <FileDiffIcon className="size-3.5" />
-        ) : tab === "preview" ? (
-          <AppWindowIcon className="size-3.5" />
         ) : (
           <FileTabIcon path={tab.path} className="size-3.5" />
         )
@@ -216,7 +213,6 @@ export function SessionPanel({
               pullRequest={pullRequest}
             />,
           )}
-        {tabs.includes("preview") && view("preview", <PreviewPanel key={key} />)}
         {files.map((file) =>
           view(
             tabKey(file),

@@ -17,20 +17,27 @@ import {
 } from "@/components/CommandHost";
 import { SheetClose, SheetContent, SheetTitle } from "@/components/PianoSheet";
 import { ProjectCommandIconView } from "@/components/Projects";
-import { dotTone, useSeenPreview } from "@/components/SessionPreview";
+import { dotTone, PreviewStatus, useSeenPreview } from "@/components/SessionPreview";
 import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { returnFocusForKeyboard } from "@/lib/pointerClose";
+import { previewObservation } from "@/lib/previewObservation";
 import type { ProjectCommand } from "@/lib/projectCommands";
 import { pullRequestView } from "@/lib/pullRequestView";
 import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
-import { previewFace, previewHost } from "@/lib/sessionPreview";
+import {
+  type PreviewClaim,
+  previewClaim,
+  previewClaimHolds,
+  previewFace,
+  previewHost,
+} from "@/lib/sessionPreview";
 
-type Page = "actions" | "projects";
+type Page = "actions" | "projects" | "preview";
 
 /** A full-width, 44px row with 16px icons, shared by buttons and the display switch's label. */
 const row =
@@ -132,16 +139,17 @@ function PullRequestRow({
   );
 }
 
-/** Show preview as a row: the app's state dot in the icon column, then its name and host. */
+/** Preview pushes inspection in this sheet, without embedding the app. */
 function PreviewRow({ preview, onShow }: { preview: SessionPreview; onShow: () => void }) {
   const face = previewFace(preview);
   return (
-    <Button variant="ghost" className={row} aria-label="Show preview" onClick={onShow}>
+    <Button variant="ghost" className={row} aria-label="Preview" onClick={onShow}>
       <span className="flex size-4 shrink-0 items-center justify-center">
         <StatusDot tone={dotTone[face.tone]} />
       </span>
       <span data-slot="row-title">Preview</span>
       <span className={value}>{preview.url ? previewHost(preview.url) : face.status}</span>
+      <ChevronRightIcon className="ml-auto text-muted-foreground" />
     </Button>
   );
 }
@@ -168,8 +176,8 @@ function PaneHeader({ title, onBack }: { title: string; onBack: () => void }) {
  * The session menu for one-area-at-a-time or a narrow viewport: a bottom sheet, one level deep.
  * The header's second line says where the session runs. The sheet includes the linked pull
  * request and known Preview, not the rail's Outputs or Environment copy menus, nor the dropdown
- * menu's session ID. Add to project pushes the project picker. A row that goes elsewhere in the
- * session (Preview) calls `onLeave`, which closes the sheet and leaves focus to that destination.
+ * menu's session ID. Project and Preview rows push panes within this sheet. Opening details or
+ * a confirmation calls `onLeave`, closing the sheet and leaving focus to that destination.
  */
 export function SessionMenuSheet({
   onLeave,
@@ -184,7 +192,8 @@ export function SessionMenuSheet({
   const { pullRequest } = sessionContext(state);
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const preview = useSeenPreview(state);
-  const showPreview = commands.find((c) => c.id === "show-preview");
+  const [previewPage, setPreviewPage] = useState<PreviewClaim | null>(null);
+  const pagePreview = previewPage && previewClaimHolds(state, previewPage) ? preview : undefined;
   const projects = useSessionProjectMenu();
   const left = useRef(false);
   const dismissed = useRef(false);
@@ -206,7 +215,7 @@ export function SessionMenuSheet({
   const { display } = menu;
   const rows = (section: SessionCommand[]) =>
     section.map((c) => <SessionCommandRow key={c.id} command={c} run={run} />);
-  const facts = !!pr || !!(preview && showPreview);
+  const facts = !!pr || !!preview;
 
   return (
     <SheetContent
@@ -242,12 +251,13 @@ export function SessionMenuSheet({
             <SheetTitle className="sr-only">Session</SheetTitle>
             {/* The pull request opens in a browser tab, so the sheet closes as after an action. */}
             {pr && <PullRequestRow url={pr.url} name={pr.reference && pr.name} onOpen={onLeave} />}
-            {preview && showPreview && (
+            {preview && (
               <PreviewRow
                 preview={preview}
                 onShow={() => {
-                  run(showPreview);
-                  leave();
+                  setPreviewPage(previewClaim(state) ?? null);
+                  setPage("preview");
+                  previewObservation.refresh();
                 }}
               />
             )}
@@ -286,6 +296,54 @@ export function SessionMenuSheet({
                 </Fragment>
               );
             })}
+          </>
+        )}
+        {page === "preview" && (
+          <>
+            <PaneHeader title="Preview" onBack={() => setPage("actions")} />
+            <Separator className="my-1" />
+            {pagePreview ? (
+              <>
+                <div className="flex min-w-0 flex-col gap-1 px-3 py-2">
+                  <PreviewStatus
+                    preview={pagePreview}
+                    className="flex items-center gap-2 text-sm"
+                  />
+                  {pagePreview.url && (
+                    <span className={cn(value, "font-mono")}>{previewHost(pagePreview.url)}</span>
+                  )}
+                </div>
+                {pagePreview.url && (
+                  <Button asChild variant="ghost" className={row}>
+                    <a
+                      href={pagePreview.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={onLeave}
+                    >
+                      Open preview in new tab
+                      <ExternalLinkIcon data-icon="inline-end" className="ml-auto" />
+                    </a>
+                  </Button>
+                )}
+                {commands
+                  .filter((c) => c.id === "preview-details" || c.id === "stop-preview")
+                  .map((command) => (
+                    <Fragment key={command.id}>
+                      {command.destructive && <Separator className="my-1" />}
+                      <SessionCommandRow
+                        command={command}
+                        run={(c) => {
+                          leave();
+                          run(c);
+                        }}
+                      />
+                    </Fragment>
+                  ))}
+              </>
+            ) : (
+              <p className="px-3 py-2 text-sm text-muted-foreground">Preview unavailable</p>
+            )}
           </>
         )}
         {page === "projects" && projects && (

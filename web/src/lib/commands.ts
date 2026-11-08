@@ -57,7 +57,6 @@ export interface CommandEffects {
   openProjects: () => void;
   openProject: (projectId: string) => void;
   openChanges: () => void;
-  openPreview: () => void;
   /** The session header's Artifacts menu. */
   openArtifacts: () => void;
   toggleRail: () => void;
@@ -149,9 +148,6 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "artifacts":
       effects.openArtifacts();
-      break;
-    case "show-preview":
-      effects.openPreview();
       break;
     case "preview-details":
       effects.openPreviewDetails();

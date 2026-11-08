@@ -5,30 +5,31 @@ one app in that session's canonical workspace. The agent reads repository script
 reports local readiness and returns an ordinary preview link. **That live Pi process owns the app.**
 No service manifest, skill collection or Stop session control is required.
 
-While the selected live session owns an app, its **session rail** has an **App** section. The
-**Preview** row shows a StatusDot and ready hostname, or its non-ready state. The row opens one
-**Preview** Surface tab beside Changes and files; its separate external-link action opens only a
-new browser tab. Where the session's areas take turns (phones), the row sits in the session menu
-instead, and selecting Preview closes the menu. The header has no separate app control. A newly appearing app never opens anything or steals focus.
+While the selected live session has an observed app URL, its header's **Open preview in new tab**
+icon opens that URL directly in a browser tab. In the side-by-side layout, the session rail's
+**App** section shows status and a hostname link; **More preview actions** holds **Preview details**
+and destructive **Stop preview**. Where the session's areas take turns, the session menu's
+**Preview** row pushes a pane within the same sheet: **Back**, status/hostname, **Open preview in new
+tab**, **Preview details** and **Stop preview**. Opening the app dismisses the sheet; details and
+stop hand focus to their dialogs. These are available-width layouts, not device feature gates.
+A newly appearing app never opens anything or steals focus.
 
-Preview embeds the current registered ready app, on an origin different from Piano. Its toolbar
-has **Reload preview**, **Open in new tab** and **More preview actions**: **Copy link**, **Details**,
-then destructive **Stop preview**. Details holds the command, URL/access, observation time and
-bounded output; **Refresh** reads it again. Non-ready states offer **Check status**. The palette
-distinguishes **Show preview**, **Open preview in new tab**, **Preview details** and **Stop preview**.
-On narrow screens Preview takes the full content area; the **Agent** tab returns to the unchanged
-composer. Request revisions there as usual; app HMR, when supported, updates the embedded page.
+Apps open only in external browser tabs, never inside Piano. Details holds the command, URL/access,
+observation time and bounded output; **Refresh** reads it again. The palette offers **Open preview
+in new tab**, **Preview details** and **Stop preview**. Changes and file previews keep their Surface
+navigation; HTML file previews retain their separate sandboxed viewer. Request revisions in the
+composer as usual; app HMR, when supported, updates its external tab.
 
 Piano reads status from the session's owner without starting Pi or an app: on attachment/reconnect,
-return to the page, opening Preview/Details and explicit checks. Concurrent reads coalesce, focus
+return to the page, opening the Preview pane, rail actions or details, and explicit refreshes. Concurrent reads coalesce, focus
 reads retain their ten-second throttle, and the browser does not poll. The owner alone checks a
 warming-up app, below. Requests carry echoed observation
 IDs, and details are fenced to attachment, owner generation and instance. Disconnection or a failed
 read is unknown, not stopped; no external action remains usable from an uncertain observation. A read
 that client or session input capacity refuses is answered under its ID too: it ends the check and
-leaves the app unknown, without its frame or link, until **Check status** or **Refresh** reads again.
+leaves the app unknown, without its link, until another inspection or **Refresh** reads again.
 A start also publishes what it has changed before it returns: a replacement drops the old app,
-with its frame and link, as soon as its stop is confirmed, and every new launch shows as starting,
+with its link, as soon as its stop is confirmed, and every new launch shows as starting,
 without a link, from its saved intent until its own readiness check succeeds. After a failed start
 the owner reads the workspace again, so the rail drops an app already stopped and keeps one
 launched but not observable as unknown.
@@ -48,12 +49,12 @@ answered once is no longer warming up; a later bad answer shows **Running, not a
 
 Stop asks for confirmation of the observed exact instance. A changed attachment, owner or instance
 invalidates that confirmation; server-side exact-instance reconciliation remains authoritative.
-Cancellation has no effect. Success removes the App row and answers once with a toast; an already-open
-Preview tab shows **Preview stopped**, without the old link. Failed stop keeps inspection available
-and reports the error. Closing a tab chooses its neighbour or returns to Agent and the enabled rail;
-showing the rail preserves covered tabs. Browser memory deliberately does not restore Preview tabs
-or disposable stopped state. A saved, closed or restarted session has no live row even if its
-transcript links an old app. Archive and Delete ask before stopping a session that owns an app.
+Cancellation has no effect. Success removes the App row and answers once with a toast. Failed stop
+keeps inspection available and reports the error. A Preview pane opened for an old selection,
+generation or instance loses its actions rather than acting on a replacement. Closing the sheet or
+external tab never stops the app. Old browser memory cannot restore a Preview Surface tab; Changes
+and file tabs remain. A saved, closed or restarted session has no live row even if its transcript
+links an old app. Archive and Delete ask before stopping a session that owns an app.
 
 | Event | Outcome |
 | --- | --- |
@@ -68,82 +69,19 @@ transcript links an old app. Archive and Delete ask before stopping a session th
 This reverses PIN-94's independent lifetime; see [ADR 0003](adr/0003-pi-owned-preview-lifetime.md)
 and the mandatory [legacy upgrade procedure](#upgrading-from-pin-94).
 
-## Embedded page and recovery
+## External app access
 
-Ordinary same-session Changes/file/Agent/rail switches keep the same iframe mounted, including
-forms, scroll and in-app navigation. Closing Preview may discard it. Session, Pi generation,
-instance or registered URL changes discard it immediately; a new app cannot inherit the old page
-or completion callbacks. Confirmed stop/release, disconnect, unknown, starting, stopping and
-terminal/non-ready observations remove the frame. A status read **in progress** leaves an unchanged
-ready frame visible without navigating it; the resulting observation decides whether it can remain.
-An unchanged successful refresh does not reload the page. Browser frame events never set service
-health or establish authentication, usable embedding or HMR.
+The normal user-activated link uses `target="_blank"` and `noopener noreferrer`. Piano does not
+frame or proxy the app, forward credentials, or relax `PIANO_ALLOWED_ORIGINS`. Sign-in, popups,
+downloads and app navigation follow ordinary browser-tab rules, without an additional Piano iframe
+sandbox. Private exe.dev authentication and browser cookie rules still apply. If opening fails,
+check **Preview details** for the app's output or ask the agent; neither path restarts the app.
 
-**Reload preview** replaces only the page, never the process. It returns to the registered entry
-URL, not a claimed cross-origin current route. Its spinner ends on a frame load or after eight
-seconds (browsers fire no iframe error event); none of these establishes success. The healthy page
-has no status or help footer. Reload and **Open preview in new tab** are named icon controls in the
-toolbar; **Details** in its menu holds status and output on demand, and **Not working here?** above
-it answers a click that does nothing (see [below](#something-does-nothing-when-clicked)). The external link stays available
-while loading, after the deadline and on opaque framing/login failures. It is a normal user-activated external link
-with `noopener noreferrer`, not a second Surface tab. Keyboard Tab/Shift+Tab traverses the tested
-app and Piano's controls; iframe keys are not intercepted by a bridge. Removing a focused frame
-returns focus to its containing view; closing the tab uses the existing Surface focus policy.
-
-### Something does nothing when clicked
-
-The embedded page runs in a restricted frame. These do nothing there, silently, while they work in
-a normal tab:
-
-- links and forms that leave the frame (`target="_top"`), such as a **Sign in** that replaces the
-  whole page;
-- links that open a new window (`target="_blank"`) and `window.open` pop-ups, such as OAuth
-  sign-in windows;
-- scripts that redirect the whole page (SSO bounces, "session expired" redirects);
-- `alert`, `confirm` and `prompt` dialogs;
-- downloads;
-- clipboard, camera, location and fullscreen.
-
-The browser reports none of these to Piano, so Piano cannot tell a denied click from a click the
-app handled without loading a page, or from an app bug. It never claims to have detected one. When
-something does nothing, the user says so: **More preview actions → Not working here?** opens a
-dialog that lists these limits in one line, with **Open in new tab** focused first. Its note says
-it opens the app's start page: the frame's current route is unreadable across origins, so the
-new tab starts at the registered entry URL, and in-frame state such as a sign-in may not carry over.
-The dialog also offers **Reload preview** (the page only; the app keeps running) and **Details**
-(status and output). Typing the symptom in the command palette ("not working", "can't click",
-"sign in", "popup") finds **Open preview in new tab**.
-
-The triage rule: if it works in a new tab, it is a Preview limitation; keep using the tab for that
-flow. If it also fails there, it is the app or access: check **Details** for the app's output, or
-ask the agent. Neither path restarts the app or touches the conversation (ADR 0003). The frame
-never gains top-navigation or pop-up permission to make these work, because the app would then
-replace Piano's page instead.
-
-### Permissions and access boundary
-
-Only absolute HTTP(S) registered ready URLs without embedded credentials, on a distinct origin,
-are eligible. An HTTPS Piano does not embed a plain-HTTP app on a non-loopback host, because the
-browser would block it as mixed content; Preview shows its status and **Open in new tab** instead. Other URLs remain externally inspectable without an iframe. No arbitrary address
-input, HTML proxy, credential forwarding or relaxation of `PIANO_ALLOWED_ORIGINS` is involved.
-The browser loads the original app URL, so upstream `X-Frame-Options` and CSP `frame-ancestors`
-remain authoritative, as do private exe.dev authentication and browser cookie rules. A login or
-framing failure may be opaque to Piano; use the external link rather than infer its cause.
-
-The iframe uses `sandbox="allow-scripts allow-same-origin allow-forms"` and
-`referrerPolicy="no-referrer"`. The tested Vite app needs scripts for interaction/HMR, its own
-origin for module loading and normal app-origin APIs, and forms for native submission. No extra
-Permissions Policy `allow` delegation, popup, download, modal or top-navigation permission is
-added. An app needing other capabilities can use the external link (see
-[Something does nothing when clicked](#something-does-nothing-when-clicked)). Browser-managed app-origin
-cookies are not Piano credential forwarding. The app runs as a trusted same-account developer
-process: different ports/origins and these iframe restrictions are **not hostile-code isolation**.
-
-Local HTTP readiness, actual browser access, framing, and HMR are separate checks. The native
-browser journey can use an explicitly loopback-configured scratch origin to test inline interaction
-without bypassing exe.dev authentication. This does not verify the authenticated HTTPS embedding /
-new-tab path or native macOS; record those separately, and leave inaccessible paths as unresolved
-verification gates. No production route, sharing or access configuration changes are needed.
+Local HTTP readiness, actual browser access and HMR are separate checks. The native browser journey
+uses an explicitly loopback-configured scratch origin to observe new-tab interaction without
+bypassing exe.dev authentication. Authenticated HTTPS access, native macOS and real-device behavior
+must be recorded separately. No production route, sharing or access configuration changes are
+needed. Apps remain trusted same-account developer processes, not hostile-code sandboxes.
 
 ## Hosts and configuration
 

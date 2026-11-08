@@ -52,7 +52,6 @@ export type SessionCommandId =
   | "agent"
   | "wrap-code"
   | "pull-request"
-  | "show-preview"
   | "open-preview"
   | "preview-details"
   | "stop-preview"
@@ -105,7 +104,6 @@ export type SessionCommandIntent =
   | { kind: "open-url"; url: string }
   /** Stop the app it claims, only while that app is still the one on screen. */
   | ({ kind: "stop-preview"; host: string } & PreviewClaim)
-  | { kind: "show-preview" }
   | { kind: "preview-details" }
   /** Turn Messages only on or off. */
   | { kind: "messages-only"; on: boolean }
@@ -534,29 +532,11 @@ function previewCommands(
   if (!preview || !claim) return [];
   return [
     {
-      id: "show-preview",
-      label: "Show preview",
-      icon: "preview",
-      enabled: true,
-      keywords: ["app", "inspect"],
-      intent: { kind: "show-preview" },
-    },
-    {
       id: "open-preview",
       label: "Open preview in new tab",
       icon: "preview",
       enabled: !!preview.url,
-      // The symptom finds the recovery: the embedded page denies what a real tab allows.
-      keywords: [
-        "app",
-        "run",
-        "localhost",
-        "not working",
-        "can't click",
-        "cant",
-        "sign in",
-        "popup",
-      ],
+      keywords: ["app", "run", "localhost"],
       ...(preview.url && { detail: previewHost(preview.url) }),
       intent: { kind: "open-url", url: preview.url ?? "" },
     },
@@ -572,6 +552,7 @@ function previewCommands(
       id: "stop-preview",
       label: "Stop preview",
       icon: "stop",
+      destructive: true,
       enabled: sessionReady(state),
       keywords: ["app", "kill"],
       intent: {

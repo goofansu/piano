@@ -1,27 +1,15 @@
 import type { SessionPreview } from "@shared/wire";
 import { cn } from "cn";
 import {
-  CircleHelpIcon,
-  CopyIcon,
   ExternalLinkIcon,
   MoreHorizontalIcon,
   RefreshCwIcon,
   ScrollTextIcon,
   SquareIcon,
 } from "lucide-react";
-import {
-  type ReactNode,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import { toast } from "sonner";
+import { useRef, useSyncExternalStore } from "react";
 import { useCommands, useSessionCommands } from "@/components/CommandHost";
-import { copyText } from "@/components/CopyButton";
 import { IconButton } from "@/components/IconButton";
-import { PianoButton } from "@/components/PianoButton";
 import {
   Dialog,
   DialogContent,
@@ -41,18 +29,9 @@ import {
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
-import { SurfaceFrame } from "@/components/SurfaceArea";
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import { Item, ItemContent, ItemDescription, ItemMedia } from "@/components/ui/item";
-import { pointerLast } from "@/lib/pointerClose";
-import { previewObservation, seenDetails, seenPreview, seenStop } from "@/lib/previewObservation";
+import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
+import { previewObservation, seenDetails, seenPreview } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
   type PreviewClaim,
@@ -60,10 +39,8 @@ import {
   previewAccess,
   previewClaimHolds,
   previewFace,
-  previewFrameUrl,
   previewHost,
 } from "@/lib/sessionPreview";
-import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
 /** The app's state in the status dot's vocabulary; work in progress breathes. */
@@ -83,10 +60,6 @@ export function useSeenPreview(state: AppState) {
   return seenPreview(state, usePreviewObservation());
 }
 
-async function copyLink(url: string) {
-  if (await copyText(url, "Could not copy the preview link.")) toast.success("Preview link copied");
-}
-
 /** The selected session's preview commands, run through the host like any other surface's. */
 function usePreviewCommands() {
   const { commands, run } = useSessionCommands();
@@ -101,7 +74,13 @@ function usePreviewCommands() {
 }
 
 /** The dot and the word for the app's state, in Preview and its details. */
-function PreviewStatus({ preview, className }: { preview: SessionPreview; className?: string }) {
+export function PreviewStatus({
+  preview,
+  className,
+}: {
+  preview: SessionPreview;
+  className?: string;
+}) {
   const face = previewFace(preview);
   return (
     <span className={className}>
@@ -111,10 +90,10 @@ function PreviewStatus({ preview, className }: { preview: SessionPreview; classN
   );
 }
 
-/** One owned app in the rail; opening externally is a sibling, never row activation. */
+/** One owned app in the rail; opening it never changes session navigation. */
 export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
-  const navigation = useNavigation();
-  const face = previewFace(preview);
+  const commands = usePreviewCommands();
+  const handOff = useRef(false);
   return (
     <RailList aria-label="App">
       <Item
@@ -123,360 +102,80 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
         role="listitem"
         className={cn(
           railRow,
-          rowActionsWidth.list[preview.url ? 1 : 0],
+          rowActionsWidth.list[1],
           "relative hover:bg-fill-hover focus-within:bg-fill-hover",
         )}
       >
-        <button
-          type="button"
-          aria-label="Show preview"
-          className="flex min-w-0 flex-1 items-center text-left outline-none pointer-coarse:min-h-11"
-          onClick={() => {
-            navigation.openPreview();
-            previewObservation.refresh();
-          }}
-        >
-          {/* Keep the first-line box with the text, even inside the taller touch target. */}
-          <div className="flex min-w-0 flex-1 items-start gap-2.5">
-            <ItemMedia
-              variant="icon"
-              className="h-lh group-has-data-[slot=item-description]/item:translate-y-0"
-            >
-              <StatusDot tone={dotTone[face.tone]} />
-            </ItemMedia>
-            <ItemContent data-motion="yield" className="min-w-0 gap-0">
-              <RailRowTitle>Preview</RailRowTitle>
-              <ItemDescription className="line-clamp-none block truncate font-mono text-xs text-ink-3">
-                {preview.url ? previewHost(preview.url) : face.status}
-              </ItemDescription>
-            </ItemContent>
-          </div>
-        </button>
-        {preview.url && (
-          <RowActions className="top-1/2 right-1 -translate-y-1/2">
-            <PianoButton
-              asChild
-              variant="ghost"
-              size="list"
-              aria-label="Open preview in new tab"
-              title="Open preview in new tab"
-            >
-              <a href={preview.url} target="_blank" rel="noopener noreferrer">
-                <ExternalLinkIcon />
+        <ItemContent data-motion="yield" className="min-w-0 gap-0">
+          <RailRowTitle>
+            <PreviewStatus preview={preview} className="flex items-center gap-2" />
+          </RailRowTitle>
+          {preview.url && (
+            <ItemDescription className="line-clamp-none block truncate font-mono text-xs text-ink-3">
+              <a
+                href={preview.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open preview in new tab"
+                className="inline-flex max-w-full items-center gap-1 hover:underline"
+              >
+                <span className="truncate">{previewHost(preview.url)}</span>
+                <ExternalLinkIcon className="size-3 shrink-0" />
               </a>
-            </PianoButton>
-          </RowActions>
-        )}
+            </ItemDescription>
+          )}
+        </ItemContent>
+        <RowActions className="top-1/2 right-1 -translate-y-1/2">
+          <DropdownMenu
+            modal={false}
+            onOpenChange={(open) => {
+              if (open) {
+                handOff.current = false;
+                previewObservation.refresh();
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <IconButton size="list" label="More preview actions">
+                <MoreHorizontalIcon />
+              </IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(event) => {
+                if (handOff.current) event.preventDefault();
+              }}
+            >
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    handOff.current = true;
+                    commands.details();
+                  }}
+                >
+                  <ScrollTextIcon />
+                  Preview details
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={!commands.canStop}
+                  onSelect={() => {
+                    handOff.current = true;
+                    commands.stop();
+                  }}
+                >
+                  <SquareIcon className="fill-current" />
+                  Stop preview
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </RowActions>
       </Item>
     </RailList>
-  );
-}
-
-/** The current app in the existing Surface. Navigation never owns the service lifetime. */
-export function PreviewPanel() {
-  const { shownTab, surfaceRequest } = useNavigation();
-  // Extra dependencies: repeated requests to show Preview are explicit observations too.
-  useEffect(() => {
-    if (shownTab === "preview") previewObservation.refresh();
-  }, [shownTab, surfaceRequest]);
-  const { state } = useCommands();
-  const observed = usePreviewObservation();
-  const preview = seenPreview(state, observed);
-  const commands = usePreviewCommands();
-  // Only a view that actually inspected this app can retain its confirmed stop. Closing the
-  // tab discards this identity; browser memory never restores a Preview tab.
-  const [viewedInstance, setViewedInstance] = useState(preview?.instanceId ?? null);
-  if (preview && preview.instanceId !== viewedInstance) setViewedInstance(preview.instanceId);
-  const stopped = seenStop(state, observed, viewedInstance);
-  const url = previewFrameUrl(preview, window.location.origin);
-  // `reload` exists only while a page is embedded: only then can something in it do nothing.
-  const actions = (reload?: () => void) =>
-    preview && <PreviewActions preview={preview} commands={commands} reload={reload} />;
-  if (url && preview)
-    return (
-      <EmbeddedPreview
-        // SessionPanel fences the session. This boundary also disposes page state, timers and
-        // callbacks on owner/instance/URL change, not on ordinary status reads or hide/show.
-        key={JSON.stringify([state.session?.cursor?.generation, preview.instanceId, url])}
-        url={url}
-        actions={actions}
-      />
-    );
-  return (
-    <SurfaceFrame tab="preview" actions={actions()}>
-      <Empty>
-        <EmptyHeader>
-          {preview ? (
-            <>
-              <EmptyTitle>
-                <PreviewStatus
-                  preview={preview}
-                  className="flex items-center justify-center gap-2"
-                />
-              </EmptyTitle>
-              {preview.url && (
-                <EmptyDescription className="break-all font-mono">
-                  {previewHost(preview.url)}
-                </EmptyDescription>
-              )}
-            </>
-          ) : (
-            <EmptyDescription>
-              {stopped ? "Preview stopped" : "Preview unavailable"}
-            </EmptyDescription>
-          )}
-        </EmptyHeader>
-        {preview && !preview.url && (
-          <EmptyContent>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={observed.refreshing || !sessionReady(state)}
-              aria-busy={observed.refreshing}
-              onClick={previewObservation.refresh}
-            >
-              <RefreshCwIcon
-                data-icon="inline-start"
-                className={observed.refreshing ? "animate-spin" : undefined}
-              />
-              Check status
-            </Button>
-          </EmptyContent>
-        )}
-      </Empty>
-    </SurfaceFrame>
-  );
-}
-
-type PreviewCommands = ReturnType<typeof usePreviewCommands>;
-
-/** Preview's toolbar actions after Reload: open externally, and the rest in one menu. */
-function PreviewActions({
-  preview,
-  commands,
-  reload,
-}: {
-  preview: SessionPreview;
-  commands: PreviewCommands;
-  reload?: () => void;
-}) {
-  const [helpOpen, setHelpOpen] = useState(false);
-  const moreRef = useRef<HTMLButtonElement>(null);
-  const help = !!(reload && preview.url);
-  return (
-    <>
-      {preview.url && (
-        <IconButton asChild size="header" label="Open preview in new tab">
-          <a href={preview.url} target="_blank" rel="noopener noreferrer">
-            <ExternalLinkIcon />
-          </a>
-        </IconButton>
-      )}
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <IconButton ref={moreRef} size="header" label="More preview actions">
-            <MoreHorizontalIcon />
-          </IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          // The dialog takes focus; the menu must not hand it back to its trigger first.
-          onCloseAutoFocus={(event) => helpOpen && event.preventDefault()}
-        >
-          <DropdownMenuGroup>
-            {help && (
-              <DropdownMenuItem onSelect={() => setHelpOpen(true)}>
-                <CircleHelpIcon />
-                Not working here?
-              </DropdownMenuItem>
-            )}
-            {preview.url && (
-              <DropdownMenuItem onSelect={() => void copyLink(preview.url!)}>
-                <CopyIcon />
-                Copy link
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onSelect={commands.details}>
-              <ScrollTextIcon />
-              Details
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={!commands.canStop}
-              onSelect={commands.stop}
-            >
-              <SquareIcon className="fill-current" />
-              Stop preview
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {help && (
-        <PreviewHelpDialog
-          url={preview.url!}
-          open={helpOpen}
-          close={() => setHelpOpen(false)}
-          reload={reload!}
-          details={commands.details}
-          returnFocus={() => moreRef.current?.focus()}
-        />
-      )}
-    </>
-  );
-}
-
-/**
- * The user's report that something in the page does nothing. Piano cannot see into the frame, so
- * this explains what the frame denies and offers the real tab; it never claims a block was seen.
- */
-function PreviewHelpDialog({
-  url,
-  open,
-  close,
-  reload,
-  details,
-  returnFocus,
-}: {
-  url: string;
-  open: boolean;
-  close: () => void;
-  reload: () => void;
-  details: () => void;
-  returnFocus: () => void;
-}) {
-  const openRef = useRef<HTMLAnchorElement>(null);
-  // Details opens its own dialog, which takes focus itself.
-  const handOff = useRef(false);
-  const then =
-    (action: () => void, ownsFocus = false) =>
-    () => {
-      handOff.current = ownsFocus;
-      close();
-      action();
-    };
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && close()}>
-      <DialogContent
-        className="sm:max-w-md"
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          openRef.current?.focus();
-        }}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          if (handOff.current) {
-            handOff.current = false;
-            return;
-          }
-          // The item that opened this is gone with its menu; the menu's trigger stands in,
-          // under the same keyboard-only policy as any overlay's return.
-          if (!pointerLast()) returnFocus();
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>Not working here?</DialogTitle>
-          <DialogDescription>
-            Preview runs the app in a restricted frame. Links that open a new window or leave the
-            frame, sign-in redirects, pop-ups, alerts and downloads may do nothing here.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col items-start gap-1.5">
-          <Button asChild>
-            <a
-              ref={openRef}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => close()}
-            >
-              Open in new tab
-              <ExternalLinkIcon data-icon="inline-end" aria-hidden />
-            </a>
-          </Button>
-          <p className="text-sm text-muted-foreground">Opens the app’s start page.</p>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          If it also fails in a new tab, check Details for the app’s output or ask the agent.
-        </p>
-        <DialogFooter>
-          <Button variant="outline" onClick={then(details, true)}>
-            <ScrollTextIcon data-icon="inline-start" aria-hidden />
-            Details
-          </Button>
-          <Button variant="outline" onClick={then(reload)}>
-            <RefreshCwIcon data-icon="inline-start" aria-hidden />
-            Reload preview
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** Ends one page's loading feedback, leaving a later page's alone. */
-const settled = (page: number) => (current: number | null) => (current === page ? null : current);
-
-/** One registered page. Reload replaces only its browsing context, never its managed process. */
-function EmbeddedPreview({
-  url,
-  actions,
-}: {
-  url: string;
-  actions: (reload: () => void) => ReactNode;
-}) {
-  const frame = useRef<HTMLIFrameElement>(null);
-  const [page, setPage] = useState(0);
-  const [loadingPage, setLoadingPage] = useState<number | null>(0);
-  const loading = loadingPage === page;
-  const reload = () => {
-    setLoadingPage(page + 1);
-    setPage(page + 1);
-  };
-  // An old iframe's queued load must not settle a later reload.
-  const finish = () => setLoadingPage(settled(page));
-  useEffect(() => {
-    // A load can be an opaque blocked/login page. Neither it nor this deadline says
-    // anything about service health or successful embedding; just end the bounded feedback.
-    const timer = setTimeout(() => setLoadingPage(settled(page)), 8_000);
-    return () => clearTimeout(timer);
-  }, [page]);
-  // Extra dependencies: each page is a different iframe DOM node.
-  useLayoutEffect(() => {
-    const element = frame.current;
-    return () => {
-      // Removing a focused cross-origin frame must not strand keyboard focus in a dead page.
-      if (element && document.activeElement === element)
-        element.closest<HTMLElement>('[tabindex="-1"]')?.focus({ preventScroll: true });
-    };
-  }, [page]);
-  return (
-    <SurfaceFrame
-      tab="preview"
-      actions={
-        <>
-          <IconButton size="header" label="Reload preview" aria-busy={loading} onClick={reload}>
-            <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
-          </IconButton>
-          {actions(reload)}
-        </>
-      }
-    >
-      {/* An iframe has no shadcn primitive. No proxy, DOM bridge or delegated device permissions.
-          Scripts/origin/forms are the tested app's minimum; top navigation/popups stay denied. */}
-      <iframe
-        key={page}
-        ref={frame}
-        title="App preview"
-        src={url}
-        sandbox="allow-scripts allow-same-origin allow-forms"
-        referrerPolicy="no-referrer"
-        onLoad={finish}
-        className="block h-full w-full border-0 bg-white"
-      />
-    </SurfaceFrame>
   );
 }
 
@@ -529,24 +228,25 @@ function PreviewFacts({ preview }: { preview: SessionPreview }) {
 export function PreviewDetailsDialog({
   claim,
   close,
+  onCloseAutoFocus,
 }: {
   claim: PreviewClaim | null;
   close: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const { state } = useCommands();
   const commands = usePreviewCommands();
   const observed = usePreviewObservation();
   const openRef = useRef<HTMLAnchorElement>(null);
-  const preview = seenPreview(state, observed);
+  const preview =
+    claim && previewClaimHolds(state, claim) ? seenPreview(state, observed) : undefined;
   const details = seenDetails(state, observed);
   return (
-    <Dialog
-      open={!!preview && !!claim && previewClaimHolds(state, claim)}
-      onOpenChange={(o) => !o && close()}
-    >
+    <Dialog open={!!preview} onOpenChange={(o) => !o && close()}>
       <DialogContent
         // Bounded to the viewport so Close and the footer stay reachable on a short screen.
         className="max-h-[85dvh] overflow-y-auto sm:max-w-xl"
+        onCloseAutoFocus={onCloseAutoFocus}
         // Land on the safe action, never Stop: opening the app, else the dialog itself.
         onOpenAutoFocus={(event) => {
           event.preventDefault();
@@ -597,14 +297,18 @@ export function PreviewDetailsDialog({
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" disabled={!commands.canStop} onClick={commands.stop}>
+          <Button
+            variant="outline"
+            disabled={!preview || !commands.canStop}
+            onClick={commands.stop}
+          >
             <SquareIcon data-icon="inline-start" className="fill-current" aria-hidden /> Stop
             preview
           </Button>
           {preview?.url && (
             <Button asChild>
               <a ref={openRef} href={preview.url} target="_blank" rel="noopener noreferrer">
-                Open in new tab
+                Open preview in new tab
                 <ExternalLinkIcon data-icon="inline-end" aria-hidden />
               </a>
             </Button>

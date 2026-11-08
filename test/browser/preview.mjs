@@ -32,10 +32,10 @@ const origin =
   previewConfig.origin ?? (local ? "http://localhost" : `https://${hostname()}.exe.xyz`);
 // Vite allows localhost already; a remote origin's hostname must be allowed explicitly.
 const appEnv = local ? {} : { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname };
-const embeddedLocal = ["localhost", "127.0.0.1"].includes(new URL(origin).hostname);
-if (!embeddedLocal)
+const externalLocal = ["localhost", "127.0.0.1"].includes(new URL(origin).hostname);
+if (!externalLocal)
   console.warn(
-    `Embedded-page checks skipped: ${origin} is not loopback. See docs/testing.md to enable them.`,
+    `External-link app interaction skipped: ${origin} is not loopback. Set PIANO_PREVIEW_CONFIG to a JSON file with {"origin":"http://127.0.0.1"} to prove it.`,
   );
 const evidence = resolve(process.argv[2] ?? ".scratch/browser/preview");
 mkdirSync(evidence, { recursive: true });
@@ -56,7 +56,7 @@ const observations = [
   {
     origin,
     platform: process.platform,
-    embeddedLocal,
+    externalLocal,
     authenticatedHttps:
       "unverified — requires a signed-in browser; no credentials or access policy changed",
   },
@@ -170,7 +170,7 @@ const model = createServer(async (req, res) => {
     delta = {
       role: "assistant",
       content: app.ready
-        ? `PREVIEW_READY: [Open preview](${app.url})\nInstance ${app.instanceId}\n[App source](app.mjs)`
+        ? `PREVIEW_READY: [Open preview](${app.url})\nInstance ${app.instanceId}\n[App source](app.mjs)\n[App document](index.html)`
         : app.stopped
           ? "PREVIEW_STOPPED"
           : `PREVIEW_FAILED: ${tool.content}`,
@@ -244,13 +244,6 @@ export default { plugins: [{ name: 'browser-boundary-fixture', configureServer(s
       res.writeHead(503, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
       return res.end('Replacement warming up');
     }
-    if (req.headers['sec-fetch-dest'] !== 'iframe') return next();
-    if (mode === 'pending') return; // browser-only stall; local readiness still answers
-    if (mode === 'denied') {
-      res.writeHead(200, { 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "frame-ancestors 'none'", 'Cache-Control': 'no-store', 'Content-Type': 'text/html' });
-      return res.end('<h1>Framing denied fixture</h1>');
-    }
-    if (mode === 'login') { res.writeHead(401, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' }); return res.end('<h1>Sign in required</h1>'); }
     next();
   });
 } }] };`,
@@ -329,261 +322,125 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         );
         assert.ok(link.includes(app.url), link);
         assert.ok(link.includes('target="_blank"'), link);
+        const externalLink = 'a[aria-label="Open preview in new tab"]';
+        const headerLink = `header ${externalLink}`;
+        const railLink = `[data-slot=session-rail] ${externalLink}`;
         const railPreview = () =>
           page.evaluate(
-            "!!document.querySelector(':is([data-slot=session-rail],[role=dialog]) button[aria-label=\"Show preview\"]')",
+            "!!document.querySelector('[data-slot=session-rail] [aria-label=\"More preview actions\"]')",
           );
         const showRail = async () => {
-          // An open rail may not have drawn the app's row yet; open it only when it is closed. One
-          // area at a time there is no rail: the session menu holds the Preview row.
-          if (!(await railPreview())) {
-            if (
-              await page.evaluate("!!document.querySelector('[aria-label=\"Show session rail\"]')")
-            )
-              await page.click("button", "Show session rail");
-            else await page.click("button", "Session information and actions");
-          }
+          if (await page.evaluate("!!document.querySelector('[aria-label=\"Show session rail\"]')"))
+            await page.click("button", "Show session rail");
           await page.until(
-            "!!document.querySelector(':is([data-slot=session-rail],[role=dialog]) button[aria-label=\"Show preview\"]')",
+            "!!document.querySelector('[data-slot=session-rail] [aria-label=\"More preview actions\"]')",
           );
         };
-        const showPreview = async () => {
-          await showRail();
-          await page.click("button", "Show preview");
-          await page.until(
-            "!!document.querySelector('[data-slot=surface-area]:not([inert]) section[aria-label=Preview]')",
+        const noEmbeddedPreview = () =>
+          page.until(
+            "!document.querySelector('iframe[title=\"App preview\"], [data-slot=surface-area] section[aria-label=Preview], button[aria-label=\"Show preview\"]') && ![...document.querySelectorAll('[role=tab]')].some(t => t.textContent.trim().startsWith('Preview'))",
           );
-        };
-        // Cross-origin content is observed through the browser's accessibility tree, not a
-        // production DOM bridge. CLI frame-scoped CSS/eval is not supported by this release.
-        const appSee = async (text) => {
-          const deadline = Date.now() + 15000;
-          while (!(await page.ab("snapshot")).includes(text)) {
-            assert.ok(Date.now() < deadline, `app did not show ${text}`);
-            await delay(100);
-          }
-        };
-        const appAct = async (name, action, ...args) => {
-          const snapshot = await page.ab("snapshot");
-          const line = snapshot
-            .split("\n")
-            .find((line) => line.includes(`"${name}"`) && line.includes("[ref="));
-          const ref = line?.match(/ref=(e\d+)/)?.[1];
-          assert.ok(ref, `${name} is accessible in the app`);
-          if (action === "click") {
-            // Native CLI pointer hit-testing double-counts some iframe offsets; keyboard
-            // activation still exercises the app control without a DOM .click().
-            await page.ab("focus", `@${ref}`);
-            await page.press("Enter");
-          } else await page.ab(action, `@${ref}`, ...args);
-        };
-        const frameReady = () => appSee("Count: 0");
-        const rememberFrame = () =>
-          page.evaluate(
-            "!!(window.previousPreviewFrame = document.querySelector('iframe[title=\"App preview\"]'))",
-          );
-        const sameFrame = () =>
-          page.evaluate(
-            "window.previousPreviewFrame === document.querySelector('iframe[title=\"App preview\"]')",
-          );
-        // A Surface resize released over the cross-origin app must end there: the release goes
-        // to the frame's browsing context, not Piano's window (PIN-126). Real CDP mouse input.
-        const surfaceResize = async () => {
-          const geometry = () =>
-            page.evaluate(`(() => {
-              const area = document.querySelector('[data-slot=surface-area]:not([inert])');
-              const separator = area.querySelector('[role=separator]');
-              const handle = separator.getBoundingClientRect();
-              const frame = document.querySelector('iframe[title="App preview"]').getBoundingClientRect();
-              return {
-                // The chosen width; the column may render narrower to leave Agent its minimum.
-                width: Number(separator.getAttribute('aria-valuenow')),
-                shown: Math.round(area.getBoundingClientRect().width),
-                dragging: area.dataset.dragging,
-                stored: localStorage.getItem('piano.panelWidth'),
-                handle: [handle.x + handle.width / 2, handle.y + handle.height / 2],
-                frame: [frame.x + frame.width / 2, frame.y + frame.height / 2],
-              };
-            })()`);
-          const mouse = (...args) => page.ab("mouse", ...args.map(String));
-          const start = await geometry();
-          const [hx, hy] = start.handle.map(Math.round);
-          // Wholly within Piano: press, drag over the Agent area, release there.
-          await mouse("move", hx, hy);
-          await mouse("down");
-          await mouse("move", hx - 30, hy);
-          await mouse("move", hx - 60, hy);
-          await mouse("up");
-          const inside = await geometry();
-          assert.equal(inside.dragging, "false", "release in Piano ends the drag");
-          assert.ok(inside.width > start.width, "drag in Piano widens the column");
-          assert.equal(inside.stored, String(inside.width), "release in Piano commits the width");
-          // Into the app: press on the divider, release over the embedded page.
-          const [ix, iy] = inside.handle.map(Math.round);
-          const [fx, fy] = inside.frame.map(Math.round);
-          await mouse("move", ix, iy);
-          await mouse("down");
-          await mouse("move", ix + 40, iy);
-          await mouse("move", ix + 100, fy);
-          await mouse("move", fx, fy);
-          await mouse("up");
-          const released = await geometry();
-          assert.equal(released.dragging, "false", "release over the app ends the drag");
-          assert.equal(released.stored, String(released.width), "release commits the width");
-          // Back across Piano with no button held: nothing follows the pointer.
-          await mouse("move", ix, iy);
-          await mouse("move", ix - 200, iy);
-          const after = await geometry();
-          observations.push({ surfaceResize: { start, inside, released, after } });
-          assert.equal(after.dragging, "false");
-          assert.equal(after.width, released.width, "moving after release leaves the width");
-          assert.equal(after.stored, released.stored);
-          // The app still takes pointer input: a press inside it focuses its browsing context.
-          await mouse("move", fx, fy);
-          await mouse("down");
-          await mouse("up");
-          await page.until(
-            "document.activeElement === document.querySelector('iframe[title=\"App preview\"]')",
-          );
-          await page.ab("focus", "[data-slot=surface-area] [role=separator]");
-          await page.press("Enter");
-          assert.equal((await geometry()).width, start.width);
-        };
-        const noFrame = () =>
-          page.until("!document.querySelector('iframe[title=\"App preview\"]')");
-        // A closing dialog hides the rest of the page from the accessibility tree until it has
-        // finished closing; a role lookup in that window finds nothing.
+        // A closing dialog hides the rest of the page from accessibility until it has closed.
         const dialogClosed = () =>
           page.until(
             "!document.querySelector('[role=dialog],[role=alertdialog],[data-aria-hidden]')",
           );
         const more = async () => {
           await page.until("!document.querySelector('[data-sonner-toast]')");
+          await showRail();
           await page.click("button", "More preview actions");
         };
+        const detailsReady = async () => {
+          await page.see("Output");
+          await page.until(
+            "document.querySelector('[role=dialog] button[aria-busy]')?.getAttribute('aria-busy') === 'false'",
+          );
+          assert.equal(
+            await page.evaluate("document.querySelector('[role=dialog] h2')?.textContent"),
+            "Preview",
+          );
+        };
+        const refreshDetails = async () => {
+          await detailsReady();
+          await page.click("button", "Refresh");
+          await detailsReady();
+        };
+        // Opening the actual UI link proves the tab destination. Only loopback runs can also
+        // prove interaction: exe.dev authentication is intentionally not bypassed.
+        const externalAnswer = async (name, heading = "Preview journey v1") => {
+          if (externalLocal) {
+            await page.see(heading);
+            assert.equal(new URL(await page.ab("get", "url")).origin, new URL(app.url).origin);
+            await page.click("button", "Count: 0");
+            await page.see("Count: 1");
+            await page.ab("fill", '[aria-label="App draft"]', "Saved");
+            await page.click("button", "Save draft");
+            await page.see("Route: ?draft=Saved");
+          }
+          await page.capture(name);
+          observations.push({
+            externalPath: name,
+            interacted: externalLocal,
+            tabs: await page.ab("tab", "list"),
+          });
+          await page.ab("tab", "close");
+        };
+        await noEmbeddedPreview();
+        await page.until(`!!document.querySelector(${JSON.stringify(headerLink)})`);
         assert.equal(
           await page.evaluate(
-            "!!document.querySelector('header button[aria-label^=\"Preview:\"]')",
+            `document.querySelector(${JSON.stringify(headerLink)}).textContent.trim()`,
           ),
-          false,
+          "",
+          "header preview link is icon-only",
         );
         assert.equal(
-          await page.evaluate("!!document.querySelector('[data-slot=surface-area]:not([inert])')"),
-          false,
-          "appearing app never opens Surface",
-        );
-        await showRail();
-        assert.equal(
-          await page.evaluate(
-            "document.querySelector(':is([data-slot=session-rail],[role=dialog]) a[aria-label=\"Open preview in new tab\"]')?.target",
-          ),
+          await page.evaluate(`document.querySelector(${JSON.stringify(headerLink)}).target`),
           "_blank",
+        );
+        await page.ab("click", headerLink);
+        await externalAnswer("1a-header-external-answer");
+        assert.equal(new URL(await page.ab("get", "url")).pathname, sessionPath);
+        await page.click("button", "Session information and actions");
+        await page.until(
+          "!!document.querySelector('[role=menu]') && !document.querySelector('[role=dialog]')",
+        );
+        await page.press("Escape");
+        await showRail();
+        await page.until(
+          "document.querySelector('[data-slot=session-rail]').textContent.includes('Running')",
+        );
+        assert.equal(
+          await page.evaluate(`document.querySelector(${JSON.stringify(railLink)}).target`),
+          "_blank",
+        );
+        assert.ok(
+          (
+            await page.evaluate(`document.querySelector(${JSON.stringify(railLink)}).textContent`)
+          ).includes(new URL(app.url).hostname),
         );
         await page.ab("fill", '[aria-label="Message"]', "Keep my draft");
         await page.ab("upload", 'input[type="file"]', join(evidence, "1-settled-preview-link.png"));
-        const alignedPreviewDot = async (viewport) => {
-          const offset = await page.evaluate(`(() => {
-            const row = document.querySelector(':is([data-slot=session-rail],[role=dialog]) button[aria-label="Show preview"]');
-            const dot = row.querySelector('[data-slot=status-dot]').getBoundingClientRect();
-            const range = document.createRange();
-            range.selectNodeContents(row.querySelector('[data-slot=item-title], [data-slot=row-title]'));
-            const line = range.getClientRects()[0];
-            return (dot.top + dot.bottom - line.top - line.bottom) / 2;
-          })()`);
-          observations.push({ previewDot: { viewport, offset } });
-          assert.ok(
-            Math.abs(offset) <= 1,
-            `${viewport}: Preview dot is ${offset}px off its first line`,
-          );
-        };
-        await alignedPreviewDot("desktop");
         await page.capture("1b-rail-preview");
-        // Sibling keyboard targets: the row inspects, its link only opens a browser tab.
-        await page.ab(
-          "focus",
-          ':is([data-slot=session-rail],[role=dialog]) button[aria-label="Show preview"]',
-        );
-        await page.press("Tab");
-        assert.equal(
-          await page.evaluate("document.activeElement?.getAttribute('aria-label')"),
-          "Open preview in new tab",
-        );
+        await page.ab("focus", railLink);
         await page.press("Enter");
-        await page.capture("1b-external-row-answer");
-        observations.push({ externalRowTabs: await page.ab("tab", "list") });
-        await page.ab("tab", "close");
+        await externalAnswer("1b-rail-external-answer");
+        assert.equal(new URL(await page.ab("get", "url")).pathname, sessionPath);
+        await noEmbeddedPreview();
         assert.equal(
           await page.evaluate("!!document.querySelector('[data-slot=surface-area]:not([inert])')"),
           false,
-          "external row action never selects Preview",
+          "rail link never opens a Surface",
         );
         await page.click("button", "App");
         await page.capture("1b-app-folded");
         await page.click("button", "App");
-        // PIN-125: Space activates the focused row once; the draft is not typed into.
-        await page.ab(
-          "focus",
-          ':is([data-slot=session-rail],[role=dialog]) button[aria-label="Show preview"]',
-        );
-        await page.press("Space");
-        await page.until(
-          "!!document.querySelector('[data-slot=surface-area]:not([inert]) section[aria-label=Preview]')",
-        );
-        assert.equal(
-          await page.evaluate("document.querySelector('[aria-label=Message]').value"),
-          "Keep my draft",
-          "Space on Show preview leaves the draft alone",
-        );
-        if (embeddedLocal) {
-          await frameReady();
-          await appAct("Count: 0", "click");
-          await appAct("App draft", "fill", "Keep app state");
-          await appAct("App route", "click");
-          await rememberFrame();
-          await surfaceResize();
-        }
-        assert.equal(
-          await page.evaluate(
-            "document.querySelector('section[aria-label=Preview] [data-slot=panel-body]').innerText.trim()",
-          ),
-          "",
-          "the healthy embedded preview has no persistent status or explanation",
-        );
-        await page.capture("1c-preview-surface");
-        await page.click("link", "Open preview in new tab");
-        await page.capture("1c-toolbar-external-answer");
-        await page.ab("tab", "close");
+        // File/Changes inspection remains independent of external preview and composer state.
         await page.click("button", "Changes");
         await page.click("button", "App source");
-        await page.press("Mod+K");
-        await page.ab("fill", "[cmdk-input]", "Show preview");
-        await page.until(
-          "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
-        );
-        await page.click("option", "Show preview");
-        await page.capture("1c-preview-and-changes");
-        await page.click("button", "Show session rail");
-        await page.capture("1c-rail-covers-tabs");
-        await page.click("button", "Show preview");
-        if (embeddedLocal) {
-          assert.equal(
-            await sameFrame(),
-            true,
-            "Changes, file and rail switches preserve the frame node",
-          );
-          await appSee("Count: 1");
-          await appSee("Keep app state");
-          await appSee("Route: #route");
-          await page.capture("1c-preserved-page");
-          await page.click("button", "Reload preview");
-          await frameReady();
-          assert.equal(await sameFrame(), false, "Reload replaces only the browsing context");
-          assert.equal(request({ action: "status" }).instanceId, identity);
-          await appSee("Route: entry");
-          assert.ok(!(await page.ab("snapshot")).includes("Keep app state"));
-          await page.capture("1c-reload-answer");
-          await rememberFrame();
-        }
+        await page.until("!!document.querySelector('[aria-label=\"Close app.mjs\"]')");
+        await page.capture("1c-changes-and-source");
+        await noEmbeddedPreview();
         assert.equal(
           await page.evaluate("document.querySelector('[aria-label=Message]').value"),
           "Keep my draft",
@@ -596,65 +453,60 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("button", "Remove 1-settled-preview-link.png");
         await page.ab("fill", '[aria-label="Message"]', "");
         await page.click("button", "Close app.mjs");
-        await page.click("button", "Hide changes");
-        await page.until(
-          "document.activeElement?.getAttribute('role') === 'tab' && document.activeElement.textContent.includes('Preview')",
+        await page.click("button", "App document");
+        await page.until("!!document.querySelector('iframe[title=\"HTML preview\"]')");
+        assert.equal(
+          await page.evaluate(
+            "document.querySelector('iframe[title=\"HTML preview\"]').getAttribute('sandbox')",
+          ),
+          "allow-scripts",
         );
+        await noEmbeddedPreview();
+        await page.capture("1c-html-file-preview-preserved");
+        await page.click("button", "Close index.html");
+        await page.click("button", "Hide changes");
         await more();
         await page.capture("1c-preview-menu");
-        await page.click("menuitem", "Details");
-        await page.see("Output");
-        await page.until(
-          "document.activeElement?.tagName === 'A' && document.activeElement.textContent.includes('Open in new tab')",
-        );
+        await page.click("menuitem", "Preview details");
+        await detailsReady();
         await page.until(
           "/VITE|ready in/i.test(document.querySelector('[role=dialog] pre')?.textContent ?? '')",
         );
-        // Opening Details reads the status; Refresh waits for that read, as a user would.
-        await page.until(
-          "document.querySelector('[role=dialog] button[aria-busy]')?.getAttribute('aria-busy') === 'false'",
-        );
-        await page.click("button", "Refresh");
-        await page.until(
-          "document.querySelector('[role=dialog] button[aria-busy]')?.getAttribute('aria-busy') === 'false'",
-        );
+        await refreshDetails();
         await page.capture("1d-preview-details");
-        if (embeddedLocal)
-          assert.equal(await sameFrame(), true, "Details/status refresh does not reload");
-        await page.click("link", "Open in new tab");
-        await page.capture("1d-details-external-answer");
-        await page.ab("tab", "close");
+        await page.click("link", "Open preview in new tab");
+        await externalAnswer("1d-details-external-answer");
         await page.press("Escape");
         await dialogClosed();
-        await more();
-        await page.click("menuitem", "Copy link");
-        await page.see("Preview link copied");
-        await page.capture("1e-copy-feedback");
         await more();
         await page.click("menuitem", "Stop preview");
         await page.see("Stop preview?");
         await page.capture("1f-stop-confirmation");
         await page.click("button", "Cancel");
+        await dialogClosed();
         assert.equal(request({ action: "status" }).instanceId, identity);
+        await page.capture("1f-stop-cancelled");
         await page.press("Mod+K");
         await page.ab("fill", "[cmdk-input]", "preview");
         await page.until(
           "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
         );
-        for (const label of [
-          "Show preview",
-          "Open preview in new tab",
-          "Preview details",
-          "Stop preview",
-        ])
+        for (const label of ["Open preview in new tab", "Preview details", "Stop preview"])
           await page.until(
             `[...document.querySelectorAll('[cmdk-item]')].some(o => o.textContent.includes(${JSON.stringify(label)}))`,
           );
+        assert.equal(
+          await page.evaluate(
+            "[...document.querySelectorAll('[cmdk-item]')].some(o => o.textContent.includes('Show preview'))",
+          ),
+          false,
+        );
         await page.capture("1g-palette-preview-commands");
         await page.click("option", "Preview details");
-        await page.see("Output");
+        await detailsReady();
         await page.capture("1g-palette-details-answer");
         await page.press("Escape");
+        await dialogClosed();
         const previewCommand = async (label) => {
           await page.press("Mod+K");
           await page.ab("fill", "[cmdk-input]", label);
@@ -664,168 +516,112 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.ab("find", "role", "option", "click", "--name", label);
         };
         await previewCommand("Open preview in new tab");
-        await page.capture("1g-palette-external-answer");
-        await page.ab("tab", "close");
+        await externalAnswer("1g-palette-external-answer");
         await previewCommand("Stop preview");
         await page.see("Stop preview?");
         await page.capture("1g-palette-stop-answer");
         await page.click("button", "Cancel");
         await dialogClosed();
 
-        if (embeddedLocal) {
-          // Browser failures are independent of local readiness. The fixture changes only its
-          // iframe response, never Piano's headers, credentials or allowed control origins.
-          writeFileSync(browserMode, "pending");
-          await page.click("button", "Reload preview");
-          await page.until(
-            "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'true'",
-          );
-          await page.capture("1g-frame-loading");
-          await page.click("link", "Open preview in new tab");
-          await page.see("Preview journey v1");
-          await page.capture("1g-open-while-loading");
-          await page.ab("tab", "close");
-          await page.until(
-            "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'false'",
-          );
-          assert.equal(request({ action: "status" }).instanceId, identity);
-          // Recovery stays in the toolbar and on-demand Details, not a persistent help footer.
-          await more();
-          await page.click("menuitem", "Details");
-          await page.see("Output");
-          await page.capture("1g-recovery-answer");
-          await page.press("Escape");
-          await dialogClosed();
-          await rememberFrame();
-          await page.click("button", "Reload preview");
-          // The old page's load handler goes with its detached frame; only the new page can
-          // finish this reload. (An event dispatched on a detached node reaches no React handler.)
+        const openPreviewPane = async () => {
+          await page.click("button", "Session information and actions");
+          await page.until("!!document.querySelector('[role=dialog] button[aria-label=Preview]')");
+          await page.evaluate("!!(window.previewSheet = document.querySelector('[role=dialog]'))");
+          await page.click("button", "Preview");
+          await page.until("!!document.querySelector('[role=dialog] button[aria-label=Back]')");
           assert.equal(
             await page.evaluate(
-              "window.previousPreviewFrame.isConnected === false && !!document.querySelector('iframe[title=\"App preview\"]')",
+              "window.previewSheet === document.querySelector('[role=dialog]') && document.querySelectorAll('[role=dialog]').length === 1",
             ),
             true,
-            "reload detaches the old page",
+            "Preview pushes within the same sheet",
           );
+          await noEmbeddedPreview();
+        };
+        const paneUnavailable = async () => {
+          await page.see("Preview unavailable");
+          await page.until("!!document.querySelector('[role=dialog] button[aria-label=Back]')");
           assert.equal(
             await page.evaluate(
-              "document.querySelector('[aria-label=\"Reload preview\"]').getAttribute('aria-busy')",
+              "[...document.querySelectorAll('[role=dialog] a, [role=dialog] button:not(:disabled)')].some(e => e.tagName === 'A' || ['Preview details', 'Stop preview'].includes(e.textContent.trim()))",
             ),
-            "true",
-            "a pending new page keeps the reload busy",
-          );
-          await page.until(
-            "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'false'",
-          );
-          await page.capture("1g-bounded-loading");
-          writeFileSync(browserMode, "denied");
-          await page.click("button", "Reload preview");
-          const denied = await fetch(app.url, { headers: { "sec-fetch-dest": "iframe" } });
-          assert.equal(denied.headers.get("x-frame-options"), "DENY");
-          assert.equal(denied.headers.get("content-security-policy"), "frame-ancestors 'none'");
-          await page.until(
-            "document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') === 'false'",
-          );
-          await more();
-          await page.click("menuitem", "Details");
-          await page.see("Output");
-          await page.capture("1g-framing-denied-recovery");
-          await page.click("link", "Open in new tab");
-          await page.see("Preview journey v1");
-          await page.capture("1g-recovery-external-answer");
-          await page.ab("tab", "close");
-          await page.press("Escape");
-          await dialogClosed();
-          writeFileSync(browserMode, "login");
-          await page.click("button", "Reload preview");
-          await appSee("Sign in required");
-          await page.capture("1g-login-gated-frame");
-          assert.equal(
-            request({ action: "status" }).ready,
-            true,
-            "browser login is not service readiness",
-          );
-          writeFileSync(browserMode, "normal");
-          await page.click("button", "Reload preview");
-          await frameReady();
-          // Native keyboard traversal enters and leaves the frame; no bridge intercepts keys.
-          await page.ab("focus", '[aria-label="More preview actions"]');
-          await page.press("Tab");
-          await page.until("document.activeElement?.tagName === 'IFRAME'");
-          await page.press("Shift+Tab");
-          await page.until(
-            "document.activeElement?.getAttribute('aria-label') === 'More preview actions'",
-          );
-          await page.press("Shift+Tab");
-          await page.until(
-            "document.activeElement?.getAttribute('aria-label') === 'Open preview in new tab'",
-          );
-          await page.press("Shift+Tab");
-          await page.until(
-            "document.activeElement?.getAttribute('aria-label') === 'Reload preview'",
-          );
-          await page.capture("1g-keyboard-frame-return");
-          // Something in the page does nothing: Piano cannot see why, so the user asks. The
-          // healthy page carries no hint, and the frame keeps denying top navigation and pop-ups.
-          assert.equal(
-            await page.evaluate(
-              "document.querySelector('iframe[title=\"App preview\"]').getAttribute('sandbox')",
-            ),
-            "allow-scripts allow-same-origin allow-forms",
-            "the frame never gains top navigation or pop-ups",
-          );
-          assert.equal(
-            await page.evaluate("document.body.innerText.includes('Not working here?')"),
             false,
-            "a healthy page shows no help footer, banner or toast",
+            "an invalidated pane has no live app actions",
           );
-          await more();
-          await page.capture("1g-more-menu-not-working");
-          await page.click("menuitem", "Not working here?");
-          await page.until(
-            "document.activeElement?.textContent?.trim() === 'Open in new tab' && !!document.activeElement.closest('[role=dialog]')",
-          );
-          await page.capture("1g-not-working-answer");
-          await page.press("Enter");
-          await page.see("Preview journey v1");
-          await page.capture("1g-not-working-external-answer");
-          await page.ab("tab", "close");
-          await dialogClosed();
-          assert.equal(request({ action: "status" }).instanceId, identity);
-          // Keyboard: Escape closes it and returns focus to the menu that opened it.
-          await page.ab("focus", '[aria-label="More preview actions"]');
-          await page.press("Enter");
-          await page.until("!!document.querySelector('[role=menu]')");
-          await page.until("document.activeElement?.textContent?.trim() === 'Not working here?'");
-          await page.press("Enter");
-          await page.until("document.activeElement?.textContent?.trim() === 'Open in new tab'");
-          await page.press("Escape");
-          await dialogClosed();
-          await page.until(
-            "document.activeElement?.getAttribute('aria-label') === 'More preview actions'",
-          );
-          // Reload from it replaces only the page; the app keeps its instance.
-          await more();
-          await page.click("menuitem", "Not working here?");
-          await rememberFrame();
-          await page.click("button", "Reload preview");
-          await dialogClosed();
-          assert.equal(await sameFrame(), false, "Reload preview replaces the page");
-          await frameReady();
-          assert.equal(request({ action: "status" }).instanceId, identity);
-          await more();
-          await page.click("menuitem", "Not working here?");
-          await page.click("button", "Details");
-          await page.see("Output");
-          await page.capture("1g-not-working-details");
-          await page.press("Escape");
-          await dialogClosed();
-          observations.push({
-            frameFallbacks: ["bounded pending", "DENY + frame-ancestors", "401 login"],
-            keyboardFrameTraversal: true,
-            notWorkingHereRecovery: true,
+          await noEmbeddedPreview();
+        };
+        const sheetJourney = async (width, name) => {
+          await page.ab("set", "viewport", String(width), "844");
+          if (
+            width > 849 &&
+            (await page.evaluate(
+              "[...document.querySelectorAll('[aria-label=\"Show sidebar\"]')].some(e => e.getClientRects().length > 0)",
+            ))
+          )
+            await page.click("button", "Show sidebar");
+          if (width > 849) {
+            const sessionWidth = await page.evaluate(
+              "document.querySelector('[data-slot=layout-view]').getBoundingClientRect().width",
+            );
+            assert.ok(
+              sessionWidth > 0 && sessionWidth < 849,
+              `wide viewport's session is single-area: ${sessionWidth}`,
+            );
+            observations.push({ singleArea: name, viewport: width, sessionWidth });
+          }
+          await page.cdp(async (call) => {
+            await call("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+            await page.until("matchMedia('(pointer: coarse)').matches");
+            const target = await page.evaluate(
+              `(() => { const r = document.querySelector(${JSON.stringify(headerLink)}).getBoundingClientRect(); return {width:r.width, height:r.height}; })()`,
+            );
+            assert.deepEqual(
+              target,
+              { width: 44, height: 44 },
+              `${name}: header external link uses the shared touch target`,
+            );
+            await page.capture(`2b-${name}-touch-header`);
           });
-        }
+          await openPreviewPane();
+          await page.until(
+            "document.querySelector('[role=dialog]').textContent.includes('Running')",
+          );
+          await page.see(new URL(app.url).hostname);
+          await page.capture(`2b-${name}-preview-pane`);
+          await page.click("button", "Back");
+          await page.until("!!document.querySelector('[role=dialog] button[aria-label=Preview]')");
+          assert.equal(
+            await page.evaluate("window.previewSheet === document.querySelector('[role=dialog]')"),
+            true,
+          );
+          await page.capture(`2b-${name}-back`);
+          await page.click("button", "Preview");
+          await page.click("button", "Preview details");
+          await detailsReady();
+          await page.until(
+            "!document.querySelector('[role=dialog] button[aria-label=Back]') && document.querySelectorAll('[role=dialog]').length === 1",
+          );
+          await refreshDetails();
+          await page.capture(`2b-${name}-details`);
+          await page.press("Escape");
+          await dialogClosed();
+          await page.until("document.activeElement?.hasAttribute('data-session-menu')");
+          await page.capture(`2b-${name}-details-dismissed`);
+          await openPreviewPane();
+          await page.click("link", "Open preview in new tab");
+          await externalAnswer(`2b-${name}-external-answer`, "Preview journey v2 HMR");
+          await dialogClosed();
+          await openPreviewPane();
+          await page.click("button", "Stop preview");
+          await page.see("Stop preview?");
+          await page.until("!document.querySelector('[role=dialog] button[aria-label=Back]')");
+          await page.capture(`2b-${name}-stop-confirmation`);
+          await page.click("button", "Cancel");
+          await dialogClosed();
+          assert.equal(request({ action: "status" }).instanceId, identity);
+          await page.capture(`2b-${name}-stop-cancelled`);
+          await noEmbeddedPreview();
+        };
 
         // An unreadable scratch intent is an observation/stop error, not absence. The service
         // still belongs to its live owner. Restore the external boundary before any cleanup.
@@ -834,14 +630,16 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         try {
           writeFileSync(intentPath, "unreadable scratch intent");
           await more();
-          await page.click("menuitem", "Details");
+          await page.click("menuitem", "Preview details");
           await page.see("Status unavailable");
-          await noFrame();
+          await noEmbeddedPreview();
+          await page.until("!document.querySelector('[role=dialog] a[target=_blank]')");
+          await page.until(`!document.querySelector(${JSON.stringify(headerLink)})`);
+          await refreshDetails();
           await page.capture("1h-unknown-details");
           await page.press("Escape");
           await dialogClosed();
-          await page.click("button", "Check status");
-          await page.capture("1h-check-status");
+          await page.capture("1h-status-refresh");
           await more();
           await page.click("menuitem", "Stop preview");
           await page.click("button", "Stop preview");
@@ -852,46 +650,86 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         } finally {
           writeFileSync(intentPath, intent);
         }
-        await page.click("button", "Check status");
-        await page.until("!!document.querySelector('section[aria-label=Preview] a')");
+        await more();
+        await page.click("menuitem", "Preview details");
+        await refreshDetails();
+        await page.press("Escape");
+        await dialogClosed();
+        await page.until(`!!document.querySelector(${JSON.stringify(headerLink)})`);
 
         // Another session in this same checkout cannot discover or adopt the owner's app.
         await page.open("/new");
-        await noFrame();
+        await noEmbeddedPreview();
         await page.ab("fill", '[aria-label="First message"]', "status");
         await page.until("document.querySelector('[aria-label=Send]')?.disabled === false");
         await page.click("button", "Send");
         await page.see("PREVIEW_READY");
         // The transcript can link the workspace app; it is still not this session's live row.
         assert.equal(await railPreview(), false);
+        assert.equal(
+          await page.evaluate(`!!document.querySelector(${JSON.stringify(headerLink)})`),
+          false,
+        );
         await page.capture("1i-non-owning-session");
-        await page.open(sessionPath);
-        await showPreview();
+        const otherSessionPath = new URL(await page.ab("get", "url")).pathname;
+        // Select through the sidebar, then use browser Back while the pane is open. This is
+        // same-document navigation: a full reload would discard the claim rather than fence it.
+        const ownerRow = `li[data-session-key*=${JSON.stringify(sessionPath.split("/").at(-1))}] > button`;
+        await page.until(`!!document.querySelector(${JSON.stringify(ownerRow)})`);
+        await page.ab("click", ownerRow);
+        await page.until(`location.pathname === ${JSON.stringify(sessionPath)}`);
+        await page.ab("set", "viewport", "1000", "844");
+        await openPreviewPane();
+        await page.ab("back");
+        await page.until(`location.pathname === ${JSON.stringify(otherSessionPath)}`);
+        // The sheet is keyed by session: selection replaces it with the new session's actions.
+        await page.until(
+          "!!document.querySelector('[role=dialog]') && !document.querySelector('[role=dialog] button[aria-label=Preview], [role=dialog] button[aria-label=Back]')",
+        );
+        assert.equal(
+          await page.evaluate(
+            "[...document.querySelectorAll('[role=dialog] a, [role=dialog] button')].some(e => /Open preview|Preview details|Stop preview/.test(e.textContent))",
+          ),
+          false,
+        );
+        await page.capture("1i-selection-fences-preview-pane");
+        assert.equal(request({ action: "status" }).instanceId, identity);
+        await page.press("Escape");
+        await dialogClosed();
+        await page.ab("click", ownerRow);
+        await page.until(`location.pathname === ${JSON.stringify(sessionPath)}`);
+        await page.ab("set", "viewport", "1280", "900");
+        await showRail();
         app = first;
 
-        // On a Mac the link itself is opened. External exe.dev login is intentionally not bypassed:
-        // there, local browser load is a separate claim.
-        await page.ab("tab", "new", local ? app.url : `http://127.0.0.1:${app.port}/`);
+        // Keep the external app tab alive while the ordinary composer deterministically edits
+        // its source. The counter proves HMR, rather than a fresh navigation to revised output.
+        const pianoUrl = await page.ab("get", "url");
+        const pianoTarget = await page.cdp(async (call) => {
+          const { targetInfos } = await call("Target.getTargets");
+          return targetInfos.find((target) => target.type === "page" && target.url === pianoUrl)
+            .targetId;
+        });
+        await page.ab("tab", "new", externalLocal ? app.url : `http://127.0.0.1:${app.port}/`);
         await page.see("Preview journey v1");
+        await page.click("button", "Count: 0");
         await page.capture("2-app-load");
-        await page.ab("tab", "close");
-        if (embeddedLocal) {
-          await appAct("Count: 0", "click");
-          await rememberFrame();
-        }
+        await page.ab("tab", pianoTarget);
+        const appTarget = await page.cdp(async (call) => {
+          const { targetInfos } = await call("Target.getTargets");
+          return targetInfos.find(
+            (target) => target.type === "page" && new URL(target.url).port === String(app.port),
+          ).targetId;
+        });
         await page.ab("fill", '[aria-label="Message"]', "Revise the app heading");
         await page.click("button", "Send");
         await page.see("APP_UPDATED");
-        if (embeddedLocal) {
-          await appSee("Preview journey v2 HMR");
-          await appSee("Count: 1");
-          assert.equal(await sameFrame(), true, "HMR updates the app without reloading it");
-          await page.capture("3-embedded-hot-reload");
-        }
-        await page.ab("tab", "new", local ? app.url : `http://127.0.0.1:${app.port}/`);
+        await page.ab("tab", appTarget);
         await page.see("Preview journey v2 HMR");
-        await page.capture("3-revised-app-load");
+        await page.see("Count: 1");
+        await page.capture("3-external-hot-reload");
         await page.ab("tab", "close");
+        observations.push({ externalHmr: true, openedObservedUrl: externalLocal });
         await page.ab("fill", '[aria-label="Message"]', "hold");
         await page.click("button", "Send");
         await page.until("!!document.querySelector('[aria-label=Stop]')");
@@ -909,129 +747,23 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.open(sessionPath);
         await page.until("!!document.querySelector('[aria-label=Message]')");
         // A reload while the owner lives finds the same instance, without launching another.
-        await showPreview();
+        await showRail();
         assert.equal(request({ action: "status" }).instanceId, identity);
         await page.capture("2b-reload-same-preview");
-        await page.ab("set", "viewport", "390", "844");
-        await page.click("button", "Close preview");
-        await showRail();
-        await alignedPreviewDot("narrow");
-        await page.capture("2b-narrow-rail");
-        await page.click("button", "Show preview");
-        await page.until("!document.querySelector('[role=dialog]')");
-        await page.capture("2b-narrow-preview");
-        if (embeddedLocal) {
-          await frameReady();
-          await appAct("Count: 0", "click");
-          await appAct("App draft", "fill", "Narrow draft");
-          await rememberFrame();
-          await page.click("tab", "Agent");
-          await page.click("button", "Changes");
-          await page.click("tab", "Preview");
-          await showRail();
-          await page.click("button", "Show preview");
-          assert.equal(await sameFrame(), true, "narrow Agent/Changes/rail preserve the page");
-          await appSee("Count: 1");
-          await appSee("Narrow draft");
-          await page.capture("2b-narrow-preserved-page");
-          await page.click("button", "Reload preview");
-          await frameReady();
-          assert.equal(request({ action: "status" }).instanceId, identity);
-          await page.capture("2b-narrow-reload-answer");
-          await appAct("App draft", "fill", "Saved");
-          await appAct("Save draft", "click");
-          await appSee("Route: ?draft=Saved");
-          await page.capture("2b-narrow-form-submit");
-          // Native browser input only: no device emulation or app-side scrolling helper.
-          const socket = new WebSocket(await page.ab("get", "cdp-url"));
-          let id = 0;
-          const cdp = (method, params = {}, sessionId) =>
-            new Promise((resolve, reject) => {
-              const request = ++id;
-              const timer = setTimeout(() => {
-                socket.removeEventListener("message", receive);
-                reject(new Error(`CDP ${method} timed out`));
-              }, 10000);
-              const receive = ({ data }) => {
-                const m = JSON.parse(data);
-                if (m.id !== request) return;
-                clearTimeout(timer);
-                socket.removeEventListener("message", receive);
-                if (m.error) reject(new Error(JSON.stringify(m.error)));
-                else resolve(m.result);
-              };
-              socket.addEventListener("message", receive);
-              socket.send(JSON.stringify({ id: request, method, params, sessionId }));
-            });
-          try {
-            await new Promise((resolve, reject) => {
-              socket.addEventListener("open", resolve, { once: true });
-              socket.addEventListener("error", reject, { once: true });
-            });
-            const url = await page.ab("get", "url");
-            const { targetInfos } = await cdp("Target.getTargets");
-            const target = targetInfos.find((t) => t.type === "page" && t.url === url);
-            assert.ok(target);
-            const { sessionId } = await cdp("Target.attachToTarget", {
-              targetId: target.targetId,
-              flatten: true,
-            });
-            await cdp(
-              "Input.dispatchTouchEvent",
-              { type: "touchStart", touchPoints: [{ x: 190, y: 600 }] },
-              sessionId,
-            );
-            for (let y = 580; y >= 200; y -= 20) {
-              await cdp(
-                "Input.dispatchTouchEvent",
-                { type: "touchMove", touchPoints: [{ x: 190, y }] },
-                sessionId,
-              );
-              await delay(16);
-            }
-            await cdp("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }, sessionId);
-            await appSee("Scroll: moved");
-            await page.capture("2b-narrow-touch-scroll");
-            observations.push({
-              touch: "Chromium synthetic touch scroll at 390×844; not real phone evidence",
-            });
-          } finally {
-            socket.close();
-          }
-          await page.click("tab", "Changes");
-          await page.click("button", "Hide changes");
-        }
-        await page.click("link", "Open preview in new tab");
-        await page.capture("2b-narrow-external-answer");
-        await page.ab("tab", "close");
-        await more();
-        await page.click("menuitem", "Details");
-        await page.capture("2b-narrow-details");
-        await page.press("Escape");
-        await dialogClosed();
-        await more();
-        await page.click("menuitem", "Copy link");
-        await page.see("Preview link copied");
-        await page.capture("2b-narrow-copy");
-        await more();
-        await page.capture("2b-narrow-menu");
-        await page.click("menuitem", "Stop preview");
+        await sheetJourney(1000, "wide-single-area");
+        await sheetJourney(390, "narrow");
+        await openPreviewPane();
+        await page.click("button", "Stop preview");
         await page.see("Stop preview?");
-        await page.capture("2b-narrow-stop-confirmation");
         await page.click("button", "Stop preview");
         await page.see("Preview stopped");
-        await gone(first, "confirmed Stop preview in narrow Surface");
-        await page.until(
-          "document.querySelector('section[aria-label=Preview]')?.textContent.includes('Preview stopped')",
-        );
-        await noFrame();
+        await gone(first, "confirmed Stop preview from narrow sheet");
+        await dialogClosed();
+        await noEmbeddedPreview();
+        await page.until(`!document.querySelector(${JSON.stringify(headerLink)})`);
         await page.capture("2b-narrow-stopped");
         await page.until("!document.querySelector('[data-sonner-toast]')");
-        await page.click("button", "Close preview");
-        await page.until("document.activeElement?.hasAttribute('data-session-menu')");
-        await page.capture("2b-narrow-agent");
         await page.ab("set", "viewport", "1280", "900");
-        await page.until("!document.querySelector('section[aria-label=Preview] a')");
         assert.equal(
           new Set(observations.filter((o) => o.ready).map((o) => o.instanceId)).size,
           1,
@@ -1074,16 +806,12 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           return app;
         };
         const replacing = await launch();
-        await showPreview();
-        if (embeddedLocal) {
-          await frameReady();
-          await rememberFrame();
-        }
+        await showRail();
         await more();
         await page.click("menuitem", "Stop preview");
         await page.see("Stop preview?");
-        // A concurrent owner request replaces the app while the browser confirmation is open.
-        // The replacement answers 503 until released, so its readiness wait is still running.
+        // A concurrent owner request replaces the app while confirmation is open. Its 503
+        // keeps readiness pending: neither the old confirmation nor a stale URL may act on it.
         writeFileSync(browserMode, "warming");
         let replacementSettled = false;
         const pendingReplacement = requestLater(
@@ -1098,60 +826,82 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         ).finally(() => {
           replacementSettled = true;
         });
-        // Once the old app's stop is confirmed, its confirmation, frame and link are gone, and
-        // the open Preview shows the replacement starting, before its readiness check succeeds.
         await page.until(
           "[...document.querySelectorAll('[role=dialog] button')].find(b => b.textContent === 'Stop preview')?.disabled === true",
         );
         await page.until(
-          "document.querySelector('section[aria-label=Preview]')?.textContent.includes('Starting')",
+          "document.querySelector('[data-slot=session-rail]')?.textContent.includes('Starting')",
         );
-        await noFrame();
-        // The old link would now reach the unready replacement on the reused port.
-        assert.equal(
-          await page.evaluate(
-            `[...document.querySelectorAll(':is([data-slot=session-rail],[role=dialog]) a, section[aria-label=Preview] a')].some(a => a.href === ${JSON.stringify(replacing.url)})`,
-          ),
-          false,
-          "no ready link while the replacement warms up",
+        await page.until(
+          `!document.querySelector(${JSON.stringify(headerLink + ", " + railLink)})`,
         );
-        // The account-wide lock is held for the readiness wait, so no status read here.
-        assert.equal(replacementSettled, false, "the replacement is still waiting for readiness");
+        await noEmbeddedPreview();
+        assert.equal(replacementSettled, false, "replacement still waits for readiness");
         await page.capture("3a-replacement-starting-unready");
-        if (embeddedLocal) writeFileSync(browserMode, "pending");
-        else writeFileSync(browserMode, "normal");
-        const replacement = await pendingReplacement;
+        writeFileSync(browserMode, "normal");
+        let replacement = await pendingReplacement;
         replacement.testPids = JSON.parse(readFileSync(join(repo, "app-processes.json"), "utf8"));
         assert.equal(replacement.ready, true);
         assert.notEqual(replacement.instanceId, replacing.instanceId);
-        // Read the new frame at once, in one call: its loading feedback lasts only eight seconds.
-        if (embeddedLocal)
-          await page.until("!!document.querySelector('iframe[title=\"App preview\"]')");
-        const replacedFrame =
-          embeddedLocal &&
-          JSON.parse(
-            await page.evaluate(
-              "JSON.stringify({ same: window.previousPreviewFrame === document.querySelector('iframe[title=\"App preview\"]'), connected: window.previousPreviewFrame.isConnected, busy: document.querySelector('[aria-label=\"Reload preview\"]')?.getAttribute('aria-busy') })",
-            ),
-          );
         await page.capture("3a-replacement-fences-confirmation");
         assert.equal(request({ action: "status" }).instanceId, replacement.instanceId);
+        assert.equal(
+          await page.evaluate(
+            "[...document.querySelectorAll('[role=dialog] button')].find(b => b.textContent === 'Stop preview')?.disabled",
+          ),
+          true,
+          "stale confirmation stays fenced after replacement is ready",
+        );
         await page.click("button", "Cancel");
-        if (embeddedLocal) {
-          assert.equal(replacedFrame.same, false, "a replacement must dispose the old page");
-          // The new frame is still pending; the old instance's frame, and its load handler, are gone.
-          assert.equal(replacedFrame.connected, false, "a replacement detaches the old page");
-          assert.equal(replacedFrame.busy, "true");
-          await page.capture("3b-replacement-pending-old-load-ignored");
-          writeFileSync(browserMode, "normal");
-          await page.click("button", "Reload preview");
-          await frameReady();
-        }
-        await page.capture("3b-replacement-current-view");
+        await dialogClosed();
         observations.push({
           replacement: replacement.instanceId,
           replaced: replacing.instanceId,
           ports: [replacing.port, replacement.port],
+        });
+
+        // The pushed pane has its own exact-instance fence, not just the stop confirmation's.
+        await page.ab("set", "viewport", "390", "844");
+        await openPreviewPane();
+        const paneOld = replacement;
+        writeFileSync(browserMode, "warming");
+        let paneReplacementSettled = false;
+        const pendingPaneReplacement = requestLater(
+          {
+            action: "start",
+            replace: paneOld.instanceId,
+            command,
+            env: appEnv,
+            timeoutSeconds: 30,
+          },
+          paneOld,
+        ).finally(() => {
+          paneReplacementSettled = true;
+        });
+        await paneUnavailable();
+        await page.until(`!document.querySelector(${JSON.stringify(headerLink)})`);
+        assert.equal(paneReplacementSettled, false);
+        await page.capture("3b-pane-replacement-unavailable");
+        writeFileSync(browserMode, "normal");
+        replacement = await pendingPaneReplacement;
+        replacement.testPids = JSON.parse(readFileSync(join(repo, "app-processes.json"), "utf8"));
+        assert.equal(replacement.ready, true);
+        assert.notEqual(replacement.instanceId, paneOld.instanceId);
+        await paneUnavailable();
+        await page.capture("3b-pane-stays-fenced-after-ready");
+        assert.equal(request({ action: "status" }).instanceId, replacement.instanceId);
+        await page.click("button", "Back");
+        await page.click("button", "Preview");
+        await page.until("document.querySelector('[role=dialog]').textContent.includes('Running')");
+        await page.capture("3b-pane-explicitly-observes-replacement");
+        await page.press("Escape");
+        await dialogClosed();
+        await page.ab("set", "viewport", "1280", "900");
+        await showRail();
+        observations.push({
+          replacement: replacement.instanceId,
+          replaced: paneOld.instanceId,
+          paneFenced: true,
         });
         // Keep this owner active while inspecting a terminal app: this scratch instance's
         // two-second idle retirement deliberately releases failed/exited apps as well.
@@ -1163,37 +913,37 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await gone(replacement, "application failure cleans its children");
         request({ action: "status" }, replacement);
         await page.see("Failed");
-        await noFrame();
+        await noEmbeddedPreview();
+        await page.until(`!document.querySelector(${JSON.stringify(headerLink)})`);
         await page.capture("3c-failed-preview");
-        await page.click("button", "Check status");
         await more();
-        await page.click("menuitem", "Details");
+        await page.click("menuitem", "Preview details");
+        await refreshDetails();
         await page.capture("3d-failed-details");
         await page.press("Escape");
         await dialogClosed();
         await more();
         await page.click("menuitem", "Stop preview");
         await page.click("button", "Stop preview");
-        await page.until(
-          "document.querySelector('section[aria-label=Preview]')?.textContent.includes('Preview stopped')",
-        );
+        await page.see("Preview stopped");
+        await dialogClosed();
+        await noEmbeddedPreview();
         await page.capture("3e-desktop-stopped");
         await page.click("button", "Stop");
         held?.end();
         const ended = await launch();
-        await showPreview();
-        if (embeddedLocal) {
-          await frameReady();
-          await appAct("Count: 0", "click");
-          await page.until("document.activeElement?.tagName === 'IFRAME'");
-        }
+        await page.ab("set", "viewport", "390", "844");
+        await openPreviewPane();
         process.kill(piFor(ended).pid, "SIGKILL");
-        await gone(ended, "owner exit while Preview stays open");
-        await page.see("Preview unavailable");
-        await noFrame();
-        if (embeddedLocal)
-          await page.until("document.activeElement?.getAttribute('role') === 'tabpanel'");
-        await page.capture("3f-owner-ended-open-view");
+        await gone(ended, "owner exit while Preview pane stays open");
+        await paneUnavailable();
+        await page.until(`!document.querySelector(${JSON.stringify(headerLink)})`);
+        await page.capture("3f-owner-ended-open-pane");
+        await page.click("button", "Back");
+        await page.until("!document.querySelector('[role=dialog] button[aria-label=Preview]')");
+        await page.press("Escape");
+        await dialogClosed();
+        await page.ab("set", "viewport", "1280", "900");
         assert.equal(await railPreview(), false);
         const killed = await launch();
         assert.notEqual(killed.owner.generation, first.owner.generation);

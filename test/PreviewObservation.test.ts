@@ -5,10 +5,8 @@ import {
   createPreviewObservation,
   seenDetails,
   seenPreview,
-  seenStop,
 } from "../web/src/lib/previewObservation.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
-import { previewFrameUrl } from "../web/src/lib/sessionPreview.ts";
 import type { SendDisposition } from "../web/src/lib/ws.ts";
 import { type AppState, initialState, reduce } from "../web/src/store.ts";
 
@@ -38,52 +36,6 @@ const page = (state: Partial<SessionState> = {}, hosted = true): AppState => ({
     messages: [],
     dialogs: [],
   },
-});
-
-test("embedding admits only the registered ready HTTP URL outside the control origin", () => {
-  const control = "http://localhost:7070";
-  assert.equal(previewFrameUrl(app, control), app.url);
-  assert.equal(
-    previewFrameUrl({ ...app, url: "https://vm.exe.xyz:9400/" }, "https://vm.exe.xyz"),
-    "https://vm.exe.xyz:9400/",
-  );
-  // An HTTPS Piano cannot frame a plain-HTTP remote app (mixed content); loopback stays eligible.
-  assert.equal(
-    previewFrameUrl({ ...app, url: "http://vm.exe.xyz:9400/" }, "https://vm.exe.xyz"),
-    null,
-  );
-  for (const url of ["http://localhost:5173/", "http://127.0.0.1:5173/", "http://[::1]:5173/"])
-    assert.equal(previewFrameUrl({ ...app, url }, "https://vm.exe.xyz"), url, url);
-  for (const url of [
-    control,
-    `${control}/app`,
-    "http://LOCALHOST:7070/",
-    "javascript:alert(1)",
-    "data:text/html,app",
-    "/app",
-    "https://user:secret@vm.exe.xyz:9400/",
-  ]) {
-    assert.equal(previewFrameUrl({ ...app, url }, control), null, url);
-  }
-  for (const state of [
-    "unknown",
-    "starting",
-    "stopping",
-    "failed",
-    "exited",
-    "not-loaded",
-  ] as const)
-    assert.equal(previewFrameUrl({ ...app, state }, control), null, state);
-  assert.equal(previewFrameUrl({ ...app, ready: false }, control), null);
-  assert.equal(previewFrameUrl({ ...app, url: null }, control), null);
-  assert.equal(previewFrameUrl(undefined, control), null);
-  assert.equal(
-    previewFrameUrl(
-      seenPreview({ ...page({ preview: app }), connected: false }, { unconfirmed: null }),
-      control,
-    ),
-    null,
-  );
 });
 
 function fakeSource(initial: AppState, disposition: SendDisposition = "sent") {
@@ -174,7 +126,7 @@ const stopped = (
   sessionId: "s1",
   result: { _tag: "preview_stopped", instanceId, outcome },
 });
-const empty = { refreshing: false, details: null, terminal: null, unconfirmed: null };
+const empty = { refreshing: false, details: null, unconfirmed: null };
 
 test("an attachment observes once; changed session state does not poll; reattachment reads again", () => {
   const f = fakeSource(page({ preview: app }));
@@ -345,7 +297,6 @@ test("observation errors settle the matching read, retain unknown rather than st
   });
   assert.equal(f.observation.getState().details?.error, "Unavailable");
   assert.equal(f.observation.getState().refreshing, false);
-  assert.equal(f.observation.getState().terminal, null);
   f.observation.refresh();
   assert.equal(f.sent.length, 2);
 });
@@ -392,7 +343,6 @@ test("a refused read settles only its own request and leaves the app inspectable
     [unknown.instanceId, unknown.state, unknown.ready, unknown.url],
     ["i1", "unknown", false, null],
   );
-  assert.equal(previewFrameUrl(unknown, "http://localhost:7070"), null, "no stale frame");
   assert.equal(
     seenPreview(state, { unconfirmed: "other" })?.url,
     app.url,
@@ -438,7 +388,7 @@ test("unsent reads can retry; uncertain reads coalesce; synchronous disconnect c
   assert.deepEqual(f.observation.getState(), empty);
 });
 
-test("confirmed stop leaves a disposable exact-instance terminal and notifies success once", () => {
+test("confirmed stop clears details and notifies success once", () => {
   for (const outcome of ["stopped", "cleared"] as const) {
     const f = fakeSource(page({ preview: app }));
     f.deliver(observed());
@@ -447,23 +397,17 @@ test("confirmed stop leaves a disposable exact-instance terminal and notifies su
     f.deliver(stopped(outcome));
     f.deliver(stopped(outcome));
     assert.deepEqual(f.notices, [{ message: "Preview stopped", level: "success" }]);
-    assert.deepEqual(f.observation.getState(), {
-      ...empty,
-      terminal: { cwd: "/repo", sessionId: "s1", instanceId: "i1", state: "stopped" },
-    });
+    assert.deepEqual(f.observation.getState(), empty);
     f.deliver(observed());
     f.observation.refresh();
     assert.equal(f.observation.getState().details, null);
-    assert.equal(f.observation.getState().terminal?.state, "stopped");
     f.set(page({ preview: { ...app, instanceId: "i2" } }));
-    assert.equal(f.observation.getState().terminal, null);
     assert.equal(f.observation.getState().refreshing, true);
   }
 });
 
-test("Details and Preview stopped show only the records of the session and app on screen", () => {
+test("Details show only the records of the session and app on screen", () => {
   const details = { cwd: "/repo", sessionId: "s1", instanceId: "i1", logs: "ready" };
-  const terminal = { cwd: "/repo", sessionId: "s1", instanceId: "i1", state: "stopped" as const };
   const withApp = page({ preview: app });
   assert.equal(seenDetails(withApp, { ...empty, details }), details);
   for (const other of [
@@ -473,17 +417,6 @@ test("Details and Preview stopped show only the records of the session and app o
   ])
     assert.equal(seenDetails(withApp, { ...empty, details: other }), undefined);
   assert.equal(seenDetails(page(), { ...empty, details }), undefined);
-
-  assert.equal(seenStop(page(), { terminal }, "i1"), true);
-  // A view that never inspected the stopped app, or a session that has an app again, shows no stop.
-  assert.equal(seenStop(page(), { terminal }, null), false);
-  assert.equal(seenStop(page(), { terminal }, "i2"), false);
-  assert.equal(seenStop(withApp, { terminal }, "i1"), false);
-  for (const other of [
-    { ...terminal, cwd: "/other" },
-    { ...terminal, sessionId: "other" },
-  ])
-    assert.equal(seenStop(page(), { terminal: other }, "i1"), false);
 });
 
 test("not-current is informational; an old stop never marks a replacement as stopped", () => {
@@ -494,15 +427,13 @@ test("not-current is informational; an old stop never marks a replacement as sto
   assert.deepEqual(f.notices, [
     { message: "That preview had already stopped or been replaced.", level: "info" },
   ]);
-  assert.equal(f.observation.getState().terminal, null);
   f.deliver(stopped());
-  assert.equal(f.observation.getState().terminal, null);
   assert.equal(f.observation.getState().refreshing, true);
   f.deliver(observed("i2", "replacement"));
   assert.equal(f.observation.getState().details?.logs, "replacement");
 });
 
-test("terminal records cannot follow a changed attachment or owner, disconnect or unfollow", () => {
+test("details cannot follow a changed attachment or owner, disconnect or unfollow", () => {
   for (const next of [
     { ...page(), selectionId: "sel-2" },
     { ...page(), connected: false },
@@ -510,13 +441,11 @@ test("terminal records cannot follow a changed attachment or owner, disconnect o
     page({ closure: { _tag: "released", detail: "" } }),
   ]) {
     const f = fakeSource(page({ preview: app }));
-    f.set(page());
-    f.deliver(stopped());
-    assert.notEqual(f.observation.getState().terminal, null);
+    f.deliver(observed());
+    assert.notEqual(f.observation.getState().details, null);
     f.set(next);
     assert.deepEqual(f.observation.getState(), empty);
     f.deliver(stopped());
-    assert.equal(f.observation.getState().terminal, null);
   }
   const f = fakeSource(page({ preview: app }));
   f.set(page());

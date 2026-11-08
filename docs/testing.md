@@ -126,24 +126,24 @@ Vite's allowed host comes from that origin. Only the origin is reused: ports and
 scratch-only. On macOS it opens the agent's `localhost` link itself.
 It uses the real installed Pi with a scripted loopback model (no credentials), scratch HOME/Pi
 history/database, and unique managed services. It checks prompt → tool → preview link, the session
-rail and Preview Surface, details/logs, copy/external links and distinct palette rows, local browser load and HMR, then original-instance survival through settlement, abort, browser disconnect,
-session switching and a short idle timeout. Reload finds the same instance. **Stop preview** in the
-Preview Surface (desktop and narrow) asks before stopping it, leaves the session answering and permits idle retirement. It also checks unknown/failed-stop inspection with an unreadable scratch intent, a non-owning session, and a replacement while confirmation is open: held unready on a 503, the open Preview already shows it starting, without the old frame or link, before the replacement call returns. It checks
-Pi SIGKILL and Piano SIGTERM/SIGKILL cleanup before reopening/restarting, no adoption on reopen,
-archive/delete via the palette, with confirmations that name the app, and cleanup after checkout
-removal. A child ignores TERM to exercise
-the kill bound. Only its scratch services stop; native platform gaps must be reported.
-With a loopback origin (the macOS default `http://localhost`, or on Linux `PIANO_PREVIEW_CONFIG`
-pointing to a JSON file containing `{"origin":"http://127.0.0.1"}`), it also checks embedded desktop/narrow page-state
-preservation across tabs/rail, page-only reload, composer-driven deterministic HMR, native forms,
-keyboard traversal, the **Not working here?** recovery (focus, new tab, Escape, page-only reload,
-an unchanged sandbox), a Surface resize released over the app (real CDP mouse input), synthetic Chromium touch scrolling, bounded loading, framing-denied and
-login-gated responses, and frame disposal on replacement/unknown/stop/owner loss. The pinned
-agent-browser's accessibility references reach the cross-origin app; no production DOM bridge is
-used. Synthetic touch is not real-device evidence. Authenticated external exe.dev access is a
-separate manual observation; this journey does not grant access or change proxy configuration.
-On the default Linux origin those embedded checks are skipped: the run warns and records
-`embeddedLocal: false`, so it is not embedding evidence. See [managed previews](live-previews.md).
+rail and header external links, same-sheet Preview pane in narrow and desktop single-area layouts,
+on-demand details/logs and distinct palette rows, then original-instance survival through settlement,
+abort, browser disconnect, session switching and a short idle timeout. Reload finds the same instance.
+**Stop preview** in the rail or sheet asks before stopping it, leaves the session answering and
+permits idle retirement. It checks unknown/failed-stop inspection with an unreadable scratch intent,
+a non-owning session, and replacement while confirmation is open: the old confirmation cannot stop
+the new app, and no old URL remains while the replacement is starting. It checks Pi SIGKILL and
+Piano SIGTERM/SIGKILL cleanup before reopening/restarting, no adoption on reopen, archive/delete via
+the palette with confirmations that name the app, and cleanup after checkout removal. A child
+ignores TERM to exercise the kill bound. Only its scratch services stop; native platform gaps must
+be reported.
+
+With a loopback origin (the macOS default http://localhost, or on Linux PIANO_PREVIEW_CONFIG
+pointing to a JSON file containing {"origin":"http://127.0.0.1"}), it also observes the actual
+external tab and app interaction/HMR. No app iframe or Preview Surface tab is created; Changes and
+file inspection remain separate. Authenticated external exe.dev access is a separate manual
+observation; this journey does not grant access or change proxy configuration. See
+[managed previews](live-previews.md).
 
 `PIANO_TEST_NATIVE_PREVIEW=1 node --test test/PreviewNative.test.ts` is the smaller opt-in native
 runner/supervisor check for clean exit, nonzero exit, application signal, explicit stop and owner

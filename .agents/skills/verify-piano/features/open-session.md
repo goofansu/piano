@@ -14,13 +14,17 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 - `history`: the saved user message and reply render; "Jump to message" lists them.
 - `header`: on desktop, one line: the project crumb ("Project: <name>", only for a member session) and the
   title with "Session information and actions" beside it; at its end "Changes" then
-  "Show session rail". Where the session runs is in the session rail and, when shown, the sidebar row; the
+  "Show session rail". An observed app URL adds "Open preview in new tab" in every layout.
+  Where the session runs is in the session rail and, when shown, the sidebar row; the
   pull request is read in Changes. The session's state is the sidebar row's; the header only
   carries it as screen-reader `role=status` text ("Ready", "Not running").
 - `phone-menu`: one area at a time, the header shows folder/repository and branch below the title;
   "Session information and actions" opens the "Session" sheet. It holds the linked "Pull request
   #222", Rename, Pin, Move to project (Add to project for a loose session), Messages only,
-  Archive and Delete; Preview appears only when one is known. It has no Outputs, Links,
+  Archive and Delete; Preview appears only when one is known and pushes a pane in the same sheet:
+  Back, status/hostname, Open preview in new tab (dismisses the sheet), Preview details and Stop
+  preview (confirmation). The app is never embedded. This also applies on wide viewports when the
+  measured session area is too narrow for side-by-side. It has no Outputs, Links,
   Environment copy menus or session ID. Escape returns focus to its trigger; widening closes it
   and narrowing again does not reopen it.
 - `artifacts`: when the session has confirmed Radius publications, the header's "Artifacts: <n>"

@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { ListIcon, MoreHorizontalIcon } from "lucide-react";
+import { ExternalLinkIcon, ListIcon, MoreHorizontalIcon } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
 import {
   CommandIcon,
@@ -24,6 +24,7 @@ import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
 import { ArtifactsMenu } from "@/components/SessionArtifacts";
 import { SessionMenuSheet } from "@/components/SessionMenuSheet";
+import { useSeenPreview } from "@/components/SessionPreview";
 import { type PullRequestControl, PullRequestLinkDialog } from "@/components/SessionPullRequest";
 import { surfaceTabNames } from "@/components/SurfaceArea";
 import {
@@ -53,6 +54,7 @@ export function SessionHeader({
   /** The link dialog stays mounted even when Changes is hidden (the palette can open it). */
   pullRequest: PullRequestControl;
 }) {
+  const preview = useSeenPreview(state);
   const narrowViewport = useNarrowViewport();
   // Menu kind/context follow area capacity, plus the narrow-viewport startup/hidden fallback.
   // Placement follows viewport alone; the breadcrumb follows CSS md. Keep these separate.
@@ -216,6 +218,13 @@ export function SessionHeader({
         </span>
         {/* Ghost controls: the group pulls out so the last one's content ends on the gutter. */}
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
+          {preview?.url && (
+            <IconButton asChild size="header" label="Open preview in new tab">
+              <a href={preview.url} target="_blank" rel="noopener noreferrer">
+                <ExternalLinkIcon />
+              </a>
+            </IconButton>
+          )}
           <ArtifactsMenu state={state} />
           <ChangesToggle />
           <SessionRailToggle />
