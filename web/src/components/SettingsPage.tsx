@@ -224,7 +224,7 @@ function ProvidersSettings({
                         </svg>
                       </ItemMedia>
                     )}
-                    <ItemContent className="min-w-0 gap-0.5">
+                    <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
                       <ItemTitle>{provider.name}</ItemTitle>
                       {provider.signedIn && (
                         <p className="flex items-center gap-1.5 text-xs text-ink-3">

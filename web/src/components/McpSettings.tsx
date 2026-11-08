@@ -291,7 +291,7 @@ function McpServerItem({
   return (
     <Item data-row className={cn(settingsRow, "relative", !reconnect && rowActionsWidth.list[1])}>
       <Logo catalog={catalog} />
-      <ItemContent className="min-w-0 gap-0.5">
+      <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
         <ItemTitle>{title}</ItemTitle>
         <ItemDescription className="line-clamp-none font-mono text-xs">{value}</ItemDescription>
         {detail && <ItemDescription className="line-clamp-none">{detail}</ItemDescription>}

@@ -105,7 +105,7 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                 rowActionsWidth.list[account.signedIn ? 1 : 0],
               )}
             >
-              <ItemContent className="min-w-0 gap-0.5">
+              <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
                 <ItemTitle>Account</ItemTitle>
                 {account.description && (
                   <ItemDescription className="line-clamp-none">
@@ -195,7 +195,7 @@ function RadiusToolRow({
   const revealed = menu && !install && !change;
   return (
     <Item data-row className={cn(settingsRow, "relative", rowActionsWidth.list[revealed ? 1 : 0])}>
-      <ItemContent className="min-w-0 gap-0.5">
+      <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
         <ItemTitle>{tool.title}</ItemTitle>
         {tool.detail && (
           <ItemDescription className="line-clamp-none">{tool.detail}</ItemDescription>
