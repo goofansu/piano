@@ -18,10 +18,12 @@ import {
   askUserQuestions,
 } from "../shared/askUser.ts";
 import {
+  IMAGE_TYPE_LIST,
   imageType,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS,
   MAX_IMAGE_BYTES,
+  mebibytes,
 } from "../shared/attachments.ts";
 import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../shared/dispatch.ts";
 import { artifactPublication, withArtifactPublication } from "../shared/radiusArtifacts.ts";
@@ -675,7 +677,7 @@ export function piExchangeFor(
       const { attachments } = action;
       if (attachments?.length && !imagesValid(attachments))
         return {
-          rejected: `Invalid image attachments. Use PNG, JPEG, GIF or WebP, up to ${MAX_IMAGE_BYTES / 2 ** 20} MiB each and ${MAX_ATTACHMENT_BYTES / 2 ** 20} MiB total (${MAX_ATTACHMENTS} images).`,
+          rejected: `Invalid image attachments. Use ${IMAGE_TYPE_LIST}, up to ${mebibytes(MAX_IMAGE_BYTES)} each and ${mebibytes(MAX_ATTACHMENT_BYTES)} total (${MAX_ATTACHMENTS} images).`,
         };
       return {
         command: {
