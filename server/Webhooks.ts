@@ -4,6 +4,7 @@ import { basename } from "node:path";
 import { Clock, Context, Data, Deferred, Effect, Layer, Queue, Schema, Semaphore } from "effect";
 import { cutText } from "../shared/cutText.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
+import { readLiteralSecret } from "../shared/literalSecret.ts";
 import { pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
 import { closureNeedsAttention, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import {
@@ -350,9 +351,14 @@ export const WebhooksLive = Layer.effect(
           Effect.mapError(() => refused("Enter a URL and select at least one event.")),
         );
         const url = input.url === undefined ? undefined : yield* receiverUrl(input.url);
-        if (input.token && /[^\x21-\x7e]/.test(input.token))
-          return yield* refused("Use only visible ASCII characters, without spaces.", "token");
-        if (input.token && input.token.length < KNOWN_SECRET_MIN)
+        // Sent as a bearer header: the same literal rule as an API key, and empty clears it.
+        let token = input.token;
+        if (typeof token === "string") {
+          const read = readLiteralSecret(token);
+          if (read.refusal !== undefined) return yield* refused(read.refusal, "token");
+          token = read.value;
+        }
+        if (token && token.length < KNOWN_SECRET_MIN)
           return yield* refused(`Use at least ${KNOWN_SECRET_MIN} characters.`, "token");
         return yield* Semaphore.withPermits(
           lock,
@@ -371,7 +377,7 @@ export const WebhooksLive = Layer.effect(
             const hook: StoredWebhook = {
               id: previous?.id ?? randomUUID(),
               url: target,
-              token: input.token === undefined ? (previous?.token ?? null) : input.token || null,
+              token: token === undefined ? (previous?.token ?? null) : token || null,
               events: [...new Set(events)],
               active: input.active,
               createdAt:

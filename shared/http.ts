@@ -12,7 +12,7 @@ import { FileDownload, FilePreview } from "./files.ts";
 import { LIBRARY_KINDS, type LibraryKind, type LibraryKindWords } from "./library.ts";
 import { McpSetupChange, McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { Prompt, PromptCreate, PromptProposal, PromptUpdate } from "./prompts.ts";
-import { API_KEY_INVALID, ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
+import { ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
 import { UserSkill, UserSkillCreate, UserSkillProposal, UserSkillUpdate } from "./skills.ts";
@@ -542,7 +542,7 @@ export const Endpoints = {
     method: "POST",
     path: "/api/provider-api-keys",
     body: ProviderApiKeyChange,
-    invalid: API_KEY_INVALID,
+    invalid: "Invalid API key request.",
     noStore: true,
     response: Schema.Struct({ ok: Schema.Literal(true) }),
     refused: 409,

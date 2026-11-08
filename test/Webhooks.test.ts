@@ -408,8 +408,14 @@ test("a refusal names the field it belongs to", async () => {
     "fields",
     Effect.gen(function* () {
       const hooks = yield* Webhooks;
-      const token = yield* hooks.save({ ...input, token: "a b" }).pipe(Effect.flip);
-      assert.equal(token.field, "token");
+      // A bearer header carries bytes: a pasted zero-width space would fail every delivery.
+      for (const value of ["a b", "private\u200bcanary", "   "]) {
+        const token = yield* hooks.save({ ...input, token: value }).pipe(Effect.flip);
+        assert.deepEqual(
+          [token.field, token.detail],
+          ["token", "Use only visible ASCII characters, without spaces."],
+        );
+      }
       // A short token would redact ordinary words out of every webhook's payload.
       const short = yield* hooks.save({ ...input, token: "test" }).pipe(Effect.flip);
       assert.deepEqual([short.field, short.detail], ["token", "Use at least 8 characters."]);

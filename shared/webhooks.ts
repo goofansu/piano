@@ -11,8 +11,9 @@ export type WebhookEvent = typeof WebhookEvent.Type;
 export const WebhookSave = Schema.Struct({
   id: Schema.optional(Schema.String),
   url: Schema.optional(Schema.String.check(Schema.isMaxLength(4096))),
-  /** Omitted preserves the token; null clears it. Never returned. */
-  token: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096)))),
+  /** Omitted preserves the token; null or empty clears it. Never returned. Webhooks reads it as a
+   * literal secret and owns its refusal (literalSecret.ts). */
+  token: Schema.optional(Schema.NullOr(Schema.String)),
   events: Schema.optional(Schema.Array(WebhookEvent).check(Schema.isMinLength(1))),
   active: Schema.Boolean,
 });

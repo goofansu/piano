@@ -429,11 +429,19 @@ test("INV-11: API-key setup rejects commands, blank keys, unsupported providers 
       Effect.gen(function* () {
         const before = readFileSync(authPath, "utf8");
         yield* catalog.catalog("/nonexistent/piano-api-key-refusal");
-        for (const key of ["", " ", "!echo secret", "key\nsecond-line", "x".repeat(8193)]) {
+        for (const [key, detail] of [
+          ["", "Enter an API key."],
+          [" ", "Enter an API key."],
+          ["!echo secret", "Enter a valid API key, not a command."],
+          ["key\nsecond-line", "Use only visible ASCII characters, without spaces."],
+          // Not \s to a regex, yet no HTTP header can carry it: every model request would throw.
+          ["sk-private\u200bkey", "Use only visible ASCII characters, without spaces."],
+          ["x".repeat(8193), "Use at most 8192 characters."],
+        ]) {
           const error = yield* Effect.flip(
             login.changeApiKey({ action: "save", provider: "deepseek", key }),
           );
-          assert.equal(error.detail, "Enter a valid API key, not a command.");
+          assert.equal(error.detail, detail, JSON.stringify(key));
         }
         for (const provider of ["unknown", "openai", "radius"]) {
           assert(

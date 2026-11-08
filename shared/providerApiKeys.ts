@@ -6,15 +6,6 @@ export const API_KEY_PROVIDERS = [
   { id: "vercel-ai-gateway", name: "Vercel AI Gateway", logo: "vercel" },
 ] as const;
 
-/** The one refusal of a key that is not literal, at the endpoint and in the service alike. */
-export const API_KEY_INVALID = "Enter a valid API key, not a command.";
-
-/** Literal keys only: Pi interprets a leading ! as a command in auth.json. */
-export const ProviderApiKey = Schema.String.check(
-  Schema.isPattern(/^[^\s!]\S*$/u),
-  Schema.isMaxLength(8192),
-);
-
 export const ApiKeyProvider = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -23,8 +14,9 @@ export const ApiKeyProvider = Schema.Struct({
 });
 export type ApiKeyProvider = typeof ApiKeyProvider.Type;
 
+/** `key` is read as a literal secret by ProviderLogin, which owns its refusal (literalSecret.ts). */
 export const ProviderApiKeyChange = Schema.Union([
-  Schema.Struct({ action: Schema.Literal("save"), provider: Schema.String, key: ProviderApiKey }),
+  Schema.Struct({ action: Schema.Literal("save"), provider: Schema.String, key: Schema.String }),
   Schema.Struct({ action: Schema.Literal("remove"), provider: Schema.String }),
 ]);
 export type ProviderApiKeyChange = typeof ProviderApiKeyChange.Type;

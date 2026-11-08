@@ -20,10 +20,13 @@ export const VoiceInputState = Schema.Struct({
 });
 export type VoiceInputState = typeof VoiceInputState.Type;
 
-/** `key` omitted keeps the saved key, a string replaces it, null removes it (and turns voice input off). */
+/**
+ * `key` omitted keeps the saved key, a string replaces it, null removes it (and turns voice input
+ * off). VoiceInput reads the string as an API key and owns its refusal (literalSecret.ts).
+ */
 export const VoiceInputSave = Schema.Struct({
   enabled: Schema.Boolean,
-  key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMaxLength(8192)))),
+  key: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type VoiceInputSave = typeof VoiceInputSave.Type;
 

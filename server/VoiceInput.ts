@@ -4,6 +4,7 @@
  * only the request to OpenAI, and is never answered back or logged.
  */
 import { Context, Data, Effect, Layer, Semaphore } from "effect";
+import { readApiKey } from "../shared/literalSecret.ts";
 import {
   MAX_AUDIO_BYTES,
   RECORDING_TYPES,
@@ -109,14 +110,12 @@ export const VoiceInputLive = Layer.effect(
     return VoiceInput.of({
       state: Effect.map(stored, shown),
       save: Effect.fn("VoiceInput.save")(function* (input) {
-        const key = input.key === undefined || input.key === null ? input.key : input.key.trim();
-        if (key !== undefined && key !== null) {
-          if (!key) return yield* refused("Enter an API key.", "key");
-          if (/[^\x21-\x7e]/.test(key))
-            return yield* refused("Enter the key exactly, without spaces.", "key");
-          // Pi treats a leading ! as a command; refuse it here too, so a key reads the same everywhere.
-          if (key.startsWith("!"))
-            return yield* refused("Enter a valid API key, not a command.", "key");
+        // The same rule as a provider key: the key is sent in an HTTP header to OpenAI.
+        let key = input.key;
+        if (typeof key === "string") {
+          const read = readApiKey(key);
+          if (read.refusal !== undefined) return yield* refused(read.refusal, "key");
+          key = read.value;
         }
         return yield* Semaphore.withPermits(
           lock,
