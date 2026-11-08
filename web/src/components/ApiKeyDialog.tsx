@@ -1,3 +1,4 @@
+import { LITERAL_SECRET_MAX } from "@shared/literalSecret";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { FormDialog } from "@/components/FormDialog";
@@ -81,7 +82,7 @@ export function ApiKeyDialog({
               autoComplete="new-password"
               spellCheck={false}
               autoCapitalize="none"
-              maxLength={8192}
+              maxLength={LITERAL_SECRET_MAX}
               required
               disabled={busy}
               aria-invalid={!!actions.error || undefined}

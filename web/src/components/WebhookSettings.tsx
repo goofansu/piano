@@ -1,3 +1,4 @@
+import { LITERAL_SECRET_MAX } from "@shared/literalSecret";
 import {
   WEBHOOK_EVENTS,
   WEBHOOK_FIELDS,
@@ -352,6 +353,7 @@ function WebhookEditor({
                 id="webhook-token"
                 type="password"
                 autoComplete="new-password"
+                maxLength={LITERAL_SECRET_MAX}
                 value={token}
                 aria-invalid={!!tokenError}
                 placeholder={hook?.hasToken && !clearToken ? "••••••••••••••••" : undefined}

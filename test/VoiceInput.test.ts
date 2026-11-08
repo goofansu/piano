@@ -143,8 +143,8 @@ test("voice input starts off, needs a key to turn on, and keeps the key private 
   );
 });
 
-test("a key with spaces or a command prefix is refused at the key field", async () => {
-  for (const key of ["sk-abc def", "!cat ~/.key", "   "]) {
+test("a key with spaces, a non-ASCII character or a command prefix is refused at the key field", async () => {
+  for (const key of ["sk-abc def", "sk-abc\u200bdef", "!cat ~/.key", "   "]) {
     const refusal = detail(
       await run(
         "bad-key",

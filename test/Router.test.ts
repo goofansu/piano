@@ -236,7 +236,11 @@ test("a body outside the endpoint's Schema is answered 400 with the endpoint's m
 });
 
 test("INV-11: API-key routes keep invalid input and credential storage errors out of responses", async () => {
-  for (const key of ["", "!echo private-value", "private-value\nsecond-line"]) {
+  for (const [key, error] of [
+    ["", "Enter an API key."],
+    ["!echo private-value", "Enter a valid API key, not a command."],
+    ["private-value\nsecond-line", "Use only visible ASCII characters, without spaces."],
+  ]) {
     assert.deepEqual(
       await reply(
         await post(
@@ -244,12 +248,13 @@ test("INV-11: API-key routes keep invalid input and credential storage errors ou
           JSON.stringify({ action: "save", provider: "deepseek", key }),
         ),
       ),
-      {
-        status: 400,
-        body: { error: "Enter a valid API key, not a command." },
-      },
+      { status: 409, body: { error } },
     );
   }
+  assert.deepEqual(
+    await reply(await post("/api/provider-api-keys", JSON.stringify({ action: "save" }))),
+    { status: 400, body: { error: "Invalid API key request." } },
+  );
   assert.deepEqual(
     await reply(
       await post(

@@ -11,8 +11,8 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer, Schema } from "effect";
+import { readApiKey } from "../shared/literalSecret.ts";
 import {
-  API_KEY_INVALID,
   API_KEY_PROVIDERS,
   type ApiKeyProvider,
   ProviderApiKeyChange,
@@ -217,10 +217,14 @@ export const ProviderLoginLive = Layer.effect(
         },
         catch: () => new ProvidersError({ detail: "Could not load API keys." }),
       }),
-      changeApiKey: Effect.fn("ProviderLogin.changeApiKey")(function* (change) {
-        yield* Schema.decodeUnknownEffect(ProviderApiKeyChange)(change).pipe(
-          Effect.mapError(() => new SignInError({ detail: API_KEY_INVALID })),
+      changeApiKey: Effect.fn("ProviderLogin.changeApiKey")(function* (input) {
+        const change = yield* Schema.decodeUnknownEffect(ProviderApiKeyChange)(input).pipe(
+          Effect.mapError(() => new SignInError({ detail: "Invalid API key request." })),
         );
+        // Pi stores the key and sends it in every model request's headers: refuse what cannot go.
+        const read = change.action === "save" ? readApiKey(change.key) : undefined;
+        if (read?.refusal !== undefined) return yield* new SignInError({ detail: read.refusal });
+        const key = read?.value ?? "";
         yield* write(
           {
             busy: "A provider operation is already in progress. Finish it before changing an API key.",
@@ -244,7 +248,7 @@ export const ProviderLoginLive = Layer.effect(
                   notify: () => {},
                   prompt: async (prompt) => {
                     if (prompt.type !== "secret") throw new Error("Unsupported API-key prompt.");
-                    return change.key;
+                    return key;
                   },
                 }),
               );
