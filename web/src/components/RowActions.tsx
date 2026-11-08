@@ -103,7 +103,6 @@ export function ListRow({
   return (
     <Item
       data-row
-      role="listitem"
       className={cn(
         settingsRow,
         "relative",

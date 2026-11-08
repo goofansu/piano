@@ -6,6 +6,15 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { run } from "./harness.mjs";
 
+/** Every row of every list on the page is a list item, whatever element the row is. */
+const listsOwnTheirItems = async (page, where) => {
+  const strays = await page.evaluate(`[...document.querySelectorAll('[role="list"]')]
+    .flatMap((list) => [...list.children].filter((row) => row.getAttribute("role") !== "listitem"))
+    .map((row) => (row.closest("[aria-label]")?.getAttribute("aria-label") ?? "") + " " + row.outerHTML.slice(0, 80))`);
+  assert.deepEqual(strays, [], `${where}: list rows that are not list items`);
+  const lists = await page.evaluate(`document.querySelectorAll('[role="list"]').length`);
+  console.log(`Lists on ${where}: ${lists}, every row a list item`);
+};
 const timestamp = Date.now();
 const usage = {
   input: 1000,
@@ -579,12 +588,14 @@ await run(
       // The named menu identifies the row independently of its element type or list position.
       const card = `[role="listitem"]:has([aria-label=${JSON.stringify(`Session menu for ${title}`)}])`;
       await page.ab("wait", card);
+      await listsOwnTheirItems(page, "project home");
       assert.match(
         await page.ab("get", "text", card),
         new RegExp(`${title}\\s*Folder:\\s*api\\s*Git branch:\\s*feat-${id}`),
       );
       await page.ab("click", `${card} [data-slot="item-title"] button`);
       await page.see("Answer 1.");
+      await listsOwnTheirItems(page, `session ${id}`);
       const header = await page.evaluate("document.querySelector('header').textContent");
       // One line: the project crumb and the title; the sidebar row and rail say where it runs.
       assert.match(header, /Project: QA Project/);
@@ -698,6 +709,10 @@ await run(
         before === "true" ? "false" : "true",
         `${key} toggles the rail once`,
       );
+      if (after.pressed === "true") {
+        await page.until(`!!document.querySelector('[role="list"][aria-label="Environment"]')`);
+        await listsOwnTheirItems(page, "session rail");
+      }
     }
     for (const key of ["Space", "Enter"]) {
       const { after } = await headerKey(600, "[data-session-menu]", key);

@@ -113,7 +113,6 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
       <Item
         size="sm"
         data-row
-        role="listitem"
         className={cn(
           railRow,
           rowActionsWidth.list[1],
