@@ -60,7 +60,7 @@ type RadiusInstall = Exclude<RadiusSetupAction, RadiusUninstall>;
 export interface RadiusToolView {
   title: string;
   ready: boolean;
-  /** Read to screen readers beside the title once ready. */
+  /** The row's state on its meta line once ready. */
   readyLabel: string;
   /** Why Pi reports this tool as it does, when it says. */
   detail?: string;
@@ -95,12 +95,12 @@ const TOOLS = {
     install: {
       action: "configure-mcp",
       ariaLabel: "Install Radius MCP",
-      done: "Radius MCP installed. Start a new session to use it.",
+      done: "Radius MCP installed for new sessions",
     },
     uninstall: {
       action: "remove-mcp",
       ariaLabel: "Uninstall Radius MCP",
-      done: "Radius MCP uninstalled for new sessions.",
+      done: "Radius MCP uninstalled for new sessions",
       confirmation: {
         title: "Uninstall Radius MCP?",
         description: "Uninstalls Radius MCP from Pi on this machine.",

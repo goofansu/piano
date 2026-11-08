@@ -1,18 +1,22 @@
 import type { McpCatalogId, McpSetupChange, McpSetupRequest } from "@shared/mcp";
-import { CheckCircle2Icon, ServerIcon } from "lucide-react";
+import { cn } from "cn";
+import { MoreHorizontalIcon, ServerIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { McpServerDialog } from "@/components/McpServerDialog";
+import { PianoButton } from "@/components/PianoButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RemovalDialog } from "@/components/RemovalDialog";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import {
   SettingsAlert,
   SettingsGroup,
@@ -22,7 +26,8 @@ import {
   SettingsSkeleton,
   settingsRow,
 } from "@/components/SettingsSectionFrame";
-import { Button } from "@/components/ui/button";
+import { StatusDot } from "@/components/StatusDot";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import {
   Item,
   ItemActions,
@@ -102,14 +107,14 @@ export function McpSettings() {
     <SettingsSectionFrame
       title="MCP"
       actions={pageCommands(app, global.settings).map((c) => (
-        <Button
+        <PianoButton
           key={c.id}
           size="sm"
           disabled={!c.enabled || !!view.problem}
           onClick={() => runCommand(c)}
         >
           <GlobalCommandIcon icon={c.icon} data-icon="inline-start" /> {c.label}
-        </Button>
+        </PianoButton>
       ))}
       dialogs={
         <>
@@ -174,6 +179,15 @@ export function McpSettings() {
             ))}
           </SettingsSkeleton>
         )
+      ) : view.rows.length === 0 && !view.available?.length ? (
+        <Empty className="py-8">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ServerIcon />
+            </EmptyMedia>
+            <EmptyTitle>No MCP servers yet</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <>
           {view.rows.length > 0 && (
@@ -205,7 +219,7 @@ export function McpSettings() {
                     connecting={actions.running === `connect:${row.server.id}`}
                     connect={() =>
                       void act({ action: "connect", server: row.server.id }, (reply) =>
-                        reply.signIn ? undefined : `MCP ${row.server.name} connected.`,
+                        reply.signIn ? undefined : "MCP server connected",
                       ).then((reply) => signInAfter(reply, row.server.name))
                     }
                   />
@@ -246,26 +260,52 @@ function McpServerItem({
   remove: () => void;
   reconnect: () => void;
 }) {
-  // The name and its endpoint or command; a third line appears only for a problem the user must fix in Pi.
+  const menu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <PianoButton
+          variant="ghost"
+          size="list"
+          disabled={disabled}
+          aria-label={`MCP ${title} actions`}
+        >
+          <MoreHorizontalIcon />
+        </PianoButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {editable && (
+          <>
+            <DropdownMenuGroup>
+              <DropdownMenuItem onSelect={edit}>Edit</DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuItem variant="destructive" onSelect={remove}>
+          {removeVerb}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+  // The name, its endpoint or command, then its state: ready, or a problem the user must fix in Pi.
   return (
-    <Item className={settingsRow}>
+    <Item data-row className={cn(settingsRow, "relative", !reconnect && rowActionsWidth.list[1])}>
       <Logo catalog={catalog} />
-      <ItemContent className="min-w-0 gap-0.5">
-        <ItemTitle>
-          {title}
-          {ready && (
-            <>
-              <CheckCircle2Icon className="size-3.5 text-brand" aria-hidden />
-              <span className="sr-only">(Ready)</span>
-            </>
-          )}
-        </ItemTitle>
+      <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
+        <ItemTitle>{title}</ItemTitle>
         <ItemDescription className="line-clamp-none font-mono text-xs">{value}</ItemDescription>
         {detail && <ItemDescription className="line-clamp-none">{detail}</ItemDescription>}
+        {ready && (
+          <p className="flex items-center gap-1.5 text-xs text-ink-3">
+            <StatusDot tone="ok" />
+            Ready
+          </p>
+        )}
       </ItemContent>
-      <ItemActions className="shrink-0">
-        {reconnect && (
-          <Button
+      {reconnect ? (
+        // Reconnect is the row's call to action, so its menu stays beside it rather than over it.
+        <ItemActions className="shrink-0 gap-1">
+          <PianoButton
             variant="outline"
             size="sm"
             disabled={disabled}
@@ -273,32 +313,12 @@ function McpServerItem({
             onClick={signIn}
           >
             Reconnect
-          </Button>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={disabled}
-              aria-label={`Manage MCP ${title}`}
-            >
-              Manage
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {editable && (
-              <>
-                <DropdownMenuItem onSelect={edit}>Edit</DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
-            )}
-            <DropdownMenuItem variant="destructive" onSelect={remove}>
-              {removeVerb}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </ItemActions>
+          </PianoButton>
+          {menu}
+        </ItemActions>
+      ) : (
+        <RowActions className="top-1/2 right-3 -translate-y-1/2">{menu}</RowActions>
+      )}
     </Item>
   );
 }
@@ -322,7 +342,7 @@ function McpAvailableItem({
         {detail && <ItemDescription className="line-clamp-none">{detail}</ItemDescription>}
       </ItemContent>
       <ItemActions className="shrink-0">
-        <Button
+        <PianoButton
           variant="outline"
           size="sm"
           disabled={disabled || !!detail}
@@ -331,7 +351,7 @@ function McpAvailableItem({
         >
           {connecting && <Spinner data-icon="inline-start" />}
           Connect
-        </Button>
+        </PianoButton>
       </ItemActions>
     </Item>
   );

@@ -279,7 +279,36 @@ test("the sign-in link shows beside a prompt or in the footer, never both", () =
   const waiting = view(running("a1", { url }));
   assert.equal(waiting.link, "footer");
   assert.equal(waiting.description, "Waiting for authorization…");
-  assert.equal(view(running("a1", { prompt: select })).description, "Choose a sign-in method.");
+});
+
+test("the dialog says each fact once: a choice is the Method field, a typed prompt its label", () => {
+  // A choice with one option needs no line; with several, the line says what the names leave out.
+  const choice = view(running("a1", { prompt: select }));
+  assert.deepEqual([choice.description, choice.label], [undefined, "Method"]);
+  const options = [
+    { id: "browser", label: "Browser" },
+    { id: "device", label: "Device code" },
+  ];
+  assert.equal(
+    view(running("a1", { prompt: { ...select, options } })).description,
+    "On another machine, choose a device-code or copy-code method.",
+  );
+  // Pi's instructions and its question say the same; the question stays, in sign-in words.
+  const typed = view(
+    running("a1", {
+      message: "Complete sign-in in your browser.",
+      prompt: {
+        id: "p2",
+        type: "manual_code",
+        message: "Complete login in your browser, or paste the final redirect URL here:",
+      },
+    }),
+  );
+  assert.equal(typed.message, undefined);
+  assert.equal(
+    typed.label,
+    "Complete sign-in in your browser, or paste the final redirect URL here",
+  );
 });
 
 test("each status gives the dialog its dismiss label and retry", () => {

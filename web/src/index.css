@@ -477,9 +477,6 @@
 .dark {
   --selected: oklch(0.84 0.04 55 / 14%);
 }
-[data-slot="sidebar-menu-button"][data-active="true"] {
-  background: var(--selected);
-}
 
 /* On phones, session navigation reads at its own scale; on desktop it keeps the app's density.
  * Menus portaled outside it keep theirs. */

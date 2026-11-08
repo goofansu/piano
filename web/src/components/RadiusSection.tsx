@@ -1,8 +1,17 @@
-import { CheckCircle2Icon, RefreshCwIcon } from "lucide-react";
+import { cn } from "cn";
+import { MoreHorizontalIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { IconButton } from "@/components/IconButton";
+import { PianoButton } from "@/components/PianoButton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/PianoDropdownMenu";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import {
   SettingsAlert,
   SettingsExternalLink,
@@ -11,7 +20,7 @@ import {
   SettingsSkeleton,
   settingsRow,
 } from "@/components/SettingsSectionFrame";
-import { Button } from "@/components/ui/button";
+import { StatusDot } from "@/components/StatusDot";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -88,33 +97,35 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
           </SettingsSkeleton>
         ) : (
           <SettingsList>
-            <Item className={settingsRow}>
-              <ItemContent className="min-w-0">
-                <ItemTitle>
-                  Account
-                  <ReadyMark ready={account.signedIn} label="Signed in" />
-                </ItemTitle>
+            <Item
+              data-row
+              className={cn(
+                settingsRow,
+                "relative",
+                rowActionsWidth.list[account.signedIn ? 1 : 0],
+              )}
+            >
+              <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
+                <ItemTitle>Account</ItemTitle>
                 {account.description && (
                   <ItemDescription className="line-clamp-none">
                     {account.description}
                   </ItemDescription>
                 )}
+                {account.signedIn && <ReadyLine label="Signed in" />}
               </ItemContent>
-              <ItemActions>
-                {account.signedIn ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground"
+              {account.signedIn ? (
+                <RowActions className={rowActionsPlace}>
+                  <RowMenu
+                    label="Radius account actions"
                     disabled={!account.canSignOut}
-                    aria-label="Sign out of Radius"
-                    onClick={() => setup.confirm({ kind: "sign-out" })}
-                  >
-                    {account.signingOut && <Spinner data-icon="inline-start" />}
-                    {account.signingOut ? "Signing out…" : "Sign out"}
-                  </Button>
-                ) : (
-                  <Button
+                    action="Sign out"
+                    onSelect={() => setup.confirm({ kind: "sign-out" })}
+                  />
+                </RowActions>
+              ) : (
+                <ItemActions className="shrink-0">
+                  <PianoButton
                     variant="outline"
                     size="sm"
                     disabled={!account.canSignIn}
@@ -122,9 +133,9 @@ export function RadiusSection({ reveal }: { reveal?: number }) {
                     onClick={setup.openSignIn}
                   >
                     Sign in
-                  </Button>
-                )}
-              </ItemActions>
+                  </PianoButton>
+                </ItemActions>
+              )}
             </Item>
             <RadiusToolRow tool={mcp} setup={setup} />
             <RadiusToolRow tool={webSearch} setup={setup} />
@@ -171,62 +182,96 @@ function RadiusToolRow({
   setup: Pick<ReturnType<typeof useRadiusSetup>, "act" | "confirm">;
 }) {
   const { install, uninstall, change } = tool;
+  const menu = uninstall && (
+    <RowMenu
+      label={`${tool.title} actions`}
+      disabled={!uninstall.enabled}
+      action={uninstall.label}
+      actionLabel={uninstall.ariaLabel}
+      onSelect={() => setup.confirm(uninstall.confirmation)}
+    />
+  );
+  // The menu reveals over the row's end, unless Install already stands there: then it sits beside it.
+  const revealed = menu && !install && !change;
   return (
-    <Item className={settingsRow}>
-      <ItemContent className="min-w-0">
-        <ItemTitle>
-          {tool.title}
-          <ReadyMark ready={tool.ready} label={tool.readyLabel} />
-        </ItemTitle>
+    <Item data-row className={cn(settingsRow, "relative", rowActionsWidth.list[revealed ? 1 : 0])}>
+      <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
+        <ItemTitle>{tool.title}</ItemTitle>
         {tool.detail && (
           <ItemDescription className="line-clamp-none">{tool.detail}</ItemDescription>
         )}
+        {tool.ready && <ReadyLine label={tool.readyLabel} />}
       </ItemContent>
-      <ItemActions>
-        {change ? (
-          <Button variant={change.action === "uninstall" ? "ghost" : "outline"} size="sm" disabled>
-            <Spinner data-icon="inline-start" />
-            {change.label}
-          </Button>
-        ) : (
-          <>
-            {install && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!install.enabled}
-                aria-label={install.ariaLabel}
-                onClick={() => void setup.act(install.action)}
-              >
-                {install.label}
-              </Button>
-            )}
-            {uninstall && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                disabled={!uninstall.enabled}
-                onClick={() => setup.confirm(uninstall.confirmation)}
-                aria-label={uninstall.ariaLabel}
-              >
-                {uninstall.label}
-              </Button>
-            )}
-          </>
-        )}
-      </ItemActions>
+      {revealed ? (
+        <RowActions className={rowActionsPlace}>{menu}</RowActions>
+      ) : (
+        <ItemActions className="shrink-0 gap-1">
+          {change ? (
+            <PianoButton variant="outline" size="sm" disabled>
+              <Spinner data-icon="inline-start" />
+              {change.label}
+            </PianoButton>
+          ) : (
+            <>
+              {install && (
+                <PianoButton
+                  variant="outline"
+                  size="sm"
+                  disabled={!install.enabled}
+                  aria-label={install.ariaLabel}
+                  onClick={() => void setup.act(install.action)}
+                >
+                  {install.label}
+                </PianoButton>
+              )}
+              {menu}
+            </>
+          )}
+        </ItemActions>
+      )}
     </Item>
   );
 }
 
-/** A quiet check beside a title once that part is ready; screen readers hear the label. */
-function ReadyMark({ ready, label }: { ready: boolean; label: string }) {
-  if (!ready) return null;
+/** Where a row's revealed ⋯ sits: centred on the row's end. */
+const rowActionsPlace = "top-1/2 right-3 -translate-y-1/2";
+
+/** A configured part's ⋯ menu, holding its one destructive action. */
+function RowMenu({
+  label,
+  disabled,
+  action,
+  actionLabel,
+  onSelect,
+}: {
+  label: string;
+  disabled: boolean;
+  action: string;
+  actionLabel?: string;
+  onSelect: () => void;
+}) {
   return (
-    <>
-      <CheckCircle2Icon className="size-3.5 text-brand" aria-hidden />
-      <span className="sr-only">({label})</span>
-    </>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <PianoButton variant="ghost" size="list" aria-label={label} disabled={disabled}>
+          <MoreHorizontalIcon />
+        </PianoButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem variant="destructive" aria-label={actionLabel} onSelect={onSelect}>
+          {action}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** The part's state once it is ready, on the row's meta line. */
+function ReadyLine({ label }: { label: string }) {
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-ink-3">
+      <StatusDot tone="ok" />
+      {label}
+    </p>
   );
 }

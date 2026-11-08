@@ -1,5 +1,6 @@
 import type { OAuthProvider } from "@shared/wire";
-import { CheckCircle2Icon, HomeIcon, PlugIcon } from "lucide-react";
+import { cn } from "cn";
+import { HomeIcon, MoreHorizontalIcon, PlugIcon } from "lucide-react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { ApiKeySettings } from "@/components/ApiKeySettings";
@@ -7,11 +8,18 @@ import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
 import { LibrarySettings } from "@/components/LibrarySettings";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoButton } from "@/components/PianoButton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/PianoDropdownMenu";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
 import { PreferencesSettings } from "@/components/PreferencesSettings";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RadiusSection } from "@/components/RadiusSection";
 import { RemovalDialog, signOutCopy } from "@/components/RemovalDialog";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import {
   SettingsGroup,
   SettingsList,
@@ -21,14 +29,8 @@ import {
   SettingsSkeleton,
   settingsRow,
 } from "@/components/SettingsSectionFrame";
-import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { StatusDot } from "@/components/StatusDot";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
 import {
   SidebarContent,
@@ -72,7 +74,6 @@ export function SettingsNavigation({
               aria-current={current === item.id ? "page" : undefined}
               aria-label={item.label}
               tooltip={item.label}
-              className="h-9 pointer-coarse:h-11"
               onClick={() => onSelect(item.id)}
             >
               <SettingsSectionIcon icon={item.icon} />
@@ -150,7 +151,7 @@ function ProvidersSettings({
     actions.run({
       id: provider.id,
       run: () => providerAccounts.signOut(provider.id),
-      done: `Signed out of ${provider.name}.`,
+      done: `Signed out of ${provider.name}`,
       fallback: "Could not sign out. Try again.",
     });
   return (
@@ -195,19 +196,27 @@ function ProvidersSettings({
                 ))}
               </SettingsSkeleton>
             ) : body.kind === "empty" ? (
-              <Empty>
+              <Empty className="py-8">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
                     <PlugIcon />
                   </EmptyMedia>
                   <EmptyTitle>No OAuth providers available</EmptyTitle>
-                  <EmptyDescription>Providers supported by Pi will appear here.</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             ) : (
               <SettingsList>
                 {body.rows.map(({ provider, logo, action }) => (
-                  <Item key={provider.id} role="listitem" className={settingsRow}>
+                  <Item
+                    key={provider.id}
+                    role="listitem"
+                    data-row
+                    className={cn(
+                      settingsRow,
+                      "relative",
+                      rowActionsWidth.list[provider.signedIn ? 1 : 0],
+                    )}
+                  >
                     {logo && (
                       <ItemMedia variant="icon">
                         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -215,32 +224,51 @@ function ProvidersSettings({
                         </svg>
                       </ItemMedia>
                     )}
-                    <ItemContent className="min-w-0">
-                      <ItemTitle>
-                        {provider.name}
-                        {provider.signedIn && (
-                          <>
-                            <CheckCircle2Icon className="size-3.5 text-brand" aria-hidden />
-                            <span className="sr-only">(Signed in)</span>
-                          </>
-                        )}
-                      </ItemTitle>
+                    <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
+                      <ItemTitle>{provider.name}</ItemTitle>
+                      {provider.signedIn && (
+                        <p className="flex items-center gap-1.5 text-xs text-ink-3">
+                          <StatusDot tone="ok" />
+                          Signed in
+                        </p>
+                      )}
                     </ItemContent>
-                    <ItemActions className="shrink-0">
-                      <Button
-                        variant={action.primary ? "outline" : "ghost"}
-                        size="sm"
-                        className={action.primary ? undefined : "text-muted-foreground"}
-                        disabled={!action.enabled}
-                        aria-label={action.ariaLabel}
-                        onClick={() => {
-                          if (action.intent === "confirm-sign-out") actions.confirm(provider);
-                          else actions.openSignIn(provider.id);
-                        }}
-                      >
-                        {action.label}
-                      </Button>
-                    </ItemActions>
+                    {action.intent === "confirm-sign-out" ? (
+                      <RowActions className="top-1/2 right-3 -translate-y-1/2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <PianoButton
+                              variant="ghost"
+                              size="list"
+                              aria-label={`${provider.name} account actions`}
+                              disabled={!action.enabled}
+                            >
+                              <MoreHorizontalIcon />
+                            </PianoButton>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => actions.confirm(provider)}
+                            >
+                              Sign out
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </RowActions>
+                    ) : (
+                      <ItemActions className="shrink-0">
+                        <PianoButton
+                          variant="outline"
+                          size="sm"
+                          disabled={!action.enabled}
+                          aria-label={action.ariaLabel}
+                          onClick={() => actions.openSignIn(provider.id)}
+                        >
+                          {action.label}
+                        </PianoButton>
+                      </ItemActions>
+                    )}
                   </Item>
                 ))}
               </SettingsList>

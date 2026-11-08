@@ -1,6 +1,6 @@
 /**
  * What the MCP section shows and allows: one row per entry of Pi's global configuration, with its
- * ready mark and what its Manage menu offers; one row per catalog server not connected yet; and
+ * ready state and what its ⋯ menu offers; one row per catalog server not connected yet; and
  * whether its controls wait. A change, read or read failure in flight disables every row. Pure;
  * the section renders it, and shows a failed read itself.
  */
@@ -39,7 +39,7 @@ export interface McpServerRow {
   reconnect: boolean;
   /** A server the user added; a catalog server's endpoint is Piano's to choose. */
   editable: boolean;
-  /** How Manage removes it: a URL server is disconnected, a local command deleted. */
+  /** How its menu removes it: a URL server is disconnected, a local command deleted. */
   removeVerb: "Disconnect" | "Delete";
 }
 
@@ -114,13 +114,13 @@ export function mcpRemovalCopy(row: Pick<McpServerRow, "title" | "removeVerb">) 
         description: `Removes MCP ${name} and its saved sign-in from Pi on this machine.`,
         action: "Disconnect",
         progress: "Disconnecting…",
-        done: `MCP ${name} disconnected.`,
+        done: "MCP server disconnected",
       }
     : {
         title: `Delete MCP ${name}?`,
         description: `Removes MCP ${name} from Pi on this machine.`,
         action: "Delete",
         progress: "Deleting…",
-        done: `MCP ${name} deleted.`,
+        done: "MCP server deleted",
       };
 }

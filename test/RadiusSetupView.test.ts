@@ -215,11 +215,8 @@ test("each uninstall is confirmed in its own tool's words, and MCP changes annou
     description: "Removes the Radius web-search extension from Pi on this machine.",
     action: "Uninstall",
   });
-  assert.equal(
-    radiusDoneMessage("configure-mcp"),
-    "Radius MCP installed. Start a new session to use it.",
-  );
-  assert.equal(radiusDoneMessage("remove-mcp"), "Radius MCP uninstalled for new sessions.");
+  assert.equal(radiusDoneMessage("configure-mcp"), "Radius MCP installed for new sessions");
+  assert.equal(radiusDoneMessage("remove-mcp"), "Radius MCP uninstalled for new sessions");
   // Web search reports its own outcome once Pi's background change settles.
   assert.equal(radiusDoneMessage("install-web-search"), undefined);
   assert.equal(radiusDoneMessage("uninstall-web-search"), undefined);

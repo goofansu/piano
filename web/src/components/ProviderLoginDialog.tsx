@@ -123,10 +123,12 @@ function SignInDialog({
         className="max-h-[85dvh] overflow-y-auto"
         showCloseButton={!busy}
         onInteractOutside={(event) => event.preventDefault()}
+        // Without a description line, nothing describes the dialog but its fields.
+        {...(view.description ? {} : { "aria-describedby": undefined })}
       >
         <DialogHeader>
           <DialogTitle>{view.title}</DialogTitle>
-          <DialogDescription>{view.description}</DialogDescription>
+          {view.description && <DialogDescription>{view.description}</DialogDescription>}
         </DialogHeader>
         {view.success ? (
           <Alert role="status">
@@ -161,7 +163,7 @@ function SignInDialog({
                     onClick={async () => {
                       try {
                         await navigator.clipboard.writeText(deviceCode);
-                        toast.success("Device code copied.");
+                        toast.success("Device code copied");
                       } catch {
                         toast.error("Could not copy. Select the code and copy it manually.");
                       }
@@ -178,6 +180,7 @@ function SignInDialog({
           <LoginPromptForm
             key={prompt.id}
             prompt={prompt}
+            label={view.label ?? prompt.message}
             busy={busy}
             cancel={dismiss}
             answer={(value) => answer(prompt.id, value)}
@@ -216,11 +219,13 @@ function SignInDialog({
 }
 function LoginPromptForm({
   prompt,
+  label,
   busy,
   answer,
   cancel,
 }: {
   prompt: LoginPrompt;
+  label: string;
   busy: boolean;
   answer: (value: string) => void;
   cancel: () => void;
@@ -239,7 +244,7 @@ function LoginPromptForm({
     >
       <FieldGroup>
         <Field>
-          <FieldLabel htmlFor="login-answer">{prompt.message}</FieldLabel>
+          <FieldLabel htmlFor="login-answer">{label}</FieldLabel>
           {prompt.type === "select" ? (
             <Select value={value} onValueChange={setValue} disabled={busy}>
               <SelectTrigger id="login-answer">
@@ -268,11 +273,6 @@ function LoginPromptForm({
             />
           )}
         </Field>
-        {prompt.type === "select" && prompt.options && prompt.options.length > 1 && (
-          <p className="text-sm text-muted-foreground">
-            If Piano runs on another machine, choose a device-code or copy-code method when offered.
-          </p>
-        )}
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={cancel}>
             Cancel

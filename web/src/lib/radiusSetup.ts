@@ -221,7 +221,7 @@ export function createRadiusSetup({
       actions.run({
         id: "sign-out",
         run: () => accounts.signOut("radius"),
-        done: "Signed out of Radius.",
+        done: "Signed out of Radius",
         fallback: "Could not sign out. Try again.",
       }),
     confirm: actions.confirm,
