@@ -9,14 +9,13 @@ import {
   DropdownMenuSeparator,
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
-import { ListRow, RowMenu } from "@/components/RowActions";
+import { ListRow, RowMenu, RowStatus } from "@/components/RowActions";
 import {
   SettingsGroup,
   SettingsList,
   SettingsLoadFailure,
   SettingsSkeleton,
 } from "@/components/SettingsSectionFrame";
-import { StatusDot } from "@/components/StatusDot";
 import { ItemMedia } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { changeProviderApiKey, providerApiKeys } from "@/lib/api";
@@ -59,14 +58,6 @@ export function ApiKeySettings() {
                 </ItemMedia>
               }
               title={provider.name}
-              value={
-                provider.saved && (
-                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <StatusDot tone="ok" />
-                    Saved
-                  </span>
-                )
-              }
               menu={
                 provider.saved && (
                   <RowMenu label={`${provider.name} API key actions`} disabled={busy}>
@@ -98,7 +89,9 @@ export function ApiKeySettings() {
                   </PianoButton>
                 )
               }
-            />
+            >
+              {provider.saved && <RowStatus>Saved</RowStatus>}
+            </ListRow>
           ))}
         </SettingsList>
       )}
