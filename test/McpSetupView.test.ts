@@ -37,7 +37,6 @@ const view = (input: Partial<McpSetupInput> = {}) =>
     state: state([http()]),
     running: undefined,
     loading: false,
-    loadFailed: false,
     ...input,
   });
 const row = (setup: McpServerSetup) => view({ state: state([setup]) }).rows?.[0];
@@ -122,11 +121,10 @@ test("rows wait for the first read; available servers sort alphabetically with t
   );
 });
 
-test("a change, read, read failure or Pi problem disables the rows; the problem is shown", () => {
+test("a change, read or Pi problem disables the rows; the problem is shown", () => {
   assert.equal(view().disabled, false);
   assert.equal(view({ running: "connect:linear" }).disabled, true);
   assert.equal(view({ loading: true }).disabled, true);
-  assert.equal(view({ loadFailed: true }).disabled, true);
   const problem = view({ state: state([], { problem: "MCP is off." }) });
   assert.equal(problem.disabled, true);
   assert.equal(problem.problem, "MCP is off.");

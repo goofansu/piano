@@ -21,14 +21,12 @@ import { RemovalDialog } from "@/components/RemovalDialog";
 import { ListRow, RowMenu, RowStatus } from "@/components/RowActions";
 import {
   SettingsList,
-  SettingsLoadFailure,
+  SettingsLoadState,
   SettingsSectionFrame,
-  SettingsSkeleton,
 } from "@/components/SettingsSectionFrame";
 import type { StatusTone } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import {
   Field,
   FieldError,
@@ -45,12 +43,12 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { ItemDescription } from "@/components/ui/item";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { listWebhooks, removeWebhook, saveWebhook, testWebhook } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { PAGE_EDITORS } from "@/lib/pageEditor";
+import { settingsLoadView } from "@/lib/settingsLoadView";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
@@ -145,62 +143,43 @@ export function WebhookSettings() {
         </>
       }
     >
-      {/* The failure stays through the poll's re-reads, so it does not flicker into the skeleton;
-       * rows already read stay below it. */}
-      {observed.error && (
-        <SettingsLoadFailure
-          title="Could not load webhooks"
-          retrying={observed.loading}
-          retry={() => void observed.refresh()}
-        />
-      )}
-      {!observed.value ? (
-        observed.error ? null : (
-          <SettingsSkeleton label="Loading webhooks…" className="flex flex-col gap-2">
-            {[0, 1].map((row) => (
-              <Skeleton key={row} className="h-14 w-full rounded-lg" />
+      <SettingsLoadState
+        view={settingsLoadView({ ...observed, isEmpty: (hooks) => hooks.length === 0 })}
+        noun="webhooks"
+        retry={() => void observed.refresh()}
+        emptyIcon={WebhookIcon}
+      >
+        {(hooks) => (
+          <SettingsList>
+            {hooks.map((hook) => (
+              <WebhookRow
+                key={hook.id}
+                hook={hook}
+                now={now}
+                disabled={busy}
+                setActive={(active) =>
+                  void actions.run({
+                    id: `active:${hook.id}`,
+                    // Only what the switch changes: the row may predate an edit made elsewhere.
+                    run: () => saveWebhook({ id: hook.id, active }),
+                    done: active ? "Webhook turned on" : "Webhook turned off",
+                    fallback: "Could not save webhook.",
+                  })
+                }
+                edit={() => webhookEditor.open(hook)}
+                test={() =>
+                  void actions.run({
+                    id: `test:${hook.id}`,
+                    run: async () => testToast(await testWebhook(hook.id)),
+                    fallback: "Could not test webhook.",
+                  })
+                }
+                remove={() => actions.confirm(hook)}
+              />
             ))}
-          </SettingsSkeleton>
-        )
-      ) : observed.value.length === 0 ? (
-        <Empty className="py-8">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <WebhookIcon />
-            </EmptyMedia>
-            <EmptyTitle>No webhooks yet</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <SettingsList>
-          {observed.value.map((hook) => (
-            <WebhookRow
-              key={hook.id}
-              hook={hook}
-              now={now}
-              disabled={busy}
-              setActive={(active) =>
-                void actions.run({
-                  id: `active:${hook.id}`,
-                  // Only what the switch changes: the row may predate an edit made elsewhere.
-                  run: () => saveWebhook({ id: hook.id, active }),
-                  done: active ? "Webhook turned on" : "Webhook turned off",
-                  fallback: "Could not save webhook.",
-                })
-              }
-              edit={() => webhookEditor.open(hook)}
-              test={() =>
-                void actions.run({
-                  id: `test:${hook.id}`,
-                  run: async () => testToast(await testWebhook(hook.id)),
-                  fallback: "Could not test webhook.",
-                })
-              }
-              remove={() => actions.confirm(hook)}
-            />
-          ))}
-        </SettingsList>
-      )}
+          </SettingsList>
+        )}
+      </SettingsLoadState>
     </SettingsSectionFrame>
   );
 }

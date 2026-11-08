@@ -16,12 +16,10 @@ import {
   SettingsAlert,
   SettingsGroup,
   SettingsList,
-  SettingsLoadFailure,
+  SettingsLoadState,
   SettingsSectionFrame,
-  SettingsSkeleton,
   settingsRow,
 } from "@/components/SettingsSectionFrame";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import {
   Item,
   ItemActions,
@@ -30,7 +28,6 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { changeMcpSetup, mcpLogin, mcpSetup } from "@/lib/api";
 import {
@@ -40,6 +37,7 @@ import {
   mcpSetupView,
 } from "@/lib/mcpSetupView";
 import { PAGE_EDITORS } from "@/lib/pageEditor";
+import { settingsLoadView } from "@/lib/settingsLoadView";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
@@ -74,7 +72,6 @@ export function McpSettings() {
     state: setup.value,
     running: actions.running,
     loading: setup.loading,
-    loadFailed: !!setup.failure,
   });
   // Pi's config is unusable, so a save would be refused: the header and the palette both say so.
   mcpServerEditor.useAvailable(!view.problem);
@@ -149,73 +146,61 @@ export function McpSettings() {
         </>
       }
     >
-      {/* The failure stays while Retry reads again, so it does not flicker into the skeleton. */}
-      {setup.error && (
-        <SettingsLoadFailure
-          title="Could not load MCP servers"
-          retrying={setup.loading}
-          retry={() => void setup.refresh()}
-        />
-      )}
-      {view.problem && <SettingsAlert title="MCP is unavailable">{view.problem}</SettingsAlert>}
-      {!view.rows ? (
-        setup.error ? null : (
-          <SettingsSkeleton label="Loading MCP servers…" className="flex flex-col gap-2">
-            {[0, 1].map((row) => (
-              <Skeleton key={row} className="h-14 w-full rounded-lg" />
-            ))}
-          </SettingsSkeleton>
-        )
-      ) : view.rows.length === 0 && !view.available?.length ? (
-        <Empty className="py-8">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <ServerIcon />
-            </EmptyMedia>
-            <EmptyTitle>No MCP servers yet</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <>
-          {view.rows.length > 0 && (
-            <SettingsGroup id="settings-mcp-connected" title="Connected">
-              <SettingsList>
-                {view.rows.map((row) => (
-                  <McpServerItem
-                    key={row.setup.name}
-                    row={row}
-                    disabled={view.disabled}
-                    edit={() => mcpServerEditor.open(row.setup)}
-                    remove={() => actions.confirm(row)}
-                    reconnect={() =>
-                      actions.openSignIn({ id: row.setup.name, name: titleOf(row.setup.name) })
-                    }
-                  />
-                ))}
-              </SettingsList>
-            </SettingsGroup>
-          )}
-          {view.available && view.available.length > 0 && (
-            <SettingsGroup id="settings-mcp-available" title="Available">
-              <SettingsList>
-                {view.available.map((row) => (
-                  <McpAvailableItem
-                    key={row.server.id}
-                    row={row}
-                    disabled={view.disabled}
-                    connecting={actions.running === `connect:${row.server.id}`}
-                    connect={() =>
-                      void act({ action: "connect", server: row.server.id }, (reply) =>
-                        reply.signIn ? undefined : "MCP server connected",
-                      ).then((reply) => signInAfter(reply, row.server.name))
-                    }
-                  />
-                ))}
-              </SettingsList>
-            </SettingsGroup>
-          )}
-        </>
-      )}
+      <SettingsLoadState
+        view={settingsLoadView({
+          ...setup,
+          // Pi's problem is the page's message, so it shows in place of the empty line.
+          isEmpty: (state) => !state.problem && !state.servers.length && !view.available?.length,
+        })}
+        noun="MCP servers"
+        retry={() => void setup.refresh()}
+        emptyIcon={ServerIcon}
+      >
+        {() => (
+          <>
+            {view.problem && (
+              <SettingsAlert title="MCP is unavailable">{view.problem}</SettingsAlert>
+            )}
+            {view.rows && view.rows.length > 0 && (
+              <SettingsGroup id="settings-mcp-connected" title="Connected">
+                <SettingsList>
+                  {view.rows.map((row) => (
+                    <McpServerItem
+                      key={row.setup.name}
+                      row={row}
+                      disabled={view.disabled}
+                      edit={() => mcpServerEditor.open(row.setup)}
+                      remove={() => actions.confirm(row)}
+                      reconnect={() =>
+                        actions.openSignIn({ id: row.setup.name, name: titleOf(row.setup.name) })
+                      }
+                    />
+                  ))}
+                </SettingsList>
+              </SettingsGroup>
+            )}
+            {view.available && view.available.length > 0 && (
+              <SettingsGroup id="settings-mcp-available" title="Available">
+                <SettingsList>
+                  {view.available.map((row) => (
+                    <McpAvailableItem
+                      key={row.server.id}
+                      row={row}
+                      disabled={view.disabled}
+                      connecting={actions.running === `connect:${row.server.id}`}
+                      connect={() =>
+                        void act({ action: "connect", server: row.server.id }, (reply) =>
+                          reply.signIn ? undefined : "MCP server connected",
+                        ).then((reply) => signInAfter(reply, row.server.name))
+                      }
+                    />
+                  ))}
+                </SettingsList>
+              </SettingsGroup>
+            )}
+          </>
+        )}
+      </SettingsLoadState>
     </SettingsSectionFrame>
   );
 }

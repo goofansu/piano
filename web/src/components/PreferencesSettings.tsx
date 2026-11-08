@@ -10,12 +10,11 @@ import { RemovalDialog } from "@/components/RemovalDialog";
 import { ListRow, RowMenu } from "@/components/RowActions";
 import {
   SettingsList,
-  SettingsLoadFailure,
+  SettingsLoadState,
   SettingsSectionFrame,
-  SettingsSkeleton,
 } from "@/components/SettingsSectionFrame";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { settingsLoadView } from "@/lib/settingsLoadView";
 import { useSetupActions } from "@/lib/useSetupActions";
 import { useVoiceInput, voiceInputSettings } from "@/lib/useVoiceInput";
 
@@ -86,55 +85,52 @@ export function PreferencesSettings() {
         </>
       }
     >
-      {observed.error ? (
-        <SettingsLoadFailure
-          title="Could not load preferences"
-          retrying={observed.loading}
-          retry={() => void voiceInputSettings.refresh()}
-        />
-      ) : !voice ? (
-        <SettingsSkeleton label="Loading preferences…">
-          <Skeleton className="h-14 w-full rounded-lg" />
-        </SettingsSkeleton>
-      ) : (
-        <SettingsList>
-          <ListRow
-            title="Voice input"
-            titleId="voice-input-title"
-            value={
-              // As tall as the key menu's button, so saving a key does not move the row. The switch
-              // is the row's value: it steps aside beneath the revealed ⋯.
-              <span className="flex min-h-8 items-center pointer-coarse:min-h-11">
-                <Switch
-                  size="sm"
-                  aria-labelledby="voice-input-title"
-                  checked={voice.enabled}
-                  disabled={busy}
-                  onCheckedChange={setEnabled}
-                />
-              </span>
-            }
-            menu={
-              voice.hasKey && (
-                <RowMenu label="Voice input actions" disabled={busy}>
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem onSelect={() => setEditing("replace")}>
-                      Replace key
+      <SettingsLoadState
+        view={settingsLoadView(observed)}
+        noun="preferences"
+        retry={() => void voiceInputSettings.refresh()}
+        skeletonRows={1}
+      >
+        {(voice) => (
+          <SettingsList>
+            <ListRow
+              title="Voice input"
+              titleId="voice-input-title"
+              value={
+                // As tall as the key menu's button, so saving a key does not move the row. The switch
+                // is the row's value: it steps aside beneath the revealed ⋯.
+                <span className="flex min-h-8 items-center pointer-coarse:min-h-11">
+                  <Switch
+                    size="sm"
+                    aria-labelledby="voice-input-title"
+                    checked={voice.enabled}
+                    disabled={busy}
+                    onCheckedChange={setEnabled}
+                  />
+                </span>
+              }
+              menu={
+                voice.hasKey && (
+                  <RowMenu label="Voice input actions" disabled={busy}>
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem onSelect={() => setEditing("replace")}>
+                        Replace key
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => actions.confirm("remove-key")}
+                    >
+                      Remove key
                     </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onSelect={() => actions.confirm("remove-key")}
-                  >
-                    Remove key
-                  </DropdownMenuItem>
-                </RowMenu>
-              )
-            }
-          />
-        </SettingsList>
-      )}
+                  </RowMenu>
+                )
+              }
+            />
+          </SettingsList>
+        )}
+      </SettingsLoadState>
     </SettingsSectionFrame>
   );
 }
