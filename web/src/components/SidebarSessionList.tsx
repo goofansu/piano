@@ -1,7 +1,6 @@
 import { cn } from "cn";
 import { MoreHorizontalIcon } from "lucide-react";
 import { Fragment, memo } from "react";
-import { BranchLabel } from "@/components/BranchLabel";
 import { SessionCommandMenuItem, useCommands, useSessionCommands } from "@/components/CommandHost";
 import { PianoButton as Button } from "@/components/PianoButton";
 import {
@@ -14,6 +13,7 @@ import {
 import { Keys } from "@/components/PianoMark";
 import { ProjectMenu } from "@/components/Projects";
 import { RowActions } from "@/components/RowActions";
+import { SessionDetails } from "@/components/SessionDetails";
 import type { Navigation } from "@/lib/navigation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
@@ -146,19 +146,10 @@ const SessionRow = memo(
               data-motion="yield"
               className="col-start-2 flex min-w-0 items-center gap-2 text-xs text-ink-3"
             >
-              {details === "folder-and-branch" && (
-                <span className="max-w-1/2 shrink-0 truncate">
-                  <span className="sr-only">Folder: </span>
-                  {t.folder}
-                </span>
-              )}
-              {t.branch && (
-                <>
-                  <span className="sr-only">Git branch: </span>
-                  {/* Sans, not mono: under every title, the branch stays a quiet label. */}
-                  <BranchLabel branch={t.branch} className="min-w-0 font-sans" />
-                </>
-              )}
+              <SessionDetails
+                folder={details === "folder-and-branch" ? t.folder : undefined}
+                branch={t.branch}
+              />
             </span>
           )}
           {activity === "working" ? (

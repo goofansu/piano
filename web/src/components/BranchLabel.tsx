@@ -3,8 +3,7 @@ import { GitBranchIcon } from "lucide-react";
 
 /**
  * A branch name the way it reads everywhere: a small branch icon, then the name in mono, truncating
- * from the end. Under a session title (the sidebar row, a project home's row) the branch is a quiet
- * sans label instead: pass `className="min-w-0 font-sans"`.
+ * from the end. Under a session's title it is a quiet sans label instead: `SessionDetails` says so.
  */
 export function BranchLabel({ branch, className }: { branch: string; className?: string }) {
   return (

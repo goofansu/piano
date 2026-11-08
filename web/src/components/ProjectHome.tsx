@@ -1,12 +1,12 @@
 import { cn } from "cn";
 import { GitPullRequestIcon, MessagesSquareIcon } from "lucide-react";
 import { type ComponentProps, useRef } from "react";
-import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
 import { NewSessionComposer } from "@/components/NewSession";
 import { PaneBody, PaneHeader, PaneNotFound } from "@/components/Pane";
 import { ProjectCommandsMenu } from "@/components/Projects";
 import { ListRow, RowMenu } from "@/components/RowActions";
+import { SessionDetails } from "@/components/SessionDetails";
 import { SettingsGroup, SettingsList } from "@/components/SettingsSectionFrame";
 import { SessionMenu } from "@/components/SidebarSessionList";
 import { StatusDot } from "@/components/StatusDot";
@@ -189,9 +189,7 @@ export function ProjectHome({
                     }
                   >
                     <ItemDescription className="flex min-w-0 items-center gap-1.5 text-xs">
-                      {/* The folder keeps its name (up to half the line); a long branch truncates first. */}
-                      <span className="max-w-1/2 shrink-0 truncate">{s.folder}</span>
-                      {s.branch && <BranchLabel branch={s.branch} className="min-w-0 font-sans" />}
+                      <SessionDetails folder={s.folder} branch={s.branch} />
                       {s.pullRequest && (
                         <span className="inline-flex shrink-0 items-center gap-1">
                           <GitPullRequestIcon className="size-3 shrink-0" aria-hidden />
