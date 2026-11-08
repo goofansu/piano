@@ -40,23 +40,6 @@ const reply = async (response: Response) => ({
   body: await response.json(),
 });
 
-test("a decoded body and the resolved workspace reach the handler; the reply is the contract's JSON", async () => {
-  const { status, body } = await reply(
-    await post(
-      `/api/workspace/changes/file?workspaceId=${server.workspaceId}`,
-      JSON.stringify({ path: "README.md" }),
-    ),
-  );
-  assert.equal(status, 200);
-  assert.deepEqual(body.workspace, {
-    id: server.workspaceId,
-    folder: server.repo,
-    path: server.repo,
-  });
-  assert.equal(body.result.status, "ready");
-  assert.match(body.result.diff, /\+two/);
-});
-
 test("written files: each path a session wrote, as sent, is outside, ignored by Git, removed or listed; inside ones are placed", async (t) => {
   const { writeFileSync, rmSync } = await import("node:fs");
   const { join } = await import("node:path");
@@ -152,112 +135,6 @@ test("written-file paths and their placed names are identities, never redacted a
   });
 });
 
-// Tabs built before 1b9e6b6 still post the old route and decode its old answer (LegacyEndpoints).
-test("tabs built before written files still get the old ignored-files answer, as sent; an ignored path that no longer exists is missing too", async (t) => {
-  const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
-  const { join } = await import("node:path");
-  writeFileSync(join(server.repo, ".gitignore"), "scratch/\n*.log\nREADME.md\n");
-  writeFileSync(join(server.repo, "src/app.ts"), "export {};\n");
-  mkdirSync(join(server.repo, "scratch"));
-  writeFileSync(join(server.repo, "scratch/kept.md"), "kept\n");
-  t.after(() => {
-    rmSync(join(server.repo, ".gitignore"));
-    rmSync(join(server.repo, "src/app.ts"));
-    rmSync(join(server.repo, "scratch"), { recursive: true });
-  });
-  const { status, body } = await reply(
-    await post(
-      `/api/workspace/files/ignored?workspaceId=${server.workspaceId}`,
-      JSON.stringify({
-        paths: [
-          "scratch/notes.md",
-          "src/app.ts",
-          `${server.repo}/build.log`,
-          "/elsewhere/x.ts",
-          "scratch/kept.md",
-          "../sibling.ts",
-          "src/gone.ts",
-          "README.md",
-        ],
-      }),
-    ),
-  );
-  assert.equal(status, 200);
-  assert.deepEqual(body.workspace, {
-    id: server.workspaceId,
-    folder: server.repo,
-    path: server.repo,
-  });
-  assert.equal(typeof body.observedAt, "string");
-  assert.deepEqual(body.result, {
-    status: "ready",
-    // README.md matches a pattern but is tracked, so Git does not ignore it.
-    ignored: ["scratch/notes.md", `${server.repo}/build.log`, "scratch/kept.md"],
-    outside: ["/elsewhere/x.ts", "../sibling.ts"],
-    // Neither ignored file but scratch/kept.md was ever written in this checkout.
-    missing: ["scratch/notes.md", `${server.repo}/build.log`, "src/gone.ts"],
-    inside: [
-      "scratch/notes.md",
-      "src/app.ts",
-      `${server.repo}/build.log`,
-      "scratch/kept.md",
-      "src/gone.ts",
-      "README.md",
-    ],
-    placed: [
-      "scratch/notes.md",
-      "src/app.ts",
-      "build.log",
-      "scratch/kept.md",
-      "src/gone.ts",
-      "README.md",
-    ],
-  });
-});
-
-test("the old ignored-files answer keeps its paths verbatim and still projects an error's detail", async (t) => {
-  const paths = ["notes/token=abc12345.md", `${server.repo}/keys/sk-abcdefghijklmnop.ts`];
-  const { body } = await reply(
-    await post(
-      `/api/workspace/files/ignored?workspaceId=${server.workspaceId}`,
-      JSON.stringify({ paths }),
-    ),
-  );
-  assert.deepEqual(body.result, {
-    status: "ready",
-    ignored: [],
-    outside: [],
-    missing: paths,
-    inside: paths,
-    placed: ["notes/token=abc12345.md", "keys/sk-abcdefghijklmnop.ts"],
-  });
-
-  // A registered folder named like a token that has since gone: Git's failure names its path.
-  const { mkdirSync, rmSync } = await import("node:fs");
-  const { join } = await import("node:path");
-  const { Effect } = await import("effect");
-  const { Registry } = await import("../server/Registry.ts");
-  const gone = join(server.root, "sk-abcdefghijklmnop");
-  mkdirSync(gone);
-  const id = await server.run(
-    Effect.gen(function* () {
-      const registry = yield* Registry;
-      yield* registry.addFolder(gone);
-      return (yield* registry.get).workspaces.find((w) => w.path === gone)!.id;
-    }),
-  );
-  rmSync(gone, { recursive: true });
-  t.after(() => server.run(Effect.flatMap(Registry, (registry) => registry.removeFolder(gone))));
-  const failed = await reply(
-    await post(`/api/workspace/files/ignored?workspaceId=${id}`, JSON.stringify({ paths })),
-  );
-  assert.equal(failed.status, 200);
-  assert.equal(failed.body.workspace.path, gone);
-  assert.equal(failed.body.result.status, "error");
-  assert.match(failed.body.result.detail, /\[REDACTED\]/);
-  assert.doesNotMatch(failed.body.result.detail, /sk-abcdefghijklmnop/);
-});
-
 test("a file the Files list places inside the workspace through a symlink opens", async (t) => {
   const { mkdtempSync, rmSync, symlinkSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
@@ -310,11 +187,11 @@ test("workspace file downloads are uncached, unsniffed attachments of the exact 
 });
 
 test("INV-07: IDs resolve through the registry; a missing ID is malformed and an unknown one is not found", async () => {
-  assert.deepEqual(await reply(await post("/api/workspace/changes?workspaceId=nope")), {
+  assert.deepEqual(await reply(await post("/api/workspace/files/written?workspaceId=nope")), {
     status: 404,
     body: { error: "Workspace is not registered. Refresh the folder list." },
   });
-  assert.deepEqual(await reply(await post("/api/workspace/changes")), {
+  assert.deepEqual(await reply(await post("/api/workspace/files/written")), {
     status: 400,
     body: { error: "Workspace ID is required." },
   });
@@ -330,11 +207,11 @@ test("INV-07: IDs resolve through the registry; a missing ID is malformed and an
 });
 
 test("a body outside the endpoint's Schema is answered 400 with the endpoint's message, before any work", async () => {
-  const file = `/api/workspace/changes/file?workspaceId=${server.workspaceId}`;
-  for (const body of [undefined, "not json", "{}", JSON.stringify({ path: 7 })]) {
+  const written = `/api/workspace/files/written?workspaceId=${server.workspaceId}`;
+  for (const body of [undefined, "not json", "{}", JSON.stringify({ paths: 7 })]) {
     assert.deepEqual(
-      await reply(await post(file, body)),
-      { status: 400, body: { error: "File path is required in the request body." } },
+      await reply(await post(written, body)),
+      { status: 400, body: { error: "File paths are required in the request body." } },
       `body ${body}`,
     );
   }

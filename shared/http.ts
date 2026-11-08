@@ -33,7 +33,6 @@ import {
   SessionPullRequest,
   SessionPullRequestAction,
   SlashCommand,
-  Workspace,
   WorkspaceChanges,
   WorkspaceWrittenFiles,
 } from "./wire.ts";
@@ -294,23 +293,6 @@ export const Endpoints = {
     noStore: true,
     refused: 400,
     fallback: "Could not download this file. Check the path and try again.",
-  }),
-  workspaceChanges: endpoint({
-    method: "POST",
-    path: "/api/workspace/changes",
-    query: ["workspaceId"],
-    response: WorkspaceChanges,
-    fallback: (status) =>
-      `Changes request failed (${status}). Refresh folders or inspect the server.`,
-  }),
-  workspaceChangedFile: endpoint({
-    method: "POST",
-    path: "/api/workspace/changes/file",
-    query: ["workspaceId"],
-    body: Schema.Struct({ path: Schema.String }),
-    invalid: "File path is required in the request body.",
-    response: WorkspaceChanges,
-    fallback: (status) => `File request failed (${status}).`,
   }),
   /** The session's Changes: its saved scope, or the one in the body for this read. */
   sessionChanges: endpoint({
@@ -591,48 +573,3 @@ export const Endpoints = {
 } as const;
 
 export type Endpoints = typeof Endpoints;
-
-/**
- * The Files answer as bundles built before 1b9e6b6 decode it: which of the paths sent Git ignores,
- * which lie outside the workspace and which no longer exist, each as sent (an ignored path that no
- * longer exists is in both `ignored` and `missing`), and `placed[i]`, the name `inside[i]` places to.
- */
-export const LegacyWorkspaceIgnoredFiles = Schema.Struct({
-  workspace: Workspace,
-  observedAt: Schema.String,
-  result: Schema.Union([
-    Schema.Struct({
-      status: Schema.Literal("ready"),
-      ignored: Schema.Array(Schema.String),
-      outside: Schema.Array(Schema.String),
-      missing: Schema.Array(Schema.String),
-      inside: Schema.Array(Schema.String),
-      placed: Schema.Array(Schema.String),
-    }),
-    Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
-  ]),
-});
-export type LegacyWorkspaceIgnoredFiles = typeof LegacyWorkspaceIgnoredFiles.Type;
-
-/**
- * Endpoints the server still answers for browser tabs that loaded a bundle built before a
- * contract change, so a deploy does not break them until they reload. The current browser never
- * calls these; `web/src` must not import them.
- */
-export const LegacyEndpoints = {
-  /**
-   * Superseded by `Endpoints.workspaceWrittenFiles` in 1b9e6b6. A tab built before it posts here,
-   * and without an answer its Files list fails open and shows ignored, outside and removed paths.
-   * Remove once every deployed Piano has served a bundle built from 1b9e6b6 or later and tabs
-   * opened before that deploy have reloaded.
-   */
-  workspaceIgnoredFiles: endpoint({
-    method: "POST",
-    path: "/api/workspace/files/ignored",
-    query: ["workspaceId"],
-    body: WrittenPaths,
-    invalid: "File paths are required in the request body.",
-    response: LegacyWorkspaceIgnoredFiles,
-    fallback: (status) => `Ignored files request failed (${status}).`,
-  }),
-} as const;

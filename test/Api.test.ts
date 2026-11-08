@@ -10,8 +10,7 @@ import {
   listWebhooks,
   makeDirectory,
   saveWebhook,
-  workspaceChangedFile,
-  workspaceChanges,
+  sessionChanges,
   workspaceFile,
   workspaceFileDownload,
   workspaceWrittenFiles,
@@ -56,25 +55,6 @@ test("folder picker: listings decode, and a missing path fails with the server's
   assert.deepEqual(
     (await listDirectory(repo)).entries.map((e) => e.name),
     ["new", "src"],
-  );
-});
-
-test("INV-07: changes address the workspace by ID and an unknown ID surfaces the registry's reason", async () => {
-  const changes = await workspaceChanges(workspaceId);
-  assert.equal(changes.workspace.path, repo);
-  assert.ok(changes.result.status === "ready");
-  assert.deepEqual(
-    changes.result.files.map((f) => [f.path, f.additions]),
-    [["README.md", 1]],
-  );
-  const file = await workspaceChangedFile(workspaceId, "README.md");
-  assert.ok(file.result.status === "ready" && file.result.diff.includes("+two"));
-  await assert.rejects(
-    workspaceChanges("not-a-workspace"),
-    (error: unknown) =>
-      error instanceof ApiError &&
-      error.status === 404 &&
-      error.message === "Workspace is not registered. Refresh the folder list.",
   );
 });
 
@@ -135,7 +115,7 @@ test("a response outside the contract is rejected with the endpoint's message, n
     );
     globalThis.fetch = async () => new Response("<html>Bad gateway</html>", { status: 502 });
     await assert.rejects(
-      workspaceChanges(workspaceId),
+      sessionChanges(workspaceId, "any-session", undefined),
       (error: unknown) =>
         error instanceof ApiError &&
         error.status === 502 &&

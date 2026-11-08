@@ -206,7 +206,7 @@ async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<
 
 /** Whether `path` (relative to the workspace, or absolute) names something on disk; a dangling
  * symlink does. Fails on anything but the path's absence. */
-export const exists = (workspace: Workspace, path: string): Promise<boolean> =>
+const exists = (workspace: Workspace, path: string): Promise<boolean> =>
   lstat(spell(workspace, path)).then(
     () => true,
     (error: NodeJS.ErrnoException) => {
