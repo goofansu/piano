@@ -8,7 +8,7 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 ## Sub-features
 
 - `open-from-sidebar`: click the session's row in navigation "Sessions".
-- `sidebar-layout`: Hide sidebar / Show sidebar, the palette's Toggle sidebar and Cmd+B toggle
+- `sidebar-layout`: Hide sidebar / Show sidebar, the palette's Hide sidebar / Show sidebar row and Cmd+B toggle
   the sidebar. Cmd+B is `Meta+b` even on Linux, not Control+B. A narrow viewport uses a sheet;
   opening or dismissing that sheet preserves the desktop column preference on widening.
 - `history`: the saved user message and reply render; "Jump to message" lists them.

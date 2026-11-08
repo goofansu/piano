@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { PanelLeftOpenIcon } from "lucide-react";
 import { createContext, useCallback, useContext } from "react";
-import { PianoButton } from "@/components/PianoButton";
+import { IconButton } from "@/components/IconButton";
 import { StatusDot } from "@/components/StatusDot";
 import { useSidebarLayout, useSidebarLayoutState } from "@/lib/useSidebarLayout";
 
@@ -13,7 +13,7 @@ export const SidebarActivityContext = createContext(false);
  * a sheet, and on desktop once it is collapsed. It sits where the sidebar's hide control was (both
  * in the pane's frame), so the toggle stands still across the collapse; it leads, so its glyph stays
  * there when the touch target grows. While any session works it carries the busy dot, since the
- * rows that would say so are hidden. It offers itself as where focus returns when the sheet closes
+ * rows that would say so are hidden. Its tooltip names it, as Hide sidebar's does. It offers itself as where focus returns when the sheet closes
  * and nothing better is left to focus.
  */
 export function ShowSidebarButton({
@@ -34,13 +34,12 @@ export function ShowSidebarButton({
     [layout],
   );
   return (
-    <PianoButton
+    <IconButton
       ref={register}
-      variant="ghost"
       size="header"
       leading
       className={cn("relative", !collapsed && "md:hidden", className)}
-      aria-label={label}
+      label={label}
       onClick={layout.show}
     >
       {children}
@@ -52,6 +51,6 @@ export function ShowSidebarButton({
           className="absolute top-[calc(50%-9px)] left-[calc(var(--glyph-pad)+10px)]"
         />
       )}
-    </PianoButton>
+    </IconButton>
   );
 }
