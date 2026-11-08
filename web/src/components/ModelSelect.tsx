@@ -1,10 +1,10 @@
 import type { ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import {
-  BookmarkCheckIcon,
-  BookmarkIcon,
   ChevronDownIcon,
   RefreshCwIcon,
+  SaveCheckIcon,
+  SaveIcon,
   Undo2Icon,
 } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
@@ -291,9 +291,9 @@ export function ModelSelect({
                 {saving ? (
                   <Spinner aria-hidden />
                 ) : view.isDefault ? (
-                  <BookmarkCheckIcon aria-hidden />
+                  <SaveCheckIcon aria-hidden />
                 ) : (
-                  <BookmarkIcon aria-hidden />
+                  <SaveIcon aria-hidden />
                 )}
               </IconButton>
             </ButtonGroup>
