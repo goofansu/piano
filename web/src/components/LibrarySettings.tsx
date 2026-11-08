@@ -4,9 +4,8 @@ import type { UserSkill } from "@shared/skills";
 import { type LucideIcon, SparklesIcon, SquareSlashIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
-import { useCommands } from "@/components/CommandHost";
 import { DraftFileView, NewDraftDialog } from "@/components/DraftDialogs";
-import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
+import { PageHeaderActions } from "@/components/PageHeaderActions";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
 import { ListRow, RowMenu } from "@/components/RowActions";
@@ -17,7 +16,6 @@ import {
   SettingsSkeleton,
 } from "@/components/SettingsSectionFrame";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { ItemDescription } from "@/components/ui/item";
@@ -31,7 +29,6 @@ import {
   removePrompt,
   removeUserSkill,
 } from "@/lib/api";
-import { pageCommands } from "@/lib/globalCommands";
 import { PAGE_EDITORS } from "@/lib/pageEditor";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
@@ -97,8 +94,7 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
   const { Noun } = LIBRARY_KINDS[kind];
   const plural = `${kind}s`;
   const observed = useObservation(plural, list);
-  // New comes from `pageCommands`, which the palette lists too; both open this editor.
-  const { state, run, global } = useCommands();
+  // New comes from `pageCommands` (the header and the palette); both open this editor.
   const editor = editors[kind];
   const editing = editor.useEditing();
   const [viewing, setViewing] = useState<Entry>();
@@ -111,11 +107,7 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
   return (
     <SettingsSectionFrame
       title={`${Noun}s`}
-      actions={pageCommands(state, global.settings).map((c) => (
-        <Button key={c.id} size="sm" disabled={!c.enabled} onClick={() => run(c)}>
-          <GlobalCommandIcon icon={c.icon} data-icon="inline-start" /> {c.label}
-        </Button>
-      ))}
+      actions={<PageHeaderActions page="settings" />}
       dialogs={
         <>
           {viewing && (

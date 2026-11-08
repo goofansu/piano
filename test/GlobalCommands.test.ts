@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { JSDOM } from "jsdom";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import type { SessionState } from "../shared/wire.ts";
 import { type CommandEffects, runCommand } from "../web/src/lib/commands.ts";
 import {
@@ -296,4 +299,47 @@ test("the sidebar toggle is named as the button it stands for: Hide sidebar whil
   assert.deepEqual([toggle(false)?.label, toggle(false)?.icon], ["Hide sidebar", "hide-sidebar"]);
   assert.deepEqual([toggle(true)?.label, toggle(true)?.icon], ["Show sidebar", "show-sidebar"]);
   assert.deepEqual(toggle(true)?.intent, { kind: "toggle-sidebar" });
+});
+
+test("a page reporting its creation unavailable disables its row until the page is left", async (t) => {
+  const dom = new JSDOM("<div id='root'></div>");
+  const globals = {
+    window: dom.window,
+    document: dom.window.document,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const originals = Object.fromEntries(
+    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  );
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+  t.after(() => {
+    dom.window.close();
+    for (const [key, descriptor] of Object.entries(originals)) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  });
+  // As MCP reports while Pi's config is unusable (`view.problem`).
+  function McpPage({ available }: { available: boolean }) {
+    PAGE_EDITORS.mcp.editor.useAvailable(available);
+    return null;
+  }
+  const row = () => pageCommands(onNewPage, "mcp")[0]!;
+  const root = createRoot(dom.window.document.getElementById("root")!);
+  assert.equal(row().enabled, true);
+  await act(() => root.render(createElement(McpPage, { available: false })));
+  assert.equal(row().enabled, false, "the header's row, and so the palette's, is disabled");
+  assert.equal(
+    globalCommands(onNewPage, { ...ctx, settings: "mcp" }).find((c) => c.label === "Add MCP server")
+      ?.enabled,
+    false,
+    "the palette lists the same disabled row",
+  );
+  assert.equal(pageCommands(onNewPage, "skills")[0]!.enabled, true, "other pages are unaffected");
+  await act(() => root.render(createElement(McpPage, { available: true })));
+  assert.equal(row().enabled, true, "a usable config enables it again");
+  await act(() => root.render(createElement(McpPage, { available: false })));
+  await act(() => root.unmount());
+  assert.equal(row().enabled, true, "leaving the page clears its report");
 });

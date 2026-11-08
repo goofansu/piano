@@ -2,18 +2,16 @@ import { cn } from "cn";
 import { ChevronRightIcon, TargetIcon } from "lucide-react";
 import { useState } from "react";
 import { useCommands } from "@/components/CommandHost";
-import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
+import { PageHeaderActions } from "@/components/PageHeaderActions";
 import { PaneBody, PaneHeader, PaneHeading } from "@/components/Pane";
 import { ProjectCommandsMenu } from "@/components/Projects";
 import { ListRow } from "@/components/RowActions";
 import { SettingsList } from "@/components/SettingsSectionFrame";
-import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { ItemDescription } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
-import { pageCommands } from "@/lib/globalCommands";
 import { isProjectDone, projectCommands } from "@/lib/projectCommands";
 import { type ProjectsIndexRow, projectsIndex, projectsIndexContext } from "@/lib/projectsIndex";
 import { useNavigation } from "@/lib/useNavigation";
@@ -71,20 +69,12 @@ function ProjectRow({
  * comes from what the browser already holds.
  */
 export function ProjectsIndex({ state }: { state: AppState }) {
-  const { run } = useCommands();
   const index = projectsIndex(state);
-  const actions = pageCommands(state);
   const now = Date.now();
   const [doneOpen, setDoneOpen] = useState(false);
   return (
     <>
-      <PaneHeader
-        actions={actions.map((c) => (
-          <Button key={c.id} size="sm" disabled={!c.enabled} onClick={() => run(c)}>
-            <GlobalCommandIcon icon={c.icon} data-icon="inline-start" /> {c.label}
-          </Button>
-        ))}
-      >
+      <PaneHeader actions={<PageHeaderActions page="projects" />}>
         <PaneHeading>
           <h1 className="truncate text-sm font-medium">Projects</h1>
         </PaneHeading>

@@ -1,9 +1,8 @@
 import type { McpCatalogId, McpSetupChange, McpSetupRequest } from "@shared/mcp";
 import { ServerIcon } from "lucide-react";
 import { toast } from "sonner";
-import { useCommands } from "@/components/CommandHost";
-import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { McpServerDialog } from "@/components/McpServerDialog";
+import { PageHeaderActions } from "@/components/PageHeaderActions";
 import { PianoButton } from "@/components/PianoButton";
 import {
   DropdownMenuGroup,
@@ -34,7 +33,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { changeMcpSetup, mcpLogin, mcpSetup } from "@/lib/api";
-import { pageCommands } from "@/lib/globalCommands";
 import {
   type McpAvailableRow,
   type McpServerRow,
@@ -63,8 +61,7 @@ interface SignInSubject {
  * connects; the sign-in it asks for first opens straight away. */
 export function McpSettings() {
   const setup = useObservation("mcp", (signal) => mcpSetup({ signal }));
-  // Add MCP server comes from `pageCommands`, which the palette lists too; both open this editor.
-  const { state: app, run: runCommand, global } = useCommands();
+  // Add MCP server comes from `pageCommands` (the header and the palette); both open this editor.
   const editing = mcpServerEditor.useEditing();
   const actions = useSetupActions<McpServerRow, SignInSubject>({
     refresh: () => void setup.refresh(),
@@ -79,6 +76,8 @@ export function McpSettings() {
     loading: setup.loading,
     loadFailed: !!setup.failure,
   });
+  // Pi's config is unusable, so a save would be refused: the header and the palette both say so.
+  mcpServerEditor.useAvailable(!view.problem);
   const titleOf = (name: string) =>
     view.rows?.find((row) => row.setup.name === name)?.title ?? name;
   /** Sign in to the server a change left waiting, which the sign-in saves. */
@@ -103,16 +102,7 @@ export function McpSettings() {
   return (
     <SettingsSectionFrame
       title="MCP"
-      actions={pageCommands(app, global.settings).map((c) => (
-        <PianoButton
-          key={c.id}
-          size="sm"
-          disabled={!c.enabled || !!view.problem}
-          onClick={() => runCommand(c)}
-        >
-          <GlobalCommandIcon icon={c.icon} data-icon="inline-start" /> {c.label}
-        </PianoButton>
-      ))}
+      actions={<PageHeaderActions page="settings" />}
       dialogs={
         <>
           {editing && (

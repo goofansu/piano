@@ -41,7 +41,7 @@ import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import type { SessionLayout } from "@/lib/navigation";
 import { openLink } from "@/lib/openLink";
-import { openPageEditor } from "@/lib/pageEditor";
+import { openPageEditor, pageAvailability } from "@/lib/pageEditor";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
@@ -213,6 +213,8 @@ export function CommandHost({
   const sidebarHidden = useSyncExternalStore(sidebar.subscribe, () =>
     sidebar.desktop() ? sidebar.getState().collapsed : !sidebar.getState().mobileOpen,
   );
+  // A page reporting its creation unavailable changes `pageCommands`, so every surface re-renders.
+  useSyncExternalStore(pageAvailability.subscribe, pageAvailability.getState);
   const forms = useCommandForms({
     state,
     radiusSignedIn,
