@@ -86,7 +86,11 @@ observations.
 
 Relative local stylesheets and images are read through the same workspace-file seam, never by
 unrestricted browser fetching. CSS imports resolve relative to their stylesheet, with cycles stopped;
-CSS `url()` images and HTML `img` sources become embedded PNG, JPEG, GIF, WebP or image-mode SVG.
+CSS `url()` images and HTML `img` sources become embedded PNG, JPEG, GIF, WebP or image-mode SVG:
+an image is whatever its file tab shows as one, by the same rule as Markdown images. A reference
+whose name claims another format (`demo.mp4`, `spec.pdf`) is neither read nor counted against the
+read and byte budgets below; a name without a known extension is read and embedded if its bytes are
+an image.
 Absolute paths, schemes (including user-supplied data/blob URLs), protocol-relative references,
 remote resources and `srcset` are not automatic reads. A reference names the same file it would as
 a Markdown or HTML link (`web/src/lib/file-link.ts`): `%XX` escapes decode, any other `%` is part
