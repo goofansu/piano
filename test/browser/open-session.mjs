@@ -579,7 +579,10 @@ await run(
       // The named menu identifies the row independently of its element type or list position.
       const card = `[role="listitem"]:has([aria-label=${JSON.stringify(`Session menu for ${title}`)}])`;
       await page.ab("wait", card);
-      assert.match(await page.ab("get", "text", card), new RegExp(`${title}\\s*api\\s*feat-${id}`));
+      assert.match(
+        await page.ab("get", "text", card),
+        new RegExp(`${title}\\s*Folder:\\s*api\\s*Git branch:\\s*feat-${id}`),
+      );
       await page.ab("click", `${card} [data-slot="item-title"] button`);
       await page.see("Answer 1.");
       const header = await page.evaluate("document.querySelector('header').textContent");
