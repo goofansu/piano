@@ -240,13 +240,18 @@ export const WebhooksLive = Layer.effect(
       yield* Queue.offer(wake, undefined);
       return true;
     });
-    /** The webhook events one live session event is, in the order they are sent. */
+    /**
+     * The webhook events one live session event is, in the order they are sent. An attachment's
+     * snapshot replays nothing; a snapshot with a view before it is the observer catching up
+     * after it fell behind, and sends what changed in the gap as any frame would. A completion in
+     * that gap cannot be told from a snapshot, so it is not sent.
+     */
     const triggered = (
       previous: Snapshot | undefined,
       event: SessionEvent,
       observed: Snapshot,
     ): WebhookEvent[] => {
-      if (event._tag === "snapshot") return [];
+      if (!previous && event._tag === "snapshot") return [];
       const events: WebhookEvent[] = [];
       if (event._tag === "response_completed") events.push("session.completed");
       const dialog = dispositionOf(observed, true).dialog;
@@ -254,8 +259,9 @@ export const WebhooksLive = Layer.effect(
       if (dialog && (dialog.id !== before?.id || dialog.generation !== before?.generation))
         events.push("session.needs_input");
       // Webhooks decide from the closure, by the rule the browser follows.
-      if (event._tag === "closed" && closureNeedsAttention(observed.state.closure))
-        events.push("session.failed");
+      const stopped =
+        event._tag === "closed" || (event._tag === "snapshot" && !previous?.state.closure);
+      if (stopped && closureNeedsAttention(observed.state.closure)) events.push("session.failed");
       return events;
     };
     const receiverUrl = Effect.fn("Webhooks.receiverUrl")(function* (text: string) {
