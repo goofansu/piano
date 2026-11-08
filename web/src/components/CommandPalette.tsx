@@ -6,7 +6,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -26,16 +25,14 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/PianoCommand";
-import { Keys } from "@/components/PianoMark";
 import { ProjectCommandIconView } from "@/components/Projects";
-import { SessionDetails } from "@/components/SessionDetails";
 import { createPaletteCatalog } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod, isImeKey } from "@/lib/keys";
 import { PALETTE_PAGE_SIZE, type PalettePage, paletteSelection } from "@/lib/paletteSearch";
 import { useNavigation } from "@/lib/useNavigation";
 import { usePaletteSearch } from "@/lib/usePaletteSearch";
-import { type AppState, sessionKey } from "@/store";
+import type { AppState } from "@/store";
 
 interface Props {
   state: AppState;
@@ -114,12 +111,6 @@ function PaletteContents({
     sessionProject,
   });
   const results = usePaletteSearch(groups, search, editing || !open);
-  // Read here, not in the catalog, so a session starting or stopping work does not restart search.
-  const workingKeys = state.hosts
-    .filter((h) => h.working)
-    .map(sessionKey)
-    .join("\n");
-  const working = useMemo(() => new Set(workingKeys ? workingKeys.split("\n") : []), [workingKeys]);
   const pending = editing || results.pending;
   const allowed = useRef(false);
   allowed.current = open && !pending && !results.error;
@@ -172,7 +163,6 @@ function PaletteContents({
         </CommandEmpty>
         <PaletteResults
           pages={results.result}
-          working={working}
           run={run}
           select={select}
           runCommand={executeCommand}
@@ -251,15 +241,12 @@ const PaletteInput = memo(function PaletteInput({
 
 const PaletteResults = memo(function PaletteResults({
   pages,
-  working,
   run,
   select,
   runCommand,
   page,
 }: {
   pages: PalettePage[];
-  /** The keys of the sessions whose Pi is working, which lead their rows as in the sidebar. */
-  working: ReadonlySet<string>;
   run: (action: () => void) => void;
   select: ReturnType<typeof useNavigation>["select"];
   runCommand: ReturnType<typeof useGlobalCommands>["run"];
@@ -294,10 +281,6 @@ const PaletteResults = memo(function PaletteResults({
                     title={r.hint}
                     onSelect={() => run(() => select(r.session.cwd, r.session.sessionId))}
                   >
-                    {/* The sidebar row's glyph slot, so the title lines up with the command labels. */}
-                    <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
-                      {working.has(r.key) && <Keys playing className="size-auto text-brand!" />}
-                    </span>
                     <span
                       className={cn(
                         "min-w-0 flex-1 truncate",
@@ -307,14 +290,12 @@ const PaletteResults = memo(function PaletteResults({
                     >
                       {r.label}
                     </span>
-                    {/* Size each detail from its content, sharing the cap only when both need it. */}
-                    <span className="ml-1 grid min-w-0 max-w-[45%] shrink-0 auto-cols-[minmax(0,auto)] grid-flow-col items-center gap-2 text-xs text-ink-3">
-                      <SessionDetails
-                        folder={r.folder}
-                        branch={r.branch}
-                        folderClassName="max-w-none"
-                      />
-                    </span>
+                    {r.folder && (
+                      <span className="ml-1 min-w-0 max-w-[45%] shrink-0 truncate text-xs text-ink-3">
+                        <span className="sr-only">Folder: </span>
+                        {r.folder}
+                      </span>
+                    )}
                     {r.hint && <span className="sr-only">{r.hint}</span>}
                   </CommandItem>
                 ))
