@@ -21,7 +21,8 @@ const save = (path: string, value: unknown) => writeFileSync(path, JSON.stringif
 
 /** The network is the fake boundary: a loopback MCP server behind OAuth discovery, dynamic
  * registration and a token endpoint. Pi's own client runs the whole sign-in against it. The same
- * endpoint also accepts a fixed Authorization header, as a server with an API key does. */
+ * endpoint also accepts a fixed Authorization header, as a server with an API key does, and a
+ * `/login` provider's key. */
 async function oauthMcpServer() {
   const server = createServer(async (request, response) => {
     let body = "";
@@ -58,7 +59,11 @@ async function oauthMcpServer() {
         : reply(400, { error: "invalid_grant" });
     // `/keyed` is the same server at an endpoint that is no catalog server's.
     if (path !== "/mcp" && path !== "/keyed") return reply(404);
-    const authorized = ["Bearer private-access-token", "Bearer header-token"];
+    const authorized = [
+      "Bearer private-access-token",
+      "Bearer header-token",
+      "Bearer provider-key",
+    ];
     if (!authorized.includes(request.headers.authorization ?? "")) {
       return reply(
         401,
@@ -373,6 +378,44 @@ test("INV-01/12: a URL server that cannot be reached, or rejects its Authorizati
         url: keyedUrl,
         headers: { Authorization: "Bearer header-token", "X-Trace": "on" },
       });
+    }),
+  );
+});
+
+test("INV-01/12: a URL server authenticated by a /login provider connects with the key Pi stores for it, and is refused without one", async () => {
+  await fixture((setup, directory, url) =>
+    Effect.gen(function* () {
+      const file = join(directory, "mcp.json");
+      const keyedUrl = url.replace(/\/mcp$/, "/keyed");
+      save(file, { mcpServers: { gateway: { url: keyedUrl, auth: { provider: "radius" } } } });
+      const gateway = (yield* server(setup, "gateway"))!;
+      const edit = {
+        action: "update",
+        name: "gateway",
+        removalKey: gateway.removalKey,
+        config: { url: keyedUrl, headers: { "x-team": "platform" } },
+      } as const;
+
+      // No key in Pi's auth.json: the server answers 401, and a provider entry has no sign-in here.
+      const refused = yield* Effect.flip(setup.change(edit));
+      assert.deepEqual(
+        [refused.field, refused.detail],
+        [
+          "config",
+          "Could not connect to MCP gateway. Check the URL, Pi's radius credentials and the network, then try again.",
+        ],
+      );
+      assert.equal(json(file).mcpServers.gateway.headers, undefined);
+
+      save(join(directory, "auth.json"), { radius: { type: "api_key", key: "provider-key" } });
+      const saved = yield* setup.change(edit);
+      assert.equal(saved.signIn, undefined);
+      assert.deepEqual(json(file).mcpServers.gateway, {
+        url: keyedUrl,
+        auth: { provider: "radius" },
+        headers: { "x-team": "platform" },
+      });
+      assert.ok(!JSON.stringify(saved).includes("provider-key"), "no key on the wire");
     }),
   );
 });
