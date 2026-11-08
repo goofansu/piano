@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { ExternalLinkIcon, ListIcon, MoreHorizontalIcon } from "lucide-react";
+import { AppWindowIcon, ListIcon, MoreHorizontalIcon } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
 import {
   CommandIcon,
@@ -221,7 +221,7 @@ export function SessionHeader({
           {preview?.url && (
             <IconButton asChild size="header" label="Open preview in new tab">
               <a href={preview.url} target="_blank" rel="noopener noreferrer">
-                <ExternalLinkIcon />
+                <AppWindowIcon />
               </a>
             </IconButton>
           )}

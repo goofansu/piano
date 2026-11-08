@@ -97,6 +97,28 @@ where boundaries matter, backed by focused lower-level tests for distinct logic.
 test validates Piano's contract handling, not the real Pi release; a real-runtime smoke check serves
 a different purpose.
 
+## UI evidence scope
+
+Choose coverage by the changed contract:
+
+- **Local cosmetic edit** (for example, swapping one icon or correcting display text): when
+  interaction, accessibility, layout and shared styling are unchanged, inspect the affected
+  element on scratch Piano and retain one after screenshot. Done when the intended appearance
+  is visible and diff review confirms the change stays local. That check is sufficient: no
+  before capture, replay of unchanged actions, viewport matrix or `style-shots.mjs` run is required.
+- **Behavior, accessibility or layout change:** observe the affected journey or state, exercise
+  changed actions and capture their answers. Cover additional viewports or input modes only
+  where the changed contract depends on them. Done when each changed contract has an observed
+  result; expand coverage for a concrete unresolved risk.
+- **Shared styles or components:** for a shadcn upgrade or changes to shared `Piano*` styling or
+  `index.css` tokens, run `test/browser/style-shots.mjs` before and after into separate directories
+  and compare affected surfaces. Done when differences are explained; publish representative
+  changed surfaces rather than the entire screenshot set. Follow the
+  [upgrade procedure](shadcn-ui.md#upgrade-procedure) for shadcn upgrades.
+
+Keep the PR evidence proportional too: a short observation and the relevant capture suffice for
+an isolated cosmetic edit. The repository's code-check gates still apply.
+
 ## Browser tests
 
 Browser evidence for a change is an observation through `agent-browser` on a scratch instance,
