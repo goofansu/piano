@@ -20,7 +20,7 @@ import { directoryTrust } from "./directoryTrust.ts";
 import { abbrevHome, branchLabel } from "./format.ts";
 import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
 import { findProject } from "./projectCommands.ts";
-import { folderFor, sessionDirectories, sessionLabel } from "./sessionCatalog.ts";
+import { sessionDirectories, sessionLabel } from "./sessionCatalog.ts";
 import { startPage } from "./startPage.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
@@ -51,10 +51,27 @@ export interface DirectoryChoices {
   worktreesFolder: FolderView | undefined;
 }
 
+/**
+ * Where a first message is spoken from the New page: the names voice input spells by. The folder
+ * is named as the session it starts will be (see `sessionDirectories`), and the branch is the
+ * checkout's.
+ */
+export function startPlace(
+  state: AppState,
+  cwd: string,
+  projectId: string | undefined,
+): { project?: string; folder?: string; branch?: string } {
+  const { checkout, folderName } = sessionDirectories(state)(cwd || undefined);
+  return {
+    project: findProject(state, projectId)?.name,
+    folder: folderName || undefined,
+    branch: checkout?.branch ?? undefined,
+  };
+}
+
 /** The New session directory picker: its trigger, folder roots and the folder its Worktrees open. */
 export function directoryChoices(state: AppState, cwd: string): DirectoryChoices {
-  const folder = folderFor(state, cwd);
-  const checkout = folder?.worktrees.find((w) => w.path === cwd);
+  const { folder, checkout } = sessionDirectories(state)(cwd || undefined);
   const trigger: DirectoryTrigger = !cwd
     ? { kind: "none" }
     : folder && checkout

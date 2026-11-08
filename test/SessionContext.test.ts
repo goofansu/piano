@@ -5,7 +5,7 @@ import { directoryTrust } from "../web/src/lib/directoryTrust.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
-import { catalogEntry } from "../web/src/lib/sessionCatalog.ts";
+import { catalogEntry, sessionDirectories } from "../web/src/lib/sessionCatalog.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import {
   checkoutMissingAt,
@@ -22,6 +22,7 @@ import {
   sessionPlace,
   sessionReady,
   sessionWorking,
+  startPlace,
 } from "../web/src/lib/sessionContext.ts";
 import { sessionHasPreview } from "../web/src/lib/sessionPreview.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
@@ -580,6 +581,28 @@ test("the New session directory picker names a root by folder, a worktree by fol
   assert.deepEqual(elsewhere.trigger, { kind: "path", label: "~/scratch" });
   assert.equal(elsewhere.worktreesFolder, undefined, "an unregistered directory has no Worktrees");
   assert.deepEqual(directoryChoices(base, "").trigger, { kind: "none" });
+});
+
+test("the New page names its place for voice input as the session it starts will", () => {
+  assert.deepEqual(startPlace(base, "/work/repo.feature", undefined), {
+    project: undefined,
+    folder: "repo",
+    branch: "feature",
+  });
+  assert.deepEqual(startPlace(base, "/Users/me/scratch/", undefined), {
+    project: undefined,
+    folder: "scratch",
+    branch: undefined,
+  });
+  assert.equal(
+    startPlace(base, "/Users/me/scratch", undefined).folder,
+    sessionDirectories(base)("/Users/me/scratch").folderName,
+  );
+  assert.deepEqual(startPlace(base, "", undefined), {
+    project: undefined,
+    folder: undefined,
+    branch: undefined,
+  });
 });
 
 test("the New session directory picker disables a missing root and labels a branchless worktree", () => {

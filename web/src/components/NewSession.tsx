@@ -44,7 +44,7 @@ import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
 import { NEW_SESSION_DRAFT } from "@/lib/messageDraft";
 import { findProject, newProjectCommand, projectDestinations } from "@/lib/projectCommands";
 import { folderFor } from "@/lib/sessionCatalog";
-import { completionTarget, directoryChoices } from "@/lib/sessionContext";
+import { completionTarget, directoryChoices, startPlace } from "@/lib/sessionContext";
 import { startPage } from "@/lib/startPage";
 import { composerInput, picker } from "@/lib/styles";
 import { useModelCatalog } from "@/lib/useModelCatalog";
@@ -126,12 +126,7 @@ export function NewSessionComposer({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const folder = folderFor(state, cwd);
-  // Where the first message is spoken: the names voice input spells by.
-  const place = {
-    project: findProject(state, projectId)?.name,
-    folder: folder?.name,
-    branch: folder?.worktrees.find((w) => w.path === cwd)?.branch ?? undefined,
-  };
+  const place = startPlace(state, cwd, projectId);
   const trust = trustCommand(state, cwd);
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
