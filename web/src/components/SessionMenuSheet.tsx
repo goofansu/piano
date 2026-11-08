@@ -11,7 +11,9 @@ import {
 import { Fragment, type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import {
   CommandIcon,
+  CommandLink,
   useCommands,
+  useOpenPreview,
   useSessionCommands,
   useSessionProjectMenu,
 } from "@/components/CommandHost";
@@ -192,6 +194,7 @@ export function SessionMenuSheet({
   const { pullRequest } = sessionContext(state);
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const preview = useSeenPreview(state);
+  const openPreview = useOpenPreview();
   const [previewPage, setPreviewPage] = useState<PreviewClaim | null>(null);
   const pagePreview = previewPage && previewClaimHolds(state, previewPage) ? preview : undefined;
   const projects = useSessionProjectMenu();
@@ -313,17 +316,12 @@ export function SessionMenuSheet({
                     <span className={cn(value, "font-mono")}>{previewHost(pagePreview.url)}</span>
                   )}
                 </div>
-                {pagePreview.url && (
+                {openPreview && (
                   <Button asChild variant="ghost" className={row}>
-                    <a
-                      href={pagePreview.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={onLeave}
-                    >
-                      Open preview in new tab
+                    <CommandLink command={openPreview} onClick={onLeave}>
+                      {openPreview.label}
                       <ExternalLinkIcon data-icon="inline-end" className="ml-auto" />
-                    </a>
+                    </CommandLink>
                   </Button>
                 )}
                 {commands
