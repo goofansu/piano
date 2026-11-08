@@ -1,6 +1,5 @@
 import { CheckIcon, CopyIcon, ExternalLinkIcon, InfoIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useCopy } from "@/components/CopyButton";
 import {
   Dialog,
   DialogContent,
@@ -41,34 +40,11 @@ export function ShareSessionDialog({
   const result = phase.phase === "shared" ? phase.share : undefined;
   const error = phase.phase === "failed" ? phase.error : undefined;
   const busy = phase.phase === "publishing";
-  // The copy confirmation is the dialog's own: it never reaches the form.
-  const [copied, setCopied] = useState(false);
-  // The dialog stays mounted between shares, so a new share starts uncopied.
-  const [wasOpen, setWasOpen] = useState(open);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (open) setCopied(false);
-  }
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-  const copy = async () => {
-    if (!result) return;
-    try {
-      await navigator.clipboard.writeText(result.url);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-      toast.error("Couldn’t copy the link. Select and copy it below.");
-    }
-  };
   return (
     <Dialog open={open} onOpenChange={(open) => !open && close()}>
       <DialogContent
         className="sm:max-w-md"
-        showCloseButton={!!result}
+        showCloseButton={!busy}
         aria-describedby={result ? undefined : "share-session-description"}
       >
         <DialogHeader>
@@ -80,55 +56,7 @@ export function ShareSessionDialog({
           )}
         </DialogHeader>
         {result ? (
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="session-share-link">Share link</FieldLabel>
-              <InputGroup>
-                <InputGroupInput
-                  id="session-share-link"
-                  value={result.url}
-                  readOnly
-                  onFocus={(event) => event.target.select()}
-                />
-                <InputGroupAddon align="inline-end">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <InputGroupButton
-                        size="icon-sm"
-                        aria-label="Copy link"
-                        onClick={() => void copy()}
-                      >
-                        {copied ? <CheckIcon /> : <CopyIcon />}
-                      </InputGroupButton>
-                    </TooltipTrigger>
-                    <TooltipContent>{copied ? "Copied" : "Copy link"}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <InputGroupButton size="icon-sm" asChild>
-                        <a
-                          href={result.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="Open shared session"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <ExternalLinkIcon />
-                        </a>
-                      </InputGroupButton>
-                    </TooltipTrigger>
-                    <TooltipContent>Open shared session</TooltipContent>
-                  </Tooltip>
-                  <span className="sr-only" role="status">
-                    {copied ? "Link copied" : ""}
-                  </span>
-                </InputGroupAddon>
-              </InputGroup>
-              <FieldDescription>
-                Expires {new Date(result.expiresAt).toLocaleDateString()}.
-              </FieldDescription>
-            </Field>
-          </FieldGroup>
+          <ShareLink url={result.url} expiresAt={result.expiresAt} />
         ) : (
           <Alert role="note">
             <InfoIcon />
@@ -156,12 +84,65 @@ export function ShareSessionDialog({
             {!error && (
               <Button disabled={!allowed || busy} onClick={submit}>
                 {busy && <Spinner data-icon="inline-start" />}
-                {busy ? "Sharing…" : "Share"}
+                Share
               </Button>
             )}
           </DialogFooter>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The shared link with its copy and open buttons. Mounted only while the dialog shows a share, so
+ * each share starts uncopied; the copy confirmation is its own and never reaches the form.
+ */
+function ShareLink({ url, expiresAt }: { url: string; expiresAt: string }) {
+  const { copied, copy } = useCopy(url, "Could not copy the link. Select and copy it below.");
+  return (
+    <FieldGroup>
+      <Field>
+        <FieldLabel htmlFor="session-share-link">Share link</FieldLabel>
+        <InputGroup>
+          <InputGroupInput
+            id="session-share-link"
+            value={url}
+            readOnly
+            onFocus={(event) => event.target.select()}
+          />
+          <InputGroupAddon align="inline-end">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <InputGroupButton size="icon-sm" aria-label="Copy link" onClick={() => void copy()}>
+                  {copied ? <CheckIcon /> : <CopyIcon />}
+                </InputGroupButton>
+              </TooltipTrigger>
+              <TooltipContent>{copied ? "Copied" : "Copy link"}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <InputGroupButton size="icon-sm" asChild>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Open shared session"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <ExternalLinkIcon />
+                  </a>
+                </InputGroupButton>
+              </TooltipTrigger>
+              <TooltipContent>Open shared session</TooltipContent>
+            </Tooltip>
+            <span className="sr-only" role="status">
+              {copied ? "Link copied" : ""}
+            </span>
+          </InputGroupAddon>
+        </InputGroup>
+        <FieldDescription>Expires {new Date(expiresAt).toLocaleDateString()}.</FieldDescription>
+      </Field>
+    </FieldGroup>
   );
 }

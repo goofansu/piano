@@ -6,6 +6,7 @@ import {
   RefreshCwIcon,
 } from "lucide-react";
 import { IconButton } from "@/components/IconButton";
+import { PianoButton } from "@/components/PianoButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +14,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
-import { Button } from "@/components/ui/button";
 import { WrapButton } from "@/components/WrapButton";
 import type { ChangesSheetView, ScopeView } from "@/lib/changesView";
 
@@ -33,7 +33,7 @@ export function ChangesScopeMenu({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button
+        <PianoButton
           variant="ghost"
           size="xs"
           disabled={disabled}
@@ -42,7 +42,7 @@ export function ChangesScopeMenu({
         >
           <span className="truncate">{scope.label}</span>
           <ChevronDownIcon className="shrink-0 text-ink-3" aria-hidden />
-        </Button>
+        </PianoButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72">
         <DropdownMenuRadioGroup

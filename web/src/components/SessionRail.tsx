@@ -11,6 +11,7 @@ import { type ReactNode, useCallback } from "react";
 import { SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { MiddleEllipsis } from "@/components/MiddleEllipsis";
+import { PianoButton } from "@/components/PianoButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +22,6 @@ import {
 import { SessionOutputs } from "@/components/SessionOutputs";
 import { PreviewRailRow, useSeenPreview } from "@/components/SessionPreview";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
-import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { createPreference, parseJson } from "@/lib/preference";
@@ -288,8 +288,8 @@ function EnvironmentRow({
           {href && (
             <DropdownMenuItem asChild>
               <a href={href} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon aria-hidden />
-                Open {menu} on GitHub
+                Open {menu}
+                <ExternalLinkIcon data-icon="inline-end" aria-hidden />
               </a>
             </DropdownMenuItem>
           )}
@@ -317,14 +317,14 @@ function RailSection({
         <h2 className="flex min-w-0">
           <CollapsibleTrigger asChild>
             {/* The heading is the fold: its name, then the chevron turned by its state. */}
-            <Button
+            <PianoButton
               variant="ghost"
               size="sm"
               className="-ml-2 h-7 gap-1 px-2 text-sm font-medium text-ink aria-expanded:bg-transparent pointer-coarse:min-h-11"
             >
               {title}
               <DisclosureChevron open={open} />
-            </Button>
+            </PianoButton>
           </CollapsibleTrigger>
         </h2>
       </div>

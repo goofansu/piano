@@ -301,7 +301,7 @@ export function Composer({
               side="top"
               align="end"
               aria-label="Context usage details"
-              className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto font-mono"
+              className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
             >
               <ContextDetails figures={figures} usage={usage} messages={messages} />
             </PopoverContent>

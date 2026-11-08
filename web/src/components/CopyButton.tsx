@@ -36,6 +36,7 @@ export function CopyButton({
   copiedLabel,
   failure,
   variant,
+  size = "inline",
   className,
 }: {
   text: string;
@@ -44,6 +45,8 @@ export function CopyButton({
   /** The toast when the clipboard refuses. */
   failure: string;
   variant?: ComponentProps<typeof IconButton>["variant"];
+  /** Its place's size: `inline` inside content, `header` on a pane's toolbar. */
+  size?: ComponentProps<typeof IconButton>["size"];
   className?: string;
 }) {
   const { copied, copy } = useCopy(text, failure);
@@ -51,7 +54,7 @@ export function CopyButton({
     <IconButton
       label={copied ? copiedLabel : label}
       variant={variant}
-      size="inline"
+      size={size}
       className={className}
       onClick={copy}
     >

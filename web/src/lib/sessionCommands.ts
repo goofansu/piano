@@ -256,7 +256,7 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  *   an unanswered status read withholds, stop needs the attachment (`sessionReady`).
  * - new session here: the checkout is present.
  * - copy session path: saved history has supplied its file path; no live Pi needed.
- * - copy git branch, commit SHA, repository name: listed only while the session has one.
+ * - copy branch, commit SHA, repository name: listed only while the session has one.
  * - other copy commands, Wrap and Messages only: always (session ID requires an ID). Wrap is one
  *   remembered preference for Changes and a file's source, so it never depends on what is shown.
  */
@@ -290,20 +290,21 @@ export function sessionCommands(
     commands.push(
       {
         id: "copy-working-directory",
-        label: "Copy working directory",
+        label: "Copy directory path",
         icon: "copy",
         enabled: true,
-        keywords: ["path", "cwd"],
-        intent: { kind: "copy", value: session.cwd, label: "Working directory" },
+        keywords: ["cwd", "working directory", "folder"],
+        intent: { kind: "copy", value: session.cwd, label: "Directory path" },
       },
       ...(ctx.branch
         ? [
             {
               id: "copy-branch",
-              label: "Copy git branch",
+              label: "Copy branch",
               icon: "copy",
               enabled: true,
-              intent: { kind: "copy", value: ctx.branch, label: "Git branch" },
+              keywords: ["git"],
+              intent: { kind: "copy", value: ctx.branch, label: "Branch" },
             } as const,
           ]
         : []),
