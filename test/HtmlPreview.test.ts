@@ -263,6 +263,29 @@ test("missing and wrong-kind resources disappear without discarding readable con
   assert.equal(output.querySelector("p")?.textContent, "Retained");
 });
 
+test("a reference whose name claims another format is neither read nor counted", async () => {
+  const reads: string[] = [];
+  const output = parse(
+    await prepare('<img src="demo.mp4"><img src="a.png">', async (path) => {
+      reads.push(path);
+      if (path.endsWith(".mp4"))
+        return {
+          workspaceId: "workspace",
+          path,
+          kind: "video",
+          mime: "video/mp4",
+          bytes: new Uint8Array(21 * 1024 * 1024),
+        };
+      return imageFile(path);
+    }),
+  );
+  assert.deepEqual(reads, ["/work/reports/a.png"]);
+  assert.deepEqual(
+    [...output.querySelectorAll("img")].map((img) => img.getAttribute("src")),
+    [null, "data:image/png;base64,iVBORw=="],
+  );
+});
+
 test("cyclic imports terminate and imports beyond the depth budget are not read", async () => {
   const reads: string[] = [];
   const output = parse(
