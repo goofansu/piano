@@ -177,7 +177,8 @@ const PROJECT_MENU_IDS = {
  * New project; on a project's home, its menu
  * (`projectMenu`), manage rows then destructive (the home itself starts sessions). An open Settings
  * page covers the page beneath it, so only its own actions count. The palette lists exactly these,
- * so a page or menu that adds a header action gets its row, named as its button is, by construction.
+ * so a page or menu that adds a header action gets its row, named as its button is, by construction;
+ * a page whose creation cannot run reports it to its editor (`useAvailable`), never to its button.
  */
 export function pageCommands(
   state: AppState,
@@ -186,14 +187,14 @@ export function pageCommands(
   if (settings) {
     const page = settingsPage(settings);
     if (!isEditorPage(page)) return [];
-    const { id, label } = PAGE_EDITORS[page];
+    const { id, label, editor } = PAGE_EDITORS[page];
     return [
       {
         id,
         label,
         icon: "create",
         group: "navigate",
-        enabled: true,
+        enabled: editor.available(),
         intent: { kind: "page-editor", page },
       },
     ];

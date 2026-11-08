@@ -19,15 +19,31 @@ export interface PageEditor<Entry> {
   close: () => void;
   /** The editor while its page is mounted; leaving the page closes it. */
   useEditing: () => Editing<Entry>;
+  /** Whether the page's creation can run now: yes unless its mounted page reports otherwise. */
+  available: () => boolean;
+  /**
+   * The mounted page reports whether its creation can run, such as MCP while Pi's config is
+   * unusable; leaving the page clears it. `pageCommands` reads it, so header and palette agree.
+   */
+  useAvailable: (available: boolean) => void;
 }
 
 /** One page's editor; `Entry` is what its Edit opens on (`never` when the page has no Edit). */
 export function pageEditor<Entry = never>(): PageEditor<Entry> {
   let editing: Editing<Entry> = null;
+  let available = true;
   const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
   const set = (next: Editing<Entry>) => {
     editing = next;
-    for (const listener of listeners) listener();
+    notify();
+  };
+  const setAvailable = (next: boolean) => {
+    if (available === next) return;
+    available = next;
+    notify();
   };
   const getState = () => editing;
   const subscribe = (listener: () => void) => {
@@ -45,6 +61,11 @@ export function pageEditor<Entry = never>(): PageEditor<Entry> {
     useEditing: () => {
       useEffect(() => close, []);
       return useSyncExternalStore(subscribe, getState);
+    },
+    available: () => available,
+    useAvailable: (next) => {
+      useEffect(() => setAvailable(next), [next]);
+      useEffect(() => () => setAvailable(true), []);
     },
   };
 }
@@ -69,3 +90,19 @@ export const isEditorPage = (page: SettingsPage): page is EditorPage => page in 
 
 /** Open `page`'s editor on a new entry, as its header's button does. */
 export const openPageEditor = (page: EditorPage) => PAGE_EDITORS[page].editor.open("new");
+
+const editors = Object.values(PAGE_EDITORS).map((p) => p.editor);
+
+/**
+ * Which pages' creations can run, as one snapshot, so a surface listing `pageCommands` (the
+ * palette's host) re-renders when a page reports a change.
+ */
+export const pageAvailability = {
+  subscribe: (listener: () => void) => {
+    const stops = editors.map((editor) => editor.subscribe(listener));
+    return () => {
+      for (const stop of stops) stop();
+    };
+  },
+  getState: () => editors.map((editor) => (editor.available() ? "1" : "0")).join(""),
+};

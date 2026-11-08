@@ -9,9 +9,8 @@ import {
 import { WebhookIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useCommands } from "@/components/CommandHost";
 import { FormDialog, useFieldRefusal } from "@/components/FormDialog";
-import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
+import { PageHeaderActions } from "@/components/PageHeaderActions";
 import { DialogFooter, DialogHeader, DialogTitle } from "@/components/PianoDialog";
 import {
   DropdownMenuGroup,
@@ -51,7 +50,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { listWebhooks, removeWebhook, saveWebhook, testWebhook } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
-import { pageCommands } from "@/lib/globalCommands";
 import { PAGE_EDITORS } from "@/lib/pageEditor";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
@@ -96,8 +94,7 @@ const testToast = (result: WebhookDelivery) => {
 
 export function WebhookSettings() {
   const observed = useObservation("webhooks", (signal) => listWebhooks({ signal }));
-  // New webhook comes from `pageCommands`, which the palette lists too; both open this editor.
-  const { state, run, global } = useCommands();
+  // New webhook comes from `pageCommands` (the header and the palette); both open this editor.
   const editing = webhookEditor.useEditing();
   // Row changes answer with a toast, failures included; only a failed load stays on the page.
   const actions = useSetupActions<Webhook>({
@@ -116,11 +113,7 @@ export function WebhookSettings() {
   return (
     <SettingsSectionFrame
       title="Webhooks"
-      actions={pageCommands(state, global.settings).map((c) => (
-        <Button key={c.id} size="sm" disabled={!c.enabled} onClick={() => run(c)}>
-          <GlobalCommandIcon icon={c.icon} data-icon="inline-start" /> {c.label}
-        </Button>
-      ))}
+      actions={<PageHeaderActions page="settings" />}
       dialogs={
         <>
           {editing && (
