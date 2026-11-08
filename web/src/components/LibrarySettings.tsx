@@ -17,9 +17,7 @@ import { PianoButton } from "@/components/PianoButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
@@ -208,7 +206,7 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
   );
 }
 
-/** One entry: its name, any badge, its description, and its View and Delete menu. */
+/** One entry: its name, any badge and its description; the row opens View, its menu holds Delete. */
 function LibraryRow({
   Noun,
   name,
@@ -227,14 +225,29 @@ function LibraryRow({
   remove: () => void;
 }) {
   return (
-    <Item role="listitem" data-row className={cn(settingsRow, rowActionsWidth.list[1], "relative")}>
-      {/* The revealed ⋯ covers the row's end, so the text fades beneath it. */}
-      <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
-        <ItemTitle className="font-mono">
-          <span className="truncate">{name}</span>
+    <Item
+      role="listitem"
+      data-row
+      className={cn(settingsRow, rowActionsWidth.list[1], "relative hover:bg-fill-hover")}
+    >
+      <ItemContent className="min-w-0 gap-0.5">
+        <ItemTitle className="w-full min-w-0 font-mono">
+          {/* As a project row: no row primitive opens on click beside a menu, so the name's button stretches over the row. */}
+          <button
+            type="button"
+            className="min-w-0 truncate text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+            disabled={disabled}
+            onClick={view}
+          >
+            {name}
+          </button>
           {badge}
         </ItemTitle>
-        <ItemDescription className="text-xs">{description}</ItemDescription>
+        {/* The revealed ⋯ covers the row's end, so the description fades beneath it. The mask sits
+            here, not on the content, where it would clip the name button's stretched focus ring. */}
+        <ItemDescription data-motion="yield" className="text-xs">
+          {description}
+        </ItemDescription>
       </ItemContent>
       <RowActions className="top-1/2 right-4 -translate-y-1/2">
         <DropdownMenu>
@@ -249,10 +262,6 @@ function LibraryRow({
             </PianoButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuGroup>
-              <DropdownMenuItem onSelect={view}>View</DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={remove}>
               Delete
             </DropdownMenuItem>
