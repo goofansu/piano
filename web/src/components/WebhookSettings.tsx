@@ -51,9 +51,11 @@ import { Switch } from "@/components/ui/switch";
 import { listWebhooks, removeWebhook, saveWebhook, testWebhook } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { pageCommands } from "@/lib/globalCommands";
+import { PAGE_EDITORS } from "@/lib/pageEditor";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
-import { useWebhookEditor, webhookEditor } from "@/lib/useWebhookEditor";
+
+const webhookEditor = PAGE_EDITORS.webhooks.editor;
 
 const host = (url: string) => {
   try {
@@ -95,7 +97,7 @@ export function WebhookSettings() {
   const observed = useObservation("webhooks", (signal) => listWebhooks({ signal }));
   // New webhook comes from `pageCommands`, which the palette lists too; both open this editor.
   const { state, run, global } = useCommands();
-  const editing = useWebhookEditor();
+  const editing = webhookEditor.useEditing();
   // Row changes answer with a toast, failures included; only a failed load stays on the page.
   const actions = useSetupActions<Webhook>({
     refresh: () => void observed.refresh(),

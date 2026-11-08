@@ -24,7 +24,6 @@ import { useTheme } from "next-themes";
 import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { copyText } from "@/components/CopyButton";
-import { promptEditor, skillEditor } from "@/components/DraftDialogs";
 import { FormDialog } from "@/components/FormDialog";
 import { DialogFooter, DialogHeader, DialogTitle } from "@/components/PianoDialog";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
@@ -42,6 +41,7 @@ import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import type { SessionLayout } from "@/lib/navigation";
 import { openLink } from "@/lib/openLink";
+import { openPageEditor } from "@/lib/pageEditor";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
@@ -54,13 +54,11 @@ import {
 import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
 import { useCodeWrap } from "@/lib/useCodeWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
-import { mcpServerEditor } from "@/lib/useMcpServerEditor";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
-import { webhookEditor } from "@/lib/useWebhookEditor";
 import type { SendDisposition } from "@/lib/ws";
 import type { AppState } from "@/store";
 
@@ -272,10 +270,7 @@ export function CommandHost({
       setPreviewDetails(previewClaim(state) ?? null);
       previewObservation.refresh();
     },
-    addWebhook: () => webhookEditor.open("new"),
-    addMcpServer: () => mcpServerEditor.open("new"),
-    newSkill: () => skillEditor.open(),
-    newPrompt: () => promptEditor.open(),
+    openPageEditor,
   };
   const run = (command: Command) => {
     runCommand(command, effects);

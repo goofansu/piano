@@ -41,9 +41,11 @@ import {
   mcpRemovalCopy,
   mcpSetupView,
 } from "@/lib/mcpSetupView";
-import { mcpServerEditor, useMcpServerEditor } from "@/lib/useMcpServerEditor";
+import { PAGE_EDITORS } from "@/lib/pageEditor";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
+
+const mcpServerEditor = PAGE_EDITORS.mcp.editor;
 
 // Locally bundled brand marks, one per catalog server; any other server shows the server icon.
 const SERVER_LOGOS: Record<McpCatalogId, string> = {
@@ -63,7 +65,7 @@ export function McpSettings() {
   const setup = useObservation("mcp", (signal) => mcpSetup({ signal }));
   // Add MCP server comes from `pageCommands`, which the palette lists too; both open this editor.
   const { state: app, run: runCommand, global } = useCommands();
-  const editing = useMcpServerEditor();
+  const editing = mcpServerEditor.useEditing();
   const actions = useSetupActions<McpServerRow, SignInSubject>({
     refresh: () => void setup.refresh(),
     success: (text) => toast.success(text),

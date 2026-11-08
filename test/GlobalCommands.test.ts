@@ -5,9 +5,12 @@ import { type CommandEffects, runCommand } from "../web/src/lib/commands.ts";
 import {
   type GlobalCommandContext,
   globalCommands,
+  pageCommands,
   radioChoice,
   trustCommand,
 } from "../web/src/lib/globalCommands.ts";
+import { type EditorPage, openPageEditor, PAGE_EDITORS } from "../web/src/lib/pageEditor.ts";
+import { SETTINGS_SECTIONS, type SettingsSection } from "../web/src/lib/routes.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 
 const session = (cwd: string, state: Partial<SessionState> = {}): SessionView => ({
@@ -197,59 +200,55 @@ test("on the Projects index the palette offers New project, which opens the New 
   );
 });
 
-test("on Settings › Skills the palette offers New skill, which opens the skill editor", () => {
-  const newSkill = (settings: GlobalCommandContext["settings"]) =>
-    globalCommands(onNewPage, { ...ctx, settings }).find((c) => c.label === "New skill");
-  const create = newSkill("skills");
-  assert.ok(create);
-  const calls: unknown[][] = [];
-  const effects = new Proxy({} as CommandEffects, {
-    get:
-      (_, name) =>
-      (...args: unknown[]) => {
-        calls.push([name, ...args]);
-      },
+test("each Settings page's header creation is a palette command that opens that page's editor", () => {
+  // As each page's header button is named (docs/quiet-ui.md#button-names); every other page offers none.
+  const creation: Partial<Record<SettingsSection, { label: string; page: EditorPage }>> = {
+    webhooks: { label: "New webhook", page: "webhooks" },
+    mcp: { label: "Add MCP server", page: "mcp" },
+    skills: { label: "New skill", page: "skills" },
+    prompts: { label: "New prompt", page: "prompts" },
+  };
+  const creations = new Set(Object.values(creation).map((c) => c.label));
+  // The host's effect, and only it: running the command must reach the page's editor through it.
+  const effects = new Proxy({ openPageEditor } as CommandEffects, {
+    get: (target, name) => {
+      if (name in target) return target[name as keyof CommandEffects];
+      throw new Error(`unexpected effect ${String(name)}`);
+    },
   });
-  assert.equal(runCommand(create, effects), true);
-  assert.deepEqual(calls, [["newSkill"]]);
-  assert.equal(newSkill("webhooks"), undefined, "another Settings page offers none");
-});
-
-test("on Settings › Prompts the palette offers New prompt, which opens the prompt editor", () => {
-  const newPrompt = (settings: GlobalCommandContext["settings"]) =>
-    globalCommands(onNewPage, { ...ctx, settings }).find((c) => c.label === "New prompt");
-  const create = newPrompt("prompts");
-  assert.ok(create);
-  const calls: unknown[][] = [];
-  const effects = new Proxy({} as CommandEffects, {
-    get:
-      (_, name) =>
-      (...args: unknown[]) => {
-        calls.push([name, ...args]);
-      },
-  });
-  assert.equal(runCommand(create, effects), true);
-  assert.deepEqual(calls, [["newPrompt"]]);
-  assert.equal(newPrompt("webhooks"), undefined, "another Settings page offers none");
-});
-
-test("on Settings › Webhooks the palette offers New webhook, which opens the webhook editor", () => {
-  const addWebhook = (settings: GlobalCommandContext["settings"], state = onNewPage) =>
-    globalCommands(state, { ...ctx, settings }).find((c) => c.label === "New webhook");
-  const add = addWebhook("webhooks");
-  assert.ok(add);
-  const calls: unknown[][] = [];
-  const effects = new Proxy({} as CommandEffects, {
-    get:
-      (_, name) =>
-      (...args: unknown[]) => {
-        calls.push([name, ...args]);
-      },
-  });
-  assert.equal(runCommand(add, effects), true);
-  assert.deepEqual(calls, [["addWebhook"]]);
-  assert.equal(addWebhook(null), undefined, "a page outside Settings offers none");
-  assert.equal(addWebhook("mcp"), undefined, "another Settings page offers none");
+  for (const { id: section } of SETTINGS_SECTIONS) {
+    const offered = globalCommands(onNewPage, { ...ctx, settings: section }).filter((c) =>
+      creations.has(c.label),
+    );
+    const expected = creation[section];
+    if (!expected) {
+      assert.deepEqual(offered, [], `${section} offers no creation`);
+      continue;
+    }
+    assert.deepEqual(
+      offered.map((c) => c.label),
+      [expected.label],
+      `${section} offers ${expected.label}`,
+    );
+    const [command] = offered;
+    assert.deepEqual(
+      command,
+      pageCommands(onNewPage, section)[0],
+      "the palette row is the header's",
+    );
+    const editor = PAGE_EDITORS[expected.page].editor;
+    assert.equal(editor.getState(), null);
+    assert.equal(runCommand(command!, effects), true);
+    assert.equal(editor.getState(), "new", `${expected.label} opens the ${section} editor on new`);
+    for (const other of Object.values(PAGE_EDITORS))
+      if (other.editor !== editor) assert.equal(other.editor.getState(), null, "no other editor");
+    editor.close();
+  }
+  assert.deepEqual(
+    labels(onNewPage).filter((l) => creations.has(l)),
+    [],
+    "a page outside Settings offers none",
+  );
   const onProjects: AppState = { ...initialState, connected: true, view: { kind: "projects" } };
   assert.equal(
     globalCommands(onProjects, { ...ctx, settings: "webhooks" }).some(
@@ -258,26 +257,6 @@ test("on Settings › Webhooks the palette offers New webhook, which opens the w
     false,
     "Settings covers the page beneath it, so its header actions are not offered",
   );
-});
-
-test("on Settings › MCP the palette offers Add MCP server, which opens the MCP server editor", () => {
-  const addServer = (settings: GlobalCommandContext["settings"]) =>
-    globalCommands(onNewPage, { ...ctx, settings }).find((c) => c.label === "Add MCP server");
-  const add = addServer("mcp");
-  assert.ok(add);
-  assert.equal(add.enabled, true);
-  const calls: unknown[][] = [];
-  const effects = new Proxy({} as CommandEffects, {
-    get:
-      (_, name) =>
-      (...args: unknown[]) => {
-        calls.push([name, ...args]);
-      },
-  });
-  assert.equal(runCommand(add, effects), true);
-  assert.deepEqual(calls, [["addMcpServer"]]);
-  assert.equal(addServer(null), undefined, "a page outside Settings offers none");
-  assert.equal(addServer("webhooks"), undefined, "another Settings page offers none");
 });
 
 test("every page's creation entry shares one icon, and New session keeps its own", () => {
