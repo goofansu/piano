@@ -160,7 +160,7 @@ after `web/dist` was built (then the running backend or UI predates the checkout
 
 4. **HTTP** for side effects, with `Origin: $ORIGIN` on anything but GET:
    `curl -s "$API_URL/api/folders"`;
-   `curl -s -X POST -H "Origin: $ORIGIN" "$API_URL/api/workspace/changes?workspaceId=<id>"`.
+   `curl -s -X POST -H "Origin: $ORIGIN" -d '{}' "$API_URL/api/session/changes?workspaceId=<id>&sessionId=<sessionId>"`.
    Workspace IDs come from `/api/folders` (`folders[].worktrees[].workspace.id`).
 
 ## Evidence

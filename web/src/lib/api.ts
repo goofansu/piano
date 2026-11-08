@@ -167,14 +167,6 @@ function attachmentName(disposition: string | null): string | undefined {
   return undefined;
 }
 
-// Live workspace changes
-
-export const workspaceChanges = (workspaceId: string, options?: RequestOptions) =>
-  call(Endpoints.workspaceChanges, { query: { workspaceId } }, options);
-
-export const workspaceChangedFile = (workspaceId: string, path: string, options?: RequestOptions) =>
-  call(Endpoints.workspaceChangedFile, { query: { workspaceId }, body: { path } }, options);
-
 /** A session's Changes under its saved scope, or `scope` for this read. */
 export const sessionChanges = (
   workspaceId: string,

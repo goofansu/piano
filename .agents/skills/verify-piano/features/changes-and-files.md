@@ -96,8 +96,9 @@ the palette (Mod+K) does not search individual outputs.
 - Session page header → the "Changes" icon; the palette's "Changes" does the same, "Hide changes" and (one area at a time) "Agent" go back.
 - Desktop session page header → "Show session rail" → an Outputs row → a file; the palette's
   "Show session rail" / "Hide session rail" does the same while the areas fit side by side.
-- The Uncommitted diff over HTTP: `POST /api/workspace/changes?workspaceId=<id>` with an allowed
-  Origin; this workspace endpoint does not apply the session's saved branch comparison.
+- The session's diff over HTTP: `POST /api/session/changes?workspaceId=<id>&sessionId=<sessionId>`
+  with an allowed Origin and a JSON body (`{}` for the session's saved comparison, Uncommitted by
+  default).
 
 ## Driving it with agent-browser
 
@@ -116,7 +117,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     `+ export const answer = 5;`; the name `new.txt` is green. Capture `01-changes`.
   - Side effect (same answer over HTTP): take the root workspace ID from
     `curl -s "$API_URL/api/folders"` (`folders[0].worktrees[0].workspace.id`), then
-    `curl -s -X POST -H "Origin: $ORIGIN" "$API_URL/api/workspace/changes?workspaceId=<id>"`
+    `curl -s -X POST -H "Origin: $ORIGIN" -d '{}' "$API_URL/api/session/changes?workspaceId=<id>&sessionId=verify-plan"`
     returns `result.status` `ready`, `branch` `main` and `files` (`path`, `additions`,
     `deletions`) `new.txt` (1/0) and `src/answer.ts` (1/1). Without the Origin header it is 403.
 - `changes-refresh`
