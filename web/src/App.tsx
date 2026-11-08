@@ -58,10 +58,7 @@ export default function App() {
   const sessionFiles = useSessionFilesController(state);
 
   const navigation = useNavigationController(client, layout.closeMobile);
-  const { settings, settingsRequest } = useSyncExternalStore(
-    navigation.subscribe,
-    navigation.getState,
-  );
+  const { settings } = useSyncExternalStore(navigation.subscribe, navigation.getState);
   const { openNew, openSettings, closeSettings } = navigation;
 
   const chooseDirectory = useCallback(
@@ -125,7 +122,7 @@ export default function App() {
                     </LayoutView>
                     {settings && (
                       <LayoutView>
-                        <SettingsPage section={settings} request={settingsRequest} />
+                        <SettingsPage section={settings} />
                       </LayoutView>
                     )}
                   </>

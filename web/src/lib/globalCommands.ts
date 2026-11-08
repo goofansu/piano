@@ -21,12 +21,7 @@ import {
   projectCommands,
   projectMenu,
 } from "./projectCommands.ts";
-import {
-  SETTINGS_PAGES,
-  type SettingsSection,
-  type SettingsSectionIconName,
-  settingsPage,
-} from "./routes.ts";
+import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
 import { checkoutMissingAt, focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
 
@@ -185,7 +180,7 @@ export function pageCommands(
   settings: SettingsSection | null = null,
 ): GlobalCommand[] {
   if (settings) {
-    const page = settingsPage(settings);
+    const page = settings;
     if (!isEditorPage(page)) return [];
     const { id, label, editor } = PAGE_EDITORS[page];
     return [
@@ -242,7 +237,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
           enabled: true,
           intent: { kind: "settings" },
         },
-    ...SETTINGS_PAGES.map((s): GlobalCommand => ({
+    ...SETTINGS_SECTIONS.map((s): GlobalCommand => ({
       id: `settings-${s.id}`,
       label: s.label,
       icon: s.icon,

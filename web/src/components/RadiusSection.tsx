@@ -1,5 +1,4 @@
 import { RefreshCwIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
 import { IconButton } from "@/components/IconButton";
 import { PianoButton } from "@/components/PianoButton";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
@@ -23,24 +22,14 @@ import { useRadiusSetup } from "@/lib/useRadiusSetup";
 /**
  * Radius on the Providers page: the account, and what Pi may use from it. Radius is here rather
  * than in the provider list because signing in is only the first of its steps.
- *
- * `reveal` is navigation's request count for the deep-link address that names Radius
- * directly: each new request scrolls to this first section. Counting requests rather than reading
- * a flag lets repeated navigation to the address reveal Radius again.
  */
-export function RadiusSection({ reveal }: { reveal?: number }) {
+export function RadiusSection() {
   const setup = useRadiusSetup();
   const { view, confirmation, providers } = setup;
   const { account, mcp, webSearch } = view;
   const removal = confirmation && confirmation.kind !== "sign-out" ? confirmation : undefined;
-  const anchor = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (reveal === undefined) return;
-    // Radius is first, so its position no longer depends on the provider catalog loading.
-    anchor.current?.scrollIntoView({ block: "start", behavior: "auto" });
-  }, [reveal]);
   return (
-    <div id="settings-radius" ref={anchor} className="scroll-mt-4">
+    <div>
       <SettingsGroup
         id="settings-radius"
         title={

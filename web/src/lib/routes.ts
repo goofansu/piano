@@ -5,41 +5,28 @@
  *   /projects/<id>   one project's home: its branches and other member sessions
  *   /projects/<id>/new the New page for one project: a session started there joins it
  *   /s/<sessionId>   one session; its directory is looked up in the folder list
- *   /settings/<section> one settings page; /settings aliases the first section, Providers,
- *                      and /settings/radius opens Providers with its Radius section revealed
+ *   /settings/<section> one settings page; /settings aliases the first section, Providers
  */
 
 /**
- * The Settings destinations, including section deep links. Radius is a section of Providers,
- * so `/settings/radius` opens that page with the Radius section revealed. The route parser reads
- * every destination; Settings navigation and the command palette list only `SETTINGS_PAGES`.
+ * The Settings pages, shared by the route parser, navigation and command palette.
  * A destination carries no search words: the palette already matches the label the user reads.
  */
 export const SETTINGS_SECTIONS = [
-  { id: "providers", label: "Providers", icon: "plug", page: "providers" },
-  { id: "radius", label: "Radius", icon: "radius", page: "providers" },
-  { id: "mcp", label: "MCP", icon: "server", page: "mcp" },
-  { id: "skills", label: "Skills", icon: "skill", page: "skills" },
-  { id: "prompts", label: "Prompts", icon: "prompt", page: "prompts" },
-  { id: "webhooks", label: "Webhooks", icon: "webhook", page: "webhooks" },
-  { id: "preferences", label: "Preferences", icon: "preferences", page: "preferences" },
+  { id: "providers", label: "Providers", icon: "plug" },
+  { id: "mcp", label: "MCP", icon: "server" },
+  { id: "skills", label: "Skills", icon: "skill" },
+  { id: "prompts", label: "Prompts", icon: "prompt" },
+  { id: "webhooks", label: "Webhooks", icon: "webhook" },
+  { id: "preferences", label: "Preferences", icon: "preferences" },
 ] as const satisfies readonly {
   id: string;
   label: string;
   icon: string;
-  page: string;
 }[];
 
-/** Settings navigation and global commands list pages, so Radius appears only inside Providers. */
-export const SETTINGS_PAGES = SETTINGS_SECTIONS.filter((section) => section.id === section.page);
-
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["id"];
-export type SettingsPage = (typeof SETTINGS_SECTIONS)[number]["page"];
 export type SettingsSectionIconName = (typeof SETTINGS_SECTIONS)[number]["icon"];
-
-/** The page a section shows; Radius shows Providers with its own section revealed. */
-export const settingsPage = (section: SettingsSection): SettingsPage =>
-  section === "radius" ? "providers" : section;
 
 export type Route =
   | { kind: "new"; projectId?: string }

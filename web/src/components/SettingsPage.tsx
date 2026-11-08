@@ -34,12 +34,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { WebhookSettings } from "@/components/WebhookSettings";
 import { providersSettingsView } from "@/lib/providersSettingsView";
-import {
-  SETTINGS_PAGES,
-  type SettingsPage as SettingsPageId,
-  type SettingsSection,
-  settingsPage,
-} from "@/lib/routes";
+import { SETTINGS_SECTIONS, type SettingsSection } from "@/lib/routes";
 import { providerAccounts, useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSetupActions } from "@/lib/useSetupActions";
 
@@ -54,16 +49,14 @@ export function SettingsNavigation({
   onSelect: (section: SettingsSection) => void;
   onHome: () => void;
 }) {
-  // Radius addresses the Providers page, so its row stays the current one while Radius shows.
-  const current = settingsPage(section);
   const menu = (
     <nav aria-label="Settings sections">
       <SidebarMenu>
-        {SETTINGS_PAGES.map((item) => (
+        {SETTINGS_SECTIONS.map((item) => (
           <SidebarMenuItem key={item.id}>
             <SidebarMenuButton
-              isActive={current === item.id}
-              aria-current={current === item.id ? "page" : undefined}
+              isActive={section === item.id}
+              aria-current={section === item.id ? "page" : undefined}
               aria-label={item.label}
               tooltip={item.label}
               onClick={() => onSelect(item.id)}
@@ -94,35 +87,20 @@ export function SettingsNavigation({
   );
 }
 
-export function SettingsPage({
-  section,
-  request,
-}: {
-  section: SettingsSection;
-  /** Navigation's request count, so asking for Radius again reveals it again. */
-  request: number;
-}) {
-  const page = settingsPage(section);
+export function SettingsPage({ section }: { section: SettingsSection }) {
   // Each page; a page named in SETTINGS_SECTIONS without one here fails to typecheck.
-  const pages: Record<SettingsPageId, () => React.ReactNode> = {
-    providers: () => (
-      <ProvidersSettings revealRadius={section === "radius" ? request : undefined} />
-    ),
+  const pages: Record<SettingsSection, () => React.ReactNode> = {
+    providers: () => <ProvidersSettings />,
     mcp: () => <McpSettings />,
     skills: () => <LibrarySettings kind="skill" />,
     prompts: () => <LibrarySettings kind="prompt" />,
     webhooks: () => <WebhookSettings />,
     preferences: () => <PreferencesSettings />,
   };
-  return pages[page]();
+  return pages[section]();
 }
 
-function ProvidersSettings({
-  revealRadius,
-}: {
-  /** The request that asked for Radius, or `undefined` when the page was opened for itself. */
-  revealRadius: number | undefined;
-}) {
+function ProvidersSettings() {
   const observed = useProviderAccounts();
   // Opening the page reads again, as returning to it from another page always has.
   useEffect(() => void providerAccounts.refresh(), []);
@@ -172,7 +150,7 @@ function ProvidersSettings({
       }
     >
       <div className="flex flex-col gap-8">
-        <RadiusSection reveal={revealRadius} />
+        <RadiusSection />
         {body.kind !== "hidden" && (
           <SettingsGroup id="settings-accounts" title="Accounts">
             {body.kind === "error" ? (

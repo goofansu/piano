@@ -135,11 +135,6 @@ const sameLayout = (a: SessionLayout, b: SessionLayout) =>
 export interface NavigationState {
   /** The open Settings section; the view underneath stays mounted (INV-02). */
   settings: SettingsSection | null;
-  /**
-   * Counts the requests to open Settings, including repeats of the section already open. A section
-   * that reveals part of a page reads it so asking again reveals it again (INV-07).
-   */
-  settingsRequest: number;
   /** The Surface area's tabs; `null` while it has none, and so is hidden. */
   surface: Surface | null;
   /**
@@ -467,7 +462,6 @@ export function createNavigation({
   };
   let state: NavigationState = {
     settings: wanted.kind === "settings" ? wanted.section : null,
-    settingsRequest: 0,
     ...fields,
     layout: sessionLayout(fields),
     // No tabs yet, so none on screen.
@@ -611,9 +605,7 @@ export function createNavigation({
     const decision = decideRoute(wanted, client.getState());
     if (decision.kind === "wait") return;
     wanted = null;
-    // Applying a settings route, on load or on back/forward, is a request of its own.
-    if (decision.kind === "settings")
-      set({ settings: decision.section, settingsRequest: state.settingsRequest + 1 });
+    if (decision.kind === "settings") set({ settings: decision.section });
     else if (decision.kind === "open") client.dispatch({ type: "open", page: decision.page });
     else if (decision.kind === "select") select(decision.cwd, decision.sessionId);
   };
@@ -876,8 +868,7 @@ export function createNavigation({
     openSettings: (section = "providers") =>
       batch(() => {
         wanted = null;
-        // Asking for the section already open is still a request; what it reveals is revealed again.
-        set({ settings: section, settingsRequest: state.settingsRequest + 1 });
+        set({ settings: section });
         moved();
       }),
     closeSettings,

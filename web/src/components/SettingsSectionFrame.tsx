@@ -4,7 +4,6 @@ import {
   ExternalLinkIcon,
   type LucideIcon,
   PlugIcon,
-  RadiusIcon,
   ServerIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
@@ -22,7 +21,6 @@ import type { SettingsLoadView } from "@/lib/settingsLoadView";
 
 const ICONS: Record<SettingsSectionIconName, LucideIcon> = {
   plug: PlugIcon,
-  radius: RadiusIcon,
   server: ServerIcon,
   skill: SparklesIcon,
   prompt: SquareSlashIcon,

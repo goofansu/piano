@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  parseRoute,
-  routePath,
-  SETTINGS_PAGES,
-  SETTINGS_SECTIONS,
-  settingsPage,
-} from "../web/src/lib/routes.ts";
+import { parseRoute, routePath } from "../web/src/lib/routes.ts";
 
 test("settings URLs preserve each section and accept the Providers alias", () => {
-  for (const section of ["providers", "radius", "mcp", "skills", "prompts", "webhooks"] as const) {
+  for (const section of [
+    "providers",
+    "mcp",
+    "skills",
+    "prompts",
+    "webhooks",
+    "preferences",
+  ] as const) {
     const route = { kind: "settings", section } as const;
     assert.equal(routePath(route), `/settings/${section}`);
     assert.deepEqual(parseRoute({ pathname: `/settings/${section}` }), route);
@@ -30,17 +31,7 @@ test("the Projects index has an address of its own beside each project's home", 
   assert.deepEqual(parseRoute({ pathname: "/projects/p1/new" }), { kind: "new", projectId: "p1" });
 });
 
-test("Radius addresses the Providers page, and is offered once in navigation", () => {
-  assert.deepEqual(
-    SETTINGS_PAGES.map((page) => page.id),
-    ["providers", "mcp", "skills", "prompts", "webhooks", "preferences"],
-    "navigation lists one row per page, so Radius is not a row of its own",
-  );
-  assert.ok(
-    SETTINGS_SECTIONS.some((section) => section.id === "radius"),
-    "the Radius deep-link address remains supported",
-  );
-  assert.equal(settingsPage("radius"), "providers", "/settings/radius opens Providers");
-  assert.equal(settingsPage("providers"), "providers");
-  assert.equal(settingsPage("mcp"), "mcp");
+test("the removed Radius URL is unknown rather than an alias for Providers", () => {
+  assert.deepEqual(parseRoute({ pathname: "/settings/radius" }), { kind: "new" });
+  assert.deepEqual(parseRoute({ pathname: "/settings/radius/" }), { kind: "new" });
 });

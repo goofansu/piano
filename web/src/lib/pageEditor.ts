@@ -6,7 +6,7 @@ import { useEffect, useSyncExternalStore } from "react";
 // Relative, not @shared: module tests load this file directly in Node.
 import type { McpServerSetup } from "../../../shared/mcp.ts";
 import type { Webhook } from "../../../shared/webhooks.ts";
-import type { SettingsPage } from "./routes.ts";
+import type { SettingsSection } from "./routes.ts";
 
 /** What the editor is open on: `"new"` for the page's creation, an entry for Edit, `null` when closed. */
 export type Editing<Entry> = Entry | "new" | null;
@@ -80,13 +80,13 @@ export const PAGE_EDITORS = {
   skills: { id: "new-skill", label: "New skill", editor: pageEditor() },
   prompts: { id: "new-prompt", label: "New prompt", editor: pageEditor() },
 } as const satisfies Partial<
-  Record<SettingsPage, { id: string; label: string; editor: { open: (target: "new") => void } }>
+  Record<SettingsSection, { id: string; label: string; editor: { open: (target: "new") => void } }>
 >;
 
 /** A Settings page whose header creates something. */
 export type EditorPage = keyof typeof PAGE_EDITORS;
 
-export const isEditorPage = (page: SettingsPage): page is EditorPage => page in PAGE_EDITORS;
+export const isEditorPage = (page: SettingsSection): page is EditorPage => page in PAGE_EDITORS;
 
 /** Open `page`'s editor on a new entry, as its header's button does. */
 export const openPageEditor = (page: EditorPage) => PAGE_EDITORS[page].editor.open("new");

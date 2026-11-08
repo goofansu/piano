@@ -1,8 +1,7 @@
 # Radius setup in Piano
 
-Open **Settings → Providers** and use the **Radius** section, or choose **Providers** from
-Mod+K. `/settings/radius` stays a working address: it opens Providers with the Radius
-section revealed. Radius appears first, followed by **Accounts** and **API keys**,
+Open **Settings → Providers** (`/settings/providers`) and use the **Radius** section, or choose
+**Providers** from Mod+K. Radius appears first, followed by **Accounts** and **API keys**,
 with no duplicate Radius provider row. The Radius section includes its account, MCP and web-search
 controls and the setup guide. Setup is machine-wide for the OS account running Piano, not a
 browser account or a Project.
@@ -122,8 +121,9 @@ Relevant invariants: INV-01/02/04/07/09/10/11/12.
   confirmation to the reviewed configuration, refuse stale/conflicting targets, preserve
   credentials and unrelated entries, and serialize installs against uninstalls. Existing
   `ProviderLogin` tests cover OAuth interaction/persistence and terminal claims.
-- `test/Routes.test.ts` and `test/GlobalCommands.test.ts`: Radius addresses the Providers page,
-  navigation and the palette list pages without a standalone Radius command.
+- `test/Routes.test.ts`, `test/Navigation.test.ts` and `test/GlobalCommands.test.ts`: Settings routes,
+  navigation and the palette list pages without a standalone Radius destination. The removed
+  `/settings/radius` address follows the unknown-route fallback to New session.
 - Original browser verification (the former `test/browser-radius-setup.mjs`): agent-browser against an isolated scratch backend
   and Vite; real config writes and Pi install CLI with a controlled fake npm executable.
   Only the browser OAuth HTTP boundary is simulated. Checks sign-in, MCP setup,

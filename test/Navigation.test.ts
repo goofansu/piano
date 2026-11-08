@@ -536,10 +536,10 @@ test("aliases are replaced and real moves are pushed, with a title for each scre
   assert.deepEqual(p.entries, ["/new", "/s/a"]);
   assert.equal(p.title(), "Alpha - Piano");
 
-  p.navigation.openSettings("radius");
+  p.navigation.openSettings("providers");
   assert.deepEqual(
     p.entries,
-    ["/new", "/s/a", "/settings/radius"],
+    ["/new", "/s/a", "/settings/providers"],
     "Settings is one history entry",
   );
   assert.equal(p.title(), "Settings - Piano");
@@ -547,7 +547,7 @@ test("aliases are replaced and real moves are pushed, with a title for each scre
   assert.equal(p.navigation.getState().settings, null);
   assert.deepEqual(
     p.entries,
-    ["/new", "/s/a", "/settings/radius", "/projects/p1/new"],
+    ["/new", "/s/a", "/settings/providers", "/projects/p1/new"],
     "leaving Settings for the New page is one entry, not two",
   );
   assert.equal(p.title(), "Launch - Piano");
@@ -656,8 +656,8 @@ test("back and forward apply the address bar's route; back onto the same New pag
 
   p.navigation.select("/scratch", "a");
   p.selected("a");
-  p.navigation.openSettings("radius");
-  assert.deepEqual(p.entries, ["/new", "/s/a", "/settings/radius"]);
+  p.navigation.openSettings("providers");
+  assert.deepEqual(p.entries, ["/new", "/s/a", "/settings/providers"]);
   p.back();
   assert.equal(p.navigation.getState().settings, null);
   assert.deepEqual(p.selects(), ["a"], "the session already on screen is not selected again");
@@ -671,10 +671,10 @@ test("back and forward apply the address bar's route; back onto the same New pag
   p.forward();
   assert.deepEqual(p.selects(), ["a", "a"]);
   p.forward();
-  assert.equal(p.navigation.getState().settings, "radius");
+  assert.equal(p.navigation.getState().settings, "providers");
   assert.deepEqual(
     p.entries,
-    ["/new", "/s/a", "/settings/radius"],
+    ["/new", "/s/a", "/settings/providers"],
     "history moves never add entries",
   );
   assert.ok(p.moves() > 0);
@@ -772,7 +772,7 @@ test("every move among a session's areas leaves Settings, so the move shows", ()
   p.navigation.openChanges();
   p.navigation.openFile("docs/guide.md");
   const overSettings = (move: () => void) => {
-    p.navigation.openSettings("radius");
+    p.navigation.openSettings("providers");
     move();
     return p.navigation.getState();
   };
@@ -1587,28 +1587,13 @@ test("a Surface tab is on screen only while nothing covers it", () => {
   assert.equal(shownTab(), "file:README.md");
 });
 
-test("each request to open Settings is counted, so a repeat reveals its section again", () => {
-  const p = page("/new");
+test("the removed Radius address follows the unknown-route fallback", () => {
+  const p = page("/settings/radius");
   p.registry();
-  const requests = () => p.navigation.getState().settingsRequest;
-  assert.equal(requests(), 0, "no Settings route, nothing asked for");
-  p.navigation.openSettings("radius");
-  const first = requests();
-  assert.ok(first > 0);
-  p.navigation.openSettings("radius");
-  assert.equal(
-    requests(),
-    first + 1,
-    "asking for the section already open is a request of its own",
-  );
-  p.navigation.closeSettings();
-  p.back();
-  assert.equal(p.navigation.getState().settings, "radius", "history returns to the section");
-  assert.ok(requests() > first + 1, "applying a settings route is a request too");
-  const deepLink = page("/settings/radius");
-  deepLink.registry();
-  assert.equal(deepLink.navigation.getState().settings, "radius");
-  assert.ok(deepLink.navigation.getState().settingsRequest > 0, "a cold deep link asks once");
+  assert.equal(p.navigation.getState().settings, null);
+  assert.equal(p.client.getState().view.kind, "new");
+  assert.equal(p.path(), "/new");
+  assert.deepEqual(p.selects(), [], "an unknown address starts no session");
 });
 
 test("a move that changes nothing notifies no one and leaves the address bar alone", () => {
@@ -1641,9 +1626,9 @@ test("a move that changes nothing notifies no one and leaves the address bar alo
   p.navigation.setSingle(true);
   assert.equal(notified, 1, "a move that changed the layout notifies once");
   assert.equal(p.navigation.getState().single, true);
-  p.navigation.openSettings("radius");
+  p.navigation.openSettings("providers");
   assert.equal(notified, 2);
-  assert.equal(p.path(), "/settings/radius", "a real move still syncs the address");
+  assert.equal(p.path(), "/settings/providers", "a real move still syncs the address");
 });
 
 test("selecting another session with the same areas notifies no navigation subscriber", () => {
