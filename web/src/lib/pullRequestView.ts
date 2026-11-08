@@ -14,7 +14,7 @@ export type SignalOutcome = Exclude<PullRequest["checks"] | PullRequest["review"
 
 export interface PullRequestView {
   url: string;
-  /** What every surface calls it: its number ("42"), else "PR" when the link names none. */
+  /** What every surface calls it: its number ("#42"), else "PR" when the link names none. */
   name: string;
   /** "owner/name#42", for copying; absent when the link names no pull request. */
   reference: string | undefined;
@@ -62,7 +62,7 @@ export function pullRequestView(
   const identity = pr ?? pullRequestIdentity(link.url);
   return {
     url: link.url,
-    name: identity ? String(identity.number) : "PR",
+    name: identity ? `#${identity.number}` : "PR",
     reference: identity ? `${identity.repo}#${identity.number}` : undefined,
     title: pr?.title,
     status: pr && { state: pr.state, label: STATE_LABELS[pr.state] },

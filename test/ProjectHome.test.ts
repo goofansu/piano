@@ -67,7 +67,7 @@ test("a project's home lists every member session, newest activity first, with i
         title: "fix sorting",
         folder: "repo",
         branch: "fix-sort",
-        pullRequest: "26674",
+        pullRequest: "#26674",
         updatedAt: at(5),
       },
       {

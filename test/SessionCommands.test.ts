@@ -573,15 +573,15 @@ test("the rail's Environment rows offer the session's copy commands for their fa
 
   const onBranch = at(worktree(path, "feature"), "feature");
   assert.deepEqual(menu(onBranch, "branch"), [
-    ["Copy git branch", { kind: "copy", value: "feature", label: "Git branch" }],
+    ["Copy branch", { kind: "copy", value: "feature", label: "Branch" }],
   ]);
   assert.deepEqual(menu(onBranch, "commit"), []);
   assert.deepEqual(menu(onBranch, "repository"), [
     ["Copy repository name", { kind: "copy", value: "acme/repo", label: "Repository name" }],
-    ["Copy working directory", { kind: "copy", value: path, label: "Working directory" }],
+    ["Copy directory path", { kind: "copy", value: path, label: "Directory path" }],
   ]);
   assert.deepEqual(menu(onBranch, "folder"), [
-    ["Copy working directory", { kind: "copy", value: path, label: "Working directory" }],
+    ["Copy directory path", { kind: "copy", value: path, label: "Directory path" }],
   ]);
 
   const detached = at(

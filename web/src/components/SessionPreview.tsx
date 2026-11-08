@@ -87,7 +87,7 @@ async function copyLink(url: string) {
     await navigator.clipboard.writeText(url);
     toast.success("Preview link copied");
   } catch {
-    toast.error("Couldn’t copy the preview link.");
+    toast.error("Could not copy the preview link.");
   }
 }
 

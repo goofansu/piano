@@ -3,9 +3,10 @@ import { cn } from "cn";
 import {
   ArrowLeftIcon,
   ChevronRightIcon,
+  CircleMinusIcon,
   ExternalLinkIcon,
-  FolderInputIcon,
   GitPullRequestIcon,
+  TargetIcon,
 } from "lucide-react";
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -60,15 +61,20 @@ function SessionCommandRow({
   );
 }
 
-/** A project command as a sheet row, by its icon and label unless `children` names it. */
+/**
+ * A project command as a sheet row, by its icon and label unless `icon` or `children` names it. A
+ * project is drawn with the Target icon, as the breadcrumb and the Projects page draw it.
+ */
 function ProjectCommandRow({
   command,
   run,
+  icon,
   children,
 }: {
   command: ProjectCommand;
   run: (command: ProjectCommand) => void;
-  children?: React.ReactNode;
+  icon?: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <SheetClose asChild>
@@ -78,7 +84,7 @@ function ProjectCommandRow({
         disabled={!command.enabled}
         onClick={() => run(command)}
       >
-        <ProjectCommandIconView icon={command.icon} /> {children ?? command.label}
+        {icon ?? <ProjectCommandIconView icon={command.icon} />} {children ?? command.label}
       </Button>
     </SheetClose>
   );
@@ -107,19 +113,19 @@ function PaneRow({
 /** The linked pull request, opened on GitHub in a new tab: the sheet's one way out of Piano. */
 function PullRequestRow({
   url,
-  number,
+  name,
   onOpen,
 }: {
   url: string;
-  /** The pull request's number, once the link names one. */
-  number: string | undefined;
+  /** The pull request's name ("#42"), once the link names a number. */
+  name: string | undefined;
   onOpen: () => void;
 }) {
   return (
     <Button asChild variant="ghost" className={row}>
       <a href={url} target="_blank" rel="noreferrer" onClick={onOpen}>
         <GitPullRequestIcon /> Pull request
-        {number && <span className={value}>#{number}</span>}
+        {name && <span className={value}>{name}</span>}
         <ExternalLinkIcon data-icon="inline-end" className="ml-auto text-muted-foreground" />
       </a>
     </Button>
@@ -235,9 +241,7 @@ export function SessionMenuSheet({
           <>
             <SheetTitle className="sr-only">Session</SheetTitle>
             {/* The pull request opens in a browser tab, so the sheet closes as after an action. */}
-            {pr && (
-              <PullRequestRow url={pr.url} number={pr.reference && pr.name} onOpen={onLeave} />
-            )}
+            {pr && <PullRequestRow url={pr.url} name={pr.reference && pr.name} onOpen={onLeave} />}
             {preview && showPreview && (
               <PreviewRow
                 preview={preview}
@@ -251,7 +255,7 @@ export function SessionMenuSheet({
             {rows(menu.manage)}
             {projects && (
               <PaneRow
-                icon={<FolderInputIcon />}
+                icon={<TargetIcon />}
                 disabled={!projects.entry.enabled}
                 onClick={() => setPage("projects")}
               >
@@ -277,22 +281,33 @@ export function SessionMenuSheet({
           <>
             <PaneHeader title={projects.entry.label} onBack={() => setPage("actions")} />
             <Separator className="my-1" />
-            {projects.current && (
-              <p className="truncate px-3 py-1 text-xs text-muted-foreground">
-                {projects.current.name}
-              </p>
+            {/* Below md the header has no breadcrumb, so this row is the way to the project's home. */}
+            {projects.current && projects.open && (
+              <Button
+                variant="ghost"
+                className={row}
+                onClick={() => {
+                  if (projects.open) run(projects.open);
+                  leave();
+                }}
+              >
+                <TargetIcon /> <span className="truncate">{projects.current.name}</span>
+              </Button>
             )}
             {projects.remove && (
               <>
-                <ProjectCommandRow command={projects.remove} run={run} />
+                <ProjectCommandRow command={projects.remove} run={run} icon={<CircleMinusIcon />} />
                 <Separator className="my-1" />
               </>
             )}
-            <ProjectCommandRow command={projects.create} run={run}>
-              {projects.create.label}…
-            </ProjectCommandRow>
+            <ProjectCommandRow command={projects.create} run={run} />
             {projects.destinations.map((d) => (
-              <ProjectCommandRow key={d.project.id} command={d.command} run={run}>
+              <ProjectCommandRow
+                key={d.project.id}
+                command={d.command}
+                run={run}
+                icon={<TargetIcon />}
+              >
                 <span className="truncate">{d.project.name}</span>
               </ProjectCommandRow>
             ))}

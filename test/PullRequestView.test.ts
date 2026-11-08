@@ -37,7 +37,7 @@ test("no link has no view", () => {
 
 test("a link whose GitHub status is unavailable is named from its URL", () => {
   const view = pullRequestView(linked(null), now);
-  assert.equal(view?.name, "42");
+  assert.equal(view?.name, "#42");
   assert.equal(view?.reference, "example/repo#42");
   assert.equal(view?.url, url);
   assert.equal(view?.status, undefined);
@@ -53,7 +53,7 @@ test("a pull request is named as the server parses its link, read or not", () =>
     { link: { url: `${url}/files`, source: "manual" }, pullRequest: null },
     now,
   );
-  assert.equal(files?.name, "42");
+  assert.equal(files?.name, "#42");
   assert.equal(files?.reference, "example/repo#42");
   const read = pullRequestView(linked(pr({ repo: "example/repo" })), now);
   assert.deepEqual([read?.name, read?.reference], [files?.name, files?.reference]);
@@ -127,7 +127,7 @@ test("the row names the PR, its state and what is still only local; branches onl
     fromBranch: true,
     local: { commitsNotPushed: 2, uncommitted: true },
   });
-  assert.equal(row.name, "42", "the row names it as the session rail and project home do");
+  assert.equal(row.name, "#42", "the row names it as the session rail and project home do");
   assert.equal(row.title, "The session deliverable");
   assert.deepEqual(
     pullRequestRow(view, { fromBranch: true, local: undefined, loading: true }).status,

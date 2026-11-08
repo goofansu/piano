@@ -25,7 +25,7 @@ function CopyCode({ text }: { text: string }) {
       text={text}
       label="Copy code"
       copiedLabel="Code copied"
-      failure="Couldn’t copy. Select the code text to copy it."
+      failure="Could not copy. Select the code text to copy it."
       variant="outline-solid"
       className="absolute top-4 right-2"
     />

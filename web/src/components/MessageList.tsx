@@ -5,7 +5,6 @@ import {
   ArrowDownIcon,
   ArrowUpRightIcon,
   CheckIcon,
-  ChevronDownIcon,
   CopyIcon,
   CornerDownRightIcon,
   GitBranchIcon,
@@ -39,7 +38,7 @@ import { PianoButton } from "@/components/PianoButton";
 import { Keys } from "@/components/PianoMark";
 import { QuestionText } from "@/components/QuestionText";
 import { StatusBadge as Badge } from "@/components/StatusBadge";
-import { StatusDot } from "@/components/StatusDot";
+import { StatusDot, type StatusTone } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
@@ -521,8 +520,9 @@ function FoldRow({
       {typeof header === "function" ? header(open) : header}
       {canOpen && (
         // The 14px chevron's painted right inset is 4.67px closed, 2.92px open. Nudge the
-        // open tool chevron inward 1px to match the gutter dot's 4px inset, not its SVG box.
-        <DisclosureChevron open={open} className={cn("ml-auto", toolOutput && open && "mr-px")} />
+        // open tool chevron inward 2px to match the 6px StatusDot's 5px inset in the 16px
+        // gutter, not its SVG box.
+        <DisclosureChevron open={open} className={cn("ml-auto", toolOutput && open && "mr-0.5")} />
       )}
     </>
   );
@@ -674,7 +674,7 @@ function ErrorMessage({ error, id }: { error: MessageError; id?: string }) {
 const USER_LINES = 6;
 
 function CopyResponse({ text }: { text: string }) {
-  const { copied, copy } = useCopy(text, "Couldn’t copy. Select the reply text to copy it.");
+  const { copied, copy } = useCopy(text, "Could not copy. Select the reply text to copy it.");
   return (
     <Button
       variant="ghost"
@@ -779,7 +779,7 @@ function UserMessage({
               }}
             >
               {open ? "Show less" : "Show more"}
-              <ChevronDownIcon className={cn(open && "rotate-180")} aria-hidden />
+              <DisclosureChevron open={open} />
             </Button>
           </div>
         )}
@@ -831,7 +831,7 @@ function DispatchRow({
   const destination = sessionId ? destinationOf(sessionId) : "unlisted";
   return (
     <FoldRow
-      glyph={<span className={cn("block size-2 rounded-full", DOT[outcome])} />}
+      glyph={<StatusDot tone={TONE[outcome]} pulse={outcome === "running"} />}
       header={
         <>
           <span className="min-w-20 flex-1 truncate font-medium text-ink">{title}</span>
@@ -917,12 +917,12 @@ function ParentLink({ sessionId, cwd, label }: SessionDestination) {
   );
 }
 
-const DOT: Record<ToolOutcome, string> = {
-  running: "bg-busy",
-  failed: "bg-err",
-  done: "bg-ok",
-  incomplete: "bg-ink-3",
-  pending: "bg-ink-3",
+const TONE: Record<ToolOutcome, StatusTone> = {
+  running: "busy",
+  failed: "err",
+  done: "ok",
+  incomplete: "muted",
+  pending: "muted",
 };
 
 /** Human replies belong in the transcript, paired with their questions rather than raw tool JSON. */
@@ -1087,7 +1087,7 @@ function NestedCalls({ parentId, nested }: { parentId: string; nested: NestedVie
 function NestedCall({ line: { call, outcome, summary, inputNote } }: { line: NestedCallLine }) {
   return (
     <FoldRow
-      glyph={<span className={cn("block size-2 rounded-full", DOT[outcome])} />}
+      glyph={<StatusDot tone={TONE[outcome]} pulse={outcome === "running"} />}
       header={
         <>
           <span
@@ -1145,7 +1145,7 @@ function Tool({
 
   return (
     <FoldRow
-      glyph={<span className={cn("block size-2 rounded-full", DOT[outcome])} />}
+      glyph={<StatusDot tone={TONE[outcome]} pulse={outcome === "running"} />}
       header={(open) => (
         <>
           <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>

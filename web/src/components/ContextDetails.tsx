@@ -28,7 +28,10 @@ interface Props {
   messages: ReadonlyArray<RenderMsg>;
 }
 
-/** History usage is per response, not a reconstruction of Pi's current context. */
+/**
+ * History usage is per response, not a reconstruction of Pi's current context. Labels are sans;
+ * values (counts, costs, the model id) are mono.
+ */
 export function ContextDetails({ figures, usage: session, messages }: Props) {
   const [selectedId, setSelectedId] = useState<string>();
   const [metric, setMetric] = useState<HistoryMetric>("tokens");
@@ -57,7 +60,10 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
       <section className="flex flex-col gap-2">
         <h2 className="font-medium">{figures.heading}</h2>
         {figures.window !== undefined && (
-          <p className="text-ink-2">Context window: {figures.window.toLocaleString()} tokens</p>
+          <p className="text-ink-2">
+            Context window: <span className="font-mono">{figures.window.toLocaleString()}</span>{" "}
+            tokens
+          </p>
         )}
         {figures.used && (
           <Progress
@@ -100,7 +106,8 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
         ) : (
           <>
             <p className="text-xs text-ink-2">
-              {metric === "tokens" ? "Tokens" : "Cost"} per response · peak {peakText}
+              {metric === "tokens" ? "Tokens" : "Cost"} per response · peak{" "}
+              <span className="font-mono">{peakText}</span>
             </p>
             {/* role=region, not a <section>: a <section> region would add a landmark inside a popover. */}
             <div
@@ -134,7 +141,10 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
             </div>
             <div className="flex items-center gap-3 text-xs">
               <span className="shrink-0 tabular-nums">
-                Response {position} / {responses.length}
+                Response{" "}
+                <span className="font-mono">
+                  {position} / {responses.length}
+                </span>
               </span>
               <Slider
                 aria-label="Inspect response"
@@ -147,7 +157,11 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
               />
             </div>
             <p className="break-words text-xs text-ink-2">
-              {selected?.model ?? "Model unavailable"}
+              {selected?.model ? (
+                <span className="font-mono">{selected.model}</span>
+              ) : (
+                "Model unavailable"
+              )}
               {selected?.thinkingLevel ? ` · ${selected.thinkingLevel}` : ""}
             </p>
           </>
@@ -172,8 +186,8 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
                 <TableHead scope="row" className="text-left font-normal text-ink-2">
                   {row.label}
                 </TableHead>
-                <TableCell className="break-all">{row.response}</TableCell>
-                <TableCell className="break-all">{row.session}</TableCell>
+                <TableCell className="break-all font-mono">{row.response}</TableCell>
+                <TableCell className="break-all font-mono">{row.session}</TableCell>
               </TableRow>
             ))}
           </TableBody>

@@ -1,6 +1,5 @@
 import { previewKindByName } from "@shared/files";
 import {
-  CopyIcon,
   DownloadIcon,
   FileAudioIcon,
   FileCodeIcon,
@@ -11,6 +10,7 @@ import {
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useState } from "react";
 import { toast } from "sonner";
+import { CopyButton } from "@/components/CopyButton";
 import { FileNotice as Notice } from "@/components/FileNotice";
 import { FilePath } from "@/components/FilePath";
 import { IconButton } from "@/components/IconButton";
@@ -128,20 +128,13 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
       status={
         <div className="flex min-w-0 items-center gap-1">
           <FilePath path={path} />
-          <IconButton
-            size="header"
+          <CopyButton
+            text={path}
             label="Copy path"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(path);
-                toast.success("Path copied");
-              } catch {
-                toast.error("Couldn’t copy path.");
-              }
-            }}
-          >
-            <CopyIcon />
-          </IconButton>
+            copiedLabel="Path copied"
+            failure="Could not copy path."
+            size="header"
+          />
         </div>
       }
       actions={
