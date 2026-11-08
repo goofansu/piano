@@ -26,8 +26,6 @@ export interface SessionEntry {
   folder: string;
   /** Git's branch for the session's checkout; empty when unknown. */
   branch: string;
-  /** The session runs in one of the folder's worktrees, not the folder's own checkout. */
-  inWorktree: boolean;
   projectId: string | undefined;
   /** The project the session belongs to, when that project exists. */
   project: Project | undefined;
@@ -77,14 +75,6 @@ export interface SessionDirectory {
    * without a directory. The sidebar row, the phone header and the rail all name a session's
    * place by this. */
   folderName: string;
-  /** A linked worktree's directory name; undefined for the folder's own checkout. */
-  worktreeName: string | undefined;
-}
-
-/** A worktree's directory without the `folder.` prefix Worktrunk gives it, since the folder is named beside it. */
-export function worktreeName(folder: string, path: string): string {
-  const base = path.split("/").pop() ?? path;
-  return base.startsWith(`${folder}.`) ? base.slice(folder.length + 1) : base;
 }
 
 /**
@@ -102,13 +92,7 @@ export function sessionDirectories(state: AppState): (cwd: string | undefined) =
     const checkout = folder?.worktrees.find((w) => w.path === cwd);
     const folderName =
       folder?.name ?? (cwd === undefined ? "" : cwd.split("/").filter(Boolean).at(-1) || cwd);
-    return {
-      folder,
-      checkout,
-      folderName,
-      worktreeName:
-        checkout && !checkout.root ? worktreeName(folderName, checkout.path) : undefined,
-    };
+    return { folder, checkout, folderName };
   };
 }
 
@@ -130,7 +114,7 @@ function entries(state: AppState): SessionEntry[] {
   const current = state.session ?? state.selecting;
   return state.sessionReferences.map((ref) => {
     const key = sessionKey(ref);
-    const { folder, folderName, worktreeName } = directoryOf(ref.cwd);
+    const { folder, folderName } = directoryOf(ref.cwd);
     const project = findProject(state, ref.projectId);
     const host = hosts.get(key);
     return {
@@ -143,7 +127,6 @@ function entries(state: AppState): SessionEntry[] {
       folderPath: folder?.path,
       folder: folderName,
       branch: ref.branch ?? "",
-      inWorktree: worktreeName !== undefined,
       projectId: ref.projectId,
       project,
       archived: ref.archived,
