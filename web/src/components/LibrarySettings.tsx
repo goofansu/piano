@@ -5,12 +5,7 @@ import { type LucideIcon, SparklesIcon, SquareSlashIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
-import {
-  DraftFileView,
-  NewDraftDialog,
-  promptEditor,
-  skillEditor,
-} from "@/components/DraftDialogs";
+import { DraftFileView, NewDraftDialog } from "@/components/DraftDialogs";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
@@ -37,6 +32,7 @@ import {
   removeUserSkill,
 } from "@/lib/api";
 import { pageCommands } from "@/lib/globalCommands";
+import { PAGE_EDITORS } from "@/lib/pageEditor";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
@@ -88,7 +84,7 @@ const promptPage: LibraryPageKind<Prompt> = {
   ),
 };
 
-const editors = { skill: skillEditor, prompt: promptEditor };
+const editors = { skill: PAGE_EDITORS.skills.editor, prompt: PAGE_EDITORS.prompts.editor };
 
 function LibraryPage<Entry extends { name: string; description: string; file: string }>({
   kind,
@@ -104,7 +100,7 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
   // New comes from `pageCommands`, which the palette lists too; both open this editor.
   const { state, run, global } = useCommands();
   const editor = editors[kind];
-  const editing = editor.useOpen();
+  const editing = editor.useEditing();
   const [viewing, setViewing] = useState<Entry>();
   const actions = useSetupActions<Entry>({
     refresh: () => void observed.refresh(),

@@ -2,7 +2,7 @@
  * The commands that apply wherever the user is, described once: navigation, what the open page's
  * header offers (`pageCommands`), directory trust, the sidebar and its view, and appearance. The
  * command palette's Global commands group, the sidebar's View menu, the Projects index's and
- * Webhooks page's headers and the New session page's trust toggle render these instead of each
+ * Settings pages' headers and the New session page's trust toggle render these instead of each
  * deciding.
  */
 // Relative, not @shared: module tests load this file directly in Node.
@@ -10,6 +10,7 @@ import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.ts";
+import { type EditorPage, isEditorPage, PAGE_EDITORS } from "./pageEditor.ts";
 import {
   findProject,
   newProjectCommand,
@@ -44,10 +45,7 @@ export type GlobalCommandId =
   | "new-session"
   | "projects"
   | "new-project"
-  | "add-webhook"
-  | "add-mcp-server"
-  | "new-skill"
-  | "new-prompt"
+  | (typeof PAGE_EDITORS)[EditorPage]["id"]
   | "project-settings"
   | "project-done"
   | "delete-project"
@@ -94,14 +92,8 @@ export type GlobalCommandIntent =
   | { kind: "projects" }
   /** The open page's header action (New project, a project's menu row), as the page runs it. */
   | ProjectCommandIntent
-  /** Open the webhook editor on a new webhook, as the Webhooks page's header does. */
-  | { kind: "add-webhook" }
-  /** Open the MCP server editor on a new server, as the MCP page's header does. */
-  | { kind: "add-mcp-server" }
-  /** Open the skill editor on a new skill, as the Skills page's header does. */
-  | { kind: "new-skill" }
-  /** Open the prompt editor on a new prompt, as the Prompts page's header does. */
-  | { kind: "new-prompt" }
+  /** Open the Settings page's editor on a new entry, as the page's header does. */
+  | { kind: "page-editor"; page: EditorPage }
   /** Send this registry or Pi change. */
   | { kind: "send"; command: ClientCommand }
   | { kind: "toggle-sidebar" }
@@ -180,8 +172,9 @@ const PROJECT_MENU_IDS = {
 } as const satisfies Record<ProjectMenuCommandId, GlobalCommandId>;
 
 /**
- * What the open page offers in its header, as the page's own commands describe it: on Settings ›
- * Webhooks, New webhook; on Settings › Skills, New skill; on Settings › Prompts, New prompt; on the Projects index, New project; on a project's home, its menu
+ * What the open page offers in its header, as the page's own commands describe it: on a Settings
+ * page with an editor (`PAGE_EDITORS`), its creation, such as New webhook; on the Projects index,
+ * New project; on a project's home, its menu
  * (`projectMenu`), manage rows then destructive (the home itself starts sessions). An open Settings
  * page covers the page beneath it, so only its own actions count. The palette lists exactly these,
  * so a page or menu that adds a header action gets its row, named as its button is, by construction.
@@ -192,51 +185,18 @@ export function pageCommands(
 ): GlobalCommand[] {
   if (settings) {
     const page = settingsPage(settings);
-    if (page === "webhooks")
-      return [
-        {
-          id: "add-webhook",
-          label: "New webhook",
-          icon: "create",
-          group: "navigate",
-          enabled: true,
-          intent: { kind: "add-webhook" },
-        },
-      ];
-    if (page === "mcp")
-      return [
-        {
-          id: "add-mcp-server",
-          label: "Add MCP server",
-          icon: "create",
-          group: "navigate",
-          enabled: true,
-          intent: { kind: "add-mcp-server" },
-        },
-      ];
-    if (page === "skills")
-      return [
-        {
-          id: "new-skill",
-          label: "New skill",
-          icon: "create",
-          group: "navigate",
-          enabled: true,
-          intent: { kind: "new-skill" },
-        },
-      ];
-    if (page === "prompts")
-      return [
-        {
-          id: "new-prompt",
-          label: "New prompt",
-          icon: "create",
-          group: "navigate",
-          enabled: true,
-          intent: { kind: "new-prompt" },
-        },
-      ];
-    return [];
+    if (!isEditorPage(page)) return [];
+    const { id, label } = PAGE_EDITORS[page];
+    return [
+      {
+        id,
+        label,
+        icon: "create",
+        group: "navigate",
+        enabled: true,
+        intent: { kind: "page-editor", page },
+      },
+    ];
   }
   const row = (id: GlobalCommandId, c: ProjectCommand): GlobalCommand => ({
     id,

@@ -5,7 +5,7 @@
 import { checkDraft, DRAFT_FIELDS, type Draft, type DraftField, NAME_RULE } from "@shared/drafts";
 import { LIBRARY_KINDS, type LibraryKind } from "@shared/library";
 import { cn } from "cn";
-import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "@/components/CopyButton";
 import { FormDialog, useFieldRefusal } from "@/components/FormDialog";
@@ -23,38 +23,6 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useSetupActions } from "@/lib/useSetupActions";
-
-/**
- * A page's one creation dialog, so it opens the same dialog whether the page's header or the command
- * palette ran it. `useOpen` reads it while the page is mounted; leaving the page closes it.
- */
-export function draftEditor() {
-  let open = false;
-  const listeners = new Set<() => void>();
-  const set = (next: boolean) => {
-    open = next;
-    for (const listener of listeners) listener();
-  };
-  const subscribe = (listener: () => void) => {
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
-  };
-  const getState = () => open;
-  const close = () => set(false);
-  return {
-    open: () => set(true),
-    close,
-    useOpen: () => {
-      useEffect(() => close, []);
-      return useSyncExternalStore(subscribe, getState);
-    },
-  };
-}
-
-export const skillEditor = draftEditor();
-export const promptEditor = draftEditor();
 
 /** New skill or New prompt: Create stays off until the draft passes the server’s rule. */
 export function NewDraftDialog({

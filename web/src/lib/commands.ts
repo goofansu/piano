@@ -7,6 +7,7 @@
 import type { ClientCommand, Project } from "../../../shared/wire.ts";
 import type { FolderCommand } from "./folderCommands.ts";
 import type { Appearance, GlobalCommand } from "./globalCommands.ts";
+import type { EditorPage } from "./pageEditor.ts";
 import type { ProjectCommand, ProjectDialog } from "./projectCommands.ts";
 import type { SettingsSection } from "./routes.ts";
 import type { SessionCommand, SessionTarget } from "./sessionCommands.ts";
@@ -73,14 +74,8 @@ export interface CommandEffects {
   /** Opens `url` in a new tab, without giving it this page. */
   openUrl: (url: string) => void;
   openPreviewDetails: () => void;
-  /** Opens the webhook editor on a new webhook. */
-  addWebhook: () => void;
-  /** Opens the MCP server editor on a new server. */
-  addMcpServer: () => void;
-  /** Opens the skill editor on a new skill. */
-  newSkill: () => void;
-  /** Opens the prompt editor on a new prompt. */
-  newPrompt: () => void;
+  /** Opens the Settings page's editor on a new entry. */
+  openPageEditor: (page: EditorPage) => void;
 }
 
 /** Carry out `command`'s intent. A disabled command does nothing; the result says whether it ran. */
@@ -161,17 +156,8 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
     case "preview-details":
       effects.openPreviewDetails();
       break;
-    case "add-webhook":
-      effects.addWebhook();
-      break;
-    case "add-mcp-server":
-      effects.addMcpServer();
-      break;
-    case "new-skill":
-      effects.newSkill();
-      break;
-    case "new-prompt":
-      effects.newPrompt();
+    case "page-editor":
+      effects.openPageEditor(intent.page);
       break;
     case "messages-only":
       effects.setMessagesOnly(intent.on);
