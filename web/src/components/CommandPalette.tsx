@@ -10,7 +10,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { BranchLabel } from "@/components/BranchLabel";
 import {
   CommandIcon,
   useGlobalCommands,
@@ -29,6 +28,7 @@ import {
 } from "@/components/PianoCommand";
 import { Keys } from "@/components/PianoMark";
 import { ProjectCommandIconView } from "@/components/Projects";
+import { SessionDetails } from "@/components/SessionDetails";
 import { createPaletteCatalog } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod, isImeKey } from "@/lib/keys";
@@ -308,8 +308,7 @@ const PaletteResults = memo(function PaletteResults({
                       {r.label}
                     </span>
                     <span className="ml-1 flex min-w-0 max-w-[45%] shrink-0 items-center gap-2 text-xs text-ink-3">
-                      <span className="truncate">{r.folder}</span>
-                      {r.branch && <BranchLabel branch={r.branch} />}
+                      <SessionDetails folder={r.folder} branch={r.branch} />
                     </span>
                     {r.hint && <span className="sr-only">{r.hint}</span>}
                   </CommandItem>
