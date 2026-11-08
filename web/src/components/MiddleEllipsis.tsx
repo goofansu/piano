@@ -3,7 +3,7 @@ import { middleEllipsis } from "@/lib/middleEllipsis";
 
 /** No shadcn primitive fits both ends of a name to the available width. Inherit the row's
  * typography; measure in the DOM so proportional fonts, spacing and font loading count too. */
-export function MiddleEllipsis({ text }: { text: string }) {
+export function MiddleEllipsis({ text, tooltip = true }: { text: string; tooltip?: boolean }) {
   const container = useRef<HTMLSpanElement>(null);
   const ruler = useRef<HTMLSpanElement>(null);
   const [display, setDisplay] = useState(text);
@@ -30,7 +30,7 @@ export function MiddleEllipsis({ text }: { text: string }) {
     <span
       ref={container}
       className="relative block w-full min-w-0 overflow-hidden whitespace-nowrap"
-      title={text}
+      title={tooltip ? text : ""}
     >
       <span className="sr-only">{text}</span>
       <span aria-hidden="true">{display}</span>

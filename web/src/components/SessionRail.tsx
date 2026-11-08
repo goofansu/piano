@@ -7,7 +7,7 @@ import {
   GitCommitHorizontalIcon,
   GitPullRequestIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { SessionCommandMenuItem, useSessionCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { MiddleEllipsis } from "@/components/MiddleEllipsis";
@@ -243,6 +243,7 @@ function EnvironmentRow({
   children: string;
 }) {
   const { commands, run } = useSessionCommands();
+  const [open, setOpen] = useState(false);
   const isName = menu === "repository" || menu === "branch";
   const content = (
     <>
@@ -253,7 +254,7 @@ function EnvironmentRow({
         <RailRowTitle
           className={isName ? "w-full font-mono" : mono ? "break-all font-mono" : "break-words"}
         >
-          {isName ? <MiddleEllipsis text={children} /> : children}
+          {isName ? <MiddleEllipsis text={children} tooltip={!open} /> : children}
         </RailRowTitle>
       </ItemContent>
     </>
@@ -261,7 +262,7 @@ function EnvironmentRow({
   return (
     // Keep rail clicks on their controls: modal pointer blocking lets repeated clicks select
     // the transcript beneath the rail through the document root.
-    <DropdownMenu modal={false}>
+    <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Item
           size="sm"
@@ -269,7 +270,7 @@ function EnvironmentRow({
             railRow,
             "cursor-pointer text-left hover:bg-fill-hover data-[state=open]:bg-fill-hover",
           )}
-          title={description ?? cwd ?? name}
+          title={open ? "" : (description ?? cwd ?? name)}
           asChild
         >
           <button type="button" aria-label={`${name}: ${children}`}>
