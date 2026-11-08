@@ -46,8 +46,6 @@ export interface PaletteSessionRow {
   /** The session on screen, which the row names in bold. */
   selected: boolean;
   folder: string;
-  /** The branch, shown only for a session in one of its folder's worktrees. */
-  branch: string | undefined;
   session: Pick<SessionEntry, "cwd" | "sessionId">;
 }
 
@@ -104,7 +102,6 @@ function sessionRow(t: SessionEntry): PaletteSessionRow {
     hint: t.hint,
     selected: t.selected,
     folder: t.folder,
-    branch: t.branch && t.inWorktree ? t.branch : undefined,
     session: { cwd: t.cwd, sessionId: t.sessionId },
   };
 }

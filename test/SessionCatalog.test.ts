@@ -102,28 +102,21 @@ test("the palette reaches every session that is not archived, with its folder, b
   ]);
   const byId = (id: string) => all.find((s) => s.sessionId === id)!;
   assert.deepEqual(
-    (({ folder, branch, inWorktree, project }) => ({
+    (({ folder, branch, project }) => ({
       folder,
       branch,
-      inWorktree,
       project: project?.name,
     }))(byId("open-member")),
-    { folder: "repo", branch: "feature", inWorktree: true, project: "Launch" },
-  );
-  assert.equal(
-    byId("open-unfiled").inWorktree,
-    false,
-    "the folder's own checkout is not a worktree",
+    { folder: "repo", branch: "feature", project: "Launch" },
   );
   assert.deepEqual(
-    (({ folder, folderPath, branch, inWorktree, project }) => ({
+    (({ folder, folderPath, branch, project }) => ({
       folder,
       folderPath,
       branch,
-      inWorktree,
       project: project?.name,
     }))(byId("closed-member")),
-    { folder: "app", folderPath: undefined, branch: "", inWorktree: false, project: "Launch" },
+    { folder: "app", folderPath: undefined, branch: "", project: "Launch" },
     "a closed folder's session is named by its directory",
   );
 });

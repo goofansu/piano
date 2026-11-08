@@ -110,9 +110,6 @@ test("a session row is found by its title, folder, branch, project and ID, and n
   const member = group.rows.find((r) => r.session.sessionId === "s9")!;
   assert.equal(member.value, "Session 9 repo feature Launch s9");
   assert.deepEqual(member.keywords, ["repo", "feature", "Launch"]);
-  assert.equal(member.branch, "feature", "a worktree session shows its branch");
-  const plain = group.rows.find((r) => r.session.sessionId === "s2")!;
-  assert.equal(plain.branch, undefined, "the folder's own checkout shows no branch");
   const untitled = group.rows.find((r) => r.session.sessionId === "s3")!;
   assert.deepEqual([untitled.label, untitled.untitled], ["Untitled", true]);
   assert.match(untitled.value, /^Untitled repo main/);
