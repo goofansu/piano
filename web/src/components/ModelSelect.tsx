@@ -1,6 +1,12 @@
 import type { ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
+import {
+  BookmarkCheckIcon,
+  BookmarkIcon,
+  ChevronDownIcon,
+  RefreshCwIcon,
+  Undo2Icon,
+} from "lucide-react";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { EffortSelect } from "@/components/EffortSelect";
 import { IconButton } from "@/components/IconButton";
@@ -14,6 +20,7 @@ import {
 } from "@/components/PianoCommand";
 import { Popover, PopoverTrigger } from "@/components/PianoPopover";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { isImeKey } from "@/lib/keys";
@@ -258,30 +265,36 @@ export function ModelSelect({
                 {view.defaultLabel ?? "Not available"}
               </span>
             </span>
-            {view.canUseDefault && (
-              <Button
-                variant="ghost"
-                size="xs"
-                className="ml-auto shrink-0 pointer-coarse:min-h-11"
+            <ButtonGroup className="shrink-0">
+              <IconButton
+                variant="outline"
+                size="header"
+                label="Use default"
+                disabled={!view.canUseDefault}
                 onClick={() => {
                   onUseDefaults();
                   finish();
                 }}
               >
-                Use default
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="xs"
-              className="w-28 shrink-0 pointer-coarse:min-h-11"
-              disabled={!view.canSaveDefault}
-              aria-busy={saving}
-              onClick={() => void models.saveDefaults(want, effort)}
-            >
-              {saving && <Spinner data-icon="inline-start" aria-hidden />}
-              {saving ? "Saving…" : view.isDefault ? "Default" : "Make default"}
-            </Button>
+                <Undo2Icon aria-hidden />
+              </IconButton>
+              <IconButton
+                variant="outline"
+                size="header"
+                label={view.isDefault ? "Default" : "Make default"}
+                disabled={!view.canSaveDefault}
+                aria-busy={saving}
+                onClick={() => void models.saveDefaults(want, effort)}
+              >
+                {saving ? (
+                  <Spinner aria-hidden />
+                ) : view.isDefault ? (
+                  <BookmarkCheckIcon aria-hidden />
+                ) : (
+                  <BookmarkIcon aria-hidden />
+                )}
+              </IconButton>
+            </ButtonGroup>
           </div>
         </div>
       </PickerContent>
