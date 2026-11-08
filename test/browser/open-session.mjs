@@ -613,9 +613,10 @@ await run(
     assert.ok(
       await page.evaluate(`document.querySelector('main header nav button').checkVisibility()`),
     );
+    // The title's second line is the sidebar row's folder and branch line, each part named.
     assert.match(
-      await page.evaluate(`document.querySelector('main header').innerText`),
-      /feat-live/,
+      await page.evaluate(`document.querySelector('main header').textContent`),
+      /Folder:\s*api\s*Git branch:\s*feat-live/,
     );
     await page.capture("17-wide-one-area");
     await page.click("button", "Session information and actions");
