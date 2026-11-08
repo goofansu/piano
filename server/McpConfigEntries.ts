@@ -54,7 +54,15 @@ export type McpAuth =
   | { readonly _tag: "header" }
   | { readonly _tag: "oauth"; readonly url: string };
 
-const isAuthorization = (header: string) => header.toLowerCase() === "authorization";
+/** Whether `header` is the `Authorization` header, as HTTP names it: case-insensitively. */
+export const isAuthorization = (header: string) => header.toLowerCase() === "authorization";
+
+const offIn = (name: string) =>
+  `MCP ${name} is disabled or hidden in Pi. Enable it in Pi before continuing.`;
+/** Why Pi would not offer `entry`'s tools, when one of its own switches turns it off; `name` is
+ * how the user knows it. */
+export const switchedOff = (entry: McpServerEntry, name: string) =>
+  entry.config.enabled === false || entry.config.exposure === "hidden" ? offIn(name) : undefined;
 
 export const authOf = (config: McpServerConfig): McpAuth => {
   if (!("url" in config)) return { _tag: "stdio" };
@@ -201,17 +209,10 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
     try {
       const entry = find(catalog);
       const identity = entry && { entry, removalKey: removalKey(entry) };
-      if (
-        builtinDisabled() ||
-        entry?.config.enabled === false ||
-        entry?.config.exposure === "hidden"
-      ) {
-        return {
-          status: "blocked",
-          ...identity,
-          detail: `MCP ${catalog.name} is disabled or hidden in Pi. Enable it in Pi before continuing.`,
-        };
-      }
+      const off = builtinDisabled()
+        ? offIn(catalog.name)
+        : entry && switchedOff(entry, catalog.name);
+      if (off) return { status: "blocked", ...identity, detail: off };
       return identity ? { status: "ready", ...identity } : { status: "missing" };
     } catch (cause) {
       return { status: "blocked", detail: message(cause, "Check Pi's global MCP configuration.") };

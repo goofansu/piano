@@ -6,7 +6,12 @@
  * when it asks, and a local command is started and stopped again. Nothing here mutates running
  * sessions: a new session reads the updated setup. */
 import { join } from "node:path";
-import type { McpServerConfig, McpServerEntry } from "@earendil-works/pi-coding-agent";
+import {
+  type McpServerConfig,
+  type McpServerEntry,
+  ModelRegistry,
+  ModelRuntime,
+} from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
 // Pi 1.4.0 exports neither its MCP credential store nor its sign-in flow. Keep these pinned
 // compatibility dependencies here; McpSetup tests exercise the installed helpers. Recheck on
@@ -32,11 +37,13 @@ import {
 } from "../shared/mcp.ts";
 import {
   authOf,
+  isAuthorization,
   isTarget,
   type McpCatalogEntry,
   McpConfigEntries,
   McpConfigEntryError,
   removalKey,
+  switchedOff,
 } from "./McpConfigEntries.ts";
 import { agentDir } from "./PiEnv.ts";
 import {
@@ -57,7 +64,6 @@ const CONNECT_TIMEOUT_MS = 20_000;
 /** How long a local command may take to start: `npx` or `uvx` may download the server first. */
 const START_TIMEOUT_MS = 60_000;
 
-const isAuthorization = (header: string) => header.toLowerCase() === "authorization";
 const withoutAuthorization = (headers: Record<string, string> | undefined) =>
   Object.fromEntries(Object.entries(headers ?? {}).filter(([key]) => !isAuthorization(key)));
 const authorizationOf = (headers: Record<string, string> | undefined) =>
@@ -171,12 +177,8 @@ export const McpSetupLive = Layer.effect(
       };
       const matched = catalogOf(entry.config);
       const identity = matched ? { ...common, catalog: matched.id } : common;
-      const detail =
-        entry.config.enabled === false || entry.config.exposure === "hidden"
-          ? {
-              detail: `MCP ${label(entry)} is disabled or hidden in Pi. Enable it in Pi before continuing.`,
-            }
-          : {};
+      const off = switchedOff(entry, label(entry));
+      const detail = off ? { detail: off } : {};
       try {
         return {
           ...identity,
@@ -243,19 +245,38 @@ export const McpSetupLive = Layer.effect(
         /* Nothing to find them by later; a later sign-in replaces them. */
       }
     };
+    /** The provider's API key as Pi resolves it for an MCP entry's `auth`, read from the agent
+     * directory on every request so a refresh or a new sign-in applies; undefined without one. */
+    const providerToken = async (provider: string) => {
+      try {
+        const runtime = await ModelRuntime.create({
+          authPath: join(directory, "auth.json"),
+          modelsPath: join(directory, "models.json"),
+          refreshOnCreate: false,
+        });
+        return await new ModelRegistry(runtime).getApiKeyForProvider(provider);
+      } catch {
+        return undefined;
+      }
+    };
+    /** Pi's client for `entry`, given what Pi's own runtime gives it: MCP OAuth credentials, the
+     * `/login` provider token and Pi's MCP log. Connecting is the caller's. */
+    const connect = (entry: McpServerEntry) =>
+      new McpServerConnection({
+        entry,
+        cwd: directory,
+        createTransport: createDefaultTransport,
+        credentials,
+        providerToken,
+        log: new McpServerLog(join(directory, "mcp.log")),
+        onTools: () => {},
+      });
     /** Whether Pi's own client connects to `entry`, unsaved: connected, asks for a sign-in, or
      * failed with Pi's reason (a command's includes the tail of its stderr). */
     const reach = async (
       entry: McpServerEntry,
     ): Promise<"connected" | "sign-in" | { readonly failed: string | undefined }> => {
-      const connection = new McpServerConnection({
-        entry,
-        cwd: directory,
-        createTransport: createDefaultTransport,
-        credentials,
-        log: new McpServerLog(join(directory, "mcp.log")),
-        onTools: () => {},
-      });
+      const connection = connect(entry);
       const timer = setTimeout(
         () => void connection.close().catch(() => undefined),
         "url" in entry.config ? CONNECT_TIMEOUT_MS : START_TIMEOUT_MS,
@@ -322,14 +343,7 @@ export const McpSetupLive = Layer.effect(
             return "Paste the full address of the page your browser opened after approving.";
           }
         };
-        const connection = new McpServerConnection({
-          entry,
-          cwd: directory,
-          createTransport: createDefaultTransport,
-          credentials,
-          log: new McpServerLog(join(directory, "mcp.log")),
-          onTools: () => {},
-        });
+        const connection = connect(entry);
         let saved = !save;
         const done = async (signedIn: string) => {
           if (save) {
@@ -435,7 +449,13 @@ export const McpSetupLive = Layer.effect(
               }),
             );
           }
-          const auth = authOf(entry.config)._tag === "header" ? ", the Authorization header" : "";
+          const how = authOf(entry.config);
+          const auth =
+            how._tag === "header"
+              ? ", the Authorization header"
+              : how._tag === "provider"
+                ? `, Pi's ${how.provider} credentials`
+                : "";
           return Effect.fail(
             new McpSetupError({
               detail: `Could not connect to MCP ${label(entry)}. Check the URL${auth} and the network, then try again.`,
