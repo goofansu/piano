@@ -8,7 +8,12 @@ import type { ClientCommand, ServerMessage, SessionPreview } from "../../../shar
 import { type AppState, isSession } from "../store.ts";
 import { browserEnvironment, type ObservationEnvironment } from "./observation.ts";
 import { sessionReady } from "./sessionContext.ts";
-import { hostedPreview, previewStatus } from "./sessionPreview.ts";
+import {
+  hostedPreview,
+  type PreviewClaim,
+  previewClaimHolds,
+  previewStatus,
+} from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
 /** The last details answer for one session's app. */
@@ -43,6 +48,18 @@ export function seenPreview(
   if (!preview || (sessionReady(page) && preview.instanceId !== observed.unconfirmed))
     return preview;
   return { ...preview, state: "unknown", ready: false, warming: false, url: null, detail: "" };
+}
+
+/**
+ * The app the user chose to inspect, as `seenPreview` shows it, while `claim` still holds: none
+ * once a new attachment, a restarted Pi or a replaced app ends the claim (`previewClaimHolds`).
+ */
+export function claimedPreview(
+  page: AppState,
+  observed: Pick<PreviewObservationState, "unconfirmed">,
+  claim: PreviewClaim | null,
+): SessionPreview | undefined {
+  return claim && previewClaimHolds(page, claim) ? seenPreview(page, observed) : undefined;
 }
 
 /** Whether a record was taken for the session the page shows now: same checkout, same session. */

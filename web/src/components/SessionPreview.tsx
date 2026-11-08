@@ -36,13 +36,17 @@ import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
-import { previewObservation, seenDetails, seenPreview } from "@/lib/previewObservation";
+import {
+  claimedPreview,
+  previewObservation,
+  seenDetails,
+  seenPreview,
+} from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
   type PreviewClaim,
   type PreviewTone,
   previewAccess,
-  previewClaimHolds,
   previewFace,
 } from "@/lib/sessionPreview";
 import type { AppState } from "@/store";
@@ -62,6 +66,11 @@ function usePreviewObservation() {
 /** The selected session's app as this page sees it; see `seenPreview`. */
 export function useSeenPreview(state: AppState) {
   return seenPreview(state, usePreviewObservation());
+}
+
+/** The app the user chose to inspect, while `claim` holds; see `claimedPreview`. */
+export function useClaimedPreview(state: AppState, claim: PreviewClaim | null) {
+  return claimedPreview(state, usePreviewObservation(), claim);
 }
 
 /** The selected session's preview commands, run through the host like any other surface's. */
@@ -242,8 +251,7 @@ export function PreviewDetailsDialog({
   const openPreview = useOpenPreview();
   const observed = usePreviewObservation();
   const openRef = useRef<HTMLAnchorElement>(null);
-  const preview =
-    claim && previewClaimHolds(state, claim) ? seenPreview(state, observed) : undefined;
+  const preview = claimedPreview(state, observed, claim);
   const details = seenDetails(state, observed);
   return (
     <Dialog open={!!preview} onOpenChange={(o) => !o && close()}>
