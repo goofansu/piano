@@ -272,8 +272,10 @@ export function ModelSelect({
                 label="Use default"
                 disabled={!view.canUseDefault}
                 onClick={() => {
+                  // Stay open to show the defaults taking effect; the button disables, so focus
+                  // moves to the default's effort once Pi shows that model.
+                  setFocusModel(catalog?.defaultModel ?? null);
                   onUseDefaults();
-                  finish();
                 }}
               >
                 <Undo2Icon aria-hidden />
