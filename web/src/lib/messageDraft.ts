@@ -10,11 +10,12 @@
 import type { Attachment, ServerMessage } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import {
+  attachmentsRefusal,
   base64Bytes,
+  IMAGE_TYPE_LIST,
   imageType,
-  MAX_ATTACHMENT_BYTES,
-  MAX_ATTACHMENTS,
   MAX_IMAGE_BYTES,
+  mebibytes,
 } from "../../../shared/attachments.ts";
 import { cutText } from "../../../shared/cutText.ts";
 import { inputVerdictOf } from "../../../shared/inputVerdict.ts";
@@ -49,19 +50,15 @@ export interface ImageDraft {
 /** The draft has something to send: visible text or an image. */
 export const hasContent = (draft: { text: string; images: Pick<ImageDraft, "items"> }) =>
   draft.text.trim().length > 0 || draft.images.items.length > 0;
-const TOO_MANY = `Attach up to ${MAX_ATTACHMENTS} images per message.`;
-const TOO_LARGE = `Images must total ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB or less.`;
+const heldBytes = (items: readonly Attachment[]) =>
+  items.reduce((n, a) => n + base64Bytes(a.data), 0);
 /**
  * Why `items` cannot be sent as one message, or "" when they can. A draft can hold more than the
  * limits allow (refused input returned while images were added): it stays editable until an image
  * is removed.
  */
 const overLimit = (items: readonly Attachment[]) =>
-  items.length > MAX_ATTACHMENTS
-    ? TOO_MANY
-    : items.reduce((n, a) => n + base64Bytes(a.data), 0) > MAX_ATTACHMENT_BYTES
-      ? TOO_LARGE
-      : "";
+  attachmentsRefusal(items.length, heldBytes(items));
 /** The draft has content, no image is still being read, and its images fit in one message. */
 export const sendable = (draft: { text: string; images: Pick<ImageDraft, "items" | "busy"> }) =>
   !draft.images.busy && hasContent(draft) && !overLimit(draft.images.items);
@@ -83,29 +80,32 @@ export type ImageCheck =
   | { ok: false; reason: string };
 
 /**
- * Whether `files` may join a draft that already holds `current`, per docs/image-attachments.md:
- * at most ten images and 50 MiB together, each non-empty, up to 10 MiB, with a PNG, JPEG, GIF
- * or WebP signature its declared type (if any) agrees with. All or none are accepted.
+ * Whether `files` may join a draft that already holds `current`, per shared/attachments.ts and
+ * docs/image-attachments.md: the batch within the message limits, each file non-empty, within the
+ * per-image limit, with an accepted signature its declared type (if any) agrees with. All or none
+ * are accepted.
  */
 export function checkImages(
   current: readonly Attachment[],
   files: readonly ImageCandidate[],
 ): ImageCheck {
-  if (current.length + files.length > MAX_ATTACHMENTS) return { ok: false, reason: TOO_MANY };
-  if (
-    current.reduce((n, a) => n + base64Bytes(a.data), 0) + files.reduce((n, f) => n + f.size, 0) >
-    MAX_ATTACHMENT_BYTES
-  )
-    return { ok: false, reason: TOO_LARGE };
+  const refusal = attachmentsRefusal(
+    current.length + files.length,
+    heldBytes(current) + files.reduce((n, f) => n + f.size, 0),
+  );
+  if (refusal) return { ok: false, reason: refusal };
   const mimeTypes: Attachment["mimeType"][] = [];
   for (const file of files) {
     if (!file.size || file.size > MAX_IMAGE_BYTES)
-      return { ok: false, reason: `${file.name}: choose an image up to 10 MiB.` };
+      return {
+        ok: false,
+        reason: `${file.name}: choose an image up to ${mebibytes(MAX_IMAGE_BYTES)}.`,
+      };
     const mimeType = imageType(file.head);
     if (!mimeType || (file.type && file.type !== mimeType))
       return {
         ok: false,
-        reason: `${file.name}: use PNG, JPEG, GIF or WebP. Other files aren't supported yet.`,
+        reason: `${file.name}: use ${IMAGE_TYPE_LIST}. Other files aren't supported yet.`,
       };
     mimeTypes.push(mimeType);
   }

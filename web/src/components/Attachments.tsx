@@ -1,4 +1,4 @@
-import { base64Bytes, IMAGE_TYPES } from "@shared/attachments";
+import { base64Bytes, IMAGE_TYPE_NAMES, IMAGE_TYPES } from "@shared/attachments";
 import type { Attachment as AttachmentData, RenderMsg } from "@shared/wire";
 import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
@@ -77,7 +77,7 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
         type="button"
         className="shrink-0"
         label="Attach images"
-        tooltip="Attach images (PNG, JPEG, GIF, WebP)"
+        tooltip={`Attach images (${IMAGE_TYPE_NAMES.join(", ")})`}
         aria-controls={id}
         disabled={disabled || draft.busy}
         onClick={() => input.current?.click()}
