@@ -307,8 +307,13 @@ const PaletteResults = memo(function PaletteResults({
                     >
                       {r.label}
                     </span>
-                    <span className="ml-1 flex min-w-0 max-w-[45%] shrink-0 items-center gap-2 text-xs text-ink-3">
-                      <SessionDetails folder={r.folder} branch={r.branch} />
+                    {/* Size each detail from its content, sharing the cap only when both need it. */}
+                    <span className="ml-1 grid min-w-0 max-w-[45%] shrink-0 auto-cols-[minmax(0,auto)] grid-flow-col items-center gap-2 text-xs text-ink-3">
+                      <SessionDetails
+                        folder={r.folder}
+                        branch={r.branch}
+                        folderClassName="max-w-none"
+                      />
                     </span>
                     {r.hint && <span className="sr-only">{r.hint}</span>}
                   </CommandItem>
