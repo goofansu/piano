@@ -1,7 +1,7 @@
 import type { LoginPrompt, OAuthProvider } from "@shared/wire";
-import { CheckCircleIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
+import { CheckCircleIcon, CheckIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { useCopy } from "@/components/CopyButton";
 import {
   Dialog,
   DialogContent,
@@ -157,20 +157,7 @@ function SignInDialog({
                   spellCheck={false}
                 />
                 <InputGroupAddon align="inline-end">
-                  <InputGroupButton
-                    size="icon-sm"
-                    aria-label="Copy device code"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(deviceCode);
-                        toast.success("Device code copied");
-                      } catch {
-                        toast.error("Could not copy. Select the code and copy it manually.");
-                      }
-                    }}
-                  >
-                    <CopyIcon />
-                  </InputGroupButton>
+                  <CopyDeviceCode code={deviceCode} />
                 </InputGroupAddon>
               </InputGroup>
             </Field>
@@ -217,6 +204,20 @@ function SignInDialog({
     </Dialog>
   );
 }
+/** Copies the device code, its icon turning to a check while the copy is confirmed. */
+function CopyDeviceCode({ code }: { code: string }) {
+  const { copied, copy } = useCopy(code, "Could not copy. Select the code to copy it.");
+  return (
+    <InputGroupButton
+      size="icon-sm"
+      aria-label={copied ? "Device code copied" : "Copy device code"}
+      onClick={copy}
+    >
+      {copied ? <CheckIcon /> : <CopyIcon />}
+    </InputGroupButton>
+  );
+}
+
 function LoginPromptForm({
   prompt,
   label,

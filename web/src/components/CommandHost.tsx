@@ -23,6 +23,7 @@ import {
 import { useTheme } from "next-themes";
 import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
+import { copyText } from "@/components/CopyButton";
 import { promptEditor, skillEditor } from "@/components/DraftDialogs";
 import {
   Dialog,
@@ -69,12 +70,8 @@ import type { SendDisposition } from "@/lib/ws";
 import type { AppState } from "@/store";
 
 async function copySessionValue(value: string, label: string) {
-  try {
-    await navigator.clipboard.writeText(value);
-    toast.success(`${label} copied`);
-  } catch {
-    toast.error(`Could not copy the ${label[0]?.toLowerCase()}${label.slice(1)}.`);
-  }
+  const failure = `Could not copy the ${label[0]?.toLowerCase()}${label.slice(1)}.`;
+  if (await copyText(value, failure)) toast.success(`${label} copied`);
 }
 
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
