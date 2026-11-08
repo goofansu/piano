@@ -11,7 +11,6 @@ import {
 import { Fragment, type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import {
   CommandIcon,
-  CommandLink,
   useCommands,
   useOpenPreview,
   useSessionCommands,
@@ -118,22 +117,29 @@ function PaneRow({
   );
 }
 
-/** The linked pull request, opened on GitHub in a new tab: the sheet's one way out of Piano. */
-function PullRequestRow({
-  url,
-  name,
+/**
+ * A link out of Piano as a sheet row: its icon in the leading column the other rows use, so the
+ * labels align, then its label, a muted value and the external-link icon. It opens a new tab, so
+ * `onOpen` closes the sheet as choosing an action would.
+ */
+function LinkRow({
+  href,
+  icon,
+  value: rowValue,
   onOpen,
+  children,
 }: {
-  url: string;
-  /** The pull request's name ("#42"), once the link names a number. */
-  name: string | undefined;
+  href: string;
+  icon: ReactNode;
+  value?: ReactNode;
   onOpen: () => void;
+  children: ReactNode;
 }) {
   return (
     <Button asChild variant="ghost" className={row}>
-      <a href={url} target="_blank" rel="noreferrer" onClick={onOpen}>
-        <GitPullRequestIcon /> Pull request
-        {name && <span className={value}>{name}</span>}
+      <a href={href} target="_blank" rel="noopener noreferrer" onClick={onOpen}>
+        {icon} {children}
+        {rowValue && <span className={value}>{rowValue}</span>}
         <ExternalLinkIcon data-icon="inline-end" className="ml-auto text-muted-foreground" />
       </a>
     </Button>
@@ -252,7 +258,16 @@ export function SessionMenuSheet({
           <>
             <SheetTitle className="sr-only">Session</SheetTitle>
             {/* The pull request opens in a browser tab, so the sheet closes as after an action. */}
-            {pr && <PullRequestRow url={pr.url} name={pr.reference && pr.name} onOpen={onLeave} />}
+            {pr && (
+              <LinkRow
+                href={pr.url}
+                icon={<GitPullRequestIcon />}
+                value={pr.reference && pr.name}
+                onOpen={onLeave}
+              >
+                Pull request
+              </LinkRow>
+            )}
             {preview && (
               <PreviewRow
                 preview={preview}
@@ -316,12 +331,13 @@ export function SessionMenuSheet({
                   )}
                 </div>
                 {openPreview && (
-                  <Button asChild variant="ghost" className={row}>
-                    <CommandLink command={openPreview} onClick={onLeave}>
-                      {openPreview.label}
-                      <ExternalLinkIcon data-icon="inline-end" className="ml-auto" />
-                    </CommandLink>
-                  </Button>
+                  <LinkRow
+                    href={openPreview.intent.url}
+                    icon={<CommandIcon icon={openPreview.icon} />}
+                    onOpen={onLeave}
+                  >
+                    {openPreview.label}
+                  </LinkRow>
                 )}
                 {commands
                   .filter((c) => c.id === "preview-details" || c.id === "stop-preview")
