@@ -11,6 +11,8 @@ import {
 import { Fragment, type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import {
   CommandIcon,
+  CommandLink,
+  type LinkCommand,
   useCommands,
   useOpenPreview,
   useSessionCommands,
@@ -119,29 +121,41 @@ function PaneRow({
 
 /**
  * A link out of Piano as a sheet row: its icon in the leading column the other rows use, so the
- * labels align, then its label, a muted value and the external-link icon. It opens a new tab, so
- * `onOpen` closes the sheet as choosing an action would.
+ * labels align, then its label, a muted value and the external-link icon. `to` is a URL, or a link
+ * command, which `CommandLink` renders as every surface does. It opens a new tab, so `onOpen`
+ * closes the sheet as choosing an action would.
  */
 function LinkRow({
-  href,
+  to,
   icon,
   value: rowValue,
   onOpen,
   children,
 }: {
-  href: string;
+  to: string | LinkCommand;
   icon: ReactNode;
   value?: ReactNode;
   onOpen: () => void;
   children: ReactNode;
 }) {
+  const content = (
+    <>
+      {icon} {children}
+      {rowValue && <span className={value}>{rowValue}</span>}
+      <ExternalLinkIcon data-icon="inline-end" className="ml-auto text-muted-foreground" />
+    </>
+  );
   return (
     <Button asChild variant="ghost" className={row}>
-      <a href={href} target="_blank" rel="noopener noreferrer" onClick={onOpen}>
-        {icon} {children}
-        {rowValue && <span className={value}>{rowValue}</span>}
-        <ExternalLinkIcon data-icon="inline-end" className="ml-auto text-muted-foreground" />
-      </a>
+      {typeof to === "string" ? (
+        <a href={to} target="_blank" rel="noopener noreferrer" onClick={onOpen}>
+          {content}
+        </a>
+      ) : (
+        <CommandLink command={to} onClick={onOpen}>
+          {content}
+        </CommandLink>
+      )}
     </Button>
   );
 }
@@ -260,7 +274,7 @@ export function SessionMenuSheet({
             {/* The pull request opens in a browser tab, so the sheet closes as after an action. */}
             {pr && (
               <LinkRow
-                href={pr.url}
+                to={pr.url}
                 icon={<GitPullRequestIcon />}
                 value={pr.reference && pr.name}
                 onOpen={onLeave}
@@ -332,7 +346,7 @@ export function SessionMenuSheet({
                 </div>
                 {openPreview && (
                   <LinkRow
-                    href={openPreview.intent.url}
+                    to={openPreview}
                     icon={<CommandIcon icon={openPreview.icon} />}
                     onOpen={onLeave}
                   >
