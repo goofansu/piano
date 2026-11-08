@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { imageLabel } from "../shared/attachments.ts";
 import type { Attachment, ServerMessage } from "../shared/wire.ts";
 import {
   checkImages,
@@ -141,6 +142,16 @@ test("PNG, JPEG, GIF and WebP are recognized by signature; the declared type mus
     ) ?? "",
     unsupported,
   );
+});
+
+test("an image tile names its type and size as the refusals do, in binary units", () => {
+  // 1.5 × 1024 × 1024 = 1572864; 9.5 MiB = 9961472; 1.5 KiB = 1536.
+  assert.equal(imageLabel("image/jpeg", 1572864), "JPEG · 1.5 MiB");
+  assert.equal(imageLabel("image/jpeg", 9961472), "JPEG · 9.5 MiB");
+  assert.equal(imageLabel("image/webp", 10 * MiB), "WebP · 10 MiB");
+  assert.equal(imageLabel("image/png", 1536), "PNG · 1.5 KiB");
+  assert.equal(imageLabel("image/gif", 1024), "GIF · 1 KiB");
+  assert.equal(imageLabel("image/png", 512), "PNG · 512 B");
 });
 
 const PNG_BASE64 = Buffer.from(SIGNATURES["image/png"]).toString("base64");
