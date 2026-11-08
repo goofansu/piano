@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/PianoSelect";
+import { SavedSecretInput, useSavedSecret } from "@/components/SavedSecretInput";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -33,12 +34,6 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -154,8 +149,8 @@ type Auth = "oauth" | "header";
  * they belong to, Add MCP server or Save in the footer. Adding also takes the `mcpServers` JSON a server's
  * README shows, one server at a time, on its JSON tab. A URL server is saved only once it
  * connects: one that cannot is refused on its URL, and one that asks for a sign-in closes this
- * dialog for the sign-in, which saves it. A saved Authorization header shows as a masked
- * placeholder: blank keeps it, typing replaces it, Remove clears it on save.
+ * dialog for the sign-in, which saves it. A saved Authorization header stays saved until the
+ * field replaces or removes it.
  */
 export function McpServerDialog({
   entry,
@@ -179,8 +174,7 @@ export function McpServerDialog({
   const [auth, setAuth] = useState<Auth>(
     config && "url" in config && config.hasAuthorization ? "header" : "oauth",
   );
-  const [authorization, setAuthorization] = useState("");
-  const [clearAuthorization, setClearAuthorization] = useState(false);
+  const authorization = useSavedSecret(!!config && "url" in config && config.hasAuthorization);
   const [headers, setHeaders] = useState<Pair[]>(
     config && "url" in config ? pairs(config.headers) : [],
   );
@@ -198,7 +192,6 @@ export function McpServerDialog({
   // A refusal belongs to the tab that sent it, so switching tabs does not carry it over.
   const refusal = useFieldRefusal(MCP_FIELDS, actions.error);
   const errorAt = (field: McpField | undefined) => refusal.at(field, tab);
-  const hasAuthorization = !!config && "url" in config && config.hasAuthorization;
   const argList = args
     .split("\n")
     .map((arg) => arg.trim())
@@ -252,11 +245,9 @@ export function McpServerDialog({
             url,
             headers: record(headers),
             ...(auth === "header"
-              ? clearAuthorization
-                ? { authorization: null }
-                : authorization
-                  ? { authorization }
-                  : {}
+              ? authorization.change === undefined
+                ? {}
+                : { authorization: authorization.change }
               : { authorization: null }),
           }
         : { command, args: argList, env: record(env), ...(cwd.trim() ? { cwd: cwd.trim() } : {}) };
@@ -394,38 +385,13 @@ export function McpServerDialog({
                 {auth === "header" && (
                   <Field>
                     <FieldLabel htmlFor="mcp-authorization">Authorization header</FieldLabel>
-                    <InputGroup>
-                      <InputGroupInput
-                        id="mcp-authorization"
-                        type="password"
-                        autoComplete="new-password"
-                        value={authorization}
-                        disabled={busy}
-                        placeholder={
-                          hasAuthorization && !clearAuthorization ? "••••••••••••••••" : "Bearer …"
-                        }
-                        aria-description={
-                          hasAuthorization && !clearAuthorization
-                            ? "A header is saved; blank keeps it."
-                            : undefined
-                        }
-                        onChange={(e) => {
-                          setAuthorization(e.target.value);
-                          setClearAuthorization(false);
-                        }}
-                      />
-                      {hasAuthorization && !authorization && (
-                        <InputGroupAddon align="inline-end">
-                          <InputGroupButton
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setClearAuthorization(!clearAuthorization)}
-                          >
-                            {clearAuthorization ? "Keep" : "Remove"}
-                          </InputGroupButton>
-                        </InputGroupAddon>
-                      )}
-                    </InputGroup>
+                    <SavedSecretInput
+                      secret={authorization}
+                      id="mcp-authorization"
+                      noun="header"
+                      placeholder="Bearer …"
+                      disabled={busy}
+                    />
                   </Field>
                 )}
                 <FieldSet>
