@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { type ComponentProps, type RefObject, useEffect, useRef } from "react";
+import { type ComponentProps, type RefObject, useCallback, useEffect, useRef } from "react";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { wheelSideways } from "@/lib/wheelSideways";
 
@@ -35,18 +35,22 @@ function useSelectedInView(list: RefObject<HTMLDivElement | null>) {
  * there is more, and `scroll-fade-x` fades both edges always in a browser without scroll-driven
  * animations, even a lone tab's underline.
  */
-function ScrollingTabsList({ className, onWheel, ...props }: ComponentProps<typeof TabsList>) {
+function ScrollingTabsList({ className, ...props }: ComponentProps<typeof TabsList>) {
   const ref = useRef<HTMLDivElement>(null);
   useSelectedInView(ref);
+  const list = useCallback((element: HTMLDivElement | null) => {
+    ref.current = element;
+    const detach = wheelSideways(element);
+    return () => {
+      ref.current = null;
+      detach?.();
+    };
+  }, []);
   return (
     <TabsList
-      ref={ref}
+      ref={list}
       variant="line"
       {...props}
-      onWheel={(event) => {
-        onWheel?.(event);
-        wheelSideways(event);
-      }}
       className={cn(
         "relative max-w-full scrollbar-none justify-start overflow-x-auto overflow-y-hidden p-0 group-data-horizontal/tabs:h-auto",
         className,
