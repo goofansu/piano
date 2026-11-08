@@ -6,6 +6,7 @@ import {
   type WebhookEvent,
   type WebhookField,
 } from "@shared/webhooks";
+import { cn } from "cn";
 import { MoreHorizontalIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import {
   SettingsList,
   SettingsLoadFailure,
@@ -140,7 +142,7 @@ export function WebhookSettings() {
           <RemovalDialog
             open={!!removing}
             title="Delete webhook?"
-            description={`Deliveries to ${removing ? host(removing.url) : "this receiver"} stop; its saved token is removed too.`}
+            description={`Deliveries to ${removing ? host(removing.url) : "this receiver"} stop, and its saved token is deleted.`}
             action="Delete"
             progress="Deleting…"
             busy={busy}
@@ -240,7 +242,12 @@ function WebhookRow({
   const name = host(hook.url);
   const delivery = deliveryFace(hook.lastDelivery, now);
   return (
-    <Item className={settingsRow} data-active={hook.active}>
+    <Item
+      role="listitem"
+      data-row
+      className={cn(settingsRow, rowActionsWidth.list[1], "relative")}
+      data-active={hook.active}
+    >
       <ItemContent className="min-w-0 gap-0.5">
         <ItemTitle className={hook.active ? undefined : "text-ink-2"}>
           <span className="truncate">{name}</span>
@@ -253,7 +260,8 @@ function WebhookRow({
           {delivery.text}
         </p>
       </ItemContent>
-      <ItemActions className="shrink-0 gap-1">
+      {/* The switch is the row's value: it steps aside beneath the revealed ⋯. */}
+      <ItemActions data-motion="aside" className="shrink-0">
         <Switch
           size="sm"
           aria-label={`Active ${name}`}
@@ -261,6 +269,8 @@ function WebhookRow({
           disabled={disabled}
           onCheckedChange={setActive}
         />
+      </ItemActions>
+      <RowActions className="top-1/2 right-4 -translate-y-1/2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <PianoButton
@@ -283,7 +293,7 @@ function WebhookRow({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </ItemActions>
+      </RowActions>
     </Item>
   );
 }
@@ -305,7 +315,6 @@ function WebhookEditor({
     hook?.events ?? ["session.completed"],
   );
   const [active, setActive] = useState(hook?.active ?? true);
-  const [eventsError, setEventsError] = useState(false);
   // A failed save stays in the open dialog, on its fields; a saved one closes it with a toast.
   const actions = useSetupActions({
     refresh,
@@ -319,12 +328,11 @@ function WebhookEditor({
     actions.error && errorField === field ? actions.error : undefined;
   const urlError = errorAt("url");
   const tokenError = errorAt("token");
+  // Create and Save wait for a URL and at least one event, as New skill waits for its draft.
+  const ready = url.trim() !== "" && events.length > 0;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!events.length) {
-      setEventsError(true);
-      return;
-    }
+    if (!ready) return;
     const saved = await actions.run({
       id: "save",
       run: () =>
@@ -351,7 +359,10 @@ function WebhookEditor({
         if (!open && !busy) close();
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto" aria-describedby={undefined}>
+      <DialogContent
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>{hook ? "Edit webhook" : "New webhook"}</DialogTitle>
         </DialogHeader>
@@ -366,7 +377,6 @@ function WebhookEditor({
                 value={url}
                 aria-invalid={!!urlError}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com/piano"
               />
               {urlError && <FieldError role="alert">{urlError}</FieldError>}
             </Field>
@@ -403,20 +413,14 @@ function WebhookEditor({
               {tokenError && <FieldError role="alert">{tokenError}</FieldError>}
             </Field>
             <FieldSet>
-              <FieldLegend>Events</FieldLegend>
+              <FieldLegend variant="label">Events</FieldLegend>
               {/* A compact checklist, as Linear lists resource types: name only, two columns when they fit. */}
               <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
                 {WEBHOOK_EVENTS.map((event) => (
-                  <Field
-                    key={event}
-                    orientation="horizontal"
-                    className="items-center gap-2.5"
-                    data-invalid={!events.length}
-                  >
+                  <Field key={event} orientation="horizontal" className="items-center gap-2.5">
                     <Checkbox
                       id={event}
                       checked={events.includes(event)}
-                      aria-invalid={!events.length}
                       onCheckedChange={(checked) =>
                         setEvents(
                           checked === true ? [...events, event] : events.filter((e) => e !== event),
@@ -429,9 +433,6 @@ function WebhookEditor({
                   </Field>
                 ))}
               </div>
-              {eventsError && !events.length && (
-                <FieldError role="alert">Select at least one event.</FieldError>
-              )}
             </FieldSet>
             <Field orientation="horizontal" className="items-center gap-2.5">
               <Switch id="webhook-active" checked={active} onCheckedChange={setActive} />
@@ -443,7 +444,7 @@ function WebhookEditor({
             <Button type="button" variant="outline" disabled={busy} onClick={close}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || !ready}>
               {busy && <Spinner data-icon="inline-start" />}
               {hook ? "Save" : "Create webhook"}
             </Button>
