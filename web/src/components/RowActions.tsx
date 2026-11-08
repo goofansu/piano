@@ -54,15 +54,16 @@ export type RowOpen = {
 
 /**
  * One row of a `SettingsList` (a Settings list, the Projects index, a project's sessions): media,
- * a title, the lines under it, an optional value at its end and its actions. It decides every
+ * a title, the lines under it, an optional time at its end and its actions. It decides every
  * reveal fact `index.css` reads, so no caller repeats them:
  *
  * - `menu` alone is revealed over the row's end (`RowActions`, `reveal`): the row carries
  *   `data-row` and `--row-actions` for one list-size button, the ⋯ ends on the row's padding where
- *   an in-flow action ends (an outline Sign in, a menu beside Reconnect), the `value` steps aside
+ *   an in-flow action ends (an outline Sign in, a menu beside Reconnect), the `time` steps aside
  *   (`aside`) and the content fades beneath them (`yield`), so no text runs under the ⋯ unmasked.
- * - With `actions` (a call to action such as Install or Reconnect), `menu` stays beside them in the
- *   row's flow and nothing is revealed.
+ *   Only text steps aside: a control there would sit beneath the revealed ⋯'s hit target.
+ * - With `actions` (a call to action such as Install or Reconnect, or a control such as a switch),
+ *   `menu` stays beside them in the row's flow and nothing is revealed.
  * - `open` makes the title a button whose hit area (`::after`) stretches over the row (no row
  *   primitive opens on click beside a menu). A mask clips what its element paints and hit-tests to
  *   the element's box, so the content's `yield` mask would shrink that area to the content and cut
@@ -77,7 +78,7 @@ export function ListRow({
   open,
   badge,
   children,
-  value,
+  time,
   menu,
   actions,
   className,
@@ -92,8 +93,8 @@ export function ListRow({
   badge?: ReactNode;
   /** The lines under the title. */
   children?: ReactNode;
-  /** The row's value at its end (a time, a switch, Saved): steps aside for a revealed menu. */
-  value?: ReactNode;
+  /** When the row last changed, at its end: `at` is the ISO time, `text` what the row reads. */
+  time?: { at: string; text: string };
   /** The ⋯ trigger, usually `RowMenu`. */
   menu?: ReactNode;
   actions?: ReactNode;
@@ -141,9 +142,11 @@ export function ListRow({
         </ItemTitle>
         {children}
       </ItemContent>
-      {value && (
+      {time && (
         <ItemActions data-motion={revealed ? "aside" : undefined} className="shrink-0">
-          {value}
+          <time dateTime={time.at} className="text-xs text-ink-3">
+            {time.text}
+          </time>
         </ItemActions>
       )}
       {actions ? (

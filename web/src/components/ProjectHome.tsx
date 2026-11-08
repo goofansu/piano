@@ -177,11 +177,7 @@ export function ProjectHome({
                       // Dim as the sidebar row does: a missing checkout, or a session with no title yet.
                       className: cn("disabled:text-ink-3", !s.title && "text-ink-3"),
                     }}
-                    value={
-                      <time dateTime={s.updatedAt} className="text-xs text-ink-3">
-                        {timeAgo(s.updatedAt, now)}
-                      </time>
-                    }
+                    time={{ at: s.updatedAt, text: timeAgo(s.updatedAt, now) }}
                     menu={
                       <RowMenu label={`Session menu for ${s.label}`}>
                         <SessionMenu target={s} />

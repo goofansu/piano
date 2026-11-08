@@ -102,8 +102,9 @@ revealed while it is pointed at, focused or has its menu open, its text fading o
 stepping aside beneath them, so the row reserves no empty slot. A list row is `ListRow`, which
 places them (its ⋯ ends where an in-flow action would, on the row's padding) and decides the fade
 and the step aside; beside a call to action (Install, Reconnect) or an interactive control (a
-switch), its ⋯ stays in the row's flow. Interactive controls use `ListRow.actions`, not `value`:
-their hit targets must stay stationary and separate from the menu.
+switch), its ⋯ stays in the row's flow. The only thing that steps aside is the row's
+`time`; interactive controls go in `ListRow.actions`, so their hit targets stay stationary and
+separate from the menu.
 
 ## Components
 
