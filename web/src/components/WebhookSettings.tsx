@@ -105,7 +105,7 @@ export function WebhookSettings() {
   const now = Date.now();
   return (
     <SettingsSectionFrame
-      title="Webhooks"
+      section="webhooks"
       actions={<PageHeaderActions page="settings" />}
       dialogs={
         <>

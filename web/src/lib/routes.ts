@@ -5,7 +5,7 @@
  *   /projects/<id>   one project's home: its branches and other member sessions
  *   /projects/<id>/new the New page for one project: a session started there joins it
  *   /s/<sessionId>   one session; its directory is looked up in the folder list
- *   /settings/<section> one settings page; /settings aliases the first section, Providers
+ *   /settings/<section> one settings page; /settings aliases the default section, Providers
  */
 
 /**
@@ -28,6 +28,9 @@ export const SETTINGS_SECTIONS = [
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["id"];
 export type SettingsSectionIconName = (typeof SETTINGS_SECTIONS)[number]["icon"];
 
+/** The section `/settings` and the Settings button open: the first. */
+export const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
+
 export type Route =
   | { kind: "new"; projectId?: string }
   | { kind: "projects" }
@@ -37,7 +40,7 @@ export type Route =
 
 const settingsSection = (id: string | undefined): SettingsSection | undefined =>
   id === undefined
-    ? SETTINGS_SECTIONS[0].id
+    ? DEFAULT_SETTINGS_SECTION
     : SETTINGS_SECTIONS.find((section) => section.id === id)?.id;
 
 export function parseRoute(loc: { pathname: string }): Route {

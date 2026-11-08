@@ -472,6 +472,13 @@ test("a direct Settings link closes to New before the registry arrives", () => {
   assert.equal(p.path(), "/new");
 });
 
+test("the Settings button opens the section /settings opens", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.openSettings();
+  assert.deepEqual(parseRoute({ pathname: p.path() }), parseRoute({ pathname: "/settings" }));
+});
+
 test("explicit session selection supersedes a deferred startup route", () => {
   const p = page("/s/a");
   p.navigation.select("/scratch", "b");

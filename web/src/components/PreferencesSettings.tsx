@@ -46,9 +46,7 @@ export function PreferencesSettings() {
   };
   return (
     <SettingsSectionFrame
-      title="Preferences"
-      titleId="settings-preferences-title"
-      sectionId="settings-preferences"
+      section="preferences"
       dialogs={
         <>
           {editing && voice && (

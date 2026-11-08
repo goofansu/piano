@@ -16,7 +16,11 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import type { SettingsSectionIconName } from "@/lib/routes";
+import {
+  SETTINGS_SECTIONS,
+  type SettingsSection,
+  type SettingsSectionIconName,
+} from "@/lib/routes";
 import type { SettingsLoadView } from "@/lib/settingsLoadView";
 
 const ICONS: Record<SettingsSectionIconName, LucideIcon> = {
@@ -42,24 +46,22 @@ export function SettingsSectionIcon({
 }
 
 /**
- * One Settings page: the header with its actions, a scrolling column of content, and the page's
- * dialogs. No intro line: the rows say what the page does.
+ * One Settings page: the header, titled with the section's label, with its actions, a scrolling
+ * column of content, and the page's dialogs. No intro line: the rows say what the page does.
  */
 export function SettingsSectionFrame({
-  title,
-  titleId = "settings-section-title",
-  sectionId,
+  section,
   actions,
   dialogs,
   children,
 }: {
-  title: string;
-  titleId?: string;
-  sectionId?: string;
+  section: SettingsSection;
   actions?: React.ReactNode;
   dialogs?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const title = SETTINGS_SECTIONS.find((s) => s.id === section)?.label;
+  const titleId = `settings-${section}-title`;
   return (
     <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
       <PaneHeader actions={actions}>
@@ -69,7 +71,6 @@ export function SettingsSectionFrame({
       </PaneHeader>
       <PaneBody>
         <section
-          id={sectionId}
           aria-labelledby={titleId}
           className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6"
         >
