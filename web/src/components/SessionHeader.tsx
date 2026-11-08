@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
-import { sessionContext } from "@/lib/sessionContext";
+import { sessionContext, sessionPlace } from "@/lib/sessionContext";
 import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
@@ -91,19 +91,20 @@ export function SessionHeader({
       {session ? title : "New session"}
     </h1>
   );
-  // With no rail, where the session runs sits under the title as it does under a sidebar row: the
-  // same folder and branch line. It shows its own text, so it does nothing on tap.
-  const titleBlock =
-    sheet && session && context.folderName !== undefined ? (
-      <div className="flex min-w-0 flex-col">
-        {heading}
-        <p className="flex min-w-0 items-center gap-2 text-xs text-ink-3">
-          <SessionDetails folder={context.folderName} branch={context.branch} />
-        </p>
-      </div>
-    ) : (
-      heading
-    );
+  // With no rail, where the session runs sits under the title in a sidebar row's folder and branch
+  // line; a detached commit stands in for the branch, since nothing else on a phone names it.
+  // It shows its own text, so it does nothing on tap.
+  const place = sheet && session ? sessionPlace(context) : undefined;
+  const titleBlock = place ? (
+    <div className="flex min-w-0 flex-col">
+      {heading}
+      <p className="flex min-w-0 items-center gap-2 text-xs text-ink-3">
+        <SessionDetails folder={context.folderName} branch={place.ref?.name} />
+      </p>
+    </div>
+  ) : (
+    heading
+  );
   const sessionMenu = sheet ? (
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger asChild>{menuButton}</SheetTrigger>
