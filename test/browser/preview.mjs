@@ -572,11 +572,11 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.cdp(async (call) => {
             await call("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
             await page.until("matchMedia('(pointer: coarse)').matches");
-            const target = await page.evaluate(
-              `(() => { const r = document.querySelector(${JSON.stringify(headerLink)}).getBoundingClientRect(); return {width:r.width, height:r.height}; })()`,
+            const { width, height } = await page.evaluate(
+              `document.querySelector(${JSON.stringify(headerLink)}).getBoundingClientRect().toJSON()`,
             );
             assert.deepEqual(
-              target,
+              { width, height },
               { width: 44, height: 44 },
               `${name}: header external link uses the shared touch target`,
             );
