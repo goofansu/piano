@@ -1,4 +1,4 @@
-import type { ModelChoice, ThinkingLevel } from "@shared/wire";
+import type { ModelChoice } from "@shared/wire";
 import { cn } from "cn";
 import { ChevronDownIcon, RefreshCwIcon, SaveCheckIcon, SaveIcon, Undo2Icon } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
@@ -18,28 +18,20 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { isImeKey } from "@/lib/keys";
-import type { ModelCatalogView } from "@/lib/modelCatalogs";
 import { modelPickerView } from "@/lib/modelPicker";
 import { footerPicker, footerPickerMenu } from "@/lib/styles";
+import type { ModelControl } from "@/lib/useModelChoice";
 
 interface Props {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   /** Composers resume editing after Enter on effort or Escape; standalone pickers use their trigger. */
   returnFocusRef?: RefObject<HTMLTextAreaElement | null>;
-  /** The directory's catalog with its refresh and saved defaults (`useModelCatalog`). */
-  models: ModelCatalogView;
-  value: string | undefined;
-  onChange: (ref: string) => void;
-  effort: ThinkingLevel;
-  onEffortChange: (level: ThinkingLevel) => void;
-  /** Returns the model and effort to Pi's defaults for new sessions. */
-  onUseDefaults: () => void;
+  /** The page's selection, its catalog and what a pick does (`useModelChoice`). */
+  control: ModelControl;
   disabled?: boolean;
   /** Bordered control for standalone forms; composers retain the quiet trigger. */
   variant?: "ghost" | "outline";
-  /** No directory is chosen yet, so there is no catalog to wait for. */
-  noDirectory?: boolean;
 }
 
 /** One settings trigger: the model label yields space before the effort or primary action does. */
@@ -47,16 +39,11 @@ export function ModelSelect({
   open: controlledOpen,
   onOpenChange,
   returnFocusRef,
-  models,
-  value,
-  onChange,
-  effort,
-  onEffortChange,
-  onUseDefaults,
+  control,
   disabled,
   variant = "ghost",
-  noDirectory,
 }: Props) {
+  const { models, model: value, effort, noDirectory } = control;
   const { catalog, refresh, refreshing, saving } = models;
   const [localOpen, setLocalOpen] = useState(false);
   const open = controlledOpen ?? localOpen;
@@ -91,7 +78,7 @@ export function ModelSelect({
     openingModel,
     disabled: !!disabled,
     canRefresh: !!refresh,
-    noDirectory: !!noDirectory,
+    noDirectory,
     chosen: focusModel,
     saving,
   });
@@ -122,7 +109,7 @@ export function ModelSelect({
       value={m.ref}
       onSelect={() => {
         setFocusModel(m.ref);
-        onChange(m.ref);
+        control.chooseModel(m.ref);
       }}
     >
       <span className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere]">
@@ -245,7 +232,7 @@ export function ModelSelect({
         <div ref={effortPanel} className="flex flex-col gap-2 p-3">
           <EffortSelect
             value={effort}
-            onChange={onEffortChange}
+            onChange={control.chooseEffort}
             onCommit={finish}
             levels={view.levels}
             defaultLevel={catalog?.defaultThinkingLevel}
@@ -269,7 +256,7 @@ export function ModelSelect({
                   // Stay open to show the defaults taking effect; the button disables, so focus
                   // moves to the default's effort once Pi shows that model.
                   setFocusModel(catalog?.defaultModel ?? null);
-                  onUseDefaults();
+                  control.chooseDefaults();
                 }}
               >
                 <Undo2Icon aria-hidden />

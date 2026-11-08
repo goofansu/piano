@@ -136,7 +136,7 @@ export function NewSessionComposer({
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
-  const choice = useModelChoice(catalog, { kind: "new", cwd });
+  const choice = useModelChoice(models, { kind: "new", cwd });
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
   const ready = newSessionReady({
     text: editor.message,
@@ -193,15 +193,7 @@ export function NewSessionComposer({
             "new-session-input md:max-h-[min(18rem,30dvh)] md:min-h-28 md:pt-5",
           )}
           maxHeight={288}
-          model={{
-            models,
-            value: choice.model,
-            onChange: choice.onModelChange,
-            effort: choice.effort,
-            onEffortChange: choice.onEffortChange,
-            onUseDefaults: choice.onUseDefaults,
-            noDirectory: !cwd,
-          }}
+          model={choice}
           onSend={submit}
           voice={() => place}
           actions={<ComposerSend disabled={!ready} onClick={submit} />}
