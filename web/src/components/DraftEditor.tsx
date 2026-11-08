@@ -1,5 +1,4 @@
 import type { VoiceHints } from "@shared/voiceInput";
-import type { ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowUpIcon } from "lucide-react";
 import {
@@ -26,11 +25,11 @@ import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { ControlHint } from "@/lib/composerControl";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
 import { type DraftKey, type DraftMessage, draftMessage, drafts } from "@/lib/messageDraft";
-import type { ModelCatalogView } from "@/lib/modelCatalogs";
 import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerAction, composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
+import type { ModelControl } from "@/lib/useModelChoice";
 import type { SendDisposition } from "@/lib/ws";
 
 /**
@@ -63,18 +62,6 @@ export function useDraftEditor(key: DraftKey | null) {
 }
 export type DraftEditorState = ReturnType<typeof useDraftEditor>;
 
-interface ModelProps {
-  /** The directory's catalog with its refresh and saved defaults (`useModelCatalog`). */
-  models: ModelCatalogView;
-  value: string | undefined;
-  onChange: (ref: string) => void;
-  effort: ThinkingLevel;
-  onEffortChange: (level: ThinkingLevel) => void;
-  /** Returns the model and effort to Pi's defaults for new sessions. */
-  onUseDefaults: () => void;
-  noDirectory?: boolean;
-}
-
 interface Props {
   editor: DraftEditorState;
   completion?: CompletionContext;
@@ -88,7 +75,8 @@ interface Props {
   /** The tallest the textarea grows, in pixels. */
   maxHeight: number;
   autoFocus?: boolean;
-  model: ModelProps;
+  /** The page's model picker (`useModelChoice`). */
+  model: ModelControl;
   /** The send key was pressed; `alt` with Alt held. The page decides whether and how it sends. */
   onSend: (alt: boolean) => void;
   /** Keys the editor does not handle itself (Mod+/ opens the model picker, Enter sends). */
@@ -180,14 +168,8 @@ export function DraftEditor({
           open={modelOpen}
           onOpenChange={setModelOpen}
           returnFocusRef={ref}
-          models={model.models}
-          value={model.value}
-          onChange={model.onChange}
-          effort={model.effort}
-          onEffortChange={model.onEffortChange}
-          onUseDefaults={model.onUseDefaults}
+          control={model}
           disabled={disabled}
-          noDirectory={model.noDirectory}
         />
         {actions}
       </div>

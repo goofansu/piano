@@ -83,7 +83,7 @@ export function Composer({
   // A running Pi owns the selection; a saved session's picks wait for its first prompt and
   // override only what was picked, so Pi restores the rest of its recorded selection.
   const choice = useModelChoice(
-    catalog,
+    models,
     {
       kind: "session",
       cwd: t?.cwd,
@@ -95,7 +95,6 @@ export function Composer({
     (action) => sendCommand({ _tag: "act", action }),
     !actionsDisabled,
   );
-  const { model, effort, onModelChange, onEffortChange } = choice;
   const streaming = !!t && isWorking(t.state);
   const usage = t?.state;
   const messages = t?.messages ?? [];
@@ -123,7 +122,7 @@ export function Composer({
       ),
     );
   };
-  const figures = contextFigures(usage?.context, catalog, model);
+  const figures = contextFigures(usage?.context, catalog, choice.model);
   const queue = queuePanel(queuedMessages, streaming);
 
   if (readOnly) {
@@ -145,14 +144,7 @@ export function Composer({
         className="mx-auto w-full max-w-3xl"
         inputClassName={composerInput}
         maxHeight={192}
-        model={{
-          models,
-          value: model,
-          onChange: onModelChange,
-          effort,
-          onEffortChange,
-          onUseDefaults: choice.onUseDefaults,
-        }}
+        model={choice}
         onSend={send}
         voice={() => place ?? {}}
         onKeyDown={(e) => {
