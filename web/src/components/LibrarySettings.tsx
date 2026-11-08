@@ -11,15 +11,12 @@ import { RemovalDialog } from "@/components/RemovalDialog";
 import { ListRow, RowMenu } from "@/components/RowActions";
 import {
   SettingsList,
-  SettingsLoadFailure,
+  SettingsLoadState,
   SettingsSectionFrame,
-  SettingsSkeleton,
 } from "@/components/SettingsSectionFrame";
 import { Badge } from "@/components/ui/badge";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { ItemDescription } from "@/components/ui/item";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
   createPrompt,
@@ -30,6 +27,7 @@ import {
   removeUserSkill,
 } from "@/lib/api";
 import { PAGE_EDITORS } from "@/lib/pageEditor";
+import { settingsLoadView } from "@/lib/settingsLoadView";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
@@ -141,47 +139,29 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
         </>
       }
     >
-      {/* The failure stays while Retry reads again, so it does not flicker into the skeleton. */}
-      {observed.error && (
-        <SettingsLoadFailure
-          title={`Could not load ${plural}`}
-          retrying={observed.loading}
-          retry={() => void observed.refresh()}
-        />
-      )}
-      {!observed.value ? (
-        observed.error ? null : (
-          <SettingsSkeleton label={`Loading ${plural}…`} className="flex flex-col gap-2">
-            {[0, 1].map((row) => (
-              <Skeleton key={row} className="h-14 w-full rounded-lg" />
+      <SettingsLoadState
+        view={settingsLoadView({ ...observed, isEmpty: (entries) => entries.length === 0 })}
+        noun={plural}
+        retry={() => void observed.refresh()}
+        emptyIcon={Icon}
+      >
+        {(entries) => (
+          <SettingsList>
+            {entries.map((entry) => (
+              <LibraryRow
+                key={entry.name}
+                Noun={Noun}
+                name={entry.name}
+                description={entry.description}
+                badge={badge?.(entry)}
+                disabled={busy}
+                view={() => setViewing(entry)}
+                remove={() => actions.confirm(entry)}
+              />
             ))}
-          </SettingsSkeleton>
-        )
-      ) : observed.value.length === 0 ? (
-        <Empty className="py-8">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Icon />
-            </EmptyMedia>
-            <EmptyTitle>{`No ${plural} yet`}</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <SettingsList>
-          {observed.value.map((entry) => (
-            <LibraryRow
-              key={entry.name}
-              Noun={Noun}
-              name={entry.name}
-              description={entry.description}
-              badge={badge?.(entry)}
-              disabled={busy}
-              view={() => setViewing(entry)}
-              remove={() => actions.confirm(entry)}
-            />
-          ))}
-        </SettingsList>
-      )}
+          </SettingsList>
+        )}
+      </SettingsLoadState>
     </SettingsSectionFrame>
   );
 }

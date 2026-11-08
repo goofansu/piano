@@ -14,8 +14,11 @@ import {
 import { PaneBody, PaneHeader } from "@/components/Pane";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import type { SettingsSectionIconName } from "@/lib/routes";
+import type { SettingsLoadView } from "@/lib/settingsLoadView";
 
 const ICONS: Record<SettingsSectionIconName, LucideIcon> = {
   plug: PlugIcon,
@@ -158,7 +161,8 @@ export function SettingsAlert({
 
 /**
  * A section whose facts could not be read: what failed, and Retry, which turns while a read is in
- * flight. It stands in for the section's loading placeholder; a change's failure is a toast instead.
+ * flight. A failed first read shows it in place of the loading placeholder, a failed re-read above
+ * the rows already read (see `settingsLoadView`); a change's failure is a toast instead.
  */
 export function SettingsLoadFailure({
   title,
@@ -201,6 +205,60 @@ export function SettingsSkeleton({
       <span className="sr-only">{label}</span>
       {children}
     </div>
+  );
+}
+
+/**
+ * A section's load as `settingsLoadView` decides it: placeholder rows, the failure with Retry,
+ * the empty line, or the rows `children` draws from the value read, below the failure when a
+ * re-read failed. `noun` names what the section lists ("webhooks") in all three lines.
+ */
+export function SettingsLoadState<T>({
+  view,
+  noun,
+  retry,
+  skeletonRows = 2,
+  emptyIcon: EmptyIcon,
+  children,
+}: {
+  view: SettingsLoadView<T>;
+  noun: string;
+  retry: () => void;
+  skeletonRows?: number;
+  /** The section's icon on its empty line; needed only where the value can list nothing. */
+  emptyIcon?: LucideIcon;
+  children: (value: T) => React.ReactNode;
+}) {
+  return (
+    <>
+      {view.failure && (
+        <SettingsLoadFailure
+          title={`Could not load ${noun}`}
+          retrying={view.retrying}
+          retry={retry}
+        />
+      )}
+      {view.body === "loading" ? (
+        <SettingsSkeleton label={`Loading ${noun}…`} className="flex flex-col gap-2">
+          {Array.from({ length: skeletonRows }, (_, row) => (
+            <Skeleton key={row} className="h-14 w-full rounded-lg" />
+          ))}
+        </SettingsSkeleton>
+      ) : view.body === "empty" ? (
+        <Empty className="py-8">
+          <EmptyHeader>
+            {EmptyIcon && (
+              <EmptyMedia variant="icon">
+                <EmptyIcon />
+              </EmptyMedia>
+            )}
+            <EmptyTitle>{`No ${noun} yet`}</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
+      ) : view.body === "rows" ? (
+        children(view.value)
+      ) : null}
+    </>
   );
 }
 

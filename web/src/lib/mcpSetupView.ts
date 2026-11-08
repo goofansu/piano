@@ -1,8 +1,9 @@
 /**
  * What the MCP section shows and allows: one row per entry of Pi's global configuration, with its
  * ready state and what its ⋯ menu offers; one row per catalog server not connected yet; and
- * whether its controls wait. A change, read or read failure in flight disables every row. Pure;
- * the section renders it, and shows a failed read itself.
+ * whether its controls wait. A change or read in flight disables every row; a failed read alone
+ * does not, as the rows are still the last facts known (`settingsLoadView`). Pure; the section
+ * renders it, and shows a failed read itself.
  */
 import {
   MCP_CATALOG,
@@ -19,8 +20,6 @@ export interface McpSetupInput {
   running: string | undefined;
   /** A read of the setup is in flight. */
   loading: boolean;
-  /** The last read failed and no read is in flight. */
-  loadFailed: boolean;
 }
 
 export interface McpServerRow {
@@ -56,7 +55,7 @@ export interface McpSetupView {
   available: readonly McpAvailableRow[] | undefined;
   /** Pi's configuration cannot be used until fixed in Pi: the page says so and offers nothing. */
   problem?: string;
-  /** Every row's controls wait: a change, read or read failure is ongoing. */
+  /** Every row's controls wait: a change or read is in flight, or Pi's configuration is unusable. */
   disabled: boolean;
 }
 
@@ -89,7 +88,7 @@ export function mcpServerRow(setup: McpServerSetup): McpServerRow {
   };
 }
 
-export function mcpSetupView({ state, running, loading, loadFailed }: McpSetupInput): McpSetupView {
+export function mcpSetupView({ state, running, loading }: McpSetupInput): McpSetupView {
   return {
     rows: state?.servers
       .map(mcpServerRow)
@@ -101,7 +100,7 @@ export function mcpSetupView({ state, running, loading, loadFailed }: McpSetupIn
       })
       .sort((a, b) => a.server.name.localeCompare(b.server.name, "en", { sensitivity: "base" })),
     ...(state?.problem ? { problem: state.problem } : {}),
-    disabled: running !== undefined || loading || loadFailed || !!state?.problem,
+    disabled: running !== undefined || loading || !!state?.problem,
   };
 }
 

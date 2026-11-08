@@ -10,15 +10,10 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
 import { ListRow, RowMenu, RowStatus } from "@/components/RowActions";
-import {
-  SettingsGroup,
-  SettingsList,
-  SettingsLoadFailure,
-  SettingsSkeleton,
-} from "@/components/SettingsSectionFrame";
+import { SettingsGroup, SettingsList, SettingsLoadState } from "@/components/SettingsSectionFrame";
 import { ItemMedia } from "@/components/ui/item";
-import { Skeleton } from "@/components/ui/skeleton";
 import { changeProviderApiKey, providerApiKeys } from "@/lib/api";
+import { settingsLoadView } from "@/lib/settingsLoadView";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
@@ -33,68 +28,62 @@ export function ApiKeySettings() {
   const busy = actions.running !== undefined;
   return (
     <SettingsGroup id="settings-api-keys" title="API keys">
-      {observed.error ? (
-        <SettingsLoadFailure
-          title="Could not load API keys"
-          retrying={observed.loading}
-          retry={() => void observed.refresh()}
-        />
-      ) : !observed.value ? (
-        <SettingsSkeleton label="Loading API keys…" className="flex flex-col gap-2">
-          {[0, 1].map((row) => (
-            <Skeleton key={row} className="h-14 w-full rounded-lg" />
-          ))}
-        </SettingsSkeleton>
-      ) : (
-        <SettingsList>
-          {observed.value.map((provider) => (
-            <ListRow
-              key={provider.id}
-              media={
-                <ItemMedia variant="icon">
-                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <use href={`/provider-logos/${provider.logo}.svg#logo`} />
-                  </svg>
-                </ItemMedia>
-              }
-              title={provider.name}
-              menu={
-                provider.saved && (
-                  <RowMenu label={`${provider.name} API key actions`} disabled={busy}>
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem onSelect={() => setEditing(provider)}>
-                        Replace key
+      <SettingsLoadState
+        view={settingsLoadView(observed)}
+        noun="API keys"
+        retry={() => void observed.refresh()}
+      >
+        {(providers) => (
+          <SettingsList>
+            {providers.map((provider) => (
+              <ListRow
+                key={provider.id}
+                media={
+                  <ItemMedia variant="icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <use href={`/provider-logos/${provider.logo}.svg#logo`} />
+                    </svg>
+                  </ItemMedia>
+                }
+                title={provider.name}
+                menu={
+                  provider.saved && (
+                    <RowMenu label={`${provider.name} API key actions`} disabled={busy}>
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem onSelect={() => setEditing(provider)}>
+                          Replace key
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => actions.confirm(provider)}
+                      >
+                        Remove key
                       </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onSelect={() => actions.confirm(provider)}
+                    </RowMenu>
+                  )
+                }
+                actions={
+                  !provider.saved && (
+                    <PianoButton
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      aria-label={`Add ${provider.name} API key`}
+                      onClick={() => setEditing(provider)}
                     >
-                      Remove key
-                    </DropdownMenuItem>
-                  </RowMenu>
-                )
-              }
-              actions={
-                !provider.saved && (
-                  <PianoButton
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    aria-label={`Add ${provider.name} API key`}
-                    onClick={() => setEditing(provider)}
-                  >
-                    Add key
-                  </PianoButton>
-                )
-              }
-            >
-              {provider.saved && <RowStatus>Saved</RowStatus>}
-            </ListRow>
-          ))}
-        </SettingsList>
-      )}
+                      Add key
+                    </PianoButton>
+                  )
+                }
+              >
+                {provider.saved && <RowStatus>Saved</RowStatus>}
+              </ListRow>
+            ))}
+          </SettingsList>
+        )}
+      </SettingsLoadState>
       {editing && (
         <ApiKeyDialog
           title={`${editing.saved ? "Replace" : "Add"} ${editing.name} API key`}
