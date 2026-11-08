@@ -25,5 +25,8 @@ export function useModelChoice(
     submit: (send: (start: StartOptions) => boolean) => setHeld(choice.submit(send)),
     onModelChange: (model: string) => apply(choice.chooseModel(model)),
     onEffortChange: (level: ThinkingLevel) => apply(choice.chooseEffort(level)),
+    onUseDefaults: () => {
+      for (const change of choice.chooseDefaults()) apply(change);
+    },
   };
 }

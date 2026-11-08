@@ -32,6 +32,8 @@ interface Props {
   onChange: (ref: string) => void;
   effort: ThinkingLevel;
   onEffortChange: (level: ThinkingLevel) => void;
+  /** Returns the model and effort to Pi's defaults for new sessions. */
+  onUseDefaults: () => void;
   disabled?: boolean;
   /** Bordered control for standalone forms; composers retain the quiet trigger. */
   variant?: "ghost" | "outline";
@@ -49,6 +51,7 @@ export function ModelSelect({
   onChange,
   effort,
   onEffortChange,
+  onUseDefaults,
   disabled,
   variant = "ghost",
   noDirectory,
@@ -255,6 +258,19 @@ export function ModelSelect({
                 {view.defaultLabel ?? "Not available"}
               </span>
             </span>
+            {view.canUseDefault && (
+              <Button
+                variant="ghost"
+                size="xs"
+                className="ml-auto shrink-0 pointer-coarse:min-h-11"
+                onClick={() => {
+                  onUseDefaults();
+                  finish();
+                }}
+              >
+                Use default
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="xs"

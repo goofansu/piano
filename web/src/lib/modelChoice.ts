@@ -54,6 +54,11 @@ export interface ModelChoice extends ModelSelection {
   chooseModel: (model: string) => ModelChange;
   chooseEffort: (level: ThinkingLevel) => ModelChange;
   /**
+   * Returns to Pi's defaults for new sessions, model and effort together; nothing while either is
+   * unknown. A running Pi takes them as two actions; a held pick takes both at once.
+   */
+  chooseDefaults: () => ModelChange[];
+  /**
    * Hands the start options to `send`, which reports whether it consumed the input they travel
    * with. Returns what to hold next: nothing picked once a prompt carried the pick, else the pick.
    */
@@ -104,6 +109,18 @@ export function modelChoice(
     chooseModel: (model) => change({ ...pick, model }, { _tag: "set_model", model }),
     chooseEffort: (level) =>
       change({ ...pick, thinkingLevel: level }, { _tag: "set_thinking_level", level }),
+    chooseDefaults: () => {
+      const model = catalog?.defaultModel;
+      const thinkingLevel = level(catalog?.defaultThinkingLevel);
+      if (!model || !thinkingLevel) return [];
+      const next = { model, thinkingLevel };
+      return effective.kind === "session" && effective.hosted
+        ? [
+            { kind: "act", action: { _tag: "set_model", model } },
+            { kind: "act", action: { _tag: "set_thinking_level", level: thinkingLevel } },
+          ]
+        : [change(next, { _tag: "set_model", model })];
+    },
     submit: (send) => (send(start) ? { scope, pick: {} } : held),
   };
 }

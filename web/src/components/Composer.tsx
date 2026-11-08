@@ -151,6 +151,7 @@ export function Composer({
           onChange: onModelChange,
           effort,
           onEffortChange,
+          onUseDefaults: choice.onUseDefaults,
         }}
         onSend={send}
         voice={() => place ?? {}}
