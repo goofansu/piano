@@ -233,11 +233,8 @@ export function CommandHost({
   const close = forms.cancel;
   const answer = forms.answer();
   // Archive, delete, close folder and delete project share one confirm dialog; `confirmation` decides its wording.
+  // The dialog animates closed on a copy of its last open face (useExitFace), so it needs no latch.
   const asking = form ? confirmation(state, form) : undefined;
-  // The dialog animates closed after the form is gone; it keeps the words it was showing.
-  const lastConfirmation = useRef(asking);
-  if (asking) lastConfirmation.current = asking;
-  const shownConfirmation = asking ?? lastConfirmation.current;
   const sharing = form?.kind === "share-session";
   const project = form?.kind === "project" ? form.dialog : undefined;
   const projectSettings = form?.kind === "project-settings";
@@ -350,10 +347,10 @@ export function CommandHost({
       </FormDialog>
       <RemovalDialog
         open={!!asking}
-        title={shownConfirmation?.title ?? ""}
-        description={shownConfirmation?.description ?? ""}
-        action={shownConfirmation?.confirmLabel ?? ""}
-        destructive={shownConfirmation?.destructive}
+        title={asking?.title ?? ""}
+        description={asking?.description ?? ""}
+        action={asking?.confirmLabel ?? ""}
+        destructive={asking?.destructive}
         // Sending closes the form at once, so there is no wait to show.
         busy={false}
         disabled={!answer.allowed}
