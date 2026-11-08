@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientCommand, ServerMessage, SessionPreview, SessionState } from "../shared/wire.ts";
 import {
+  claimedPreview,
   createPreviewObservation,
   seenDetails,
   seenPreview,
 } from "../web/src/lib/previewObservation.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
+import { previewClaim } from "../web/src/lib/sessionPreview.ts";
 import type { SendDisposition } from "../web/src/lib/ws.ts";
 import { type AppState, initialState, reduce } from "../web/src/store.ts";
 
@@ -470,4 +472,15 @@ test("following again disposes the previous source; its late cleanup cannot disp
   assert.equal(first.observation.getState().details?.logs, "new source");
   stop();
   assert.deepEqual(first.observation.getState(), empty);
+});
+
+test("the inspected app is shown only while the claim on it holds", () => {
+  const current = page({ preview: app });
+  const claim = previewClaim(current)!;
+  const seen = { unconfirmed: "i1" };
+  assert.equal(claimedPreview(current, seen, null), undefined, "nothing was chosen");
+  assert.deepEqual(claimedPreview(current, seen, claim), seenPreview(current, seen), "as seen");
+  const replaced = page({ preview: { ...app, instanceId: "i2" } });
+  assert.equal(claimedPreview(replaced, seen, claim), undefined, "replaced app");
+  assert.equal(claimedPreview(page(), seen, claim), undefined, "stopped app");
 });

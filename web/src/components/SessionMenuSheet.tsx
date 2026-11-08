@@ -19,7 +19,12 @@ import {
 } from "@/components/CommandHost";
 import { SheetClose, SheetContent, SheetTitle } from "@/components/PianoSheet";
 import { ProjectCommandIconView } from "@/components/Projects";
-import { dotTone, PreviewStatus, useSeenPreview } from "@/components/SessionPreview";
+import {
+  dotTone,
+  PreviewStatus,
+  useClaimedPreview,
+  useSeenPreview,
+} from "@/components/SessionPreview";
 import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -31,13 +36,7 @@ import type { ProjectCommand } from "@/lib/projectCommands";
 import { pullRequestView } from "@/lib/pullRequestView";
 import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
-import {
-  type PreviewClaim,
-  previewClaim,
-  previewClaimHolds,
-  previewFace,
-  previewHost,
-} from "@/lib/sessionPreview";
+import { type PreviewClaim, previewClaim, previewFace, previewHost } from "@/lib/sessionPreview";
 
 type Page = "actions" | "projects" | "preview";
 
@@ -196,7 +195,7 @@ export function SessionMenuSheet({
   const preview = useSeenPreview(state);
   const openPreview = useOpenPreview();
   const [previewPage, setPreviewPage] = useState<PreviewClaim | null>(null);
-  const pagePreview = previewPage && previewClaimHolds(state, previewPage) ? preview : undefined;
+  const pagePreview = useClaimedPreview(state, previewPage);
   const projects = useSessionProjectMenu();
   const left = useRef(false);
   const dismissed = useRef(false);
