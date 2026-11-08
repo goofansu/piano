@@ -16,8 +16,20 @@ const IMAGE_TYPE_NAME: Record<ImageType, string> = {
 export const IMAGE_TYPE_NAMES = IMAGE_TYPES.map((t) => IMAGE_TYPE_NAME[t]);
 /** The accepted types as a sentence names them: "PNG, JPEG, GIF or WebP". */
 export const IMAGE_TYPE_LIST = `${IMAGE_TYPE_NAMES.slice(0, -1).join(", ")} or ${IMAGE_TYPE_NAMES.at(-1)}`;
+/** At most one decimal, without a trailing ".0". */
+const tenths = (n: number) => `${Number(n.toFixed(1))}`;
 /** A byte limit in the UI's unit, e.g. "10 MiB". */
-export const mebibytes = (bytes: number) => `${bytes / 2 ** 20} MiB`;
+export const mebibytes = (bytes: number) => `${tenths(bytes / 2 ** 20)} MiB`;
+/** A size in the UI's binary units: "512 B", "1.5 KiB", "9.5 MiB". */
+const byteSize = (bytes: number) =>
+  bytes >= 2 ** 20
+    ? mebibytes(bytes)
+    : bytes >= 2 ** 10
+      ? `${tenths(bytes / 2 ** 10)} KiB`
+      : `${bytes} B`;
+/** How the UI names an attached image: "JPEG · 1.5 MiB". */
+export const imageLabel = (type: ImageType, bytes: number) =>
+  `${IMAGE_TYPE_NAME[type]} · ${byteSize(bytes)}`;
 
 /**
  * Why `count` images totalling `bytes` original bytes cannot be one message, or "" when they can.

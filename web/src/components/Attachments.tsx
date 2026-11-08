@@ -1,5 +1,5 @@
-import { base64Bytes, IMAGE_TYPE_NAMES, IMAGE_TYPES } from "@shared/attachments";
-import type { Attachment as AttachmentData, RenderMsg } from "@shared/wire";
+import { base64Bytes, IMAGE_TYPE_NAMES, IMAGE_TYPES, imageLabel } from "@shared/attachments";
+import type { RenderMsg } from "@shared/wire";
 import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { IconButton } from "@/components/IconButton";
@@ -37,19 +37,6 @@ export function attachmentDraft(key: DraftKey | null, images: ImageDraft) {
   };
 }
 export type AttachmentDraft = ReturnType<typeof attachmentDraft>;
-
-const TYPE_LABEL: Record<AttachmentData["mimeType"], string> = {
-  "image/png": "PNG",
-  "image/jpeg": "JPG",
-  "image/gif": "GIF",
-  "image/webp": "WEBP",
-};
-const formatBytes = (n: number) =>
-  n >= 1024 * 1024
-    ? `${(n / 1048576).toFixed(1)} MB`
-    : n >= 1024
-      ? `${Math.round(n / 1024)} KB`
-      : `${n} B`;
 
 /** Native file input + shadcn controls; same validation for picker, drop and paste. */
 export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disabled: boolean }) {
@@ -114,7 +101,7 @@ export function AttachmentDraftView({
               <AttachmentContent>
                 <AttachmentTitle>{a.name}</AttachmentTitle>
                 <AttachmentDescription>
-                  {TYPE_LABEL[a.mimeType]} · {formatBytes(base64Bytes(a.data))}
+                  {imageLabel(a.mimeType, base64Bytes(a.data))}
                 </AttachmentDescription>
               </AttachmentContent>
               <AttachmentActions>
