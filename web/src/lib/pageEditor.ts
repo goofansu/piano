@@ -8,8 +8,18 @@ import type { McpServerSetup } from "../../../shared/mcp.ts";
 import type { Webhook } from "../../../shared/webhooks.ts";
 import type { SettingsSection } from "./routes.ts";
 
-/** What the editor is open on: `"new"` for the page's creation, an entry for Edit, `null` when closed. */
-export type Editing<Entry> = Entry | "new" | null;
+/**
+ * One open of the editor: what it is open on (`"new"` for the page's creation, an entry for Edit),
+ * and a key no other open shares, so a dialog keyed by it starts fresh on every open, even one that
+ * replaces an open dialog (New webhook from the palette while editing one).
+ */
+export interface EditorOpen<Entry> {
+  target: Entry | "new";
+  key: number;
+}
+
+/** The editor's current open, `null` when closed. */
+export type Editing<Entry> = EditorOpen<Entry> | null;
 
 export interface PageEditor<Entry> {
   getState: () => Editing<Entry>;
@@ -31,6 +41,7 @@ export interface PageEditor<Entry> {
 /** One page's editor; `Entry` is what its Edit opens on (`never` when the page has no Edit). */
 export function pageEditor<Entry = never>(): PageEditor<Entry> {
   let editing: Editing<Entry> = null;
+  let opens = 0;
   let available = true;
   const listeners = new Set<() => void>();
   const notify = () => {
@@ -56,7 +67,7 @@ export function pageEditor<Entry = never>(): PageEditor<Entry> {
   return {
     getState,
     subscribe,
-    open: set,
+    open: (target) => set({ target, key: ++opens }),
     close,
     useEditing: () => {
       useEffect(() => close, []);

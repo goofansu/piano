@@ -111,7 +111,8 @@ export function WebhookSettings() {
         <>
           {editing && (
             <WebhookEditor
-              hook={editing === "new" ? undefined : editing}
+              key={editing.key}
+              hook={editing.target === "new" ? undefined : editing.target}
               close={webhookEditor.close}
               refresh={() => void observed.refresh()}
             />

@@ -116,7 +116,13 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
               close={() => setViewing(undefined)}
             />
           )}
-          {editing && <NewDialog close={editor.close} refresh={() => void observed.refresh()} />}
+          {editing && (
+            <NewDialog
+              key={editing.key}
+              close={editor.close}
+              refresh={() => void observed.refresh()}
+            />
+          )}
           <RemovalDialog
             open={!!removing}
             title={`Delete ${kind}?`}

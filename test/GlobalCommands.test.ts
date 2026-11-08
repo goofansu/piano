@@ -12,7 +12,12 @@ import {
   radioChoice,
   trustCommand,
 } from "../web/src/lib/globalCommands.ts";
-import { type EditorPage, openPageEditor, PAGE_EDITORS } from "../web/src/lib/pageEditor.ts";
+import {
+  type EditorPage,
+  openPageEditor,
+  PAGE_EDITORS,
+  pageEditor,
+} from "../web/src/lib/pageEditor.ts";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../web/src/lib/routes.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 
@@ -206,6 +211,22 @@ test("on the Projects index the palette offers New project, which opens the New 
   );
 });
 
+test("every open of a page editor is its own, so the dialog keyed by it starts fresh", () => {
+  // New webhook from the palette while editing one replaces that open without closing it first.
+  const editor = pageEditor<{ name: string }>();
+  const a = { name: "a" };
+  const opens = [];
+  for (const target of [a, "new", { name: "b" }, a, "new", "new"] as const) {
+    editor.open(target);
+    const open = editor.getState();
+    assert.equal(open?.target, target);
+    opens.push(open!.key);
+  }
+  assert.equal(new Set(opens).size, opens.length, "no two opens share a key");
+  editor.close();
+  assert.equal(editor.getState(), null);
+});
+
 test("each Settings page's header creation is a palette command that opens that page's editor", () => {
   // As each page's header button is named (docs/quiet-ui.md#button-names); every other page offers none.
   const creation: Partial<Record<SettingsSection, { label: string; page: EditorPage }>> = {
@@ -245,7 +266,11 @@ test("each Settings page's header creation is a palette command that opens that 
     const editor = PAGE_EDITORS[expected.page].editor;
     assert.equal(editor.getState(), null);
     assert.equal(runCommand(command!, effects), true);
-    assert.equal(editor.getState(), "new", `${expected.label} opens the ${section} editor on new`);
+    assert.equal(
+      editor.getState()?.target,
+      "new",
+      `${expected.label} opens the ${section} editor on new`,
+    );
     for (const other of Object.values(PAGE_EDITORS))
       if (other.editor !== editor) assert.equal(other.editor.getState(), null, "no other editor");
     editor.close();
