@@ -16,7 +16,7 @@ import { sessionLabel } from "./sessionCatalog.ts";
 import { checkoutMissingAt, workspaceFor } from "./sessionContext.ts";
 
 /** The session's own views in the Surface area, one tab each. */
-export type SurfaceView = "changes" | "preview";
+export type SurfaceView = "changes";
 
 /**
  * One tab in the selected session's Surface area: one of its views, or a file a link opened. A
@@ -225,7 +225,6 @@ export interface Navigation {
   /** Shows Changes, opening its tab at the end if needed, or focuses it; never a toggle. */
   openChanges: () => void;
   /** Shows the owned app inspector, never launching anything. */
-  openPreview: () => void;
   /**
    * Shows the session rail on the Agent area's right, or hides it, for every session: on hides
    * the Surface area until a tab is shown again or the rail goes off. One area at a time there is
@@ -429,8 +428,8 @@ function decodeKept(
   }
   const surface = value?.owner === owner ? value.surface : null;
   if (!surface || !isArea(value?.area) || !Array.isArray(surface.tabs)) return null;
-  // Preview is deliberately disposable: browser memory is not evidence of a live owner.
-  // Retired tab kinds (Details was one) are left behind too.
+  // Retired Preview/Details tabs are left behind. Older memory with Preview active
+  // still restores its remaining Changes/files, never a live-looking app view.
   const tabs = surface.tabs.filter(isTab);
   if (
     !tabs.length ||
@@ -883,7 +882,6 @@ export function createNavigation({
       }),
     closeSettings,
     openChanges: () => openView("changes"),
-    openPreview: () => openView("preview"),
     toggleRail: () => {
       if (!state.single) setRail(!state.layout.rail);
     },

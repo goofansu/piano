@@ -42,6 +42,7 @@ import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands"
 import type { SessionLayout } from "@/lib/navigation";
 import { openLink } from "@/lib/openLink";
 import { openPageEditor, pageAvailability } from "@/lib/pageEditor";
+import { pointerLast } from "@/lib/pointerClose";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
@@ -65,6 +66,20 @@ import type { AppState } from "@/store";
 async function copySessionValue(value: string, label: string) {
   const failure = `Could not copy the ${label[0]?.toLowerCase()}${label.slice(1)}.`;
   if (await copyText(value, failure)) toast.success(`${label} copied`);
+}
+
+/** A menu row disappears on handoff; return keyboard focus to its surviving trigger. */
+function previewFocusReturn() {
+  const source = document.activeElement as HTMLElement | null;
+  const fallback = document.querySelector<HTMLElement>(
+    source?.closest("[data-slot=session-rail], [role=menu]")
+      ? '[data-slot=session-rail] [aria-label="More preview actions"]'
+      : "main header [data-session-menu]",
+  );
+  return (event: Event) => {
+    event.preventDefault();
+    if (!pointerLast()) (source?.isConnected ? source : fallback)?.focus({ preventScroll: true });
+  };
 }
 
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
@@ -193,7 +208,6 @@ export function CommandHost({
     openProjects,
     openProject,
     openChanges,
-    openPreview,
     toggleRail,
     showAgent,
     openPullRequest,
@@ -240,6 +254,8 @@ export function CommandHost({
   const projectSettings = form?.kind === "project-settings";
   // The app whose details are open; another app, even in the same session, never reopens them.
   const [previewDetails, setPreviewDetails] = useState<PreviewClaim | null>(null);
+  const detailsFocus = useRef<((event: Event) => void) | undefined>(undefined);
+  const stopFocus = useRef<((event: Event) => void) | undefined>(undefined);
 
   const effects: CommandEffects = {
     send,
@@ -249,10 +265,6 @@ export function CommandHost({
     openProjects,
     openProject,
     openChanges,
-    openPreview: () => {
-      openPreview();
-      previewObservation.refresh();
-    },
     openArtifacts: artifactsMenu.open,
     toggleRail,
     showAgent,
@@ -264,11 +276,13 @@ export function CommandHost({
     setAppearance: setTheme,
     copy: (value, label) => void copySessionValue(value, label),
     openForm: (form) => {
+      stopFocus.current = form.kind === "stop-preview" ? previewFocusReturn() : undefined;
       forms.open(form);
       if (form.kind === "stop-preview") previewObservation.refresh();
     },
     openUrl: openLink,
     openPreviewDetails: () => {
+      detailsFocus.current = previewFocusReturn();
       setPreviewDetails(previewClaim(state) ?? null);
       previewObservation.refresh();
     },
@@ -353,8 +367,13 @@ export function CommandHost({
         disabled={!answer.allowed}
         cancel={close}
         confirm={forms.submit}
+        onCloseAutoFocus={stopFocus.current}
       />
-      <PreviewDetailsDialog claim={previewDetails} close={() => setPreviewDetails(null)} />
+      <PreviewDetailsDialog
+        claim={previewDetails}
+        close={() => setPreviewDetails(null)}
+        onCloseAutoFocus={detailsFocus.current}
+      />
       <ProjectDialogView
         open={!!project}
         dialog={project}

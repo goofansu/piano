@@ -4,7 +4,7 @@
  * forgets a cancel path.
  *
  * The pressed `handle` captures the pointer, so its events stay in Piano's document even when the
- * pointer crosses an embedded app: without capture, a release over a Preview frame goes to that
+ * pointer crosses an HTML file preview: without capture, a release over its iframe goes to that
  * frame's browsing context and Piano's window never hears it. Should a release still go unheard,
  * the next move with no button held ends the drag where it was.
  */

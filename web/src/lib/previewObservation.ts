@@ -1,6 +1,6 @@
 /**
  * Re-observes the selected session's own app on attachment, focus and explicit refresh, never by
- * polling or launching anything. Details and terminal UI state are disposable projections, not
+ * polling or launching anything. Details are disposable projections, not
  * another authority for app lifetime. Nothing here depends on React.
  */
 // Relative, not @shared: module tests load this file directly in Node.
@@ -20,20 +20,10 @@ export interface PreviewDetails {
   error?: string;
 }
 
-/** A confirmed stop for an already-open view, never a replacement app or a launch affordance. */
-export interface PreviewTerminal {
-  cwd: string;
-  sessionId: string;
-  instanceId: string;
-  state: "stopped";
-}
-
 export interface PreviewObservationState {
   /** A re-observation of the session on screen is in flight. */
   refreshing: boolean;
   details: PreviewDetails | null;
-  /** Discarded on attachment/owner loss or replacement, including disconnect and unfollow. */
-  terminal: PreviewTerminal | null;
   /** The app whose last read ended unanswered, so its status is unknown until a read answers. */
   unconfirmed: string | null;
 }
@@ -42,7 +32,7 @@ export interface PreviewObservationState {
  * The selected session's app as this page sees it, which the session rail, Preview, Details and
  * palette all show. The store's app, unless this page cannot vouch for its status: without an
  * attachment (`sessionReady`), or after its last status read went unanswered (`unconfirmed`), it
- * is unknown, without its frame or link, until a read answers. Neither says anything about the
+ * is unknown, without its link, until a read answers. Neither says anything about the
  * server-owned app's lifetime: it is not stopped.
  */
 export function seenPreview(
@@ -74,25 +64,6 @@ export function seenDetails(
     : undefined;
 }
 
-/**
- * Whether a view that inspected `viewedInstance` shows its app as stopped: the session has no app
- * now, and the confirmed stop is of that very instance in this session. Only a view that actually
- * inspected the app can keep its stop; a view opened after it shows no app at all.
- */
-export function seenStop(
-  page: AppState,
-  observed: Pick<PreviewObservationState, "terminal">,
-  viewedInstance: string | null,
-): boolean {
-  const terminal = observed.terminal;
-  return (
-    !hostedPreview(page) &&
-    !!terminal &&
-    terminal.instanceId === viewedInstance &&
-    ofSession(page, terminal)
-  );
-}
-
 /** The client to follow; the page's `Client` is one. */
 export interface PreviewObservationSource {
   getState: () => AppState;
@@ -117,7 +88,6 @@ const FOCUS_MS = 10_000;
 const empty = (): PreviewObservationState => ({
   refreshing: false,
   details: null,
-  terminal: null,
   unconfirmed: null,
 });
 
@@ -153,8 +123,6 @@ export function createPreviewObservation({
       let active = true;
       let attachment: string | null = null;
       let instanceId: string | null = null;
-      // A stop publishes the preview-less session state before its caller-only result arrives.
-      let lastInstance: string | null = null;
       let pending: string | null = null;
       let focusedAt = Number.NEGATIVE_INFINITY;
       const notified = new Set<string>();
@@ -180,7 +148,6 @@ export function createPreviewObservation({
         if (changed) {
           attachment = nextAttachment;
           instanceId = null;
-          lastInstance = null;
           pending = null;
           set(empty());
         }
@@ -189,14 +156,13 @@ export function createPreviewObservation({
           changed = true;
           instanceId = nextInstance;
           pending = null;
-          if (instanceId) lastInstance = instanceId;
-          set({ ...empty(), terminal: instanceId ? null : state.terminal });
+          set(empty());
         }
         return changed;
       };
       const read = () => {
         reconcile();
-        if (!attachment || !instanceId || pending || state.terminal) return;
+        if (!attachment || !instanceId || pending) return;
         // Claim before sending: send may synchronously disconnect or deliver its answer.
         const request = newRequestId();
         pending = request;
@@ -281,18 +247,6 @@ export function createPreviewObservation({
             notified.add(key);
             if (stopped) notify("Preview stopped", "success");
             else notify("That preview had already stopped or been replaced.", "info");
-          }
-          if (stopped && onScreen && lastInstance === m.result.instanceId) {
-            pending = null;
-            set({
-              ...empty(),
-              terminal: {
-                cwd: m.cwd,
-                sessionId: m.sessionId,
-                instanceId: m.result.instanceId,
-                state: "stopped",
-              },
-            });
           }
         }
       });

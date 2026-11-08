@@ -170,7 +170,7 @@ const model = createServer(async (req, res) => {
     delta = {
       role: "assistant",
       content: app.ready
-        ? `PREVIEW_READY: [Open preview](${app.url})\nInstance ${app.instanceId}\n[App source](app.mjs)`
+        ? `PREVIEW_READY: [Open preview](${app.url})\nInstance ${app.instanceId}\n[App source](app.mjs)\n[App document](index.html)`
         : app.stopped
           ? "PREVIEW_STOPPED"
           : `PREVIEW_FAILED: ${tool.content}`,
@@ -453,6 +453,17 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("button", "Remove 1-settled-preview-link.png");
         await page.ab("fill", '[aria-label="Message"]', "");
         await page.click("button", "Close app.mjs");
+        await page.click("button", "App document");
+        await page.until("!!document.querySelector('iframe[title=\"HTML preview\"]')");
+        assert.equal(
+          await page.evaluate(
+            "document.querySelector('iframe[title=\"HTML preview\"]').getAttribute('sandbox')",
+          ),
+          "allow-scripts",
+        );
+        await noEmbeddedPreview();
+        await page.capture("1c-html-file-preview-preserved");
+        await page.click("button", "Close index.html");
         await page.click("button", "Hide changes");
         await more();
         await page.capture("1c-preview-menu");
@@ -474,6 +485,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("button", "Cancel");
         await dialogClosed();
         assert.equal(request({ action: "status" }).instanceId, identity);
+        await page.capture("1f-stop-cancelled");
         await page.press("Mod+K");
         await page.ab("fill", "[cmdk-input]", "preview");
         await page.until(
@@ -514,7 +526,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         const openPreviewPane = async () => {
           await page.click("button", "Session information and actions");
           await page.until("!!document.querySelector('[role=dialog] button[aria-label=Preview]')");
-          await page.evaluate("window.previewSheet = document.querySelector('[role=dialog]')");
+          await page.evaluate("!!(window.previewSheet = document.querySelector('[role=dialog]'))");
           await page.click("button", "Preview");
           await page.until("!!document.querySelector('[role=dialog] button[aria-label=Back]')");
           assert.equal(
@@ -542,7 +554,9 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.ab("set", "viewport", String(width), "844");
           if (
             width > 849 &&
-            (await page.evaluate("!!document.querySelector('[aria-label=\"Show sidebar\"]')"))
+            (await page.evaluate(
+              "[...document.querySelectorAll('[aria-label=\"Show sidebar\"]')].some(e => e.getClientRects().length > 0)",
+            ))
           )
             await page.click("button", "Show sidebar");
           if (width > 849) {
@@ -555,6 +569,19 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
             );
             observations.push({ singleArea: name, viewport: width, sessionWidth });
           }
+          await page.cdp(async (call) => {
+            await call("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+            await page.until("matchMedia('(pointer: coarse)').matches");
+            const target = await page.evaluate(
+              `(() => { const r = document.querySelector(${JSON.stringify(headerLink)}).getBoundingClientRect(); return {width:r.width, height:r.height}; })()`,
+            );
+            assert.deepEqual(
+              target,
+              { width: 44, height: 44 },
+              `${name}: header external link uses the shared touch target`,
+            );
+            await page.capture(`2b-${name}-touch-header`);
+          });
           await openPreviewPane();
           await page.until(
             "document.querySelector('[role=dialog]').textContent.includes('Running')",
@@ -578,6 +605,8 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.capture(`2b-${name}-details`);
           await page.press("Escape");
           await dialogClosed();
+          await page.until("document.activeElement?.hasAttribute('data-session-menu')");
+          await page.capture(`2b-${name}-details-dismissed`);
           await openPreviewPane();
           await page.click("link", "Open preview in new tab");
           await externalAnswer(`2b-${name}-external-answer`, "Preview journey v2 HMR");
@@ -590,6 +619,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.click("button", "Cancel");
           await dialogClosed();
           assert.equal(request({ action: "status" }).instanceId, identity);
+          await page.capture(`2b-${name}-stop-cancelled`);
           await noEmbeddedPreview();
         };
 
@@ -604,6 +634,7 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.see("Status unavailable");
           await noEmbeddedPreview();
           await page.until("!document.querySelector('[role=dialog] a[target=_blank]')");
+          await page.until(`!document.querySelector(${JSON.stringify(headerLink)})`);
           await refreshDetails();
           await page.capture("1h-unknown-details");
           await page.press("Escape");
@@ -651,11 +682,18 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await openPreviewPane();
         await page.ab("back");
         await page.until(`location.pathname === ${JSON.stringify(otherSessionPath)}`);
-        await paneUnavailable();
+        // The sheet is keyed by session: selection replaces it with the new session's actions.
+        await page.until(
+          "!!document.querySelector('[role=dialog]') && !document.querySelector('[role=dialog] button[aria-label=Preview], [role=dialog] button[aria-label=Back]')",
+        );
+        assert.equal(
+          await page.evaluate(
+            "[...document.querySelectorAll('[role=dialog] a, [role=dialog] button')].some(e => /Open preview|Preview details|Stop preview/.test(e.textContent))",
+          ),
+          false,
+        );
         await page.capture("1i-selection-fences-preview-pane");
         assert.equal(request({ action: "status" }).instanceId, identity);
-        await page.click("button", "Back");
-        await page.until("!document.querySelector('[role=dialog] button[aria-label=Preview]')");
         await page.press("Escape");
         await dialogClosed();
         await page.ab("click", ownerRow);

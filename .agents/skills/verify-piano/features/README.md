@@ -87,7 +87,7 @@ Keep these prerequisites visible when using the default launch:
 - The dialogs fake can supply confirmed artifact results for the header menu, but does not
   publish to Radius or prove authenticated link access; see
   [Open a session](./open-session.md#driving-it-with-agent-browser).
-- Managed Preview (including "Not working here?" recovery) needs the isolated real-Pi/native
+- Managed Preview (external tabs, rail actions and the same-sheet Preview pane) needs the isolated real-Pi/native
   supervisor journey in [`docs/testing.md`](../../../../docs/testing.md#managed-preview-host-journey),
   `node test/browser/preview.mjs <evidence-directory>`. The default fake's Changes/rail checks
   are not Preview evidence; authenticated exe.dev access and real-device touch remain separate.

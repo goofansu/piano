@@ -1498,34 +1498,7 @@ test("every tab closes at every width; one area at a time, closing the last retu
   );
 });
 
-test("Preview is one ordered peer of Changes/files, rail covering preserves it, close chooses a neighbour", () => {
-  const p = page("/new", undefined, railPreference(railStorage()));
-  p.registry();
-  p.navigation.select("/scratch", "a");
-  p.selected("a");
-  p.navigation.toggleRail();
-  p.navigation.openChanges();
-  p.navigation.openPreview();
-  p.navigation.openFile("README.md");
-  p.navigation.openPreview();
-  assert.deepEqual(shownTabs(p.navigation).tabs, ["changes", "preview", "file:README.md"]);
-  p.navigation.toggleRail();
-  assert.equal(p.navigation.getState().layout.rail, true);
-  p.navigation.openPreview();
-  assert.equal(p.navigation.getState().shownTab, "preview");
-  p.navigation.closeTab("preview");
-  assert.equal(p.navigation.getState().shownTab, "file:README.md");
-  p.navigation.closeTab("file:README.md");
-  p.navigation.closeTab("changes");
-  assert.equal(p.navigation.getState().layout.rail, true);
-  p.navigation.setSingle(true);
-  p.navigation.openPreview();
-  p.navigation.closeTab("preview");
-  assert.equal(p.navigation.getState().layout.agent, true);
-  assert.equal(p.navigation.getState().surface, null);
-});
-
-test("browser memory never restores a live-looking Preview or its disposable stopped state", () => {
+test("legacy Preview memory restores remaining Changes but never the retired app surface", () => {
   let value: string | null = null;
   const memory = {
     read: () => value,
@@ -1538,7 +1511,10 @@ test("browser memory never restores a live-looking Preview or its disposable sto
   p.navigation.select("/scratch", "a");
   p.selected("a");
   p.navigation.openChanges();
-  p.navigation.openPreview();
+  const legacy = JSON.parse(value!);
+  legacy.surface.tabs.push("preview");
+  legacy.surface.active = "preview";
+  value = JSON.stringify(legacy);
   const reloaded = page("/s/a", memory);
   reloaded.registry();
   reloaded.selected("a");
