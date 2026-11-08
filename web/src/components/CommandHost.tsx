@@ -21,7 +21,14 @@ import {
   WrapTextIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type ComponentProps,
+  createContext,
+  useContext,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { toast } from "sonner";
 import { copyText } from "@/components/CopyButton";
 import { FormDialog } from "@/components/FormDialog";
@@ -182,6 +189,34 @@ export function SessionCommandMenuItem({
     >
       <CommandIcon icon={command.icon} /> {command.label}
     </DropdownMenuItem>
+  );
+}
+
+/** A command whose effect is opening its URL in a new tab. */
+export type LinkCommand = SessionCommand & { intent: { kind: "open-url"; url: string } };
+
+/** The selected session's `open-preview` command while its app has a link to open. */
+export function useOpenPreview(): LinkCommand | undefined {
+  const { commands } = useSessionCommands();
+  const command = commands.find((c) => c.id === "open-preview");
+  return command?.enabled && command.intent.kind === "open-url" && command.intent.url
+    ? (command as LinkCommand)
+    : undefined;
+}
+
+/**
+ * A link command as the link itself, so the browser opens the new tab (and its context menu offers
+ * copy and open-in-window). Each surface supplies the content: its label, icon or both.
+ */
+export function CommandLink({
+  command,
+  children,
+  ...props
+}: Omit<ComponentProps<"a">, "href" | "target" | "rel"> & { command: LinkCommand }) {
+  return (
+    <a {...props} href={command.intent.url} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
   );
 }
 

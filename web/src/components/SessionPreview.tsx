@@ -8,7 +8,12 @@ import {
   SquareIcon,
 } from "lucide-react";
 import { useRef, useSyncExternalStore } from "react";
-import { useCommands, useSessionCommands } from "@/components/CommandHost";
+import {
+  CommandLink,
+  useCommands,
+  useOpenPreview,
+  useSessionCommands,
+} from "@/components/CommandHost";
 import { IconButton } from "@/components/IconButton";
 import {
   Dialog,
@@ -39,7 +44,6 @@ import {
   previewAccess,
   previewClaimHolds,
   previewFace,
-  previewHost,
 } from "@/lib/sessionPreview";
 import type { AppState } from "@/store";
 
@@ -93,6 +97,7 @@ export function PreviewStatus({
 /** One owned app in the rail; opening it never changes session navigation. */
 export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
   const commands = usePreviewCommands();
+  const openPreview = useOpenPreview();
   const handOff = useRef(false);
   return (
     <RailList aria-label="App">
@@ -110,18 +115,16 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
           <RailRowTitle>
             <PreviewStatus preview={preview} className="flex items-center gap-2" />
           </RailRowTitle>
-          {preview.url && (
+          {openPreview && (
             <ItemDescription className="line-clamp-none block truncate font-mono text-xs text-ink-3">
-              <a
-                href={preview.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Open preview in new tab"
+              <CommandLink
+                command={openPreview}
+                aria-label={openPreview.label}
                 className="inline-flex max-w-full items-center gap-1 hover:underline"
               >
-                <span className="truncate">{previewHost(preview.url)}</span>
+                <span className="truncate">{openPreview.detail}</span>
                 <ExternalLinkIcon className="size-3 shrink-0" />
-              </a>
+              </CommandLink>
             </ItemDescription>
           )}
         </ItemContent>
@@ -236,6 +239,7 @@ export function PreviewDetailsDialog({
 }) {
   const { state } = useCommands();
   const commands = usePreviewCommands();
+  const openPreview = useOpenPreview();
   const observed = usePreviewObservation();
   const openRef = useRef<HTMLAnchorElement>(null);
   const preview =
@@ -305,12 +309,12 @@ export function PreviewDetailsDialog({
             <SquareIcon data-icon="inline-start" className="fill-current" aria-hidden /> Stop
             preview
           </Button>
-          {preview?.url && (
+          {preview && openPreview && (
             <Button asChild>
-              <a ref={openRef} href={preview.url} target="_blank" rel="noopener noreferrer">
-                Open preview in new tab
+              <CommandLink ref={openRef} command={openPreview}>
+                {openPreview.label}
                 <ExternalLinkIcon data-icon="inline-end" aria-hidden />
-              </a>
+              </CommandLink>
             </Button>
           )}
         </DialogFooter>
