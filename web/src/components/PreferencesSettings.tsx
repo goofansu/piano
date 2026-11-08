@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { MoreHorizontalIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -12,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import {
   SettingsList,
   SettingsLoadFailure,
@@ -47,7 +49,7 @@ export function PreferencesSettings() {
     void actions.run({
       id: "voice-input",
       run: () => voiceInputSettings.save({ enabled }),
-      done: enabled ? "Voice input on" : "Voice input off",
+      done: enabled ? "Voice input turned on" : "Voice input turned off",
       fallback: "Could not save voice input.",
     });
   };
@@ -66,7 +68,7 @@ export function PreferencesSettings() {
               save={(key) =>
                 voiceInputSettings.save({ enabled: editing === "turn-on" || voice.enabled, key })
               }
-              done={editing === "turn-on" ? "Voice input on" : "OpenAI API key saved"}
+              done={editing === "turn-on" ? "Voice input turned on" : "OpenAI API key saved"}
               fallback="Could not save API key."
               close={() => setEditing(undefined)}
               refresh={() => void voiceInputSettings.refresh()}
@@ -104,12 +106,17 @@ export function PreferencesSettings() {
         </SettingsSkeleton>
       ) : (
         <SettingsList>
-          <Item role="listitem" className={settingsRow}>
+          <Item
+            role="listitem"
+            data-row
+            className={cn(settingsRow, rowActionsWidth.list[voice.hasKey ? 1 : 0], "relative")}
+          >
             <ItemContent className="min-w-0">
               <ItemTitle id="voice-input-title">Voice input</ItemTitle>
             </ItemContent>
-            {/* As tall as the key menu's button, so saving a key does not move the row. */}
-            <ItemActions className="min-h-8 shrink-0 gap-1 pointer-coarse:min-h-11">
+            {/* As tall as the key menu's button, so saving a key does not move the row. The switch
+             * is the row's value: it steps aside beneath the revealed ⋯. */}
+            <ItemActions data-motion="aside" className="min-h-8 shrink-0 pointer-coarse:min-h-11">
               <Switch
                 size="sm"
                 aria-labelledby="voice-input-title"
@@ -117,7 +124,9 @@ export function PreferencesSettings() {
                 disabled={busy}
                 onCheckedChange={setEnabled}
               />
-              {voice.hasKey && (
+            </ItemActions>
+            {voice.hasKey && (
+              <RowActions className="top-1/2 right-4 -translate-y-1/2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <PianoButton
@@ -144,8 +153,8 @@ export function PreferencesSettings() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              )}
-            </ItemActions>
+              </RowActions>
+            )}
           </Item>
         </SettingsList>
       )}

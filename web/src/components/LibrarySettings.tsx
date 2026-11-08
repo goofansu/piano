@@ -1,6 +1,7 @@
 import { LIBRARY_KINDS, type LibraryKind } from "@shared/library";
 import type { Prompt } from "@shared/prompts";
 import type { UserSkill } from "@shared/skills";
+import { cn } from "cn";
 import { type LucideIcon, MoreHorizontalIcon, SparklesIcon, SquareSlashIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
+import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import {
   SettingsList,
   SettingsLoadFailure,
@@ -33,7 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
+import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -68,7 +70,7 @@ interface LibraryPageKind<Entry extends { name: string; description: string; fil
   remove: (name: string) => Promise<unknown>;
   /** The creation dialog, opened by the header's New command or the palette's. */
   NewDialog: (props: { close: () => void; refresh: () => void }) => ReactNode;
-  /** Marks after an entry's name, such as a skill's Disable model invocation. */
+  /** Marks after an entry's name, such as a skill's Model invocation off. */
   badge?: (entry: Entry) => ReactNode;
 }
 
@@ -81,7 +83,7 @@ const skillPage: LibraryPageKind<UserSkill> = {
   badge: (skill) =>
     skill.disableModelInvocation && (
       <Badge variant="outline" className="font-sans">
-        Disable model invocation
+        Model invocation off
       </Badge>
     ),
 };
@@ -142,7 +144,7 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
           <RemovalDialog
             open={!!removing}
             title={`Delete ${kind}?`}
-            description={`${removing?.name ?? `This ${kind}`} is removed. Sessions started from now no longer load it.`}
+            description={`Sessions started from now no longer load ${removing?.name ?? `this ${kind}`}.`}
             action="Delete"
             progress="Deleting…"
             busy={busy}
@@ -225,15 +227,16 @@ function LibraryRow({
   remove: () => void;
 }) {
   return (
-    <Item className={settingsRow}>
-      <ItemContent className="min-w-0 gap-0.5">
+    <Item role="listitem" data-row className={cn(settingsRow, rowActionsWidth.list[1], "relative")}>
+      {/* The revealed ⋯ covers the row's end, so the text fades beneath it. */}
+      <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
         <ItemTitle className="font-mono">
           <span className="truncate">{name}</span>
           {badge}
         </ItemTitle>
-        <ItemDescription>{description}</ItemDescription>
+        <ItemDescription className="text-xs">{description}</ItemDescription>
       </ItemContent>
-      <ItemActions className="shrink-0">
+      <RowActions className="top-1/2 right-4 -translate-y-1/2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <PianoButton
@@ -255,7 +258,7 @@ function LibraryRow({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </ItemActions>
+      </RowActions>
     </Item>
   );
 }

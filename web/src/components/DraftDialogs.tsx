@@ -275,7 +275,7 @@ export function DraftFileText({
         text={file}
         label={`Copy ${kind}`}
         copiedLabel={`${Kind} copied`}
-        failure={`Couldn’t copy. Select the ${kind} text to copy it.`}
+        failure={`Could not copy. Select the ${kind} text to copy it.`}
         variant="ghost"
         className="absolute top-2 right-2"
       />
