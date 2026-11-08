@@ -7,6 +7,7 @@ import {
   type HtmlPreviewDocument,
   type HtmlPreviewLink,
 } from "./html-preview-bridge.ts";
+import { mayPreviewAsImage, previewImageBytes } from "./previewImage.ts";
 
 /** The existing workspace file reader, already bound to the selected workspace. */
 export type HtmlPreviewReadFile = (path: string, signal: AbortSignal) => Promise<FilePreview>;
@@ -139,16 +140,13 @@ export async function prepareHtmlPreview(
 
   const image = async (reference: string, base: string): Promise<string | undefined> => {
     const resource = automaticReference(base, reference);
-    if (!resource) return undefined;
+    // A name that claims another format (`demo.mp4`) is neither read nor counted, as in Markdown.
+    if (!resource || !mayPreviewAsImage(resource)) return undefined;
     if (!images.has(resource)) {
       const file = await read(resource);
-      let url: string | undefined;
-      // SVG is safe only in image mode, never inline. Match the existing file-preview contract.
-      if (file?.kind === "svg")
-        url = dataUrl(new TextEncoder().encode(file.content), "image/svg+xml");
-      else if (file?.kind === "image" && /^image\/(png|jpeg|gif|webp)$/.test(file.mime))
-        url = dataUrl(file.bytes, file.mime);
-      images.set(resource, url);
+      // The file tab's notion of an image; SVG becomes an image-mode data URL, never inline.
+      const shown = file && previewImageBytes(file);
+      images.set(resource, shown && dataUrl(shown.bytes, shown.mime));
     }
     const url = images.get(resource);
     if (url) {
