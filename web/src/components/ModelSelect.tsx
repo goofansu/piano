@@ -1,12 +1,6 @@
 import type { ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import {
-  ChevronDownIcon,
-  RefreshCwIcon,
-  SaveCheckIcon,
-  SaveIcon,
-  Undo2Icon,
-} from "lucide-react";
+import { ChevronDownIcon, RefreshCwIcon, SaveCheckIcon, SaveIcon, Undo2Icon } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { EffortSelect } from "@/components/EffortSelect";
 import { IconButton } from "@/components/IconButton";
