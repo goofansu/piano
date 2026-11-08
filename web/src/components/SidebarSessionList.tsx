@@ -208,32 +208,21 @@ export function SessionMenu({
 }) {
   const { state } = useCommands();
   const { commands, run } = useSessionCommands(target);
-  const { sections, destructive } = sessionRowMenu(commands);
+  const { sections } = sessionRowMenu(commands);
   return (
     <>
-      {sections.map((section) => (
-        <Fragment key={section[0]?.id}>
+      {sections.map((section, i) => (
+        <Fragment key={section === "project" ? section : section[0]?.id}>
+          {i > 0 && <DropdownMenuSeparator />}
           <DropdownMenuGroup>
-            {section.map((c) => (
-              <SessionCommandMenuItem key={c.id} command={c} run={run} />
-            ))}
+            {section === "project" ? (
+              <ProjectMenu menu={sessionProjectMenu(state, target)} run={run} />
+            ) : (
+              section.map((c) => <SessionCommandMenuItem key={c.id} command={c} run={run} />)
+            )}
           </DropdownMenuGroup>
-          <DropdownMenuSeparator />
         </Fragment>
       ))}
-      <DropdownMenuGroup>
-        <ProjectMenu menu={sessionProjectMenu(state, target)} run={run} />
-      </DropdownMenuGroup>
-      {destructive.length > 0 && (
-        <>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            {destructive.map((c) => (
-              <SessionCommandMenuItem key={c.id} command={c} run={run} />
-            ))}
-          </DropdownMenuGroup>
-        </>
-      )}
     </>
   );
 }

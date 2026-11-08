@@ -8,7 +8,7 @@ import {
   GitPullRequestIcon,
   TargetIcon,
 } from "lucide-react";
-import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import {
   CommandIcon,
   useCommands,
@@ -252,29 +252,40 @@ export function SessionMenuSheet({
               />
             )}
             {facts && <Separator className="my-1" />}
-            {rows(menu.manage)}
-            {projects && (
-              <PaneRow
-                icon={<TargetIcon />}
-                disabled={!projects.entry.enabled}
-                onClick={() => setPage("projects")}
-              >
-                {projects.entry.label}
-              </PaneRow>
-            )}
-            {display && (
-              <>
-                <Separator className="my-1" />
-                <Label className={cn(row, "flex justify-between rounded-md")}>
-                  <span className="flex items-center gap-3">
-                    <CommandIcon icon={display.icon} /> {display.label}
-                  </span>
-                  <Switch checked={!!display.checked} onCheckedChange={() => run(display)} />
-                </Label>
-              </>
-            )}
-            <Separator className="my-1" />
-            {rows(menu.destructive)}
+            {menu.sections.map((section, i) => {
+              if (section === "project")
+                // The project entry opens its own page, so it continues the manage rows unseparated.
+                return (
+                  projects && (
+                    <PaneRow
+                      key={section}
+                      icon={<TargetIcon />}
+                      disabled={!projects.entry.enabled}
+                      onClick={() => setPage("projects")}
+                    >
+                      {projects.entry.label}
+                    </PaneRow>
+                  )
+                );
+              return (
+                <Fragment key={typeof section === "string" ? section : section[0]?.id}>
+                  {i > 0 && <Separator className="my-1" />}
+                  {section === "display"
+                    ? display && (
+                        <Label className={cn(row, "flex justify-between rounded-md")}>
+                          <span className="flex items-center gap-3">
+                            <CommandIcon icon={display.icon} /> {display.label}
+                          </span>
+                          <Switch
+                            checked={!!display.checked}
+                            onCheckedChange={() => run(display)}
+                          />
+                        </Label>
+                      )
+                    : rows(section)}
+                </Fragment>
+              );
+            })}
           </>
         )}
         {page === "projects" && projects && (

@@ -7,6 +7,7 @@ import {
   environmentRowMenu,
   type SessionCommandId,
   type SessionHeaderMenu,
+  type SessionMenuSection,
   type SessionRowMenu,
   sessionCommands,
   sessionHeaderMenu,
@@ -259,15 +260,17 @@ test("Wrap reflects the code wrap preference and is available whatever Changes c
   assert.ok(!sessionCommands(base, other).some((c) => c.id === "wrap-code"));
 });
 
-const headerIds = ({ details, manage, display, destructive }: SessionHeaderMenu) => [
-  ...[...details, ...manage, ...destructive].map((c) => c.id),
+const commandsOf = (sections: readonly (SessionMenuSection | "display")[]) =>
+  sections.flatMap((s) => (typeof s === "string" ? [] : s));
+const ids = (sections: readonly (SessionMenuSection | "display")[]) =>
+  sections.map((s) => (typeof s === "string" ? s : s.map((c) => c.id)));
+
+const headerIds = ({ details, sections, display }: SessionHeaderMenu) => [
+  ...[...details, ...commandsOf(sections)].map((c) => c.id),
   ...(display ? [display.id] : []),
 ];
 
-const rowCommands = ({ sections, destructive }: SessionRowMenu) => [
-  ...sections.flat(),
-  ...destructive,
-];
+const rowCommands = ({ sections }: SessionRowMenu) => commandsOf(sections);
 
 test("the palette offers every command the session header and the sidebar row menu offer", () => {
   const options = { radiusSignedIn: true };
@@ -288,24 +291,20 @@ test("the palette offers every command the session header and the sidebar row me
   );
 });
 
-test("the row menu: rename and pin, share only when signed in to Radius, then archive with delete last", () => {
-  const menu = (radiusSignedIn: boolean) => {
-    const { sections, destructive } = sessionRowMenu(
-      sessionCommands(base, other, { radiusSignedIn }),
-    );
-    return {
-      sections: sections.map((s) => s.map((c) => c.id)),
-      destructive: destructive.map((c) => c.id),
-    };
-  };
-  assert.deepEqual(menu(true), {
-    sections: [["rename", "pin"], ["share"]],
-    destructive: ["archive", "delete"],
-  });
-  assert.deepEqual(menu(false), {
-    sections: [["rename", "pin"]],
-    destructive: ["archive", "delete"],
-  });
+test("each session menu places its project section after the manage commands and before Archive and Delete", () => {
+  const row = (radiusSignedIn: boolean) =>
+    ids(sessionRowMenu(sessionCommands(base, other, { radiusSignedIn })).sections);
+  assert.deepEqual(row(true), [["rename", "pin"], ["share"], "project", ["archive", "delete"]]);
+  assert.deepEqual(row(false), [["rename", "pin"], "project", ["archive", "delete"]]);
+  // In the declared order, whatever order the descriptors come in.
+  const reversed = sessionCommands(base, other, { radiusSignedIn: true }).reverse();
+  assert.deepEqual(ids(sessionRowMenu(reversed).sections), row(true));
+  assert.deepEqual(ids(sessionHeaderMenu(sessionCommands(base)).sections), [
+    ["rename", "pin"],
+    "project",
+    "display",
+    ["archive", "delete"],
+  ]);
 });
 
 test("the header menu: copy beside the details, manage with share only when signed in, a Messages only switch, then archive with delete", () => {
@@ -319,25 +318,20 @@ test("the header menu: copy beside the details, manage with share only when sign
     );
     assert.ok(!headerIds(menu).includes("pull-request"), "PR linking lives in Changes");
     assert.ok(sessionCommands(base).some((c) => c.id === "pull-request" && c.enabled));
-    assert.deepEqual(
-      menu.manage.map((c) => c.id),
+    assert.deepEqual(ids(menu.sections), [
       ["rename", "pin", "share"],
-    );
-    assert.deepEqual(
-      menu.destructive.map((c) => c.id),
+      "project",
+      "display",
       ["archive", "delete"],
-    );
+    ]);
     assert.equal(menu.display?.label, "Messages only");
     assert.equal(menu.display?.checked, messagesOnly);
   }
-  assert.deepEqual(
-    sessionHeaderMenu(sessionCommands(base)).manage.map((c) => c.id),
-    ["rename", "pin"],
-  );
   // Another session's commands carry no header: nothing to open or switch, only management.
   const other = sessionHeaderMenu(sessionCommands(base, { cwd: "/work/other", sessionId: "s9" }));
   assert.deepEqual(other.details, []);
   assert.equal(other.display, undefined);
+  assert.ok(!other.sections.includes("display"));
 });
 
 test("Share is Radius-sign-in only and targets the row, independent of selected model or MCP", () => {
