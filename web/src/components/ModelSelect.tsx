@@ -1,6 +1,6 @@
 import type { ModelChoice, ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
-import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
+import { ChevronDownIcon, RefreshCwIcon, SaveCheckIcon, SaveIcon, Undo2Icon } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { EffortSelect } from "@/components/EffortSelect";
 import { IconButton } from "@/components/IconButton";
@@ -14,6 +14,7 @@ import {
 } from "@/components/PianoCommand";
 import { Popover, PopoverTrigger } from "@/components/PianoPopover";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { isImeKey } from "@/lib/keys";
@@ -32,6 +33,8 @@ interface Props {
   onChange: (ref: string) => void;
   effort: ThinkingLevel;
   onEffortChange: (level: ThinkingLevel) => void;
+  /** Returns the model and effort to Pi's defaults for new sessions. */
+  onUseDefaults: () => void;
   disabled?: boolean;
   /** Bordered control for standalone forms; composers retain the quiet trigger. */
   variant?: "ghost" | "outline";
@@ -49,6 +52,7 @@ export function ModelSelect({
   onChange,
   effort,
   onEffortChange,
+  onUseDefaults,
   disabled,
   variant = "ghost",
   noDirectory,
@@ -255,17 +259,38 @@ export function ModelSelect({
                 {view.defaultLabel ?? "Not available"}
               </span>
             </span>
-            <Button
-              variant="ghost"
-              size="xs"
-              className="w-28 shrink-0 pointer-coarse:min-h-11"
-              disabled={!view.canSaveDefault}
-              aria-busy={saving}
-              onClick={() => void models.saveDefaults(want, effort)}
-            >
-              {saving && <Spinner data-icon="inline-start" aria-hidden />}
-              {saving ? "Saving…" : view.isDefault ? "Default" : "Make default"}
-            </Button>
+            <ButtonGroup className="shrink-0">
+              <IconButton
+                variant="outline"
+                size="header"
+                label="Use default"
+                disabled={!view.canUseDefault}
+                onClick={() => {
+                  // Stay open to show the defaults taking effect; the button disables, so focus
+                  // moves to the default's effort once Pi shows that model.
+                  setFocusModel(catalog?.defaultModel ?? null);
+                  onUseDefaults();
+                }}
+              >
+                <Undo2Icon aria-hidden />
+              </IconButton>
+              <IconButton
+                variant="outline"
+                size="header"
+                label={view.isDefault ? "Default" : "Make default"}
+                disabled={!view.canSaveDefault}
+                aria-busy={saving}
+                onClick={() => void models.saveDefaults(want, effort)}
+              >
+                {saving ? (
+                  <Spinner aria-hidden />
+                ) : view.isDefault ? (
+                  <SaveCheckIcon aria-hidden />
+                ) : (
+                  <SaveIcon aria-hidden />
+                )}
+              </IconButton>
+            </ButtonGroup>
           </div>
         </div>
       </PickerContent>

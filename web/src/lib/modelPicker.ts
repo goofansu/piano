@@ -60,6 +60,8 @@ export interface ModelPickerView {
   /** The shown model and effort are already Pi's defaults for new sessions. */
   isDefault: boolean;
   canSaveDefault: boolean;
+  /** Pi's defaults are known, listed and differ from the shown selection: the picker can return to them. */
+  canUseDefault: boolean;
   /** Pi's defaults as the trigger names them, such as "claude-x · medium"; null when unknown. */
   defaultLabel: string | null;
 }
@@ -102,6 +104,14 @@ export function modelPickerView(s: ModelPickerInput): ModelPickerView {
     isDefault,
     canSaveDefault:
       !s.disabled && !waitingForModel && !s.saving && !isDefault && !!shown && !catalog?.error,
+    canUseDefault:
+      !s.disabled &&
+      !waitingForModel &&
+      !isDefault &&
+      !catalog?.error &&
+      !!catalog?.defaultModel &&
+      !!catalog.defaultThinkingLevel &&
+      catalog.models.some((m) => m.ref === catalog.defaultModel),
     defaultLabel: catalog?.defaultModel
       ? [catalog.defaultModel.split("/").pop(), catalog.defaultThinkingLevel]
           .filter(Boolean)

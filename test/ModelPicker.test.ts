@@ -141,6 +141,23 @@ test("saving defaults waits for a model, a working catalog and the previous save
   );
 });
 
+test("the picker offers Pi's defaults only when the selection differs and they can be applied", () => {
+  assert.equal(view({ value: "anthropic/claude-x", effort: "medium" }).canUseDefault, false);
+  assert.equal(view({ value: "openai/gpt-y" }).canUseDefault, true, "other model");
+  assert.equal(view({ effort: "high" }).canUseDefault, true, "other effort");
+  const changed = { value: "openai/gpt-y" };
+  const blocked: [string, Partial<ModelPickerInput>][] = [
+    ["no default model", { catalog: catalog({ defaultModel: undefined }) }],
+    ["no default effort", { catalog: catalog({ defaultThinkingLevel: undefined }) }],
+    ["default model not listed", { catalog: catalog({ defaultModel: "gone/model" }) }],
+    ["catalog error", { catalog: catalog({ error: "pi exited" }) }],
+    ["waiting for the chosen model", { chosen: "anthropic/claude-x" }],
+    ["picker disabled", { disabled: true }],
+  ];
+  for (const [why, over] of blocked)
+    assert.equal(view({ ...changed, ...over }).canUseDefault, false, why);
+});
+
 test("efforts follow the shown model and pause while a chosen model is on its way", () => {
   const narrow = catalog({
     models: [{ ...model("anthropic/claude-x"), thinkingLevels: ["off"] }],

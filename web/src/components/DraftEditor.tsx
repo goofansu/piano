@@ -70,6 +70,8 @@ interface ModelProps {
   onChange: (ref: string) => void;
   effort: ThinkingLevel;
   onEffortChange: (level: ThinkingLevel) => void;
+  /** Returns the model and effort to Pi's defaults for new sessions. */
+  onUseDefaults: () => void;
   noDirectory?: boolean;
 }
 
@@ -183,6 +185,7 @@ export function DraftEditor({
           onChange={model.onChange}
           effort={model.effort}
           onEffortChange={model.onEffortChange}
+          onUseDefaults={model.onUseDefaults}
           disabled={disabled}
           noDirectory={model.noDirectory}
         />

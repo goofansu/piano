@@ -139,6 +139,33 @@ test("saved session: shows its recorded selection; only deliberate picks overrid
   });
 });
 
+test("using the defaults returns model and effort to Pi's defaults for every target", () => {
+  // New page: a different pick returns to what a fresh New page shows.
+  const quick = held(modelChoice(emptyChoice(fresh), catalog, fresh).chooseModel("a/quick"));
+  const [toFresh, ...restFresh] = modelChoice(quick, catalog, fresh).chooseDefaults();
+  assert.deepEqual(restFresh, []);
+  assert.deepEqual(shown(held(toFresh), catalog, fresh), shown(emptyChoice(fresh), catalog, fresh));
+
+  // Saved session: the defaults override its recorded selection in the next prompt.
+  const [toSaved, ...restSaved] = modelChoice(emptyChoice(saved), catalog, saved).chooseDefaults();
+  assert.deepEqual(restSaved, []);
+  assert.deepEqual(shown(held(toSaved), catalog, saved), {
+    model: "a/deep",
+    effort: "high",
+    start: { model: "a/deep", thinkingLevel: "high" },
+  });
+
+  // Hosted session: Pi takes the model, then the effort.
+  assert.deepEqual(modelChoice(emptyChoice(hosted), catalog, hosted).chooseDefaults(), [
+    { kind: "act", action: { _tag: "set_model", model: "a/deep" } },
+    { kind: "act", action: { _tag: "set_thinking_level", level: "high" } },
+  ]);
+
+  // Without Pi's defaults there is nothing to return to.
+  const bare: ModelCatalog = { ...catalog, defaultThinkingLevel: undefined };
+  assert.deepEqual(modelChoice(emptyChoice(fresh), bare, fresh).chooseDefaults(), []);
+});
+
 test("reconnect: a pick survives a refreshed catalog that still lists its model", () => {
   const pick = held(modelChoice(emptyChoice(fresh), catalog, fresh).chooseModel("a/quick"));
   const both = held(modelChoice(pick, catalog, fresh).chooseEffort("low"));

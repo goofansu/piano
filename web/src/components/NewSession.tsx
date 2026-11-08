@@ -199,6 +199,7 @@ export function NewSessionComposer({
             onChange: choice.onModelChange,
             effort: choice.effort,
             onEffortChange: choice.onEffortChange,
+            onUseDefaults: choice.onUseDefaults,
             noDirectory: !cwd,
           }}
           onSend={submit}
