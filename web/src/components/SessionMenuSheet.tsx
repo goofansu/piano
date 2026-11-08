@@ -12,6 +12,7 @@ import { Fragment, type ReactNode, type RefObject, useLayoutEffect, useRef, useS
 import {
   CommandIcon,
   CommandLink,
+  type LinkCommand,
   useCommands,
   useOpenPreview,
   useSessionCommands,
@@ -118,24 +119,43 @@ function PaneRow({
   );
 }
 
-/** The linked pull request, opened on GitHub in a new tab: the sheet's one way out of Piano. */
-function PullRequestRow({
-  url,
-  name,
+/**
+ * A link out of Piano as a sheet row: its icon in the leading column the other rows use, so the
+ * labels align, then its label, a muted value and the external-link icon. `to` is a URL, or a link
+ * command, which `CommandLink` renders as every surface does. It opens a new tab, so `onOpen`
+ * closes the sheet as choosing an action would.
+ */
+function LinkRow({
+  to,
+  icon,
+  value: rowValue,
   onOpen,
+  children,
 }: {
-  url: string;
-  /** The pull request's name ("#42"), once the link names a number. */
-  name: string | undefined;
+  to: string | LinkCommand;
+  icon: ReactNode;
+  value?: ReactNode;
   onOpen: () => void;
+  children: ReactNode;
 }) {
+  const content = (
+    <>
+      {icon} {children}
+      {rowValue && <span className={value}>{rowValue}</span>}
+      <ExternalLinkIcon data-icon="inline-end" className="ml-auto text-muted-foreground" />
+    </>
+  );
   return (
     <Button asChild variant="ghost" className={row}>
-      <a href={url} target="_blank" rel="noreferrer" onClick={onOpen}>
-        <GitPullRequestIcon /> Pull request
-        {name && <span className={value}>{name}</span>}
-        <ExternalLinkIcon data-icon="inline-end" className="ml-auto text-muted-foreground" />
-      </a>
+      {typeof to === "string" ? (
+        <a href={to} target="_blank" rel="noopener noreferrer" onClick={onOpen}>
+          {content}
+        </a>
+      ) : (
+        <CommandLink command={to} onClick={onOpen}>
+          {content}
+        </CommandLink>
+      )}
     </Button>
   );
 }
@@ -252,7 +272,16 @@ export function SessionMenuSheet({
           <>
             <SheetTitle className="sr-only">Session</SheetTitle>
             {/* The pull request opens in a browser tab, so the sheet closes as after an action. */}
-            {pr && <PullRequestRow url={pr.url} name={pr.reference && pr.name} onOpen={onLeave} />}
+            {pr && (
+              <LinkRow
+                to={pr.url}
+                icon={<GitPullRequestIcon />}
+                value={pr.reference && pr.name}
+                onOpen={onLeave}
+              >
+                Pull request
+              </LinkRow>
+            )}
             {preview && (
               <PreviewRow
                 preview={preview}
@@ -316,12 +345,13 @@ export function SessionMenuSheet({
                   )}
                 </div>
                 {openPreview && (
-                  <Button asChild variant="ghost" className={row}>
-                    <CommandLink command={openPreview} onClick={onLeave}>
-                      {openPreview.label}
-                      <ExternalLinkIcon data-icon="inline-end" className="ml-auto" />
-                    </CommandLink>
-                  </Button>
+                  <LinkRow
+                    to={openPreview}
+                    icon={<CommandIcon icon={openPreview.icon} />}
+                    onOpen={onLeave}
+                  >
+                    {openPreview.label}
+                  </LinkRow>
                 )}
                 {commands
                   .filter((c) => c.id === "preview-details" || c.id === "stop-preview")
