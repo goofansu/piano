@@ -102,7 +102,7 @@ export function SessionHeader({
         {place.ref && (
           <>
             <span aria-hidden>·</span>
-            <span className="min-w-0 flex-1">
+            <span className="min-w-0 flex-1" title={place.ref.name}>
               <MiddleEllipsis text={place.ref.name} />
             </span>
           </>

@@ -194,13 +194,12 @@ export function SessionEnvironment({ state }: { state: AppState }) {
           name="Git"
           menu="commit"
           icon={<GitCommitHorizontalIcon />}
-          mono
           description="A commit is checked out directly; no branch is active."
         >
           {`${place.ref.name} (detached)`}
         </EnvironmentRow>
       ) : place?.ref ? (
-        <EnvironmentRow name="Branch" menu="branch" icon={<GitBranchIcon />} mono href={branchUrl}>
+        <EnvironmentRow name="Branch" menu="branch" icon={<GitBranchIcon />} href={branchUrl}>
           {place.ref.name}
         </EnvironmentRow>
       ) : null}
@@ -225,7 +224,6 @@ export function SessionEnvironment({ state }: { state: AppState }) {
 function EnvironmentRow({
   name,
   icon,
-  mono = false,
   href,
   menu,
   cwd,
@@ -234,7 +232,6 @@ function EnvironmentRow({
 }: {
   name: string;
   icon: ReactNode;
-  mono?: boolean;
   href?: string;
   menu: EnvironmentRowKind;
   /** The directory the row stands for, as its tooltip. */
@@ -252,13 +249,11 @@ function EnvironmentRow({
       </ItemMedia>
       <ItemContent className="min-w-0">
         <RailRowTitle
-          className={isName ? "w-full font-mono" : mono ? "break-all font-mono" : "break-words"}
+          className={
+            isName ? "w-full font-mono" : menu === "commit" ? "break-all font-mono" : "break-words"
+          }
         >
-          {isName ? (
-            <MiddleEllipsis text={children} tooltip={!open && menu !== "repository"} />
-          ) : (
-            children
-          )}
+          {isName ? <MiddleEllipsis text={children} /> : children}
         </RailRowTitle>
       </ItemContent>
     </>
@@ -274,7 +269,9 @@ function EnvironmentRow({
             railRow,
             "cursor-pointer text-left hover:bg-fill-hover data-[state=open]:bg-fill-hover",
           )}
-          title={open ? "" : (description ?? cwd ?? name)}
+          // The row's one tooltip: what its text stands for, or the full name a shortened text hides;
+          // none while its menu is open.
+          title={open ? undefined : (description ?? cwd ?? (isName ? children : name))}
           asChild
         >
           <button type="button" aria-label={`${name}: ${children}`}>
