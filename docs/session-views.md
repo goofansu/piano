@@ -53,7 +53,7 @@ One row in the 48px band, so Settings, the project home and the sidebar header s
 - **Controls at the end:** preview and pull request, each a state and a one-click action; Views
   joins them in slice 2. Controls never shrink.
 - **Phones:** the same row with 44px controls. With no rail, where the session runs is a second
-  line under the title (repository or folder, then the branch shortened in the middle). The
+  line under the title (the folder and branch line of its sidebar row). The
   session menu, a bottom sheet, holds the desktop menu's actions, the linked pull request and
   Preview, and nothing of the rail's lists.
 

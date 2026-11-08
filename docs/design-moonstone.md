@@ -204,8 +204,8 @@ open beside the Agent area: Agent, then the open tabs ("Agent | README.md"), dra
 strip tabs without Close (each view closes from its toolbar). With nothing open the bar is left
 out to save its row; Changes opens from the header or palette. Taking turns there is no rail and
 no rail control, in the header or the palette. The header says where the session runs on a second
-line under the title: the repository or folder, then the branch shortened in the middle (or the
-short commit), in 12px muted text that does nothing on tap. The session menu ("…", a bottom sheet
+line under the title, the same folder and branch line as under a sidebar row, in 12px muted text
+that does nothing on tap. The session menu ("…", a bottom sheet
 whenever the areas take turns) is the desktop menu's actions and no more, one level deep. Before
 them, the linked pull request opens on GitHub in a new tab and ends with the external-link icon.
 Preview, while known, shows its state dot, name and host; tapping it pushes a Preview pane in the

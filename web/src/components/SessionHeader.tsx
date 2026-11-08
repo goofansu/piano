@@ -10,7 +10,6 @@ import {
   useSessionProjectMenu,
 } from "@/components/CommandHost";
 import { IconButton } from "@/components/IconButton";
-import { MiddleEllipsis } from "@/components/MiddleEllipsis";
 import { PaneHeader } from "@/components/Pane";
 import { PianoButton } from "@/components/PianoButton";
 import {
@@ -25,6 +24,7 @@ import {
 import { Sheet, SheetTrigger } from "@/components/PianoSheet";
 import { ProjectMenu } from "@/components/Projects";
 import { ArtifactsMenu } from "@/components/SessionArtifacts";
+import { SessionDetails } from "@/components/SessionDetails";
 import { SessionMenuSheet } from "@/components/SessionMenuSheet";
 import { type PullRequestControl, PullRequestLinkDialog } from "@/components/SessionPullRequest";
 import { surfaceTabNames } from "@/components/SurfaceArea";
@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
-import { sessionContext, sessionPlace } from "@/lib/sessionContext";
+import { sessionContext } from "@/lib/sessionContext";
 import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
@@ -69,7 +69,6 @@ export function SessionHeader({
   const session = state.session;
   const context = sessionContext(state);
   const { title, sessionId, cwd } = context;
-  const place = sheet && session ? sessionPlace(context) : undefined;
   const { commands, run } = useSessionCommands();
   const menu = sessionHeaderMenu(commands);
   const projectMenu = useSessionProjectMenu();
@@ -93,26 +92,18 @@ export function SessionHeader({
     </h1>
   );
   // With no rail, where the session runs sits under the title as it does under a sidebar row: the
-  // folder, then the branch shortened in the middle.
-  // It shows its own text, so it does nothing on tap.
-  const titleBlock = place ? (
-    <div className="flex min-w-0 flex-col">
-      {heading}
-      <p className="flex min-w-0 items-center gap-1 text-xs text-ink-3">
-        <span className="truncate">{context.folderName}</span>
-        {place.ref && (
-          <>
-            <span aria-hidden>·</span>
-            <span className="min-w-0 flex-1" title={place.ref.name}>
-              <MiddleEllipsis text={place.ref.name} />
-            </span>
-          </>
-        )}
-      </p>
-    </div>
-  ) : (
-    heading
-  );
+  // same folder and branch line. It shows its own text, so it does nothing on tap.
+  const titleBlock =
+    sheet && session && context.folderName !== undefined ? (
+      <div className="flex min-w-0 flex-col">
+        {heading}
+        <p className="flex min-w-0 items-center gap-2 text-xs text-ink-3">
+          <SessionDetails folder={context.folderName} branch={context.branch} />
+        </p>
+      </div>
+    ) : (
+      heading
+    );
   const sessionMenu = sheet ? (
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger asChild>{menuButton}</SheetTrigger>
@@ -131,7 +122,7 @@ export function SessionHeader({
         className="w-96 max-w-[calc(100vw-2rem)]"
       >
         <DropdownMenuGroup className="flex items-center">
-          <SessionDetails className="px-2" sessionId={sessionId} />
+          <SessionIdDetails className="px-2" sessionId={sessionId} />
           {menu.details.map((c) => (
             <DropdownMenuItem key={c.id} asChild disabled={!c.enabled} onSelect={() => run(c)}>
               <PianoButton variant="ghost" size="row" className="shrink-0" aria-label={c.label}>
@@ -291,13 +282,7 @@ function ChangesToggle() {
 }
 
 /** The selectable session ID at the top of the dropdown session menu. */
-export function SessionDetails({
-  sessionId,
-  className,
-}: {
-  sessionId?: string;
-  className?: string;
-}) {
+function SessionIdDetails({ sessionId, className }: { sessionId?: string; className?: string }) {
   return (
     // Static, selectable metadata has no menu-item primitive; a definition list keeps field names accessible.
     <dl
