@@ -274,6 +274,24 @@ test("INV-11: API-key routes keep invalid input and credential storage errors ou
   });
 });
 
+test("a webhook save outside its body Schema is refused before Webhooks sees it", async () => {
+  const save = (body: unknown) =>
+    server.handle("/api/settings/webhooks", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  for (const body of [
+    { url: "https://receiver.example/events", events: [], active: true },
+    { url: "https://receiver.example/events", events: ["session.unknown"], active: true },
+    { url: "https://receiver.example/events", events: ["session.completed"] },
+  ])
+    assert.deepEqual(await reply(await save(body)), {
+      status: 400,
+      body: { error: "Enter a URL and select at least one event." },
+    });
+});
+
 test("a result outside the response Schema is never sent", async () => {
   const { status, body } = await reply(
     await server.handle("/api/settings/defaults", {
