@@ -275,7 +275,7 @@ test("subscription/active filtering is paired with positive delivery; payloads a
   );
 });
 
-test("Webhooks decides which live events it sends: a completion, a dialog newly asked, a stop that needs attention; never a snapshot", async () => {
+test("Webhooks decides which live events it sends: a completion, a dialog newly asked, a stop that needs attention; never an attachment's snapshot", async () => {
   const requests: Received[] = [];
   await run(
     "trigger",
@@ -310,6 +310,37 @@ test("Webhooks decides which live events it sends: a completion, a dialog newly 
         "session.failed",
       ]);
       assert.equal(requests[3].body.failure?.exitCode, 1);
+    }),
+    receive(requests),
+  );
+});
+
+test("a snapshot that catches the observer up sends the dialog or failure it missed, once", async () => {
+  const requests: Received[] = [];
+  await run(
+    "resync",
+    Effect.gen(function* () {
+      yield* registered;
+      const hooks = yield* Webhooks;
+      yield* hooks.save({ ...input, events: WEBHOOK_EVENTS });
+      const sent = () => requests.map((r) => r.body.event);
+      const resync = (before: Snapshot, after: Snapshot) =>
+        hooks.observe(cwd, "s", before, { _tag: "snapshot", snapshot: after }, after);
+      const asking: Snapshot = { ...snapshot, dialogs: [choose] };
+      yield* resync(snapshot, asking);
+      yield* resync(asking, asking);
+      const failed: Snapshot = {
+        ...asking,
+        state: {
+          ...asking.state,
+          closure: { _tag: "exited", code: 1, detail: "Pi exited with code 1" },
+        },
+      };
+      yield* resync(asking, failed);
+      yield* resync(failed, failed);
+      yield* wait(() => requests.length === 2);
+      yield* Effect.sleep(50);
+      assert.deepEqual(sent(), ["session.needs_input", "session.failed"]);
     }),
     receive(requests),
   );
