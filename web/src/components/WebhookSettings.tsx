@@ -19,6 +19,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { RemovalDialog } from "@/components/RemovalDialog";
 import { ListRow, RowMenu, RowStatus } from "@/components/RowActions";
+import { SavedSecretInput, useSavedSecret } from "@/components/SavedSecretInput";
 import {
   SettingsList,
   SettingsLoadState,
@@ -36,12 +37,6 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
 import { ItemDescription } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -253,8 +248,7 @@ function WebhookEditor({
   refresh: () => void;
 }) {
   const [url, setUrl] = useState(hook?.url ?? "");
-  const [token, setToken] = useState("");
-  const [clearToken, setClearToken] = useState(false);
+  const token = useSavedSecret(hook?.hasToken ?? false);
   const [events, setEvents] = useState<readonly WebhookEvent[]>(
     hook?.events ?? ["session.completed"],
   );
@@ -281,7 +275,7 @@ function WebhookEditor({
         saveWebhook({
           id: hook?.id,
           url,
-          token: clearToken ? null : token || undefined,
+          token: token.change,
           events,
           active,
         }).catch(refusal.record),
@@ -318,33 +312,14 @@ function WebhookEditor({
             <FieldLabel htmlFor="webhook-token">
               Bearer token <span className="font-normal text-ink-3">Optional</span>
             </FieldLabel>
-            {/* A saved token shows as a masked placeholder: blank keeps it, typing replaces it,
-             * Remove clears it on save (Keep undoes that before saving). */}
-            <InputGroup>
-              <InputGroupInput
-                id="webhook-token"
-                type="password"
-                autoComplete="new-password"
-                maxLength={LITERAL_SECRET_MAX}
-                value={token}
-                aria-invalid={!!tokenError}
-                placeholder={hook?.hasToken && !clearToken ? "••••••••••••••••" : undefined}
-                aria-description={
-                  hook?.hasToken && !clearToken ? "A token is saved; blank keeps it." : undefined
-                }
-                onChange={(e) => {
-                  setToken(e.target.value);
-                  setClearToken(false);
-                }}
-              />
-              {hook?.hasToken && !token && (
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton type="button" onClick={() => setClearToken(!clearToken)}>
-                    {clearToken ? "Keep" : "Remove"}
-                  </InputGroupButton>
-                </InputGroupAddon>
-              )}
-            </InputGroup>
+            <SavedSecretInput
+              secret={token}
+              id="webhook-token"
+              noun="token"
+              maxLength={LITERAL_SECRET_MAX}
+              disabled={busy}
+              invalid={!!tokenError}
+            />
             {tokenError && <FieldError role="alert">{tokenError}</FieldError>}
           </Field>
           <FieldSet>
