@@ -100,7 +100,7 @@ export function AttachmentDraftView({
         <AttachmentGroup
           aria-label="Attachments"
           className="scroll-fade-none px-3 pt-3 font-sans"
-          onWheel={wheelSideways}
+          ref={wheelSideways}
         >
           {draft.items.map((a, i) => (
             /* Index keys: drafts may repeat a file name and only append or clear. */ <Attachment
@@ -211,7 +211,7 @@ function ImagePreview({ url }: { url: string }) {
 /** The group clips overflow, so inline padding (offset by the margin) keeps the first tile's focus ring visible. */
 export function MessageAttachments({ items }: { items: RenderMsg["attachments"] }) {
   return items?.length ? (
-    <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1" onWheel={wheelSideways}>
+    <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1" ref={wheelSideways}>
       {items.map((a, i) => (
         /* Index keys: a message's attachments are fixed and may repeat a URL. */ <ImagePreview
           key={`${a.url}-${i}`}
