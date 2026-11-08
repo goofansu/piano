@@ -39,13 +39,10 @@ function ProjectRow({
     <ListRow
       title={row.project.name}
       open={{ onOpen: () => openProject(row.project.id) }}
-      value={
-        time && (
-          <time dateTime={time} className="text-xs text-ink-3">
-            {isProjectDone(row.project) && "Done "}
-            {timeAgo(time, now)}
-          </time>
-        )
+      time={
+        time
+          ? { at: time, text: `${isProjectDone(row.project) ? "Done " : ""}${timeAgo(time, now)}` }
+          : undefined
       }
       menu={
         <ProjectCommandsMenu
