@@ -4,20 +4,14 @@ import {
   type Webhook,
   type WebhookDelivery,
   type WebhookEvent,
-  type WebhookField,
 } from "@shared/webhooks";
 import { WebhookIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
+import { FormDialog, useFieldRefusal } from "@/components/FormDialog";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/PianoDialog";
+import { DialogFooter, DialogHeader, DialogTitle } from "@/components/PianoDialog";
 import {
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -54,7 +48,7 @@ import { ItemDescription } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { ApiError, listWebhooks, removeWebhook, saveWebhook, testWebhook } from "@/lib/api";
+import { listWebhooks, removeWebhook, saveWebhook, testWebhook } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { pageCommands } from "@/lib/globalCommands";
 import { useObservation } from "@/lib/useObservation";
@@ -298,11 +292,9 @@ function WebhookEditor({
   });
   const busy = actions.running !== undefined;
   // The server names the field a refusal belongs to; one without a field shows below the form.
-  const [errorField, setErrorField] = useState<WebhookField | undefined>();
-  const errorAt = (field: WebhookField | undefined) =>
-    actions.error && errorField === field ? actions.error : undefined;
-  const urlError = errorAt("url");
-  const tokenError = errorAt("token");
+  const refusal = useFieldRefusal(WEBHOOK_FIELDS, actions.error);
+  const urlError = refusal.at("url");
+  const tokenError = refusal.at("token");
   // Create and Save wait for a URL and at least one event, as New skill waits for its draft.
   const ready = url.trim() !== "" && events.length > 0;
   const submit = async (event: React.FormEvent) => {
@@ -317,115 +309,106 @@ function WebhookEditor({
           token: clearToken ? null : token || undefined,
           events,
           active,
-        }).catch((cause: unknown) => {
-          const field = cause instanceof ApiError ? cause.field : undefined;
-          setErrorField(WEBHOOK_FIELDS.find((known) => known === field));
-          throw cause;
-        }),
+        }).catch(refusal.record),
       done: hook ? "Webhook saved" : "Webhook created",
       fallback: "Could not save webhook.",
     });
     if (saved) close();
   };
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !busy) close();
-      }}
+    <FormDialog
+      busy={busy}
+      close={close}
+      className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+      aria-describedby={undefined}
     >
-      <DialogContent
-        className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
-        aria-describedby={undefined}
-      >
-        <DialogHeader>
-          <DialogTitle>{hook ? "Edit webhook" : "New webhook"}</DialogTitle>
-        </DialogHeader>
-        <form className="flex flex-col gap-6" onSubmit={(e) => void submit(e)}>
-          <FieldGroup>
-            <Field data-invalid={!!urlError}>
-              <FieldLabel htmlFor="webhook-url">URL</FieldLabel>
-              <Input
-                id="webhook-url"
-                type="url"
-                required
-                value={url}
-                aria-invalid={!!urlError}
-                onChange={(e) => setUrl(e.target.value)}
+      <DialogHeader>
+        <DialogTitle>{hook ? "Edit webhook" : "New webhook"}</DialogTitle>
+      </DialogHeader>
+      <form className="flex flex-col gap-6" onSubmit={(e) => void submit(e)}>
+        <FieldGroup>
+          <Field data-invalid={!!urlError}>
+            <FieldLabel htmlFor="webhook-url">URL</FieldLabel>
+            <Input
+              id="webhook-url"
+              type="url"
+              required
+              value={url}
+              aria-invalid={!!urlError}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+            {urlError && <FieldError role="alert">{urlError}</FieldError>}
+          </Field>
+          <Field data-invalid={!!tokenError}>
+            <FieldLabel htmlFor="webhook-token">
+              Bearer token <span className="font-normal text-ink-3">Optional</span>
+            </FieldLabel>
+            {/* A saved token shows as a masked placeholder: blank keeps it, typing replaces it,
+             * Remove clears it on save (Keep undoes that before saving). */}
+            <InputGroup>
+              <InputGroupInput
+                id="webhook-token"
+                type="password"
+                autoComplete="new-password"
+                value={token}
+                aria-invalid={!!tokenError}
+                placeholder={hook?.hasToken && !clearToken ? "••••••••••••••••" : undefined}
+                aria-description={
+                  hook?.hasToken && !clearToken ? "A token is saved; blank keeps it." : undefined
+                }
+                onChange={(e) => {
+                  setToken(e.target.value);
+                  setClearToken(false);
+                }}
               />
-              {urlError && <FieldError role="alert">{urlError}</FieldError>}
-            </Field>
-            <Field data-invalid={!!tokenError}>
-              <FieldLabel htmlFor="webhook-token">
-                Bearer token <span className="font-normal text-ink-3">Optional</span>
-              </FieldLabel>
-              {/* A saved token shows as a masked placeholder: blank keeps it, typing replaces it,
-               * Remove clears it on save (Keep undoes that before saving). */}
-              <InputGroup>
-                <InputGroupInput
-                  id="webhook-token"
-                  type="password"
-                  autoComplete="new-password"
-                  value={token}
-                  aria-invalid={!!tokenError}
-                  placeholder={hook?.hasToken && !clearToken ? "••••••••••••••••" : undefined}
-                  aria-description={
-                    hook?.hasToken && !clearToken ? "A token is saved; blank keeps it." : undefined
-                  }
-                  onChange={(e) => {
-                    setToken(e.target.value);
-                    setClearToken(false);
-                  }}
-                />
-                {hook?.hasToken && !token && (
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton type="button" onClick={() => setClearToken(!clearToken)}>
-                      {clearToken ? "Keep" : "Remove"}
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                )}
-              </InputGroup>
-              {tokenError && <FieldError role="alert">{tokenError}</FieldError>}
-            </Field>
-            <FieldSet>
-              <FieldLegend variant="label">Events</FieldLegend>
-              {/* A compact checklist, as Linear lists resource types: name only, two columns when they fit. */}
-              <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-                {WEBHOOK_EVENTS.map((event) => (
-                  <Field key={event} orientation="horizontal" className="items-center gap-2.5">
-                    <Checkbox
-                      id={event}
-                      checked={events.includes(event)}
-                      onCheckedChange={(checked) =>
-                        setEvents(
-                          checked === true ? [...events, event] : events.filter((e) => e !== event),
-                        )
-                      }
-                    />
-                    <FieldLabel htmlFor={event} className="font-mono font-normal">
-                      {event}
-                    </FieldLabel>
-                  </Field>
-                ))}
-              </div>
-            </FieldSet>
-            <Field orientation="horizontal" className="items-center gap-2.5">
-              <Switch id="webhook-active" checked={active} onCheckedChange={setActive} />
-              <FieldLabel htmlFor="webhook-active">Active</FieldLabel>
-            </Field>
-            {errorAt(undefined) && <FieldError role="alert">{errorAt(undefined)}</FieldError>}
-          </FieldGroup>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={close}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy || !ready}>
-              {busy && <Spinner data-icon="inline-start" />}
-              {hook ? "Save" : "Create webhook"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              {hook?.hasToken && !token && (
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton type="button" onClick={() => setClearToken(!clearToken)}>
+                    {clearToken ? "Keep" : "Remove"}
+                  </InputGroupButton>
+                </InputGroupAddon>
+              )}
+            </InputGroup>
+            {tokenError && <FieldError role="alert">{tokenError}</FieldError>}
+          </Field>
+          <FieldSet>
+            <FieldLegend variant="label">Events</FieldLegend>
+            {/* A compact checklist, as Linear lists resource types: name only, two columns when they fit. */}
+            <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+              {WEBHOOK_EVENTS.map((event) => (
+                <Field key={event} orientation="horizontal" className="items-center gap-2.5">
+                  <Checkbox
+                    id={event}
+                    checked={events.includes(event)}
+                    onCheckedChange={(checked) =>
+                      setEvents(
+                        checked === true ? [...events, event] : events.filter((e) => e !== event),
+                      )
+                    }
+                  />
+                  <FieldLabel htmlFor={event} className="font-mono font-normal">
+                    {event}
+                  </FieldLabel>
+                </Field>
+              ))}
+            </div>
+          </FieldSet>
+          <Field orientation="horizontal" className="items-center gap-2.5">
+            <Switch id="webhook-active" checked={active} onCheckedChange={setActive} />
+            <FieldLabel htmlFor="webhook-active">Active</FieldLabel>
+          </Field>
+          {refusal.at(undefined) && <FieldError role="alert">{refusal.at(undefined)}</FieldError>}
+        </FieldGroup>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={busy} onClick={close}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy || !ready}>
+            {busy && <Spinner data-icon="inline-start" />}
+            {hook ? "Save" : "Create webhook"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </FormDialog>
   );
 }

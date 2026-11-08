@@ -1,12 +1,7 @@
 import { cn } from "cn";
 import { type Ref, useId } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/PianoDialog";
+import { FormDialog } from "@/components/FormDialog";
+import { DialogFooter, DialogHeader, DialogTitle } from "@/components/PianoDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -41,30 +36,28 @@ export function ProjectSettingsDialog({
 }) {
   const id = useId();
   return (
-    <Dialog open={open} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Project settings</DialogTitle>
-          </DialogHeader>
-          <ProjectFields id={id} draft={draft} setDraft={setDraft} check={check} />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={close}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!allowed}>
-              Save
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <FormDialog open={open} close={close} className="sm:max-w-xl" aria-describedby={undefined}>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Project settings</DialogTitle>
+        </DialogHeader>
+        <ProjectFields id={id} draft={draft} setDraft={setDraft} check={check} />
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={close}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!allowed}>
+            Save
+          </Button>
+        </DialogFooter>
+      </form>
+    </FormDialog>
   );
 }
 

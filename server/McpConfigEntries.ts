@@ -22,6 +22,7 @@ import {
   loadMcpConfig,
   removeMcpServerConfig,
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js";
+import type { McpField } from "../shared/mcp.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 
 /** What a setup offers: `id` is the entry's default name, `name` its label, `url` its endpoint.
@@ -247,7 +248,7 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
     }
   };
   const named = (name: string) => globalEntries().find((entry) => entry.name === name);
-  const refuse = (detail: string, field?: string) =>
+  const refuse = (detail: string, field?: McpField) =>
     new McpConfigEntryError({ detail, ...(field ? { field } : {}) });
   /** Pi's own validation of one entry, as its loader applies it. */
   const validated = (name: string, raw: unknown) => {

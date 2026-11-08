@@ -79,7 +79,9 @@ label; elsewhere a branch, path, file name or model id is mono, and a folder's n
 A form dialog (New project, New webhook, Add MCP server, an API key, Rename) shows the close
 control and a Cancel button, puts Cancel first in its footer, keeps its confirm button disabled
 until its required fields are filled, and while busy keeps the button's label and shows a
-`Spinner` as `data-icon="inline-start"` before it (never "Saving…"). A dialog with several
+`Spinner` as `data-icon="inline-start"` before it (never "Saving…"). It is a `FormDialog`, so
+an outside click never discards it (Escape, the close control and Cancel do) and while busy
+nothing closes it and the close control hides. A dialog with several
 fields is `sm:max-w-xl`; one with one field, or a confirmation, is `sm:max-w-md`. A
 confirmation is `RemovalDialog`: no close control, outside clicks blocked, "<Verb> <noun>?" as
 its title, one line that says what stops, and the verb as its button; its words are the
