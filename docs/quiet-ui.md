@@ -62,7 +62,7 @@ session's state, so the header repeats nothing; a refresh control turns its own 
 reads; a page listing things (providers, webhooks, the Projects index) is `SettingsGroup`s and
 `SettingsList`s of hairline-divided rows (`settingsRow` draws the hairline, each row is a
 `listitem`) in one `max-w-2xl` column on `PaneBody`, with no fill behind the list, its one
-primary action in its header, and a configured thing's actions in its row's `RowActions` as a
+primary action in its header, and a configured thing's actions in its `ListRow`'s `RowMenu`, a
 ghost ⋯ menu (the verb that configures a thing, Sign in, Add key, Connect, stays an `outline`
 text button); a state in a row is `StatusDot` beside its word ("Signed in", "Ready"), never an
 icon alone; an empty list is one `Empty` line, the section's icon and "No <nouns> yet", at
@@ -96,8 +96,10 @@ action outside the sidebar are 32px, 44px on touch; a sidebar row's are 24px, 36
 a control inside content (a code block, a quote, the PDF toolbar) is 24px. A one-off (the
 composer's Attach and Send, Scroll to bottom, the session menu sheet's) and a button inside a field
 (`InputGroupButton`) keep their own sizes. A row's actions are `RowActions`: over the row's end,
-revealed while it is pointed at, focused or has its menu open, its title fading or its value
-stepping aside beneath them, so the row reserves no empty slot.
+revealed while it is pointed at, focused or has its menu open, its text fading or its value
+stepping aside beneath them, so the row reserves no empty slot. A list row is `ListRow`, which
+places them (its ⋯ ends where an in-flow action would, on the row's padding) and decides the fade
+and the step aside; beside a call to action (Install, Reconnect) its ⋯ stays in the row's flow.
 
 ## Components
 

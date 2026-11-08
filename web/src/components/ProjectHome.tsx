@@ -1,19 +1,13 @@
 import { cn } from "cn";
-import { GitPullRequestIcon, MessagesSquareIcon, MoreHorizontalIcon } from "lucide-react";
+import { GitPullRequestIcon, MessagesSquareIcon } from "lucide-react";
 import { type ComponentProps, useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
 import { NewSessionComposer } from "@/components/NewSession";
 import { PaneBody, PaneHeader, PaneNotFound } from "@/components/Pane";
-import { PianoButton } from "@/components/PianoButton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/PianoDropdownMenu";
 import { ProjectCommandsMenu } from "@/components/Projects";
-import { RowActions, rowActionsWidth } from "@/components/RowActions";
-import { SettingsGroup, SettingsList, settingsRow } from "@/components/SettingsSectionFrame";
+import { ListRow, RowMenu } from "@/components/RowActions";
+import { SettingsGroup, SettingsList } from "@/components/SettingsSectionFrame";
 import { SessionMenu } from "@/components/SidebarSessionList";
 import { StatusDot } from "@/components/StatusDot";
 import {
@@ -25,7 +19,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
+import { ItemDescription } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { isProjectDone, projectCommands } from "@/lib/projectCommands";
@@ -173,70 +167,40 @@ export function ProjectHome({
             ) : (
               <SettingsList>
                 {sessions.map((s) => (
-                  <Item
+                  <ListRow
                     key={sessionKey(s)}
-                    data-row
-                    role="listitem"
-                    className={cn(
-                      settingsRow,
-                      rowActionsWidth.list[1],
-                      "relative hover:bg-fill-hover",
-                    )}
-                  >
-                    <ItemContent className="min-w-0 gap-0.5">
-                      <ItemTitle className="w-full min-w-0">
-                        {/* As on Projects, stretch the name's button over the row beside its menu. */}
-                        <button
-                          type="button"
-                          // Dim as the sidebar row does: a missing checkout, or a session with no title yet.
-                          className={cn(
-                            "min-w-0 flex-1 truncate text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset disabled:text-ink-3",
-                            !s.title && "text-ink-3",
-                          )}
-                          disabled={s.disabled}
-                          title={s.hint}
-                          onClick={() => select(s.cwd, s.sessionId)}
-                        >
-                          {s.label}
-                        </button>
-                      </ItemTitle>
-                      <ItemDescription className="flex min-w-0 items-center gap-1.5 text-xs">
-                        {/* The folder keeps its name (up to half the line); a long branch truncates first. */}
-                        <span className="max-w-1/2 shrink-0 truncate">{s.folder}</span>
-                        {s.branch && (
-                          <BranchLabel branch={s.branch} className="min-w-0 font-sans" />
-                        )}
-                        {s.pullRequest && (
-                          <span className="inline-flex shrink-0 items-center gap-1">
-                            <GitPullRequestIcon className="size-3 shrink-0" aria-hidden />
-                            <span className="sr-only">Pull request </span>
-                            {s.pullRequest}
-                          </span>
-                        )}
-                      </ItemDescription>
-                    </ItemContent>
-                    <ItemActions className="text-xs text-ink-3">
-                      <time data-motion="aside" dateTime={s.updatedAt}>
+                    title={s.label}
+                    open={{
+                      onOpen: () => select(s.cwd, s.sessionId),
+                      disabled: s.disabled,
+                      hint: s.hint,
+                      // Dim as the sidebar row does: a missing checkout, or a session with no title yet.
+                      className: cn("disabled:text-ink-3", !s.title && "text-ink-3"),
+                    }}
+                    value={
+                      <time dateTime={s.updatedAt} className="text-xs text-ink-3">
                         {timeAgo(s.updatedAt, now)}
                       </time>
-                      <RowActions className="top-1/2 right-4 -translate-y-1/2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <PianoButton
-                              variant="ghost"
-                              size="list"
-                              aria-label={`Session menu for ${s.label}`}
-                            >
-                              <MoreHorizontalIcon />
-                            </PianoButton>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <SessionMenu target={s} />
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </RowActions>
-                    </ItemActions>
-                  </Item>
+                    }
+                    menu={
+                      <RowMenu label={`Session menu for ${s.label}`}>
+                        <SessionMenu target={s} />
+                      </RowMenu>
+                    }
+                  >
+                    <ItemDescription className="flex min-w-0 items-center gap-1.5 text-xs">
+                      {/* The folder keeps its name (up to half the line); a long branch truncates first. */}
+                      <span className="max-w-1/2 shrink-0 truncate">{s.folder}</span>
+                      {s.branch && <BranchLabel branch={s.branch} className="min-w-0 font-sans" />}
+                      {s.pullRequest && (
+                        <span className="inline-flex shrink-0 items-center gap-1">
+                          <GitPullRequestIcon className="size-3 shrink-0" aria-hidden />
+                          <span className="sr-only">Pull request </span>
+                          {s.pullRequest}
+                        </span>
+                      )}
+                    </ItemDescription>
+                  </ListRow>
                 ))}
               </SettingsList>
             )}

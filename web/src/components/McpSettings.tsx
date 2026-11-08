@@ -1,22 +1,18 @@
 import type { McpCatalogId, McpSetupChange, McpSetupRequest } from "@shared/mcp";
-import { cn } from "cn";
-import { MoreHorizontalIcon, ServerIcon } from "lucide-react";
+import { ServerIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useCommands } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { McpServerDialog } from "@/components/McpServerDialog";
 import { PianoButton } from "@/components/PianoButton";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
 import { RemovalDialog } from "@/components/RemovalDialog";
-import { RowActions, rowActionsWidth } from "@/components/RowActions";
+import { ListRow, RowMenu, RowStatus } from "@/components/RowActions";
 import {
   SettingsAlert,
   SettingsGroup,
@@ -26,7 +22,6 @@ import {
   SettingsSkeleton,
   settingsRow,
 } from "@/components/SettingsSectionFrame";
-import { StatusDot } from "@/components/StatusDot";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import {
   Item,
@@ -261,50 +256,29 @@ function McpServerItem({
   reconnect: () => void;
 }) {
   const menu = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <PianoButton
-          variant="ghost"
-          size="list"
-          disabled={disabled}
-          aria-label={`MCP ${title} actions`}
-        >
-          <MoreHorizontalIcon />
-        </PianoButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {editable && (
-          <>
-            <DropdownMenuGroup>
-              <DropdownMenuItem onSelect={edit}>Edit</DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-          </>
-        )}
-        <DropdownMenuItem variant="destructive" onSelect={remove}>
-          {removeVerb}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <RowMenu label={`MCP ${title} actions`} disabled={disabled}>
+      {editable && (
+        <>
+          <DropdownMenuGroup>
+            <DropdownMenuItem onSelect={edit}>Edit</DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+        </>
+      )}
+      <DropdownMenuItem variant="destructive" onSelect={remove}>
+        {removeVerb}
+      </DropdownMenuItem>
+    </RowMenu>
   );
   // The name, its endpoint or command, then its state: ready, or a problem the user must fix in Pi.
+  // Reconnect is the row's call to action, so its menu stays beside it rather than over it.
   return (
-    <Item data-row className={cn(settingsRow, "relative", !reconnect && rowActionsWidth.list[1])}>
-      <Logo catalog={catalog} />
-      <ItemContent data-motion="yield" className="min-w-0 gap-0.5">
-        <ItemTitle>{title}</ItemTitle>
-        <ItemDescription className="line-clamp-none font-mono text-xs">{value}</ItemDescription>
-        {detail && <ItemDescription className="line-clamp-none">{detail}</ItemDescription>}
-        {ready && (
-          <p className="flex items-center gap-1.5 text-xs text-ink-3">
-            <StatusDot tone="ok" />
-            Ready
-          </p>
-        )}
-      </ItemContent>
-      {reconnect ? (
-        // Reconnect is the row's call to action, so its menu stays beside it rather than over it.
-        <ItemActions className="shrink-0 gap-1">
+    <ListRow
+      media={<Logo catalog={catalog} />}
+      title={title}
+      menu={menu}
+      actions={
+        reconnect && (
           <PianoButton
             variant="outline"
             size="sm"
@@ -314,12 +288,13 @@ function McpServerItem({
           >
             Reconnect
           </PianoButton>
-          {menu}
-        </ItemActions>
-      ) : (
-        <RowActions className="top-1/2 right-3 -translate-y-1/2">{menu}</RowActions>
-      )}
-    </Item>
+        )
+      }
+    >
+      <ItemDescription className="line-clamp-none font-mono text-xs">{value}</ItemDescription>
+      {detail && <ItemDescription className="line-clamp-none">{detail}</ItemDescription>}
+      {ready && <RowStatus>Ready</RowStatus>}
+    </ListRow>
   );
 }
 

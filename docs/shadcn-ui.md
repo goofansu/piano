@@ -25,7 +25,7 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 | Concern | Owner outside `ui/` |
 | --- | --- |
 | Borderless button variants; icon button sizes by place (`header`, `list`, `row`, `inline`) | `PianoButton` |
-| A row's revealed actions and the room made for them | `RowActions`; motion in `index.css` |
+| A row's revealed actions and the room made for them | `RowActions`, and for a list row `ListRow` with its `RowMenu`; motion in `index.css` |
 | Underlined file-view toggles | `PianoViewToggle`, `PianoViewToggleItem` |
 | Status badge and warning alert variants | `StatusBadge`, `PianoAlert` |
 | Status dot (session, preview, delivery state) | `StatusDot` |
