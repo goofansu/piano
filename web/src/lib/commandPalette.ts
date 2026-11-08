@@ -8,7 +8,7 @@ import { type AppState, sessionKey } from "../store.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
 import type { ProjectCommand, SessionProjectMenu } from "./projectCommands.ts";
 import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
-import { type SessionCommand, sessionRowMenu } from "./sessionCommands.ts";
+import { type SessionCommand, type SessionMenuSection, sessionRowMenu } from "./sessionCommands.ts";
 
 /**
  * A row's own search text always outranks a match that needs a hidden alias. Keep cmdk's fuzzy
@@ -149,26 +149,33 @@ function projectRows(menu: SessionProjectMenu): PaletteSessionCommandRow[] {
 }
 
 /**
- * Session commands with the membership rows after the manage commands, where the header menu has
- * them, and Archive and Delete last, as both session menus end. A command this screen does not have
- * (`hidden`) is left out rather than greyed.
+ * Session commands in descriptor order, with the row menu's sections in its own order: those before
+ * its project slot where the first of their commands sits, the membership rows in the slot, and the
+ * ones after it (Archive and Delete) last, as both session menus end. A command this screen does
+ * not have (`hidden`) is left out rather than greyed.
  */
 function sessionRows(input: PaletteInput): PaletteSessionCommandRow[] {
   const shown = input.sessionCommands.filter((c) => !c.hidden);
-  const last = new Set(sessionRowMenu(shown).destructive);
   const row = (c: SessionCommand): PaletteSessionCommandRow => ({
     ...commandRow(c),
     kind: "session",
   });
-  const rows = shown.filter((c) => !last.has(c)).map(row);
-  const tail = shown.filter((c) => last.has(c)).map(row);
-  if (input.sessionProject) {
-    // Where the menus' project section sits: after the manage commands, before the first one that
-    // ends the session's life.
-    const at = shown.findIndex((c) => last.has(c));
-    rows.splice(at < 0 ? rows.length : at, 0, ...projectRows(input.sessionProject));
-  }
-  return [...rows, ...tail];
+  const flat = (sections: SessionMenuSection[]) =>
+    sections.flatMap((s) =>
+      s !== "project" ? s.map(row) : input.sessionProject ? projectRows(input.sessionProject) : [],
+    );
+  const { sections } = sessionRowMenu(shown);
+  const slot = sections.indexOf("project");
+  const menu = new Set(sections.flatMap((s) => (s === "project" ? [] : s)));
+  const first = shown.findIndex((c) => menu.has(c));
+  const at = first < 0 ? shown.length : first;
+  const others = (cs: SessionCommand[]) => cs.filter((c) => !menu.has(c)).map(row);
+  return [
+    ...others(shown.slice(0, at)),
+    ...flat(sections.slice(0, slot + 1)),
+    ...others(shown.slice(at)),
+    ...flat(sections.slice(slot + 1)),
+  ];
 }
 
 /**

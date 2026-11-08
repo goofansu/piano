@@ -14,7 +14,7 @@ import {
   searchPalette,
 } from "../web/src/lib/paletteSearch.ts";
 import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
-import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
+import { type SessionCommand, sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState, type SessionView, sessionKey } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
@@ -237,6 +237,40 @@ test("Session commands end with Archive and Delete, as both session menus do, an
     group.rows.filter((r) => r.kind === "session" && r.command.destructive).map((r) => r.label),
     ["Delete"],
   );
+});
+
+test("Session commands place the menus' sections in the menus' order, whatever the descriptor order", () => {
+  const member: AppState = {
+    ...inSession,
+    sessionReferences: references.map((r) =>
+      r.sessionId === "s1" ? { ...r, projectId: "launch" } : r,
+    ),
+  };
+  const labels = (order: (c: SessionCommand[]) => SessionCommand[]) => {
+    const [group] = searchPalette(
+      commandPalette(member, {
+        globalCommands: [],
+        sessionCommands: order(sessionCommands(member, undefined, { radiusSignedIn: true })),
+        sessionProject: sessionProjectMenu(member, { cwd: "/repo", sessionId: "s1" }),
+      }),
+      "",
+    ).filter((g) => g.id === "session");
+    return group?.id === "session" ? group.rows.map((r) => r.label) : [];
+  };
+  const menu = [
+    "Rename",
+    "Pin",
+    "Share",
+    "Open project: Launch",
+    "Move to project: New project",
+    "Remove from project",
+  ];
+  for (const order of [(c: SessionCommand[]) => c, (c: SessionCommand[]) => c.reverse()]) {
+    const shown = labels(order);
+    const at = shown.indexOf("Rename");
+    assert.deepEqual(shown.slice(at, at + menu.length), menu);
+    assert.deepEqual(shown.slice(-2), ["Archive", "Delete"]);
+  }
 });
 
 test("Session commands reach the session's project home, as the header's project link does", () => {

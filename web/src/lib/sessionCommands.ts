@@ -136,26 +136,27 @@ export interface SessionCommand {
 }
 
 /**
- * The sidebar row's menu: separated sections in order, an empty one left out; the project picker
- * follows them, and the destructive commands come last.
+ * A session menu's separated section: its commands, or `"project"`, the slot where the surface
+ * places the session's project section (`sessionProjectMenu`).
  */
+export type SessionMenuSection = SessionCommand[] | "project";
+
+/** The sidebar row's menu: separated sections in order, an empty one left out. */
 export interface SessionRowMenu {
-  sections: SessionCommand[][];
-  destructive: SessionCommand[];
+  sections: SessionMenuSection[];
 }
 
 /**
  * The session header's menu, which the desktop dropdown and the phone sheet lay out alike: the
- * details with their copy action, then manage (the project picker follows it), the display
- * switch, and the destructive commands last.
+ * details with their copy action, then its separated sections in order.
  */
 export interface SessionHeaderMenu {
   /** Icon actions beside the session's details. */
   details: SessionCommand[];
-  manage: SessionCommand[];
+  /** In order; `"display"` stands for the Messages only switch, present only with `display`. */
+  sections: (SessionMenuSection | "display")[];
   /** The Messages only switch: `checked` while on; running it toggles. */
   display?: SessionCommand;
-  destructive: SessionCommand[];
 }
 
 /** The session rail's Environment rows, each with the copy commands its menu offers. */
@@ -177,34 +178,50 @@ export function environmentRowMenu(
   return ENVIRONMENT_ROWS[row].flatMap((id) => commands.filter((c) => c.id === id));
 }
 
-const ROW_SECTIONS = [["rename", "pin"], ["share"]] as const;
-/** Archive sits beside delete, though only delete is destructive: both end the session's life. */
-const DESTRUCTIVE = ["archive", "delete"] as const;
-const HEADER_SECTIONS = {
-  details: ["copy-session-path"],
-  // Preview and Changes have their own controls; PR linking lives in Changes.
-  manage: ["rename", "pin", "share"],
-  destructive: DESTRUCTIVE,
-} as const satisfies Record<string, readonly SessionCommandId[]>;
+/**
+ * Every session menu's order (and the palette's, which places the row menu's): the manage
+ * commands, then the project section, then the commands that end the session's life. Archive sits
+ * beside Delete, though only Delete is destructive: both end the session's life.
+ */
+const END_OF_LIFE = ["archive", "delete"] as const;
+const ROW_SECTIONS = [["rename", "pin"], ["share"], "project", END_OF_LIFE] as const;
+// Preview and Changes have their own controls; PR linking lives in Changes.
+const HEADER_SECTIONS = [["rename", "pin", "share"], "project", "display", END_OF_LIFE] as const;
+const HEADER_DETAILS = ["copy-session-path"] as const;
 
+/** The commands with these IDs, in the IDs' order rather than the descriptors'. */
 const pick = (commands: readonly SessionCommand[], ids: readonly SessionCommandId[]) =>
-  commands.filter((c) => ids.includes(c.id));
+  ids.flatMap((id) => commands.filter((c) => c.id === id));
+
+/** A layout's sections from the descriptors, an empty one and an absent slot left out. */
+function lay<Slot extends string>(
+  commands: readonly SessionCommand[],
+  layout: readonly (readonly SessionCommandId[] | Slot)[],
+  has: (slot: Slot) => boolean,
+): (SessionCommand[] | Slot)[] {
+  return layout.flatMap<SessionCommand[] | Slot>((s) => {
+    if (typeof s === "string") return has(s) ? [s] : [];
+    const section = pick(commands, s);
+    return section.length > 0 ? [section] : [];
+  });
+}
 
 /** The sidebar row's menu, from `sessionCommands`' descriptors. */
 export function sessionRowMenu(commands: readonly SessionCommand[]): SessionRowMenu {
-  return {
-    sections: ROW_SECTIONS.map((ids) => pick(commands, ids)).filter((s) => s.length > 0),
-    destructive: pick(commands, DESTRUCTIVE),
-  };
+  return { sections: lay<"project">(commands, ROW_SECTIONS, () => true) };
 }
 
 /** The session header's menu, from `sessionCommands`' descriptors. */
 export function sessionHeaderMenu(commands: readonly SessionCommand[]): SessionHeaderMenu {
+  const display = commands.find((c) => c.id === "messages-only");
   return {
-    details: pick(commands, HEADER_SECTIONS.details),
-    manage: pick(commands, HEADER_SECTIONS.manage),
-    display: commands.find((c) => c.id === "messages-only"),
-    destructive: pick(commands, HEADER_SECTIONS.destructive),
+    details: pick(commands, HEADER_DETAILS),
+    sections: lay<"project" | "display">(
+      commands,
+      HEADER_SECTIONS,
+      (slot) => slot === "project" || !!display,
+    ),
+    display,
   };
 }
 

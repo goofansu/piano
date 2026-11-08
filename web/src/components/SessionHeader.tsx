@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { ListIcon, MoreHorizontalIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import {
   CommandIcon,
   SessionCommandMenuItem,
@@ -137,39 +137,29 @@ export function SessionHeader({
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          {menu.manage.map((c) => (
-            <SessionCommandMenuItem key={c.id} command={c} run={run} />
-          ))}
-        </DropdownMenuGroup>
-        {projectMenu && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <ProjectMenu menu={projectMenu} run={run} />
-            </DropdownMenuGroup>
-          </>
+        {menu.sections.map((section) =>
+          section === "project" && !projectMenu ? null : (
+            <Fragment key={typeof section === "string" ? section : section[0]?.id}>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                {section === "project"
+                  ? projectMenu && <ProjectMenu menu={projectMenu} run={run} />
+                  : section === "display"
+                    ? display && (
+                        <DropdownMenuCheckboxItem
+                          checked={!!display.checked}
+                          onCheckedChange={() => run(display)}
+                        >
+                          <CommandIcon icon={display.icon} /> {display.label}
+                        </DropdownMenuCheckboxItem>
+                      )
+                    : section.map((c) => (
+                        <SessionCommandMenuItem key={c.id} command={c} run={run} />
+                      ))}
+              </DropdownMenuGroup>
+            </Fragment>
+          ),
         )}
-        {display && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuCheckboxItem
-                checked={!!display.checked}
-                onCheckedChange={() => run(display)}
-              >
-                <CommandIcon icon={display.icon} /> {display.label}
-              </DropdownMenuCheckboxItem>
-            </DropdownMenuGroup>
-          </>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          {menu.destructive.map((c) => (
-            <SessionCommandMenuItem key={c.id} command={c} run={run} />
-          ))}
-        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
