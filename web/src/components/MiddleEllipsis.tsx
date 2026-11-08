@@ -2,7 +2,8 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { middleEllipsis } from "@/lib/middleEllipsis";
 
 /** No shadcn primitive fits both ends of a name to the available width. Inherit the row's
- * typography; measure in the DOM so proportional fonts, spacing and font loading count too. */
+ * typography; measure in the DOM so proportional fonts, spacing and font loading count too.
+ * With `tooltip` off, native title text comes from the enclosing control. */
 export function MiddleEllipsis({ text, tooltip = true }: { text: string; tooltip?: boolean }) {
   const container = useRef<HTMLSpanElement>(null);
   const ruler = useRef<HTMLSpanElement>(null);
@@ -30,7 +31,7 @@ export function MiddleEllipsis({ text, tooltip = true }: { text: string; tooltip
     <span
       ref={container}
       className="relative block w-full min-w-0 overflow-hidden whitespace-nowrap"
-      title={tooltip ? text : ""}
+      title={tooltip ? text : undefined}
     >
       <span className="sr-only">{text}</span>
       <span aria-hidden="true">{display}</span>

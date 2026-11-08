@@ -254,7 +254,11 @@ function EnvironmentRow({
         <RailRowTitle
           className={isName ? "w-full font-mono" : mono ? "break-all font-mono" : "break-words"}
         >
-          {isName ? <MiddleEllipsis text={children} tooltip={!open} /> : children}
+          {isName ? (
+            <MiddleEllipsis text={children} tooltip={!open && menu !== "repository"} />
+          ) : (
+            children
+          )}
         </RailRowTitle>
       </ItemContent>
     </>
