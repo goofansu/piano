@@ -104,8 +104,8 @@ export function McpSettings() {
         <>
           {editing && (
             <McpServerDialog
-              key={editing === "new" ? "new" : editing.name}
-              entry={editing === "new" ? undefined : editing}
+              key={editing.key}
+              entry={editing.target === "new" ? undefined : editing.target}
               close={mcpServerEditor.close}
               refresh={() => void setup.refresh()}
               saved={(reply, name) => signInAfter(reply, name)}
