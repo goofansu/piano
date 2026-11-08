@@ -3,7 +3,7 @@ import type { VoiceHints } from "@shared/voiceInput";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
 import { ContextDetails } from "@/components/ContextDetails";
-import { DraftEditor, useDraftEditor } from "@/components/DraftEditor";
+import { ComposerSend, DraftEditor, useDraftEditor } from "@/components/DraftEditor";
 import { JumpTo } from "@/components/JumpTo";
 import {
   DropdownMenu,
@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -33,7 +32,7 @@ import { contextFigures } from "@/lib/contextUsage";
 import type { DraftKey } from "@/lib/messageDraft";
 import { createPreference } from "@/lib/preference";
 import type { SessionNotice } from "@/lib/sessionNotices";
-import { composerAction, composerInput, footerPicker, footerPickerMenu } from "@/lib/styles";
+import { composerInput, footerPicker, footerPickerMenu } from "@/lib/styles";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { usePreference } from "@/lib/usePreference";
@@ -243,44 +242,35 @@ export function Composer({
               </DropdownMenu>
             )}
             {/* Send and Stop are one control; its face cross-fades so the key never jumps. */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  data-motion="press"
-                  variant={showStop ? "outline" : "default"}
-                  className={cn(composerAction, "relative")}
-                  aria-label={control.label}
-                  disabled={!control.enabled}
-                  onClick={showStop ? () => sendCommand(STOP) : () => send(false)}
-                >
-                  <span
-                    aria-hidden
-                    data-motion="swap"
-                    className={cn(
-                      "absolute inset-0 grid place-items-center",
-                      showStop ? "scale-75 opacity-0 blur-[2px]" : "scale-100 opacity-100",
-                    )}
-                  >
-                    <ArrowUpIcon />
-                  </span>
-                  <span
-                    aria-hidden
-                    data-motion="swap"
-                    className={cn(
-                      "absolute inset-0 grid place-items-center",
-                      showStop ? "scale-100 opacity-100" : "scale-75 opacity-0 blur-[2px]",
-                    )}
-                  >
-                    <SquareIcon className="fill-current" />
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {control.hint.lead} <Kbd>{control.hint.key}</Kbd>
-                {control.hint.tail}
-              </TooltipContent>
-            </Tooltip>
+            <ComposerSend
+              variant={showStop ? "outline" : "default"}
+              className="relative"
+              label={control.label}
+              hint={control.hint}
+              disabled={!control.enabled}
+              onClick={showStop ? () => sendCommand(STOP) : () => send(false)}
+            >
+              <span
+                aria-hidden
+                data-motion="swap"
+                className={cn(
+                  "absolute inset-0 grid place-items-center",
+                  showStop ? "scale-75 opacity-0 blur-[2px]" : "scale-100 opacity-100",
+                )}
+              >
+                <ArrowUpIcon />
+              </span>
+              <span
+                aria-hidden
+                data-motion="swap"
+                className={cn(
+                  "absolute inset-0 grid place-items-center",
+                  showStop ? "scale-100 opacity-100" : "scale-75 opacity-0 blur-[2px]",
+                )}
+              >
+                <SquareIcon className="fill-current" />
+              </span>
+            </ComposerSend>
           </>
         }
       />

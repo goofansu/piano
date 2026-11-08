@@ -59,7 +59,7 @@ function ProjectRow({
       <ItemActions className="text-xs text-ink-3">
         {time && (
           <time data-motion="aside" dateTime={time}>
-            {isProjectDone(row.project) && "Completed "}
+            {isProjectDone(row.project) && "Done "}
             {timeAgo(time, now)}
           </time>
         )}
@@ -103,7 +103,7 @@ export function ProjectsIndex({ state }: { state: AppState }) {
         </PaneHeading>
       </PaneHeader>
       <PaneBody>
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6">
           {index.kind === "loading" ? (
             <div aria-hidden className="late-enter flex flex-col gap-2">
               <Skeleton className="h-14 w-full rounded-lg" />
@@ -121,7 +121,7 @@ export function ProjectsIndex({ state }: { state: AppState }) {
           ) : (
             <>
               {index.rows.length > 0 && (
-                <SettingsList aria-label="Projects" className="bg-surface-1">
+                <SettingsList aria-label="Projects">
                   {index.rows.map((row) => (
                     <ProjectRow
                       key={row.project.id}
@@ -159,7 +159,7 @@ export function ProjectsIndex({ state }: { state: AppState }) {
                     </button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="disclosure-content">
-                    <SettingsList aria-label="Done projects" className="bg-surface-1">
+                    <SettingsList aria-label="Done projects">
                       {index.done.map((row) => (
                         <ProjectRow
                           key={row.project.id}

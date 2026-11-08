@@ -51,15 +51,20 @@ export type ProjectCommandId =
   | "new-project"
   | "assign";
 
-/** `new` starts a session (the pen, as the sidebar's New session); `new-project` adds a project (the plus). */
+/**
+ * `new` starts a session (the pen, as the sidebar's New session); `create` adds any other thing (the
+ * plus: New project, New webhook, New skill, New prompt, Add MCP server). `project` stands for a
+ * project (the target, as the sidebar and the Projects index show one), so the folder icon means
+ * only a folder.
+ */
 export type ProjectCommandIcon =
   | "new"
-  | "new-project"
+  | "create"
   | "settings"
   | "done"
   | "reopen"
   | "delete"
-  | "folder"
+  | "project"
   | "remove";
 
 export type ProjectCommandIntent =
@@ -270,7 +275,7 @@ export function openProjectCommand(project: Project): ProjectCommand {
   return {
     id: "open-project",
     label: `Open project: ${project.name}`,
-    icon: "folder",
+    icon: "project",
     enabled: true,
     intent: { kind: "open-project", projectId: project.id },
   };
@@ -288,7 +293,7 @@ export function newProjectCommand(
   return {
     id: "new-project",
     label: "New project",
-    icon: "new-project",
+    icon: "create",
     enabled: state.connected,
     intent: {
       kind: "project-dialog",
@@ -310,7 +315,7 @@ export function assignProjectCommand(
   return {
     id: "assign",
     label: findProject(state, projectId)?.name ?? "None",
-    icon: projectId ? "folder" : "remove",
+    icon: projectId ? "project" : "remove",
     enabled: state.connected,
     intent: {
       kind: "send",

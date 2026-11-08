@@ -205,8 +205,12 @@ const SessionRow = memo(
     ),
 );
 
-/** Closed row menus must not subscribe to every streamed token or compute commands. */
-function SessionMenu({
+/**
+ * A session row's ⋯ menu, wherever a row lists a session (the sidebar, a project's home): Rename,
+ * Pin, [Share], then its project rows, then Archive and Delete. Render it inside the open menu's
+ * content only: closed row menus must not subscribe to every streamed token or compute commands.
+ */
+export function SessionMenu({
   target,
 }: {
   target: { cwd: string; sessionId: string; title: string | undefined };

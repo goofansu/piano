@@ -194,7 +194,7 @@ export function pageCommands(
         {
           id: "add-webhook",
           label: "New webhook",
-          icon: "new",
+          icon: "create",
           group: "navigate",
           enabled: true,
           intent: { kind: "add-webhook" },
@@ -205,7 +205,7 @@ export function pageCommands(
         {
           id: "add-mcp-server",
           label: "Add MCP server",
-          icon: "new",
+          icon: "create",
           group: "navigate",
           enabled: true,
           intent: { kind: "add-mcp-server" },
@@ -216,7 +216,7 @@ export function pageCommands(
         {
           id: "new-skill",
           label: "New skill",
-          icon: "new",
+          icon: "create",
           group: "navigate",
           enabled: true,
           intent: { kind: "new-skill" },
@@ -227,7 +227,7 @@ export function pageCommands(
         {
           id: "new-prompt",
           label: "New prompt",
-          icon: "new",
+          icon: "create",
           group: "navigate",
           enabled: true,
           intent: { kind: "new-prompt" },

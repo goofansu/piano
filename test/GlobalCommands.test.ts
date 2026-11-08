@@ -280,6 +280,22 @@ test("on Settings › MCP the palette offers Add MCP server, which opens the MCP
   assert.equal(addServer("webhooks"), undefined, "another Settings page offers none");
 });
 
+test("every page's creation entry shares one icon, and New session keeps its own", () => {
+  const onProjects: AppState = { ...initialState, connected: true, view: { kind: "projects" } };
+  const icon = (label: string, state: AppState, settings: GlobalCommandContext["settings"]) =>
+    globalCommands(state, { ...ctx, settings }).find((c) => c.label === label)?.icon;
+  const creation = [
+    icon("New project", onProjects, null),
+    icon("New webhook", onNewPage, "webhooks"),
+    icon("Add MCP server", onNewPage, "mcp"),
+    icon("New skill", onNewPage, "skills"),
+    icon("New prompt", onNewPage, "prompts"),
+  ];
+  assert.ok(creation[0]);
+  assert.deepEqual(new Set(creation), new Set([creation[0]]), "one icon for every creation entry");
+  assert.notEqual(icon("New session", onProjects, null), creation[0], "New session keeps the pen");
+});
+
 test("Show folder and branch is one command for the palette and the View menu, naming what it does", () => {
   const command = (folderAndBranch: boolean) =>
     globalCommands(onNewPage, { ...ctx, view: { ...ctx.view, folderAndBranch } }).find(

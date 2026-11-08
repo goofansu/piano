@@ -158,7 +158,7 @@ await run(
     await page.see("Messages only");
     await page.capture("09b-mobile-actions");
     await page.click("button", "Add to project");
-    await page.see("New project…");
+    await page.see("New project");
     await page.capture("09c-mobile-projects");
     await page.click("button", "Back");
     await page.see("Messages only");

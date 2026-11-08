@@ -1,21 +1,21 @@
 import { cn } from "cn";
-import { GitPullRequestIcon, MoreHorizontalIcon } from "lucide-react";
+import { GitPullRequestIcon, MessagesSquareIcon, MoreHorizontalIcon } from "lucide-react";
 import { type ComponentProps, useRef } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
-import { SessionCommandMenuItem, useCommands, useSessionCommands } from "@/components/CommandHost";
+import { useCommands } from "@/components/CommandHost";
 import { NewSessionComposer } from "@/components/NewSession";
 import { PaneBody, PaneHeader, PaneNotFound } from "@/components/Pane";
 import { PianoButton } from "@/components/PianoButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { ProjectCommandsMenu } from "@/components/Projects";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { SettingsGroup, SettingsList, settingsRow } from "@/components/SettingsSectionFrame";
-import { StatusBadge } from "@/components/StatusBadge";
+import { SessionMenu } from "@/components/SidebarSessionList";
+import { StatusDot } from "@/components/StatusDot";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -23,27 +23,15 @@ import {
   BreadcrumbList,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { isProjectDone, projectCommands } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
-import { type SessionTarget, sessionRowMenu } from "@/lib/sessionCommands";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
-
-/** Use the same commands and confirmations as the sidebar and palette, without selecting the row. */
-function SessionActions({ target }: { target: SessionTarget }) {
-  const { commands, run } = useSessionCommands(target);
-  return (
-    <DropdownMenuGroup>
-      {sessionRowMenu(commands).destructive.map((c) => (
-        <SessionCommandMenuItem key={c.id} command={c} run={run} />
-      ))}
-    </DropdownMenuGroup>
-  );
-}
 
 /** Rows keep their place while the page is open: a new key appends, a gone one drops. */
 function useStableOrder(keys: readonly string[]): string[] {
@@ -100,6 +88,11 @@ export function ProjectHome({
       <PaneNotFound
         title="Project not found"
         description="This project is not in Piano's database."
+        action={
+          <Button variant="outline" onClick={() => openProjects()}>
+            Projects
+          </Button>
+        }
       />
     );
 
@@ -142,9 +135,10 @@ export function ProjectHome({
               </h1>
               {/* The home's one statement of the project's state; the index says it by grouping. */}
               {isProjectDone(project) && (
-                <StatusBadge variant="secondary" className="shrink-0">
+                <span className="flex shrink-0 items-center gap-1.5 text-xs text-ink-3">
+                  <StatusDot tone="done" />
                   Done
-                </StatusBadge>
+                </span>
               )}
             </BreadcrumbItem>
           </BreadcrumbList>
@@ -170,11 +164,14 @@ export function ProjectHome({
             {sessions.length === 0 ? (
               <Empty className="py-8">
                 <EmptyHeader>
-                  <EmptyDescription>No sessions yet</EmptyDescription>
+                  <EmptyMedia variant="icon">
+                    <MessagesSquareIcon aria-hidden />
+                  </EmptyMedia>
+                  <EmptyTitle>No sessions yet</EmptyTitle>
                 </EmptyHeader>
               </Empty>
             ) : (
-              <SettingsList className="bg-surface-1">
+              <SettingsList>
                 {sessions.map((s) => (
                   <Item
                     key={sessionKey(s)}
@@ -191,7 +188,11 @@ export function ProjectHome({
                         {/* As on Projects, stretch the name's button over the row beside its menu. */}
                         <button
                           type="button"
-                          className="min-w-0 flex-1 truncate text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+                          // Dim as the sidebar row does: a missing checkout, or a session with no title yet.
+                          className={cn(
+                            "min-w-0 flex-1 truncate text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset disabled:text-ink-3",
+                            !s.title && "text-ink-3",
+                          )}
                           disabled={s.disabled}
                           title={s.hint}
                           onClick={() => select(s.cwd, s.sessionId)}
@@ -202,7 +203,9 @@ export function ProjectHome({
                       <ItemDescription className="flex min-w-0 items-center gap-1.5 text-xs">
                         {/* The folder keeps its name (up to half the line); a long branch truncates first. */}
                         <span className="max-w-1/2 shrink-0 truncate">{s.folder}</span>
-                        {s.branch && <BranchLabel branch={s.branch} />}
+                        {s.branch && (
+                          <BranchLabel branch={s.branch} className="min-w-0 font-sans" />
+                        )}
                         {s.pullRequest && (
                           <span className="inline-flex shrink-0 items-center gap-1">
                             <GitPullRequestIcon className="size-3 shrink-0" aria-hidden />
@@ -228,7 +231,7 @@ export function ProjectHome({
                             </PianoButton>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <SessionActions target={s} />
+                            <SessionMenu target={s} />
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </RowActions>

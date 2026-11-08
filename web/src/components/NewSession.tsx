@@ -1,8 +1,7 @@
 import { cn } from "cn";
 import {
-  ArrowUpIcon,
+  CircleOffIcon,
   FolderIcon,
-  FolderMinusIcon,
   FolderOpenIcon,
   GitBranchPlusIcon,
   ShieldCheckIcon,
@@ -12,7 +11,7 @@ import {
 import { useRef, useState } from "react";
 import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
-import { DraftEditor, useDraftEditor } from "@/components/DraftEditor";
+import { ComposerSend, DraftEditor, useDraftEditor } from "@/components/DraftEditor";
 import { FolderPicker } from "@/components/FolderPicker";
 import { PaneShowSidebar } from "@/components/Pane";
 import {
@@ -33,6 +32,7 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { PianoMark } from "@/components/PianoMark";
 import { Popover, PopoverTrigger } from "@/components/PianoPopover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { PickerCheck, PickerContent, PickerSearch } from "@/components/Picker";
 import { ProjectDestinationItems } from "@/components/Projects";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -46,7 +46,7 @@ import { findProject, newProjectCommand, projectDestinations } from "@/lib/proje
 import { folderFor } from "@/lib/sessionCatalog";
 import { completionTarget, directoryChoices } from "@/lib/sessionContext";
 import { startPage } from "@/lib/startPage";
-import { composerAction, composerInput, picker } from "@/lib/styles";
+import { composerInput, picker } from "@/lib/styles";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useWorktreeOperation } from "@/lib/useWorktreeOperation";
@@ -203,20 +203,7 @@ export function NewSessionComposer({
           }}
           onSend={submit}
           voice={() => place}
-          actions={
-            <Button
-              size="icon"
-              data-motion="press"
-              className={composerAction}
-              aria-label="Send"
-              disabled={!ready}
-              onClick={submit}
-            >
-              <span className="inline-flex">
-                <ArrowUpIcon />
-              </span>
-            </Button>
-          }
+          actions={<ComposerSend disabled={!ready} onClick={submit} />}
         />
         {folder?.discovery.status === "error" && (
           <Alert data-motion="fade" variant="destructive" className="mt-2">
@@ -237,8 +224,9 @@ export function NewSessionComposer({
 }
 
 /**
- * Which project the new session joins: the sidebar's destination menu, with a way to clear the
- * choice. A project created here becomes the page's project.
+ * Which project the new session joins: the sidebar's destination menu with the current choice
+ * checked, as the Directory and Model pickers beside it check theirs, and No project last. A
+ * project created here becomes the page's project.
  */
 function ProjectSelect({
   state,
@@ -289,17 +277,15 @@ function ProjectSelect({
           destinations={choices.map((project) => ({ project }))}
           onCreate={onCreate}
           onPick={(d) => pick(d.project.id)}
+          selected={current?.id}
         />
-        {current && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem onSelect={() => pick(undefined)}>
-                <FolderMinusIcon /> None
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </>
-        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onSelect={() => pick(undefined)}>
+            <CircleOffIcon /> No project
+            <PickerCheck selected={!current} />
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -318,34 +304,38 @@ function TrustToggle({
 }) {
   const trusted = !!command.pressed;
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      aria-pressed={trusted}
-      aria-label="Directory trust"
-      aria-busy={command.pending || undefined}
-      disabled={!command.enabled}
-      className={cn(picker, "shrink-0", trusted ? "text-ink-3" : "text-ink-2")}
-      title={
-        trusted
-          ? "Pi loads this folder's .pi settings, extensions and skills. Click to untrust."
-          : "Pi skips this folder's .pi settings, extensions and skills. Click to trust."
-      }
-      onClick={() => run(command)}
-    >
-      {command.pending ? (
-        <Spinner
-          data-icon="inline-start"
-          aria-label="Updating trust"
-          className="motion-reduce:animate-none"
-        />
-      ) : trusted ? (
-        <ShieldCheckIcon data-icon="inline-start" />
-      ) : (
-        <ShieldOffIcon data-icon="inline-start" />
-      )}
-      <span>{trusted ? "Trusted" : "Untrusted"}</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-pressed={trusted}
+          aria-label="Directory trust"
+          aria-busy={command.pending || undefined}
+          disabled={!command.enabled}
+          className={cn(picker, "shrink-0", trusted ? "text-ink-3" : "text-ink-2")}
+          onClick={() => run(command)}
+        >
+          {command.pending ? (
+            <Spinner
+              data-icon="inline-start"
+              aria-label="Updating trust"
+              className="motion-reduce:animate-none"
+            />
+          ) : trusted ? (
+            <ShieldCheckIcon data-icon="inline-start" />
+          ) : (
+            <ShieldOffIcon data-icon="inline-start" />
+          )}
+          <span>{trusted ? "Trusted" : "Untrusted"}</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {trusted
+          ? "Pi loads this directory's .pi resources"
+          : "Pi skips this directory's .pi resources"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -383,37 +373,46 @@ function DirectorySelect({
         if (next) setWtOpen(false);
       }}
     >
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          // oxlint-disable-next-line jsx-a11y/role-has-required-aria-props -- PopoverTrigger sets aria-controls.
-          role="combobox"
-          aria-expanded={open}
-          aria-label="Directory"
-          className={cn(picker, "w-full min-w-0 max-w-none justify-start")}
-          title={value}
-        >
-          <FolderIcon className="text-ink-3" />
-          {trigger.kind === "none" ? (
-            <span>Choose a folder</span>
-          ) : trigger.kind === "checkout" ? (
-            <>
-              {/* The folder keeps its name; a long branch truncates first, as in the session header. */}
-              <span className="max-w-[12rem] shrink-0 truncate font-mono">{trigger.folder}</span>
-              {trigger.branchLabel && (
-                <BranchLabel branch={trigger.branchLabel} className="text-ink-3" />
+      <Tooltip>
+        {/* The full path waits in a tooltip; with no directory chosen there is none to show. */}
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              // oxlint-disable-next-line jsx-a11y/role-has-required-aria-props -- PopoverTrigger sets aria-controls.
+              role="combobox"
+              aria-expanded={open}
+              aria-label="Directory"
+              className={cn(
+                picker,
+                "w-full min-w-0 max-w-none justify-start",
+                trigger.kind === "none" && "text-ink-3",
               )}
-            </>
-          ) : (
-            <span className="truncate font-mono">{trigger.label}</span>
-          )}
-        </Button>
-      </PopoverTrigger>
+            >
+              <FolderIcon className="text-ink-3" />
+              {trigger.kind === "none" ? (
+                <span>Directory</span>
+              ) : trigger.kind === "checkout" ? (
+                <>
+                  {/* The folder keeps its name; a long branch truncates first, as in the session header. */}
+                  <span className="max-w-[12rem] shrink-0 truncate">{trigger.folder}</span>
+                  {trigger.branchLabel && (
+                    <BranchLabel branch={trigger.branchLabel} className="text-ink-3" />
+                  )}
+                </>
+              ) : (
+                <span className="truncate font-mono">{trigger.label}</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        {value && <TooltipContent className="max-w-md break-all">{value}</TooltipContent>}
+      </Tooltip>
       {wtOpen ? (
         <WorktreesPopover operation={worktrees} state={state} currentCwd={value} />
       ) : (
-        <PickerContent aria-label="Choose a folder" searchRef={search}>
+        <PickerContent aria-label="Choose a directory" searchRef={search}>
           <Command>
             <PickerSearch
               ref={search}

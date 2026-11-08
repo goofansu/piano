@@ -1,6 +1,7 @@
 import type { VoiceHints } from "@shared/voiceInput";
 import type { ThinkingLevel } from "@shared/wire";
 import { cn } from "cn";
+import { ArrowUpIcon } from "lucide-react";
 import {
   type ReactNode,
   useCallback,
@@ -16,14 +17,18 @@ import {
   attachmentEvents,
 } from "@/components/Attachments";
 import { ModelSelect } from "@/components/ModelSelect";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { QuoteChips, type QuoteDraft } from "@/components/Quotes";
 import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
+import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import { VoiceInputButton } from "@/components/VoiceInputButton";
+import type { ControlHint } from "@/lib/composerControl";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
 import { type DraftKey, type DraftMessage, draftMessage, drafts } from "@/lib/messageDraft";
 import type { ModelCatalogView } from "@/lib/modelCatalogs";
 import { modelPickerEnabled } from "@/lib/modelPicker";
-import { composerCard, composerToolbar } from "@/lib/styles";
+import { composerAction, composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
 import type { SendDisposition } from "@/lib/ws";
@@ -184,5 +189,52 @@ export function DraftEditor({
         {actions}
       </div>
     </div>
+  );
+}
+
+const SEND_HINT: ControlHint = { lead: "Send", key: "Enter" };
+
+/**
+ * The composer's primary action, the toolbar's end in both composers: the button, with the key it
+ * shares in a tooltip. The New page shows Send; a session passes its `composerControl` label and
+ * hint, and its Send and Stop faces as `children` to cross-fade.
+ */
+export function ComposerSend({
+  label = "Send",
+  hint = SEND_HINT,
+  disabled,
+  onClick,
+  variant,
+  className,
+  children = <ArrowUpIcon />,
+}: {
+  label?: string;
+  hint?: ControlHint;
+  disabled: boolean;
+  onClick: () => void;
+  variant?: "default" | "outline";
+  className?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          size="icon"
+          data-motion="press"
+          variant={variant}
+          className={cn(composerAction, className)}
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {hint.lead} <Kbd>{hint.key}</Kbd>
+        {hint.tail}
+      </TooltipContent>
+    </Tooltip>
   );
 }
