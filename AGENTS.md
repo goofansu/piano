@@ -21,13 +21,12 @@ or mock choreography. Documentation-only changes need document/link review, not 
   (module tests against `test/fake-pi.mjs`, no credentials). All three must pass.
 - **Application behavior:** observe the affected journey on a [scratch instance](#scratch-instance)
   and keep the output as PR evidence.
-- **UI changes:** list every string, control and action the change adds, from its screenshots,
-  and run each through the [quiet UI](docs/quiet-ui.md#checks) checks; take each action once and
-  screenshot its answer. The change is done when every listed item passes or is gone.
+- **UI changes:** apply the [quiet UI](docs/quiet-ui.md#checks) checks to changed strings,
+  controls and actions. Choose focused evidence for local cosmetic edits, affected journeys for
+  behavior changes, and cross-surface comparisons for shared styles or component upgrades:
+  [UI evidence scope](docs/testing.md#ui-evidence-scope) defines the completion check for each.
 - **Critical paths** (start a session; open and continue one) live in `test/browser/`; add a
-  journey there only for a new critical path. `test/browser/style-shots.mjs` is evidence, not a
-  journey: run it before and after a shadcn upgrade, a style change or an edit to the `Piano*`
-  wrappers or `index.css` tokens, into two directories, and compare the pairs.
+  journey there only for a new critical path.
 - **Model calls** cost real credits: prompt "Reply with exactly: X" and read the reply back.
 - **Transcript rows:** a new row's gutter glyph centres on its first text line. Add the row kind
   to `test/browser/transcript-rows.mjs` and run it; the journey measures every row (see
