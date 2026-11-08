@@ -69,7 +69,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex flex-col gap-3 sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Choose a folder</DialogTitle>
+          <DialogTitle>Choose a directory</DialogTitle>
         </DialogHeader>
 
         <Input
@@ -142,6 +142,8 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
                 ))}
               </div>
             )}
+            {/* Hand-written rows: no shadcn component is a plain list of buttons that navigate a
+             * directory tree (Command filters and selects; Item has no button row). */}
             {dir?.parent && (
               <button
                 type="button"
@@ -202,7 +204,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
                 <PianoButton
                   type="submit"
                   size="inline"
-                  aria-label="Create"
+                  aria-label="Create folder"
                   disabled={!ready || !newName.trim()}
                 >
                   <CheckIcon />
@@ -227,7 +229,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
               <Empty className="p-6 md:p-6">
                 <EmptyHeader>
                   <EmptyDescription>
-                    {prefix ? "No matching folders" : "No subfolders"}
+                    {prefix ? "No folder matches." : "No subfolders"}
                   </EmptyDescription>
                 </EmptyHeader>
               </Empty>
@@ -250,7 +252,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
               Cancel
             </Button>
             <Button type="button" disabled={!ready} onClick={select}>
-              Use this folder
+              Use this directory
             </Button>
           </div>
         </DialogFooter>

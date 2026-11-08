@@ -2,15 +2,14 @@ import type { Project } from "@shared/wire";
 import { cn } from "cn";
 import {
   CircleCheckIcon,
-  FolderIcon,
-  FolderInputIcon,
-  FolderMinusIcon,
+  CircleMinusIcon,
   type LucideIcon,
   MoreHorizontalIcon,
   PlusIcon,
   RotateCcwIcon,
   SettingsIcon,
   SquarePenIcon,
+  TargetIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useId, useRef } from "react";
@@ -34,6 +33,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
+import { PickerCheck } from "@/components/Picker";
 import { ProjectFields } from "@/components/ProjectSettings";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,13 +48,13 @@ import {
 /** The one map from a project command's icon name to its icon, menus and palette alike. */
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   new: SquarePenIcon,
-  "new-project": PlusIcon,
+  create: PlusIcon,
   settings: SettingsIcon,
   done: CircleCheckIcon,
   reopen: RotateCcwIcon,
   delete: Trash2Icon,
-  folder: FolderIcon,
-  remove: FolderMinusIcon,
+  project: TargetIcon,
+  remove: CircleMinusIcon,
 };
 
 /** Whether `icon` names a project command's icon, which `ProjectCommandIconView` draws. */
@@ -152,24 +152,28 @@ export function ProjectCommandsMenu({
 
 /**
  * Shared destination rows for the composer menu and sidebar submenu. A destination with a `command`
- * sends a registry change and is enabled as that command is; the New page's pick only chooses locally.
+ * sends a registry change and is enabled as that command is; the New page's pick only chooses locally,
+ * and checks its `selected` project as its sibling pickers check theirs.
  */
 export function ProjectDestinationItems<D extends { project: Project; command?: ProjectCommand }>({
   create,
   destinations,
   onCreate,
   onPick,
+  selected,
 }: {
   create: ProjectCommand;
   destinations: readonly D[];
   onCreate: () => void;
   onPick: (destination: D) => void;
+  /** The chosen project's ID, where the menu picks one rather than moving a session. */
+  selected?: string;
 }) {
   return (
     <>
       <DropdownMenuGroup>
         <DropdownMenuItem disabled={!create.enabled} onSelect={onCreate}>
-          <ProjectCommandIconView icon={create.icon} /> {create.label}…
+          <ProjectCommandIconView icon={create.icon} /> {create.label}
         </DropdownMenuItem>
       </DropdownMenuGroup>
       {destinations.length > 0 && (
@@ -182,8 +186,9 @@ export function ProjectDestinationItems<D extends { project: Project; command?: 
                 disabled={d.command ? !d.command.enabled : false}
                 onSelect={() => onPick(d)}
               >
-                <FolderIcon />
+                <TargetIcon />
                 <span className="truncate">{d.project.name}</span>
+                {selected !== undefined && <PickerCheck selected={d.project.id === selected} />}
               </DropdownMenuItem>
             ))}
           </DropdownMenuGroup>
@@ -195,7 +200,7 @@ export function ProjectDestinationItems<D extends { project: Project; command?: 
 
 /**
  * A session's project rows for a menu, from `sessionProjectMenu`: the current membership named, the
- * destinations in a submenu, and removal. "New project…" creates a destination and files the session
+ * destinations in a submenu, and removal. "New project" creates a destination and files the session
  * in it without changing execution. `run` is the command host's runner.
  */
 export function ProjectMenu({
@@ -215,7 +220,7 @@ export function ProjectMenu({
       )}
       <DropdownMenuSub>
         <DropdownMenuSubTrigger disabled={!entry.enabled}>
-          <FolderInputIcon /> {entry.label}
+          <TargetIcon /> {entry.label}
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
           <ProjectDestinationItems

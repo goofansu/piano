@@ -346,7 +346,7 @@ export function SlashTextarea({
               ? "Loading commands…"
               : current.error
                 ? "Could not load commands. Close and reopen to retry."
-                : "No matching commands."}
+                : "No command matches."}
           </p>
         )}
       </PopoverContent>
