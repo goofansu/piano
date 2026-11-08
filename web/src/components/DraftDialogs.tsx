@@ -8,6 +8,7 @@ import { cn } from "cn";
 import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "@/components/CopyButton";
+import { FormDialog, useFieldRefusal } from "@/components/FormDialog";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +22,6 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError } from "@/lib/api";
 import { useSetupActions } from "@/lib/useSetupActions";
 
 /**
@@ -91,21 +91,14 @@ export function NewDraftDialog({
   // name is free, only the server can say.
   const [nameLeft, setNameLeft] = useState(false);
   const nameError = check.malformedName && (nameLeft || /[^a-z0-9-]/.test(draft.name.trim()));
-  const [errorField, setErrorField] = useState<DraftField | undefined>();
-  const errorAt = (field: DraftField | undefined) =>
-    actions.error && errorField === field ? actions.error : undefined;
+  const refusal = useFieldRefusal(DRAFT_FIELDS, actions.error);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const saved = check.saved;
     if (!saved) return;
     const created = await actions.run({
       id: "create",
-      run: () =>
-        create(saved).catch((cause: unknown) => {
-          const field = cause instanceof ApiError ? cause.field : undefined;
-          setErrorField(DRAFT_FIELDS.find((known) => known === field));
-          throw cause;
-        }),
+      run: () => create(saved).catch(refusal.record),
       done: `${Kind} created`,
       fallback: `Could not create ${kind}.`,
     });
@@ -117,7 +110,7 @@ export function NewDraftDialog({
     control: (invalid: boolean) => ReactNode,
     counted = false,
   ) => {
-    const error = id === "name" && nameError ? NAME_RULE : errorAt(id);
+    const error = id === "name" && nameError ? NAME_RULE : refusal.at(id);
     return (
       <Field data-invalid={!!error}>
         <FieldLabel htmlFor={`${kind}-${id}`}>{label}</FieldLabel>
@@ -140,84 +133,75 @@ export function NewDraftDialog({
     );
   };
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !busy) close();
-      }}
-    >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>New {kind}</DialogTitle>
-          <DialogDescription>
-            Saved in Piano. Sessions started from now can use it.
-          </DialogDescription>
-        </DialogHeader>
-        <form className="flex flex-col gap-6" onSubmit={(e) => void submit(e)}>
-          <FieldGroup>
-            {field("name", "Name", (invalid) => (
-              <Input
-                id={`${kind}-name`}
+    <FormDialog busy={busy} close={close} className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+      <DialogHeader>
+        <DialogTitle>New {kind}</DialogTitle>
+        <DialogDescription>Saved in Piano. Sessions started from now can use it.</DialogDescription>
+      </DialogHeader>
+      <form className="flex flex-col gap-6" onSubmit={(e) => void submit(e)}>
+        <FieldGroup>
+          {field("name", "Name", (invalid) => (
+            <Input
+              id={`${kind}-name`}
+              required
+              autoFocus
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              maxLength={check.name.max}
+              className="font-mono"
+              value={draft.name}
+              aria-invalid={invalid}
+              onChange={(e) => edit("name")(e.target.value)}
+              onBlur={() => setNameLeft(true)}
+            />
+          ))}
+          {field(
+            "description",
+            "Description",
+            (invalid) => (
+              <Textarea
+                id={`${kind}-description`}
                 required
-                autoFocus
-                autoComplete="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                maxLength={check.name.max}
-                className="font-mono"
-                value={draft.name}
+                rows={3}
+                aria-describedby={`${kind}-description-count`}
+                value={draft.description}
                 aria-invalid={invalid}
-                onChange={(e) => edit("name")(e.target.value)}
-                onBlur={() => setNameLeft(true)}
+                onChange={(e) => edit("description")(e.target.value)}
               />
-            ))}
-            {field(
-              "description",
-              "Description",
-              (invalid) => (
-                <Textarea
-                  id={`${kind}-description`}
-                  required
-                  rows={3}
-                  aria-describedby={`${kind}-description-count`}
-                  value={draft.description}
-                  aria-invalid={invalid}
-                  onChange={(e) => edit("description")(e.target.value)}
-                />
-              ),
-              true,
-            )}
-            {field(
-              "instructions",
-              "Instructions",
-              (invalid) => (
-                <Textarea
-                  id={`${kind}-instructions`}
-                  required
-                  aria-describedby={`${kind}-instructions-count`}
-                  className="max-h-[50dvh] min-h-48 font-mono"
-                  value={draft.instructions}
-                  aria-invalid={invalid}
-                  onChange={(e) => edit("instructions")(e.target.value)}
-                />
-              ),
-              true,
-            )}
-            {extra}
-            {errorAt(undefined) && <FieldError role="alert">{errorAt(undefined)}</FieldError>}
-          </FieldGroup>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={close}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy || !check.saved}>
-              {busy && <Spinner data-icon="inline-start" />}
-              Create {kind}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            ),
+            true,
+          )}
+          {field(
+            "instructions",
+            "Instructions",
+            (invalid) => (
+              <Textarea
+                id={`${kind}-instructions`}
+                required
+                aria-describedby={`${kind}-instructions-count`}
+                className="max-h-[50dvh] min-h-48 font-mono"
+                value={draft.instructions}
+                aria-invalid={invalid}
+                onChange={(e) => edit("instructions")(e.target.value)}
+              />
+            ),
+            true,
+          )}
+          {extra}
+          {refusal.at(undefined) && <FieldError role="alert">{refusal.at(undefined)}</FieldError>}
+        </FieldGroup>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={busy} onClick={close}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy || !check.saved}>
+            {busy && <Spinner data-icon="inline-start" />}
+            Create {kind}
+          </Button>
+        </DialogFooter>
+      </form>
+    </FormDialog>
   );
 }
 

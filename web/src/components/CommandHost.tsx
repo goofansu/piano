@@ -25,13 +25,8 @@ import { createContext, useContext, useRef, useState, useSyncExternalStore } fro
 import { toast } from "sonner";
 import { copyText } from "@/components/CopyButton";
 import { promptEditor, skillEditor } from "@/components/DraftDialogs";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/PianoDialog";
+import { FormDialog } from "@/components/FormDialog";
+import { DialogFooter, DialogHeader, DialogTitle } from "@/components/PianoDialog";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
 import { ProjectDialogView } from "@/components/Projects";
 import { ProjectSettingsDialog } from "@/components/ProjectSettings";
@@ -311,48 +306,48 @@ export function CommandHost({
         submit={forms.submit}
         close={close}
       />
-      <Dialog open={!!renaming} onOpenChange={(open) => !open && close()}>
-        <DialogContent
-          className="sm:max-w-md"
-          aria-describedby={undefined}
-          onOpenAutoFocus={(event) => {
+      <FormDialog
+        open={!!renaming}
+        close={close}
+        className="sm:max-w-md"
+        aria-describedby={undefined}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          renameInputRef.current?.focus();
+        }}
+      >
+        <form
+          onSubmit={(event) => {
             event.preventDefault();
-            renameInputRef.current?.focus();
+            forms.submit();
           }}
+          className="flex flex-col gap-4"
         >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              forms.submit();
-            }}
-            className="flex flex-col gap-4"
-          >
-            <DialogHeader>
-              <DialogTitle>Rename session</DialogTitle>
-            </DialogHeader>
-            <FieldGroup>
-              <Field>
-                <Input
-                  ref={renameInputRef}
-                  aria-label="Session name"
-                  value={renaming ? forms.text : ""}
-                  onChange={(event) => forms.edit(event.target.value)}
-                  onFocus={(event) => event.target.select()}
-                  maxLength={SESSION_TITLE_MAX}
-                />
-              </Field>
-            </FieldGroup>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={close}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={!answer.allowed}>
-                Rename
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+          <DialogHeader>
+            <DialogTitle>Rename session</DialogTitle>
+          </DialogHeader>
+          <FieldGroup>
+            <Field>
+              <Input
+                ref={renameInputRef}
+                aria-label="Session name"
+                value={renaming ? forms.text : ""}
+                onChange={(event) => forms.edit(event.target.value)}
+                onFocus={(event) => event.target.select()}
+                maxLength={SESSION_TITLE_MAX}
+              />
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={close}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!answer.allowed}>
+              Rename
+            </Button>
+          </DialogFooter>
+        </form>
+      </FormDialog>
       <RemovalDialog
         open={!!asking}
         title={shownConfirmation?.title ?? ""}

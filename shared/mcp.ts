@@ -74,6 +74,10 @@ export const McpSetupState = Schema.Struct({
 });
 export type McpSetupState = typeof McpSetupState.Type;
 
+/** The dialog's fields a refused save can name: its name, or the server's configuration. */
+export const MCP_FIELDS = ["name", "config"] as const;
+export type McpField = (typeof MCP_FIELDS)[number];
+
 /**
  * What the dialog's form saves, adding or editing: the fields it shows. The server merges them
  * into the entry (an empty one when adding), keeping Pi's other keys; the `Authorization` header

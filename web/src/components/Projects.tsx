@@ -13,14 +13,9 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useId, useRef } from "react";
+import { FormDialog } from "@/components/FormDialog";
 import { type IconPlace, PianoButton } from "@/components/PianoButton";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/PianoDialog";
+import { DialogFooter, DialogHeader, DialogTitle } from "@/components/PianoDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -266,36 +261,36 @@ export function ProjectDialogView({
   const id = useId();
   const nameInput = useRef<HTMLInputElement>(null);
   return (
-    <Dialog open={open} onOpenChange={(open) => !open && close()}>
-      <DialogContent
-        className="sm:max-w-xl"
-        aria-describedby={undefined}
-        onOpenAutoFocus={(event) => {
+    <FormDialog
+      open={open}
+      close={close}
+      className="sm:max-w-xl"
+      aria-describedby={undefined}
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        nameInput.current?.focus();
+      }}
+    >
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
           event.preventDefault();
-          nameInput.current?.focus();
+          submit();
         }}
       >
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>New project</DialogTitle>
-          </DialogHeader>
-          <ProjectFields id={id} draft={draft} setDraft={setDraft} nameRef={nameInput} />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={close}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!allowed}>
-              {dialog?.assign ? "Create and add session" : "Create project"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        <DialogHeader>
+          <DialogTitle>New project</DialogTitle>
+        </DialogHeader>
+        <ProjectFields id={id} draft={draft} setDraft={setDraft} nameRef={nameInput} />
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={close}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!allowed}>
+            {dialog?.assign ? "Create and add session" : "Create project"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </FormDialog>
   );
 }

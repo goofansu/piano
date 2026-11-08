@@ -1,10 +1,15 @@
-import type { McpServerEdit, McpServerSetup, McpSetupChange } from "@shared/mcp";
+import {
+  MCP_FIELDS,
+  type McpField,
+  type McpServerEdit,
+  type McpServerSetup,
+  type McpSetupChange,
+} from "@shared/mcp";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { FormDialog, useFieldRefusal } from "@/components/FormDialog";
 import {
-  Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -38,7 +43,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ApiError, changeMcpSetup } from "@/lib/api";
+import { changeMcpSetup } from "@/lib/api";
 import { useSetupActions } from "@/lib/useSetupActions";
 
 interface Pair {
@@ -190,11 +195,9 @@ export function McpServerDialog({
     failure: "keep",
   });
   const busy = actions.running !== undefined;
-  // The server names the field a refusal belongs to; one without a field shows below the form.
   // A refusal belongs to the tab that sent it, so switching tabs does not carry it over.
-  const [refusal, setErrorAt] = useState<{ tab: string; field?: string } | undefined>();
-  const errorAt = (field: string | undefined) =>
-    actions.error && refusal?.tab === tab && refusal.field === field ? actions.error : undefined;
+  const refusal = useFieldRefusal(MCP_FIELDS, actions.error);
+  const errorAt = (field: McpField | undefined) => refusal.at(field, tab);
   const hasAuthorization = !!config && "url" in config && config.hasAuthorization;
   const argList = args
     .split("\n")
@@ -219,11 +222,7 @@ export function McpServerDialog({
     actions
       .run({
         id: "save",
-        run: () =>
-          changeMcpSetup(request).catch((cause: unknown) => {
-            setErrorAt({ tab, field: cause instanceof ApiError ? cause.field : undefined });
-            throw cause;
-          }),
+        run: () => changeMcpSetup(request).catch((cause: unknown) => refusal.record(cause, tab)),
         // A server waiting for its sign-in is not saved yet: the sign-in says when it is.
         done: (reply) => (reply.signIn ? undefined : done),
         fallback: "Could not save MCP server.",
@@ -279,246 +278,237 @@ export function McpServerDialog({
   };
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !busy) close();
-      }}
+    <FormDialog
+      busy={busy}
+      close={close}
+      className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+      aria-describedby={startsCommand ? "mcp-starts-command" : undefined}
     >
-      <DialogContent
-        className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
-        aria-describedby={startsCommand ? "mcp-starts-command" : undefined}
-      >
-        <DialogHeader>
-          <DialogTitle>{entry ? "Edit MCP server" : "Add MCP server"}</DialogTitle>
-          {startsCommand && (
-            <DialogDescription id="mcp-starts-command">
-              {entry ? "Saving" : "Adding"} runs the command once to check that it starts.
-            </DialogDescription>
-          )}
-        </DialogHeader>
-        {!entry && (
-          <Tabs value={tab} onValueChange={(value) => setTab(value as "form" | "json")}>
-            <TabsList variant="line">
-              <TabsTrigger value="form">Form</TabsTrigger>
-              <TabsTrigger value="json">JSON</TabsTrigger>
-            </TabsList>
-          </Tabs>
+      <DialogHeader>
+        <DialogTitle>{entry ? "Edit MCP server" : "Add MCP server"}</DialogTitle>
+        {startsCommand && (
+          <DialogDescription id="mcp-starts-command">
+            {entry ? "Saving" : "Adding"} runs the command once to check that it starts.
+          </DialogDescription>
         )}
-        <form className="flex flex-col gap-6" onSubmit={submit}>
-          {tab === "json" ? (
-            <FieldGroup>
-              <Field data-invalid={!!(pasted && "error" in pasted) || !!errorAt(undefined)}>
-                <FieldLabel htmlFor="mcp-json">mcpServers JSON</FieldLabel>
-                <Textarea
-                  id="mcp-json"
-                  rows={10}
-                  autoFocus
-                  value={json}
-                  disabled={busy}
-                  className="font-mono text-xs"
-                  placeholder={JSON.stringify(
-                    { mcpServers: { docs: { url: "https://mcp.example.com/mcp" } } },
-                    null,
-                    2,
-                  )}
-                  onChange={(e) => setJson(e.target.value)}
-                />
-                {pasted && "error" in pasted && (
-                  <FieldError role="alert">{pasted.error}</FieldError>
+      </DialogHeader>
+      {!entry && (
+        <Tabs value={tab} onValueChange={(value) => setTab(value as "form" | "json")}>
+          <TabsList variant="line">
+            <TabsTrigger value="form">Form</TabsTrigger>
+            <TabsTrigger value="json">JSON</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+      <form className="flex flex-col gap-6" onSubmit={submit}>
+        {tab === "json" ? (
+          <FieldGroup>
+            <Field data-invalid={!!(pasted && "error" in pasted) || !!errorAt(undefined)}>
+              <FieldLabel htmlFor="mcp-json">mcpServers JSON</FieldLabel>
+              <Textarea
+                id="mcp-json"
+                rows={10}
+                autoFocus
+                value={json}
+                disabled={busy}
+                className="font-mono text-xs"
+                placeholder={JSON.stringify(
+                  { mcpServers: { docs: { url: "https://mcp.example.com/mcp" } } },
+                  null,
+                  2,
                 )}
-                {(errorAt("name") || errorAt("config") || errorAt(undefined)) && (
-                  <FieldError role="alert">
-                    {errorAt("name") ?? errorAt("config") ?? errorAt(undefined)}
-                  </FieldError>
-                )}
-              </Field>
-            </FieldGroup>
-          ) : (
-            <FieldGroup>
-              <Field data-invalid={!!errorAt("name")}>
-                <FieldLabel htmlFor="mcp-name">Name</FieldLabel>
-                <Input
-                  id="mcp-name"
-                  required
-                  autoFocus={!entry}
-                  value={name}
-                  disabled={busy}
-                  aria-invalid={!!errorAt("name")}
-                  onChange={(e) => setName(e.target.value)}
-                />
-                {errorAt("name") && <FieldError role="alert">{errorAt("name")}</FieldError>}
-              </Field>
-              <Field>
-                <FieldLabel id="mcp-kind-label">Type</FieldLabel>
-                {/* Field stretches its children; the wrapper keeps the group's shadow to its buttons. */}
-                <div>
-                  <ToggleGroup
-                    type="single"
-                    variant="outline"
-                    spacing={0}
-                    aria-labelledby="mcp-kind-label"
-                    value={kind}
-                    disabled={busy}
-                    onValueChange={(value) => value && setKind(value as Kind)}
-                  >
-                    <ToggleGroupItem value="url">URL</ToggleGroupItem>
-                    <ToggleGroupItem value="command">Command</ToggleGroupItem>
-                  </ToggleGroup>
-                </div>
-              </Field>
-              {kind === "url" ? (
-                <>
-                  <Field data-invalid={!!errorAt("config")}>
-                    <FieldLabel htmlFor="mcp-url">URL</FieldLabel>
-                    <Input
-                      id="mcp-url"
-                      type="url"
-                      required
-                      value={url}
-                      disabled={busy}
-                      placeholder="https://mcp.example.com/mcp"
-                      onChange={(e) => setUrl(e.target.value)}
-                    />
-                    {errorAt("config") && <FieldError role="alert">{errorAt("config")}</FieldError>}
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="mcp-auth">Authentication</FieldLabel>
-                    <Select
-                      value={auth}
-                      onValueChange={(value) => setAuth(value as Auth)}
-                      disabled={busy}
-                    >
-                      <SelectTrigger id="mcp-auth" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="oauth">Sign in if needed</SelectItem>
-                        <SelectItem value="header">Authorization header</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  {auth === "header" && (
-                    <Field>
-                      <FieldLabel htmlFor="mcp-authorization">Authorization header</FieldLabel>
-                      <InputGroup>
-                        <InputGroupInput
-                          id="mcp-authorization"
-                          type="password"
-                          autoComplete="new-password"
-                          value={authorization}
-                          disabled={busy}
-                          placeholder={
-                            hasAuthorization && !clearAuthorization
-                              ? "••••••••••••••••"
-                              : "Bearer …"
-                          }
-                          aria-description={
-                            hasAuthorization && !clearAuthorization
-                              ? "A header is saved; blank keeps it."
-                              : undefined
-                          }
-                          onChange={(e) => {
-                            setAuthorization(e.target.value);
-                            setClearAuthorization(false);
-                          }}
-                        />
-                        {hasAuthorization && !authorization && (
-                          <InputGroupAddon align="inline-end">
-                            <InputGroupButton
-                              type="button"
-                              disabled={busy}
-                              onClick={() => setClearAuthorization(!clearAuthorization)}
-                            >
-                              {clearAuthorization ? "Keep" : "Remove"}
-                            </InputGroupButton>
-                          </InputGroupAddon>
-                        )}
-                      </InputGroup>
-                    </Field>
-                  )}
-                  <FieldSet>
-                    <FieldLegend variant="label">Headers</FieldLegend>
-                    <KeyValueFields
-                      list={headers}
-                      onChange={setHeaders}
-                      addLabel="Add header"
-                      disabled={busy}
-                    />
-                  </FieldSet>
-                </>
-              ) : (
-                <>
-                  <Field data-invalid={!!errorAt("config")}>
-                    <FieldLabel htmlFor="mcp-command">Command</FieldLabel>
-                    <Input
-                      id="mcp-command"
-                      required
-                      value={command}
-                      disabled={busy}
-                      className="font-mono text-xs"
-                      onChange={(e) => setCommand(e.target.value)}
-                    />
-                    {errorAt("config") && <FieldError role="alert">{errorAt("config")}</FieldError>}
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="mcp-args">
-                      Arguments <span className="font-normal text-ink-3">One per line</span>
-                    </FieldLabel>
-                    <Textarea
-                      id="mcp-args"
-                      rows={2}
-                      value={args}
-                      disabled={busy}
-                      className="font-mono text-xs"
-                      onChange={(e) => setArgs(e.target.value)}
-                    />
-                  </Field>
-                  <FieldSet>
-                    <FieldLegend variant="label">Environment</FieldLegend>
-                    <KeyValueFields
-                      list={env}
-                      onChange={setEnv}
-                      addLabel="Add variable"
-                      disabled={busy}
-                    />
-                  </FieldSet>
-                  <Field>
-                    <FieldLabel htmlFor="mcp-cwd">
-                      Working directory <span className="font-normal text-ink-3">Optional</span>
-                    </FieldLabel>
-                    <Input
-                      id="mcp-cwd"
-                      value={cwd}
-                      disabled={busy}
-                      aria-describedby="mcp-cwd-hint"
-                      className="font-mono text-xs"
-                      onChange={(e) => setCwd(e.target.value)}
-                    />
-                    <FieldDescription id="mcp-cwd-hint" className="text-xs text-ink-3">
-                      Empty runs the command in each session's folder. Set it only when the command
-                      uses relative paths.
-                    </FieldDescription>
-                  </Field>
-                </>
+                onChange={(e) => setJson(e.target.value)}
+              />
+              {pasted && "error" in pasted && <FieldError role="alert">{pasted.error}</FieldError>}
+              {(errorAt("name") || errorAt("config") || errorAt(undefined)) && (
+                <FieldError role="alert">
+                  {errorAt("name") ?? errorAt("config") ?? errorAt(undefined)}
+                </FieldError>
               )}
-              {errorAt(undefined) && <FieldError role="alert">{errorAt(undefined)}</FieldError>}
-            </FieldGroup>
-          )}
-          <DialogFooter>
-            {pasted && "name" in pasted && (
-              <span className="mr-auto self-center text-xs text-ink-3">Adds {pasted.name}</span>
+            </Field>
+          </FieldGroup>
+        ) : (
+          <FieldGroup>
+            <Field data-invalid={!!errorAt("name")}>
+              <FieldLabel htmlFor="mcp-name">Name</FieldLabel>
+              <Input
+                id="mcp-name"
+                required
+                autoFocus={!entry}
+                value={name}
+                disabled={busy}
+                aria-invalid={!!errorAt("name")}
+                onChange={(e) => setName(e.target.value)}
+              />
+              {errorAt("name") && <FieldError role="alert">{errorAt("name")}</FieldError>}
+            </Field>
+            <Field>
+              <FieldLabel id="mcp-kind-label">Type</FieldLabel>
+              {/* Field stretches its children; the wrapper keeps the group's shadow to its buttons. */}
+              <div>
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  spacing={0}
+                  aria-labelledby="mcp-kind-label"
+                  value={kind}
+                  disabled={busy}
+                  onValueChange={(value) => value && setKind(value as Kind)}
+                >
+                  <ToggleGroupItem value="url">URL</ToggleGroupItem>
+                  <ToggleGroupItem value="command">Command</ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+            </Field>
+            {kind === "url" ? (
+              <>
+                <Field data-invalid={!!errorAt("config")}>
+                  <FieldLabel htmlFor="mcp-url">URL</FieldLabel>
+                  <Input
+                    id="mcp-url"
+                    type="url"
+                    required
+                    value={url}
+                    disabled={busy}
+                    placeholder="https://mcp.example.com/mcp"
+                    onChange={(e) => setUrl(e.target.value)}
+                  />
+                  {errorAt("config") && <FieldError role="alert">{errorAt("config")}</FieldError>}
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="mcp-auth">Authentication</FieldLabel>
+                  <Select
+                    value={auth}
+                    onValueChange={(value) => setAuth(value as Auth)}
+                    disabled={busy}
+                  >
+                    <SelectTrigger id="mcp-auth" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="oauth">Sign in if needed</SelectItem>
+                      <SelectItem value="header">Authorization header</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {auth === "header" && (
+                  <Field>
+                    <FieldLabel htmlFor="mcp-authorization">Authorization header</FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        id="mcp-authorization"
+                        type="password"
+                        autoComplete="new-password"
+                        value={authorization}
+                        disabled={busy}
+                        placeholder={
+                          hasAuthorization && !clearAuthorization ? "••••••••••••••••" : "Bearer …"
+                        }
+                        aria-description={
+                          hasAuthorization && !clearAuthorization
+                            ? "A header is saved; blank keeps it."
+                            : undefined
+                        }
+                        onChange={(e) => {
+                          setAuthorization(e.target.value);
+                          setClearAuthorization(false);
+                        }}
+                      />
+                      {hasAuthorization && !authorization && (
+                        <InputGroupAddon align="inline-end">
+                          <InputGroupButton
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setClearAuthorization(!clearAuthorization)}
+                          >
+                            {clearAuthorization ? "Keep" : "Remove"}
+                          </InputGroupButton>
+                        </InputGroupAddon>
+                      )}
+                    </InputGroup>
+                  </Field>
+                )}
+                <FieldSet>
+                  <FieldLegend variant="label">Headers</FieldLegend>
+                  <KeyValueFields
+                    list={headers}
+                    onChange={setHeaders}
+                    addLabel="Add header"
+                    disabled={busy}
+                  />
+                </FieldSet>
+              </>
+            ) : (
+              <>
+                <Field data-invalid={!!errorAt("config")}>
+                  <FieldLabel htmlFor="mcp-command">Command</FieldLabel>
+                  <Input
+                    id="mcp-command"
+                    required
+                    value={command}
+                    disabled={busy}
+                    className="font-mono text-xs"
+                    onChange={(e) => setCommand(e.target.value)}
+                  />
+                  {errorAt("config") && <FieldError role="alert">{errorAt("config")}</FieldError>}
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="mcp-args">
+                    Arguments <span className="font-normal text-ink-3">One per line</span>
+                  </FieldLabel>
+                  <Textarea
+                    id="mcp-args"
+                    rows={2}
+                    value={args}
+                    disabled={busy}
+                    className="font-mono text-xs"
+                    onChange={(e) => setArgs(e.target.value)}
+                  />
+                </Field>
+                <FieldSet>
+                  <FieldLegend variant="label">Environment</FieldLegend>
+                  <KeyValueFields
+                    list={env}
+                    onChange={setEnv}
+                    addLabel="Add variable"
+                    disabled={busy}
+                  />
+                </FieldSet>
+                <Field>
+                  <FieldLabel htmlFor="mcp-cwd">
+                    Working directory <span className="font-normal text-ink-3">Optional</span>
+                  </FieldLabel>
+                  <Input
+                    id="mcp-cwd"
+                    value={cwd}
+                    disabled={busy}
+                    aria-describedby="mcp-cwd-hint"
+                    className="font-mono text-xs"
+                    onChange={(e) => setCwd(e.target.value)}
+                  />
+                  <FieldDescription id="mcp-cwd-hint" className="text-xs text-ink-3">
+                    Empty runs the command in each session's folder. Set it only when the command
+                    uses relative paths.
+                  </FieldDescription>
+                </Field>
+              </>
             )}
-            <Button type="button" variant="outline" disabled={busy} onClick={close}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy || !complete}>
-              {busy && <Spinner data-icon="inline-start" />}
-              {entry ? "Save" : "Add MCP server"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            {errorAt(undefined) && <FieldError role="alert">{errorAt(undefined)}</FieldError>}
+          </FieldGroup>
+        )}
+        <DialogFooter>
+          {pasted && "name" in pasted && (
+            <span className="mr-auto self-center text-xs text-ink-3">Adds {pasted.name}</span>
+          )}
+          <Button type="button" variant="outline" disabled={busy} onClick={close}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy || !complete}>
+            {busy && <Spinner data-icon="inline-start" />}
+            {entry ? "Save" : "Add MCP server"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </FormDialog>
   );
 }
