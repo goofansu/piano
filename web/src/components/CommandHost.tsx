@@ -27,7 +27,6 @@ import { promptEditor, skillEditor } from "@/components/DraftDialogs";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -35,6 +34,7 @@ import {
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
 import { ProjectDialogView } from "@/components/Projects";
 import { ProjectSettingsDialog } from "@/components/ProjectSettings";
+import { RemovalDialog } from "@/components/RemovalDialog";
 import { PreviewDetailsDialog } from "@/components/SessionPreview";
 import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
@@ -73,7 +73,7 @@ async function copySessionValue(value: string, label: string) {
     await navigator.clipboard.writeText(value);
     toast.success(`${label} copied`);
   } catch {
-    toast.error(`Couldn’t copy ${label.toLowerCase()}.`);
+    toast.error(`Could not copy the ${label[0]?.toLowerCase()}${label.slice(1)}.`);
   }
 }
 
@@ -218,6 +218,11 @@ export function CommandHost({
   const { view, setView } = useSidebarView();
   const { theme, setTheme } = useTheme();
   const sidebar = useSidebarLayout();
+  // Out of sight: the desktop column collapsed, or below the breakpoint the sheet closed. A boolean
+  // snapshot, so a resize drag does not re-render the host.
+  const sidebarHidden = useSyncExternalStore(sidebar.subscribe, () =>
+    sidebar.desktop() ? sidebar.getState().collapsed : !sidebar.getState().mobileOpen,
+  );
   const forms = useCommandForms({
     state,
     radiusSignedIn,
@@ -237,6 +242,10 @@ export function CommandHost({
   const answer = forms.answer();
   // Archive, delete, close folder and delete project share one confirm dialog; `confirmation` decides its wording.
   const asking = form ? confirmation(state, form) : undefined;
+  // The dialog animates closed after the form is gone; it keeps the words it was showing.
+  const lastConfirmation = useRef(asking);
+  if (asking) lastConfirmation.current = asking;
+  const shownConfirmation = asking ?? lastConfirmation.current;
   const sharing = form?.kind === "share-session";
   const project = form?.kind === "project" ? form.dialog : undefined;
   const projectSettings = form?.kind === "project-settings";
@@ -293,7 +302,7 @@ export function CommandHost({
         state,
         radiusSignedIn,
         // The one global command context; "system" is next-themes' default before it reads storage.
-        global: { settings, view, theme: theme ?? "system" },
+        global: { settings, view, theme: theme ?? "system", sidebarHidden },
       }}
     >
       {children}
@@ -308,7 +317,6 @@ export function CommandHost({
       <Dialog open={!!renaming} onOpenChange={(open) => !open && close()}>
         <DialogContent
           className="sm:max-w-md"
-          showCloseButton={false}
           aria-describedby={undefined}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
@@ -348,26 +356,18 @@ export function CommandHost({
           </form>
         </DialogContent>
       </Dialog>
-      <Dialog open={!!asking} onOpenChange={(open) => !open && close()}>
-        <DialogContent className="sm:max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>{asking?.title}</DialogTitle>
-            <DialogDescription>{asking?.description}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={close}>
-              Cancel
-            </Button>
-            <Button
-              variant={asking?.destructive ? "destructive" : "default"}
-              disabled={!answer.allowed}
-              onClick={forms.submit}
-            >
-              {asking?.confirmLabel}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RemovalDialog
+        open={!!asking}
+        title={shownConfirmation?.title ?? ""}
+        description={shownConfirmation?.description ?? ""}
+        action={shownConfirmation?.confirmLabel ?? ""}
+        destructive={shownConfirmation?.destructive}
+        // Sending closes the form at once, so there is no wait to show.
+        busy={false}
+        disabled={!answer.allowed}
+        cancel={close}
+        confirm={forms.submit}
+      />
       <PreviewDetailsDialog claim={previewDetails} close={() => setPreviewDetails(null)} />
       <ProjectDialogView
         open={!!project}

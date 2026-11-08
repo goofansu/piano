@@ -171,8 +171,8 @@ export function Sidebar({ state }: Props) {
       <LayoutHeader>
         <IconButton
           size="header"
-          label="Search sessions"
-          tooltip={<Hint of={["mod", "K"]}>Search and commands</Hint>}
+          label="Search sessions and commands"
+          tooltip={<Hint of={["mod", "K"]}>Search sessions and commands</Hint>}
           onClick={() => setPalette(true)}
         >
           <SearchIcon />

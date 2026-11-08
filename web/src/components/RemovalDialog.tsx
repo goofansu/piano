@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
 /**
- * Confirms removing setup from Pi on this machine: an install, or a saved sign-in. It stays
+ * The one confirm dialog: removing setup from Pi on this machine (an install, a saved sign-in) and
+ * the commands that ask first (archive or delete a session, close a folder, delete a project). It
+ * keeps its label and turns a spinner while busy, and only Cancel or Escape dismiss it. It stays
  * mounted so it can animate closed.
  */
 export function RemovalDialog({
@@ -21,6 +23,7 @@ export function RemovalDialog({
   progress = action,
   busy,
   disabled = busy,
+  destructive = true,
   cancel,
   confirm,
 }: {
@@ -34,6 +37,8 @@ export function RemovalDialog({
   busy: boolean;
   /** Whether confirming is unavailable; defaults to `busy`. */
   disabled?: boolean;
+  /** The confirm button is the red destructive one; false for a reversible step such as Archive. */
+  destructive?: boolean;
   cancel: () => void;
   confirm: () => void;
 }) {
@@ -58,7 +63,7 @@ export function RemovalDialog({
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant={destructive ? "destructive" : "default"}
             disabled={disabled}
             onClick={() => {
               if (open) confirm();

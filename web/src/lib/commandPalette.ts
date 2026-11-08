@@ -8,7 +8,7 @@ import { type AppState, sessionKey } from "../store.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
 import type { ProjectCommand, SessionProjectMenu } from "./projectCommands.ts";
 import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
-import type { SessionCommand } from "./sessionCommands.ts";
+import { type SessionCommand, sessionRowMenu } from "./sessionCommands.ts";
 
 /**
  * A row's own search text always outranks a match that needs a hidden alias. Keep cmdk's fuzzy
@@ -150,19 +150,25 @@ function projectRows(menu: SessionProjectMenu): PaletteSessionCommandRow[] {
 
 /**
  * Session commands with the membership rows after the manage commands, where the header menu has
- * them. A command this screen does not have (`hidden`) is left out rather than greyed.
+ * them, and Archive and Delete last, as both session menus end. A command this screen does not have
+ * (`hidden`) is left out rather than greyed.
  */
 function sessionRows(input: PaletteInput): PaletteSessionCommandRow[] {
-  const rows: PaletteSessionCommandRow[] = input.sessionCommands
-    .filter((c) => !c.hidden)
-    .map((c) => ({
-      ...commandRow(c),
-      kind: "session",
-    }));
-  if (!input.sessionProject) return rows;
-  const at = rows.findIndex((r) => r.key === "archive");
-  rows.splice(at < 0 ? rows.length : at, 0, ...projectRows(input.sessionProject));
-  return rows;
+  const shown = input.sessionCommands.filter((c) => !c.hidden);
+  const last = new Set(sessionRowMenu(shown).destructive);
+  const row = (c: SessionCommand): PaletteSessionCommandRow => ({
+    ...commandRow(c),
+    kind: "session",
+  });
+  const rows = shown.filter((c) => !last.has(c)).map(row);
+  const tail = shown.filter((c) => last.has(c)).map(row);
+  if (input.sessionProject) {
+    // Where the menus' project section sits: after the manage commands, before the first one that
+    // ends the session's life.
+    const at = shown.findIndex((c) => last.has(c));
+    rows.splice(at < 0 ? rows.length : at, 0, ...projectRows(input.sessionProject));
+  }
+  return [...rows, ...tail];
 }
 
 /**

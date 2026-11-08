@@ -310,3 +310,11 @@ test("Show folder and branch is one command for the palette and the View menu, n
   assert.equal(on?.pressed, true);
   assert.deepEqual(on?.intent, { kind: "view", change: { folderAndBranch: false } });
 });
+
+test("the sidebar toggle is named as the button it stands for: Hide sidebar while shown, Show sidebar while hidden", () => {
+  const toggle = (sidebarHidden: boolean) =>
+    globalCommands(onNewPage, { ...ctx, sidebarHidden }).find((c) => c.id === "toggle-sidebar");
+  assert.deepEqual([toggle(false)?.label, toggle(false)?.icon], ["Hide sidebar", "hide-sidebar"]);
+  assert.deepEqual([toggle(true)?.label, toggle(true)?.icon], ["Show sidebar", "show-sidebar"]);
+  assert.deepEqual(toggle(true)?.intent, { kind: "toggle-sidebar" });
+});

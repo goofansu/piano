@@ -76,7 +76,8 @@ export type GlobalCommandIcon =
   | "projects"
   | "trusted"
   | "untrusted"
-  | "sidebar"
+  | "hide-sidebar"
+  | "show-sidebar"
   | Appearance
   | "group"
   | "sort"
@@ -136,6 +137,8 @@ export interface GlobalCommandContext {
   view: SidebarView;
   /** The chosen appearance, for a surface that marks it; without it no appearance is checked. */
   theme?: string;
+  /** The sidebar is out of sight (collapsed, or a closed sheet), so its toggle reads Show sidebar. */
+  sidebarHidden?: boolean;
 }
 
 /** One of the View menu's choices (appearance, grouping or sorting) as a radio group. */
@@ -254,7 +257,7 @@ export function pageCommands(
 /**
  * Global commands, in the palette's order: Home or Settings (whichever is not open), each Settings
  * section, New session, Projects, the open page's header actions (`pageCommands`), trust for the
- * directory the main pane is about, Toggle sidebar, the appearances, then each sidebar grouping and sort, with the current one of each checked.
+ * directory the main pane is about, Hide or Show sidebar, the appearances, then each sidebar grouping and sort, with the current one of each checked.
  */
 export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
   const trust = trustCommand(state, focusedDirectory(state)?.cwd);
@@ -306,8 +309,9 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
     ...(trust ? [trust] : []),
     {
       id: "toggle-sidebar",
-      label: "Toggle sidebar",
-      icon: "sidebar",
+      // Named as the button that does the same is: Hide sidebar in its header, Show sidebar in a pane's.
+      label: ctx.sidebarHidden ? "Show sidebar" : "Hide sidebar",
+      icon: ctx.sidebarHidden ? "show-sidebar" : "hide-sidebar",
       group: "sidebar",
       enabled: true,
       intent: { kind: "toggle-sidebar" },

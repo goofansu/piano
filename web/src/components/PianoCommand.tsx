@@ -37,9 +37,22 @@ export function CommandInput({ className, ...props }: ComponentProps<typeof Base
   return <BaseInput {...props} className={cn("h-full py-0", className)} />;
 }
 
-export function CommandItem({ className, ...props }: ComponentProps<typeof BaseItem>) {
+/** A row; `destructive` reads red, as the same command does in a menu. */
+export function CommandItem({
+  className,
+  variant = "default",
+  ...props
+}: ComponentProps<typeof BaseItem> & { variant?: "default" | "destructive" }) {
   return (
-    <BaseItem {...props} className={cn("min-h-(--command-row-height) rounded-md", className)} />
+    <BaseItem
+      data-variant={variant}
+      {...props}
+      className={cn(
+        "min-h-(--command-row-height) rounded-md",
+        "data-[variant=destructive]:text-destructive! data-[variant=destructive]:data-selected:bg-destructive/10 dark:data-[variant=destructive]:data-selected:bg-destructive/20 data-[variant=destructive]:**:[svg]:text-destructive!",
+        className,
+      )}
+    />
   );
 }
 

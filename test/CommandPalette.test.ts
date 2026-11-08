@@ -214,6 +214,31 @@ test("Session commands offer the session's project membership, named as the menu
     assert.equal(r.enabled, r.key === "project:open", r.label);
 });
 
+test("Session commands end with Archive and Delete, as both session menus do, and only Delete is destructive", () => {
+  const member: AppState = {
+    ...inSession,
+    sessionReferences: references.map((r) =>
+      r.sessionId === "s1" ? { ...r, projectId: "launch" } : r,
+    ),
+  };
+  const group = palette(member).find((g) => g.id === "session");
+  assert.ok(group?.id === "session");
+  const labels = group.rows.map((r) => r.label);
+  assert.deepEqual(labels.slice(-2), ["Archive", "Delete"]);
+  assert.ok(
+    labels.indexOf("New session here") < labels.indexOf("Archive"),
+    "New session here comes before the rows that end the session",
+  );
+  assert.ok(
+    labels.indexOf("Remove from project") < labels.indexOf("New session here"),
+    "the project rows stay after the manage commands",
+  );
+  assert.deepEqual(
+    group.rows.filter((r) => r.kind === "session" && r.command.destructive).map((r) => r.label),
+    ["Delete"],
+  );
+});
+
 test("Session commands reach the session's project home, as the header's project link does", () => {
   const member: AppState = {
     ...inSession,
