@@ -40,6 +40,8 @@ jobs:
     name: Module tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      WORKTRUNK_VERSION: v0.81.0
     strategy:
       # Finish every shard even when another fails, retaining the full suite's evidence.
       fail-fast: false
@@ -54,39 +56,25 @@ jobs:
           node-version: '24'
           cache: npm
       # The module suite includes a real Worktrunk lifecycle test, not just fake CLI tests.
-      # Piano supports the latest Worktrunk, so CI tests the latest release, checked against
-      # the checksum file published with it. The binary is cached per release: release
-      # downloads have returned 504 for an hour at a time, and each release downloads once.
-      - name: Find the latest Worktrunk release
-        id: worktrunk
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for delay in 2 4 8 16 32 0; do
-            tag=$(gh api repos/max-sixty/worktrunk/releases/latest --jq .tag_name) && break
-            [ "$delay" = 0 ] && exit 1
-            sleep "$delay"
-          done
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-      - name: Restore Worktrunk ${{ steps.worktrunk.outputs.tag }}
+      # CI tests one pinned release, checked against the checksum file published with it;
+      # bump WORKTRUNK_VERSION to move CI to a new release. The binary is cached per
+      # version: release downloads have returned 504 for an hour at a time.
+      - name: Restore Worktrunk
         id: worktrunk-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/worktrunk
-          key: worktrunk-x86_64-unknown-linux-musl-${{ steps.worktrunk.outputs.tag }}
-      - name: Download Worktrunk ${{ steps.worktrunk.outputs.tag }}
+          key: worktrunk-x86_64-unknown-linux-musl-${{ env.WORKTRUNK_VERSION }}
+      - name: Download Worktrunk
         if: steps.worktrunk-cache.outputs.cache-hit != 'true'
         shell: bash
-        env:
-          TAG: ${{ steps.worktrunk.outputs.tag }}
         run: |
           cd "$RUNNER_TEMP"
           asset=worktrunk-x86_64-unknown-linux-musl.tar.xz
           for file in "$asset" "$asset.sha256"; do
             curl --fail --location --silent --show-error --remote-name \
               --retry 8 --retry-all-errors --retry-max-time 300 \
-              "https://github.com/max-sixty/worktrunk/releases/download/$TAG/$file"
+              "https://github.com/max-sixty/worktrunk/releases/download/$WORKTRUNK_VERSION/$file"
           done
           sha256sum --check "$asset.sha256"
           mkdir -p worktrunk
