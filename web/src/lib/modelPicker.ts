@@ -5,7 +5,7 @@
  * ModelSelect renders from it and keeps focus and keys; refresh and saving live in modelCatalogs.
  */
 import type { ModelCatalog, ModelChoice, ThinkingLevel } from "@shared/wire";
-import { levelsFor } from "./modelChoice.ts";
+import { levelsFor, piDefaults } from "./modelChoice.ts";
 
 /** What decides whether the picker can open; the trigger and the Mod+/ shortcut both read it. */
 export interface ModelPickerAvailability {
@@ -62,7 +62,7 @@ export interface ModelPickerView {
   canSaveDefault: boolean;
   /** Pi's defaults are known, listed and differ from the shown selection: the picker can return to them. */
   canUseDefault: boolean;
-  /** Pi's defaults as the trigger names them, such as "claude-x · medium"; null when unknown. */
+  /** Pi's defaults as the trigger names them, such as "claude-x · medium"; null when unusable. */
   defaultLabel: string | null;
 }
 
@@ -81,8 +81,8 @@ export function modelPickerView(s: ModelPickerInput): ModelPickerView {
         ...models.filter((m) => m.ref !== s.openingModel),
       ];
   const waitingForModel = s.chosen !== null && s.chosen !== shown;
-  const isDefault =
-    !!shown && shown === catalog?.defaultModel && s.effort === catalog.defaultThinkingLevel;
+  const defaults = piDefaults(catalog);
+  const isDefault = !!shown && shown === defaults?.model && s.effort === defaults.thinkingLevel;
   const label = !catalog
     ? s.noDirectory
       ? "Model"
@@ -104,18 +104,9 @@ export function modelPickerView(s: ModelPickerInput): ModelPickerView {
     isDefault,
     canSaveDefault:
       !s.disabled && !waitingForModel && !s.saving && !isDefault && !!shown && !catalog?.error,
-    canUseDefault:
-      !s.disabled &&
-      !waitingForModel &&
-      !isDefault &&
-      !catalog?.error &&
-      !!catalog?.defaultModel &&
-      !!catalog.defaultThinkingLevel &&
-      catalog.models.some((m) => m.ref === catalog.defaultModel),
-    defaultLabel: catalog?.defaultModel
-      ? [catalog.defaultModel.split("/").pop(), catalog.defaultThinkingLevel]
-          .filter(Boolean)
-          .join(" · ")
+    canUseDefault: !s.disabled && !waitingForModel && !isDefault && !catalog?.error && !!defaults,
+    defaultLabel: defaults
+      ? `${defaults.model.split("/").pop() ?? defaults.model} · ${defaults.thinkingLevel}`
       : null,
   };
 }

@@ -110,16 +110,15 @@ export function modelChoice(
     chooseEffort: (level) =>
       change({ ...pick, thinkingLevel: level }, { _tag: "set_thinking_level", level }),
     chooseDefaults: () => {
-      const model = catalog?.defaultModel;
-      const thinkingLevel = level(catalog?.defaultThinkingLevel);
-      if (!model || !thinkingLevel) return [];
-      const next = { model, thinkingLevel };
+      const defaults = piDefaults(catalog);
+      if (!defaults) return [];
+      const { model, thinkingLevel } = defaults;
       return effective.kind === "session" && effective.hosted
         ? [
             { kind: "act", action: { _tag: "set_model", model } },
             { kind: "act", action: { _tag: "set_thinking_level", level: thinkingLevel } },
           ]
-        : [change(next, { _tag: "set_model", model })];
+        : [change(defaults, { _tag: "set_model", model })];
     },
     submit: (send) => (send(start) ? { scope, pick: {} } : held),
   };
@@ -139,6 +138,20 @@ export function clampEffort(levels: ThinkingLevel[], wanted: ThinkingLevel): Thi
   if (levels.includes(wanted)) return wanted;
   const below = ALL.slice(0, ALL.indexOf(wanted)).filter((l) => levels.includes(l));
   return below[below.length - 1] ?? levels[0] ?? "off";
+}
+
+/**
+ * Pi's defaults for new sessions as the picker can apply them: the default model while the catalog
+ * lists it, and the default effort clamped to what that model accepts. Nothing while Pi names no
+ * listed model or no known effort.
+ */
+export function piDefaults(
+  catalog: ModelCatalog | null,
+): { model: string; thinkingLevel: ThinkingLevel } | undefined {
+  const model = catalog?.defaultModel;
+  const wanted = level(catalog?.defaultThinkingLevel);
+  if (!model || !wanted || !catalog.models.some((m) => m.ref === model)) return undefined;
+  return { model, thinkingLevel: clampEffort(levelsFor(catalog, model), wanted) };
 }
 
 const level = (value: string | undefined): ThinkingLevel | undefined =>
