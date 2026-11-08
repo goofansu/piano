@@ -25,7 +25,7 @@ export function AnsweredQuestion({ resolution }: { resolution: DialogResolution 
         {status && (
           <ItemHeader>
             <span role="status" className="flex items-center gap-2 text-xs text-ink-2">
-              <StatusDot tone={status.tone} pulse={status.pulse} />
+              <StatusDot tone={status.tone} />
               {status.label}
             </span>
             {details && (

@@ -105,7 +105,7 @@ function PreviewStatus({ preview, className }: { preview: SessionPreview; classN
   const face = previewFace(preview);
   return (
     <span className={className}>
-      <StatusDot tone={dotTone[face.tone]} pulse={face.tone === "pending"} />
+      <StatusDot tone={dotTone[face.tone]} />
       {face.status}
     </span>
   );
@@ -142,7 +142,7 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
               variant="icon"
               className="h-lh group-has-data-[slot=item-description]/item:translate-y-0"
             >
-              <StatusDot tone={dotTone[face.tone]} pulse={face.tone === "pending"} />
+              <StatusDot tone={dotTone[face.tone]} />
             </ItemMedia>
             <ItemContent data-motion="yield" className="min-w-0 gap-0">
               <RailRowTitle>Preview</RailRowTitle>

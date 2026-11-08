@@ -138,7 +138,7 @@ function PreviewRow({ preview, onShow }: { preview: SessionPreview; onShow: () =
   return (
     <Button variant="ghost" className={row} aria-label="Show preview" onClick={onShow}>
       <span className="flex size-4 shrink-0 items-center justify-center">
-        <StatusDot tone={dotTone[face.tone]} pulse={face.tone === "pending"} />
+        <StatusDot tone={dotTone[face.tone]} />
       </span>
       <span data-slot="row-title">Preview</span>
       <span className={value}>{preview.url ? previewHost(preview.url) : face.status}</span>

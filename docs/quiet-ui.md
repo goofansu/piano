@@ -57,7 +57,7 @@ sheet (one-area-at-a-time or a narrow viewport). On a wide viewport it keeps the
 and menu beside the title, even one-area-at-a-time; on a narrow viewport the menu moves to the end
 and replaces the breadcrumb as the route to project actions;
 one status glyph, `StatusDot`, for every state (an app preview, a webhook delivery), breathing
-(`pulse`) only while something is in progress, and each state shown once: the sidebar row owns a
+(its `busy` tone) only while something is in progress, and each state shown once: the sidebar row owns a
 session's state, so the header repeats nothing; a refresh control turns its own icon while it
 reads; a page listing things (providers, webhooks, the Projects index) is `SettingsGroup`s and
 `SettingsList`s of hairline-divided rows (`settingsRow` draws the hairline, each row is a

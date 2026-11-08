@@ -240,19 +240,14 @@ test("a receipt is shown by delivery and ownership; an answer-less one is a stat
     details: false,
     notice: null,
   };
-  const card = (
-    label: string,
-    tone: AnswerTone,
-    details = false,
-    pulse = false,
-  ): AnswerReceipt => ({
+  const card = (label: string, tone: AnswerTone, details = false): AnswerReceipt => ({
     ...quiet,
     card: true,
-    status: { label, tone, pulse },
+    status: { label, tone },
     details,
   });
   const cases: [string, Partial<DialogResolution>, AnswerReceipt][] = [
-    ["pending", { delivery: "pending" }, card("Sending answer…", "busy", false, true)],
+    ["pending", { delivery: "pending" }, card("Sending answer…", "busy")],
     ["written, not owned", {}, quiet],
     [
       "written, owned by a tool call",
