@@ -10,6 +10,7 @@ import {
   SquareSlashIcon,
   WebhookIcon,
 } from "lucide-react";
+import { Children, isValidElement } from "react";
 import { PaneBody, PaneHeader } from "@/components/Pane";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -115,24 +116,33 @@ export function SettingsGroup({
 
 /**
  * Rows in one bordered list, split by hairlines rather than spaced as cards, as Linear's settings
- * lists are. Rows are `Item`s with `settingsRow`. Each row's hairline is its own bottom border:
- * `Item` draws a transparent border on every side, which a `divide-*` colour cannot win against.
+ * lists are. Rows are `Item`s with `settingsRow`. The list makes each child a list item, so a row
+ * never decides its own role, and a row that is a button stays one. The hairline is the item's
+ * bottom border; the row's own border is cleared, since `Item` draws a transparent one on every
+ * side.
  */
 export function SettingsList({
   className,
+  children,
   ...props
 }: React.ComponentProps<"div"> & { children: React.ReactNode }) {
   return (
-    // Its rows are shadcn Items (divs), which a <ul> cannot hold; the role names the list.
+    // Its rows are shadcn Items (divs), which a <ul> cannot hold; the roles name the list.
     <div
       role="list"
       className={cn(
         "flex flex-col overflow-hidden rounded-lg border border-line",
-        "*:border-x-0 *:border-t-0 *:border-b *:border-b-line *:last:border-b-0",
+        "*:border-b *:border-b-line *:last:border-b-0 *:*:border-0",
         className,
       )}
       {...props}
-    />
+    >
+      {Children.toArray(children).map((row) => (
+        <div role="listitem" key={isValidElement(row) ? row.key : undefined}>
+          {row}
+        </div>
+      ))}
+    </div>
   );
 }
 
