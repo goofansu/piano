@@ -831,7 +831,7 @@ function DispatchRow({
   const destination = sessionId ? destinationOf(sessionId) : "unlisted";
   return (
     <FoldRow
-      glyph={<StatusDot tone={TONE[outcome]} pulse={outcome === "running"} />}
+      glyph={<StatusDot tone={TONE[outcome]} />}
       header={
         <>
           <span className="min-w-20 flex-1 truncate font-medium text-ink">{title}</span>
@@ -1087,7 +1087,7 @@ function NestedCalls({ parentId, nested }: { parentId: string; nested: NestedVie
 function NestedCall({ line: { call, outcome, summary, inputNote } }: { line: NestedCallLine }) {
   return (
     <FoldRow
-      glyph={<StatusDot tone={TONE[outcome]} pulse={outcome === "running"} />}
+      glyph={<StatusDot tone={TONE[outcome]} />}
       header={
         <>
           <span
@@ -1145,7 +1145,7 @@ function Tool({
 
   return (
     <FoldRow
-      glyph={<StatusDot tone={TONE[outcome]} pulse={outcome === "running"} />}
+      glyph={<StatusDot tone={TONE[outcome]} />}
       header={(open) => (
         <>
           <span className={cn("shrink-0 font-medium", failed ? "text-err" : "text-ink")}>

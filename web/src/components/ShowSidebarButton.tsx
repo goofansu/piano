@@ -47,7 +47,6 @@ export function ShowSidebarButton({
       {working && (
         <StatusDot
           tone="busy"
-          pulse
           className="absolute top-[calc(50%-9px)] left-[calc(var(--glyph-pad)+10px)]"
         />
       )}

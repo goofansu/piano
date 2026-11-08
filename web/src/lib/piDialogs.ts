@@ -63,7 +63,7 @@ export interface AnswerReceipt {
   /** The last answer stays above the composer. */
   card: boolean;
   /** The card's delivery line; null when delivery needs no word. */
-  status: { label: string; tone: AnswerTone; pulse: boolean } | null;
+  status: { label: string; tone: AnswerTone } | null;
   /** The card offers the delivery detail behind a Details popover. */
   details: boolean;
   /** The status line for a resolution without an answer; null when it has one or the user's
@@ -104,7 +104,7 @@ export function answerReceipt(resolution: DialogResolution): AnswerReceipt {
     (delivery === "written" || delivery === "accepted");
   return {
     card: !!answer && delivery !== "accepted" && !(delivery === "written" && !owned),
-    status: status && { ...status, pulse: delivery === "pending" },
+    status,
     details: delivery === "uncertain" || delivery === "not-sent" || delivery === "rejected",
     notice:
       answer || cancelled
