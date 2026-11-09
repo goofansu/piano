@@ -14,6 +14,7 @@ import { errorText } from "./ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { peerVerdict } from "./PeerScope.ts";
 import { sessionActionPolicy } from "./PiSessions.ts";
+import { PreparedImages } from "./PreparedImages.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts, SessionNotCreated } from "./SessionHosts.ts";
 import { SessionStatus } from "./SessionStatus.ts";
@@ -41,6 +42,7 @@ export interface ClientDispatch {
 type Unanswered =
   | { readonly _tag: "refused" }
   | { readonly _tag: "unsupported" }
+  | { readonly _tag: "images"; readonly detail: string }
   | { readonly _tag: "failed"; readonly error: unknown };
 
 const unansweredText = (reason: Unanswered) =>
@@ -48,7 +50,9 @@ const unansweredText = (reason: Unanswered) =>
     ? "Client input capacity is full. Request was not started; wait for pending work before trying again."
     : reason._tag === "unsupported"
       ? "Not available from another machine: this session is not listed here, or the request is not supported remotely."
-      : errorText(reason.error);
+      : reason._tag === "images"
+        ? reason.detail
+        : errorText(reason.error);
 
 /**
  * How `receive` admits a request, in arrival order:
@@ -122,6 +126,14 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   const registry = yield* Registry;
   const commands = yield* WorkspaceCommands;
   const status = yield* SessionStatus;
+  const prepared = yield* PreparedImages;
+  const pendingImages = new Set<() => void>();
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      for (const release of pendingImages) release();
+      pendingImages.clear();
+    }),
+  );
   const sessions = yield* makeClientSessions(output);
   const { send } = output;
 
@@ -446,13 +458,60 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
 
   const capacity = makeInboundCapacity(inboundLimits.client);
   const receive = Effect.fn("ClientDispatch.receive")(function* (request: ClientRequest) {
+    const selection = peer ? yield* sessions.selection : null;
     if (peer) {
-      const verdict = peerVerdict(yield* registry.get, request, yield* sessions.selection);
+      const verdict = peerVerdict(yield* registry.get, request, selection);
       if (verdict === "skip") return Effect.void;
       if (verdict === "refuse") {
         yield* settle(request, { _tag: "unsupported" });
         return Effect.void;
       }
+    }
+    // References are transport capabilities, resolved here before any start/create. PiSessions
+    // receives only its existing image action; mixed inline/reference input is never ambiguous.
+    let releaseImages = () => {};
+    let imageLease = false;
+    if ((request._tag === "act" || request._tag === "create_session") && request.preparedImages) {
+      const reference = request.preparedImages;
+      const create = request._tag === "create_session";
+      const input = request._tag === "create_session" ? request : request.action;
+      const target =
+        request._tag === "create_session"
+          ? { cwd: request.cwd, draftId: reference.draftId ?? "" }
+          : selection?.sessionId
+            ? { cwd: selection.cwd, sessionId: selection.sessionId }
+            : undefined;
+      if (
+        !peer ||
+        !target ||
+        (!create && input._tag !== "prompt" && input._tag !== "steer") ||
+        ("attachments" in input && input.attachments !== undefined)
+      ) {
+        yield* settle(request, { _tag: "unsupported" });
+        return Effect.void;
+      }
+      const lease = yield* prepared
+        .claim(yield* registry.get, reference, target)
+        .pipe(Effect.result);
+      if (lease._tag === "Failure") {
+        // No session or input was started. Preserve the normal known-unsent receipt shape.
+        yield* settle(request, { _tag: "images", detail: lease.failure.detail });
+        return Effect.void;
+      }
+      releaseImages = lease.success.release;
+      imageLease = true;
+      pendingImages.add(releaseImages);
+      request =
+        request._tag === "create_session"
+          ? { ...request, preparedImages: undefined, attachments: lease.success.attachments }
+          : {
+              ...request,
+              preparedImages: undefined,
+              action: {
+                ...request.action,
+                attachments: lease.success.attachments,
+              } as typeof request.action,
+            };
     }
     const policy = policyOf(request);
     const admission =
@@ -473,10 +532,27 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     if (!release) {
       // Reject before claiming a selection or mutating anything. The receive loop
       // remains available for acknowledgements, dialog answers and cancellation.
+      releaseImages();
+      pendingImages.delete(releaseImages);
       yield* settle(request, { _tag: "refused" });
       return Effect.void;
     }
-    return (yield* admitted).pipe(answered(request), Effect.ensuring(Effect.sync(release)));
+    const work = (yield* admitted).pipe(
+      answered(request),
+      Effect.ensuring(
+        Effect.sync(() => {
+          releaseImages();
+          release();
+        }),
+      ),
+    );
+    // Once consumed, a disconnected observer must not free the image budget while Pi still
+    // processes the operation. Existing Pi admission/write deadlines bound its settlement.
+    return imageLease
+      ? Effect.sync(() => {
+          pendingImages.delete(releaseImages);
+        }).pipe(Effect.andThen(work), Effect.uninterruptible)
+      : work;
   }, Effect.uninterruptible);
 
   // ── initial state and global updates ──

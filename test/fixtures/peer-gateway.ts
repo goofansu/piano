@@ -47,10 +47,12 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       headers: IncomingHttpHeaders;
       method?: string;
       body?: string;
+      bytes?: Buffer;
     }[],
     received: [] as string[],
     sent: [] as string[],
     pendingHttp: [] as Array<() => void>,
+    pendingBodies: [] as Array<() => void>,
   };
   const events = new EventTarget();
   const changed = () => events.dispatchEvent(new Event("change"));
@@ -76,9 +78,21 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
     });
   };
   const upstream = createServer(async (req, res) => {
-    let body = "";
-    for await (const chunk of req) body += chunk;
-    state.requests.push({ url: req.url!, headers: req.headers, method: req.method, body });
+    if (state.mode === "image-body-held" && req.url === "/api/peer/images")
+      await new Promise<void>((resolve) => {
+        state.pendingBodies.push(resolve);
+        changed();
+      });
+    const chunks: Buffer[] = [];
+    try {
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    } catch {
+      res.destroy();
+      return;
+    }
+    const bytes = Buffer.concat(chunks);
+    const body = bytes.toString();
+    state.requests.push({ url: req.url!, headers: req.headers, method: req.method, body, bytes });
     changed();
     if (
       state.requiredToken &&
@@ -106,7 +120,41 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       res.end("x".repeat(1024 * 1024 + 1));
       return;
     }
+    if (req.url?.startsWith("/api/peer/image-preview")) {
+      res.setHeader("content-type", state.mode === "image-mime" ? "text/html" : "image/png");
+      res.setHeader("set-cookie", "upstream-secret=never-forward");
+      if (state.mode === "image-large") {
+        res.setHeader("content-length", 64 * 1024 * 1024 + 1);
+        res.end();
+        return;
+      }
+      if (state.mode === "image-chunked-large") {
+        for (let n = 0; n < 65; n++) res.write(Buffer.alloc(1024 * 1024));
+        res.end();
+        return;
+      }
+      if (state.mode === "image-interrupted") {
+        res.write(Buffer.from("iVBORw0KGgo=", "base64"));
+        setImmediate(() => res.destroy());
+        return;
+      }
+      res.end(Buffer.from("iVBORw0KGgo=", "base64"));
+      return;
+    }
     res.setHeader("content-type", "application/json");
+    if (req.url === "/api/peer/images" || req.url === "/api/peer/images/cancel") {
+      const respond = () =>
+        res.end(
+          JSON.stringify(
+            req.url?.endsWith("cancel") ? { ok: true } : { id: `prepared-${spec.id}` },
+          ),
+        );
+      if (state.mode === "http-held") {
+        state.pendingHttp.push(respond);
+        changed();
+      } else respond();
+      return;
+    }
     // The remote's own settings endpoint: it refuses a model its catalog does not offer.
     if (req.url === "/api/settings/defaults") {
       const defaults = JSON.parse(body);

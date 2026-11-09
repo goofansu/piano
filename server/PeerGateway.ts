@@ -1,8 +1,8 @@
 /**
  * Same-origin attachment to a configured Piano: an authenticated, bounded pipe. The remote's
  * `/ws/peer` decides what another machine may ask (PeerScope there) and answers refusals in its
- * own delivery sequence. Besides that socket, the gateway relays exactly the HTTP requests
- * `RemoteRequests` (shared/http.ts) declares, each checked against its browser endpoint first.
+ * own delivery sequence. Besides that socket, the gateway relays `RemoteRequests` (shared/http.ts)
+ * and the fixed binary image routes in PeerImageGateway, each checked before dialing.
  * No Pi protocol, request policy, local registry lookup, mutation retry, delivery renumbering or
  * remote process ownership lives here (INV-01/02/05).
  */
@@ -21,6 +21,7 @@ import {
 import { socketLimits } from "./BoundedDelivery.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
 import { ConfiguredPeers, type PeerConfig } from "./PeerConfig.ts";
+import { makePeerImageRelay, peerImagePaths } from "./PeerImageGateway.ts";
 
 const limits = {
   connectMs: 5_000,
@@ -347,6 +348,7 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
   const peers = yield* ConfiguredPeers;
   const allowedOrigins = yield* AllowedOrigins;
   const byId = new Map(peers.map((peer) => [peer.id, peer]));
+  const relayImages = makePeerImageRelay();
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = new URL(request.url, "http://localhost");
@@ -354,9 +356,10 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
     // The request owns this immutable destination, including credentials, through completion.
     const peer = match ? byId.get(match[1]) : undefined;
     const remote = match ? remoteRequests.get(match[2]) : undefined;
-    if (!peer || (!remote && match?.[2] !== "/ws"))
+    const imagePath = match && peerImagePaths.has(match[2]) ? match[2] : undefined;
+    if (!peer || (!remote && !imagePath && match?.[2] !== "/ws"))
       return json({ error: "Unknown remote machine or unsupported remote request." }, 404);
-    if (request.method !== (remote?.browser.method ?? "GET"))
+    if (!imagePath && request.method !== (remote?.browser.method ?? "GET"))
       return json({ error: "Remote request method is not supported." }, 405);
     // Every remote request spends the peer's credential, so another site's page must not make the
     // browser send one (an image or script tag needs no Origin). Browsers label such loads.
@@ -367,6 +370,7 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       (origin !== undefined && !allowedOrigins.has(origin))
     )
       return json({ error: "Remote requests must come from this Piano's own page." }, 403);
+    if (imagePath) return yield* relayImages(peer, imagePath, request, upstreamHeaders(peer));
     if (!remote) {
       if (url.search || request.headers.upgrade?.toLowerCase() !== "websocket")
         return json({ error: "A remote WebSocket upgrade is required." }, 400);

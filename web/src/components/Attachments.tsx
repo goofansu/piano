@@ -1,7 +1,7 @@
 import { base64Bytes, IMAGE_TYPE_NAMES, IMAGE_TYPES, imageLabel } from "@shared/attachments";
 import type { RenderMsg } from "@shared/wire";
 import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { createContext, useContext, useId, useRef, useState } from "react";
 import { IconButton } from "@/components/IconButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -17,8 +17,14 @@ import {
 } from "@/components/ui/attachment";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { LOCAL } from "@/lib/machine";
 import { type DraftKey, drafts, type ImageDraft } from "@/lib/messageDraft";
-import { useOffers } from "@/lib/useMachine";
+import { remoteImageUrl } from "@/lib/remoteImages";
+import { useMachine, useOffers } from "@/lib/useMachine";
+
+export const ImageSessionContext = createContext<
+  { workspaceId: string; sessionId: string } | undefined
+>(undefined);
 import { wheelSideways } from "@/lib/wheelSideways";
 
 /** Reads a file as base64 with the browser's native encoder. */
@@ -197,14 +203,22 @@ function ImagePreview({ url }: { url: string }) {
   );
 }
 /** The group clips overflow, so inline padding (offset by the margin) keeps the first tile's focus ring visible. */
-export function MessageAttachments({ items }: { items: RenderMsg["attachments"] }) {
+export function MessageAttachments({
+  items,
+  draft = false,
+}: {
+  items: RenderMsg["attachments"];
+  /** Browser-created first input, never a peer's transcript. */ draft?: boolean;
+}) {
   const offers = useOffers();
+  const machineId = useMachine()?.machine.id ?? LOCAL.id;
+  const target = useContext(ImageSessionContext);
   return offers.attachments && items?.length ? (
     <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1" ref={wheelSideways}>
       {items.map((a, i) => (
         /* Index keys: a message's attachments are fixed and may repeat a URL. */ <ImagePreview
           key={`${a.url}-${i}`}
-          url={a.url}
+          url={draft ? a.url : remoteImageUrl(machineId, a.url, target)}
         />
       ))}
     </AttachmentGroup>

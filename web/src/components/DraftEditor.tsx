@@ -19,8 +19,10 @@ import { ModelSelect } from "@/components/ModelSelect";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { QuoteChips, type QuoteDraft } from "@/components/Quotes";
 import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
+import { Spinner } from "@/components/ui/spinner";
 import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { ControlHint } from "@/lib/composerControl";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
@@ -47,6 +49,11 @@ export function useDraftEditor(key: DraftKey | null) {
   return {
     key,
     text: draft.text,
+    preparing: draft.preparing,
+    prepareError: draft.prepareError,
+    prepareSubmit: (
+      deliver: (message: DraftMessage, inputId: string) => Promise<SendDisposition>,
+    ) => drafts.prepareSubmit(key, deliver),
     /** The text a send delivers; send rules read this, not `text`, so quotes alone can be sent. */
     message: draftMessage(draft).text,
     attachments: attachmentDraft(key, draft.images, drafts),
@@ -87,6 +94,7 @@ interface Props {
   above?: ReactNode;
   /** The toolbar's end, after the model picker: the page's send control and its options. */
   actions: ReactNode;
+  cancelUpload?: () => void;
   /**
    * Where the message is spoken, read when a recording stops: the names voice input spells by.
    * The mic shows beside Attach in every composer while voice input is on.
@@ -113,6 +121,7 @@ export function DraftEditor({
   above,
   actions,
   voice,
+  cancelUpload,
 }: Props) {
   const offers = useOffers();
   const { ref, text, attachments, quotes } = editor;
@@ -137,6 +146,39 @@ export function DraftEditor({
       className={cn(composerCard, className)}
       {...attachmentEvents(attachments, attachmentsDisabled || !offers.attachments)}
     >
+      {editor.preparing && (
+        <>
+          <AttachmentDraftView
+            draft={{
+              items: editor.preparing.attachments,
+              busy: false,
+              error: "",
+              add: async () => {},
+              remove: () => {},
+            }}
+            disabled
+          />
+          <div
+            role="status"
+            className="flex items-center gap-2 px-3 pt-2 text-sm text-muted-foreground"
+          >
+            <Spinner /> Uploading images…
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={cancelUpload}
+              aria-label="Cancel image upload"
+            >
+              Cancel
+            </Button>
+          </div>
+        </>
+      )}
+      {editor.prepareError && (
+        <Alert variant="destructive" className="mx-3 mt-3 w-auto">
+          <AlertDescription>{editor.prepareError}</AlertDescription>
+        </Alert>
+      )}
       <AttachmentDraftView draft={attachments} disabled={attachmentsDisabled} />
       <QuoteChips draft={quotes} disabled={disabled} />
       {above}
