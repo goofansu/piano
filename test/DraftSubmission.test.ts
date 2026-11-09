@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { LOCAL, machineFrameBytes, PEER_FRAME_BYTES } from "../shared/machine.ts";
 import { type ClientMessage, encodeServerMessage } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { messageCommand, newSessionCommand } from "../web/src/lib/composerControl.ts";
@@ -9,7 +10,7 @@ import { openConnection, type SocketEnvironment, type SocketEvents } from "../we
 import { initialState } from "../web/src/store.ts";
 
 /** Real transport and client; only the external socket and reconnect clock are controlled. */
-function harness({ select = true } = {}) {
+function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {}) {
   const sockets: Array<{
     events: SocketEvents;
     open: boolean;
@@ -33,6 +34,7 @@ function harness({ select = true } = {}) {
       };
     },
     url: () => "ws://scratch.test/ws",
+    frameBytes,
     nonce: () => "ping",
     setTimeout: () => 0,
     clearTimeout: () => {},
@@ -179,6 +181,24 @@ test("PIN-61: a throwing send is uncertain and reconnect never replays it", (t) 
   h.accept();
   h.selected();
   assert.equal(h.actions().length, 1);
+});
+
+test("a message larger than a remote admits keeps its draft and says why", (t) => {
+  const h = harness({ frameBytes: PEER_FRAME_BYTES });
+  t.after(h.stop);
+  const drafts = createDrafts();
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
+  const log = "a pasted log line\n".repeat(PEER_FRAME_BYTES / 16);
+  drafts.setText(key, log);
+  const before = drafts.get(key);
+  const sent = drafts.submit(key, (message) =>
+    h.client.send(messageCommand("steering", message, {})),
+  );
+  assert.equal(sent, false);
+  assert.deepEqual(drafts.get(key), before, "the person's text stays in the composer");
+  assert.equal(h.actions().length, 0);
+  assert.equal(h.client.getState().connected, true, "the socket stays up");
+  assert.match(h.notices[0]!, /too large/);
 });
 
 test("a new session's first message that is known not sent stays on the New page as a draft", (t) => {

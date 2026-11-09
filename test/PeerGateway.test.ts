@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { loadPeerConfigs } from "../server/PeerConfig.ts";
+import { PEER_FRAME_BYTES } from "../shared/machine.ts";
 import { gatewayFixture, identity, registry } from "./fixtures/peer-gateway.ts";
 import { readRegistry } from "./fixtures/registry.ts";
 
@@ -437,7 +438,7 @@ test(
       async () => {
         const large = await f.open();
         const before = f.state.received.length;
-        large.send({ _tag: "ping", nonce: "x".repeat(1024 * 1024) });
+        large.send({ _tag: "ping", nonce: "x".repeat(PEER_FRAME_BYTES) });
         assert.equal((await large.closed).code, 1008);
         assert.equal(
           f.state.received.slice(before).some((raw) => raw.includes("xxx")),

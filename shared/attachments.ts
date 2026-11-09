@@ -4,6 +4,13 @@ export const MAX_ATTACHMENTS = 10;
 // Original upload bytes, not Pi's resized/base64 model input. See docs/image-attachments.md.
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+/** JSON envelope, prompt text and other fields that travel beside the base64 images. */
+const MESSAGE_TEXT_ALLOWANCE_BYTES = 16 * 1024 * 1024;
+/** The largest single inbound message: a full attachment batch after base64 encoding
+ * (about 67 MiB for 50 MiB) plus the text allowance. One WebSocket frame, one Pi RPC line and
+ * the pending Pi output all admit one such message; derive any transport cap from this. */
+export const MAX_MESSAGE_BYTES =
+  4 * Math.ceil(MAX_ATTACHMENT_BYTES / 3) + MESSAGE_TEXT_ALLOWANCE_BYTES;
 export type ImageType = (typeof IMAGE_TYPES)[number];
 
 /** How the UI names each accepted type in prose, in `IMAGE_TYPES` order. */

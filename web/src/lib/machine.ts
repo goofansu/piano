@@ -1,9 +1,15 @@
 /** Machine identity belongs above a backend's workspace/session projection (INV-07). */
 import { RemoteRequests } from "../../../shared/http.ts";
-import { isLocalId, isMachineId, LOCAL, type Machine } from "../../../shared/machine.ts";
+import {
+  isLocalId,
+  isMachineId,
+  LOCAL,
+  type Machine,
+  machineFrameBytes,
+} from "../../../shared/machine.ts";
 import type { AddressBar } from "./navigation.ts";
 
-export { isLocalId, LOCAL, type Machine };
+export { isLocalId, LOCAL, type Machine, machineFrameBytes };
 
 /** `/m/<id>/…` addresses a remote; an ID no machine could take addresses none (`""`). */
 export function machineLocation(pathname: string): { id: string; pathname: string } {

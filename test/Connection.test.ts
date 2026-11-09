@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { LOCAL, machineFrameBytes, PEER_FRAME_BYTES } from "../shared/machine.ts";
 import { type ClientMessage, encodeServerMessage, type ServerMessage } from "../shared/wire.ts";
 import {
   type DisconnectReason,
@@ -19,7 +20,7 @@ interface FakeSocket {
 }
 
 /** A connection over fake sockets, a clock the test advances and network events it fires. */
-function harness(onDisconnect?: () => void) {
+function harness(onDisconnect?: () => void, overrides: Partial<SocketEnvironment> = {}) {
   let now = 0;
   let ids = 0;
   let nonces = 0;
@@ -59,6 +60,7 @@ function harness(onDisconnect?: () => void) {
       };
     },
     url: () => "ws://piano.test/ws",
+    frameBytes: machineFrameBytes(LOCAL.id),
     nonce: () => `n${++nonces}`,
     setTimeout: (run, ms) => {
       const id = ++ids;
@@ -76,6 +78,7 @@ function harness(onDisconnect?: () => void) {
       offline.add(listener);
       return () => offline.delete(listener);
     },
+    ...overrides,
   };
   const advance = (ms: number) => {
     const until = now + ms;
@@ -337,4 +340,20 @@ test("PIN-132: a message the wire cannot encode is not sent and keeps the socket
   assert.ok(!h.last().sent.some((m) => m._tag === "act"));
   assert.ok(!h.last().closed, "the socket stays up");
   assert.equal(h.connection.send(act(10)), "sent", "the same message within the limit goes");
+});
+
+test("a message larger than its machine admits is not sent and keeps the socket", () => {
+  const h = harness(undefined, { frameBytes: PEER_FRAME_BYTES });
+  h.last().accept();
+  const prompt = (text: string) =>
+    ({
+      _tag: "act",
+      selectionId: "s",
+      action: { _tag: "prompt", text, attachments: [], inputId: "a-1" },
+    }) as ClientMessage;
+  // A pasted log the remote's gateway would refuse: the draft must stay with the person.
+  assert.equal(h.connection.send(prompt("é".repeat(PEER_FRAME_BYTES / 2))), "not-sent");
+  assert.ok(!h.last().sent.some((m) => m._tag === "act"));
+  assert.ok(!h.last().closed, "the socket stays up");
+  assert.equal(h.connection.send(prompt("é".repeat(1000))), "sent");
 });
