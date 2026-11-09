@@ -8,6 +8,8 @@
  *   /settings/<section> one settings page; /settings aliases the default section, Providers
  */
 
+import { sessionPath } from "../../../shared/sessionLink.ts";
+
 /**
  * The Settings pages, shared by the route parser, navigation and command palette.
  * A destination carries no search words: the palette already matches the label the user reads.
@@ -60,7 +62,7 @@ export function parseRoute(loc: { pathname: string }): Route {
 
 export function routePath(r: Route): string {
   if (r.kind === "settings") return `/settings/${r.section}`;
-  if (r.kind === "session") return `/s/${encodeURIComponent(r.sessionId)}`;
+  if (r.kind === "session") return sessionPath(r.sessionId);
   if (r.kind === "projects") return "/projects";
   if (r.kind === "project") return `/projects/${encodeURIComponent(r.projectId)}`;
   return r.projectId ? `/projects/${encodeURIComponent(r.projectId)}/new` : "/new";
