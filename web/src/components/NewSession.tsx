@@ -47,6 +47,7 @@ import { folderFor } from "@/lib/sessionCatalog";
 import { completionTarget, directoryChoices, startPlace } from "@/lib/sessionContext";
 import { startPage } from "@/lib/startPage";
 import { composerInput, picker } from "@/lib/styles";
+import { useRemote } from "@/lib/useMachine";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useWorktreeOperation } from "@/lib/useWorktreeOperation";
@@ -61,7 +62,8 @@ interface Props {
   client: WorktreeClient;
   /** Picks the directory the session will run in; the page shows the store's `view.cwd`. */
   chooseDirectory: (cwd: string) => void;
-  onProjectChange: (projectId?: string) => void;
+  /** Absent on a remote machine, whose projects stay its own. */
+  onProjectChange?: (projectId?: string) => void;
 }
 
 /** New session: a welcome above the composer. The project control names the project; the headline does not repeat it. */
@@ -100,7 +102,8 @@ export function NewSession({ state, client, chooseDirectory, onProjectChange }: 
  * The composer that starts a session, on the New page and on a project's home: where it runs, that
  * directory's trust, which project it joins (only where `onProjectChange` lets the page change it),
  * and the first message. The first prompt creates the session in the chosen directory with the
- * chosen model and effort.
+ * chosen model and effort. On a remote machine the directory is one the remote registered: there is
+ * no browsing, worktree creation, trust or project choice, which would change the remote.
  */
 export function NewSessionComposer({
   state,
@@ -117,17 +120,18 @@ export function NewSessionComposer({
 }) {
   const { send } = client;
   const { run } = useCommands();
+  const remote = useRemote();
   // The client starts a fresh New page in the last directory used, else the first folder; a
   // project's New page starts without one, and its home in its most recent member's folder.
   const page = startPage(state.view);
   const cwd = page?.cwd ?? "";
-  const projectId = page?.projectId;
+  const projectId = remote ? undefined : page?.projectId;
   const editor = useDraftEditor(NEW_SESSION_DRAFT);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const folder = folderFor(state, cwd);
   const place = startPlace(state, cwd, projectId);
-  const trust = trustCommand(state, cwd);
+  const trust = remote ? undefined : trustCommand(state, cwd);
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
@@ -167,8 +171,9 @@ export function NewSessionComposer({
                 state={state}
                 value={cwd}
                 onChange={chooseDirectory}
-                onBrowse={() => setPickerOpen(true)}
+                onBrowse={remote ? undefined : () => setPickerOpen(true)}
                 client={client}
+                worktreesOffered={!remote}
               />
             </div>
             {trust && <TrustToggle command={trust} run={run} />}
@@ -193,7 +198,7 @@ export function NewSessionComposer({
           voice={() => place}
           actions={<ComposerSend disabled={!ready} onClick={submit} />}
         />
-        {folder?.discovery.status === "error" && (
+        {!remote && folder?.discovery.status === "error" && (
           <Alert data-motion="fade" variant="destructive" className="mt-2">
             <AlertDescription>
               Git status unavailable. Open Worktrees to inspect and refresh.
@@ -201,12 +206,14 @@ export function NewSessionComposer({
           </Alert>
         )}
       </div>
-      <FolderPicker
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        onPick={chooseDirectory}
-        initialPath={cwd || undefined}
-      />
+      {!remote && (
+        <FolderPicker
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onPick={chooseDirectory}
+          initialPath={cwd || undefined}
+        />
+      )}
     </>
   );
 }
@@ -327,19 +334,24 @@ function TrustToggle({
   );
 }
 
-/** Folder roots plus Browse and Worktrees escape hatches; a selected worktree is still named by folder and branch. */
+/**
+ * Folder roots plus Browse and Worktrees escape hatches, offered only where this machine may
+ * browse or create; a selected worktree is still named by folder and branch.
+ */
 function DirectorySelect({
   state,
   value,
   onChange,
   onBrowse,
   client,
+  worktreesOffered,
 }: {
   state: AppState;
   value: string;
   onChange: (cwd: string) => void;
-  onBrowse: () => void;
+  onBrowse?: () => void;
   client: WorktreeClient;
+  worktreesOffered: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [wtOpen, setWtOpen] = useState(false);
@@ -350,7 +362,9 @@ function DirectorySelect({
   // A pending worktree operation keeps the picker open until its receipt, timeout or disconnect.
   const wtPending = worktrees.request.status === "pending";
   const search = useRef<HTMLInputElement>(null);
-  const { trigger, roots, worktreesFolder } = directoryChoices(state, value);
+  const choices = directoryChoices(state, value);
+  const { trigger, roots } = choices;
+  const worktreesFolder = worktreesOffered ? choices.worktreesFolder : undefined;
   return (
     <Popover
       open={open}
@@ -429,30 +443,36 @@ function DirectorySelect({
                   ))}
                 </CommandGroup>
               )}
-              <CommandSeparator />
-              <CommandGroup>
-                <CommandItem
-                  value="__browse"
-                  onSelect={() => {
-                    setOpen(false);
-                    onBrowse();
-                  }}
-                >
-                  <FolderOpenIcon /> Browse…
-                </CommandItem>
-                {/* Worktrees belong to the chosen folder's repository. */}
-                {worktreesFolder && (
-                  <CommandItem
-                    value="__worktree"
-                    onSelect={() => {
-                      setWtOpen(true);
-                      worktrees.open(worktreesFolder.path);
-                    }}
-                  >
-                    <GitBranchPlusIcon /> Worktrees
-                  </CommandItem>
-                )}
-              </CommandGroup>
+              {(onBrowse || worktreesFolder) && (
+                <>
+                  <CommandSeparator />
+                  <CommandGroup>
+                    {onBrowse && (
+                      <CommandItem
+                        value="__browse"
+                        onSelect={() => {
+                          setOpen(false);
+                          onBrowse();
+                        }}
+                      >
+                        <FolderOpenIcon /> Browse…
+                      </CommandItem>
+                    )}
+                    {/* Worktrees belong to the chosen folder's repository. */}
+                    {worktreesFolder && (
+                      <CommandItem
+                        value="__worktree"
+                        onSelect={() => {
+                          setWtOpen(true);
+                          worktrees.open(worktreesFolder.path);
+                        }}
+                      >
+                        <GitBranchPlusIcon /> Worktrees
+                      </CommandItem>
+                    )}
+                  </CommandGroup>
+                </>
+              )}
             </CommandList>
           </Command>
         </PickerContent>

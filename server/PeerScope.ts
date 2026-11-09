@@ -3,21 +3,26 @@
  * the sessions, so it decides here, and answers a refusal with the request's ordinary reply in
  * the delivery sequence: the gateway in front stays a pipe that never injects or renumbers frames.
  *
- * The slice lists registered sessions, opens them, sends text, answers dialogs and stops. Remote
- * creation, files, worktrees and settings (trust included: trusting a folder runs its project
- * extensions here) are not offered.
+ * The slice lists registered sessions, opens them, starts a session with a text prompt in a
+ * registered folder or worktree, sends text, answers dialogs and stops. Files, worktree creation,
+ * projects and settings (trust included: trusting a folder runs its project extensions here) are
+ * not offered.
  */
 import { type ClientMessage, sameSession } from "../shared/wire.ts";
 import type { RegistryData } from "./Registry.ts";
 
 type Request = Exclude<ClientMessage, { _tag: "ack" }>;
 type Act = Extract<Request, { _tag: "act" }>;
+type Create = Extract<Request, { _tag: "create_session" }>;
 
-/** The session a peer connection last selected, for checking its actions. */
+/**
+ * The session a peer connection last selected or created, for checking its actions. A creation
+ * has no session ID until Pi names it; its selection then shows only the session it created.
+ */
 export interface PeerSelection {
   readonly selectionId: string;
   readonly cwd: string;
-  readonly sessionId: string;
+  readonly sessionId: string | null;
 }
 
 /**
@@ -53,6 +58,21 @@ function actionAllowed({ action, start }: Act): boolean {
   }
 }
 
+/**
+ * A new session starts where it is asked, as this machine's own browser would start it, but adds
+ * nothing else here: no worktree, project membership, name, ancestry or attached files.
+ */
+function creationAllowed({ projectId, inheritProject, worktree, attachments, options }: Create) {
+  return (
+    projectId === undefined &&
+    !inheritProject &&
+    worktree === undefined &&
+    !attachments?.length &&
+    options.name === undefined &&
+    options.dispatchedFrom === undefined
+  );
+}
+
 export function peerVerdict(
   data: RegistryData,
   request: Request,
@@ -69,9 +89,13 @@ export function peerVerdict(
       return request.sessionId !== null && listed(data, request.cwd, request.sessionId)
         ? "admit"
         : "refuse";
+    case "create_session":
+      return registered(data, request.cwd) && creationAllowed(request) ? "admit" : "refuse";
     case "act":
       return selection?.selectionId === request.selectionId &&
-        listed(data, selection.cwd, selection.sessionId) &&
+        (selection.sessionId === null
+          ? registered(data, selection.cwd)
+          : listed(data, selection.cwd, selection.sessionId)) &&
         actionAllowed(request)
         ? "admit"
         : "refuse";

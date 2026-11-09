@@ -1,4 +1,5 @@
-// Critical path: continue a peer's session without crossing machine identities or owning its run.
+// Critical path: continue a peer's session, and start one there, without crossing machine
+// identities or owning its run.
 // INV-01, INV-02, INV-05, INV-07: identical cwd/workspace/session IDs on independent backends.
 // node test/browser/remote-session.mjs [evidence-directory]
 import assert from "node:assert/strict";
@@ -10,6 +11,7 @@ import { run } from "./harness.mjs";
 const sessionId = "same-session";
 const workspaceId = "same-workspace";
 const echo = "REMOTE-ECHO-ONCE";
+const created = "REMOTE-NEW-ONCE";
 let cwd;
 const seed = (machine, { root, history }) => {
   mkdirSync(join(root, "prompts"));
@@ -95,7 +97,6 @@ const unsupported = async (page) => {
     .filter(e => e.getClientRects().length)
     .map(e => e.getAttribute('aria-label') ?? e.textContent.trim())`);
   for (const label of [
-    "New session",
     "Add folder",
     "Settings",
     "Files",
@@ -105,6 +106,24 @@ const unsupported = async (page) => {
     "Open preview in new tab",
   ])
     assert.ok(!controls.includes(label), `remote does not offer unsupported ${label}`);
+};
+// The remote New page starts only in the remote's registered directories, changing nothing else there.
+const remoteNewPage = async (page) => {
+  await page.until(`!!document.querySelector('[aria-label="First message"]')`);
+  for (const label of ["Directory trust", "Project"])
+    assert.equal(
+      await page.evaluate(`!!document.querySelector('[aria-label="${label}"]')`),
+      false,
+      `remote New page has no ${label} control`,
+    );
+  await page.ab("click", '[aria-label="Directory"]');
+  await page.until(`!!document.querySelector('[aria-label="Choose a directory"]')`);
+  const choices = await page.evaluate(
+    `[...document.querySelectorAll('[aria-label="Choose a directory"] [cmdk-item]')].map(e => e.textContent.trim())`,
+  );
+  assert.deepEqual(choices, ["repo"], "only the remote's registered folder is offered");
+  await page.press("Escape");
+  await page.until(`!document.querySelector('[aria-label="Choose a directory"]')`);
 };
 
 await run(
@@ -179,17 +198,13 @@ await run(
         await machine(page, "eng-1");
         await page.until(`location.pathname === '/m/eng-1/new'`);
         await page.see("Remote host-only session");
-        assert.equal(
-          await page.evaluate(`!!document.querySelector('[aria-label="First message"]')`),
-          false,
-          "remote starts at pick-existing, never a local creation form",
-        );
+        await remoteNewPage(page);
         assert.equal(
           await page.evaluate(`document.body.innerText.includes('Local-only session')`),
           false,
         );
         await unsupported(page);
-        await page.capture("2-remote-pick-existing");
+        await page.capture("2-remote-new-page");
         await page.ab("find", "role", "button", "click", "--name", "Remote collision session");
         await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
         await page.see("Remote collision session saved history");
@@ -450,15 +465,51 @@ await run(
             ({ direction, message }) => direction === "sent" && message._tag === "create_session",
           ).length,
           0,
-          "remote UI never creates a session",
+          "continuing a remote session never creates one",
         );
         await unsupported(page);
+        await page.capture("9-remote-stopped");
+
+        // New session on the remote: the session starts and runs there, under the remote's address.
+        await page.click("button", "New session");
+        await page.until(`location.pathname === '/m/eng-1/new'`);
+        await remoteNewPage(page);
+        await page.ab("fill", '[aria-label="First message"]', created);
+        await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
+        await page.capture("9a-remote-new-session-draft");
+        await page.click("button", "Send");
+        await page.until(
+          `/^\\/m\\/eng-1\\/s\\//.test(location.pathname) && location.pathname !== '/m/eng-1/s/${sessionId}'`,
+        );
+        await page.see(`echo: ${created}`);
+        const createdId = decodeURIComponent(
+          (await page.evaluate(`location.pathname`)).split("/").at(-1),
+        );
+        const creations = frames.filter(
+          ({ direction, message }) => direction === "sent" && message._tag === "create_session",
+        );
+        assert.equal(creations.length, 1, "one creation request");
+        assert.equal(creations[0].message.cwd, cwd);
+        assert.equal(creations[0].message.projectId, undefined, "no project on the remote");
+        assert.deepEqual(
+          page.remote.prompts(),
+          [echo, "question", "stream", created],
+          "the new session's first message reaches the peer once",
+        );
+        assert.ok(
+          page.remote
+            .received()
+            .some((entry) => entry.command === "start" && entry.sessionId === createdId),
+          "the peer started the new session's Pi",
+        );
+        assert.deepEqual(page.prompts(), [], "local Pi receives no remote creation");
+        assert.deepEqual(page.peers["eng-2"].prompts(), ["SECOND-ECHO-ONCE"]);
+        await page.capture("9b-remote-new-session-reply");
         assert.deepEqual(
           localRequestsFromRemote,
           [],
           "remote UI never calls a Local HTTP endpoint or socket",
         );
-        await page.capture("9-remote-stopped");
         await page.open("/m/not-configured/s/same-session");
         await page.see("Machine unavailable");
         assert.equal(
@@ -478,6 +529,7 @@ await run(
           secondRemoteStarts: secondStarts.length,
           secondPid: secondStarts[0].pid,
           localRequestsFromRemote,
+          createdId,
         };
         writeFileSync(join(page.evidence, "remote-result.json"), JSON.stringify(result, null, 2));
         console.log(JSON.stringify(result));

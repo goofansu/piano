@@ -218,13 +218,15 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
 
 export async function gatewayFixture(
   t: TestContext,
-  options: { vmToken?: string; peers?: PeerSpec[] } = {},
+  /** `checkout`: also register a folder that exists on disk, where a session can start. */
+  options: { vmToken?: string; peers?: PeerSpec[]; checkout?: boolean } = {},
 ) {
   const root = mkdtempSync(join(tmpdir(), "piano-peer-"));
-  for (const name of ["home", "agent", "sessions"]) mkdirSync(join(root, name));
+  for (const name of ["home", "agent", "sessions", "checkout"]) mkdirSync(join(root, name));
   const database = join(root, "piano.db");
+  const checkout = join(root, "checkout");
   seedRegistry(database, {
-    folders: [identity.cwd],
+    folders: options.checkout ? [identity.cwd, checkout] : [identity.cwd],
     workspaces: registry.workspaces,
     sessions: [
       {
@@ -354,5 +356,17 @@ export async function gatewayFixture(
       req.setTimeout(12_000, () => req.destroy(new Error("handshake timeout")));
       req.end();
     });
-  return { state, base, config, peers, open, handshake, until, wss, database, logs: () => log };
+  return {
+    state,
+    base,
+    config,
+    peers,
+    open,
+    handshake,
+    until,
+    wss,
+    database,
+    checkout,
+    logs: () => log,
+  };
 }
