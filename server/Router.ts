@@ -15,6 +15,7 @@ import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup } from "./McpSetup.ts";
 import { AllowedOrigins, hostAllowed } from "./OriginPolicy.ts";
+import { addPeerRoutes } from "./PeerGateway.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { Prompts } from "./Prompts.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
@@ -218,6 +219,8 @@ export const AppRouter = HttpRouter.use((router) =>
         return HttpServerResponse.empty();
       }).pipe(Effect.scoped),
     );
+
+    yield* addPeerRoutes(router);
 
     const serve = route(router);
 

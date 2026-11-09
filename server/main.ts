@@ -15,6 +15,7 @@ import {
   SessionLinkOrigin,
   sessionLinkOrigin,
 } from "./OriginPolicy.ts";
+import { ConfiguredPeer, loadPeerConfig } from "./PeerConfig.ts";
 import { ensurePianoFolders, pianoFolder } from "./PianoFolders.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "./PianoServices.ts";
 import { defaultPiCli, PiCli } from "./PiCli.ts";
@@ -28,6 +29,9 @@ const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";
 const listener = { host: HOST, port: PORT };
 const origins = configuredOrigins(PORT, process.env.PIANO_ALLOWED_ORIGINS);
+const peer = loadPeerConfig(process.env.PIANO_PEER_CONFIG, {
+  allowHttpLoopbackForTests: process.env.NODE_ENV === "test",
+});
 const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
 // Every Pi child loads Piano's extensions, prompts and skills and is told how to reach this instance.
@@ -90,6 +94,7 @@ const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog:
   Layer.provide(
     Layer.mergeAll(
       Layer.succeed(AllowedOrigins, origins),
+      Layer.succeed(ConfiguredPeer, peer),
       // Webhooks link to sessions by the same rule the session endpoint hands Pi.
       Layer.succeed(SessionLinkOrigin, sessionLinkOrigin(origins, listener)),
     ),
