@@ -6,6 +6,7 @@ import { cutText } from "../shared/cutText.ts";
 import { LAST_ANSWER_CHARS } from "../shared/dispatch.ts";
 import { readLiteralSecret } from "../shared/literalSecret.ts";
 import { pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
+import { sessionLink } from "../shared/sessionLink.ts";
 import { closureNeedsAttention, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import {
   type Webhook,
@@ -279,7 +280,7 @@ export const WebhooksLive = Layer.effect(
         const workspace = data.workspaces.find((w) => w.path === cwd);
         const entry = data.sessions.find((s) => sameSession(s, { cwd, sessionId }));
         if (!workspace || !entry) return;
-        const url = origin ? `${origin}/s/${encodeURIComponent(sessionId)}` : null;
+        const url = origin ? sessionLink(origin, sessionId) : null;
         const pr = entry.pullRequest ? pullRequestIdentity(entry.pullRequest.url) : null;
         // Free-form Pi text is display-projected and strips filesystem paths, including known
         // credentials. This is best-effort redaction, not a security boundary for conversation text.

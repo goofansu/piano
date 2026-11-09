@@ -30,6 +30,7 @@ import {
   type WaitArguments,
   type WaitToolResult,
 } from "../../shared/dispatch.ts";
+import { sessionLink } from "../../shared/sessionLink.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
 import { readStatus, startSession, waitSessions, withLinks } from "./SessionDispatch.ts";
 
@@ -172,8 +173,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
   if (!config) return;
   const environment = nodeSocketEnvironment(config);
   const active = new Set<AbortController>();
-  const link = (sessionId: string) =>
-    new URL(`/s/${encodeURIComponent(sessionId)}`, config.origin).href;
+  const link = (sessionId: string) => sessionLink(config.origin, sessionId);
   const invoke = async <T>(
     signal: AbortSignal | undefined,
     run: (signal: AbortSignal) => Promise<T>,
