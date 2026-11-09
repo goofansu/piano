@@ -1,5 +1,5 @@
 /**
- * Same-origin attachment to one configured Piano. No Pi protocol, local registry lookup,
+ * Same-origin attachment to a configured Piano. No Pi protocol, local registry lookup,
  * mutation retry, delivery renumbering or remote process ownership lives here (INV-01/02/05).
  */
 import { WebSocket } from "@effect/platform-node/NodeWS";
@@ -14,7 +14,7 @@ import {
   type ServerMessage,
   sessionKey,
 } from "../shared/wire.ts";
-import { ConfiguredPeer, type PeerConfig } from "./PeerConfig.ts";
+import { ConfiguredPeers, type PeerConfig } from "./PeerConfig.ts";
 
 const limits = {
   connectMs: 5_000,
@@ -331,34 +331,30 @@ const json = (body: unknown, status = 200) =>
 export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
   router: HttpRouter.HttpRouter,
 ) {
-  const peer = yield* ConfiguredPeer;
+  const peers = yield* ConfiguredPeers;
+  const byId = new Map(peers.map((peer) => [peer.id, peer]));
   yield* router.add(
     "GET",
     "/api/machines",
     Effect.succeed(
       json({
-        machines: [
-          { id: "local", name: "Local" },
-          ...(peer ? [{ id: peer.id, name: peer.name }] : []),
-        ],
+        machines: [{ id: "local", name: "Local" }, ...peers.map(({ id, name }) => ({ id, name }))],
       }),
     ),
   );
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = new URL(request.url, "http://localhost");
-    const prefix = peer ? `/peer/${peer.id}` : undefined;
-    if (
-      !prefix ||
-      (url.pathname !== `${prefix}/ws` && url.pathname !== `${prefix}/api/session/commands`)
-    )
-      return json({ error: "Unknown remote machine or unsupported remote request." }, 404);
+    const match = /^\/peer\/([^/]+)(\/ws|\/api\/session\/commands)$/.exec(url.pathname);
+    // The request owns this immutable destination, including credentials, through completion.
+    const peer = match ? byId.get(match[1]) : undefined;
+    if (!peer) return json({ error: "Unknown remote machine or unsupported remote request." }, 404);
     if (request.method !== "GET")
       return json({ error: "Remote request method is not supported." }, 405);
-    if (url.pathname === `${prefix}/ws`) {
+    if (match?.[2] === "/ws") {
       if (url.search || request.headers.upgrade?.toLowerCase() !== "websocket")
         return json({ error: "A remote WebSocket upgrade is required." }, 400);
-      const upstream = yield* connect(peer!);
+      const upstream = yield* connect(peer);
       yield* bridge(yield* request.upgrade, upstream);
       return HttpServerResponse.empty();
     }
@@ -373,7 +369,7 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       request.headers.upgrade
     )
       return json({ error: "Remote workspace and session IDs are required." }, 400);
-    const body = yield* commands(peer!, workspaceId, sessionId);
+    const body = yield* commands(peer, workspaceId, sessionId);
     return HttpServerResponse.text(body, {
       contentType: "application/json",
       headers: { "cache-control": "no-store" },

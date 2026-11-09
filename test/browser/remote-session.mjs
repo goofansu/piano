@@ -20,10 +20,15 @@ const seed = (machine, { root, history }) => {
           [sessionId, "Local collision session"],
           ["local-only", "Local-only session"],
         ]
-      : [
-          [sessionId, "Remote collision session"],
-          ["remote-only", "Remote host-only session"],
-        ];
+      : machine === "remote"
+        ? [
+            [sessionId, "Remote collision session"],
+            ["remote-only", "Remote host-only session"],
+          ]
+        : [
+            [sessionId, "Second collision session"],
+            ["second-only", "Second host-only session"],
+          ];
   const now = new Date().toISOString();
   return {
     folders: [cwd],
@@ -57,7 +62,7 @@ const send = async (page, text) => {
   await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
   await page.click("button", "Send");
 };
-const machine = async (page, name) => {
+const machine = async (page, name, capture) => {
   // The Machine control can be a dropdown button or combobox; both use real pointer clicks.
   await page.ab("click", '[aria-label="Machine"]');
   await page.until(
@@ -69,6 +74,7 @@ const machine = async (page, name) => {
     return option?.getAttribute('role');
   })()`);
   assert.ok(role, `Machine picker offers ${name}`);
+  if (capture) await page.capture(capture);
   await page.click(role, name);
   await page.until(`!document.querySelector('[role="menu"], [role="listbox"]')`);
 };
@@ -212,6 +218,32 @@ await run(
         await page.click("button", "Show sidebar");
         await page.until(`!document.querySelector('main header [aria-label="Machine"]')`);
 
+        // A second independent peer collides with both Local and the first peer by every ID/path.
+        await machine(page, "eng-2", "3b-machine-picker");
+        await page.see("Second host-only session");
+        await page.ab("find", "role", "button", "click", "--name", "Second collision session");
+        await page.see("Second collision session saved history");
+        await ready(page);
+        assert.equal(await draft(page), "", "second peer cannot inherit first peer's draft");
+        await send(page, "SECOND-ECHO-ONCE");
+        await page.see("echo: SECOND-ECHO-ONCE");
+        await catalog(page, "second", "remote", "SECOND-DRAFT");
+        assert.deepEqual(page.remote.prompts(), [echo]);
+        assert.deepEqual(page.peers["eng-2"].prompts(), ["SECOND-ECHO-ONCE"]);
+        await page.capture("3b-second-peer");
+        await machine(page, "eng-1");
+        await page.see(`echo: ${echo}`);
+        assert.equal(await draft(page), "REMOTE-DRAFT");
+        await page.ab("back");
+        await page.until(`location.pathname === '/m/eng-2/s/${sessionId}'`);
+        await page.see("echo: SECOND-ECHO-ONCE");
+        assert.equal(await draft(page), "SECOND-DRAFT", "back retains second peer ownership");
+        await page.ab("forward");
+        await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
+        await page.see(`echo: ${echo}`);
+        assert.equal(await draft(page), "REMOTE-DRAFT", "forward retains first peer ownership");
+        await catalog(page, "remote", "second", "REMOTE-DRAFT");
+
         onRemote = false;
         await machine(page, "Local");
         await page.see("Local collision session");
@@ -273,10 +305,46 @@ await run(
         await send(page, "stream");
         await page.see("Streaming line");
         await page.until(`!!document.querySelector('button[aria-label="Stop"]')`);
+        const beforeOutage = page.remote
+          .received()
+          .filter((entry) => entry.command === "stream")
+          .at(-1).line;
+        await page.peers["eng-2"].stop();
+        await machine(page, "eng-2");
+        await page.until(`location.pathname === '/m/eng-2/s/${sessionId}'`);
+        await page.see("Machine unavailable");
+        assert.equal(
+          await page.evaluate(`!!document.querySelector('[aria-label="Send"]:not(:disabled)')`),
+          false,
+        );
+        await waitFor(
+          "first peer keeps streaming while the selected second peer is unavailable",
+          () =>
+            page.remote
+              .received()
+              .filter((entry) => entry.command === "stream")
+              .at(-1).line >
+            beforeOutage + 2,
+        );
+        assert.deepEqual(page.peers["eng-2"].prompts(), ["SECOND-ECHO-ONCE"]);
+        assert.deepEqual(page.prompts(), []);
+        await page.capture("6a-second-peer-unavailable");
+        await machine(page, "eng-1");
+        await page.see("Streaming line");
+        await page.until(`!!document.querySelector('button[aria-label="Stop"]')`);
         await waitFor("remote host has a generation", () => selected().length > 0);
         assert.equal(starts().length, 1, "switching machines reused the sole peer Pi process");
         const pid = starts()[0].pid;
         assert.ok(Number.isInteger(pid), "audit identifies the remote Pi PID");
+        const secondStarts = page.peers["eng-2"]
+          .received()
+          .filter((entry) => entry.command === "start" && entry.sessionId !== "probe");
+        assert.equal(
+          secondStarts.length,
+          1,
+          "second peer also owns exactly one Pi for the colliding session",
+        );
+        assert.notEqual(secondStarts[0].pid, pid, "each backend owns its own Pi process");
         const generation = selected().at(-1).message.cursor.generation;
         const connection = received().at(-1).requestId;
         const beforeReconnect = selected().length;
@@ -349,6 +417,17 @@ await run(
           "each input reaches the peer once, never resent",
         );
         assert.deepEqual(page.prompts(), [], "no local prompt from remote UI");
+        assert.deepEqual(
+          page.peers["eng-2"].prompts(),
+          ["SECOND-ECHO-ONCE"],
+          "no replay or cross-peer fallback",
+        );
+        assert.equal(
+          page.peers["eng-2"]
+            .received()
+            .filter((entry) => entry.command === "extension_ui_response").length,
+          0,
+        );
         assert.equal(starts().length, 1, "Stop leaves the same remote Pi available");
         process.kill(pid, 0);
         assert.equal(
@@ -389,9 +468,12 @@ await run(
           generation,
           pid,
           peerPrompts: page.remote.prompts(),
+          secondPeerPrompts: page.peers["eng-2"].prompts(),
           localPrompts: page.prompts(),
           disconnectedLine,
           remoteStarts: starts().length,
+          secondRemoteStarts: secondStarts.length,
+          secondPid: secondStarts[0].pid,
           localRequestsFromRemote,
         };
         writeFileSync(join(page.evidence, "remote-result.json"), JSON.stringify(result, null, 2));
@@ -408,5 +490,10 @@ await run(
       );
     }
   },
-  { remote: { id: "eng-1", setup: (fixture) => seed("remote", fixture) } },
+  {
+    peers: [
+      { id: "eng-1", setup: (fixture) => seed("remote", fixture) },
+      { id: "eng-2", setup: (fixture) => seed("second", fixture) },
+    ],
+  },
 );

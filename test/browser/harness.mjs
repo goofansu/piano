@@ -92,8 +92,8 @@ async function fixture(root, setup) {
 
 /**
  * `setup({ root, repository, history })` returns the main machine's registry seed.
- * `options.remote = { id, name, setup, backendEnv? }` adds an independent headless peer, seeded
- * with the same helpers. Only the main backend receives its generated PIANO_PEER_CONFIG.
+ * `options.peers = [{ id, name, setup, backendEnv? }]` adds independent headless peers, seeded
+ * with the same helpers. `remote` remains the one-peer shorthand. Only main gets PIANO_PEER_CONFIG.
  * `journey(page)` drives the browser; a thrown error fails the run after capturing the page.
  */
 export async function run(name, setup, journey, options = {}) {
@@ -101,18 +101,29 @@ export async function run(name, setup, journey, options = {}) {
   mkdirSync(evidence, { recursive: true });
   const root = mkdtempSync(join(tmpdir(), `piano-${name}-`));
   const local = await fixture(root, setup);
-  const remote = options.remote && (await fixture(join(root, "peer"), options.remote.setup));
+  const peers = [];
+  for (const [index, spec] of (
+    options.peers ?? (options.remote ? [options.remote] : [])
+  ).entries()) {
+    const machine = await fixture(join(root, `peer-${index}`), spec.setup);
+    const port = await freePort();
+    peers.push({
+      machine,
+      port,
+      backendEnv: spec.backendEnv,
+      config: {
+        id: spec.id,
+        name: spec.name ?? spec.id,
+        endpoint: `http://127.0.0.1:${port}`,
+        origin: `http://127.0.0.1:${port}`,
+      },
+    });
+  }
   const [backendPort, webPort] = [await freePort(), await freePort()];
-  const remotePort = remote && (await freePort());
   const web = `http://127.0.0.1:${webPort}`;
-  const peer = remote && {
-    id: options.remote.id,
-    name: options.remote.name ?? options.remote.id,
-    endpoint: `http://127.0.0.1:${remotePort}`,
-    origin: `http://127.0.0.1:${remotePort}`,
-  };
-  const peerConfig = join(root, "peer.json");
-  if (peer) writeFileSync(peerConfig, JSON.stringify(peer));
+  const peerConfig = join(root, "peers.json");
+  if (peers.length)
+    writeFileSync(peerConfig, JSON.stringify({ peers: peers.map((peer) => peer.config) }));
   // Do not inherit a live backend's socket, peers, integration paths or Worktrunk overrides.
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(([key]) => !/^(PIANO_|WORKTRUNK_)/.test(key)),
@@ -166,7 +177,7 @@ export async function run(name, setup, journey, options = {}) {
   const children = [
     backend("backend", local, backendPort, {
       ...options.backendEnv,
-      ...(peer ? { PIANO_PEER_CONFIG: peerConfig, NODE_ENV: "test" } : {}),
+      ...(peers.length ? { PIANO_PEER_CONFIG: peerConfig, NODE_ENV: "test" } : {}),
     }),
     start(
       "web",
@@ -184,8 +195,31 @@ export async function run(name, setup, journey, options = {}) {
       },
     ),
   ];
-  if (remote)
-    children.push(backend("remote-backend", remote, remotePort, options.remote.backendEnv));
+  for (const peer of peers) {
+    peer.child = backend(`${peer.config.id}-backend`, peer.machine, peer.port, peer.backendEnv);
+    children.push(peer.child);
+  }
+  const peerViews = Object.fromEntries(
+    peers.map((peer) => [
+      peer.config.id,
+      {
+        ...peer.config,
+        received: peer.machine.received,
+        prompts: () =>
+          peer.machine
+            .received()
+            .filter((r) => r.command === "prompt")
+            .map((r) => r.text),
+        /** Stop only this fixture's recorded backend to observe a single-machine outage. */
+        stop: async () => {
+          if (peer.child.exitCode !== null || peer.child.signalCode !== null) return;
+          const exited = new Promise((done) => peer.child.once("exit", done));
+          peer.child.kill("SIGTERM");
+          await exited;
+        },
+      },
+    ]),
+  );
 
   const browser = `piano-${name}-${process.pid}`;
   const ab = async (...args) => {
@@ -220,15 +254,8 @@ export async function run(name, setup, journey, options = {}) {
   const page = {
     ab,
     evidence,
-    remote: remote && {
-      ...peer,
-      received: remote.received,
-      prompts: () =>
-        remote
-          .received()
-          .filter((r) => r.command === "prompt")
-          .map((r) => r.text),
-    },
+    peers: peerViews,
+    remote: peers.length ? peerViews[peers[0].config.id] : undefined,
     /** Restart only this harness's recorded backend; retain its isolated database and Pi history. */
     restartBackend: async ({ signal = "SIGTERM", beforeRestart = async () => {} } = {}) => {
       const previous = children[0];
@@ -351,7 +378,7 @@ export async function run(name, setup, journey, options = {}) {
     platform: process.platform,
     web,
     backend: `http://127.0.0.1:${backendPort}`,
-    peer,
+    peers: peers.map((peer) => peer.config),
     pids: children.map((child) => child.pid),
     startedAt: new Date(started).toISOString(),
     outcome: "failed",
@@ -363,7 +390,11 @@ export async function run(name, setup, journey, options = {}) {
       try {
         if (
           (await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok &&
-          (!peer || (await fetch(`${peer.endpoint}/api/folders`)).ok) &&
+          (
+            await Promise.all(
+              peers.map(async (peer) => (await fetch(`${peer.config.endpoint}/api/folders`)).ok),
+            )
+          ).every(Boolean) &&
           (await fetch(web)).ok
         )
           break;
@@ -388,7 +419,7 @@ export async function run(name, setup, journey, options = {}) {
       await ab("close");
     } catch {}
     for (const child of children)
-      if (child.exitCode === null) {
+      if (child.exitCode === null && child.signalCode === null) {
         const exited = new Promise((done) => child.once("exit", done));
         child.kill("SIGTERM");
         await exited;
@@ -398,7 +429,7 @@ export async function run(name, setup, journey, options = {}) {
       writeFileSync(join(evidence, `${label}.log`), content);
     for (const [label, machine] of [
       ["local", local],
-      ["remote", remote],
+      ...peers.map((peer) => [peer.config.id, peer.machine]),
     ])
       if (machine)
         writeFileSync(

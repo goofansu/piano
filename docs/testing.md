@@ -131,12 +131,12 @@ tests are only the critical paths, which must keep working on every change and r
 - `test/browser/open-session.mjs`: open a session from the sidebar; read its transcript; jump to an
   earlier message; read the session cost; send a follow-up and see the reply and updated cost;
   stop a running reply.
-
-- `test/browser/remote-session.mjs`: two independent scratch Pianos with colliding workspace/session
-  identities; list an existing remote session, continue, switch with isolated drafts/catalogs, answer
-  a dialog, disconnect/reconnect/reload without replay, and Stop on the same remote generation/PID.
-  The local fake Pi must receive no remote prompt; unsupported remote HTTP/socket requests cannot
-  reach Local. The harness's optional `remote` fixture owns its separate database/history/audit.
+- `test/browser/remote-session.mjs`: a main and two independent scratch peers with colliding
+  workspace/session identities; list existing sessions, continue each, switch/back/forward with
+  isolated drafts/catalogs, answer a dialog, disconnect/reconnect/reload without replay, and Stop
+  on the same remote generation/PID. One unavailable peer cannot stop the other's stream or
+  redirect input. Local receives no remote prompt or HTTP/socket request. The harness's optional
+  `peers` fixtures each own separate database/history/audit; `remote` is the one-peer shorthand.
 
 `npm run test:browser` runs these and the transcript-row alignment check against scratch registries, Pi history and
 `test/browser/fake-pi.mjs`, with no model calls. They drive the UI by role and accessible name and

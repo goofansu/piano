@@ -31,25 +31,13 @@ export const registry = {
   ],
 };
 
-export async function gatewayFixture(t: TestContext, options: { vmToken?: string } = {}) {
-  const root = mkdtempSync(join(tmpdir(), "piano-peer-"));
-  for (const name of ["home", "agent", "sessions"]) mkdirSync(join(root, name));
-  const database = join(root, "piano.db");
-  seedRegistry(database, {
-    folders: [identity.cwd],
-    workspaces: registry.workspaces,
-    sessions: [
-      {
-        cwd: identity.cwd,
-        sessionId: identity.sessionId,
-        createdAt: "2026-01-01",
-        updatedAt: "2026-01-01",
-      },
-    ],
-  });
+type PeerSpec = { id: string; name?: string; vmToken?: string; commandName?: string };
+
+/** Independent fake network boundary; every peer may intentionally reuse the same session identity. */
+async function peerServer(t: TestContext, spec: PeerSpec) {
   const state = {
     mode: "ready",
-    requiredToken: options.vmToken,
+    requiredToken: spec.vmToken,
     running: false,
     connections: 0,
     disconnected: 0,
@@ -57,6 +45,7 @@ export async function gatewayFixture(t: TestContext, options: { vmToken?: string
     requests: [] as { url: string; headers: IncomingHttpHeaders }[],
     received: [] as string[],
     sent: [] as string[],
+    pendingHttp: [] as Array<() => void>,
   };
   const events = new EventTarget();
   const changed = () => events.dispatchEvent(new Event("change"));
@@ -111,7 +100,16 @@ export async function gatewayFixture(t: TestContext, options: { vmToken?: string
       return;
     }
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ commands: [{ name: "remote-only", source: "extension" }] }));
+    const respond = () =>
+      res.end(
+        JSON.stringify({
+          commands: [{ name: spec.commandName ?? "remote-only", source: "extension" }],
+        }),
+      );
+    if (state.mode === "http-held") {
+      state.pendingHttp.push(respond);
+      changed();
+    } else respond();
   });
   const wss = new WebSocketServer({ noServer: true });
   upstream.on("upgrade", (req, socket, head) => {
@@ -202,16 +200,54 @@ export async function gatewayFixture(t: TestContext, options: { vmToken?: string
   const address = upstream.address();
   assert.ok(address && typeof address !== "string");
   const endpoint = `http://127.0.0.1:${address.port}`;
-  const vmTokenFile = join(root, "vm-token");
-  if (options.vmToken) writeFileSync(vmTokenFile, `${options.vmToken}\n`, { mode: 0o600 });
-  const config = {
-    ...(options.vmToken ? { vmTokenFile } : {}),
-    id: "eng-1",
-    name: "Engineering",
-    endpoint,
-    origin: "https://eng-1.exe.xyz:3000",
-  };
-  writeFileSync(join(root, "peer.json"), JSON.stringify(config));
+  t.after(async () => {
+    for (const ws of wss.clients) ws.terminate();
+    wss.close();
+    upstream.closeAllConnections();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  });
+  return { state, endpoint, until, changed, wss };
+}
+
+export async function gatewayFixture(
+  t: TestContext,
+  options: { vmToken?: string; peers?: PeerSpec[] } = {},
+) {
+  const root = mkdtempSync(join(tmpdir(), "piano-peer-"));
+  for (const name of ["home", "agent", "sessions"]) mkdirSync(join(root, name));
+  const database = join(root, "piano.db");
+  seedRegistry(database, {
+    folders: [identity.cwd],
+    workspaces: registry.workspaces,
+    sessions: [
+      {
+        cwd: identity.cwd,
+        sessionId: identity.sessionId,
+        createdAt: "2026-01-01",
+        updatedAt: "2026-01-01",
+      },
+    ],
+  });
+  const specs = options.peers ?? [{ id: "eng-1", name: "Engineering", vmToken: options.vmToken }];
+  const peers = [];
+  for (const [index, spec] of specs.entries()) {
+    const upstream = await peerServer(t, spec);
+    const vmTokenFile = join(root, `vm-token-${index}`);
+    if (spec.vmToken) writeFileSync(vmTokenFile, `${spec.vmToken}\n`, { mode: 0o600 });
+    const config = {
+      ...(spec.vmToken ? { vmTokenFile } : {}),
+      id: spec.id,
+      name: spec.name ?? spec.id,
+      endpoint: upstream.endpoint,
+      origin: `https://${spec.id}.exe.xyz:3000`,
+    };
+    peers.push({ ...upstream, config });
+  }
+  const { state, config, until, changed, wss } = peers[0];
+  writeFileSync(
+    join(root, "peer.json"),
+    JSON.stringify(options.peers ? { peers: peers.map((peer) => peer.config) } : config),
+  );
   const reservation = createServer();
   reservation.listen(0, "127.0.0.1");
   await once(reservation, "listening");
@@ -251,10 +287,6 @@ export async function gatewayFixture(t: TestContext, options: { vmToken?: string
     const force = setTimeout(() => child.kill("SIGKILL"), 5_000);
     if (child.exitCode === null) await exited;
     clearTimeout(force);
-    for (const ws of wss.clients) ws.terminate();
-    wss.close();
-    upstream.closeAllConnections();
-    await new Promise<void>((resolve) => upstream.close(() => resolve()));
     rmSync(root, { recursive: true, force: true });
   });
   const deadline = Date.now() + 20_000;
@@ -267,8 +299,12 @@ export async function gatewayFixture(t: TestContext, options: { vmToken?: string
     assert.ok(Date.now() < deadline && child.exitCode === null, log);
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  const open = async (headers: Record<string, string> = {}, acknowledge = true) => {
-    const ws = new WebSocket(`${base.replace("http", "ws")}/peer/eng-1/ws`, {
+  const open = async (
+    headers: Record<string, string> = {},
+    acknowledge = true,
+    peerId = "eng-1",
+  ) => {
+    const ws = new WebSocket(`${base.replace("http", "ws")}/peer/${peerId}/ws`, {
       headers: { Origin: base, ...headers },
     });
     browsers.add(ws);
@@ -311,5 +347,5 @@ export async function gatewayFixture(t: TestContext, options: { vmToken?: string
       req.setTimeout(12_000, () => req.destroy(new Error("handshake timeout")));
       req.end();
     });
-  return { state, base, config, open, handshake, until, wss, database, logs: () => log };
+  return { state, base, config, peers, open, handshake, until, wss, database, logs: () => log };
 }

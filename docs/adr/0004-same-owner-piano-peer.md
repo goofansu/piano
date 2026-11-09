@@ -3,7 +3,7 @@
 Status: proposed; accepted when merged.
 
 One developer already runs independent private Pianos on their exe.dev VMs. For the first
-remote-conversation slice, the main Piano proxies one explicitly configured same-protocol peer:
+remote-conversation slice, the main Piano proxies explicitly configured same-protocol peers:
 through exe.dev's scoped HTTP-proxy peer integration from an attached VM, or directly through
 exe.dev's HTTPS proxy with a VM-scoped token from the developer's laptop. Pi RPC remains local to
 each owning backend. This supersedes the system-OpenSSH recommendation in the
@@ -26,13 +26,18 @@ turn Piano into a fleet manager.
   attached peer integration or VM token. exe.dev supplies private access and authentication. It is
   not multi-user authorization, a sandbox or enrollment. Target configuration is a trusted
   identity assertion, not cryptographic attestation of a VM.
-- Laptop access adds one explicit backend-owned credential file, read at startup and wrapped in a
+- Laptop access adds an explicit backend-owned credential file per VM, read at startup and wrapped in a
   redacted value. Only the configured direct HTTPS VM endpoint receives the token, on both HTTP
   and WebSocket handshakes, via `X-Exedev-Authorization`; exe.dev strips it before the target.
   The browser sees neither the token nor its file path. The token grants VM-wide HTTPS access,
   not Piano/port-specific permission. Missing/expired/revoked credentials fail closed, with no
   tokenless fallback or mutation replay. Rotation requires an explicit local backend restart;
   provisioning and revocation stay outside Piano (INV-02/11).
+- Startup configuration accepts a bounded `peers` list, retaining the single-peer object format.
+  IDs and display names are unique; one invalid entry refuses startup rather than admitting a
+  partial set. Runtime unavailability is independent: each request/socket captures one peer,
+  including its Origin and credential, and never falls back to another. This is a configured
+  switcher, not discovery, machine CRUD or cross-machine orchestration (INV-07/11).
 - Machine IDs qualify navigation and own separate client, draft, question-reply and catalog
   instances (INV-07). Drafts remain page-memory only. Remote catalogs are not persisted; local
   caches and surface memory remain local. Unsupported remote views never reuse local HTTP APIs.

@@ -4,7 +4,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { loadPeerConfig } from "../server/PeerConfig.ts";
+import { loadPeerConfigs } from "../server/PeerConfig.ts";
 import { gatewayFixture, identity, registry } from "./fixtures/peer-gateway.ts";
 import { readRegistry } from "./fixtures/registry.ts";
 
@@ -20,10 +20,10 @@ test("peer startup configuration is explicit, bounded and fail-closed", (t) => {
     origin: "https://origin.example:3000",
   };
   const write = (value: unknown) => writeFileSync(file, JSON.stringify(value));
-  assert.equal(loadPeerConfig(undefined), undefined);
+  assert.deepEqual(loadPeerConfigs(undefined), []);
   write(valid);
-  assert.deepEqual(loadPeerConfig(file), valid);
-  assert.throws(() => loadPeerConfig("relative.json"), /PIANO_PEER_CONFIG/);
+  assert.deepEqual(loadPeerConfigs(file), [valid]);
+  assert.throws(() => loadPeerConfigs("relative.json"), /PIANO_PEER_CONFIG/);
   for (const invalid of [
     { id: "local" },
     { id: "../other" },
@@ -44,23 +44,71 @@ test("peer startup configuration is explicit, bounded and fail-closed", (t) => {
     { extra: "unknown" },
   ]) {
     write({ ...valid, ...invalid });
-    assert.throws(() => loadPeerConfig(file), /PIANO_PEER_CONFIG/);
+    assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
   }
   write({ ...valid, endpoint: "http://127.0.0.1:1234" });
-  assert.throws(() => loadPeerConfig(file), /PIANO_PEER_CONFIG/);
+  assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
   assert.equal(
-    loadPeerConfig(file, { allowHttpLoopbackForTests: true })?.endpoint,
+    loadPeerConfigs(file, { allowHttpLoopbackForTests: true })[0]?.endpoint,
     "http://127.0.0.1:1234",
   );
   write({ ...valid, endpoint: "http://192.168.1.2:1234" });
   assert.throws(
-    () => loadPeerConfig(file, { allowHttpLoopbackForTests: true }),
+    () => loadPeerConfigs(file, { allowHttpLoopbackForTests: true }),
     /PIANO_PEER_CONFIG/,
   );
   writeFileSync(file, "not json");
-  assert.throws(() => loadPeerConfig(file), /PIANO_PEER_CONFIG/);
+  assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
   writeFileSync(file, " ".repeat(16 * 1024 + 1));
-  assert.throws(() => loadPeerConfig(file), /PIANO_PEER_CONFIG/);
+  assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
+});
+
+test("peer lists retain configured order and reject ambiguous or partially invalid configurations", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "piano-peer-list-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = join(root, "peers.json");
+  const first = {
+    id: "eng-1",
+    name: "eng-1",
+    endpoint: "https://one.example",
+    origin: "https://one.example",
+  };
+  const second = {
+    id: "eng-2",
+    name: "eng-2",
+    endpoint: "https://two.example",
+    origin: "https://two.example",
+  };
+  const write = (value: unknown) => writeFileSync(file, JSON.stringify(value));
+  write({ peers: [second, first] });
+  assert.deepEqual(loadPeerConfigs(file), [second, first]);
+  write({ peers: [] });
+  assert.deepEqual(loadPeerConfigs(file), [], "an empty list is Local only");
+  for (const value of [
+    { peers: [first, first] },
+    { peers: [first, { ...second, id: first.id }] },
+    { peers: [first, { ...second, name: "ENG-1" }] },
+    { peers: [{ ...first, name: "Local" }] },
+    { peers: [first, { ...second, id: "local" }] },
+    { peers: [first, { ...second, endpoint: "http://two.example" }] },
+    { peers: [first, { ...second, vmTokenFile: "/missing/private-token" }] },
+    { peers: [first], ...second },
+    { peers: [first], extra: true },
+    { peers: null },
+    [first, second],
+  ]) {
+    write(value);
+    assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
+  }
+  const maximum = Array.from({ length: 32 }, (_, index) => ({
+    ...first,
+    id: `vm-${index}`,
+    name: `VM ${index}`,
+  }));
+  write({ peers: maximum });
+  assert.equal(loadPeerConfigs(file).length, 32);
+  write({ peers: [...maximum, { ...second, id: "overflow", name: "Overflow" }] });
+  assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
 });
 
 test(

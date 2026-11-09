@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { inspect } from "node:util";
 import { Redacted } from "effect";
-import { loadPeerConfig } from "../server/PeerConfig.ts";
+import { loadPeerConfigs } from "../server/PeerConfig.ts";
 import { gatewayFixture, identity } from "./fixtures/peer-gateway.ts";
 
 // Dummy credentials only: no account, token provisioning or real exe.dev request in routine tests.
@@ -28,7 +28,7 @@ test("VM token configuration stays startup-owned and redacted, with a private bo
   const writeToken = (text: string) => writeFileSync(vmTokenFile, text, { mode: 0o600 });
   configure();
   writeToken(`${token}\n`);
-  const peer = loadPeerConfig(file)!;
+  const peer = loadPeerConfigs(file)[0]!;
   assert.equal(Redacted.value(peer.vmToken!), token);
   assert.equal("vmTokenFile" in peer, false);
   assert.ok(!JSON.stringify(peer).includes(token));
@@ -37,7 +37,7 @@ test("VM token configuration stays startup-owned and redacted, with a private bo
   assert.equal(Redacted.value(peer.vmToken!), token, "loaded once, not reread on reconnect");
   const denied = () =>
     assert.throws(
-      () => loadPeerConfig(file),
+      () => loadPeerConfigs(file),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.match(error.message, /vmTokenFile/);
@@ -83,10 +83,10 @@ test("VM token configuration stays startup-owned and redacted, with a private bo
     denied();
   }
   configure({ endpoint: "http://eng-1.exe.xyz" });
-  assert.throws(() => loadPeerConfig(file), /PIANO_PEER_CONFIG/);
+  assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
   configure({ vmToken: token });
   assert.throws(
-    () => loadPeerConfig(file),
+    () => loadPeerConfigs(file),
     /PIANO_PEER_CONFIG/,
     "raw inline tokens are not accepted",
   );

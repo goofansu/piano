@@ -61,13 +61,19 @@ test("same cwd/session IDs retain separate page-memory drafts, questions and mod
   };
   const forMachine = createMachineStores(local, () => {});
   const remote = forMachine("eng-1");
+  const second = forMachine("eng-2");
   const key = sessionDraftKey({ cwd: "/same", sessionId: "same-id" });
   local.drafts.setText(key, "LOCAL-DRAFT");
   assert.equal(remote.drafts.get(key).text, "");
   remote.drafts.setText(key, "REMOTE-DRAFT");
   assert.equal(forMachine("local").drafts.get(key).text, "LOCAL-DRAFT");
   assert.equal(forMachine("eng-1").drafts.get(key).text, "REMOTE-DRAFT");
+  assert.equal(second.drafts.get(key).text, "");
+  second.drafts.setText(key, "SECOND-DRAFT");
+  assert.equal(remote.drafts.get(key).text, "REMOTE-DRAFT");
+  assert.equal(forMachine("eng-2").drafts.get(key).text, "SECOND-DRAFT");
   assert.deepEqual(remote.catalogs.seed(), {});
+  assert.deepEqual(second.catalogs.seed(), {});
   assert.equal(local.catalogs.seed()["/same"].fetchedAt, "local");
   assert.notEqual(remote.questions, local.questions);
   let events!: ConnectionHandlers;
@@ -85,6 +91,24 @@ test("same cwd/session IDs retain separate page-memory drafts, questions and mod
   events.onMessage({ _tag: "models", catalog: { cwd: "/same", models: [], fetchedAt: "remote" } });
   assert.equal(remote.catalogs.getState().catalogs["/same"].fetchedAt, "remote");
   assert.equal(local.catalogs.getState().catalogs["/same"].fetchedAt, "local");
+  let secondEvents!: ConnectionHandlers;
+  const secondClient = createClient({
+    initial: initialState,
+    notify: () => {},
+    connect: (handlers) => {
+      secondEvents = handlers;
+      return { send: () => "sent", close: () => {} };
+    },
+    lastDirectory: { read: () => null, write: () => {} },
+  });
+  const closeSecond = secondClient.start();
+  const unfollowSecond = second.catalogs.follow(secondClient);
+  secondEvents.onMessage({
+    _tag: "models",
+    catalog: { cwd: "/same", models: [], fetchedAt: "second" },
+  });
+  assert.equal(second.catalogs.getState().catalogs["/same"].fetchedAt, "second");
+  assert.equal(remote.catalogs.getState().catalogs["/same"].fetchedAt, "remote");
   unfollow();
   events.onMessage({ _tag: "models", catalog: { cwd: "/same", models: [], fetchedAt: "late" } });
   assert.equal(
@@ -93,6 +117,13 @@ test("same cwd/session IDs retain separate page-memory drafts, questions and mod
     "a detached client cannot overwrite a returning machine's cache",
   );
   assert.equal(local.catalogs.getState().catalogs["/same"].fetchedAt, "local");
+  assert.equal(
+    second.catalogs.getState().catalogs["/same"].fetchedAt,
+    "second",
+    "late first-peer catalog cannot cross to the second peer",
+  );
+  unfollowSecond();
+  closeSecond();
   close();
   assert.notEqual(
     createMachineStores(local, () => {})("eng-1"),
