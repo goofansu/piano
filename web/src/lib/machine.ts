@@ -1,4 +1,5 @@
 /** Machine identity belongs above a backend's workspace/session projection (INV-07). */
+import { RemoteRequests } from "../../../shared/http.ts";
 import type { AddressBar } from "./navigation.ts";
 
 export interface Machine {
@@ -17,8 +18,9 @@ export function machineLocation(pathname: string): { id: string; pathname: strin
 }
 export const machinePath = (id: string, path: string) =>
   id === "local" ? path : `/m/${encodeURIComponent(id)}${path}`;
-export const machineSocketPath = (id: string) =>
-  id === "local" ? "/ws" : `/peer/${encodeURIComponent(id)}/ws`;
+/** Where this Piano's gateway answers for a remote machine. */
+const peerPath = (id: string, path: string) => `/peer/${encodeURIComponent(id)}${path}`;
+export const machineSocketPath = (id: string) => peerPath(id, "/ws");
 
 /** Each navigation owns its prefix; late work cannot adopt the newly selected machine. */
 export function machineAddress(id: string, address: AddressBar): AddressBar {
@@ -37,17 +39,14 @@ export function machineAddress(id: string, address: AddressBar): AddressBar {
   };
 }
 
+const remotePaths = new Set<string>(RemoteRequests.map((request) => request.browser.path));
+
 /**
- * No relative fallback: each supported remote request has an immutable owner. A remote offers its
- * commands and, as its own pickers save them, its default model and effort (ADR 0004).
+ * No relative fallback: each supported remote request has an immutable owner. A remote answers
+ * only the requests its gateway relays (`RemoteRequests`, ADR 0004).
  */
 export function peerApiPath(id: string, path: string): string {
   if (id === "local") return path;
-  if (
-    path !== "/api/session/commands" &&
-    path !== "/api/commands" &&
-    path !== "/api/settings/defaults"
-  )
-    throw new Error("Unavailable on this machine.");
-  return `/peer/${encodeURIComponent(id)}${path}`;
+  if (!remotePaths.has(path)) throw new Error("Unavailable on this machine.");
+  return peerPath(id, path);
 }
