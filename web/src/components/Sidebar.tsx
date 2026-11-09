@@ -52,6 +52,7 @@ import type { Navigation } from "@/lib/navigation";
 import { projectCommands } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import type { SessionRowDetails, SidebarSection } from "@/lib/sidebarList";
+import { useRemote } from "@/lib/useMachine";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarList } from "@/lib/useSidebarList";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -71,7 +72,70 @@ const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-(--glyph-pad) text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 export function Sidebar({ state }: Props) {
-  const { select, openNew, openProjects, openSettings, setPalette } = useNavigation();
+  const { openNew, openProjects, openSettings, setPalette } = useNavigation();
+  return (
+    <div data-slot="session-sidebar" className="flex h-full flex-col">
+      <LayoutHeader>
+        <MachineSwitcher />
+        <IconButton
+          size="header"
+          label="Search sessions and commands"
+          tooltip={<Hint of={["mod", "K"]}>Search sessions and commands</Hint>}
+          onClick={() => setPalette(true)}
+        >
+          <SearchIcon />
+        </IconButton>
+        <ViewMenu />
+        {/* The sidebar's one primary action, filled, at the header's end. */}
+        <IconButton size="header" label="New session" variant="default" onClick={() => openNew()}>
+          <SquarePenIcon />
+        </IconButton>
+      </LayoutHeader>
+      {/* The way to the Projects index leads the list; it is the current row while the index is open, as a selected session row is. */}
+      <div className="px-(--row-inset) py-2">
+        <Button
+          variant="ghost"
+          leading
+          className={cn(
+            row,
+            "w-full text-ink-2",
+            state.view.kind === "projects" &&
+              "bg-(--selected) font-medium text-ink hover:bg-(--selected)",
+          )}
+          aria-current={state.view.kind === "projects" ? "page" : undefined}
+          onClick={() => openProjects()}
+        >
+          <TargetIcon data-icon="inline-start" /> Projects
+        </Button>
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <nav className="relative px-(--row-inset) pb-4" aria-label="Sessions">
+          <SidebarSessions state={state} />
+        </nav>
+      </ScrollArea>
+      <LayoutFooter>
+        <Button variant="ghost" leading className="flex-1" onClick={() => openSettings()}>
+          <SettingsIcon data-icon="inline-start" />
+          Settings
+        </Button>
+      </LayoutFooter>
+    </div>
+  );
+}
+
+/**
+ * Pinned, then the catalog in this browser's grouping, sort and row details: one list for this
+ * machine's catalog and a remote's. On a remote its groups carry no actions, since grouping by
+ * folder or project only presents the remote's metadata. `emptyText` replaces the empty state's
+ * text and `unavailable` the loading skeleton, for a remote that cannot be started from here or
+ * has not answered.
+ */
+export function SidebarSessions({
+  state,
+  emptyText,
+  unavailable,
+}: Props & { emptyText?: string; unavailable?: string }) {
+  const { select } = useNavigation();
   const { view } = useSidebarView();
   const {
     list: { pinned, body },
@@ -131,20 +195,21 @@ export function Sidebar({ state }: Props) {
         );
     }
   };
+  const empty = (text: string) => (
+    <Empty className="py-8">
+      <EmptyHeader>
+        <EmptyDescription>{text}</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
+  );
   const list = () => {
     switch (body?.kind) {
       case undefined:
         return null;
       case "loading":
-        return <SidebarSkeleton />;
+        return unavailable ? empty(unavailable) : <SidebarSkeleton />;
       case "empty":
-        return (
-          <Empty className="py-8">
-            <EmptyHeader>
-              <EmptyDescription>{body.text}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        );
+        return empty(emptyText ?? body.text);
       case "sections": {
         // Done projects' groups come last; one label says so for all of them.
         return (
@@ -168,69 +233,26 @@ export function Sidebar({ state }: Props) {
   };
 
   return (
-    <div data-slot="session-sidebar" className="flex h-full flex-col">
-      <LayoutHeader>
-        <MachineSwitcher />
-        <IconButton
-          size="header"
-          label="Search sessions and commands"
-          tooltip={<Hint of={["mod", "K"]}>Search sessions and commands</Hint>}
-          onClick={() => setPalette(true)}
-        >
-          <SearchIcon />
-        </IconButton>
-        <ViewMenu />
-        {/* The sidebar's one primary action, filled, at the header's end. */}
-        <IconButton size="header" label="New session" variant="default" onClick={() => openNew()}>
-          <SquarePenIcon />
-        </IconButton>
-      </LayoutHeader>
-      {/* The way to the Projects index leads the list; it is the current row while the index is open, as a selected session row is. */}
-      <div className="px-(--row-inset) py-2">
-        <Button
-          variant="ghost"
-          leading
-          className={cn(
-            row,
-            "w-full text-ink-2",
-            state.view.kind === "projects" &&
-              "bg-(--selected) font-medium text-ink hover:bg-(--selected)",
-          )}
-          aria-current={state.view.kind === "projects" ? "page" : undefined}
-          onClick={() => openProjects()}
-        >
-          <TargetIcon data-icon="inline-start" /> Projects
-        </Button>
-      </div>
-      <ScrollArea className="min-h-0 flex-1">
-        <nav className="relative px-(--row-inset) pb-4" aria-label="Sessions">
-          {pinned && (
-            <SidebarGroup
-              label="Pinned"
-              aria-label="Pinned"
-              sessions={pinned.sessions}
-              open={pinned.open}
-              onOpenChange={(open) => toggle(pinned.key, open)}
-              details={pinned.details}
-              select={select}
-              className="mb-1"
-            />
-          )}
-          {list()}
-        </nav>
-      </ScrollArea>
-      <LayoutFooter>
-        <Button variant="ghost" leading className="flex-1" onClick={() => openSettings()}>
-          <SettingsIcon data-icon="inline-start" />
-          Settings
-        </Button>
-      </LayoutFooter>
-    </div>
+    <>
+      {pinned && (
+        <SidebarGroup
+          label="Pinned"
+          aria-label="Pinned"
+          sessions={pinned.sessions}
+          open={pinned.open}
+          onOpenChange={(open) => toggle(pinned.key, open)}
+          details={pinned.details}
+          select={select}
+          className="mb-1"
+        />
+      )}
+      {list()}
+    </>
   );
 }
 
 /** One menu for grouping, sorting and what each row shows; appearance lives here too. Each choice is a global command, as the palette offers it. */
-function ViewMenu() {
+export function ViewMenu() {
   const { commands, run } = useGlobalCommands();
   const groupBy = radioChoice(commands, "group-by");
   const sortBy = radioChoice(commands, "sort-by");
@@ -465,7 +487,9 @@ function ProjectGroup({
   select,
 }: GroupProps & { project: Project | null; done: boolean; sessions: readonly SessionEntry[] }) {
   const { run } = useCommands();
-  const commands = project ? projectCommands(state, project) : [];
+  // A remote's project is presentation here, not something to manage.
+  const remote = useRemote();
+  const commands = project && !remote ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
   // The group's name only folds it; its New session in project button opens the project's home.
   // A done project reads as quietly as No project: its sessions are listed, the project is set aside.
@@ -491,7 +515,7 @@ function ProjectGroup({
             <ProjectCommandIconView icon={create.icon} />
           </IconButton>
         ),
-        project && (
+        project && !remote && (
           <ProjectCommandsMenu
             key="menu"
             project={project}
@@ -515,6 +539,8 @@ function FolderGroup({
   select,
 }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
   const { run } = useCommands();
+  // A remote's folder is presentation here, not something to manage.
+  const remote = useRemote();
   const { create, close } = folderCommands(state, folder);
 
   return (
@@ -527,29 +553,33 @@ function FolderGroup({
       details={details}
       select={select}
       actions={[
-        <IconButton
-          key="new"
-          size="row"
-          label={create.ariaLabel ?? create.label}
-          tooltip={create.label}
-          onClick={() => run(create)}
-        >
-          <SquarePenIcon />
-        </IconButton>,
-        <DropdownMenu key="menu">
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="row" aria-label={`Folder menu for ${folder.name}`}>
-              <MoreHorizontalIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuGroup>
-              <DropdownMenuItem disabled={!close.enabled} onSelect={() => run(close)}>
-                <XIcon /> {close.label}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>,
+        !remote && (
+          <IconButton
+            key="new"
+            size="row"
+            label={create.ariaLabel ?? create.label}
+            tooltip={create.label}
+            onClick={() => run(create)}
+          >
+            <SquarePenIcon />
+          </IconButton>
+        ),
+        !remote && (
+          <DropdownMenu key="menu">
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="row" aria-label={`Folder menu for ${folder.name}`}>
+                <MoreHorizontalIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuGroup>
+                <DropdownMenuItem disabled={!close.enabled} onSelect={() => run(close)}>
+                  <XIcon /> {close.label}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
       ]}
       notice={
         folder.discovery.status === "error" && (

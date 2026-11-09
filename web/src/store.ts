@@ -35,6 +35,11 @@ export interface SessionView extends Snapshot {
 
 export interface AppState {
   connected: boolean;
+  /**
+   * The last socket failed to open or closed, and none has opened since. False while the first
+   * connection is still being made, so "connecting" and "cannot reach" read apart.
+   */
+  unreachable: boolean;
   selectionId: string | null;
   resync: boolean;
   /** What the main pane shows: a session, or a page. */
@@ -86,6 +91,7 @@ export const isSession = (
 
 export const initialState: AppState = {
   connected: false,
+  unreachable: false,
   selectionId: null,
   resync: false,
   view: { kind: "new" },
@@ -107,7 +113,8 @@ export const initialState: AppState = {
 };
 
 export type Action =
-  | { type: "connected"; connected: boolean }
+  /** `lost`: a socket failed or closed, as opposed to a selection landing on a closed connection. */
+  | { type: "connected"; connected: boolean; lost?: boolean }
   | { type: "server"; message: ServerMessage }
   | { type: "trust_pending"; cwd: string }
   | {
@@ -136,6 +143,7 @@ function reduceAction(s: AppState, a: Action): AppState {
       return {
         ...(a.connected ? s : dropTrustDecisions(s)),
         connected: a.connected,
+        unreachable: a.connected ? false : (a.lost ?? s.unreachable),
         selectionId: a.connected ? s.selectionId : null,
         selecting: !a.connected && s.pendingCreate ? null : s.selecting,
         pendingCreate: a.connected ? s.pendingCreate : FirstMessage.connectionLost(s.pendingCreate),

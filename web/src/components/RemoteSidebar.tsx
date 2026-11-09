@@ -2,17 +2,17 @@ import { SearchIcon } from "lucide-react";
 import { LayoutHeader } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
 import { MachineSwitcher } from "@/components/MachineSwitcher";
-import { SidebarSessionList } from "@/components/SidebarSessionList";
-import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import { SidebarSessions, ViewMenu } from "@/components/Sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { recentSessions } from "@/lib/sessionCatalog";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
-/** Remote's complete listed catalog, not folders/projects or terminal-history discovery. */
+/**
+ * A remote's catalog in this browser's View options, listed as this machine's sidebar lists its
+ * own. No New session, Projects or Settings: those manage the remote, which stays its own.
+ */
 export function RemoteSidebar({ state }: { state: AppState }) {
-  const { select, setPalette } = useNavigation();
-  const sessions = recentSessions(state);
+  const { setPalette } = useNavigation();
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
       <LayoutHeader>
@@ -24,19 +24,16 @@ export function RemoteSidebar({ state }: { state: AppState }) {
         >
           <SearchIcon />
         </IconButton>
+        <ViewMenu />
       </LayoutHeader>
       <ScrollArea className="min-h-0 flex-1">
         <nav className="relative px-(--row-inset) py-2" aria-label="Sessions">
-          <SidebarSessionList sessions={sessions} select={select} details="folder-and-branch" />
-          {!sessions.length && (
-            <Empty className="py-8">
-              <EmptyHeader>
-                <EmptyDescription>
-                  {state.connected ? "No sessions yet" : "Machine unavailable"}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          )}
+          {/* Skeleton rows while the remote's catalog is on its way; unavailable once it cannot be reached. */}
+          <SidebarSessions
+            state={state}
+            emptyText={state.unreachable ? "Machine unavailable" : "No sessions yet"}
+            unavailable={state.unreachable ? "Machine unavailable" : undefined}
+          />
         </nav>
       </ScrollArea>
     </div>

@@ -9,6 +9,8 @@ export function remoteCommandAllowed(command: Command): boolean {
     case "messages-only":
     case "toggle-sidebar":
     case "appearance":
+    // View options: how this browser lists any machine's catalog.
+    case "view":
       return true;
     // Trusting a folder lets its project extensions run on the remote: a remote setting, not here.
     default:

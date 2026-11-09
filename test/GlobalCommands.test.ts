@@ -18,6 +18,7 @@ import {
   PAGE_EDITORS,
   pageEditor,
 } from "../web/src/lib/pageEditor.ts";
+import { remoteCommandAllowed } from "../web/src/lib/remoteCapabilities.ts";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../web/src/lib/routes.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 
@@ -120,6 +121,28 @@ test("exactly the current grouping and sort are checked", () => {
   } as const;
   assert.deepEqual(checked("group-by", other), ["No grouping"]);
   assert.deepEqual(checked("sort-by", other), ["Sort by name"]);
+});
+
+test("on a remote machine the View options stay, and nothing that manages the remote does", () => {
+  const remote = globalCommands(onNewPage, ctx).filter(remoteCommandAllowed);
+  const groups = new Set<string>(remote.map((command) => command.group));
+  for (const group of ["group-by", "sort-by", "row-details", "appearance"])
+    assert.ok(groups.has(group), `${group} offered`);
+  // The View options change only this browser's presentation, wherever it is run.
+  const changes = remote
+    .filter((command) => command.intent.kind === "view")
+    .map((command) => command.label);
+  assert.deepEqual(changes, [
+    "Group by date",
+    "Group by folder",
+    "Group by project",
+    "No grouping",
+    "Sort by activity",
+    "Sort by name",
+    "Show folder and branch",
+  ]);
+  for (const label of ["New session", "Projects", "Settings"])
+    assert.ok(!remote.some((command) => command.label === label), `${label} not offered`);
 });
 
 test("one list of appearances serves the palette and the View menu", () => {

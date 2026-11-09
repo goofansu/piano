@@ -206,7 +206,7 @@ export function createClient({
   };
 
   const onStatus = (connected: boolean, reason?: DisconnectReason) => {
-    apply({ type: "connected", connected });
+    apply({ type: "connected", connected, lost: !connected });
     if (connected) reselect(state.session ?? state.selecting);
     else if (reason) notify(...disconnectNotices[reason]);
   };

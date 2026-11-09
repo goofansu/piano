@@ -227,6 +227,18 @@ test("live state is current before paint, while local actions and disconnect not
   unsubscribe();
 });
 
+test("still connecting is not unreachable; a failed or closed socket is, until one opens", () => {
+  const h = harness();
+  h.client.select("/scratch", "a");
+  assert.equal(h.client.getState().unreachable, false, "a selection before the first socket");
+  h.status(false);
+  assert.equal(h.client.getState().unreachable, true, "the first attempt failed");
+  h.status(true);
+  assert.equal(h.client.getState().unreachable, false);
+  h.status(false);
+  assert.equal(h.client.getState().unreachable, true, "an open socket closed");
+});
+
 test("INV-02/05: a dropped connection re-selects the session exactly once and keeps its transcript", () => {
   const h = harness();
   h.status(true);
