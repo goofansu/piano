@@ -136,7 +136,7 @@ test(
       assert.equal(req.headers.authorization, undefined);
       assert.equal(req.headers.cookie, undefined);
     }
-    assert.ok(f.state.requests.some((req) => req.url === "/ws"));
+    assert.ok(f.state.requests.some((req) => req.url === "/ws/peer"));
     assert.ok(f.state.requests.some((req) => req.url.startsWith("/api/session/commands")));
     assert.ok(connection.messages.every((raw) => !raw.includes(token)));
     connection.ws.close();
@@ -168,11 +168,7 @@ test(
         !(await failed.text()).includes(token),
         "even an auth body echoing a credential is discarded",
       );
-      assert.equal(
-        f.state.requests.length,
-        before + 2,
-        "one registry plus one HTTP read, no retry/redirect",
-      );
+      assert.equal(f.state.requests.length, before + 1, "one HTTP read, no retry/redirect");
     }
     assert.equal(f.state.received.filter((raw) => JSON.parse(raw)._tag === "act").length, 1);
     assert.ok(!f.logs().includes(token), "startup and transport logs contain no credential");

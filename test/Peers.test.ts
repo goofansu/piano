@@ -67,7 +67,7 @@ test(
     assert.deepEqual(inputs(first), ["first input"]);
     assert.deepEqual(inputs(second), ["second input"]);
     for (const peer of f.peers) {
-      assert.ok(peer.state.requests.some((req) => req.url === "/ws"));
+      assert.ok(peer.state.requests.some((req) => req.url === "/ws/peer"));
       assert.ok(peer.state.requests.some((req) => req.url.startsWith("/api/")));
       for (const req of peer.state.requests) {
         assert.equal(req.headers["x-exedev-authorization"], `Bearer ${peer.state.requiredToken}`);

@@ -3,7 +3,8 @@
 Status: proposed; accepted when merged.
 
 One developer already runs independent private Pianos on their exe.dev VMs. For the first
-remote-conversation slice, the main Piano proxies explicitly configured same-protocol peers:
+remote-conversation slice, the main Piano proxies explicitly configured peers running the same
+Piano version:
 through exe.dev's scoped HTTP-proxy peer integration from an attached VM, or directly through
 exe.dev's HTTPS proxy with a VM-scoped token from the developer's laptop. Pi RPC remains local to
 each owning backend. This supersedes the system-OpenSSH recommendation in the
@@ -17,10 +18,19 @@ turn Piano into a fleet manager.
   backend routes a bounded connection, never imports history or starts a local substitute
   (INV-01/02). Disconnect closes an observer, not the remote host; only explicit conversation
   actions affect the run. Neither gateway nor browser replays prompts.
-- The browser speaks only to its current origin. Main validates Host and browser Origin before
-  proxying; upstream receives the configured target Origin, not the browser's headers or the
-  integration hostname. Only configured destinations and the slice's operations are admitted;
-  redirects, unknown IDs and unsupported endpoints fail closed (INV-11). No browser-supplied
+- The browser speaks only to its current origin. Main validates Host, browser Origin and
+  `Sec-Fetch-Site` before dialing; upstream receives the configured target Origin, not the
+  browser's headers or the integration hostname. Only configured destinations, the remote's
+  `/ws/peer` and its session-commands read are routed; redirects, unknown IDs and other endpoints
+  fail closed (INV-11).
+- The peer decides the slice, not the gateway. Main attaches at the peer's `/ws/peer`, where the
+  peer admits only its registered sessions and the slice's actions, and answers every refusal with
+  that request's ordinary reply in its own delivery sequence. The gateway is a bounded,
+  authenticated pipe: it neither filters requests nor injects or renumbers frames, so a refusal
+  never has to end the connection. A separate path, not a header, marks the connection: nothing in
+  transit can strip it, and a peer without it fails closed. Folder trust is outside the slice, since
+  it runs project extensions on the peer. The session-commands read needs no peer mode: the peer
+  already resolves its IDs in its own registry. No browser-supplied
   cookies or bearer tokens, or developer credential environment, are copied to the peer.
 - This is the existing trusted-developer boundary: the same owner controls both Pianos and the
   attached peer integration or VM token. exe.dev supplies private access and authentication. It is
@@ -45,9 +55,9 @@ turn Piano into a fleet manager.
   preserve the peer's generation, sequence and delivery frames (INV-04/05). The browser remains
   the only reconnect owner. Gateway disconnect/failure does not promise whether an in-flight
   prompt was received: inspect the next snapshot before manually retrying.
-- Compatibility means the configured peer speaks the current registry/session protocol, checked
-  on connection, not that any Piano/Pi release works (INV-12). No target upgrade or protocol
-  handshake extension is required. Fake-Pi and live peer evidence are separate from real-runtime
+- Compatibility means main and peer run the same Piano revision; the registry frame is still
+  checked on connection (INV-12). Peers are upgraded with main: one deploy updates every machine.
+  There is no version negotiation; a peer without `/ws/peer` is unavailable. Fake-Pi and live peer evidence are separate from real-runtime
   compatibility; deployments must verify their specific peer versions.
 
 The slice lists the peer's existing registered sessions, opens history/state, sends text, streams,

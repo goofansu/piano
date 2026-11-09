@@ -225,6 +225,11 @@ test(
           connection.messages.some((raw) => JSON.parse(raw)._tag === "action_result"),
         );
         const receivedFrames = f.state.sent.slice(from);
+        assert.equal(
+          f.state.requests.findLast((r) => !r.url.startsWith("/api/"))?.url,
+          "/ws/peer",
+          "the remote decides this connection's scope at its peer endpoint",
+        );
         assert.deepEqual(
           connection.messages,
           receivedFrames,
@@ -263,163 +268,67 @@ test(
       },
     );
 
-    await t.test(
-      "commands use a freshly listed remote identity even when Local has the same IDs",
-      async () => {
-        const response = await fetch(`${f.base}${commandPath}`, { headers });
-        assert.equal(response.status, 200);
-        assert.equal(response.headers.get("cache-control"), "no-store");
-        assert.deepEqual(await response.json(), {
-          commands: [{ name: "remote-only", source: "extension" }],
-        });
-        const count = f.state.requests.filter((r) => r.url.startsWith("/api/")).length;
-        assert.equal(
-          (await fetch(`${f.base}${commandPath.replace("same-session", "terminal-only")}`)).status,
-          502,
-        );
-        assert.equal(f.state.requests.filter((r) => r.url.startsWith("/api/")).length, count);
-        for (const request of f.state.requests) {
-          assert.equal(request.headers.origin, f.config.origin);
-          assert.equal(request.headers.host, new URL(f.config.endpoint).host);
-          for (const name of [
-            "cookie",
-            "authorization",
-            "x-exedev-authorization",
-            "forwarded",
-            "x-forwarded-host",
-            "x-forwarded-proto",
-          ])
-            assert.equal(request.headers[name], undefined, name);
-        }
-        assert.deepEqual(
-          await readRegistry("unused", f.database),
-          original,
-          "peer requests must not mutate Local's registry",
-        );
-      },
-    );
-
-    await t.test("only listed selection and the bounded action surface pass", async () => {
-      const connection = await f.open();
-      for (const message of [
-        { _tag: "models", cwd: identity.cwd },
-        { _tag: "trust", cwd: identity.cwd },
-        { _tag: "select", selectionId: "s", cwd: identity.cwd, sessionId: identity.sessionId },
-      ])
-        connection.send(message);
-      await f.until(() => connection.messages.some((raw) => JSON.parse(raw)._tag === "selected"));
-      for (const action of [
-        { _tag: "steer", text: "text only" },
-        { _tag: "stop" },
-        { _tag: "abort" },
-        { _tag: "restore_queue" },
-        { _tag: "set_model", model: "remote/model" },
-        { _tag: "set_thinking_level", level: "high" },
-        { _tag: "answer", id: "dialog", generation: "remote-generation", value: "yes" },
-      ])
-        connection.send({ _tag: "act", selectionId: "s", action });
-      connection.send({ _tag: "ping", nonce: "actions-passed" });
-      await f.until(() =>
-        connection.messages.some((raw) => JSON.parse(raw).nonce === "actions-passed"),
-      );
+    await t.test("commands reach the remote even when Local has the same IDs", async () => {
+      const response = await fetch(`${f.base}${commandPath}`, { headers });
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.deepEqual(await response.json(), {
+        commands: [{ name: "remote-only", source: "extension" }],
+      });
+      const connections = f.state.connections;
+      assert.equal((await fetch(`${f.base}${commandPath}`, { headers })).status, 200);
       assert.equal(
-        f.state.received.filter((raw) => JSON.parse(raw).action?._tag === "answer").length,
-        1,
-        "dialog response forwarded once, not handled by gateway",
+        f.state.connections,
+        connections,
+        "a commands read is one HTTP request; the remote resolves the IDs itself",
       );
+      for (const request of f.state.requests) {
+        assert.equal(request.headers.origin, f.config.origin);
+        assert.equal(request.headers.host, new URL(f.config.endpoint).host);
+        for (const name of [
+          "cookie",
+          "authorization",
+          "x-exedev-authorization",
+          "forwarded",
+          "x-forwarded-host",
+          "x-forwarded-proto",
+        ])
+          assert.equal(request.headers[name], undefined, name);
+      }
+      assert.deepEqual(
+        await readRegistry("unused", f.database),
+        original,
+        "peer requests must not mutate Local's registry",
+      );
+    });
+
+    await t.test("well-formed messages pass unchanged; the remote decides", async () => {
+      const connection = await f.open();
+      const messages = [
+        { _tag: "select", selectionId: "s", cwd: identity.cwd, sessionId: "terminal-only" },
+        { _tag: "set_trust", path: identity.cwd, trusted: true },
+        { _tag: "act", selectionId: "s", action: { _tag: "set_name", name: "rename" } },
+        { _tag: "ping", nonce: "forwarded" },
+      ];
+      for (const message of messages) connection.send(message);
+      await f.until(() => connection.messages.some((raw) => JSON.parse(raw).nonce === "forwarded"));
+      for (const message of messages)
+        assert.ok(
+          f.state.received.includes(JSON.stringify(message)),
+          `${JSON.stringify(message)} reaches the remote byte for byte`,
+        );
       connection.ws.close();
       await connection.closed;
 
-      for (const message of [
-        { _tag: "create_session", selectionId: "s", cwd: identity.cwd, options: {} },
-        { _tag: "select", selectionId: "s", cwd: identity.cwd, sessionId: null },
-        // Trusting a folder would let its project extensions run on the remote: a remote setting.
-        { _tag: "set_trust", path: identity.cwd, trusted: true },
-        { _tag: "set_trust", path: "/different", trusted: true },
-        { _tag: "worktrees", folder: identity.cwd },
-        { _tag: "archive_session", cwd: identity.cwd, sessionId: identity.sessionId },
-        {
-          _tag: "act",
-          selectionId: "not-selected",
-          action: { _tag: "prompt", text: "must not send" },
-        },
-        {
-          _tag: "act",
-          selectionId: "s",
-          action: { _tag: "preview_stop", instanceId: "remote-preview" },
-        },
-        { _tag: "act", selectionId: "s", action: { _tag: "set_name", name: "rename" } },
-        {
-          _tag: "act",
-          selectionId: "s",
-          action: {
-            _tag: "prompt",
-            text: "image",
-            attachments: [{ kind: "image", name: "x.png", mimeType: "image/png", data: "AA==" }],
-          },
-        },
-        {
-          _tag: "act",
-          selectionId: "s",
-          start: { name: "rename" },
-          action: { _tag: "prompt", text: "name" },
-        },
-        { _tag: "ping", nonce: "extra", filesystem: "/elsewhere" },
-      ]) {
-        const denied = await f.open();
-        denied.send({
-          _tag: "select",
-          selectionId: "s",
-          cwd: identity.cwd,
-          sessionId: identity.sessionId,
-        });
-        await f.until(() => denied.messages.some((raw) => JSON.parse(raw)._tag === "selected"));
-        const before = f.state.received.filter((raw) => raw === JSON.stringify(message)).length;
-        denied.send(message);
-        assert.equal((await denied.closed).code, 1008, JSON.stringify(message));
-        assert.equal(
-          f.state.received.filter((raw) => raw === JSON.stringify(message)).length,
-          before,
-        );
-      }
+      const invalid = await f.open();
+      const before = f.state.received.length;
+      invalid.send({ _tag: "not-a-message" });
+      assert.equal((await invalid.closed).code, 1008);
+      assert.equal(
+        f.state.received.slice(before).some((raw) => raw.includes("not-a-message")),
+        false,
+      );
     });
-
-    await t.test(
-      "an unlisted selection fails that selection; reads for unregistered folders are skipped",
-      async () => {
-        for (const select of [
-          { _tag: "select", selectionId: "s", cwd: identity.cwd, sessionId: "terminal-only" },
-          { _tag: "select", selectionId: "s", cwd: "/different", sessionId: identity.sessionId },
-        ]) {
-          const connection = await f.open();
-          connection.send(select);
-          // A distinct code, so the browser fails the selection instead of reselecting forever.
-          assert.equal((await connection.closed).code, 4404, JSON.stringify(select));
-          assert.equal(
-            f.state.received.some((raw) => raw === JSON.stringify(select)),
-            false,
-          );
-        }
-        const reads = await f.open();
-        const before = f.state.received.length;
-        reads.send({ _tag: "models", cwd: "/different" });
-        reads.send({ _tag: "trust", cwd: "/different" });
-        reads.send({ _tag: "ping", nonce: "after-skipped-reads" });
-        await f.until(() =>
-          reads.messages.some((raw) => JSON.parse(raw).nonce === "after-skipped-reads"),
-        );
-        assert.deepEqual(
-          f.state.received
-            .slice(before)
-            .map((raw) => JSON.parse(raw)._tag)
-            .filter((tag) => tag !== "ack"),
-          ["ping"],
-          "only the ping reaches the remote; the socket stays open",
-        );
-        reads.ws.close();
-        await reads.closed;
-      },
-    );
 
     await t.test("the remote's close meaning reaches the browser", async () => {
       for (const code of [1009, 1013]) {
@@ -466,85 +375,35 @@ test(
       },
     );
 
-    await t.test(
-      "registry changes revoke scope; malformed or incompatible peers never admit traffic",
-      async () => {
-        const revoked = await f.open();
-        revoked.send({
-          _tag: "select",
-          selectionId: "s",
-          cwd: identity.cwd,
-          sessionId: identity.sessionId,
-        });
-        await f.until(() => revoked.messages.some((raw) => JSON.parse(raw)._tag === "selected"));
-        for (const ws of f.wss.clients)
-          ws.send(JSON.stringify({ ...registry, sessionReferences: [], deliveryId: 4 }));
-        await f.until(() => revoked.messages.some((raw) => JSON.parse(raw).deliveryId === 4));
-        revoked.send({
-          _tag: "act",
-          selectionId: "s",
-          action: { _tag: "prompt", text: "revoked" },
-        });
-        assert.equal((await revoked.closed).code, 1008);
-        for (const initial of [
-          { _tag: "registry", folders: "invalid" },
-          { _tag: "registry", folders: [] },
-          { ...registry, sessionReferences: [{ cwd: "/incomplete" }] },
-        ]) {
-          f.state.initial = initial;
-          assert.equal(
-            await f.handshake().catch((error) => {
-              throw new Error(`initial ${JSON.stringify(initial)}`, { cause: error });
-            }),
-            502,
-          );
-        }
-        f.state.initial = registry;
-        for (const mode of ["malformed", "redirect", "dead", "silent"]) {
-          f.state.mode = mode;
-          const before = f.state.requests.length;
-          assert.equal(
-            await f.handshake().catch((error) => {
-              throw new Error(`mode ${mode}`, { cause: error });
-            }),
-            502,
-            mode,
-          );
-          assert.equal(f.state.requests.length, before + 1, "no redirect or retry");
-        }
-        f.state.mode = "ready";
-      },
-    );
-
-    await t.test(
-      "commands reuse a live attachment's registry, and fresh observations are capped",
-      async () => {
-        const connection = await f.open();
-        const connections = f.state.connections;
-        const response = await fetch(`${f.base}${commandPath}`, { headers });
-        assert.equal(response.status, 200);
-        assert.equal(f.state.connections, connections, "no extra remote attachment per read");
-        // The live registry still scopes the read: a session the remote drops is refused.
-        for (const ws of f.wss.clients)
-          ws.send(JSON.stringify({ ...registry, sessionReferences: [], deliveryId: 50 }));
-        await f.until(() => connection.messages.some((raw) => JSON.parse(raw).deliveryId === 50));
-        const apiReads = f.state.requests.filter((r) => r.url.startsWith("/api/")).length;
-        assert.equal((await fetch(`${f.base}${commandPath}`, { headers })).status, 502);
-        assert.equal(f.state.requests.filter((r) => r.url.startsWith("/api/")).length, apiReads);
-        connection.ws.close();
-        await connection.closed;
-
-        f.state.mode = "silent";
-        const dialed = f.state.connections;
-        const started = Date.now();
-        const reads = [1, 2, 3].map(() => fetch(`${f.base}${commandPath}`, { headers }));
-        assert.equal((await Promise.race(reads)).status, 502);
-        assert.ok(Date.now() - started < 2_000, "a read over the cap fails without waiting");
-        await Promise.all(reads);
-        assert.equal(f.state.connections - dialed, 2, "two fresh observations per remote at once");
-        f.state.mode = "ready";
-      },
-    );
+    await t.test("malformed or incompatible peers never admit traffic", async () => {
+      for (const initial of [
+        { _tag: "registry", folders: "invalid" },
+        { _tag: "registry", folders: [] },
+        { ...registry, sessionReferences: [{ cwd: "/incomplete" }] },
+      ]) {
+        f.state.initial = initial;
+        assert.equal(
+          await f.handshake().catch((error) => {
+            throw new Error(`initial ${JSON.stringify(initial)}`, { cause: error });
+          }),
+          502,
+        );
+      }
+      f.state.initial = registry;
+      for (const mode of ["malformed", "redirect", "dead", "silent"]) {
+        f.state.mode = mode;
+        const before = f.state.requests.length;
+        assert.equal(
+          await f.handshake().catch((error) => {
+            throw new Error(`mode ${mode}`, { cause: error });
+          }),
+          502,
+          mode,
+        );
+        assert.equal(f.state.requests.length, before + 1, "no redirect or retry");
+      }
+      f.state.mode = "ready";
+    });
 
     await t.test(
       "HTTP redirects, failure, bytes and response deadlines are bounded without retry",
@@ -554,11 +413,7 @@ test(
           const before = f.state.requests.length;
           const response = await fetch(`${f.base}${commandPath}`);
           assert.equal(response.status, 502, mode);
-          assert.equal(
-            f.state.requests.length,
-            before + 2,
-            "one registry attachment plus one commands read, no redirect/retry",
-          );
+          assert.equal(f.state.requests.length, before + 1, "one commands read, no redirect/retry");
         }
         f.state.mode = "ready";
       },

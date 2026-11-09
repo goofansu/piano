@@ -9,8 +9,9 @@ Piano has not registered is not discovered.
 
 The main Piano can run on your laptop or on an exe.dev VM. All backends stay bound to loopback;
 remotes stay behind exe.dev private access. Choose either authentication mode below for each peer.
-Neither changes the remote session protocol: the PR runs on the main Piano; compatible existing
-remote Pianos can keep running main without a deployment or restart.
+Every remote must run the same Piano version as the main one: the main Piano attaches at the
+remote's `/ws/peer`, where the remote itself decides what another machine may ask. Deploy main and
+remotes together.
 
 ### From an exe.dev VM: peer integration
 
@@ -175,14 +176,17 @@ Local's persisted catalog. Remote files, credentials, history and database remai
 
 - No remote session creation, archive/delete/rename/pin, projects management, worktree or machine
   management. Create/manage those on the owning Piano.
-- No remote file/Changes/attachment/preview or account/settings controls. These requests are not
+- No remote file/Changes/attachment/preview or account/settings controls, folder trust included:
+  trusting a folder would run its project extensions on the remote. These requests are not
   forwarded to Local. Remote transcript attachments/local-file actions are unavailable.
-- Only configured peers and supported operations are routed. There is no arbitrary URL proxy,
-  redirect following, mutation retry or cross-machine search. The browser never contacts the
+- The remote enforces these limits on its `/ws/peer` connection and answers a refused request the
+  way it answers any failed one (for example "Unable to open session"); the connection stays open.
+- Only configured peers, the remote's `/ws/peer` and its session-commands read are routed. There is
+  no arbitrary URL proxy, redirect following, mutation retry or cross-machine search. The browser never contacts the
   integration hostname.
-- The configured destination is trusted, not an authenticated instance-ID handshake. Existing
-  registry/session schemas are the compatibility check, not universal version negotiation. Keep
-  peer versions compatible and verify the actual pair. Fake-Pi evidence does not certify a real
+- The configured destination is trusted, not an authenticated instance-ID handshake. A remote
+  without `/ws/peer` fails closed as unavailable; there is no version negotiation. Deploy main and
+  remotes from the same revision and verify the actual pair. Fake-Pi evidence does not certify a real
   Pi runtime or authenticated external-browser access.
 
 See [ADR 0004](adr/0004-same-owner-piano-peer.md) for ownership and trust decisions.

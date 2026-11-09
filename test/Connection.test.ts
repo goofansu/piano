@@ -255,15 +255,6 @@ test("close 1013 reports falling behind and reconnects; 1009 reports the size li
   assert.deepEqual(tooLarge.statuses, [[true], [false, "too-large"]]);
 });
 
-test("close 4404 reports an unavailable session and still reconnects", () => {
-  const h = harness();
-  h.last().accept();
-  h.last().serverClose(4404);
-  assert.deepEqual(h.statuses, [[true], [false, "session-unavailable"]]);
-  h.advance(2000);
-  assert.equal(h.sockets.length, 2);
-});
-
 test("any other close is a plain loss that reconnects", () => {
   const h = harness();
   h.last().accept();

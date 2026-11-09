@@ -198,6 +198,7 @@ export const AppRouter = HttpRouter.use((router) =>
         const path = new URL(request.url, "http://localhost").pathname;
         if (
           path === "/ws" ||
+          path === "/ws/peer" ||
           request.headers.upgrade !== undefined ||
           !["GET", "HEAD", "OPTIONS"].includes(request.method)
         ) {
@@ -216,6 +217,18 @@ export const AppRouter = HttpRouter.use((router) =>
         const request = yield* HttpServerRequest.HttpServerRequest;
         const socket = yield* request.upgrade;
         yield* handleSocket(socket);
+        return HttpServerResponse.empty();
+      }).pipe(Effect.scoped),
+    );
+    // Another machine's Piano attaches here through its gateway, never at /ws: a separate path
+    // cannot be stripped in transit the way a header could, so the slice cannot silently widen.
+    yield* router.add(
+      "GET",
+      "/ws/peer",
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const socket = yield* request.upgrade;
+        yield* handleSocket(socket, { peer: true });
         return HttpServerResponse.empty();
       }).pipe(Effect.scoped),
     );
