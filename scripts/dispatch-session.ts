@@ -17,6 +17,7 @@ import {
   startSession,
   withLinks,
 } from "../extensions/piano-dispatch/SessionDispatch.ts";
+import { sessionLink } from "../shared/sessionLink.ts";
 
 const usage = `Usage: node scripts/dispatch-session.ts <prompt-file> <cwd> [out-file] [options]
        node scripts/dispatch-session.ts follow-up <sessionId> <prompt-file> [--steer] [--ws-url URL] [--origin ORIGIN]
@@ -80,9 +81,6 @@ function argumentsFromCommandLine() {
     throw new CliError(2, `${(error as Error).message}\n${usage}`);
   }
 }
-
-const sessionLink = (origin: string, sessionId: string) =>
-  new URL(`/s/${encodeURIComponent(sessionId)}`, origin).href;
 
 /** The prompt file's text; an unreadable or blank file is invalid input. */
 function promptFrom(file: string) {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { sessionLink } from "../shared/sessionLink.ts";
 import { parseRoute, routePath } from "../web/src/lib/routes.ts";
 
 test("settings URLs preserve each section and accept the Providers alias", () => {
@@ -34,4 +35,12 @@ test("the Projects index has an address of its own beside each project's home", 
 test("the removed Radius URL is unknown rather than an alias for Providers", () => {
   assert.deepEqual(parseRoute({ pathname: "/settings/radius" }), { kind: "new" });
   assert.deepEqual(parseRoute({ pathname: "/settings/radius/" }), { kind: "new" });
+});
+
+test("a session link handed out of Piano opens the session the UI routes to", () => {
+  const sessionId = "a/b c?#%";
+  const link = new URL(sessionLink("https://piano.example", sessionId));
+  assert.equal(link.origin, "https://piano.example");
+  assert.equal(link.pathname, routePath({ kind: "session", sessionId }));
+  assert.deepEqual(parseRoute(link), { kind: "session", sessionId });
 });

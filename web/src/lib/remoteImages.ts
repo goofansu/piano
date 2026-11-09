@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { base64Bytes } from "../../../shared/attachments.ts";
+import { isLocalId } from "../../../shared/machine.ts";
 import {
   IMAGE_CANCEL_PATH,
   IMAGE_PREVIEW_PATH,
@@ -10,7 +11,7 @@ import {
   PreparedImages,
   remoteImageLimits,
 } from "../../../shared/remoteImages.ts";
-import type { Attachment } from "../../../shared/wire.ts";
+import type { Attachment, ClientCommand } from "../../../shared/wire.ts";
 import { peerApiPath } from "./machine.ts";
 
 /** Blob framing keeps base64 off the socket; the browser supplies its exact Content-Length. */
@@ -80,6 +81,23 @@ export async function prepareImages(
   });
 }
 
+/** The post-preparation wire command, shared by both composers: no inline image bytes. */
+export function preparedImageCommand(
+  original: ClientCommand,
+  reference: PreparedImages,
+): ClientCommand {
+  return original._tag === "act" &&
+    (original.action._tag === "prompt" || original.action._tag === "steer")
+    ? {
+        ...original,
+        preparedImages: reference,
+        action: { ...original.action, attachments: undefined },
+      }
+    : original._tag === "create_session"
+      ? { ...original, preparedImages: reference, attachments: undefined }
+      : original;
+}
+
 /** Best effort disposal, never a retry of upload or input. A lost result expires on the peer. */
 export function discardImages(machineId: string, reference: PreparedImages) {
   void fetch(peerApiPath(machineId, IMAGE_CANCEL_PATH), {
@@ -99,7 +117,7 @@ export function remoteImageUrl(
   url: string,
   target?: { workspaceId: string; sessionId: string },
 ) {
-  if (machineId === "local") return url;
+  if (isLocalId(machineId)) return url;
   const match = /^\/api\/image-previews\/([a-f0-9]{64})$/.exec(url);
   if (
     !match ||

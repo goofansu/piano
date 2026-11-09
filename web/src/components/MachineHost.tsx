@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { listMachines } from "@/lib/api";
 import { LOCAL, type Machine, machineLocation, machinePath } from "@/lib/machine";
 import { createMachineStores } from "@/lib/machineStores";
 import { drafts } from "@/lib/messageDraft";
@@ -24,19 +25,9 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
   const [paths] = useState(() => new Map<string, string>());
   useEffect(() => {
     const controller = new AbortController();
-    void fetch("/api/machines", { signal: controller.signal, cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error();
-        const value = await response.json();
-        if (
-          !Array.isArray(value.machines) ||
-          value.machines[0]?.id !== "local" ||
-          !value.machines.every(
-            (m: Machine) => typeof m.name === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(m.id),
-          )
-        )
-          throw new Error();
-        setMachines(value.machines);
+    void listMachines(controller.signal)
+      .then((list) => {
+        setMachines([...list]);
         setLoaded(true);
       })
       .catch(() => {
@@ -64,7 +55,7 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
         </EmptyHeader>
         {(error || loaded) && (
           <EmptyContent>
-            <Button variant="outline" onClick={() => switchMachine("local")}>
+            <Button variant="outline" onClick={() => switchMachine(LOCAL.id)}>
               Local
             </Button>
           </EmptyContent>

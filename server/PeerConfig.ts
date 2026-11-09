@@ -2,6 +2,7 @@ import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { Context, Redacted, Schema } from "effect";
 import { isLoopbackHostname } from "../shared/loopback.ts";
+import { isMachineId, LOCAL } from "../shared/machine.ts";
 
 const Config = Schema.Struct({
   id: Schema.String,
@@ -68,8 +69,8 @@ export function loadPeerConfigs(
     );
     entries = "peers" in document ? document.peers : [document];
     if (entries.length > 32) throw invalid();
-    const ids = new Set(["local"]);
-    const names = new Set(["local"]);
+    const ids = new Set([LOCAL.id]);
+    const names = new Set([LOCAL.name.toLowerCase()]);
     for (const entry of entries) {
       const name = entry.name.toLowerCase();
       if (ids.has(entry.id) || names.has(name)) throw invalid();
@@ -83,9 +84,7 @@ export function loadPeerConfigs(
   return entries.map((configured) => {
     try {
       if (
-        !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(configured.id) ||
-        configured.id === "local" ||
-        configured.id.includes("--") ||
+        !isMachineId(configured.id) ||
         configured.name !== configured.name.trim() ||
         configured.name.length === 0 ||
         configured.name.length > 80 ||

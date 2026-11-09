@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
+import { isLocalId, LOCAL } from "../../../shared/machine.ts";
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { DraftEditorState } from "../components/DraftEditor.tsx";
 import type { Client } from "./client.ts";
 import type { DraftMessage } from "./messageDraft.ts";
-import { discardImages, prepareImages } from "./remoteImages.ts";
+import { discardImages, preparedImageCommand, prepareImages } from "./remoteImages.ts";
 import { useMachine } from "./useMachine.ts";
 
 /** One async send owns its original machine, draft and navigation. Switching cancels, never retargets. */
@@ -13,7 +14,7 @@ export function useImageSend(
   target: { cwd: string; sessionId?: string | null },
   selection: string | null,
 ) {
-  const machineId = useMachine()?.machine.id ?? "local";
+  const machineId = useMachine()?.machine.id ?? LOCAL.id;
   const active = useRef<AbortController | null>(null);
   useEffect(
     () => () => {
@@ -29,7 +30,7 @@ export function useImageSend(
       settled: (consumed: boolean) => void,
     ) => {
       const send = captureSend();
-      if (machineId === "local" || !editor.attachments.items.length) {
+      if (isLocalId(machineId) || !editor.attachments.items.length) {
         settled(editor.submit((message, id) => send(command(message, id))));
         return;
       }
@@ -49,17 +50,7 @@ export function useImageSend(
               controller.signal,
             );
             if (controller.signal.aborted) return "not-sent";
-            const original = command(message, id);
-            const prepared =
-              original._tag === "act"
-                ? {
-                    ...original,
-                    preparedImages: reference,
-                    action: { ...original.action, attachments: undefined },
-                  }
-                : original._tag === "create_session"
-                  ? { ...original, preparedImages: reference, attachments: undefined }
-                  : original;
+            const prepared = preparedImageCommand(command(message, id), reference);
             const disposition = send(prepared, {
               text: message.text,
               attachments: message.attachments.map((i) => ({

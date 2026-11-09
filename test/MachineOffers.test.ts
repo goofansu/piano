@@ -24,7 +24,6 @@ test("Local offers every surface, page and command", () => {
   const offers = machineOffers(LOCAL);
   for (const [name, offered] of surfaces(offers)) assert.equal(offered, true, name);
   for (const kind of views) assert.ok(offers.view(kind), kind);
-  assert.ok(offers.fullSidebar, "the sidebar leads to Projects and Settings");
   assert.ok(offers.command(trustCommand(state, "/repo")!));
   assert.ok(offers.command(folderCommands(state, folder).close));
 });
@@ -36,9 +35,8 @@ test("a remote offers the conversation slice: sessions, the New page and New ses
   assert.deepEqual(
     surfaces(offers).filter(([, offered]) => offered),
     [["attachments", true]],
-    "files, rail, voice input, pull requests, previews, accounts, worktrees, browse, trust, folders, projects, session menus, settings, the full sidebar and last directory stay on the remote",
+    "files, rail, voice input, pull requests, previews, accounts, worktrees, browse, trust, folders, projects, session menus, settings and last directory stay on the remote",
   );
-  assert.ok(!offers.fullSidebar, "the sidebar lists sessions alone");
   assert.deepEqual(
     views.filter((kind) => offers.view(kind)),
     ["session", "new"],

@@ -31,14 +31,12 @@ export interface MachineOffers {
   trust: boolean;
   /** A folder row's New session and folder menu. */
   folders: boolean;
-  /** Projects: the index, a project's home, a session's membership and the New page's choice. */
+  /** Projects: the sidebar's way to the index, the index, a project's home, a session's membership and the New page's choice. */
   projects: boolean;
   /** Session menus in the sidebar row and the session header. */
   sessionManagement: boolean;
-  /** Settings. */
+  /** Settings, and the sidebar's way to it. */
   settings: boolean;
-  /** The full sidebar, leading to Projects and Settings; without it, the sidebar lists sessions alone. */
-  fullSidebar: boolean;
   /** The New page starting in the last directory this browser used. */
   lastDirectory: boolean;
   /** Whether `kind`, a page or the session pane, is shown rather than "Select a session". */
@@ -62,7 +60,6 @@ const LOCAL_OFFERS: MachineOffers = {
   projects: true,
   sessionManagement: true,
   settings: true,
-  fullSidebar: true,
   lastDirectory: true,
   view: () => true,
   command: () => true,
@@ -84,7 +81,6 @@ const REMOTE_OFFERS: MachineOffers = {
   projects: false,
   sessionManagement: false,
   settings: false,
-  fullSidebar: false,
   lastDirectory: false,
   view: (kind) => kind === "session" || kind === "new",
   command: (command) => {

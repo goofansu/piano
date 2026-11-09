@@ -125,6 +125,7 @@ const unsupported = async (page) => {
     .map(e => e.getAttribute('aria-label') ?? e.textContent.trim())`);
   for (const label of [
     "Add folder",
+    "Projects",
     "Settings",
     "Files",
     "Search files",
@@ -560,22 +561,26 @@ await run(
             .received()
             .filter((entry) => entry.command === "stream")
             .at(-1);
-        const network = { latency: 0, downloadThroughput: -1, uploadThroughput: -1 };
         let disconnectedLine;
-        try {
-          await call("Network.emulateNetworkConditions", { ...network, offline: true });
-          await waitFor("browser socket actually closed", () => sockets.get(connection)?.closed);
-          disconnectedLine = tick().line;
-          await waitFor(
-            "same remote Pi continues emitting with browser disconnected",
-            () => tick().line > disconnectedLine + 2 && tick().pid === pid,
-          );
-          process.kill(pid, 0);
-          assert.equal(starts().length, 1);
-          await page.capture("6-disconnected-host-still-streaming");
-        } finally {
-          await call("Network.emulateNetworkConditions", { ...network, offline: false });
-        }
+        // Cut the real observer transport by stopping only the scratch main, not either peer.
+        // CDP offline emulation can suppress its physical-close event even after Piano retires
+        // the half-open socket. A gateway outage gives this assertion a deterministic boundary.
+        await page.restartBackend({
+          beforeRestart: async () => {
+            await waitFor("browser socket actually closed", () => sockets.get(connection)?.closed);
+            await page.until(
+              `document.querySelector('button[aria-label="Stop"]')?.disabled === true`,
+            );
+            disconnectedLine = tick().line;
+            await waitFor(
+              "same remote Pi continues emitting with browser disconnected",
+              () => tick().line > disconnectedLine + 2 && tick().pid === pid,
+            );
+            process.kill(pid, 0);
+            assert.equal(starts().length, 1);
+            await page.capture("6-disconnected-host-still-streaming");
+          },
+        });
         await waitFor("reconnect attaches to same remote generation", () =>
           selected()
             .slice(beforeReconnect)

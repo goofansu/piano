@@ -8,6 +8,7 @@ import {
   type RefusedStatus,
   type SignInEndpoints,
 } from "../shared/http.ts";
+import { machineList } from "../shared/machine.ts";
 import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
@@ -15,6 +16,7 @@ import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup } from "./McpSetup.ts";
 import { AllowedOrigins, hostAllowed } from "./OriginPolicy.ts";
+import { ConfiguredPeers } from "./PeerConfig.ts";
 import { addPeerRoutes } from "./PeerGateway.ts";
 import { addPeerImageRoutes } from "./PeerImages.ts";
 import { registered } from "./PeerScope.ts";
@@ -239,6 +241,9 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* addPeerImageRoutes(router);
 
     const serve = route(router);
+
+    const machines = machineList(yield* ConfiguredPeers);
+    yield* serve(Endpoints.machines, () => Effect.succeed({ machines }));
 
     yield* serve(Endpoints.listDirectory, ({ body }) => Directories.list(body.path ?? "~"));
 

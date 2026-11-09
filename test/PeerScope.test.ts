@@ -161,7 +161,9 @@ test(
       "a registered session cannot read another session's cached hash",
     );
     assert.equal(
-      (await peer.answers({ ...create, selectionId: "duplicate" }))[0]?._tag,
+      (await peer.answers({ ...create, selectionId: "duplicate" })).find(
+        (m) => m.selectionId === "duplicate",
+      )?._tag,
       "selection_rejected",
     );
     assert.ok(
@@ -190,7 +192,8 @@ test(
       action: { _tag: "prompt", text: "text and image", inputId: "image-follow-up" },
     };
     assert.equal(
-      (await peer.answers({ ...act, selectionId: "wrong" }))[0]?.inputId,
+      (await peer.answers({ ...act, selectionId: "wrong" })).find((m) => m.selectionId === "wrong")
+        ?.inputId,
       "image-follow-up",
     );
     const from = peer.frames.length;
