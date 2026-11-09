@@ -12,7 +12,7 @@ import { type ClientOutput, InputNotSent, makeClientSessions } from "./ClientSes
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
-import { type PeerSelection, peerVerdict } from "./PeerScope.ts";
+import { peerVerdict } from "./PeerScope.ts";
 import { sessionActionPolicy } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts, SessionNotCreated } from "./SessionHosts.ts";
@@ -445,18 +445,14 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       );
 
   const capacity = makeInboundCapacity(inboundLimits.client);
-  let peerSelection: PeerSelection | undefined;
   const receive = Effect.fn("ClientDispatch.receive")(function* (request: ClientRequest) {
     if (peer) {
-      const verdict = peerVerdict(yield* registry.get, request, peerSelection);
+      const verdict = peerVerdict(yield* registry.get, request, yield* sessions.selection);
       if (verdict === "skip") return Effect.void;
       if (verdict === "refuse") {
         yield* settle(request, { _tag: "unsupported" });
         return Effect.void;
       }
-      if (request._tag === "select") peerSelection = { ...request, sessionId: request.sessionId };
-      else if (request._tag === "create_session")
-        peerSelection = { selectionId: request.selectionId, cwd: request.cwd, sessionId: null };
     }
     const policy = policyOf(request);
     const admission =

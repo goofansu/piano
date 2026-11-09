@@ -233,6 +233,61 @@ for (const control of ["answer", "abort"] as const) {
   });
 }
 
+test("INV-05: a peer selection refused at capacity leaves the peer acting on the session it selected", async () => {
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addFolder(cwd);
+      const session = yield* registered("peer-current");
+      yield* registry.addSession(cwd, "peer-other");
+      const queue = yield* Queue.unbounded<ServerMessage>();
+      const { receive } = yield* makeClientDispatch(
+        { send: (m) => Queue.offer(queue, m).pipe(Effect.asVoid), overflow: (e) => Effect.die(e) },
+        { peer: true },
+      );
+      yield* yield* receive({
+        _tag: "select",
+        selectionId: "current",
+        cwd,
+        sessionId: session.spec.sessionId,
+      });
+      // Admission owns capacity before returned work runs, so this saturates deterministically.
+      const held = [];
+      for (let n = 0; n < inboundLimits.client.messages; n++)
+        held.push(yield* receive({ _tag: "registry" }));
+      yield* yield* receive({
+        _tag: "select",
+        selectionId: "excess",
+        cwd,
+        sessionId: "peer-other",
+      });
+      for (;;) {
+        const m = yield* Queue.take(queue);
+        if (m._tag !== "selection_rejected") continue;
+        assert.equal(m.selectionId, "excess");
+        assert.match(m.message, /capacity.*not started/);
+        break;
+      }
+      for (const work of held) yield* work;
+      yield* yield* receive({
+        _tag: "act",
+        selectionId: "current",
+        action: { _tag: "set_thinking_level", level: "high" },
+      });
+      for (;;) {
+        const m = yield* Queue.take(queue);
+        if (m._tag === "error") assert.fail(m.message);
+        if (
+          m._tag === "session" &&
+          m.event._tag === "state" &&
+          m.event.state.thinkingLevel === "high"
+        )
+          break;
+      }
+    }),
+  );
+});
+
 test("INV-05: browser client recovers from dispatch saturation with a fresh explicit selection", async () => {
   await run(
     Effect.gen(function* () {

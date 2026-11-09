@@ -7,7 +7,8 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type PeerSelection, peerVerdict } from "../server/PeerScope.ts";
+import type { Selection } from "../server/ClientSessions.ts";
+import { peerVerdict } from "../server/PeerScope.ts";
 import type { RegistryData } from "../server/Registry.ts";
 import type { Attachment, ClientMessage, Dialog, ModelCatalog } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
@@ -184,7 +185,7 @@ function browserSends(offers: MachineOffers): ClientMessage[] {
 
 /** Each message's verdict, tracking the selection as the peer connection does. */
 function verdicts(sent: readonly ClientMessage[]) {
-  let selection: PeerSelection | undefined;
+  let selection: Selection | null = null;
   return sent.flatMap((m) => {
     if (m._tag === "ack") return [];
     const verdict = peerVerdict(registry, m, selection);
