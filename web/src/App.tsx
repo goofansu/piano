@@ -17,8 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { checkoutRefresh } from "@/lib/checkoutRefresh";
 import type { NotifyLevel } from "@/lib/client";
-import { machineLocation, machineSocketPath } from "@/lib/machine";
-import { isLocal } from "@/lib/machineOffers";
+import { isLocalId, machineLocation, machineSocketUrl } from "@/lib/machine";
 import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
 import { previewObservation } from "@/lib/previewObservation";
@@ -68,12 +67,11 @@ function MachineApp() {
     notify,
     {
       // Local keeps this Piano's own socket; a remote's goes through the gateway.
-      ...(!isLocal(machine) && {
+      ...(!isLocalId(machine.id) && {
         connect: (handlers: ConnectionHandlers) =>
           openConnection(handlers, {
             ...browserSocketEnvironment,
-            url: () =>
-              `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}${machineSocketPath(machine.id)}`,
+            url: () => machineSocketUrl(machine.id),
           }),
       }),
       ...(!offers.lastDirectory && { lastDirectory: { read: () => null, write: () => {} } }),

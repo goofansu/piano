@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { folderCommands } from "../web/src/lib/folderCommands.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import { LOCAL } from "../web/src/lib/machine.ts";
-import { isLocal, type MachineOffers, machineOffers } from "../web/src/lib/machineOffers.ts";
+import { type MachineOffers, machineOffers } from "../web/src/lib/machineOffers.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
 
 const state: AppState = {
@@ -20,7 +20,6 @@ const surfaces = (offers: MachineOffers) =>
     .map(([name, value]) => [name, value] as const);
 
 test("Local offers every surface, page and command", () => {
-  assert.ok(isLocal(LOCAL), "Local keeps this Piano's own socket");
   const offers = machineOffers(LOCAL);
   for (const [name, offered] of surfaces(offers)) assert.equal(offered, true, name);
   for (const kind of views) assert.ok(offers.view(kind), kind);
@@ -30,7 +29,6 @@ test("Local offers every surface, page and command", () => {
 
 test("a remote offers the conversation slice: sessions, the New page and New session, nothing that manages it", () => {
   const remote = { id: "eng-1", name: "eng-1" };
-  assert.ok(!isLocal(remote), "a remote connects through the gateway");
   const offers = machineOffers(remote);
   assert.deepEqual(
     surfaces(offers).filter(([, offered]) => offered),

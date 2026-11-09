@@ -6,7 +6,7 @@ import type { AppState } from "../store.ts";
  * remote, read its files or follow its accounts stays on the remote's own Piano.
  */
 import type { Command } from "./commands.ts";
-import { LOCAL, type Machine } from "./machine.ts";
+import { isLocalId, type Machine } from "./machine.ts";
 
 export interface MachineOffers {
   /** Files and Changes in the Surface area, file links in the transcript, the session rail's Outputs. */
@@ -103,8 +103,5 @@ const REMOTE_OFFERS: MachineOffers = {
   },
 };
 
-/** Local answers on this Piano's own socket and APIs; any other machine through its gateway. */
-export const isLocal = (machine: Machine) => machine.id === LOCAL.id;
-
 export const machineOffers = (machine: Machine): MachineOffers =>
-  isLocal(machine) ? LOCAL_OFFERS : REMOTE_OFFERS;
+  isLocalId(machine.id) ? LOCAL_OFFERS : REMOTE_OFFERS;

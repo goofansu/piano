@@ -12,6 +12,7 @@ import {
   encodeClientMessage,
   type ServerMessage,
 } from "../../../shared/wire.ts";
+import { LOCAL, machineSocketUrl } from "./machine.ts";
 
 /** Local disposition only: `sent` is socket acceptance, not a server or Pi receipt.
  * A throwing send is uncertain; only a message the wire cannot encode, or a socket checked
@@ -75,7 +76,7 @@ export const browserSocketEnvironment: SocketEnvironment = {
       close: () => ws.close(),
     };
   },
-  url: () => `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`,
+  url: () => machineSocketUrl(LOCAL.id),
   nonce: () => crypto.randomUUID(),
   setTimeout: (run, ms) => globalThis.setTimeout(run, ms),
   clearTimeout: (timer) => globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>),

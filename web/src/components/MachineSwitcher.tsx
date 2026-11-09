@@ -8,7 +8,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
-import { LOCAL, type Machine } from "@/lib/machine";
+import { isLocalId, type Machine } from "@/lib/machine";
 import { useMachine } from "@/lib/useMachine";
 import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useSidebarLayoutState } from "@/lib/useSidebarLayout";
@@ -27,7 +27,7 @@ export function PaneMachineSwitcher() {
  * name too little width to tell eng-1 from eng-2.
  */
 function MachineTile({ machine }: { machine: Machine }) {
-  const Icon = machine.id === LOCAL.id ? LaptopIcon : ServerIcon;
+  const Icon = isLocalId(machine.id) ? LaptopIcon : ServerIcon;
   return (
     <span
       aria-hidden
