@@ -154,7 +154,7 @@ export function LayoutView({ active = true, children }: { active?: boolean; chil
  * each pane's show control appears once the sidebar is collapsed, so the toggle never moves; then
  * the pane's controls, its one primary action last. The rows beneath say what the list is, for
  * sessions and for Settings alike; the only title is the machine, when there is more than one,
- * and it gives up width before any control does. The mark lives in the footer.
+ * and it gives up width, then its place, before any control does. The mark lives in the footer.
  */
 export function LayoutHeader({ title, children }: { title?: ReactNode; children?: ReactNode }) {
   const { hide } = useSidebarLayout();

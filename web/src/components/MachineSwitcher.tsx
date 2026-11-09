@@ -45,7 +45,7 @@ function MachineTile({ machine }: { machine: Machine }) {
 export function MachineSwitcher({ place = "sidebar" }: { place?: "sidebar" | "pane" }) {
   const scope = useMachine();
   if (!scope || scope.machines.length < 2) return null;
-  return (
+  const menu = (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <PianoButton
@@ -73,5 +73,14 @@ export function MachineSwitcher({ place = "sidebar" }: { place?: "sidebar" | "pa
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+  // A sidebar narrowed until the name would show a letter or two drops the switcher whole; the
+  // palette's Switch to commands still reach every machine.
+  return place === "sidebar" ? (
+    <div className="@container flex min-w-0 flex-1">
+      <div className="hidden min-w-0 @[5rem]:flex">{menu}</div>
+    </div>
+  ) : (
+    menu
   );
 }
