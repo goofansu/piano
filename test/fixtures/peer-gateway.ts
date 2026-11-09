@@ -31,7 +31,7 @@ export const registry = {
   ],
 };
 
-export async function gatewayFixture(t: TestContext) {
+export async function gatewayFixture(t: TestContext, options: { vmToken?: string } = {}) {
   const root = mkdtempSync(join(tmpdir(), "piano-peer-"));
   for (const name of ["home", "agent", "sessions"]) mkdirSync(join(root, name));
   const database = join(root, "piano.db");
@@ -49,6 +49,7 @@ export async function gatewayFixture(t: TestContext) {
   });
   const state = {
     mode: "ready",
+    requiredToken: options.vmToken,
     running: false,
     connections: 0,
     disconnected: 0,
@@ -83,6 +84,19 @@ export async function gatewayFixture(t: TestContext) {
   const upstream = createServer((req, res) => {
     state.requests.push({ url: req.url!, headers: req.headers });
     changed();
+    if (
+      state.requiredToken &&
+      req.headers["x-exedev-authorization"] !== `Bearer ${state.requiredToken}`
+    ) {
+      res.writeHead(401).end("Unauthenticated");
+      return;
+    }
+    if (state.mode === "http-unauthorized" || state.mode === "http-forbidden") {
+      res
+        .writeHead(state.mode === "http-unauthorized" ? 401 : 403)
+        .end(`Refused ${state.requiredToken}`);
+      return;
+    }
     if (state.mode === "http-redirect") {
       res.writeHead(302, { location: "/unexpected" }).end();
       return;
@@ -103,6 +117,17 @@ export async function gatewayFixture(t: TestContext) {
   upstream.on("upgrade", (req, socket, head) => {
     state.requests.push({ url: req.url!, headers: req.headers });
     changed();
+    if (
+      state.requiredToken &&
+      req.headers["x-exedev-authorization"] !== `Bearer ${state.requiredToken}`
+    ) {
+      socket.end("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n");
+      return;
+    }
+    if (state.mode === "ws-forbidden") {
+      socket.end("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
+      return;
+    }
     if (state.mode === "redirect") {
       socket.end("HTTP/1.1 302 Found\r\nLocation: /unexpected\r\nContent-Length: 0\r\n\r\n");
       return;
@@ -177,7 +202,10 @@ export async function gatewayFixture(t: TestContext) {
   const address = upstream.address();
   assert.ok(address && typeof address !== "string");
   const endpoint = `http://127.0.0.1:${address.port}`;
+  const vmTokenFile = join(root, "vm-token");
+  if (options.vmToken) writeFileSync(vmTokenFile, `${options.vmToken}\n`, { mode: 0o600 });
   const config = {
+    ...(options.vmToken ? { vmTokenFile } : {}),
     id: "eng-1",
     name: "Engineering",
     endpoint,
@@ -283,5 +311,5 @@ export async function gatewayFixture(t: TestContext) {
       req.setTimeout(12_000, () => req.destroy(new Error("handshake timeout")));
       req.end();
     });
-  return { state, base, config, open, handshake, until, wss, database };
+  return { state, base, config, open, handshake, until, wss, database, logs: () => log };
 }

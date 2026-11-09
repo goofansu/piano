@@ -7,7 +7,13 @@ Piano has not registered is not discovered.
 
 ## Setup
 
-Both Pianos must remain on loopback behind exe.dev private access. Configure the peer integration
+The main Piano can run on your laptop or on an exe.dev VM. Both backends stay bound to loopback;
+the remote stays behind exe.dev private access. Choose one of the two authentication modes below.
+Neither changes the remote session protocol or requires a target upgrade.
+
+### From an exe.dev VM: peer integration
+
+Configure the peer integration
 outside Piano, attached to the VM running the main backend. The authorized scratch example is:
 
 ```sh
@@ -26,6 +32,66 @@ On the **main** Piano's VM, write a private JSON configuration file outside the 
 }
 ```
 
+### From your laptop: VM-scoped HTTPS token
+
+Use an [exe.dev VM token](https://exe.dev/docs/https-tokens-for-vms), **not** a management API token.
+It authorizes access to eng-1's private HTTPS services, not only Piano or a single port. Do not paste
+it into chat, commit it, or put it in browser storage. The token is the laptop's access credential;
+remote Pi/provider credentials remain on eng-1.
+
+Generate and store the token on your laptop (with your existing exe.dev SSH identity):
+
+```sh
+umask 077
+mkdir -p "$HOME/.config/piano"
+ssh exe.dev ssh-key generate-api-key --vm=eng-1 --label=piano-laptop > "$HOME/.config/piano/eng-1.token"
+chmod 600 "$HOME/.config/piano/eng-1.token"
+```
+
+The file must contain only the token (a final newline is fine). It must be an absolute-path,
+regular, non-symlink file, at most 16 KiB. On macOS/Linux it must belong to the backend's user and
+have no group/other permissions (`0600` or `0400`). Keep its directory private too.
+
+Write a separate configuration file such as `$HOME/.config/piano/peer.json`, substituting your
+actual **absolute** home path in `vmTokenFile` (JSON does not expand `$HOME` or `~`):
+
+```json
+{
+  "id": "eng-1",
+  "name": "eng-1",
+  "endpoint": "https://eng-1.exe.xyz:3000",
+  "origin": "https://eng-1.exe.xyz:3000",
+  "vmTokenFile": "/Users/you/.config/piano/eng-1.token"
+}
+```
+
+Use the remote Piano's actual private port and configured allowed Origin; `3000` above is the
+scratch target, not production. Token authentication only accepts direct HTTPS VM hosts such as
+`eng-1.exe.xyz`, not integration hosts, arbitrary domains or cleartext destinations. No integration
+attachment or SSH tunnel is needed for this mode. The local backend supplies
+`X-Exedev-Authorization: Bearer …` on HTTP requests and WebSocket upgrades; exe.dev consumes it
+before forwarding to the remote. Browser-supplied authorization is never forwarded.
+
+For a local PR checkout with dependencies installed:
+
+```sh
+PIANO_PEER_CONFIG="$HOME/.config/piano/peer.json" npm run dev
+```
+
+Open `http://localhost:5173` and choose **eng-1**. Both the UI and main backend run on your laptop;
+only the selected session executes on eng-1. The same configuration works with the built UI and
+`npm start`, at `http://127.0.0.1:7070` by default.
+
+The token is read at startup and retained as a redacted server-only value. After replacing it,
+restart your local backend explicitly. Expired/revoked credentials or authentication redirects
+make the remote unavailable; Piano never retries without authentication or executes locally.
+Revoke a generated token by removing its associated SSH key in exe.dev (keep the `piano-laptop`
+label for identification). Stop the local backend when revoking so already-open sockets close.
+Piano does not mint, refresh or revoke tokens, and the token does not sandbox local Pi processes
+running as the same trusted user.
+
+### Shared startup configuration
+
 Start the main backend with `PIANO_PEER_CONFIG=/absolute/path/to/peer.json`, keeping its normal
 `HOST=127.0.0.1` and `PIANO_ALLOWED_ORIGINS` configuration. This is startup configuration: changing
 it requires an explicit restart. No remote is configured by default, and Local retains its
@@ -33,11 +99,13 @@ existing behavior. Do not point this scratch example at a production service for
 
 `id` is a stable lowercase slug, not `local`; it identifies routes and browser state. Keep it bound
 to the same backend identity; use a different ID for another Piano rather than repointing it.
-`name` is the picker label. `endpoint` is the integration's HTTPS origin, without path, credentials,
-query or fragment. HTTP loopback endpoints require `NODE_ENV=test` and exist only for isolated development tests.
-`origin` is the **target Piano's allowed Origin**, not the integration hostname. No client token
-is needed for this exe.dev peer integration; the edge supplies scoped authentication. Piano does
-not change integrations or copy credentials.
+`name` is the picker label. `endpoint` is the integration's or target VM's HTTPS origin, without
+path, credentials, query or fragment. HTTP loopback endpoints require `NODE_ENV=test` and exist
+only for isolated tests with dummy credentials, never real tokens.
+`origin` is the **target Piano's allowed Origin**, not the integration hostname or laptop origin.
+Omit `vmTokenFile` for an exe.dev peer integration; the edge supplies authentication. Set it only
+for direct VM access. A configured but unreadable/invalid token fails startup rather than silently
+switching to tokenless access. Piano never changes integrations.
 
 ## Use
 

@@ -3,7 +3,7 @@
  * mutation retry, delivery renumbering or remote process ownership lives here (INV-01/02/05).
  */
 import { WebSocket } from "@effect/platform-node/NodeWS";
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Redacted, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { Endpoints } from "../shared/http.ts";
@@ -72,6 +72,12 @@ function registered(registry: RegistryFrame, cwd: string) {
   return registry.workspaces?.some((workspace) => workspace.path === cwd) === true;
 }
 
+/** Only startup configuration can supply upstream authentication. Never forward caller headers. */
+const upstreamHeaders = (peer: PeerConfig) => ({
+  Origin: peer.origin,
+  ...(peer.vmToken ? { "X-Exedev-Authorization": `Bearer ${Redacted.value(peer.vmToken)}` } : {}),
+});
+
 const connect = Effect.fn("PeerGateway.connect")(
   function* (peer: PeerConfig) {
     const url = new URL("/ws", peer.endpoint);
@@ -80,7 +86,7 @@ const connect = Effect.fn("PeerGateway.connect")(
       Effect.sync(
         () =>
           new WebSocket(url, {
-            headers: { Origin: peer.origin },
+            headers: upstreamHeaders(peer),
             followRedirects: false,
             handshakeTimeout: limits.connectMs,
             maxPayload: limits.serverBytes,
@@ -284,7 +290,7 @@ const commands = Effect.fn("PeerGateway.commands")(function* (
   return yield* Effect.tryPromise({
     try: async (signal) => {
       const response = await fetch(url, {
-        headers: { Origin: peer.origin },
+        headers: upstreamHeaders(peer),
         redirect: "manual",
         signal: AbortSignal.any([signal, AbortSignal.timeout(limits.requestMs)]),
       });

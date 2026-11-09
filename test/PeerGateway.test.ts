@@ -71,6 +71,7 @@ test(
     const headers = {
       Cookie: "browser-cookie=secret",
       Authorization: "Bearer browser-secret",
+      "X-Exedev-Authorization": "Bearer browser-exe-secret",
       Forwarded: "host=browser.example",
       "X-Forwarded-Host": "browser.example",
       "X-Forwarded-Proto": "https",
@@ -225,6 +226,7 @@ test(
           for (const name of [
             "cookie",
             "authorization",
+            "x-exedev-authorization",
             "forwarded",
             "x-forwarded-host",
             "x-forwarded-proto",
