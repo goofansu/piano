@@ -21,8 +21,9 @@ turn Piano into a fleet manager.
 - The browser speaks only to its current origin. Main validates Host, browser Origin and
   `Sec-Fetch-Site` before dialing; upstream receives the configured target Origin, not the
   browser's headers or the integration hostname. Only configured destinations, the remote's
-  `/ws/peer` and its two slash-command reads are routed; redirects, unknown IDs and other endpoints
-  fail closed (INV-11).
+  `/ws/peer`, its two slash-command reads and its default-model save (the model picker's defaults,
+  checked against the remote's own catalog) are routed, as `RemoteRequests` in `shared/http.ts`
+  lists them; redirects, unknown IDs and other endpoints fail closed (INV-11).
 - The peer decides the slice, not the gateway. Main attaches at the peer's `/ws/peer`, where the
   peer admits only its registered sessions and the slice's actions, and answers every refusal with
   that request's ordinary reply in its own delivery sequence. The gateway is a bounded,
