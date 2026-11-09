@@ -98,6 +98,7 @@ const unsupported = async (page) => {
     .map(e => e.getAttribute('aria-label') ?? e.textContent.trim())`);
   for (const label of [
     "Add folder",
+    "Projects",
     "Settings",
     "Files",
     "Search files",
