@@ -1,4 +1,4 @@
-import { SearchIcon } from "lucide-react";
+import { SearchIcon, SquarePenIcon } from "lucide-react";
 import { LayoutHeader } from "@/components/AppLayout";
 import { IconButton } from "@/components/IconButton";
 import { MachineSwitcher } from "@/components/MachineSwitcher";
@@ -9,10 +9,11 @@ import type { AppState } from "@/store";
 
 /**
  * A remote's catalog in this browser's View options, listed as this machine's sidebar lists its
- * own. No New session, Projects or Settings: those manage the remote, which stays its own.
+ * own, and New session to start one there. No Projects or Settings: those manage the remote,
+ * which stays its own.
  */
 export function RemoteSidebar({ state }: { state: AppState }) {
-  const { setPalette } = useNavigation();
+  const { openNew, setPalette } = useNavigation();
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
       <LayoutHeader>
@@ -25,6 +26,9 @@ export function RemoteSidebar({ state }: { state: AppState }) {
           <SearchIcon />
         </IconButton>
         <ViewMenu />
+        <IconButton size="header" label="New session" variant="default" onClick={() => openNew()}>
+          <SquarePenIcon />
+        </IconButton>
       </LayoutHeader>
       <ScrollArea className="min-h-0 flex-1">
         <nav className="relative px-(--row-inset) py-2" aria-label="Sessions">

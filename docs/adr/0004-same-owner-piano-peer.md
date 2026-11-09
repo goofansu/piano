@@ -63,6 +63,10 @@ turn Piano into a fleet manager.
   compatibility; deployments must verify their specific peer versions.
 
 The slice lists the peer's existing registered sessions, opens history/state, sends text, streams,
-answers dialogs and stops. Remote creation, machine CRUD/provisioning, cross-machine projects or
-search, files/Changes/attachments/previews/worktrees and remote settings/accounts are out.
+answers dialogs and stops. It also starts a session with a text first message in a folder or worktree
+the peer already registered: the peer admits that creation without a worktree, project, name,
+dispatch ancestry or attachment, and its selection then takes the slice's actions. Registering
+folders, worktree creation, machine CRUD/provisioning, cross-machine projects or search,
+files/Changes/attachments/previews and remote settings/accounts are out. Parallel worktree sessions
+come from a remote session's own dispatch, which runs on the peer.
 [Setup and limits](../remote-piano.md) describe the exact startup configuration.

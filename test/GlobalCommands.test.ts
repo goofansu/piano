@@ -123,7 +123,7 @@ test("exactly the current grouping and sort are checked", () => {
   assert.deepEqual(checked("sort-by", other), ["Sort by name"]);
 });
 
-test("on a remote machine the View options stay, and nothing that manages the remote does", () => {
+test("on a remote machine the View options and New session stay, and nothing that manages the remote does", () => {
   const remote = globalCommands(onNewPage, ctx).filter(remoteCommandAllowed);
   const groups = new Set<string>(remote.map((command) => command.group));
   for (const group of ["group-by", "sort-by", "row-details", "appearance"])
@@ -141,7 +141,12 @@ test("on a remote machine the View options stay, and nothing that manages the re
     "Sort by name",
     "Show folder and branch",
   ]);
-  for (const label of ["New session", "Projects", "Settings"])
+  // Starting a session in a directory the remote registered changes nothing else there.
+  assert.ok(
+    remote.some((command) => command.label === "New session"),
+    "New session offered",
+  );
+  for (const label of ["Projects", "Settings"])
     assert.ok(!remote.some((command) => command.label === label), `${label} not offered`);
 });
 

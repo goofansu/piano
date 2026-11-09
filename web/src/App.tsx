@@ -127,7 +127,7 @@ function MachineApp() {
                   <>
                     {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
                     <LayoutView key={state.view.kind} active={remote || !settings}>
-                      {remote && state.view.kind !== "session" ? (
+                      {remote && state.view.kind !== "session" && state.view.kind !== "new" ? (
                         <PaneNotFound
                           title={
                             state.view.kind === "missing-session"
@@ -141,7 +141,7 @@ function MachineApp() {
                           state={state}
                           client={client}
                           chooseDirectory={chooseDirectory}
-                          onProjectChange={(id) => openNew(undefined, id)}
+                          onProjectChange={remote ? undefined : (id) => openNew(undefined, id)}
                         />
                       ) : state.view.kind === "projects" ? (
                         <ProjectsIndex state={state} />

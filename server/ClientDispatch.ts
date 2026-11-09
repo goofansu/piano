@@ -454,8 +454,9 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         yield* settle(request, { _tag: "unsupported" });
         return Effect.void;
       }
-      if (request._tag === "select" && request.sessionId !== null)
-        peerSelection = { ...request, sessionId: request.sessionId };
+      if (request._tag === "select") peerSelection = { ...request, sessionId: request.sessionId };
+      else if (request._tag === "create_session")
+        peerSelection = { selectionId: request.selectionId, cwd: request.cwd, sessionId: null };
     }
     const policy = policyOf(request);
     const admission =

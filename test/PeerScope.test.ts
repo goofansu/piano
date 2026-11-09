@@ -63,7 +63,7 @@ test(
     timeout: 60_000,
   },
   async (t) => {
-    const f = await gatewayFixture(t);
+    const f = await gatewayFixture(t, { checkout: true });
     const peer = await attach(f.base, "/ws/peer");
     const local = await attach(f.base, "/ws");
     t.after(() => {
@@ -91,36 +91,47 @@ test(
     });
 
     await t.test(
-      "creation, settings and unselected actions are refused with their replies",
+      "creation that would add more than a text session in a registered directory is refused",
       async () => {
-        const [created] = await peer.answers({
-          _tag: "create_session",
-          selectionId: "create",
-          cwd: identity.cwd,
-          options: {},
-        });
-        assert.equal(created?._tag, "selection_rejected");
-        assert.match(String(created?.message), notAvailable);
-
-        const [trust] = await peer.answers({
-          _tag: "set_trust",
-          path: identity.cwd,
-          trusted: true,
-        });
-        assert.equal(trust?._tag, "trust_failed");
-        assert.equal(trust?.cwd, identity.cwd);
-        assert.match(String(trust?.message), notAvailable);
-
-        const [act] = await peer.answers({
-          _tag: "act",
-          selectionId: "never-selected",
-          action: { _tag: "prompt", text: "must not run", inputId: "input-1" },
-        });
-        assert.equal(act?._tag, "error");
-        assert.equal(act?.inputId, "input-1", "the browser learns the input was never delivered");
-        assert.match(String(act?.message), notAvailable);
+        const base = { _tag: "create_session", cwd: f.checkout, options: {}, text: "hi" };
+        const image = { kind: "image", name: "a.png", mimeType: "image/png", data: "iVBORw0KGgo=" };
+        for (const [selectionId, create] of Object.entries({
+          unregistered: { ...base, cwd: "/different" },
+          worktree: { ...base, worktree: { branch: "feature" } },
+          project: { ...base, projectId: "some-project" },
+          inherited: { ...base, inheritProject: true },
+          named: { ...base, options: { name: "Named" } },
+          dispatched: { ...base, options: { dispatchedFrom: identity.sessionId } },
+          attached: { ...base, attachments: [image] },
+        })) {
+          const [answer, ...rest] = await peer.answers({ ...create, selectionId });
+          assert.equal(answer?._tag, "selection_rejected", selectionId);
+          assert.equal(answer?.selectionId, selectionId);
+          assert.match(String(answer?.message), notAvailable, selectionId);
+          assert.deepEqual(rest, [], selectionId);
+        }
       },
     );
+
+    await t.test("settings and unselected actions are refused with their replies", async () => {
+      const [trust] = await peer.answers({
+        _tag: "set_trust",
+        path: identity.cwd,
+        trusted: true,
+      });
+      assert.equal(trust?._tag, "trust_failed");
+      assert.equal(trust?.cwd, identity.cwd);
+      assert.match(String(trust?.message), notAvailable);
+
+      const [act] = await peer.answers({
+        _tag: "act",
+        selectionId: "never-selected",
+        action: { _tag: "prompt", text: "must not run", inputId: "input-1" },
+      });
+      assert.equal(act?._tag, "error");
+      assert.equal(act?.inputId, "input-1", "the browser learns the input was never delivered");
+      assert.match(String(act?.message), notAvailable);
+    });
 
     await t.test("the same requests reach their work on this machine's own /ws", async () => {
       let from = local.frames.length;
@@ -182,6 +193,51 @@ test(
       const own = await read("/api/commands", "/different");
       assert.doesNotMatch((await own.json()).error ?? "", notRegistered);
     });
+
+    // Last but one: the started session keeps streaming frames the subtests above would read.
+    await t.test(
+      "a text session starts in a registered folder, and its selection takes actions",
+      async () => {
+        const from = peer.frames.length;
+        peer.ws.send(
+          JSON.stringify({
+            _tag: "create_session",
+            selectionId: "created",
+            cwd: f.checkout,
+            options: {},
+            text: "Reply with exactly: X",
+          }),
+        );
+        const selected = await peer.next(
+          (frame) =>
+            (frame._tag === "selected" || frame._tag === "selection_rejected") &&
+            frame.selectionId === "created",
+          from,
+        );
+        assert.equal(selected._tag, "selected", JSON.stringify(selected));
+        assert.equal(selected.cwd, f.checkout);
+        const sessionId = String(selected.sessionId);
+        // The remote registers the session it started, so the main Piano lists it.
+        await peer.next(
+          (frame) =>
+            frame._tag === "registry" &&
+            (frame.sessionReferences as { sessionId: string }[]).some(
+              (entry) => entry.sessionId === sessionId,
+            ),
+          from,
+        );
+        const answers = await peer.answers({
+          _tag: "act",
+          selectionId: "created",
+          action: { _tag: "stop" },
+        });
+        assert.deepEqual(
+          answers.filter((frame) => notAvailable.test(String(frame.message ?? ""))),
+          [],
+          "the created selection is not refused",
+        );
+      },
+    );
 
     await t.test("refusals never end the connection", () => {
       assert.equal(peer.ws.readyState, WebSocket.OPEN);

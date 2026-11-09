@@ -164,6 +164,11 @@ model/effort, context, queue, dialog and Stop controls apply to that remote sess
 only the selected machine and offers a **Switch to …** command for each configured machine. A remote session's
 address is `/m/eng-1/s/<sessionId>`; reload and back/forward retain that machine.
 
+**New session** (or **New session here** in Cmd+K) starts a session on the selected machine. Its
+directory picker lists only the folders that machine has registered, and the first message is text.
+The session runs and stays on the remote. A worktree for parallel work comes from the remote
+session's own dispatch, which runs on the remote, not from this picker.
+
 A switch disconnects this browser's attachment, not the run. Returning or reconnecting reads a
 fresh authoritative snapshot; it never resends input. Check the conversation before retrying any
 input whose delivery is uncertain. Disconnection makes the remote unavailable, never Local.
@@ -174,8 +179,10 @@ Local's persisted catalog. Remote files, credentials, history and database remai
 
 ## Deliberate limits
 
-- No remote session creation, archive/delete/rename/pin, projects management, worktree or machine
-  management. Create/manage those on the owning Piano.
+- A new remote session starts only in a folder or worktree the remote has registered, with a text
+  first message: no Browse, worktree creation, project, name or attachment. No archive/delete/
+  rename/pin, projects management, worktree or machine management. Add folders and manage those on
+  the owning Piano.
 - No remote file/Changes/attachment/preview or account/settings controls, folder trust included:
   trusting a folder would run its project extensions on the remote. These requests are not
   forwarded to Local. Remote transcript attachments/local-file actions are unavailable.

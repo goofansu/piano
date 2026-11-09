@@ -11,6 +11,8 @@ export function remoteCommandAllowed(command: Command): boolean {
     case "appearance":
     // View options: how this browser lists any machine's catalog.
     case "view":
+    // Starting a session in a folder or worktree the remote already registered.
+    case "new-session":
       return true;
     // Trusting a folder lets its project extensions run on the remote: a remote setting, not here.
     default:
