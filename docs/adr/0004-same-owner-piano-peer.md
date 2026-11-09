@@ -21,8 +21,8 @@ turn Piano into a fleet manager.
 - The browser speaks only to its current origin. Main validates Host, browser Origin and
   `Sec-Fetch-Site` before dialing; upstream receives the configured target Origin, not the
   browser's headers or the integration hostname. Only configured destinations, the remote's
-  `/ws/peer` and its two slash-command reads are routed; redirects, unknown IDs and other endpoints
-  fail closed (INV-11).
+  `/ws/peer`, slash-command reads, model-default save and the fixed image routes below are routed;
+  redirects, unknown IDs and other endpoints fail closed (INV-11).
 - The peer decides the slice, not the gateway. Main attaches at the peer's `/ws/peer`, where the
   peer admits only its registered sessions and the slice's actions, and answers every refusal with
   that request's ordinary reply in its own delivery sequence. The gateway is a bounded,
@@ -62,13 +62,60 @@ turn Piano into a fleet manager.
   There is no version negotiation; a peer without `/ws/peer` is unavailable. Fake-Pi and live peer evidence are separate from real-runtime
   compatibility; deployments must verify their specific peer versions.
 
-The slice lists the peer's existing registered sessions, opens history/state, sends text, streams,
-answers dialogs and stops. It also starts a session with a text first message in a folder or worktree
-the peer already registered: the peer admits that creation without a worktree, project, name,
-dispatch ancestry or attachment, and its selection then takes the slice's actions. The model
+The slice lists the peer's existing registered sessions, opens history/state, sends text and raster
+images, streams, answers dialogs and stops. It also starts a session with text, images or both in
+a folder or worktree the peer already registered: the peer admits that creation without a worktree,
+project, name or dispatch ancestry, and its selection then takes the slice's actions. The model
 picker saves the peer's default model and effort for new sessions through the peer's own settings
 endpoint, which checks the model against the peer's catalog; Pi on the peer owns the file. Registering
 folders, worktree creation, machine CRUD/provisioning, cross-machine projects or search,
-files/Changes/attachments/previews and other remote settings/accounts are out. Parallel worktree sessions
+files/Changes/managed app previews, voice input and other remote settings/accounts are out. Parallel worktree sessions
 come from a remote session's own dispatch, which runs on the peer.
 [Setup and limits](../remote-piano.md) describe the exact startup configuration.
+
+## Raster images: separate preparation, unchanged conversation ownership
+
+This extends the original text-only slice, not general file access or dictation. Both composers
+use the existing PNG/JPEG/GIF/WebP policy: ten images, 10 MiB each, 50 MiB combined original bytes.
+Raising the conversation WebSocket cap would put Stop, dialog answers and heartbeats behind
+base64 uploads on slow links. Keep that cap at 1 MiB and use a separate bounded HTTP lane:
+
+1. The browser captures its machine, draft, directory/session, selection and connection before
+   sending. `POST /api/peer/images` streams a binary batch through main to that configured peer.
+   Its length-prefixed JSON manifest names the target in the body, never a filesystem URL.
+   Both hops count actual bytes before buffering; the peer checks registered identity, manifest,
+   count/byte limits and every MIME/signature before returning a random preparation reference.
+2. The peer holds only temporary memory, not files or database rows. Two batch slots reserve up
+   to 100 MiB of original bytes; unclaimed references expire after ten minutes. This replaces
+   the proposed temporary-file staging with a smaller bounded lifecycle: restart/teardown forgets
+   preparations, without disk cleanup or another durable image store. See the exact
+   [resource budgets](../runtime-input-limits.md#remote-image-http-lane).
+3. Normal `act`/`create_session` carries a small `preparedImages` reference. PeerScope still
+   refuses inline remote images. ClientDispatch rejects mixed inline/reference input, verifies
+   the reference's session or pre-session draft nonce, and consumes it once **before** starting
+   Pi or creating a session. It resolves to the existing SessionAction images; PiRecords retains
+   all Pi translation. A consumed slot stays reserved through operation settlement, including
+   when the observer disconnects. Expiry/cancellation cannot release an in-flight input's slot.
+4. Preparation failure or cancellation restores that draft ahead of newer typing. Navigation
+   invalidates a captured send even if the user returns to identical IDs. Stop can cancel the
+   pending upload while still stopping the conversation. Only known-unsent input is recoverable;
+   a socket/write uncertainty never reuses a reference or automatically sends again. `inputId`
+   correlates receipts; it is not deduplication (INV-02/03/04/07).
+5. Transcript projection binds cached hashes to their observed session. The exact source-owned
+   renderer URL becomes `/peer/<machineId>/api/peer/image-preview` with workspace/session/hash
+   query values. The peer verifies registered session membership and cached provenance; it never
+   reads an arbitrary history/file to satisfy an image URL. Thumbnails and full-image links use
+   the same mapper. Bytes remain disposable (64 MiB cache); an evicted image can stay unavailable
+   until the session is reopened. No Local fetch fallback, gateway frame rewriting, snapshot
+   bytes or second transcript store (INV-01/05).
+
+The third fixed route, `POST /api/peer/images/cancel`, discards an unconsumed reference. Lost
+preparation results expire; no mutation is retried. HTTP lanes have independent concurrency,
+byte and time limits, reject redirects and compressed bodies, and forward only configured
+Origin/credentials and the required content type/length. Image reads return only raster MIME,
+`private, no-store` and `nosniff`, never upstream cookies. Host/Origin/Sec-Fetch-Site admission
+still precedes dialing (INV-11). Main and peer must upgrade together; there is no inline or Local
+compatibility fallback (INV-12). Scratch fake-Pi, fault-injected and throttled evidence proves
+Piano's boundaries, not external edge limits, real-device memory or provider image acceptance
+(INV-09). Pi still owns processing, persistence and text-only queue restoration, including its
+reported empty image-only queue entries.

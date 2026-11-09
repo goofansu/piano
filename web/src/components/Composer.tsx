@@ -33,6 +33,7 @@ import type { DraftKey } from "@/lib/messageDraft";
 import { createPreference } from "@/lib/preference";
 import type { SessionNotice } from "@/lib/sessionNotices";
 import { composerInput, footerPicker, footerPickerMenu } from "@/lib/styles";
+import { useImageSend } from "@/lib/useImageSend";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { usePreference } from "@/lib/usePreference";
@@ -53,6 +54,8 @@ interface Props {
   /** Shown in place of the composer, which keeps its draft-local model picks meanwhile. */
   readOnly?: SessionNotice;
   send: Client["send"];
+  captureSend: Client["captureSend"];
+  selectionId: string | null;
 }
 
 /** The delivery mode is a sticky preference; the alternative always stays on Alt+Enter. */
@@ -75,6 +78,8 @@ export function Composer({
   actionsDisabled,
   readOnly,
   send: sendCommand,
+  captureSend,
+  selectionId,
 }: Props) {
   const directoryModels = useModelCatalog(t?.cwd);
   // Refreshing waits for the session to take input again.
@@ -100,6 +105,12 @@ export function Composer({
   const messages = t?.messages ?? [];
   const queuedMessages = t?.state.queuedMessages ?? [];
   const editor = useDraftEditor(draftKey);
+  const imageSend = useImageSend(
+    editor,
+    captureSend,
+    { cwd: t?.cwd ?? "", sessionId: t?.sessionId },
+    selectionId,
+  );
   const [queueMode, setQueueMode] = usePreference(queueModePreference);
   const control = composerControl({
     text: editor.message,
@@ -108,6 +119,7 @@ export function Composer({
     streaming,
     compacting: !!t?.state.isCompacting,
     stopping: !!t?.state.isStopping,
+    preparing: !!editor.preparing,
     queued: queuedMessages.length,
     mode: queueMode,
   });
@@ -116,10 +128,13 @@ export function Composer({
   const send = (alt: boolean) => {
     const kind = control.delivery(alt);
     if (!kind) return;
-    choice.submit((start) =>
-      editor.submit((message, inputId) =>
-        sendCommand(messageCommand(kind, message, start, inputId)),
-      ),
+    // Capture the model choice with the draft, not after upload or a later picker change.
+    const start = choice.start;
+    imageSend.send(
+      (message, inputId) => messageCommand(kind, message, start, inputId),
+      (consumed) => {
+        if (consumed) choice.consume();
+      },
     );
   };
   const figures = contextFigures(usage?.context, catalog, choice.model);
@@ -138,6 +153,7 @@ export function Composer({
     <div className="px-(--gutter) pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-3">
       <DraftEditor
         editor={editor}
+        cancelUpload={imageSend.cancel}
         completion={completion}
         disabled={disabled}
         label="Message"
@@ -150,6 +166,7 @@ export function Composer({
         onKeyDown={(e) => {
           if (e.key === "Escape" && control.escape) {
             e.preventDefault();
+            if (control.escape === STOP) imageSend.cancel();
             sendCommand(control.escape);
           }
         }}
@@ -241,7 +258,14 @@ export function Composer({
               label={control.label}
               hint={control.hint}
               disabled={!control.enabled}
-              onClick={showStop ? () => sendCommand(STOP) : () => send(false)}
+              onClick={
+                showStop
+                  ? () => {
+                      imageSend.cancel();
+                      sendCommand(STOP);
+                    }
+                  : () => send(false)
+              }
             >
               <span
                 aria-hidden

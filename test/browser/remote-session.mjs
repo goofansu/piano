@@ -13,6 +13,24 @@ const workspaceId = "same-workspace";
 const echo = "REMOTE-ECHO-ONCE";
 const created = "REMOTE-NEW-ONCE";
 let cwd;
+const png =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGZkAAAAASUVORK5CYII=";
+const imagesFor = (machine) =>
+  Buffer.concat([Buffer.from(png, "base64"), Buffer.from(machine)]).toString("base64");
+const imageEvent = async (page, kind, name = "pasted.png") => {
+  await page.evaluate(`(() => {
+    const bytes = Uint8Array.from(atob(${JSON.stringify(png)}), c => c.charCodeAt(0));
+    const transfer = new DataTransfer(); transfer.items.add(new File([bytes], ${JSON.stringify(name)}, { type: 'image/png' }));
+    const editor = document.querySelector('[aria-label="Message"], [aria-label="First message"]');
+    editor.focus();
+    editor.dispatchEvent(${kind === "paste" ? "new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true })" : "new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true })"});
+  })()`);
+  await page.until(`!!document.querySelector('[aria-label="Remove ${name}"]')`);
+};
+const imageShown = (page, machine) =>
+  page.until(
+    `[...document.querySelectorAll('[data-slot="transcript"] img[alt="Attachment preview"]')].some(i => i.getAttribute('src').startsWith('/peer/${machine}/api/peer/image-preview?') && i.complete && i.naturalWidth > 0)`,
+  );
 const seed = (machine, { root, history }) => {
   mkdirSync(join(root, "prompts"));
   writeFileSync(join(root, "prompts", `${machine}-only.md`), `Only ${machine}'s catalog.\n`);
@@ -39,7 +57,16 @@ const seed = (machine, { root, history }) => {
       history({
         sessionId: id,
         cwd,
-        messages: [{ role: "user", content: `${title} saved history`, timestamp: Date.now() }],
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: `${title} saved history` },
+              { type: "image", mimeType: "image/png", data: imagesFor(machine) },
+            ],
+            timestamp: Date.now(),
+          },
+        ],
       });
       return { sessionId: id, cwd, title, createdAt: now, updatedAt: now };
     }),
@@ -133,6 +160,10 @@ await run(
     return seed("local", fixture);
   },
   async (page) => {
+    const imageFile = join(page.evidence, "picker.png");
+    const invalidFile = join(page.evidence, "invalid.txt");
+    writeFileSync(imageFile, Buffer.from(png, "base64"));
+    writeFileSync(invalidFile, "not an image");
     await page.open("/");
     await page.see("Local collision session");
     await page.click("button", "Local collision session");
@@ -145,9 +176,17 @@ await run(
     const sockets = new Map();
     const localRequestsFromRemote = [];
     let onRemote = false;
+    let heldUpload;
+    const imageRequests = [];
     try {
       await page.cdp(async (call, onEvent) => {
         onEvent(({ method, params }) => {
+          if (method === "Fetch.requestPaused") heldUpload = params.requestId;
+          if (
+            method === "Network.requestWillBeSent" &&
+            params.request.url.includes("/api/peer/image")
+          )
+            imageRequests.push(params.request.url);
           if (onRemote && method === "Network.requestWillBeSent") {
             const path = new URL(params.request.url).pathname;
             if (path.startsWith("/api/") && path !== "/api/machines")
@@ -222,8 +261,73 @@ await run(
         );
         // Saved history only, Pi not running: the remote lists its folder's commands.
         await catalog(page, "remote", "local", "", "2b-remote-saved-session-commands");
+        await imageShown(page, "eng-1");
+        assert.equal(
+          await page.evaluate(
+            `document.querySelector('[data-slot="transcript"] a[href*="/api/peer/image-preview"]').getAttribute('href')`,
+          ),
+          await page.evaluate(
+            `document.querySelector('[data-slot="transcript"] img[alt="Attachment preview"]').getAttribute('src')`,
+          ),
+          "full-image link uses the same peer-owned address as its thumbnail",
+        );
+        assert.equal(
+          await page.evaluate(`!!document.querySelector('[aria-label="Voice input"]')`),
+          false,
+        );
+        await page.ab("upload", 'input[aria-label="Image files"]', imageFile);
+        await page.until(`!!document.querySelector('[aria-label="Remove picker.png"]')`);
+        await imageEvent(page, "paste");
+        await imageEvent(page, "drop", "dropped.png");
+        await page.click("button", "Remove dropped.png");
+        await page.click("button", "Remove pasted.png");
+        await page.ab("upload", 'input[aria-label="Image files"]', invalidFile);
+        await page.see("Other files aren't supported yet.");
+        assert.ok(
+          await page.evaluate(`!!document.querySelector('[aria-label="Remove picker.png"]')`),
+          "invalid addition preserves accepted image",
+        );
+        await page.capture("2c-remote-image-draft");
+        await call("Fetch.enable", {
+          patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
+        });
+        try {
+          await send(page, echo);
+          await waitFor("upload failure request paused", () => !!heldUpload);
+          await call("Fetch.fulfillRequest", {
+            requestId: heldUpload,
+            responseCode: 502,
+            body: Buffer.from("{}").toString("base64"),
+          });
+          await page.see("Could not upload images.");
+          assert.equal(await draft(page), echo);
+          assert.ok(
+            await page.evaluate(`!!document.querySelector('[aria-label="Remove picker.png"]')`),
+          );
+          assert.deepEqual(page.remote.prompts(), [], "failed preparation never reaches Pi");
+          await page.capture("2d-image-upload-failure");
+        } finally {
+          await call("Fetch.disable");
+          heldUpload = undefined;
+        }
         await send(page, echo);
         await page.see(`echo: ${echo}`);
+        await imageShown(page, "eng-1");
+        assert.equal(
+          page.remote.received().find((e) => e.command === "prompt" && e.text === echo).images
+            .length,
+          1,
+        );
+        const imageAct = frames.find(
+          (f) =>
+            f.direction === "sent" && f.message._tag === "act" && f.message.action.text === echo,
+        ).message;
+        assert.ok(imageAct.preparedImages);
+        assert.equal(
+          imageAct.action.attachments,
+          undefined,
+          "image bytes never enter the conversation socket",
+        );
         assert.deepEqual(page.remote.prompts(), [echo], "peer receives one prompt");
         assert.deepEqual(page.prompts(), [], "local Pi receives no remote prompt");
         await catalog(page, "remote", "local", "REMOTE-DRAFT");
@@ -243,6 +347,8 @@ await run(
         await page.see("Second collision session saved history");
         await ready(page);
         assert.equal(await draft(page), "", "second peer cannot inherit first peer's draft");
+        await imageShown(page, "eng-2");
+        await imageEvent(page, "drop", "second.png");
         await send(page, "SECOND-ECHO-ONCE");
         await page.see("echo: SECOND-ECHO-ONCE");
         await catalog(page, "second", "remote", "SECOND-DRAFT");
@@ -261,6 +367,34 @@ await run(
         await page.see(`echo: ${echo}`);
         assert.equal(await draft(page), "REMOTE-DRAFT", "forward retains first peer ownership");
         await catalog(page, "remote", "second", "REMOTE-DRAFT");
+        // Pause preparation before it reaches main. Switching cancels the send, restoring its
+        // source draft ahead of newer typing, even with identical identities on the other peer.
+        await imageEvent(page, "paste", "cancelled.png");
+        await call("Fetch.enable", {
+          patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
+        });
+        try {
+          await page.click("button", "Send");
+          await waitFor("upload request paused", () => !!heldUpload);
+          await page.see("Uploading images…");
+          await page.ab("fill", composer, "AFTER-UPLOAD");
+          await page.capture("3c-upload-new-typing");
+          await machine(page, "eng-2");
+          await page.see("echo: SECOND-ECHO-ONCE");
+          assert.equal(await draft(page), "SECOND-DRAFT");
+          await call("Fetch.continueRequest", { requestId: heldUpload }).catch(() => {});
+        } finally {
+          await call("Fetch.disable");
+          heldUpload = undefined;
+        }
+        await machine(page, "eng-1");
+        await page.see(`echo: ${echo}`);
+        await page.until(
+          `document.querySelector('${composer}')?.value === 'REMOTE-DRAFT\\n\\nAFTER-UPLOAD'`,
+        );
+        await page.click("button", "Remove cancelled.png");
+        await page.ab("fill", composer, "REMOTE-DRAFT");
+        assert.deepEqual(page.remote.prompts(), [echo], "cancelled upload never becomes an input");
 
         onRemote = false;
         await machine(page, "Local");
@@ -307,9 +441,29 @@ await run(
         await page.see("Remote collision session");
         await page.ab("find", "role", "button", "click", "--name", "Remote collision session");
         await page.see("Which checks?");
-        await page.click("radio", "Quick checks");
-        await page.click("button", "Send answer");
-        await page.see("Answer: Quick checks");
+        // Preparation must not block a Pi dialog on the conversation socket.
+        await imageEvent(page, "paste", "dialog-upload.png");
+        await call("Fetch.enable", {
+          patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
+        });
+        try {
+          await page.ab("fill", composer, "do not submit");
+          await page.press("Enter");
+          await waitFor("dialog image upload paused", () => !!heldUpload);
+          await page.see("Uploading images…");
+          await page.click("radio", "Quick checks");
+          await page.click("button", "Send answer");
+          await page.see("Answer: Quick checks");
+          await page.capture("5a-dialog-answered-during-upload");
+          await page.click("button", "Cancel image upload");
+          await call("Fetch.continueRequest", { requestId: heldUpload }).catch(() => {});
+        } finally {
+          await call("Fetch.disable");
+          heldUpload = undefined;
+        }
+        await page.until(`!!document.querySelector('[aria-label="Remove dialog-upload.png"]')`);
+        await page.click("button", "Remove dialog-upload.png");
+        await page.ab("fill", composer, "");
         assert.equal(
           page.remote.received().filter((entry) => entry.command === "extension_ui_response")
             .length,
@@ -323,6 +477,41 @@ await run(
         await send(page, "stream");
         await page.see("Streaming line");
         await page.until(`!!document.querySelector('button[aria-label="Stop"]')`);
+        // Pi reports text queues, including an empty entry for image-only input. Edit restores
+        // text only; Piano does not hide the row or synthesize an attachment queue.
+        await imageEvent(page, "paste", "queued.png");
+        await page.ab("fill", composer, "queued image");
+        await page.press("Enter");
+        await page.see("Queued messages (1)");
+        await page.click("button", "Edit queued message");
+        await page.until(
+          `document.querySelector('${composer}')?.value === 'queued image' && !document.querySelector('[aria-label="Queued messages"]')`,
+        );
+        assert.equal(
+          await page.evaluate(`!!document.querySelector('[aria-label="Remove queued.png"]')`),
+          false,
+        );
+        await page.ab("click", composer);
+        await page.press("Mod+A");
+        await page.press("Backspace");
+        await imageEvent(page, "drop", "empty-queue.png");
+        await page.press("Alt+Enter");
+        await page.see("Queued messages (1)");
+        assert.equal(
+          await page.evaluate(
+            `document.querySelector('[aria-label="Queued messages"] ol li').textContent.trim()`,
+          ),
+          "",
+        );
+        await page.capture("5b-image-only-pi-queue");
+        await page.click("button", "Edit queued message");
+        await page.until(`!document.querySelector('[aria-label="Queued messages"]')`);
+        assert.equal(await draft(page), "");
+        const imageInputs = page.remote
+          .received()
+          .filter((e) => e.command === "prompt" && e.images);
+        assert.equal(imageInputs.find((e) => e.text === "queued image").streamingBehavior, "steer");
+        assert.equal(imageInputs.find((e) => e.text === "").streamingBehavior, "followUp");
         const beforeOutage = page.remote
           .received()
           .filter((entry) => entry.command === "stream")
@@ -420,8 +609,23 @@ await run(
         process.kill(pid, 0);
         assert.equal(starts().length, 1, "disconnect and reload never replace remote Pi");
         await page.capture("8-remote-deep-link-reload");
-        await page.click("button", "Stop");
-        await page.until(`document.querySelector('[aria-label="Send"]') !== null`);
+        await imageEvent(page, "paste", "stop-upload.png");
+        await call("Fetch.enable", {
+          patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
+        });
+        try {
+          await page.press("Enter");
+          await waitFor("stop image upload paused", () => !!heldUpload);
+          await page.see("Uploading images…");
+          await page.click("button", "Stop");
+          await page.until(`document.querySelector('[aria-label="Send"]') !== null`);
+          await call("Fetch.continueRequest", { requestId: heldUpload }).catch(() => {});
+        } finally {
+          await call("Fetch.disable");
+          heldUpload = undefined;
+        }
+        await page.until(`!!document.querySelector('[aria-label="Remove stop-upload.png"]')`);
+        await page.click("button", "Remove stop-upload.png");
         await waitFor("Stop reaches only remote Pi", () =>
           page.remote
             .received()
@@ -431,7 +635,7 @@ await run(
         assert.equal(page.received().filter((entry) => entry.command === "abort").length, 0);
         assert.deepEqual(
           page.remote.prompts(),
-          [echo, "question", "stream"],
+          [echo, "question", "stream", "queued image", ""],
           "each input reaches the peer once, never resent",
         );
         assert.deepEqual(page.prompts(), [], "no local prompt from remote UI");
@@ -474,6 +678,7 @@ await run(
         await page.click("button", "New session");
         await page.until(`location.pathname === '/m/eng-1/new'`);
         await remoteNewPage(page);
+        await imageEvent(page, "paste", "first.png");
         await page.ab("fill", '[aria-label="First message"]', created);
         await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
         await page.capture("9a-remote-new-session-draft");
@@ -482,6 +687,12 @@ await run(
           `/^\\/m\\/eng-1\\/s\\//.test(location.pathname) && location.pathname !== '/m/eng-1/s/${sessionId}'`,
         );
         await page.see(`echo: ${created}`);
+        await imageShown(page, "eng-1");
+        assert.equal(
+          page.remote.received().find((e) => e.command === "prompt" && e.text === created).images
+            .length,
+          1,
+        );
         const createdId = decodeURIComponent(
           (await page.evaluate(`location.pathname`)).split("/").at(-1),
         );
@@ -493,7 +704,7 @@ await run(
         assert.equal(creations[0].message.projectId, undefined, "no project on the remote");
         assert.deepEqual(
           page.remote.prompts(),
-          [echo, "question", "stream", created],
+          [echo, "question", "stream", "queued image", "", created],
           "the new session's first message reaches the peer once",
         );
         assert.ok(
@@ -505,6 +716,105 @@ await run(
         assert.deepEqual(page.prompts(), [], "local Pi receives no remote creation");
         assert.deepEqual(page.peers["eng-2"].prompts(), ["SECOND-ECHO-ONCE"]);
         await page.capture("9b-remote-new-session-reply");
+        // Image-only existing input and image-only first input use the same preparation path.
+        await imageEvent(page, "drop", "only.png");
+        await page.click("button", "Send");
+        await waitFor(
+          "image-only existing input reached peer",
+          () => page.remote.prompts().filter((p) => p === "").length === 2,
+        );
+        await page.until(
+          `!document.querySelector('[aria-label="Remove only.png"]') && !document.body.innerText.includes('Uploading images…')`,
+        );
+        await page.click("button", "New session");
+        await remoteNewPage(page);
+        await imageEvent(page, "paste", "only-first.png");
+        await ready(page);
+        await page.click("button", "Send");
+        await waitFor(
+          "image-only creation reached peer",
+          () => page.remote.prompts().filter((p) => p === "").length === 3,
+        );
+        await page.until(
+          `/^\\/m\\/eng-1\\/s\\//.test(location.pathname) && location.pathname !== '/m/eng-1/s/${createdId}'`,
+        );
+        await imageShown(page, "eng-1");
+        const beforeImageReload = page.remote.prompts().length;
+        await page.ab("reload");
+        await imageShown(page, "eng-1");
+        assert.equal(
+          page.remote.prompts().length,
+          beforeImageReload,
+          "reload reconstructs peer images without resending",
+        );
+        await page.capture("9c-image-only-reloaded");
+        await page.ab("set", "viewport", "390", "844");
+        await page.until(
+          `document.querySelector('[aria-label="Message"]')?.getBoundingClientRect().right <= innerWidth`,
+        );
+        await page.capture("9c-image-only-narrow");
+        await page.ab("set", "viewport", "1280", "900");
+        // Opt-in resource/slow-link evidence, not a 50 MiB allocation on every portable CI run.
+        if (process.env.PIANO_TEST_LARGE_IMAGES === "1") {
+          const big = Buffer.alloc(10 * 1024 * 1024);
+          Buffer.from(png, "base64").copy(big);
+          const paths = Array.from({ length: 5 }, (_, i) =>
+            join(page.evidence, `maximum-${i}.png`),
+          );
+          for (const path of paths) writeFileSync(path, big);
+          await page.ab("upload", 'input[aria-label="Image files"]', ...paths);
+          await page.until(
+            `document.querySelectorAll('[aria-label^="Remove maximum-"]').length === 5 && !document.body.innerText.includes('Reading images…')`,
+          );
+          const inputsBefore = page.remote.prompts().length;
+          const began = Date.now();
+          await call("Network.emulateNetworkConditions", {
+            offline: false,
+            latency: 100,
+            downloadThroughput: -1,
+            uploadThroughput: 4 * 1024 * 1024,
+          });
+          try {
+            await page.click("button", "Send");
+            await page.see("Uploading images…");
+            await page.capture("9d-maximum-batch-uploading");
+            const deadline = Date.now() + 120_000;
+            while (page.remote.prompts().length === inputsBefore) {
+              assert.ok(Date.now() < deadline, "maximum batch delivered");
+              await delay(100);
+            }
+            await imageShown(page, "eng-1");
+          } finally {
+            await call("Network.emulateNetworkConditions", {
+              offline: false,
+              latency: 0,
+              downloadThroughput: -1,
+              uploadThroughput: -1,
+            });
+          }
+          const last = page.remote
+            .received()
+            .filter((e) => e.command === "prompt")
+            .at(-1);
+          assert.equal(last.images.length, 5);
+          assert.ok(last.images.every((i) => i.bytes === 10 * 1024 * 1024));
+          writeFileSync(
+            join(page.evidence, "maximum-batch.json"),
+            JSON.stringify(
+              {
+                originalBytes: 50 * 1024 * 1024,
+                elapsedMs: Date.now() - began,
+                uploadBytesPerSecond: 4 * 1024 * 1024,
+                imageInputs: last.images,
+              },
+              null,
+              2,
+            ),
+          );
+          await page.capture("9e-maximum-batch-delivered");
+        }
+        assert.ok(imageRequests.some((url) => url.includes("/peer/eng-1/api/peer/image-preview")));
+        assert.ok(imageRequests.some((url) => url.includes("/peer/eng-2/api/peer/image-preview")));
         assert.deepEqual(
           localRequestsFromRemote,
           [],

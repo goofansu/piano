@@ -23,6 +23,7 @@ import {
   sameSession,
 } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
+import { bindImagePreviews } from "./ImagePreviews.ts";
 import { type PiSession, type PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
 
@@ -150,6 +151,15 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     yield* session.events.pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
+          bindImagePreviews(
+            session.spec.cwd,
+            session.spec.sessionId,
+            event._tag === "snapshot"
+              ? event.snapshot.messages
+              : event._tag === "message_update" || event._tag === "message_end"
+                ? [event.message]
+                : [],
+          );
           if (current(selection))
             yield* event._tag === "snapshot"
               ? send({
@@ -227,6 +237,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         shown = sessionId
           ? { selectionId, cwd: view.cwd, checkoutMissing: !!view.snapshot.state.checkoutMissing }
           : null;
+        if (sessionId) bindImagePreviews(view.cwd, sessionId, view.snapshot.messages);
         yield* send({
           _tag: "selected",
           selectionId,

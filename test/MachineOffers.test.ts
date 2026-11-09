@@ -35,8 +35,8 @@ test("a remote offers the conversation slice: sessions, the New page and New ses
   const offers = machineOffers(remote);
   assert.deepEqual(
     surfaces(offers).filter(([, offered]) => offered),
-    [],
-    "files, rail, attachments, voice input, pull requests, previews, accounts, worktrees, browse, trust, folders, projects, session menus, settings, the full sidebar and last directory stay on the remote",
+    [["attachments", true]],
+    "files, rail, voice input, pull requests, previews, accounts, worktrees, browse, trust, folders, projects, session menus, settings, the full sidebar and last directory stay on the remote",
   );
   assert.ok(!offers.fullSidebar, "the sidebar lists sessions alone");
   assert.deepEqual(

@@ -5,6 +5,7 @@ import { MessagesSquareIcon } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AnsweredQuestion } from "@/components/AnsweredQuestion";
+import { ImageSessionContext } from "@/components/Attachments";
 import { Banner } from "@/components/Banner";
 import { useSessionCommands } from "@/components/CommandHost";
 import { Composer } from "@/components/Composer";
@@ -51,13 +52,14 @@ import { type AppState, sessionKey } from "@/store";
 interface Props {
   state: AppState;
   send: Client["send"];
+  captureSend: Client["captureSend"];
 }
 
 /** The session's areas share one tab list one at a time; these name its parts for each other. */
 const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" } as const;
 const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
-export function SessionView({ state, send }: Props) {
+export function SessionView({ state, send, captureSend }: Props) {
   const offers = useOffers();
   const drafts = useDrafts();
   // The selected session's PR dialog; navigation closes it when Settings covers the view. Its
@@ -234,19 +236,27 @@ export function SessionView({ state, send }: Props) {
                   value={offers.files ? (path) => openFile(path, "agent") : undefined}
                 >
                   <SessionDestinationContext value={destination}>
-                    <MessageList
-                      key={t ? sessionKey(t) : draftKey}
-                      workspaceId={offers.files ? workspace?.id : undefined}
-                      showTools={!messagesOnly}
-                      messages={t?.messages ?? []}
-                      pending={t?.pending ?? null}
-                      submittedInput={input}
-                      tools={tools}
-                      activity={replyActivity}
-                      working={!!t && isWorking(t.state)}
-                      placeholder={pane.placeholder}
-                      dispatchedFrom={dispatchedFrom}
-                    />
+                    <ImageSessionContext
+                      value={
+                        workspace && t?.sessionId
+                          ? { workspaceId: workspace.id, sessionId: t.sessionId }
+                          : undefined
+                      }
+                    >
+                      <MessageList
+                        key={t ? sessionKey(t) : draftKey}
+                        workspaceId={offers.files ? workspace?.id : undefined}
+                        showTools={!messagesOnly}
+                        messages={t?.messages ?? []}
+                        pending={t?.pending ?? null}
+                        submittedInput={input}
+                        tools={tools}
+                        activity={replyActivity}
+                        working={!!t && isWorking(t.state)}
+                        placeholder={pane.placeholder}
+                        dispatchedFrom={dispatchedFrom}
+                      />
+                    </ImageSessionContext>
                   </SessionDestinationContext>
                 </LocalFileContext>
               )}
@@ -300,6 +310,8 @@ export function SessionView({ state, send }: Props) {
                 actionsDisabled={pane.composerDisabled}
                 readOnly={readOnly}
                 send={send}
+                captureSend={captureSend}
+                selectionId={state.selectionId}
               />
             </div>
             {railInside && <SessionRail state={state} />}

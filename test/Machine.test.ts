@@ -13,9 +13,34 @@ import { createMachineStores } from "../web/src/lib/machineStores.ts";
 import { createDrafts, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import { createQuestionReplies } from "../web/src/lib/piDialogs.ts";
+import { remoteImageUrl } from "../web/src/lib/remoteImages.ts";
 import { parseRoute, routePath } from "../web/src/lib/routes.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
+
+test("remote thumbnails and full-image links accept only exact peer-owned projection URLs", () => {
+  const hash = "a".repeat(64);
+  const target = { workspaceId: "same-workspace", sessionId: "same-session" };
+  const url = `/api/image-previews/${hash}`;
+  assert.equal(remoteImageUrl("local", url), url);
+  for (const id of ["eng-1", "eng-2"])
+    assert.equal(
+      remoteImageUrl(id, url, target),
+      `/peer/${id}/api/peer/image-preview?workspaceId=same-workspace&sessionId=same-session&hash=${hash}`,
+    );
+  for (const invalid of [
+    `https://host${url}`,
+    `//host${url}`,
+    url + "?x=1",
+    url + "#x",
+    "/api/image-previews/../x",
+    url.replace("/api", "%2Fapi"),
+    "data:image/png;base64,aA==",
+  ])
+    assert.equal(remoteImageUrl("eng-1", invalid, target), "", invalid);
+  assert.equal(remoteImageUrl("eng-1", url), "");
+  assert.equal(remoteImageUrl("eng-1", url, { ...target, sessionId: "../x" }), "");
+});
 
 test("machine-qualified session navigation survives reload; late navigation keeps its owner", () => {
   let path = "/m/eng-1/s/same-id";

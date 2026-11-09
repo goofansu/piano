@@ -39,6 +39,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { WorktreesPopover } from "@/components/Worktrees";
+import type { Client } from "@/lib/client";
 import { newSessionCommand, newSessionReady } from "@/lib/composerControl";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
 import { NEW_SESSION_DRAFT } from "@/lib/messageDraft";
@@ -47,6 +48,7 @@ import { folderFor } from "@/lib/sessionCatalog";
 import { completionTarget, directoryChoices, startPlace } from "@/lib/sessionContext";
 import { startPage } from "@/lib/startPage";
 import { composerInput, picker } from "@/lib/styles";
+import { useImageSend } from "@/lib/useImageSend";
 import { useOffers } from "@/lib/useMachine";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
@@ -54,7 +56,7 @@ import { useWorktreeOperation } from "@/lib/useWorktreeOperation";
 import type { WorktreeOperationOptions } from "@/lib/worktreeOperation";
 import type { AppState } from "@/store";
 
-type WorktreeClient = WorktreeOperationOptions["client"];
+type WorktreeClient = WorktreeOperationOptions["client"] & Pick<Client, "captureSend">;
 
 interface Props {
   state: AppState;
@@ -118,7 +120,6 @@ export function NewSessionComposer({
   onProjectChange?: (projectId?: string) => void;
   className?: string;
 }) {
-  const { send } = client;
   const { run } = useCommands();
   const offers = useOffers();
   // The client starts a fresh New page in the last directory used, else the first folder; a
@@ -127,6 +128,7 @@ export function NewSessionComposer({
   const cwd = page?.cwd ?? "";
   const projectId = offers.projects ? page?.projectId : undefined;
   const editor = useDraftEditor(NEW_SESSION_DRAFT);
+  const imageSend = useImageSend(editor, client.captureSend, { cwd }, state.selectionId);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const folder = folderFor(state, cwd);
@@ -137,14 +139,16 @@ export function NewSessionComposer({
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
   const choice = useModelChoice(models, { kind: "new", cwd });
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
-  const ready = newSessionReady({
-    text: editor.message,
-    images: editor.attachments,
-    connected: state.connected,
-    catalog,
-    cwd,
-    model: choice.model,
-  });
+  const ready =
+    !editor.preparing &&
+    newSessionReady({
+      text: editor.message,
+      images: editor.attachments,
+      connected: state.connected,
+      catalog,
+      cwd,
+      model: choice.model,
+    });
 
   const submit = () => {
     // A creation that is sent switches the main pane to the new session at once, so this page never
@@ -152,8 +156,12 @@ export function NewSessionComposer({
     if (!ready) return;
     // A project deleted while it was chosen is no longer joined.
     const join = findProject(state, projectId)?.id;
-    choice.submit((start) =>
-      editor.submit((message) => send(newSessionCommand({ cwd, projectId: join }, message, start))),
+    const start = choice.start;
+    imageSend.send(
+      (message) => newSessionCommand({ cwd, projectId: join }, message, start),
+      (consumed) => {
+        if (consumed) choice.consume();
+      },
     );
   };
 
@@ -184,6 +192,7 @@ export function NewSessionComposer({
         </div>
         <DraftEditor
           editor={editor}
+          cancelUpload={imageSend.cancel}
           completion={completionTarget(state)}
           attachmentsDisabled={!state.connected}
           autoFocus={!window.matchMedia("(pointer: coarse)").matches}

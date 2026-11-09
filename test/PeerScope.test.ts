@@ -7,7 +7,10 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import test from "node:test";
 import { WebSocket } from "@effect/platform-node/NodeWS";
+import { IMAGE_UPLOAD_PATH, IMAGE_PREVIEW_PATH } from "../shared/remoteImages.ts";
+import { imageUploadBody } from "../web/src/lib/remoteImages.ts";
 import { gatewayFixture, identity } from "./fixtures/peer-gateway.ts";
+import { readRegistry } from "./fixtures/registry.ts";
 
 type Frame = { _tag: string; [key: string]: unknown };
 
@@ -56,6 +59,152 @@ async function attach(base: string, path: "/ws" | "/ws/peer") {
   await next((frame) => frame._tag === "registry");
   return { ws, frames, next, answers };
 }
+
+test(
+  "prepared remote images are validated before creation, consumed once, and projected with session provenance",
+  { timeout: 30_000 },
+  async (t) => {
+    const f = await gatewayFixture(t, { checkout: true });
+    const peer = await attach(f.base, "/ws/peer");
+    t.after(() => peer.ws.terminate());
+    const png = {
+      kind: "image" as const,
+      name: "test.png",
+      mimeType: "image/png" as const,
+      data: "iVBORw0KGgo=",
+    };
+    const target = { cwd: f.checkout, draftId: "new-draft" };
+    const upload = (image = png, destination = target) =>
+      fetch(f.base + IMAGE_UPLOAD_PATH, {
+        method: "POST",
+        headers: { Origin: f.base },
+        body: imageUploadBody(destination, [image]),
+      });
+    const before = await readRegistry("unused", f.database);
+    assert.equal((await upload({ ...png, data: "YQ==" })).status, 400);
+    assert.equal((await upload(png, { cwd: "/unregistered", draftId: "new-draft" })).status, 404);
+    assert.equal(
+      (
+        await fetch(f.base + IMAGE_UPLOAD_PATH, {
+          method: "POST",
+          body: imageUploadBody(target, [png]),
+        })
+      ).status,
+      403,
+    );
+    const response = await upload();
+    assert.equal(response.status, 200);
+    const preparedImages = await response.json();
+    const create = {
+      _tag: "create_session",
+      selectionId: "images-new",
+      cwd: f.checkout,
+      options: {},
+      text: "",
+      preparedImages,
+    };
+    for (const invalid of [
+      { ...create, selectionId: "mixed", attachments: [png] },
+      {
+        ...create,
+        selectionId: "wrong-draft",
+        preparedImages: { ...preparedImages, draftId: "wrong" },
+      },
+      { ...create, selectionId: "absent", preparedImages: { id: "missing", draftId: "new-draft" } },
+    ])
+      assert.equal((await peer.answers(invalid))[0]?._tag, "selection_rejected");
+    assert.deepEqual(
+      (await readRegistry("unused", f.database)).sessions,
+      before.sessions,
+      "invalid preparation starts no work",
+    );
+    peer.ws.send(JSON.stringify(create));
+    const selected = await peer.next(
+      (m) => m._tag === "selected" && m.selectionId === "images-new",
+    );
+    assert.equal(selected.cwd, f.checkout);
+    const sessionId = String(selected.sessionId);
+    const imageMessage = await peer.next(
+      (m) =>
+        m._tag === "session" &&
+        (m.event as { _tag: string; message?: { role: string; attachments?: unknown[] } }).message
+          ?.role === "user",
+    );
+    const attachments = (imageMessage.event as { message: { attachments: { url: string }[] } })
+      .message.attachments;
+    assert.equal(attachments.length, 1);
+    const hash = attachments[0].url.split("/").at(-1)!;
+    const listing = await readRegistry("unused", f.database);
+    const workspaceId = listing.workspaces.find((w) => w.path === f.checkout)!.id;
+    const path =
+      f.base + IMAGE_PREVIEW_PATH + "?" + new URLSearchParams({ workspaceId, sessionId, hash });
+    const preview = await fetch(path);
+    assert.equal(preview.status, 200);
+    assert.equal(preview.headers.get("content-type"), "image/png");
+    assert.equal(preview.headers.get("cache-control"), "private, no-store");
+    assert.equal(preview.headers.get("x-content-type-options"), "nosniff");
+    assert.deepEqual(Buffer.from(await preview.arrayBuffer()), Buffer.from(png.data, "base64"));
+    assert.equal((await fetch(path + "&extra=1")).status, 400);
+    assert.equal((await fetch(path, { headers: { "Sec-Fetch-Site": "cross-site" } })).status, 403);
+    const unrelated =
+      f.base +
+      IMAGE_PREVIEW_PATH +
+      "?" +
+      new URLSearchParams({
+        workspaceId: identity.workspaceId,
+        sessionId: identity.sessionId,
+        hash,
+      });
+    assert.equal(
+      (await fetch(unrelated)).status,
+      404,
+      "a registered session cannot read another session's cached hash",
+    );
+    assert.equal(
+      (await peer.answers({ ...create, selectionId: "duplicate" }))[0]?._tag,
+      "selection_rejected",
+    );
+    assert.ok(
+      !(
+        await peer.answers({ _tag: "act", selectionId: "images-new", action: { _tag: "stop" } })
+      ).some((m) => m._tag === "error"),
+      "a refused preparation cannot steal the current selection",
+    );
+    // Re-select the created session: a small reference on act is resolved only for that selection.
+    peer.ws.send(
+      JSON.stringify({ _tag: "select", cwd: f.checkout, sessionId, selectionId: "continue" }),
+    );
+    await peer.next((m) => m._tag === "selected" && m.selectionId === "continue");
+    const nextUpload = await fetch(f.base + IMAGE_UPLOAD_PATH, {
+      method: "POST",
+      headers: { Origin: f.base },
+      body: imageUploadBody({ cwd: f.checkout, sessionId }, [png]),
+    });
+    assert.equal(nextUpload.status, 200);
+    const nextReference = await nextUpload.json();
+    const act = {
+      _tag: "act",
+      selectionId: "continue",
+      start: {},
+      preparedImages: nextReference,
+      action: { _tag: "prompt", text: "text and image", inputId: "image-follow-up" },
+    };
+    assert.equal(
+      (await peer.answers({ ...act, selectionId: "wrong" }))[0]?.inputId,
+      "image-follow-up",
+    );
+    const from = peer.frames.length;
+    peer.ws.send(JSON.stringify(act));
+    await peer.next(
+      (m) =>
+        m._tag === "session" &&
+        (m.event as { message?: { text: string } }).message?.text === "text and image",
+      from,
+    );
+    const duplicate = await peer.answers(act);
+    assert.ok(duplicate.some((m) => m._tag === "error" && m.inputId === "image-follow-up"));
+  },
+);
 
 test(
   "ADR 0004: /ws/peer admits only the remote slice and answers refusals in sequence",

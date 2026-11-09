@@ -173,7 +173,7 @@ function MachineApp() {
                           }
                         />
                       ) : (
-                        <SessionView state={state} send={send} />
+                        <SessionView state={state} send={send} captureSend={client.captureSend} />
                       )}
                     </LayoutView>
                     {offers.settings && settings && (

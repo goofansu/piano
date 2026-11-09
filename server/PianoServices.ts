@@ -18,6 +18,7 @@ import { GitHubPullRequestsLive } from "./GitHubPullRequests.ts";
 import { McpSetupLive } from "./McpSetup.ts";
 import { PiSessionsLive } from "./PiSessions.ts";
 import { PiSettingsLive } from "./PiSettings.ts";
+import { PreparedImagesLive } from "./PreparedImages.ts";
 import { PromptsLive } from "./Prompts.ts";
 import { ProviderLoginLive } from "./ProviderLogin.ts";
 import { RadiusArtifactsLive } from "./RadiusArtifacts.ts";
@@ -50,6 +51,7 @@ export const PianoCoreLive = (options: PianoServicesOptions) =>
     Layer.provideMerge(SessionHostsLive({ idleMs: options.idleMs })),
     Layer.provideMerge(RegistryLive),
     Layer.provideMerge(PiSessionsLive),
+    Layer.provideMerge(PreparedImagesLive),
   );
 
 /** The network services Piano calls; a test replaces one by providing its own. */

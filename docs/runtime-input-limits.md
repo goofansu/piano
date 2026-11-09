@@ -4,7 +4,7 @@ Piano bounds incoming work as well as browser delivery (INV-02–05, INV-09).
 The policy is defined in `server/InboundCapacity.ts`; these are per-connection or
 per-Pi-child limits, not global quotas or a security sandbox.
 
-Every byte cap derives from one **maximum message**: the attachment policy's total
+Every conversation-runtime byte cap below derives from one **maximum message**: the attachment policy's total
 (`MAX_ATTACHMENT_BYTES` in `shared/attachments.ts`) after base64 encoding, plus a named
 JSON/text allowance (`MAX_MESSAGE_BYTES` in `server/InboundCapacity.ts`). Raising the attachment policy raises every cap
 below with it; about 83 MiB for today's 50 MiB policy.
@@ -56,6 +56,44 @@ parsed objects/strings, one active record, framing storage, runtime buffers and
 existing session history also consume memory. It does not bound Pi's own context,
 number of browser connections, number of sessions, or HTTP request bodies.
 
+## Remote image HTTP lane
+
+The [same-owner remote image extension](adr/0004-same-owner-piano-peer.md#raster-images-separate-preparation-unchanged-conversation-ownership)
+keeps the gateway conversation cap at **1 MiB**, including reference-bearing sends. Original
+images travel separately; the peer resolves the reference before the runtime limits above apply.
+`shared/remoteImages.ts`, `ImageTransfer`, `PreparedImages` and `PeerImageGateway` define:
+
+| Resource | Bound |
+| --- | --- |
+| Binary upload | 50 MiB original bytes + 16 KiB manifest + 4-byte length prefix |
+| Manifest | One JSON object; exact fields, ten image descriptors; name 255 characters, cwd 4096, IDs 200 |
+| Parts | At most ten contiguous rasters of declared sizes; no multipart headers, nested bodies or general file kinds |
+| HTTP body handling | Count actual streamed bytes before allocation/JSON parsing; bound manifest before reading it; reject trailing/truncated bytes, compression and inconsistent Content-Length; missing length/chunked bodies still counted |
+| Peer preparations | **Two slots total** across reading, unclaimed and consumed-but-unsettled batches; immediate busy refusal |
+| Staged image budget | Two maximum batches = **100 MiB original bytes**; consuming replaces raw bytes with up to about 133.34 MiB base64 across both slots |
+| Unclaimed lifetime | Ten minutes; sweep every 30 s and before prepare/claim; consumed entries never expire during an operation |
+| Main HTTP concurrency | Per configured peer: two uploads, two image reads, two small cancellation requests; no waiting queue |
+| Peer image reads | Two concurrently streaming reads |
+| HTTP timing | 30 s without body progress, 180 s total; fetch/header wait also bounded by the 180 s deadline; browser upload deadline 185 s |
+| Preparation/cancellation response | 1 KiB, schema-decoded, no arbitrary upstream error body forwarded |
+| Transcript image response | 64 MiB, matching the independent disposable preview cache, not the 10 MiB original-upload ceiling; MIME allowlist, no compressed response |
+| Preview metadata | At most 4096 cached images and 4096 observed session/hash memberships **globally**; oldest entries/memberships drop when full; byte eviction drops provenance too |
+
+Main backpressures a binary stream without storing the batch. The peer validates before returning
+an opaque reference and before creating work; a failed/cancelled ingest frees its slot. A consumed
+reference is not reusable even after a known-unsent refusal. It holds its slot until the operation
+settles, not just until its observer disconnects. Cancellation discards only unconsumed entries;
+unknown preparation results expire. All staging is memory-only, with scope cleanup and no files
+or database migrations. None of these paths retries input or falls back to Local.
+
+These are data/lifecycle budgets, **not a process RSS ceiling**: browser Blob/base64 copies, JSON
+serialization, Pi stdin and Pi-owned queues/history add memory. HTTP protocol headers remain under
+Node's bounded HTTP parser; the binary format has no per-part header parser. The preview cache
+itself remains at most 64 MiB / 4096 images; two in-flight reads can retain older evicted bytes temporarily. Opening
+many peers multiplies main's per-peer concurrency, but each relay backpressures rather than
+collecting whole images. Reserved controls still cannot overtake bytes already written to Pi's
+local stdin. The separate HTTP lane solves network head-of-line blocking, not that runtime limit.
+
 ## Verification
 
 `test/PiInbound.test.ts` exercises PiSessions' public interface: capacity rejection,
@@ -67,3 +105,12 @@ controls at client capacity. `test/OriginPolicy.test.ts` sends oversized single 
 fragmented messages through the real Node server. The scratch-only
 `test/browser-inbound-limits.mjs` observes overload, answering, acknowledgements,
 heartbeat continuity and a subsequent prompt through `npx agent-browser` with fake Pi.
+
+`PreparedImages.test.ts`, `PeerScope.test.ts`, `PeerGateway.test.ts`, `Machine.test.ts` and
+`DraftSubmission.test.ts` cover image validation/resource bounds, scope/provenance, one-use/expiry/
+cancellation, no retry/fallback and target-bound draft recovery. `test/browser/remote-session.mjs`
+observes the two-peer affected journey, including uploads, dialogs, queues, Stop and reload. Set
+`PIANO_TEST_LARGE_IMAGES=1` for its opt-in 50 MiB batch over a browser-throttled connection. The
+gateway module test separately backpressures the main→peer hop of a maximum batch while sending
+controls. Fake Pi and signature-valid padded rasters do not establish worst-case pixel decoding,
+real phone memory, provider acceptance or authenticated exe.dev edge body/time limits.

@@ -39,6 +39,27 @@ work around this; the fix belongs upstream in Pi.
 Checkouts previously using the queue-metadata patch should run `npm ci` after updating to replace
 their patched `node_modules`. The patch installer and its npm postinstall hook have been removed.
 
+## Remote composers
+
+The same policy applies on configured peers, in both existing sessions and New session. Only
+images are enabled; remote voice input and general files remain unavailable. Draft acquisition
+and thumbnails are browser-local and machine-partitioned. Send prepares the images over a separate
+bounded HTTP stream to their owning peer, then submits a one-use reference on the conversation
+socket. **Uploading images…** is not proof of Pi/provider receipt. Upload failure, Cancel or
+navigation before submission retains the original draft and newer typing; uncertain prompt
+delivery must be inspected, never automatically retried.
+
+Transcript image links are machine- and session-qualified, with cache provenance checked on the
+peer. Reopening history repopulates the disposable cache; there is no Local fallback for a missing
+peer image. Pi remains the only durable image/history store. See
+[remote use](remote-piano.md#images), [ADR 0004](adr/0004-same-owner-piano-peer.md) and the
+[HTTP budgets](runtime-input-limits.md#remote-image-http-lane).
+
+The empty image-only queue behavior above was documented on Pi 1.2.0. The installed 1.5.0 source
+still guards queue removal with `if (messageText)`; this extension does not patch it. Fake-Pi
+remote checks deliberately report an empty text entry and verify Piano preserves it; they are
+not a new real-provider reproduction of Pi's behavior.
+
 ## Why this combination
 
 - **10 MiB each:** accommodates typical screenshots and phone photos with fewer manual compression
@@ -52,7 +73,8 @@ their patched `node_modules`. The patch installer and its npm postinstall hook h
   line and queue byte limits derive from the total attachment limit, and Pi's acknowledgement
   deadline grows with the bytes written ([runtime input limits](runtime-input-limits.md)).
   JSON parsing, browser previews, process I/O and decoding can hold additional copies; the total
-  upload cap is not a claim that memory consumption is only 50 MiB.
+  upload cap is not a claim that memory consumption is only 50 MiB. Remote network upload uses
+  binary HTTP instead of base64 WebSocket frames; the same Pi stdin costs still apply.
 - **Not 20 MiB each:** the per-image limit stays at 10 MiB, which already covers phone photos.
 
 ## Pi owns model preparation

@@ -3,8 +3,8 @@
  * the sessions, so it decides here, and answers a refusal with the request's ordinary reply in
  * the delivery sequence: the gateway in front stays a pipe that never injects or renumbers frames.
  *
- * The slice lists registered sessions, opens them, starts a session with a text prompt in a
- * registered folder or worktree, sends text, answers dialogs and stops. Files, worktree creation,
+ * The slice lists registered sessions, opens them, starts a session in a registered folder or
+ * worktree, sends text/prepared raster images, answers dialogs and stops. Files, worktree creation,
  * projects and settings (trust included: trusting a folder runs its project extensions here) are
  * not offered.
  */
@@ -39,7 +39,7 @@ export const registered = (data: RegistryData, cwd: string) =>
 const listed = (data: RegistryData, cwd: string, sessionId: string) =>
   registered(data, cwd) && data.sessions.some((entry) => sameSession(entry, { cwd, sessionId }));
 
-/** Restarting a listed session is allowed; renaming it, inventing ancestry or attaching files is not. */
+/** Inline remote images stay forbidden: ClientDispatch resolves prepared references after this check. */
 function actionAllowed({ action, start }: Act): boolean {
   if (start?.name !== undefined || start?.dispatchedFrom !== undefined) return false;
   switch (action._tag) {
@@ -60,7 +60,7 @@ function actionAllowed({ action, start }: Act): boolean {
 
 /**
  * A new session starts where it is asked, as this machine's own browser would start it, but adds
- * nothing else here: no worktree, project membership, name, ancestry or attached files.
+ * nothing else here: no worktree, project membership, name, ancestry or inline attachments.
  */
 function creationAllowed({ projectId, inheritProject, worktree, attachments, options }: Create) {
   return (

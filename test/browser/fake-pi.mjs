@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // The Pi the browser journeys talk to: `pi --mode rpc` for one session, without a model.
 // It resumes a session file's history, echoes each prompt with priced usage, and keeps a prompt
 // of exactly "hold" running until Stop. PIANO_TEST_AUDIT records every command it receives.
@@ -54,6 +55,10 @@ let thinkingLevel = arg("--thinking") ?? settings.defaultThinkingLevel ?? "mediu
 let sessionName = arg("--name");
 let streaming = false;
 let streamTimer;
+const steering = [],
+  followUp = [];
+const queueUpdate = () =>
+  out({ type: "queue_update", steering: [...steering], followUp: [...followUp] });
 
 const out = (record) => process.stdout.write(`${JSON.stringify(record)}\n`);
 const respond = (cmd, data, error) =>
@@ -108,6 +113,16 @@ function handle(cmd) {
     command: cmd.type,
     text: cmd.message,
     sessionId,
+    ...(cmd.images
+      ? {
+          images: cmd.images.map((i) => ({
+            mimeType: i.mimeType,
+            bytes: Buffer.from(i.data, "base64").length,
+            hash: createHash("sha256").update(Buffer.from(i.data, "base64")).digest("hex"),
+          })),
+          streamingBehavior: cmd.streamingBehavior,
+        }
+      : {}),
     ...(cmd.type === "extension_ui_response" ? { answer: cmd } : {}),
   });
   switch (cmd.type) {
@@ -162,8 +177,13 @@ function handle(cmd) {
     case "set_session_name":
       sessionName = cmd.name;
       return respond(cmd, {});
-    case "clear_queue":
-      return respond(cmd, { steering: [], followUp: [] });
+    case "clear_queue": {
+      const restored = { steering: [...steering], followUp: [...followUp] };
+      steering.length = 0;
+      followUp.length = 0;
+      queueUpdate();
+      return respond(cmd, restored);
+    }
     case "abort":
       clearInterval(streamTimer);
       streaming = false;
@@ -171,10 +191,22 @@ function handle(cmd) {
       out({ type: "agent_settled" });
       return respond(cmd);
     case "prompt": {
-      if (streaming) return respond(cmd, undefined, "Agent is streaming");
+      if (streaming) {
+        if (!["steer", "followUp"].includes(cmd.streamingBehavior))
+          return respond(cmd, undefined, "Agent is streaming");
+        (cmd.streamingBehavior === "steer" ? steering : followUp).push(cmd.message);
+        queueUpdate();
+        return respond(cmd, { disposition: "queued" });
+      }
       respond(cmd, { disposition: "started" });
       streaming = true;
-      const user = { role: "user", content: cmd.message, timestamp: Date.now() };
+      const user = {
+        role: "user",
+        content: cmd.images?.length
+          ? [{ type: "text", text: cmd.message }, ...cmd.images]
+          : cmd.message,
+        timestamp: Date.now(),
+      };
       messages.push(user);
       out({ type: "agent_start" });
       out({ type: "turn_start" });

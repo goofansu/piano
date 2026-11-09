@@ -11,6 +11,7 @@ import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
 import { inboundLimits } from "../server/InboundCapacity.ts";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { PiCli } from "../server/PiCli.ts";
+import type { PreparedImages } from "../server/PreparedImages.ts";
 import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { type SessionStatus, SessionStatusLive } from "../server/SessionStatus.ts";
@@ -81,6 +82,7 @@ const run = <A, E>(
     A,
     E,
     | WorkspaceCommands
+    | PreparedImages
     | SidebarView
     | DirectoryFacts
     | SessionHosts

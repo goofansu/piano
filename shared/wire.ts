@@ -14,6 +14,7 @@ import {
   MAX_IMAGE_BYTES,
 } from "./attachments.ts";
 import { DISPOSITIONS } from "./dispatch.ts";
+import { PreparedImages } from "./remoteImages.ts";
 
 /** Browser input, not a Pi protocol block. Future files get a distinct kind. */
 export const Attachment = Schema.Struct({
@@ -993,6 +994,7 @@ export const ClientMessage = Schema.Union([
     worktree: Schema.optional(WorktreeRequest),
     text: Schema.optional(Schema.String),
     attachments: attachmentInput,
+    preparedImages: Schema.optional(PreparedImages),
   }),
   /** Read sessions' status without starting Pi: one by ID, or every active session of a project. */
   Schema.TaggedStruct("session_status", {
@@ -1012,6 +1014,7 @@ export const ClientMessage = Schema.Union([
     selectionId: Schema.String,
     action: SessionAction,
     start: Schema.optional(StartOptions),
+    preparedImages: Schema.optional(PreparedImages),
   }),
   /** Round-trip liveness, independent of incoming session activity. */
   Schema.TaggedStruct("ping", { nonce: Schema.String }),
