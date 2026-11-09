@@ -15,6 +15,7 @@ import { useCommands, useGlobalCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { IconButton } from "@/components/IconButton";
+import { MachineSwitcher } from "@/components/MachineSwitcher";
 import { PianoButton as Button } from "@/components/PianoButton";
 import {
   DropdownMenu,
@@ -169,6 +170,7 @@ export function Sidebar({ state }: Props) {
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
       <LayoutHeader>
+        <MachineSwitcher />
         <IconButton
           size="header"
           label="Search sessions and commands"

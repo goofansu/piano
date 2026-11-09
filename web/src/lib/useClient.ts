@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { AppState } from "../store.ts";
-import { type Client, createClient, type Notify } from "./client.ts";
+import { type Client, type ClientOptions, createClient, type Notify } from "./client.ts";
 import { openConnection } from "./ws.ts";
 
 /** One client for the page, connected while mounted; components read its state and call it directly. */
 export function useClient(
   initial: () => AppState,
   notify: Notify,
+  options: Partial<Pick<ClientOptions, "connect" | "lastDirectory">> = {},
 ): { state: AppState; client: Client } {
   const [client] = useState(() =>
-    createClient({ initial: initial(), connect: openConnection, notify }),
+    createClient({ initial: initial(), connect: openConnection, notify, ...options }),
   );
   useEffect(() => client.start(), [client]);
   const subscribe = useCallback(

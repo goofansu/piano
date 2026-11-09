@@ -25,7 +25,8 @@ Piano has no login and runs commands as your user. Keep it on loopback or behind
 authenticated proxy; never expose it publicly.
 
 See [using Piano](docs/use.md) for features and [configuration](docs/configuration.md) for
-ports, storage and the access model.
+ports, storage and the access model. To continue sessions on another private exe.dev VM,
+configure [one remote Piano](docs/remote-piano.md).
 
 ## Develop
 

@@ -51,6 +51,7 @@ export function loadPeerConfig(
     if (
       !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(peer.id) ||
       peer.id === "local" ||
+      peer.id.includes("--") ||
       peer.name !== peer.name.trim() ||
       peer.name.length === 0 ||
       peer.name.length > 80 ||

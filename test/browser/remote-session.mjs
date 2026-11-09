@@ -117,9 +117,22 @@ await run(
 
     const frames = [];
     const sockets = new Map();
+    const localRequestsFromRemote = [];
+    let onRemote = false;
     try {
       await page.cdp(async (call, onEvent) => {
         onEvent(({ method, params }) => {
+          if (onRemote && method === "Network.requestWillBeSent") {
+            const path = new URL(params.request.url).pathname;
+            if (path.startsWith("/api/") && path !== "/api/machines")
+              localRequestsFromRemote.push(path);
+          }
+          if (
+            onRemote &&
+            method === "Network.webSocketCreated" &&
+            new URL(params.url).pathname === "/ws"
+          )
+            localRequestsFromRemote.push("/ws");
           if (
             method === "Network.webSocketCreated" &&
             new URL(params.url).pathname === "/peer/eng-1/ws"
@@ -155,6 +168,7 @@ await run(
             .received()
             .filter((entry) => entry.command === "start" && entry.sessionId !== "probe");
 
+        onRemote = true;
         await machine(page, "eng-1");
         await page.until(`location.pathname === '/m/eng-1/new'`);
         await page.see("Remote host-only session");
@@ -169,7 +183,7 @@ await run(
         );
         await unsupported(page);
         await page.capture("2-remote-pick-existing");
-        await page.click("button", "Remote collision session");
+        await page.ab("find", "role", "button", "click", "--name", "Remote collision session");
         await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
         await page.see("Remote collision session saved history");
         await ready(page);
@@ -190,7 +204,15 @@ await run(
         assert.deepEqual(page.prompts(), [], "local Pi receives no remote prompt");
         await catalog(page, "remote", "local", "REMOTE-DRAFT");
         await page.capture("3-remote-reply-draft");
+        await page.click("button", "Hide sidebar");
+        await page.until(
+          `document.querySelector('main header [aria-label="Machine"]')?.textContent.includes('eng-1')`,
+        );
+        await page.capture("3a-machine-with-sidebar-hidden");
+        await page.click("button", "Show sidebar");
+        await page.until(`!document.querySelector('main header [aria-label="Machine"]')`);
 
+        onRemote = false;
         await machine(page, "Local");
         await page.see("Local collision session");
         await page.click("button", "Local collision session");
@@ -204,9 +226,10 @@ await run(
         );
         await page.capture("4-local-return");
 
+        onRemote = true;
         await machine(page, "eng-1");
         await page.see("Remote collision session");
-        await page.click("button", "Remote collision session");
+        await page.ab("find", "role", "button", "click", "--name", "Remote collision session");
         await page.see(`echo: ${echo}`);
         await ready(page);
         assert.equal(await draft(page), "REMOTE-DRAFT", "remote draft survived local selection");
@@ -215,10 +238,12 @@ await run(
         await page.until(`!!document.querySelector('[aria-label="Context usage details"]')`);
         await page.capture("5-remote-context");
         await page.press("Escape");
+        await page.until(`!document.querySelector('[aria-label="Context usage details"]')`);
 
         // The remote host also owns pending questions, not the newly selected local runtime.
         await send(page, "question");
         await page.see("Which checks?");
+        onRemote = false;
         await machine(page, "Local");
         await page.see("Local collision session");
         await page.click("button", "Local collision session");
@@ -227,9 +252,10 @@ await run(
           await page.evaluate(`document.body.innerText.includes('Which checks?')`),
           false,
         );
+        onRemote = true;
         await machine(page, "eng-1");
         await page.see("Remote collision session");
-        await page.click("button", "Remote collision session");
+        await page.ab("find", "role", "button", "click", "--name", "Remote collision session");
         await page.see("Which checks?");
         await page.click("radio", "Quick checks");
         await page.click("button", "Send answer");
@@ -345,7 +371,20 @@ await run(
           "remote UI never creates a session",
         );
         await unsupported(page);
+        assert.deepEqual(
+          localRequestsFromRemote,
+          [],
+          "remote UI never calls a Local HTTP endpoint or socket",
+        );
         await page.capture("9-remote-stopped");
+        await page.open("/m/not-configured/s/same-session");
+        await page.see("Machine unavailable");
+        assert.equal(
+          await page.evaluate(`!!document.querySelector('[aria-label="Message"]')`),
+          false,
+        );
+        assert.deepEqual(localRequestsFromRemote, [], "an unknown machine cannot mount Local");
+        await page.capture("10-unknown-machine");
         const result = {
           generation,
           pid,
@@ -353,6 +392,7 @@ await run(
           localPrompts: page.prompts(),
           disconnectedLine,
           remoteStarts: starts().length,
+          localRequestsFromRemote,
         };
         writeFileSync(join(page.evidence, "remote-result.json"), JSON.stringify(result, null, 2));
         console.log(JSON.stringify(result));

@@ -5,6 +5,7 @@ import { workspaceWrittenFiles } from "./api.ts";
 import { refreshKey } from "./changesView.ts";
 import { sessionContext } from "./sessionContext.ts";
 import { type SessionFile, sessionFiles, visibleFiles } from "./sessionFiles.ts";
+import { useRemote } from "./useMachine.ts";
 import { useObservation } from "./useObservation.ts";
 
 /**
@@ -18,7 +19,11 @@ import { useObservation } from "./useObservation.ts";
  * read restores filtering. The app provides it through `SessionFilesContext`.
  */
 export function useSessionFilesController(state: AppState): SessionFile[] {
-  return useVisibleFiles(state.session, sessionContext(state).changesWorkspace);
+  const remote = useRemote();
+  return useVisibleFiles(
+    remote ? null : state.session,
+    remote ? undefined : sessionContext(state).changesWorkspace,
+  );
 }
 
 export const SessionFilesContext = createContext<SessionFile[] | null>(null);

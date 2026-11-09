@@ -4,10 +4,12 @@ import { AppLayout, LayoutView } from "@/components/AppLayout";
 import { CommandHost } from "@/components/CommandHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
+import { MachineHost } from "@/components/MachineHost";
 import { NewSession } from "@/components/NewSession";
 import { PaneNotFound } from "@/components/Pane";
 import { ProjectHome } from "@/components/ProjectHome";
 import { ProjectsIndex } from "@/components/ProjectsIndex";
+import { RemoteSidebar } from "@/components/RemoteSidebar";
 import { SessionView } from "@/components/SessionView";
 import { SettingsNavigation, SettingsPage } from "@/components/SettingsPage";
 import { SidebarActivityContext } from "@/components/ShowSidebarButton";
@@ -16,17 +18,18 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { checkoutRefresh } from "@/lib/checkoutRefresh";
 import type { NotifyLevel } from "@/lib/client";
-import { drafts } from "@/lib/messageDraft";
+import { machineLocation, machineSocketPath } from "@/lib/machine";
 import { initialView } from "@/lib/navigation";
-import { pendingDialogs, questionReplies } from "@/lib/piDialogs";
+import { pendingDialogs } from "@/lib/piDialogs";
 import { previewObservation } from "@/lib/previewObservation";
 import { parseRoute } from "@/lib/routes";
 import { useClient } from "@/lib/useClient";
-import { modelCatalogs } from "@/lib/useModelCatalog";
+import { useMachine } from "@/lib/useMachine";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
 import { providerAccounts } from "@/lib/useProviderAccounts";
 import { SessionFilesContext, useSessionFilesController } from "@/lib/useSessionFiles";
 import { SidebarLayoutContext, useSidebarLayoutController } from "@/lib/useSidebarLayout";
+import { browserSocketEnvironment, openConnection } from "@/lib/ws";
 import { type AppState, initialState } from "@/store";
 
 const notify = (message: string, level?: NotifyLevel) =>
@@ -41,18 +44,50 @@ const notify = (message: string, level?: NotifyLevel) =>
           : toast(message);
 
 export default function App() {
-  const { state, client } = useClient((): AppState => {
-    // Stored catalogs let the model picker open before Pi answers.
-    const catalogs = { ...modelCatalogs.seed() };
-    return { ...initialState, catalogs, view: initialView(parseRoute(location)) };
-  }, notify);
+  return (
+    <MachineHost>
+      <MachineApp />
+    </MachineHost>
+  );
+}
+
+function MachineApp() {
+  const scope = useMachine()!;
+  const { machine, catalogs: modelCatalogs, drafts, questions: questionReplies } = scope;
+  const remote = machine.id !== "local";
+  const { state, client } = useClient(
+    (): AppState => {
+      // Stored catalogs let the model picker open before Pi answers.
+      const catalogs = { ...modelCatalogs.seed() };
+      return {
+        ...initialState,
+        catalogs,
+        view: initialView(parseRoute(machineLocation(location.pathname))),
+      };
+    },
+    notify,
+    remote
+      ? {
+          connect: (handlers) =>
+            openConnection(handlers, {
+              ...browserSocketEnvironment,
+              url: () =>
+                `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}${machineSocketPath(machine.id)}`,
+            }),
+          lastDirectory: { read: () => null, write: () => {} },
+        }
+      : {},
+  );
   const { dispatch, send } = client;
-  useEffect(() => providerAccounts.follow(client), [client]);
-  useEffect(() => modelCatalogs.follow(client), [client]);
-  useEffect(() => checkoutRefresh.follow(client), [client]);
-  useEffect(() => drafts.follow(client), [client]);
-  useEffect(() => questionReplies.follow(client), [client]);
-  useEffect(() => previewObservation.follow(client, notify), [client]);
+  useEffect(() => (remote ? undefined : providerAccounts.follow(client)), [client, remote]);
+  useEffect(() => modelCatalogs.follow(client), [client, modelCatalogs]);
+  useEffect(() => (remote ? undefined : checkoutRefresh.follow(client)), [client, remote]);
+  useEffect(() => drafts.follow(client), [client, drafts]);
+  useEffect(() => questionReplies.follow(client), [client, questionReplies]);
+  useEffect(
+    () => (remote ? undefined : previewObservation.follow(client, notify)),
+    [client, remote],
+  );
   const layout = useSidebarLayoutController();
   // Details' Outputs reads this one answer, filtered by Git once per change.
   const sessionFiles = useSessionFilesController(state);
@@ -76,7 +111,9 @@ export default function App() {
               <AppLayout
                 navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
                 navigation={
-                  settings ? (
+                  remote ? (
+                    <RemoteSidebar state={state} />
+                  ) : settings ? (
                     <SettingsNavigation
                       section={settings}
                       onSelect={openSettings}
@@ -89,8 +126,17 @@ export default function App() {
                 content={
                   <>
                     {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
-                    <LayoutView key={state.view.kind} active={!settings}>
-                      {state.view.kind === "new" ? (
+                    <LayoutView key={state.view.kind} active={remote || !settings}>
+                      {remote && state.view.kind !== "session" ? (
+                        <PaneNotFound
+                          title={
+                            state.view.kind === "missing-session"
+                              ? "Session not found"
+                              : "Select a session"
+                          }
+                          description=""
+                        />
+                      ) : state.view.kind === "new" ? (
                         <NewSession
                           state={state}
                           client={client}
@@ -120,7 +166,7 @@ export default function App() {
                         <SessionView state={state} send={send} />
                       )}
                     </LayoutView>
-                    {settings && (
+                    {!remote && settings && (
                       <LayoutView>
                         <SettingsPage section={settings} />
                       </LayoutView>

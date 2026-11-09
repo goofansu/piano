@@ -132,7 +132,13 @@ tests are only the critical paths, which must keep working on every change and r
   earlier message; read the session cost; send a follow-up and see the reply and updated cost;
   stop a running reply.
 
-`npm run test:browser` runs both (about 6 seconds each) against a scratch registry, Pi history and
+- `test/browser/remote-session.mjs`: two independent scratch Pianos with colliding workspace/session
+  identities; list an existing remote session, continue, switch with isolated drafts/catalogs, answer
+  a dialog, disconnect/reconnect/reload without replay, and Stop on the same remote generation/PID.
+  The local fake Pi must receive no remote prompt; unsupported remote HTTP/socket requests cannot
+  reach Local. The harness's optional `remote` fixture owns its separate database/history/audit.
+
+`npm run test:browser` runs these and the transcript-row alignment check against scratch registries, Pi history and
 `test/browser/fake-pi.mjs`, with no model calls. They drive the UI by role and accessible name and
 assert what a user sees and what Pi receives, not markup. Add a journey only for a new critical
 path; cover rules and edge cases with module tests. Earlier documents cite `test/browser-*.mjs`

@@ -129,6 +129,7 @@ export default defineConfig({
     proxy: {
       "/api": backend,
       "/ws": { target: backend, ws: true },
+      "/peer": { target: backend, ws: true },
     },
   },
   build: { outDir: "dist", emptyOutDir: true },

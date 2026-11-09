@@ -45,7 +45,11 @@ import { Input } from "@/components/ui/input";
 import { artifactsMenu } from "@/lib/artifactsMenu";
 import { confirmation, FORM_NOT_SENT } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
-import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
+import {
+  type GlobalCommand,
+  type GlobalCommandContext,
+  globalCommands,
+} from "@/lib/globalCommands";
 import type { SessionLayout } from "@/lib/navigation";
 import { openLink } from "@/lib/openLink";
 import { openPageEditor, pageAvailability } from "@/lib/pageEditor";
@@ -53,6 +57,7 @@ import { pointerLast } from "@/lib/pointerClose";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
+import { remoteCommandAllowed } from "@/lib/remoteCapabilities";
 import {
   type SessionCommand,
   type SessionCommandIcon,
@@ -62,6 +67,7 @@ import {
 import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
 import { useCodeWrap } from "@/lib/useCodeWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
+import { useMachine, useRemote } from "@/lib/useMachine";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
@@ -136,6 +142,7 @@ export function useCommands() {
 
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
+  const remote = useRemote();
   const { state, run, messagesOnly, codeWrap, radiusSignedIn, layout } = useCommands();
   const observed = useSyncExternalStore(previewObservation.subscribe, previewObservation.getState);
   return {
@@ -144,8 +151,8 @@ export function useSessionCommands(target?: SessionTarget) {
       codeWrap,
       radiusSignedIn,
       layout,
-      previewObservation: observed,
-    }),
+      previewObservation: remote ? undefined : observed,
+    }).filter((command) => !remote || remoteCommandAllowed(command)),
     run,
     messagesOnly,
   };
@@ -157,7 +164,8 @@ export function useSessionCommands(target?: SessionTarget) {
  */
 export function useSessionProjectMenu() {
   const { state } = useCommands();
-  const session = state.session;
+  const remote = useRemote();
+  const session = remote ? null : state.session;
   return session?.sessionId
     ? sessionProjectMenu(state, { cwd: session.cwd, sessionId: session.sessionId })
     : undefined;
@@ -170,7 +178,24 @@ export function useSessionProjectMenu() {
  */
 export function useGlobalCommands() {
   const { state, run, global } = useCommands();
-  return { commands: globalCommands(state, global), run };
+  const scope = useMachine();
+  const remote = useRemote();
+  const commands = globalCommands(state, global).filter(
+    (command) => !remote || remoteCommandAllowed(command),
+  );
+  if (scope && scope.machines.length > 1)
+    commands.push(
+      ...scope.machines.map((machine): GlobalCommand => ({
+        id: `machine-${machine.id}`,
+        label: `Switch to ${machine.name}`,
+        icon: "machine",
+        group: "navigate",
+        enabled: machine.id !== scope.machine.id,
+        checked: machine.id === scope.machine.id,
+        intent: { kind: "machine", id: machine.id },
+      })),
+    );
+  return { commands, run };
 }
 
 /** A descriptor as a menu row, by its label and icon. */
@@ -251,6 +276,8 @@ export function CommandHost({
     settings,
     layout,
   } = useNavigation();
+  const remote = useRemote();
+  const machineScope = useMachine();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [codeWrap, setCodeWrap] = useCodeWrap();
   const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
@@ -293,6 +320,7 @@ export function CommandHost({
   const stopFocus = useRef<((event: Event) => void) | undefined>(undefined);
 
   const effects: CommandEffects = {
+    switchMachine: machineScope?.switchMachine,
     send,
     closeSettings,
     openSettings,
@@ -324,6 +352,7 @@ export function CommandHost({
     openPageEditor,
   };
   const run = (command: Command) => {
+    if (remote && !remoteCommandAllowed(command)) return;
     runCommand(command, effects);
   };
 

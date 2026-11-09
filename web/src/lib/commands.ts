@@ -50,6 +50,7 @@ export type CommandForm =
 
 /** What running a command can do; the host binds each to navigation, the client, and its own forms. */
 export interface CommandEffects {
+  switchMachine?: (id: string) => void;
   send: (message: ClientCommand) => void;
   closeSettings: () => void;
   openSettings: (section?: SettingsSection) => void;
@@ -82,6 +83,10 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
   if (!command.enabled) return false;
   const intent = command.intent;
   switch (intent.kind) {
+    case "machine":
+      if (!effects.switchMachine) return false;
+      effects.switchMachine(intent.id);
+      break;
     case "send":
       effects.send(intent.command);
       break;

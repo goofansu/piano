@@ -6,6 +6,7 @@ import {
   createModelCatalogs,
   type ModelCatalogView,
 } from "./modelCatalogs.ts";
+import { useMachine } from "./useMachine.ts";
 
 /** The page's model catalogs; App seeds the client with them and follows its connection. */
 export const modelCatalogs = createModelCatalogs({
@@ -16,6 +17,7 @@ export const modelCatalogs = createModelCatalogs({
 
 /** One directory's model picker: its catalog, refresh and saved defaults. */
 export function useModelCatalog(cwd: string | undefined): ModelCatalogView {
-  const state = useSyncExternalStore(modelCatalogs.subscribe, modelCatalogs.getState);
-  return useMemo(() => modelCatalogs.view(state, cwd), [state, cwd]);
+  const catalogs = useMachine()?.catalogs ?? modelCatalogs;
+  const state = useSyncExternalStore(catalogs.subscribe, catalogs.getState);
+  return useMemo(() => catalogs.view(state, cwd), [catalogs, state, cwd]);
 }

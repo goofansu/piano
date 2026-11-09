@@ -29,6 +29,7 @@ test("peer startup configuration is explicit, bounded and fail-closed", (t) => {
     { id: "../other" },
     { id: "" },
     { id: "eng_1" },
+    { id: "eng--1" },
     { name: " " },
     { endpoint: "https://user:secret@peer.example" },
     { endpoint: "http://peer.example" },

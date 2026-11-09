@@ -34,6 +34,7 @@ export const APPEARANCES = [
 ] as const satisfies readonly { value: Appearance; label: string }[];
 
 export type GlobalCommandId =
+  | `machine-${string}`
   | "home"
   | "settings"
   | `settings-${SettingsSection}`
@@ -62,6 +63,7 @@ export type GlobalCommandGroup =
   | "row-details";
 
 export type GlobalCommandIcon =
+  | "machine"
   | "home"
   | "settings"
   | SettingsSectionIconName
@@ -78,6 +80,7 @@ export type GlobalCommandIcon =
   | ProjectCommandIcon;
 
 export type GlobalCommandIntent =
+  | { kind: "machine"; id: string }
   | { kind: "home" }
   /** Open Settings, at `section` when given. */
   | { kind: "settings"; section?: SettingsSection }

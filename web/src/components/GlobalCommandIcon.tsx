@@ -21,6 +21,7 @@ import type { SettingsSectionIconName } from "@/lib/routes";
 
 /** The global names only: Settings sections and project commands keep their own maps. */
 const ICONS: Record<Exclude<IconId, SettingsSectionIconName | ProjectCommandIcon>, LucideIcon> = {
+  machine: MonitorIcon,
   home: HomeIcon,
   projects: TargetIcon,
   trusted: ShieldCheckIcon,

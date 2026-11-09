@@ -25,6 +25,7 @@ import {
   slashOpen,
   slashUpdate,
 } from "@/lib/slashCompletion";
+import { useMachine } from "@/lib/useMachine";
 import { useObservation } from "@/lib/useObservation";
 
 export interface CompletionContext {
@@ -118,6 +119,7 @@ export function SlashTextarea({
       window.removeEventListener("resize", sync);
     };
   }, [ref, value, props.className, props.style]);
+  const machineId = useMachine()?.machine.id;
   const open = slashOpen(state, view);
   const cwd = completion?.cwd;
   const session = completion?.session;
@@ -125,8 +127,8 @@ export function SlashTextarea({
   // again, including changes made by a handled extension command.
   const catalog = useObservation(open && cwd ? key : null, (signal) =>
     session
-      ? sessionCommands(session.workspaceId, session.sessionId, { signal })
-      : slashCommands(cwd!, { signal }),
+      ? sessionCommands(session.workspaceId, session.sessionId, { signal, machineId })
+      : slashCommands(cwd!, { signal, machineId }),
   );
   const current = catalog.value
     ? { commands: catalog.value }

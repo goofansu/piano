@@ -166,7 +166,7 @@ export async function run(name, setup, journey, options = {}) {
   const children = [
     backend("backend", local, backendPort, {
       ...options.backendEnv,
-      ...(peer ? { PIANO_PEER_CONFIG: peerConfig } : {}),
+      ...(peer ? { PIANO_PEER_CONFIG: peerConfig, NODE_ENV: "test" } : {}),
     }),
     start(
       "web",
