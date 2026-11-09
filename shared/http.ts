@@ -586,3 +586,45 @@ export const Endpoints = {
 } as const;
 
 export type Endpoints = typeof Endpoints;
+
+/**
+ * The requests another machine answers through this Piano's gateway (ADR 0004), declared once:
+ * the gateway serves exactly these at `/peer/<machine id>` + the browser path, and the browser
+ * sends nothing else there. The browser calls `browser`; the gateway checks the request against
+ * it, then asks the remote's `upstream` with the same IDs and body and returns its answer.
+ */
+export interface RemoteRequest {
+  readonly browser: Endpoint;
+  readonly upstream: Endpoint;
+  /** The 400 answer for a request outside `browser`'s query or body. */
+  readonly invalid: string;
+  /**
+   * The remote's refusal (`upstream.refused`) reaches the browser as its own `{ error, field? }`,
+   * for a check only the remote can make. Otherwise any answer but 200 is the remote unavailable.
+   */
+  readonly passRefusal: boolean;
+}
+
+export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
+  // The remote resolves the IDs in its own registry and refuses what it does not list.
+  {
+    browser: Endpoints.sessionCommands,
+    upstream: Endpoints.sessionCommands,
+    invalid: "Remote workspace and session IDs are required.",
+    passRefusal: false,
+  },
+  // Its peer folder read answers only for a folder registered there.
+  {
+    browser: Endpoints.slashCommands,
+    upstream: Endpoints.peerSlashCommands,
+    invalid: "A remote folder is required.",
+    passRefusal: false,
+  },
+  // The remote checks the model against its own catalog ("Choose an available model.").
+  {
+    browser: Endpoints.saveDefaults,
+    upstream: Endpoints.saveDefaults,
+    invalid: Endpoints.saveDefaults.invalid,
+    passRefusal: true,
+  },
+];
