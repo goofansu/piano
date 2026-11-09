@@ -1,12 +1,6 @@
-import { MAX_ATTACHMENT_BYTES } from "../shared/attachments.ts";
+import { MAX_MESSAGE_BYTES } from "../shared/attachments.ts";
 
 const MiB = 1024 * 1024;
-/** JSON envelope, prompt text and other fields that travel beside the base64 images. */
-const MESSAGE_TEXT_ALLOWANCE_BYTES = 16 * MiB;
-/** The largest single inbound message: a full attachment batch after base64 encoding
- * (about 67 MiB for 50 MiB) plus the text allowance. One WebSocket frame, one Pi RPC line and
- * the pending Pi output all admit one such message; derive any transport cap from this. */
-const MAX_MESSAGE_BYTES = 4 * Math.ceil(MAX_ATTACHMENT_BYTES / 3) + MESSAGE_TEXT_ALLOWANCE_BYTES;
 
 /** Non-waiting admission: ordinary work cannot occupy the reserved control lane.
  * Rejected input is never queued for later execution. Keep the lease until the

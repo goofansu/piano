@@ -12,7 +12,7 @@ import {
   encodeClientMessage,
   type ServerMessage,
 } from "../../../shared/wire.ts";
-import { LOCAL, machineSocketUrl } from "./machine.ts";
+import { LOCAL, machineFrameBytes, machineSocketUrl } from "./machine.ts";
 
 /** Local disposition only: `sent` is socket acceptance, not a server or Pi receipt.
  * A throwing send is uncertain; only a message the wire cannot encode, or a socket checked
@@ -54,6 +54,8 @@ export interface SocketLike {
 export interface SocketEnvironment {
   open: (url: string, events: SocketEvents) => SocketLike;
   url: () => string;
+  /** The largest frame the machine at `url` accepts (`machineFrameBytes`). */
+  frameBytes: number;
   nonce: () => string;
   setTimeout: (run: () => void, ms: number) => unknown;
   clearTimeout: (timer: unknown) => void;
@@ -77,6 +79,7 @@ export const browserSocketEnvironment: SocketEnvironment = {
     };
   },
   url: () => machineSocketUrl(LOCAL.id),
+  frameBytes: machineFrameBytes(LOCAL.id),
   nonce: () => crypto.randomUUID(),
   setTimeout: (run, ms) => globalThis.setTimeout(run, ms),
   clearTimeout: (timer) => globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>),
@@ -100,6 +103,12 @@ const PONG_TIMEOUT = 8_000;
 const RECONNECT_DELAY = 2_000;
 
 const reasons: Partial<Record<number, DisconnectReason>> = { 1013: "behind", 1009: "too-large" };
+
+/** Whether a frame's UTF-8 bytes stay within `limit`; it counts them only when its length
+ * leaves the answer open (a UTF-16 unit takes one to three bytes). */
+const fits = (data: string, limit: number) =>
+  data.length * 3 <= limit ||
+  (data.length <= limit && new TextEncoder().encode(data).byteLength <= limit);
 
 /** Auto-reconnecting WebSocket that speaks the shared wire schema. */
 export function openConnection(
@@ -214,6 +223,11 @@ export function openConnection(
         data = encodeClientMessage(m);
       } catch (err) {
         console.warn("unencodable client message", err);
+        return "not-sent";
+      }
+      // Nor does one larger than the machine accepts: its socket would close and drop it unseen.
+      if (!fits(data, env.frameBytes)) {
+        console.warn("client message exceeds the machine's frame limit");
         return "not-sent";
       }
       try {

@@ -1,6 +1,7 @@
 /** Connects the dispatch tools to their launching Piano; no endpoint comes from tool input. */
 import { SESSION_ORIGIN, SESSION_WS_URL } from "../../shared/dispatch.ts";
 import { isLoopbackHostname } from "../../shared/loopback.ts";
+import { LOCAL, machineFrameBytes } from "../../shared/machine.ts";
 import type { SocketEnvironment } from "../../web/src/lib/ws.ts";
 
 export interface DispatchConfiguration {
@@ -39,6 +40,8 @@ export function dispatchConfiguration(
 export function nodeSocketEnvironment(config: DispatchConfiguration): SocketEnvironment {
   return {
     url: () => config.url,
+    // Dispatch speaks to this Piano's own socket.
+    frameBytes: machineFrameBytes(LOCAL.id),
     nonce: () => crypto.randomUUID(),
     open: (url, events) => {
       // Node's WebSocket accepts Undici's options, including Origin, but the shared transport's

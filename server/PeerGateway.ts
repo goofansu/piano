@@ -11,6 +11,7 @@ import { Data, Effect, Redacted, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { type RemoteRequest, RemoteRequests } from "../shared/http.ts";
+import { PEER_FRAME_BYTES } from "../shared/machine.ts";
 import { ClientMessageJson, decodeServerMessage } from "../shared/wire.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
 import { ConfiguredPeers, type PeerConfig } from "./PeerConfig.ts";
@@ -18,7 +19,8 @@ import { ConfiguredPeers, type PeerConfig } from "./PeerConfig.ts";
 const limits = {
   connectMs: 5_000,
   requestMs: 10_000,
-  clientBytes: 1024 * 1024,
+  /** The browser's own frames (`machineFrameBytes`, which the browser checks before sending). */
+  clientBytes: PEER_FRAME_BYTES,
   serverBytes: 8 * 1024 * 1024,
   bufferedFrames: 64,
   ackMs: 15_000,

@@ -16,6 +16,7 @@ import {
 } from "../extensions/piano-dispatch/SessionDispatch.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
+import { LOCAL, machineFrameBytes } from "../shared/machine.ts";
 import { dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import {
   type ClientMessage,
@@ -178,6 +179,7 @@ function world() {
       };
     },
     url: () => "ws://piano.test/ws",
+    frameBytes: machineFrameBytes(LOCAL.id),
     nonce: () => `n${++nonces}`,
     setTimeout: (run, ms) => {
       const id = ++ids;

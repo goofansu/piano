@@ -45,6 +45,7 @@ const disconnectNotices: Record<DisconnectReason, [string, NotifyLevel]> = {
 };
 
 const NOT_SENT = "Message not sent. Your draft is kept; retry when the session reconnects.";
+const TOO_LARGE = "Message too large to send to this machine. Your draft is kept.";
 
 /** The input a creation carries, shown as the new session's first message until Pi records it. */
 const firstMessage = (m: Extract<ClientCommand, { _tag: "create_session" }>) =>
@@ -149,6 +150,10 @@ export function createClient({
     for (const listener of listeners) listener(action.type === "server" ? "live" : "immediate");
   };
 
+  /** Why a send the connection declined was not sent. A lost socket reports itself before `send`
+   * returns, so one still connected afterwards refused the message itself: it can never fit. */
+  const notSent = () => (state.connected ? TOO_LARGE : NOT_SENT);
+
   const send = (m: ClientCommand): SendDisposition => {
     if (m._tag === "select" || m._tag === "create_session") {
       const selectionId = newSelectionId();
@@ -170,7 +175,7 @@ export function createClient({
       // during the send has already been applied, so its first message shows as uncertain.
       const disposition = connection?.send({ ...m, selectionId }) ?? "not-sent";
       if (disposition === "not-sent") {
-        if (firstMessage(m)) notify(NOT_SENT, "warning");
+        if (firstMessage(m)) notify(notSent(), "warning");
       } else {
         lastDirectory.write(m.cwd);
         selecting();
@@ -178,12 +183,12 @@ export function createClient({
       return disposition;
     } else if (m._tag === "act") {
       // An action belongs to the attachment it was aimed at; never send it on a stale or pending one.
-      const disposition =
-        sessionReady(state) && state.selectionId
-          ? (connection?.send({ ...m, selectionId: state.selectionId }) ?? "not-sent")
-          : "not-sent";
+      const ready = sessionReady(state) && state.selectionId;
+      const disposition = ready
+        ? (connection?.send({ ...m, selectionId: state.selectionId! }) ?? "not-sent")
+        : "not-sent";
       if (m.action._tag === "prompt" || m.action._tag === "steer") {
-        if (disposition === "not-sent") notify(NOT_SENT, "warning");
+        if (disposition === "not-sent") notify(ready ? notSent() : NOT_SENT, "warning");
         else if (disposition === "uncertain")
           notify(
             "Message delivery is uncertain. Check the conversation before sending again.",
