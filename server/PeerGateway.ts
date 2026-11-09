@@ -320,15 +320,6 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
   const peers = yield* ConfiguredPeers;
   const allowedOrigins = yield* AllowedOrigins;
   const byId = new Map(peers.map((peer) => [peer.id, peer]));
-  yield* router.add(
-    "GET",
-    "/api/machines",
-    Effect.succeed(
-      json({
-        machines: [{ id: "local", name: "Local" }, ...peers.map(({ id, name }) => ({ id, name }))],
-      }),
-    ),
-  );
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = new URL(request.url, "http://localhost");

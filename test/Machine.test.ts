@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
+import { loadPeerConfigs } from "../server/PeerConfig.ts";
 import type { ModelCatalog } from "../shared/wire.ts";
 import { sessionCommands, workspaceFile } from "../web/src/lib/api.ts";
 import { createClient } from "../web/src/lib/client.ts";
@@ -162,4 +166,49 @@ test("HTTP request captures its peer; unsupported remote reads never fall throug
   assert.deepEqual(await pending, []);
   assert.equal(peerApiPath("local", "/api/workspace/file"), "/api/workspace/file");
   assert.throws(() => peerApiPath("unknown", "/api/settings"), /Unavailable/);
+});
+
+test("a machine ID startup configuration accepts is one the browser can address, and only those", () => {
+  const root = mkdtempSync(join(tmpdir(), "piano-machine-id-"));
+  const file = join(root, "peers.json");
+  const accepts = (id: string) => {
+    writeFileSync(
+      file,
+      JSON.stringify({
+        id,
+        name: "Remote",
+        endpoint: "https://peer.example",
+        origin: "https://peer.example",
+      }),
+    );
+    try {
+      return loadPeerConfigs(file).length === 1;
+    } catch {
+      return false;
+    }
+  };
+  try {
+    for (const id of [
+      "eng-1",
+      "a",
+      "0x9",
+      "a".repeat(64),
+      "eng--1",
+      "-eng",
+      "eng-",
+      "Eng",
+      "a".repeat(65),
+    ]) {
+      const configured = accepts(id);
+      const addressed = machineLocation(`/m/${id}/s/same-id`).id === id;
+      assert.equal(
+        addressed,
+        configured,
+        `${id}: configured ${configured}, addressed ${addressed}`,
+      );
+    }
+    assert.ok(accepts("a".repeat(64)) && !accepts("eng--1"), "the table covers both outcomes");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

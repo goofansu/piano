@@ -1,5 +1,6 @@
 import { saveDefaults } from "./api.ts";
 import type { Notify } from "./client.ts";
+import { LOCAL } from "./machine.ts";
 import { createDrafts, type Drafts } from "./messageDraft.ts";
 import { createModelCatalogs, type ModelCatalogs } from "./modelCatalogs.ts";
 import { createQuestionReplies, type QuestionReplies } from "./piDialogs.ts";
@@ -12,7 +13,7 @@ export interface MachineStores {
 
 /** One page-memory partition per configured identity; identical remote cwd/IDs never share stores. */
 export function createMachineStores(local: MachineStores, notify: Notify) {
-  const stores = new Map<string, MachineStores>([["local", local]]);
+  const stores = new Map<string, MachineStores>([[LOCAL.id, local]]);
   return (id: string): MachineStores => {
     let current = stores.get(id);
     if (!current) {

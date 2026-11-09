@@ -28,7 +28,7 @@ import {
   type WorkspaceWrittenFiles,
   type WrittenFile,
 } from "../../../shared/wire.ts";
-import { peerApiPath } from "./machine.ts";
+import { LOCAL, peerApiPath } from "./machine.ts";
 
 export type { RadiusSetupAction };
 export const listWebhooks = (options?: RequestOptions) => call(Endpoints.webhooks, {}, options);
@@ -77,7 +77,7 @@ type Input<Q extends IdParam, B extends Json | undefined> = ([Q] extends [never]
 async function call<Q extends IdParam, B extends Json | undefined, R extends Json>(
   endpoint: Endpoint<Q, B, R>,
   input: Input<Q, B>,
-  { signal, machineId = "local" }: RequestOptions = {},
+  { signal, machineId = LOCAL.id }: RequestOptions = {},
   readSuccess?: (response: Response) => Promise<unknown>,
 ): Promise<R["Type"]> {
   const { method, noStore, fallback } = endpoint;
@@ -113,6 +113,10 @@ async function call<Q extends IdParam, B extends Json | undefined, R extends Jso
   if (decoded._tag === "Failure") throw new ApiError(failure(response.status), response.status);
   return decoded.value;
 }
+
+/** Always this Piano's own list: a remote's machines are not this browser's. */
+export const listMachines = (signal?: AbortSignal) =>
+  call(Endpoints.machines, {}, { signal }).then(({ machines }) => machines);
 
 // Folder picker
 
