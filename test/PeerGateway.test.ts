@@ -361,7 +361,7 @@ test(
         const saved = { model: "remote/beta", thinkingLevel: "high" };
         const response = await put(JSON.stringify(saved));
         assert.equal(response.status, 200);
-        assert.deepEqual(await response.json(), { defaults: saved });
+        assert.deepEqual(await response.json(), { ok: true });
         const sent = f.state.requests.slice(before);
         assert.deepEqual(
           sent.map(({ url, method, body }) => ({ url, method, body: JSON.parse(body!) })),

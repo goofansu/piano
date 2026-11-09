@@ -12,10 +12,8 @@ export class PiSettingsError extends Data.TaggedError("PiSettingsError")<{
 export class PiSettings extends Context.Service<
   PiSettings,
   {
-    readonly defaults: Effect.Effect<SessionDefaults, PiSettingsError>;
-    readonly saveDefaults: (
-      defaults: SessionDefaults,
-    ) => Effect.Effect<SessionDefaults, PiSettingsError>;
+    /** Pi's probed catalog, not this answer, names the saved default (INV-01). */
+    readonly saveDefaults: (defaults: SessionDefaults) => Effect.Effect<void, PiSettingsError>;
   }
 >()("piano/PiSettings") {}
 
@@ -25,12 +23,9 @@ function manager() {
   return settings;
 }
 
-function defaultsOf(settings: SettingsManager): SessionDefaults {
-  const { defaultProvider, defaultModel, defaultThinkingLevel } = settings.getGlobalSettings();
-  return {
-    model: defaultProvider && defaultModel ? `${defaultProvider}/${defaultModel}` : undefined,
-    thinkingLevel: defaultThinkingLevel ?? "medium",
-  };
+function modelOf(settings: SettingsManager): string | undefined {
+  const { defaultProvider, defaultModel } = settings.getGlobalSettings();
+  return defaultProvider && defaultModel ? `${defaultProvider}/${defaultModel}` : undefined;
 }
 
 export const PiSettingsLive = Layer.effect(
@@ -38,23 +33,22 @@ export const PiSettingsLive = Layer.effect(
   Effect.gen(function* () {
     const facts = yield* DirectoryFacts;
     const lock = yield* Semaphore.make(1);
-    const read = Effect.try({
-      try: () => defaultsOf(manager()),
+    const currentModel = Effect.try({
+      try: () => modelOf(manager()),
       catch: () =>
         new PiSettingsError({
           detail: "Could not read Pi settings. Check the settings file and try again.",
         }),
     });
     return PiSettings.of({
-      defaults: Semaphore.withPermits(lock, 1)(read),
       saveDefaults: (next) =>
         Semaphore.withPermits(
           lock,
           1,
         )(
           Effect.gen(function* () {
-            const current = yield* read;
-            if (next.model !== undefined && next.model !== current.model) {
+            const current = yield* currentModel;
+            if (next.model !== undefined && next.model !== current) {
               const available = yield* facts.global;
               if (available.error)
                 return yield* new PiSettingsError({
@@ -78,7 +72,6 @@ export const PiSettingsLive = Layer.effect(
                 await settings.flush();
                 // Pi records I/O failures instead of rejecting flush(). Never claim a failed save succeeded.
                 if (settings.drainErrors().length) throw new Error("Could not write Pi settings.");
-                return defaultsOf(manager());
               },
               catch: () =>
                 new PiSettingsError({
