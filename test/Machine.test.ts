@@ -11,6 +11,7 @@ import {
   machineAddress,
   machineLocation,
   machinePath,
+  machineSocketUrl,
   peerApiPath,
 } from "../web/src/lib/machine.ts";
 import { createMachineStores } from "../web/src/lib/machineStores.ts";
@@ -211,4 +212,13 @@ test("a machine ID startup configuration accepts is one the browser can address,
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("Local keeps this Piano's own socket; a remote's goes through the gateway, wss under https", () => {
+  const http = { protocol: "http:", host: "127.0.0.1:7070" };
+  const https = { protocol: "https:", host: "piano.example" };
+  assert.equal(machineSocketUrl("local", http), "ws://127.0.0.1:7070/ws");
+  assert.equal(machineSocketUrl("local", https), "wss://piano.example/ws");
+  assert.equal(machineSocketUrl("eng-1", http), "ws://127.0.0.1:7070/peer/eng-1/ws");
+  assert.equal(machineSocketUrl("eng-1", https), "wss://piano.example/peer/eng-1/ws");
 });

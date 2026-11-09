@@ -3,7 +3,7 @@ import { RemoteRequests } from "../../../shared/http.ts";
 import { isLocalId, isMachineId, LOCAL, type Machine } from "../../../shared/machine.ts";
 import type { AddressBar } from "./navigation.ts";
 
-export { LOCAL, type Machine };
+export { isLocalId, LOCAL, type Machine };
 
 /** `/m/<id>/…` addresses a remote; an ID no machine could take addresses none (`""`). */
 export function machineLocation(pathname: string): { id: string; pathname: string } {
@@ -17,7 +17,13 @@ export const machinePath = (id: string, path: string) =>
   isLocalId(id) ? path : `/m/${encodeURIComponent(id)}${path}`;
 /** Where this Piano's gateway answers for a remote machine. */
 const peerPath = (id: string, path: string) => `/peer/${encodeURIComponent(id)}${path}`;
-export const machineSocketPath = (id: string) => peerPath(id, "/ws");
+/** Local answers on this Piano's own socket; a remote's goes through the gateway. */
+const machineSocketPath = (id: string) => (isLocalId(id) ? "/ws" : peerPath(id, "/ws"));
+/** The one place a machine's socket URL is built from the page's own address. */
+export const machineSocketUrl = (
+  id: string,
+  { protocol, host }: Pick<Location, "protocol" | "host"> = location,
+) => `${protocol === "https:" ? "wss:" : "ws:"}//${host}${machineSocketPath(id)}`;
 
 /** Each navigation owns its prefix; late work cannot adopt the newly selected machine. */
 export function machineAddress(id: string, address: AddressBar): AddressBar {
