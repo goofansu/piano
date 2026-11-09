@@ -10,6 +10,7 @@
 import { Schema } from "effect";
 import { FileDownload, FilePreview } from "./files.ts";
 import { LIBRARY_KINDS, type LibraryKind, type LibraryKindWords } from "./library.ts";
+import { Machines } from "./machine.ts";
 import { McpSetupChange, McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { Prompt, PromptCreate, PromptProposal, PromptUpdate } from "./prompts.ts";
 import { ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
@@ -244,6 +245,16 @@ const libraryEndpoints = <E extends Json, C extends Json, U extends Json, P exte
 };
 
 export const Endpoints = {
+  /** This Piano and the remotes it was configured with; never their endpoints or credentials. */
+  machines: endpoint({
+    method: "GET",
+    path: "/api/machines",
+    response: Schema.Struct({ machines: Machines }),
+    noStore: true,
+    redact: false,
+    fallback: "Could not load machines.",
+  }),
+
   // Folder picker
 
   listDirectory: endpoint({
