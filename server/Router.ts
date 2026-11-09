@@ -389,7 +389,7 @@ export const AppRouter = HttpRouter.use((router) =>
 
     yield* serve(Endpoints.saveDefaults, ({ body }) =>
       Effect.flatMap(PiSettings, (settings) => settings.saveDefaults(body)).pipe(
-        Effect.map((defaults) => ({ defaults })),
+        Effect.as({ ok: true as const }),
       ),
     );
 

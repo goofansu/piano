@@ -37,7 +37,7 @@ export interface ModelCatalogsOptions {
   storage: CatalogStorage;
   notify: Notify;
   /** Pi's saved defaults for new sessions; rejects when Pi did not save them. */
-  saveDefaults: (model: string | undefined, effort: ThinkingLevel) => Promise<unknown>;
+  saveDefaults: (model: string | undefined, effort: ThinkingLevel) => Promise<void>;
   /** How long a saved default may take to reach a catalog before saving ends anyway. */
   confirmMs?: number;
 }

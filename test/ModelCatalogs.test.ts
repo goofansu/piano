@@ -23,7 +23,7 @@ const catalog = (fetchedAt: string, extra: Partial<ModelCatalog> = {}): ModelCat
 });
 
 /** The page's client over a fake transport, with model catalogs following it as App wires them. */
-function page(stored: Catalogs = {}, save: () => Promise<unknown> = async () => ({})) {
+function page(stored: Catalogs = {}, save: () => Promise<void> = async () => {}) {
   const writes: Catalogs[] = [];
   const notes: Array<[string, NotifyLevel | undefined]> = [];
   const sent: ClientMessage[] = [];

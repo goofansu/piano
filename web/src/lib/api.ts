@@ -282,11 +282,14 @@ export const sessionCommands = async (
 ) =>
   (await call(Endpoints.sessionCommands, { query: { workspaceId, sessionId } }, options)).commands;
 
+/** Pi's probed catalog, not this answer, names the saved default. */
 export const saveDefaults = async (
   model: string | undefined,
   thinkingLevel: ThinkingLevel,
   options?: RequestOptions,
-) => (await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options)).defaults;
+): Promise<void> => {
+  await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options);
+};
 
 // Settings
 

@@ -17,6 +17,13 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
   const project = fixture.project("overridden");
   const path = join(fixture.agentDir, "settings.json");
   writeFileSync(path, JSON.stringify({ cacheWarming: "off", theme: "dark" }));
+  // What a save left in Pi's settings file, which Pi reads for every new session.
+  const saved = () => {
+    const { defaultProvider, defaultModel, defaultThinkingLevel } = JSON.parse(
+      readFileSync(path, "utf8"),
+    );
+    return { defaultProvider, defaultModel, defaultThinkingLevel };
+  };
   const previous = { HOME: process.env.HOME, PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR };
   process.env.HOME = fixture.root;
   process.env.PI_CODING_AGENT_DIR = fixture.agentDir;
@@ -31,7 +38,6 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
         const settings = yield* PiSettings,
           catalogs = yield* DirectoryFacts,
           sessions = yield* PiSessions;
-        assert.deepEqual(yield* settings.defaults, { model: undefined, thinkingLevel: "medium" });
         // Global discovery must ignore project configuration, even for a trusted checkout.
         const globalProbe = yield* sessions.probe(project, { globalSettingsOnly: true });
         assert.notEqual(globalProbe.defaultModel, "piano-phase0/project");
@@ -44,12 +50,14 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
         });
         const original = yield* session.state;
         const wanted = { model: "piano-phase0/global", thinkingLevel: "high" } as const;
-        assert.deepEqual(yield* settings.saveDefaults(wanted), wanted);
-        assert.deepEqual(yield* settings.defaults, wanted);
+        yield* settings.saveDefaults(wanted);
+        const written = {
+          defaultProvider: "piano-phase0",
+          defaultModel: "global",
+          defaultThinkingLevel: "high",
+        };
+        assert.deepEqual(saved(), written);
         const persisted = JSON.parse(readFileSync(path, "utf8"));
-        assert.equal(persisted.defaultProvider, "piano-phase0");
-        assert.equal(persisted.defaultModel, "global");
-        assert.equal(persisted.defaultThinkingLevel, "high");
         assert.equal(persisted.theme, "dark");
         assert.equal(persisted.cacheWarming, "off");
         const next = yield* catalogs.catalog(fixture.root);
@@ -74,13 +82,10 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
           ))._tag,
           "Failure",
         );
-        assert.deepEqual(yield* settings.defaults, wanted);
+        assert.deepEqual(saved(), written);
         // Effort can be updated independently, retaining the selected model.
         yield* settings.saveDefaults({ thinkingLevel: "medium" });
-        assert.deepEqual(yield* settings.defaults, {
-          model: wanted.model,
-          thinkingLevel: "medium",
-        });
+        assert.deepEqual(saved(), { ...written, defaultThinkingLevel: "medium" });
         // flush() resolves even on I/O failure; Piano must not report success.
         chmodSync(path, 0o400);
         assert.equal(
@@ -88,9 +93,9 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
           "Failure",
         );
         chmodSync(path, 0o600);
-        assert.equal((yield* settings.defaults).thinkingLevel, "medium");
+        assert.deepEqual(saved(), { ...written, defaultThinkingLevel: "medium" });
+        // An unreadable settings file is refused, never overwritten.
         writeFileSync(path, "{broken");
-        assert.equal((yield* Effect.result(settings.defaults))._tag, "Failure");
         assert.equal(
           (yield* Effect.result(settings.saveDefaults({ thinkingLevel: "low" })))._tag,
           "Failure",

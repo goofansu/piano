@@ -112,7 +112,7 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       const defaults = JSON.parse(body);
       if (defaults.model === "remote/unknown")
         res.writeHead(400).end(JSON.stringify({ error: "Choose an available model." }));
-      else res.end(JSON.stringify({ defaults }));
+      else res.end(JSON.stringify({ ok: true }));
       return;
     }
     const respond = () =>

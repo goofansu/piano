@@ -3,6 +3,7 @@ import { after, before, test } from "node:test";
 import { Effect, Layer } from "effect";
 import { PiSettings, PiSettingsError } from "../server/PiSettings.ts";
 import { ProviderLoginRuntime } from "../server/ProviderLogin.ts";
+import { RadiusSetup } from "../server/RadiusSetup.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { type Endpoint, Endpoints } from "../shared/http.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
@@ -10,23 +11,27 @@ import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 // The router's half of shared/http.ts, observed over HTTP the way any client sees it.
 let server: RouterFixture;
 before(async () => {
-  // Settings that refuse one model, answer outside the response contract for another and fail
-  // unexpectedly for any other, to observe failure statuses and the response contract.
+  // Settings that refuse one model and fail unexpectedly for any other, to observe failure statuses.
   const failingSettings = Layer.succeed(PiSettings, {
-    defaults: Effect.die("unused"),
     saveDefaults: ({ model }) =>
       model === "refused"
         ? Effect.fail(new PiSettingsError({ detail: "Choose an available model." }))
-        : model === "off-contract"
-          ? Effect.succeed({ candidate: "not defaults" } as never)
-          : Effect.die(new Error("EACCES: /home/someone/.pi/agent/settings.json")),
+        : Effect.die(new Error("EACCES: /home/someone/.pi/agent/settings.json")),
+  });
+  // A Radius setup that answers outside its response contract, to observe that contract.
+  const offContractRadius = Layer.succeed(RadiusSetup, {
+    state: Effect.succeed({ candidate: "not a setup" } as never),
+    change: () => Effect.die("unused"),
   });
   // Pi's providers fail to load with an error that names a local file.
   const unreadableProviders = Layer.succeed(ProviderLoginRuntime, {
     create: () => Promise.reject(new Error("EACCES: /home/someone/.pi/agent/auth.json")),
     deviceId: () => "unused",
   });
-  server = await startRouter("piano-router-", Layer.merge(failingSettings, unreadableProviders));
+  server = await startRouter(
+    "piano-router-",
+    Layer.mergeAll(failingSettings, unreadableProviders, offContractRadius),
+  );
 });
 after(() => server.dispose());
 
@@ -300,16 +305,10 @@ test("a webhook save outside its body Schema is refused before Webhooks sees it"
 });
 
 test("a result outside the response Schema is never sent", async () => {
-  const { status, body } = await reply(
-    await server.handle("/api/settings/defaults", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "off-contract", thinkingLevel: "medium" }),
-    }),
-  );
+  const { status, body } = await reply(await server.handle("/api/settings/radius"));
   assert.equal(status, 500);
   assert.equal(body.error, "The server answered outside its contract. Inspect the server log.");
-  assert.ok(!JSON.stringify(body).includes("not defaults"));
+  assert.ok(!JSON.stringify(body).includes("not a setup"));
 });
 
 test("a refusal is answered with the endpoint's status and its detail; an unexpected failure generically, never with its message", async () => {

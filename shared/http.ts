@@ -482,7 +482,7 @@ export const Endpoints = {
     path: "/api/settings/defaults",
     body: SessionDefaults,
     invalid: "Choose a valid default model and effort.",
-    response: Schema.Struct({ defaults: SessionDefaults }),
+    response: Schema.Struct({ ok: Schema.Literal(true) }),
     refused: 400,
     fallback: "Could not save defaults. Try again.",
   }),
