@@ -167,7 +167,7 @@ only the selected machine and offers a **Switch to …** command for each config
 address is `/m/eng-1/s/<sessionId>`; reload and back/forward retain that machine.
 
 **New session** (or **New session here** in Cmd+K) starts a session on the selected machine. Its
-directory picker lists only the folders that machine has registered, and the first message is text.
+directory picker lists only the folders open on that machine, and the first message is text.
 The session runs and stays on the remote. A worktree for parallel work comes from the remote
 session's own dispatch, which runs on the remote, not from this picker.
 
@@ -181,10 +181,10 @@ Local's persisted catalog. Remote files, credentials, history and database remai
 
 ## Deliberate limits
 
-- A new remote session starts only in a folder or worktree the remote has registered, with a text
+- A new remote session starts only in a folder open on the remote or one of its worktrees, with a text
   first message: no Browse, worktree creation, project, name or attachment. No archive/delete/
-  rename/pin, projects management, worktree or machine management. Add folders and manage those on
-  the owning Piano.
+  rename/pin, projects management, worktree or machine management. Add, close and reopen folders
+  on the owning Piano.
 - No remote file/Changes/attachment/preview or account/settings controls beyond the model picker's
   defaults, folder trust included:
   trusting a folder would run its project extensions on the remote. These requests are not

@@ -252,6 +252,46 @@ test(
       },
     );
 
+    // After the creation above: closing its folder here is what this subtest needs.
+    await t.test("a folder closed here cannot be reopened by a peer's new session", async () => {
+      const folderPaths = (frame: Frame) =>
+        (frame.folders as { path: string }[]).map((folder) => folder.path);
+      const closing = local.frames.length;
+      local.ws.send(JSON.stringify({ _tag: "remove_folder", path: f.checkout }));
+      await local.next(
+        (frame) => frame._tag === "registry" && !folderPaths(frame).includes(f.checkout),
+        closing,
+      );
+
+      const from = peer.frames.length;
+      peer.ws.send(
+        JSON.stringify({
+          _tag: "create_session",
+          selectionId: "closed",
+          cwd: f.checkout,
+          options: {},
+          text: "Reply with exactly: X",
+        }),
+      );
+      const answer = await peer.next(
+        (frame) =>
+          (frame._tag === "selected" || frame._tag === "selection_rejected") &&
+          frame.selectionId === "closed",
+        from,
+      );
+      assert.equal(answer._tag, "selection_rejected", JSON.stringify(answer));
+      assert.match(String(answer.message), notAvailable);
+      // The models read for an existing session in the closed folder is still answered.
+      const [models] = await peer.answers({
+        _tag: "models",
+        cwd: f.checkout,
+        requestId: "closed-models",
+      });
+      assert.notEqual(models?._tag, "models_failed", JSON.stringify(models));
+      const latest = local.frames.findLast((frame) => frame._tag === "registry");
+      assert.ok(latest && !folderPaths(latest).includes(f.checkout), "the folder stays closed");
+    });
+
     await t.test("refusals never end the connection", () => {
       assert.equal(peer.ws.readyState, WebSocket.OPEN);
     });

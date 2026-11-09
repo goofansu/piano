@@ -3,8 +3,8 @@
  * the sessions, so it decides here, and answers a refusal with the request's ordinary reply in
  * the delivery sequence: the gateway in front stays a pipe that never injects or renumbers frames.
  *
- * The slice lists registered sessions, opens them, starts a session with a text prompt in a
- * registered folder or worktree, sends text, answers dialogs and stops. Files, worktree creation,
+ * The slice lists registered sessions, opens them, starts a session with a text prompt in an open
+ * folder or one of its worktrees, sends text, answers dialogs and stops. Files, worktree creation,
  * projects and settings (trust included: trusting a folder runs its project extensions here) are
  * not offered.
  */
@@ -18,16 +18,27 @@ type Create = Extract<Request, { _tag: "create_session" }>;
 
 /**
  * - `admit`: run as for a browser on this machine;
- * - `skip`: drop silently: a quiet read (no `requestId`) about a folder no longer registered here,
+ * - `skip`: drop silently: a quiet read (no `requestId`) about a folder not registered here,
  *   which a reconnecting browser may still ask about before the fresh registry refocuses it. A read
  *   that carries a `requestId` has a sender waiting on that ID, so it is refused instead;
  * - `refuse`: answer with the request's ordinary unanswered reply.
  */
 export type PeerVerdict = "admit" | "skip" | "refuse";
 
-/** A folder or worktree registered on this machine: the only directories a peer may ask about. */
+/**
+ * A folder or worktree registered on this machine: the only directories a peer may ask about.
+ * Closing a folder keeps its workspaces, so this includes the sessions of closed folders.
+ */
 export const registered = (data: RegistryData, cwd: string) =>
   data.workspaces.some((workspace) => workspace.path === cwd);
+/**
+ * Where a peer may start a session: an open folder or one of its worktrees. Starting a session in
+ * a closed folder's directory reopens the folder, and registering folders stays with this machine.
+ */
+const open = (data: RegistryData, cwd: string) =>
+  data.workspaces.some(
+    (workspace) => workspace.path === cwd && data.folders.includes(workspace.folder),
+  );
 const listed = (data: RegistryData, cwd: string, sessionId: string) =>
   registered(data, cwd) && data.sessions.some((entry) => sameSession(entry, { cwd, sessionId }));
 
@@ -88,11 +99,11 @@ export function peerVerdict(
         ? "admit"
         : "refuse";
     case "create_session":
-      return registered(data, request.cwd) && creationAllowed(request) ? "admit" : "refuse";
+      return open(data, request.cwd) && creationAllowed(request) ? "admit" : "refuse";
     case "act":
       return selection?.selectionId === request.selectionId &&
         (selection.sessionId === null
-          ? registered(data, selection.cwd)
+          ? open(data, selection.cwd)
           : listed(data, selection.cwd, selection.sessionId)) &&
         actionAllowed(request)
         ? "admit"
