@@ -64,10 +64,10 @@ turn Piano into a fleet manager.
   compatibility; deployments must verify their specific peer versions.
 
 The slice lists the peer's existing registered sessions, opens history/state, sends text, streams,
-answers dialogs and stops. It also starts a session with a text first message in a folder or worktree
-the peer already registered: the peer admits that creation without a worktree, project, name,
-dispatch ancestry or attachment, and its selection then takes the slice's actions. The model
-picker saves the peer's default model and effort for new sessions through the peer's own settings
+answers dialogs and stops. It also starts a session with a text first message in a folder open on
+the peer or one of its worktrees (a closed folder stays closed): the peer admits that creation
+without a worktree, project, name, dispatch ancestry or attachment, and its selection then takes
+the slice's actions. The model picker saves the peer's default model and effort for new sessions through the peer's own settings
 endpoint, which checks the model against the peer's catalog; Pi on the peer owns the file. Registering
 folders, worktree creation, machine CRUD/provisioning, cross-machine projects or search,
 files/Changes/attachments/previews and other remote settings/accounts are out. Parallel worktree sessions
