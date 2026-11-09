@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { loadPeerConfigs } from "../server/PeerConfig.ts";
 import { PEER_FRAME_BYTES } from "../shared/machine.ts";
+import { CloseCode } from "../shared/wire.ts";
 import { gatewayFixture, identity, registry } from "./fixtures/peer-gateway.ts";
 import { readRegistry } from "./fixtures/registry.ts";
 
@@ -426,7 +427,7 @@ test(
     });
 
     await t.test("the remote's close meaning reaches the browser", async () => {
-      for (const code of [1009, 1013]) {
+      for (const code of [CloseCode.tooLarge, CloseCode.tryAgainLater]) {
         const connection = await f.open();
         for (const ws of f.wss.clients) ws.close(code, "remote closed");
         assert.equal((await connection.closed).code, code);

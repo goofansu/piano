@@ -1,6 +1,7 @@
 /** Nonblocking delivery. Overflow fails the consumer instead of dropping facts or
  * backpressuring the producer. Limits count serialized bytes, not just frames. */
 import { Data, Deferred, type Duration, Effect, Queue, Stream } from "effect";
+import { CloseCode } from "../shared/wire.ts";
 
 export class DeliveryOverflow extends Data.TaggedError("DeliveryOverflow")<{
   readonly detail: string;
@@ -57,10 +58,6 @@ export interface SocketClose {
   readonly reason: string;
   readonly code: number;
 }
-
-/** Socket close codes: 1009 a single frame or view is too large to ever deliver;
- * 1013 the client fell behind and should reconnect for a current snapshot. */
-export const CloseCode = { tooLarge: 1009, tryAgainLater: 1013 } as const;
 
 export const socketLimits = {
   /** Retained frames waiting for the socket window. */
