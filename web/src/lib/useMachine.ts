@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
-import type { Machine } from "./machine.ts";
+import { LOCAL, type Machine } from "./machine.ts";
+import { type MachineOffers, machineOffers } from "./machineOffers.ts";
 import type { Drafts } from "./messageDraft.ts";
 import { drafts } from "./messageDraft.ts";
 import type { ModelCatalogs } from "./modelCatalogs.ts";
@@ -15,6 +16,7 @@ export interface MachineScope {
 }
 export const MachineContext = createContext<MachineScope | null>(null);
 export const useMachine = () => useContext(MachineContext);
-export const useRemote = () => (useMachine()?.machine.id ?? "local") !== "local";
+/** What the selected machine offers in this browser; outside a machine scope, Local's. */
+export const useOffers = (): MachineOffers => machineOffers(useMachine()?.machine ?? LOCAL);
 export const useDrafts = () => useMachine()?.drafts ?? drafts;
 export const useQuestionReplies = () => useMachine()?.questions ?? questionReplies;

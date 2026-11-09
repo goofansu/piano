@@ -52,7 +52,7 @@ import type { Navigation } from "@/lib/navigation";
 import { projectCommands } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import type { SessionRowDetails, SidebarSection } from "@/lib/sidebarList";
-import { useRemote } from "@/lib/useMachine";
+import { useOffers } from "@/lib/useMachine";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarList } from "@/lib/useSidebarList";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -486,9 +486,9 @@ function ProjectGroup({
   select,
 }: GroupProps & { project: Project | null; done: boolean; sessions: readonly SessionEntry[] }) {
   const { run } = useCommands();
-  // A remote's project is presentation here, not something to manage.
-  const remote = useRemote();
-  const commands = project && !remote ? projectCommands(state, project) : [];
+  // Where projects are not offered, a project is presentation, not something to manage.
+  const offers = useOffers();
+  const commands = project && offers.projects ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
   // The group's name only folds it; its New session in project button opens the project's home.
   // A done project reads as quietly as No project: its sessions are listed, the project is set aside.
@@ -514,7 +514,7 @@ function ProjectGroup({
             <ProjectCommandIconView icon={create.icon} />
           </IconButton>
         ),
-        project && !remote && (
+        project && offers.projects && (
           <ProjectCommandsMenu
             key="menu"
             project={project}
@@ -538,8 +538,8 @@ function FolderGroup({
   select,
 }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
   const { run } = useCommands();
-  // A remote's folder is presentation here, not something to manage.
-  const remote = useRemote();
+  // Where folders are not offered, a folder is presentation, not something to manage.
+  const offers = useOffers();
   const { create, close } = folderCommands(state, folder);
 
   return (
@@ -552,7 +552,7 @@ function FolderGroup({
       details={details}
       select={select}
       actions={[
-        !remote && (
+        offers.folders && (
           <IconButton
             key="new"
             size="row"
@@ -563,7 +563,7 @@ function FolderGroup({
             <SquarePenIcon />
           </IconButton>
         ),
-        !remote && (
+        offers.folders && (
           <DropdownMenu key="menu">
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="row" aria-label={`Folder menu for ${folder.name}`}>

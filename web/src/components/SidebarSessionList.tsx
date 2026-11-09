@@ -19,7 +19,7 @@ import { sessionProjectMenu } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import { sessionRowMenu } from "@/lib/sessionCommands";
 import type { SessionRowDetails } from "@/lib/sidebarList";
-import { useRemote } from "@/lib/useMachine";
+import { useOffers } from "@/lib/useMachine";
 import { useSidebarWindow } from "@/lib/useSidebarWindow";
 import { sessionKey } from "@/store";
 
@@ -98,7 +98,7 @@ const SessionRow = memo(
     count: number;
     onMenuChange: (key: string, open: boolean) => void;
   } & Pick<Navigation, "select">) {
-    const remote = useRemote();
+    const offers = useOffers();
     const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
     const { selected, disabled, hint, activity } = t;
     // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
@@ -161,7 +161,7 @@ const SessionRow = memo(
           ) : null}
           {hint && <span className="sr-only">{hint}</span>}
         </button>
-        {!remote && (
+        {offers.sessionManagement && (
           <RowActions className="inset-y-0 right-1 max-md:hidden">
             <DropdownMenu
               onOpenChange={(open) => {

@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { type DraftKey, drafts, type ImageDraft } from "@/lib/messageDraft";
-import { useRemote } from "@/lib/useMachine";
+import { useOffers } from "@/lib/useMachine";
 import { wheelSideways } from "@/lib/wheelSideways";
 
 /** Reads a file as base64 with the browser's native encoder. */
@@ -198,8 +198,8 @@ function ImagePreview({ url }: { url: string }) {
 }
 /** The group clips overflow, so inline padding (offset by the margin) keeps the first tile's focus ring visible. */
 export function MessageAttachments({ items }: { items: RenderMsg["attachments"] }) {
-  const remote = useRemote();
-  return !remote && items?.length ? (
+  const offers = useOffers();
+  return offers.attachments && items?.length ? (
     <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1" ref={wheelSideways}>
       {items.map((a, i) => (
         /* Index keys: a message's attachments are fixed and may repeat a URL. */ <ImagePreview

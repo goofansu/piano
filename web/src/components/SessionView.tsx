@@ -41,7 +41,7 @@ import {
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
 import { useLibraryToasts } from "@/lib/useLibraryToasts";
-import { useDrafts, useRemote } from "@/lib/useMachine";
+import { useDrafts, useOffers } from "@/lib/useMachine";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
@@ -58,7 +58,7 @@ const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" }
 const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
 export function SessionView({ state, send }: Props) {
-  const remote = useRemote();
+  const offers = useOffers();
   const drafts = useDrafts();
   // The selected session's PR dialog; navigation closes it when Settings covers the view. Its
   // Changes and open file live in the Surface area (SessionPanel).
@@ -90,9 +90,9 @@ export function SessionView({ state, send }: Props) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [setSingle]);
-  const agentHidden = !remote && !navigation.layout.agent;
+  const agentHidden = offers.files && !navigation.layout.agent;
   // The rail is pinned beside the transcript side by side; one area at a time it is not shown.
-  const railInside = !remote && navigation.layout.rail;
+  const railInside = offers.rail && navigation.layout.rail;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
@@ -135,8 +135,8 @@ export function SessionView({ state, send }: Props) {
   // rule, the sidebar's.
   const changesVisible = navigation.shownTab === "changes";
   const pullRequest = useSessionPullRequest(
-    remote ? undefined : pullRequestTarget,
-    remote ? undefined : link,
+    offers.pullRequests ? pullRequestTarget : undefined,
+    offers.pullRequests ? link : undefined,
     !!t?.sessionId && sessionWorking(state, { cwd: t.cwd, sessionId: t.sessionId }),
     {
       visible: changesVisible,
@@ -158,15 +158,15 @@ export function SessionView({ state, send }: Props) {
 
   return (
     <TranscriptViewportContext value={viewport}>
-      {remote ? (
+      {offers.sessionManagement ? (
+        <SessionHeader state={state} status={status} pullRequest={pullRequest} />
+      ) : (
         <PaneHeader>
           <h1 className="min-w-0 truncate text-sm font-medium">{context.title}</h1>
           <span className="sr-only" role="status">
             {status}
           </span>
         </PaneHeader>
-      ) : (
-        <SessionHeader state={state} status={status} pullRequest={pullRequest} />
       )}
       {areaTabs && <AreaTabs />}
       <div
@@ -230,11 +230,13 @@ export function SessionView({ state, send }: Props) {
           <div className="relative flex min-h-0 flex-1 flex-col">
             <AddToChat draftKey={draftKey} className="relative flex min-h-0 flex-1 flex-col">
               {pane.list && (
-                <LocalFileContext value={remote ? undefined : (path) => openFile(path, "agent")}>
+                <LocalFileContext
+                  value={offers.files ? (path) => openFile(path, "agent") : undefined}
+                >
                   <SessionDestinationContext value={destination}>
                     <MessageList
                       key={t ? sessionKey(t) : draftKey}
-                      workspaceId={remote ? undefined : workspace?.id}
+                      workspaceId={offers.files ? workspace?.id : undefined}
                       showTools={!messagesOnly}
                       messages={t?.messages ?? []}
                       pending={t?.pending ?? null}
@@ -283,7 +285,9 @@ export function SessionView({ state, send }: Props) {
                   ),
                 )}
               {/* Local file links in a question open the preview, as they do in the transcript. */}
-              <LocalFileContext value={remote ? undefined : (path) => openFile(path, "agent")}>
+              <LocalFileContext
+                value={offers.files ? (path) => openFile(path, "agent") : undefined}
+              >
                 {answerReceipt && <AnsweredQuestion resolution={answerReceipt} />}
                 <InlineQuestion pending={pendingDialogs(state)} send={send} />
               </LocalFileContext>
@@ -301,7 +305,7 @@ export function SessionView({ state, send }: Props) {
             {railInside && <SessionRail state={state} />}
           </div>
         </div>
-        {!remote && (
+        {offers.files && (
           <SessionPanel
             state={state}
             onAsk={onAsk}

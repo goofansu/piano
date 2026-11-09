@@ -29,7 +29,7 @@ import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerAction, composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
-import { useDrafts, useRemote } from "@/lib/useMachine";
+import { useDrafts, useOffers } from "@/lib/useMachine";
 import type { ModelControl } from "@/lib/useModelChoice";
 import type { SendDisposition } from "@/lib/ws";
 
@@ -114,7 +114,7 @@ export function DraftEditor({
   actions,
   voice,
 }: Props) {
-  const remote = useRemote();
+  const offers = useOffers();
   const { ref, text, attachments, quotes } = editor;
   const [modelOpen, setModelOpen] = useState(false);
   useAutoGrow(ref, text, maxHeight);
@@ -135,7 +135,7 @@ export function DraftEditor({
     <div
       data-motion="ring"
       className={cn(composerCard, className)}
-      {...attachmentEvents(attachments, attachmentsDisabled || remote)}
+      {...attachmentEvents(attachments, attachmentsDisabled || !offers.attachments)}
     >
       <AttachmentDraftView draft={attachments} disabled={attachmentsDisabled} />
       <QuoteChips draft={quotes} disabled={disabled} />
@@ -165,8 +165,8 @@ export function DraftEditor({
         }}
       />
       <div className={composerToolbar}>
-        {!remote && <AttachButton draft={attachments} disabled={attachmentsDisabled} />}
-        {!remote && (
+        {offers.attachments && <AttachButton draft={attachments} disabled={attachmentsDisabled} />}
+        {offers.voiceInput && (
           <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
         )}
         <ModelSelect
