@@ -74,6 +74,8 @@ const refuse = (reason: ActRefused["reason"], detail: string = refused[reason]) 
   Effect.fail(new ActRefused({ reason, detail }));
 
 interface ClientSessions {
+  /** The selection last claimed or shown; a created session's ID once it is shown. */
+  readonly selection: Effect.Effect<Selection | null>;
   /** Claims the selection at once; the returned effect loads it and shows it if it is still current. */
   readonly select: (selection: Selection) => Effect.Effect<Effect.Effect<void, PiSessionError>>;
   /**
@@ -437,6 +439,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   });
 
   return {
+    selection: Effect.sync(() => selected),
     select: (selection) => claim(selection).pipe(Effect.as(show(selection))),
     create: ({ selectionId, ...request }) =>
       claim({ cwd: request.cwd, sessionId: null, selectionId }).pipe(

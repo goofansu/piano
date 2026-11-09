@@ -9,21 +9,12 @@
  * not offered.
  */
 import { type ClientMessage, sameSession } from "../shared/wire.ts";
+import type { Selection } from "./ClientSessions.ts";
 import type { RegistryData } from "./Registry.ts";
 
 type Request = Exclude<ClientMessage, { _tag: "ack" }>;
 type Act = Extract<Request, { _tag: "act" }>;
 type Create = Extract<Request, { _tag: "create_session" }>;
-
-/**
- * The session a peer connection last selected or created, for checking its actions. A creation
- * has no session ID until Pi names it; its selection then shows only the session it created.
- */
-export interface PeerSelection {
-  readonly selectionId: string;
-  readonly cwd: string;
-  readonly sessionId: string | null;
-}
 
 /**
  * - `admit`: run as for a browser on this machine;
@@ -73,10 +64,14 @@ function creationAllowed({ projectId, inheritProject, worktree, attachments, opt
   );
 }
 
+/**
+ * `selection` is the connection's own (ClientSessions'), checked for its actions. A creation has
+ * no session ID until Pi names it; until then its actions are checked against its folder.
+ */
 export function peerVerdict(
   data: RegistryData,
   request: Request,
-  selection: PeerSelection | undefined,
+  selection: Selection | null,
 ): PeerVerdict {
   switch (request._tag) {
     case "ping":
