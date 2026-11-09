@@ -37,10 +37,17 @@ export function machineAddress(id: string, address: AddressBar): AddressBar {
   };
 }
 
-/** No relative fallback: the sole supported remote HTTP read has an immutable owner. */
+/**
+ * No relative fallback: each supported remote request has an immutable owner. A remote offers its
+ * commands and, as its own pickers save them, its default model and effort (ADR 0004).
+ */
 export function peerApiPath(id: string, path: string): string {
   if (id === "local") return path;
-  if (path !== "/api/session/commands" && path !== "/api/commands")
+  if (
+    path !== "/api/session/commands" &&
+    path !== "/api/commands" &&
+    path !== "/api/settings/defaults"
+  )
     throw new Error("Unavailable on this machine.");
   return `/peer/${encodeURIComponent(id)}${path}`;
 }

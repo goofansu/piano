@@ -347,6 +347,55 @@ test(
       },
     );
 
+    await t.test(
+      "a defaults save reaches the remote's own settings, and its refusal comes back",
+      async () => {
+        const defaultsPath = "/peer/eng-1/api/settings/defaults";
+        const put = (body: string, extra: Record<string, string> = {}) =>
+          fetch(`${f.base}${defaultsPath}`, {
+            method: "PUT",
+            headers: { Origin: f.base, "content-type": "application/json", ...headers, ...extra },
+            body,
+          });
+        const before = f.state.requests.length;
+        const saved = { model: "remote/beta", thinkingLevel: "high" };
+        const response = await put(JSON.stringify(saved));
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), { defaults: saved });
+        const sent = f.state.requests.slice(before);
+        assert.deepEqual(
+          sent.map(({ url, method, body }) => ({ url, method, body: JSON.parse(body!) })),
+          [{ url: "/api/settings/defaults", method: "PUT", body: saved }],
+        );
+        assert.equal(sent[0]!.headers.origin, f.config.origin);
+        assert.equal(sent[0]!.headers.cookie, undefined);
+        assert.equal(sent[0]!.headers.authorization, undefined);
+
+        const unknown = await put(
+          JSON.stringify({ model: "remote/unknown", thinkingLevel: "low" }),
+        );
+        assert.equal(unknown.status, 400);
+        assert.deepEqual(await unknown.json(), { error: "Choose an available model." });
+
+        const refused = f.state.requests.length;
+        for (const [body, extra, status] of [
+          [JSON.stringify({ thinkingLevel: "extreme" }), {}, 400],
+          [JSON.stringify({ ...saved, cwd: "/elsewhere" }), {}, 400],
+          ["x".repeat(17 * 1024), {}, 400],
+          [JSON.stringify(saved), { "Sec-Fetch-Site": "cross-site" }, 403],
+        ] as const) {
+          assert.equal((await put(body, extra)).status, status, body.slice(0, 60));
+        }
+        assert.equal((await fetch(`${f.base}${defaultsPath}`, { headers })).status, 405);
+        assert.equal(f.state.requests.length, refused, "refused requests never reach the remote");
+        assert.deepEqual(
+          await readRegistry("unused", f.database),
+          original,
+          "a remote save must not touch Local",
+        );
+      },
+    );
+
     await t.test("well-formed messages pass unchanged; the remote decides", async () => {
       const connection = await f.open();
       const messages = [
