@@ -16,8 +16,7 @@ export function RemoteSidebar({ state }: { state: AppState }) {
   const { openNew, setPalette } = useNavigation();
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
-      <LayoutHeader>
-        <MachineSwitcher />
+      <LayoutHeader title={<MachineSwitcher />}>
         <IconButton
           size="header"
           label="Search sessions and commands"

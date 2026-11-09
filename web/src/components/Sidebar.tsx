@@ -75,8 +75,7 @@ export function Sidebar({ state }: Props) {
   const { openNew, openProjects, openSettings, setPalette } = useNavigation();
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
-      <LayoutHeader>
-        <MachineSwitcher />
+      <LayoutHeader title={<MachineSwitcher />}>
         <IconButton
           size="header"
           label="Search sessions and commands"
