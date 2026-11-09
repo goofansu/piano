@@ -18,8 +18,9 @@ type Create = Extract<Request, { _tag: "create_session" }>;
 
 /**
  * - `admit`: run as for a browser on this machine;
- * - `skip`: drop silently: a read about a folder no longer registered here, which a reconnecting
- *   browser may still ask about before the fresh registry refocuses it;
+ * - `skip`: drop silently: a quiet read (no `requestId`) about a folder no longer registered here,
+ *   which a reconnecting browser may still ask about before the fresh registry refocuses it. A read
+ *   that carries a `requestId` has a sender waiting on that ID, so it is refused instead;
  * - `refuse`: answer with the request's ordinary unanswered reply.
  */
 export type PeerVerdict = "admit" | "skip" | "refuse";
@@ -78,6 +79,8 @@ export function peerVerdict(
     case "registry":
       return "admit";
     case "models":
+      if (registered(data, request.cwd)) return "admit";
+      return request.requestId === undefined ? "skip" : "refuse";
     case "trust":
       return registered(data, request.cwd) ? "admit" : "skip";
     case "select":

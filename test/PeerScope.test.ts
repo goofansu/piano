@@ -175,6 +175,19 @@ test(
       );
     });
 
+    await t.test("a requested read about an unregistered folder is answered", async () => {
+      const from = peer.frames.length;
+      peer.ws.send(
+        JSON.stringify({ _tag: "models", cwd: "/different", refresh: true, requestId: "r1" }),
+      );
+      const failed = await peer.next(
+        (frame) => frame._tag === "models_failed" && frame.requestId === "r1",
+        from,
+      );
+      assert.equal(failed.cwd, "/different");
+      assert.match(String(failed.message), notAvailable);
+    });
+
     await t.test("the peer folder-commands read answers only for registered folders", async () => {
       const read = (path: string, cwd: string) =>
         fetch(`${f.base}${path}`, {
