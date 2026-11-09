@@ -20,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { isImeKey } from "@/lib/keys";
 import { modelPickerView } from "@/lib/modelPicker";
 import { footerPicker, footerPickerMenu } from "@/lib/styles";
+import { useRemote } from "@/lib/useMachine";
 import type { ModelControl } from "@/lib/useModelChoice";
 
 interface Props {
@@ -35,8 +36,6 @@ interface Props {
 }
 
 /** One settings trigger: the model label yields space before the effort or primary action does. */
-import { useRemote } from "@/lib/useMachine";
-
 export function ModelSelect({
   open: controlledOpen,
   onOpenChange,

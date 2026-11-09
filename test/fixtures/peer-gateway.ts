@@ -260,7 +260,7 @@ export async function gatewayFixture(
     env: {
       PATH: process.env.PATH,
       HOME: join(root, "home"),
-      NODE_ENV: "test",
+      PIANO_TEST_HTTP_LOOPBACK_PEERS: "1",
       HOST: "127.0.0.1",
       PORT: String(local.port),
       PIANO_ALLOWED_ORIGINS: base,

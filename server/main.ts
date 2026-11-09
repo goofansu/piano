@@ -30,7 +30,8 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 const listener = { host: HOST, port: PORT };
 const origins = configuredOrigins(PORT, process.env.PIANO_ALLOWED_ORIGINS);
 const peers = loadPeerConfigs(process.env.PIANO_PEER_CONFIG, {
-  allowHttpLoopbackForTests: process.env.NODE_ENV === "test",
+  // A dedicated switch: a shell or service manager exporting NODE_ENV=test must not admit cleartext.
+  allowHttpLoopbackForTests: process.env.PIANO_TEST_HTTP_LOOPBACK_PEERS === "1",
 });
 const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));

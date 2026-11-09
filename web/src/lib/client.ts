@@ -33,7 +33,7 @@ export interface LastDirectory {
 }
 
 /** What the person is told when the connection closes for a reason they should know. */
-const disconnectNotices: Record<DisconnectReason, [string, NotifyLevel]> = {
+const disconnectNotices: Partial<Record<DisconnectReason, [string, NotifyLevel]>> = {
   behind: [
     "Connection fell behind. Reconnecting for a current view; some live notices may have been missed.",
     "warning",
@@ -119,6 +119,8 @@ export function createClient({
   let connection: Connection | null = null;
   /** The focused directory and catalog revision last asked about on this connection. */
   let asked: string | null = null;
+  /** A session its machine refused as unlisted; reconnects leave it failed until navigation. */
+  let unlisted: string | null = null;
   const listeners = new Set<(update: ClientUpdate) => void>();
   const messageListeners = new Set<(message: ServerMessage) => void>();
 
@@ -151,6 +153,7 @@ export function createClient({
 
   const send = (m: ClientCommand): SendDisposition => {
     if (m._tag === "select" || m._tag === "create_session") {
+      unlisted = null;
       const selectionId = newSelectionId();
       const selecting = () =>
         apply({
@@ -202,13 +205,27 @@ export function createClient({
 
   /** A fresh attachment for the session on screen, so the server re-attaches this socket. */
   const reselect = (current: { cwd: string; sessionId: string | null } | null) => {
+    if (current && unlisted === `${current.cwd}\0${current.sessionId}`) return;
     if (current) send({ _tag: "select", cwd: current.cwd, sessionId: current.sessionId });
   };
 
   const onStatus = (connected: boolean, reason?: DisconnectReason) => {
+    // The machine no longer lists the session being opened: fail that selection as Local would,
+    // so the reconnect has nothing to reselect instead of being refused again.
+    if (reason === "session-unavailable" && state.selecting && state.selectionId) {
+      unlisted = `${state.selecting.cwd}\0${state.selecting.sessionId}`;
+      apply({
+        type: "server",
+        message: {
+          _tag: "selection_rejected",
+          selectionId: state.selectionId,
+          message: "This session is no longer listed on this machine.",
+        },
+      });
+    }
     apply({ type: "connected", connected });
     if (connected) reselect(state.session ?? state.selecting);
-    else if (reason) notify(...disconnectNotices[reason]);
+    else if (reason && disconnectNotices[reason]) notify(...disconnectNotices[reason]);
   };
 
   const onMessage = (m: ServerMessage) => {

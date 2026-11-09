@@ -255,6 +255,26 @@ test("INV-02/05: a dropped connection re-selects the session exactly once and ke
   assert.equal(h.selects().length, 2, "the fresh snapshot does not trigger another selection");
 });
 
+test("a session its machine no longer lists fails to open instead of reselecting on every reconnect", () => {
+  const h = harness();
+  h.status(true);
+  h.client.select("/scratch", "a");
+  h.server(h.selected("a"));
+  h.status(false);
+  h.status(true);
+  assert.equal(h.selects().length, 2, "the reconnect reselects once");
+  h.status(false, "session-unavailable");
+  const failed = h.client.getState();
+  assert.equal(failed.selecting, null);
+  assert.match(failed.selectionFailure?.message ?? "", /no longer listed/);
+  assert.equal(failed.selectionFailure?.sessionId, "a");
+  h.status(true);
+  assert.equal(h.selects().length, 2, "nothing is reselected after the refusal");
+  assert.deepEqual(h.notes, [], "the pane shows the failure; no toast");
+  h.client.select("/scratch", "a");
+  assert.equal(h.selects().length, 3, "opening it again is the person's choice");
+});
+
 test("INV-05: a delivery gap re-selects once, and further gapped frames do not pile up selections", () => {
   const h = harness();
   h.status(true);

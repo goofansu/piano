@@ -1167,6 +1167,9 @@ const decodePayload = Schema.decodeUnknownSync(ServerMessageJson);
 const decodeDelivery = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ deliveryId: Schema.Number })),
 );
+/** A remote gateway closes with this when a selection names a session its remote does not list:
+ * the browser fails that selection rather than reselecting it on every reconnect. */
+export const SessionUnavailableCloseCode = 4404;
 export const encodeServerMessage = (message: ServerMessage, deliveryId: number) =>
   JSON.stringify({ ...JSON.parse(Schema.encodeSync(ServerMessageJson)(message)), deliveryId });
 export const decodeServerMessage = (text: string): ServerMessage & { deliveryId: number } => ({

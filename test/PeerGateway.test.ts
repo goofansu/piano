@@ -304,7 +304,6 @@ test(
       for (const message of [
         { _tag: "models", cwd: identity.cwd },
         { _tag: "trust", cwd: identity.cwd },
-        { _tag: "set_trust", path: identity.cwd, trusted: true },
         { _tag: "select", selectionId: "s", cwd: identity.cwd, sessionId: identity.sessionId },
       ])
         connection.send(message);
@@ -334,10 +333,8 @@ test(
       for (const message of [
         { _tag: "create_session", selectionId: "s", cwd: identity.cwd, options: {} },
         { _tag: "select", selectionId: "s", cwd: identity.cwd, sessionId: null },
-        { _tag: "select", selectionId: "s", cwd: identity.cwd, sessionId: "terminal-only" },
-        { _tag: "select", selectionId: "s", cwd: "/different", sessionId: identity.sessionId },
-        { _tag: "models", cwd: "/different" },
-        { _tag: "trust", cwd: "/different" },
+        // Trusting a folder would let its project extensions run on the remote: a remote setting.
+        { _tag: "set_trust", path: identity.cwd, trusted: true },
         { _tag: "set_trust", path: "/different", trusted: true },
         { _tag: "worktrees", folder: identity.cwd },
         { _tag: "archive_session", cwd: identity.cwd, sessionId: identity.sessionId },
@@ -384,6 +381,51 @@ test(
           f.state.received.filter((raw) => raw === JSON.stringify(message)).length,
           before,
         );
+      }
+    });
+
+    await t.test(
+      "an unlisted selection fails that selection; reads for unregistered folders are skipped",
+      async () => {
+        for (const select of [
+          { _tag: "select", selectionId: "s", cwd: identity.cwd, sessionId: "terminal-only" },
+          { _tag: "select", selectionId: "s", cwd: "/different", sessionId: identity.sessionId },
+        ]) {
+          const connection = await f.open();
+          connection.send(select);
+          // A distinct code, so the browser fails the selection instead of reselecting forever.
+          assert.equal((await connection.closed).code, 4404, JSON.stringify(select));
+          assert.equal(
+            f.state.received.some((raw) => raw === JSON.stringify(select)),
+            false,
+          );
+        }
+        const reads = await f.open();
+        const before = f.state.received.length;
+        reads.send({ _tag: "models", cwd: "/different" });
+        reads.send({ _tag: "trust", cwd: "/different" });
+        reads.send({ _tag: "ping", nonce: "after-skipped-reads" });
+        await f.until(() =>
+          reads.messages.some((raw) => JSON.parse(raw).nonce === "after-skipped-reads"),
+        );
+        assert.deepEqual(
+          f.state.received
+            .slice(before)
+            .map((raw) => JSON.parse(raw)._tag)
+            .filter((tag) => tag !== "ack"),
+          ["ping"],
+          "only the ping reaches the remote; the socket stays open",
+        );
+        reads.ws.close();
+        await reads.closed;
+      },
+    );
+
+    await t.test("the remote's close meaning reaches the browser", async () => {
+      for (const code of [1009, 1013]) {
+        const connection = await f.open();
+        for (const ws of f.wss.clients) ws.close(code, "remote closed");
+        assert.equal((await connection.closed).code, code);
       }
     });
 
@@ -470,6 +512,36 @@ test(
           );
           assert.equal(f.state.requests.length, before + 1, "no redirect or retry");
         }
+        f.state.mode = "ready";
+      },
+    );
+
+    await t.test(
+      "commands reuse a live attachment's registry, and fresh observations are capped",
+      async () => {
+        const connection = await f.open();
+        const connections = f.state.connections;
+        const response = await fetch(`${f.base}${commandPath}`, { headers });
+        assert.equal(response.status, 200);
+        assert.equal(f.state.connections, connections, "no extra remote attachment per read");
+        // The live registry still scopes the read: a session the remote drops is refused.
+        for (const ws of f.wss.clients)
+          ws.send(JSON.stringify({ ...registry, sessionReferences: [], deliveryId: 50 }));
+        await f.until(() => connection.messages.some((raw) => JSON.parse(raw).deliveryId === 50));
+        const apiReads = f.state.requests.filter((r) => r.url.startsWith("/api/")).length;
+        assert.equal((await fetch(`${f.base}${commandPath}`, { headers })).status, 502);
+        assert.equal(f.state.requests.filter((r) => r.url.startsWith("/api/")).length, apiReads);
+        connection.ws.close();
+        await connection.closed;
+
+        f.state.mode = "silent";
+        const dialed = f.state.connections;
+        const started = Date.now();
+        const reads = [1, 2, 3].map(() => fetch(`${f.base}${commandPath}`, { headers }));
+        assert.equal((await Promise.race(reads)).status, 502);
+        assert.ok(Date.now() - started < 2_000, "a read over the cap fails without waiting");
+        await Promise.all(reads);
+        assert.equal(f.state.connections - dialed, 2, "two fresh observations per remote at once");
         f.state.mode = "ready";
       },
     );

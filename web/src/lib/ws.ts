@@ -11,6 +11,7 @@ import {
   decodeServerMessage,
   encodeClientMessage,
   type ServerMessage,
+  SessionUnavailableCloseCode,
 } from "../../../shared/wire.ts";
 
 /** Local disposition only: `sent` is socket acceptance, not a server or Pi receipt.
@@ -25,9 +26,10 @@ export interface Connection {
 
 /**
  * Why a socket closed when the person should hear about it: the server dropped a reader that
- * fell behind (1013, reconnects), or a frame exceeded the delivery limit (1009, stays closed).
+ * fell behind (1013, reconnects), a frame exceeded the delivery limit (1009, stays closed), or a
+ * remote gateway refused a selection its machine no longer lists (4404, reconnects).
  */
-export type DisconnectReason = "behind" | "too-large";
+export type DisconnectReason = "behind" | "too-large" | "session-unavailable";
 
 export interface ConnectionHandlers {
   onMessage: (m: ServerMessage) => void;
@@ -98,7 +100,11 @@ const PONG_TIMEOUT = 8_000;
 /** Milliseconds between losing a socket and opening the next. */
 const RECONNECT_DELAY = 2_000;
 
-const reasons: Partial<Record<number, DisconnectReason>> = { 1013: "behind", 1009: "too-large" };
+const reasons: Partial<Record<number, DisconnectReason>> = {
+  1013: "behind",
+  1009: "too-large",
+  [SessionUnavailableCloseCode]: "session-unavailable",
+};
 
 /** Auto-reconnecting WebSocket that speaks the shared wire schema. */
 export function openConnection(

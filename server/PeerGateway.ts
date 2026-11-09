@@ -3,7 +3,7 @@
  * mutation retry, delivery renumbering or remote process ownership lives here (INV-01/02/05).
  */
 import { WebSocket } from "@effect/platform-node/NodeWS";
-import { Data, Effect, Redacted, Schema } from "effect";
+import { Data, Effect, Redacted, Schema, Semaphore } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { Endpoints } from "../shared/http.ts";
@@ -12,6 +12,7 @@ import {
   decodeServerMessage,
   type ClientMessage,
   type ServerMessage,
+  SessionUnavailableCloseCode,
   sessionKey,
 } from "../shared/wire.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
@@ -24,6 +25,8 @@ const limits = {
   serverBytes: 8 * 1024 * 1024,
   bufferedFrames: 64,
   ackMs: 15_000,
+  /** Fresh registry observations per peer when no live socket already holds one. */
+  observations: 2,
 };
 class PeerFailure extends Data.TaggedError("PeerFailure")<{
   readonly message: string;
@@ -41,6 +44,35 @@ const overflow = () =>
     message: "Remote connection capacity exceeded; reconnect for a snapshot.",
     code: 1013,
   });
+/** The browser stays closed on 1009 rather than refetching a view it can never receive. */
+const tooLarge = () =>
+  new PeerFailure({ message: "Remote session view exceeds the delivery limit.", code: 1009 });
+/** The browser fails its selection instead of reselecting a session the remote no longer lists. */
+const sessionUnavailable = () =>
+  new PeerFailure({
+    message: "This session is not listed on the remote machine.",
+    code: SessionUnavailableCloseCode,
+  });
+
+/** Keep the remote's own close meaning: 1009 and 1013 tell the browser whether to reconnect. */
+function peerFailure(error: unknown): PeerFailure {
+  if (error instanceof PeerFailure) return error;
+  if (Socket.SocketError.is(error)) {
+    const reason = error.reason;
+    if (reason._tag === "SocketCloseError" && reason.code === 1009) return tooLarge();
+    if (reason._tag === "SocketCloseError" && reason.code === 1013) return overflow();
+    // ws reports a frame above maxPayload as an error before closing with 1009.
+    if (
+      reason._tag === "SocketReadError" &&
+      (reason.cause as { code?: unknown } | undefined)?.code === "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH"
+    )
+      return tooLarge();
+  }
+  return new PeerFailure({
+    message: "Remote connection ended; reconnect for a snapshot.",
+    code: 1011,
+  });
+}
 const envelope = Schema.decodeUnknownSync(
   Schema.fromJsonString(
     Schema.Struct({
@@ -139,12 +171,21 @@ const connect = Effect.fn("PeerGateway.connect")(
   Effect.catch(() => Effect.fail(unavailable())),
 );
 
+/** The latest registry each live attachment received, so catalog reads need not dial again. */
+type LiveRegistry = { current: RegistryFrame };
+
 const bridge = Effect.fn("PeerGateway.bridge")(function* (
   browser: Socket.Socket,
   upstream: Effect.Success<ReturnType<typeof connect>>,
+  live: Set<LiveRegistry>,
 ) {
   const reader = yield* browser.reader;
   const writer = yield* browser.writer;
+  const observed: LiveRegistry = { current: upstream.registry };
+  yield* Effect.acquireRelease(
+    Effect.sync(() => live.add(observed)),
+    () => Effect.sync(() => live.delete(observed)),
+  );
   let registry = upstream.registry;
   let selection: { selectionId: string; cwd: string; sessionId: string } | undefined;
   let lastDeliveryId = 0;
@@ -152,12 +193,12 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
   const pending = new Map<number, { bytes: number; at: number }>();
   const forward = Effect.fnUntraced(function* (text: string) {
     const bytes = Buffer.byteLength(text);
-    if (bytes > limits.serverBytes) return yield* Effect.fail(overflow());
+    if (bytes > limits.serverBytes) return yield* Effect.fail(tooLarge());
     const frame = yield* Effect.try({ try: () => inspectFrame(text), catch: unavailable });
     if (frame.deliveryId <= lastDeliveryId) return yield* Effect.fail(unavailable());
     if (pendingBytes + bytes > limits.serverBytes || pending.size >= limits.bufferedFrames)
       return yield* Effect.fail(overflow());
-    if (frame.registry) registry = frame.registry;
+    if (frame.registry) registry = observed.current = frame.registry;
     lastDeliveryId = frame.deliveryId;
     pending.set(frame.deliveryId, { bytes, at: Date.now() });
     pendingBytes += bytes;
@@ -200,15 +241,17 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
         }
         case "models":
         case "trust":
-          allowed = registered(registry, message.cwd);
-          break;
-        case "set_trust":
-          allowed = registered(registry, message.path);
+          // Reads for a folder the remote just dropped are skipped, not fatal: on reconnect the
+          // browser asks again about its last focus before the fresh registry refocuses it.
+          if (!registered(registry, message.cwd)) continue;
+          allowed = true;
           break;
         case "select":
-          allowed = message.sessionId !== null && listed(registry, message.cwd, message.sessionId);
-          if (allowed && message.sessionId !== null)
-            selection = { ...message, sessionId: message.sessionId };
+          if (message.sessionId === null) break;
+          if (!listed(registry, message.cwd, message.sessionId))
+            return yield* Effect.fail(sessionUnavailable());
+          selection = { ...message, sessionId: message.sessionId };
+          allowed = true;
           break;
         case "act":
           allowed =
@@ -230,18 +273,10 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
   yield* fromPeer.pipe(
     Effect.raceFirst(fromBrowser),
     Effect.raceFirst(deadline),
-    Effect.catch((error) =>
-      writer
-        .write(
-          new Socket.CloseEvent(
-            error instanceof PeerFailure ? error.code : 1011,
-            error instanceof PeerFailure
-              ? error.message
-              : "Remote connection ended; reconnect for a snapshot.",
-          ),
-        )
-        .pipe(Effect.ignore),
-    ),
+    Effect.catch((error) => {
+      const failure = peerFailure(error);
+      return writer.write(new Socket.CloseEvent(failure.code, failure.message)).pipe(Effect.ignore);
+    }),
   );
 });
 
@@ -269,12 +304,21 @@ const commands = Effect.fn("PeerGateway.commands")(function* (
   peer: PeerConfig,
   workspaceId: string,
   sessionId: string,
+  live: Set<LiveRegistry>,
+  observations: Semaphore.Semaphore,
 ) {
-  // HTTP has no browser attachment identity. A fresh read-only registry observation prevents
-  // arbitrary terminal history access and avoids consulting Local even when IDs collide.
-  const registry = yield* Effect.scoped(
-    connect(peer).pipe(Effect.map((connection) => connection.registry)),
-  );
+  // HTTP has no browser attachment identity. A registry the remote pushed to a live attachment, or
+  // else a bounded fresh observation, prevents arbitrary terminal history access and avoids
+  // consulting Local even when IDs collide.
+  const pushed = [...live].at(-1)?.current;
+  const registry =
+    pushed ??
+    (yield* Effect.scoped(connect(peer).pipe(Effect.map((connection) => connection.registry))).pipe(
+      observations.withPermitsIfAvailable(1),
+      Effect.flatMap((observed) =>
+        observed._tag === "Some" ? Effect.succeed(observed.value) : Effect.fail(overflow()),
+      ),
+    ));
   const workspace = registry.workspaces?.find((item) => item.id === workspaceId);
   const reference = registry.sessionReferences?.find(
     (item) => item.workspaceId === workspaceId && item.sessionId === sessionId,
@@ -335,6 +379,10 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
   const peers = yield* ConfiguredPeers;
   const allowedOrigins = yield* AllowedOrigins;
   const byId = new Map(peers.map((peer) => [peer.id, peer]));
+  const live = new Map(peers.map((peer) => [peer.id, new Set<LiveRegistry>()]));
+  const observations = new Map(
+    peers.map((peer) => [peer.id, Semaphore.makeUnsafe(limits.observations)]),
+  );
   yield* router.add(
     "GET",
     "/api/machines",
@@ -366,7 +414,7 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       if (url.search || request.headers.upgrade?.toLowerCase() !== "websocket")
         return json({ error: "A remote WebSocket upgrade is required." }, 400);
       const upstream = yield* connect(peer);
-      yield* bridge(yield* request.upgrade, upstream);
+      yield* bridge(yield* request.upgrade, upstream, live.get(peer.id)!);
       return HttpServerResponse.empty();
     }
     const workspaceId = url.searchParams.get("workspaceId"),
@@ -380,7 +428,13 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       request.headers.upgrade
     )
       return json({ error: "Remote workspace and session IDs are required." }, 400);
-    const body = yield* commands(peer, workspaceId, sessionId);
+    const body = yield* commands(
+      peer,
+      workspaceId,
+      sessionId,
+      live.get(peer.id)!,
+      observations.get(peer.id)!,
+    );
     return HttpServerResponse.text(body, {
       contentType: "application/json",
       headers: { "cache-control": "no-store" },

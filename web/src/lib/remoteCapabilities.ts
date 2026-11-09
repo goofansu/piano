@@ -10,8 +10,7 @@ export function remoteCommandAllowed(command: Command): boolean {
     case "toggle-sidebar":
     case "appearance":
       return true;
-    case "send":
-      return command.intent.command._tag === "set_trust";
+    // Trusting a folder lets its project extensions run on the remote: a remote setting, not here.
     default:
       return false;
   }
