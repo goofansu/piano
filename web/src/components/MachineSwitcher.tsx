@@ -25,8 +25,14 @@ export function MachineSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <PianoButton variant="ghost" size="header" aria-label="Machine">
-          {scope.machine.name}
+        <PianoButton
+          variant="ghost"
+          size="sm"
+          className="max-w-40 shrink-0 pointer-coarse:h-11"
+          aria-label="Machine"
+          aria-description={scope.machine.name}
+        >
+          <span className="truncate">{scope.machine.name}</span>
           <ChevronDownIcon data-icon="inline-end" />
         </PianoButton>
       </DropdownMenuTrigger>
