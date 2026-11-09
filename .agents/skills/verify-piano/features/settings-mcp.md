@@ -119,8 +119,9 @@ step reaches a public endpoint; the command fixture and refused URLs below stay 
 - These Settings operations use Pi's MCP setup API, not the echo fake's tool calls. The local
   command fixture is real MCP but does not prove a third-party server or OAuth completion.
 - The ⋯ menu and Connect have accessible names `MCP <name> actions` / `Connect MCP <name>`; their
-  visible text alone is ambiguous. Arguments and Working directory include their hints in
-  accessible names; prefer `#mcp-cwd` for the latter if needed.
+  visible text alone is ambiguous. Arguments is named "Arguments One per line"; Working directory is named "Working directory
+  Optional". Its longer hint is an accessible description, not part of the name; `#mcp-cwd`
+  also selects it.
 - A create/save toast can cover the ⋯ menu. Wait with
   `ab wait --fn "!document.querySelector('[data-sonner-toast]')"` before opening its menu.
 - Catalog identity follows the endpoint, not the configured name. A command merely named

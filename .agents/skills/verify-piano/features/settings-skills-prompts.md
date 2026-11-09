@@ -1,17 +1,18 @@
 # Settings › Skills and Prompts
 
-Settings (`/settings/<section>`) holds Providers, MCP, Skills, Prompts and Webhooks. Skills and
+Settings (`/settings/<section>`) holds Providers, MCP, Skills, Prompts, Webhooks and Preferences. Skills and
 Prompts are Piano-owned templates saved under the scratch database's skills and prompts folders:
-the user creates one from the page header or the Mod+K palette, views or deletes it from the row
-menu, and sessions started afterwards load what is saved (already-running sessions do not). The
+the user creates one from the page header or the Mod+K palette, views it by clicking its name,
+deletes it from the row menu, and sessions started afterwards load what is saved (already-running sessions do not). The
 sidebar's Settings opens Providers; the palette lists each section by name.
 
 ## Sub-features
 
 - `open-settings`: the sidebar's Settings opens `/settings/providers`; Mod+K offers Providers,
-  MCP, Skills, Prompts and Webhooks (and Radius under Providers); address bar `/settings/skills`,
+  MCP, Skills, Prompts, Webhooks and Preferences (Radius is inside Providers, not a separate
+  palette destination); address bar `/settings/skills`,
   `/settings/prompts`.
-- `skills-empty`: `/settings/skills` headed Skills with New skill; with none, "No skills".
+- `skills-empty`: `/settings/skills` headed Skills with New skill; with none, "No skills yet".
 - `new-skill`: New skill (header or palette) opens a dialog: Name, Description (live count
   "0 / 1,024"), Instructions ("0 / 20,000"), "Disable model invocation", Cancel and Create skill;
   description text "Saved in Piano. Sessions started from now can use it."; Create skill stays
@@ -21,7 +22,7 @@ sidebar's Settings opens Providers; the palette lists each section by name.
   "Copy skill"; "Skill actions <name>" (shown while the row is pointed at or focused) holds a red
   Delete, which asks "Delete skill?" (`Sessions started from now no longer load <name>.`) and
   toasts "Skill deleted".
-- `prompts-empty`: `/settings/prompts` headed Prompts with New prompt; with none, "No prompts".
+- `prompts-empty`: `/settings/prompts` headed Prompts with New prompt; with none, "No prompts yet".
 - `new-prompt`: New prompt opens a dialog shaped as New skill (Name, Description "0 / 1,024",
   Instructions "0 / 20,000", Cancel, Create prompt; no Disable model invocation). Create prompt
   stays off until the three fields are valid; success toasts "Prompt created" and the row shows
@@ -51,7 +52,7 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   - Action: `ab open "$WEB_URL/settings/skills"; ab wait --text "Skills"`
   - Result: title `Settings - Piano`, main starts `Skills` / `New skill`.
 - `skills-empty` and `new-skill`
-  - Action: on `/settings/skills`, `ab wait --text "No skills";
+  - Action: on `/settings/skills`, `ab wait --text "No skills yet";
     ab find role button click --name "New skill" --exact; ab wait "[role=dialog]"`
   - Result: dialog reads `New skill` / `Saved in Piano…` / `Name` / `Description` /
     `0 / 1,024` / `Instructions` / `0 / 20,000` / `Disable model invocation` / `Cancel` /
@@ -71,9 +72,9 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     `ab press Escape; ab find role button click --name "Skill actions verify-skill" --exact;
     ab find role menuitem click --name "Delete" --exact; ab wait --text "Delete skill?"`;
     capture `02d-skill-delete`, then `ab find role button click --name "Delete" --exact;
-    ab wait --text "No skills"`. Capture `02e-skill-deleted`.
+    ab wait --text "No skills yet"`. Capture `02e-skill-deleted`.
 - `prompts-empty` and `new-prompt`
-  - Action: `ab open "$WEB_URL/settings/prompts"; ab wait --text "No prompts";
+  - Action: `ab open "$WEB_URL/settings/prompts"; ab wait --text "No prompts yet";
     ab find role button click --name "New prompt" --exact; ab wait "[role=dialog]";
     ab find role textbox fill --name "Name" --exact "verify-prompt";
     ab find role textbox fill --name "Description" --exact "A short verify prompt";
@@ -91,7 +92,7 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   - Result: the View dialog is titled with the prompt name and offers "Copy prompt" (and Close).
     Escape, then Delete through the same menu; confirm on "Delete prompt?" /
     `Sessions started from now no longer load verify-prompt.`: toast
-    `Prompt deleted`, and "No prompts" again when it was the only one. Capture `04-prompt-view`,
+    `Prompt deleted`, and "No prompts yet" again when it was the only one. Capture `04-prompt-view`,
     `05-prompt-delete`, `06-prompt-deleted`.
 - `palette-new`
   - Action: on `/settings/prompts`, `ab press Control+k; ab wait "[cmdk-input]";
@@ -120,8 +121,8 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   listbox "Slash commands" offers `/verify-prompt` and `/skill:verify-skill`. Capture this
   separately from Settings CRUD; clear the draft rather than claiming a model used either file.
 - Agent-authored saves are a separate user path: ask a session to create or update a Piano skill
-  or prompt; its proposal shows the new file or update diff, with Save skill / Save prompt and
-  Cancel. A proposal containing hidden text offers only Cancel. Manual Settings CRUD does not
+  or prompt; its proposal shows the new file or update diff, with Create skill / Create prompt for a new
+  file, Save skill / Save prompt for an update, and Cancel. A proposal containing hidden text offers only Cancel. Manual Settings CRUD does not
   prove this approval path. The default browser fake only echoes `propose visible`; the dialogs
   fake can render a proposal but does not save the file. End-to-end proof requires an isolated
   real-Pi session with a scripted model calling `piano_save_skill` / `piano_save_prompt`, then

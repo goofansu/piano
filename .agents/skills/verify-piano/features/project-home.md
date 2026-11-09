@@ -14,7 +14,7 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 - `project-menu`: the group's "Project menu for <name>" holds "Project settings", "Mark project
   done" ("Reopen project" once done), then a red "Delete project", as the home's header menu does.
 - `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
-- `member-cards`: one `[data-slot=item]` row (`role=listitem`) per non-archived member session in
+- `member-cards`: one `[data-slot=item]` row inside a `role=listitem` wrapper per non-archived member session in
   the Sessions group's hairline list; its title button opens `/s/<id>`.
 - `row-actions`: each row's "Session menu for <title>", revealed while pointed at, holds "Archive"
   and a red "Delete", the sidebar row's menu ([`open-session.md`](./open-session.md)
@@ -22,7 +22,7 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   Delete asks "Delete session?" and toasts "Session deleted". The page stays.
 - `new-in-project`: the composer above the cards ("First message") defaults to the folder-root
   checkout of the most recently active non-archived member whose folder is open; otherwise it
-  asks "Choose a folder". Sending opens the new session, which joins the project.
+  shows "Directory" until a folder is chosen. Sending opens the new session, which joins the project.
 - `header`: the pane header is one breadcrumb line, "Projects / <name>", the name being the `h1`,
   and ends with "Project menu for <name>" (see `project-menu`). A done project has a Done badge
   beside its name; its composer and sessions remain available.
@@ -31,7 +31,7 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 - `crumb`: the header's "Projects" button opens the Projects index at `/projects`.
 - `sessions-heading`: the `h2` "Sessions" above the rows carries their count ("Sessions 1"); the
   header shows no count.
-- `empty`: a project with no sessions shows its header, the composer on "Choose a folder", the
+- `empty`: a project with no sessions shows its header, the composer on "Directory", the
   heading "Sessions" with no count, and the line "No sessions yet".
 - `settings`: "Project settings" (the header menu, the sidebar's project menu, Mod+K on the home) opens a
   dialog in place: Name and Instructions fields with a live count under Instructions ("0 / 20,000"
@@ -48,7 +48,8 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 
 ## How to get to it (user POV)
 
-- Session page: click the header's project name (accessible name `Project: <name>`).
+- Desktop session page: click the header's project name (accessible name `Project: <name>`).
+- Narrow session page: Session information and actions → Move to project → the current project name.
 - Sidebar: View options → Group by → Project, then the group's "New session in <name>" button.
 - Palette: Mod+K on a session that belongs to a project, type `open project`, choose the row.
 - Address bar: `/projects/<id>`.
@@ -67,6 +68,13 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     `ab eval "document.querySelector('main header').innerText"` is `Projects` / `/` /
     `Verify Project`, and `main`'s text continues with the composer's directory `repo` and the
     heading `Sessions` / `1`. Capture `02-home`.
+- `open-from-header` on narrow screens
+  - Action: on `/s/verify-plan`, `ab set viewport 700 800;
+    ab find role button click --name "Session information and actions" --exact;
+    ab find role button click --name "Move to project" --exact`; capture `02c-project-picker`.
+    `ab find role button click --name "Verify Project" --exact; ab wait --url "**/projects/verify"`.
+  - Result: the sheet closes and the project home opens. Capture `02d-mobile-home`, then
+    `ab set viewport 1280 800` for the remaining steps.
 - `crumb`
   - Action: `ab click 'main [data-slot=breadcrumb-link]'; ab wait --url "**/projects"`
   - Result: `ab get url` ends in `/projects` and `ab get title` is `Projects - Piano`. Capture
@@ -76,8 +84,9 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     `ab open "$WEB_URL/projects/verify"; ab wait --text "Plan the verification";
     ab eval "[...document.querySelectorAll('main [data-slot=item]')].map(b => b.innerText.replace(/\n+/g, ' | '))"`;
     `ab click 'main [data-slot=item-title] button'; ab wait --url "**/s/verify-plan"`
-  - Result: exactly one row, `Plan the verification | repo | main | Pull request | 222 | 1 hour ago`; "Loose
-    session" (no project) is absent; the click lands on `/s/verify-plan`. Capture `03-card-opened`.
+  - Result: exactly one row containing `Plan the verification`, `repo`, `main`, `#222` and
+    its relative activity time (with screen-reader Folder / Git branch / Pull request labels).
+    "Loose session" is absent; the click lands on `/s/verify-plan`. Capture `03-card-opened`.
 - `open-from-sidebar`
   - Action: `ab find role button click --name "View options" --exact;
     ab find role menuitem click --name "Group by Date" --exact;
@@ -90,8 +99,7 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     project". Capture `04-empty`.
 - `empty`
   - Action: read the page.
-  - Result: the header reads `Projects` / `/` / `Empty Project`; main text continues `Choose a
-    folder`, then `Sessions` (the `h2`, with no count) and `No sessions yet`; no row.
+  - Result: the header reads `Projects` / `/` / `Empty Project`; main text continues `Directory`, then `Sessions` (the `h2`, with no count) and `No sessions yet`; no row.
 - `open-from-palette`
   - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4."; ab press Control+k;
     ab wait "[cmdk-input]"; ab fill "[cmdk-input]" "open project";
@@ -152,7 +160,8 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
 - `missing`
   - Action: `ab open "$WEB_URL/projects/nope"; ab wait --text "Project not found"`
   - Result: `ab eval "document.querySelector('[role=alert]')?.innerText"` is
-    `Project not found` / `This project is not in Piano's database.` Capture `07-missing`.
+    `Project not found` / `This project is not in Piano's database.` / `Projects` (the recovery
+    button). Capture `07-missing`.
 - Side effects: a project home starts no Pi session. Before `new-in-project`, `rg -c '"command":"prompt"' "$AUDIT"` finds
   nothing (prints nothing, exit 1) and `rg -vc '"sessionId":"probe"' "$AUDIT"` likewise: the audit
   holds only `probe` entries for uncached composer catalogs (session pages or populated homes).
