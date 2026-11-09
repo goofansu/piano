@@ -152,10 +152,11 @@ export function LayoutView({ active = true, children }: { active?: boolean; chil
 /**
  * The sidebar's header, in the one header shape and no heavier: the hide control first, where
  * each pane's show control appears once the sidebar is collapsed, so the toggle never moves; then
- * the pane's controls, its one primary action last. No title: the rows beneath say what the list
- * is, for sessions and for Settings alike. The mark lives in the footer.
+ * the pane's controls, its one primary action last. The rows beneath say what the list is, for
+ * sessions and for Settings alike; the only title is the machine, when there is more than one,
+ * and it gives up width before any control does. The mark lives in the footer.
  */
-export function LayoutHeader({ children }: { children?: ReactNode }) {
+export function LayoutHeader({ title, children }: { title?: ReactNode; children?: ReactNode }) {
   const { hide } = useSidebarLayout();
   return (
     // The pane header's row in the same frame, so Hide sits where a pane's Show appears; without
@@ -170,7 +171,8 @@ export function LayoutHeader({ children }: { children?: ReactNode }) {
       >
         <PanelLeftCloseIcon />
       </IconButton>
-      <span className="flex-1" />
+      {/* The sidebar's title takes the free width and gives it up first, ahead of the controls. */}
+      <div className="flex min-w-0 flex-1">{title}</div>
       {children}
     </SidebarHeader>
   );
