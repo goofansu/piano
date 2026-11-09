@@ -28,10 +28,11 @@ export function RemoteSidebar({ state }: { state: AppState }) {
       </LayoutHeader>
       <ScrollArea className="min-h-0 flex-1">
         <nav className="relative px-(--row-inset) py-2" aria-label="Sessions">
+          {/* Skeleton rows while the remote's catalog is on its way; unavailable once it cannot be reached. */}
           <SidebarSessions
             state={state}
-            emptyText={state.connected ? "No sessions yet" : "Machine unavailable"}
-            unavailable={state.connected ? undefined : "Machine unavailable"}
+            emptyText={state.unreachable ? "Machine unavailable" : "No sessions yet"}
+            unavailable={state.unreachable ? "Machine unavailable" : undefined}
           />
         </nav>
       </ScrollArea>
