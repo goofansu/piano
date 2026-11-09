@@ -19,6 +19,7 @@ and `web/vite.config.ts`.
 | `PIANO_DEBUG` | unset | Any value prints Pi transport messages to stderr, prefixed `[PiTransport]`. |
 | `PIANO_PREVIEW_CONFIG` | unset (macOS: previews on `http://localhost`; Linux: unavailable) | Absolute path to private JSON deployment configuration for [managed previews](live-previews.md): the explicit exe.dev origin (required on Linux), reserved ports and the app's `PATH`. |
 | `PIANO_PREVIEW_STATE` | `~/.local/state/piano/previews` | Durable preview intents and allocation lock. Override only for isolated scratch verification; all production sessions must share one directory. |
+| `PIANO_PEER_CONFIG` | unset | Absolute path to the startup JSON for [same-owner remote Pianos](remote-piano.md): a single peer object or `{ "peers": [...] }`. No remotes when unset. |
 | `PIANO_DEV_BACKEND` | `http://127.0.0.1:7070` | Backend that the Vite development server proxies to. |
 
 Piano also honors two of Pi's own variables. `PI_CODING_AGENT_SESSION_DIR` sets where Piano looks

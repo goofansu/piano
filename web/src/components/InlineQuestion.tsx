@@ -17,8 +17,9 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import type { Client } from "@/lib/client";
-import { type PendingDialogs, questionReplies } from "@/lib/piDialogs";
+import { type PendingDialogs } from "@/lib/piDialogs";
 import { useDialogAnswer } from "@/lib/useDialogAnswer";
+import { useQuestionReplies } from "@/lib/useMachine";
 
 /** The queue head alone owns the answer surface; confirmations stay in DialogHost. */
 export function InlineQuestion({
@@ -66,6 +67,7 @@ function Question({
   session: string | null;
   send: Client["send"];
 }) {
+  const questionReplies = useQuestionReplies();
   const id = useId();
   // The reply outlives this view (another session shown, a resync) while the question stays open.
   const reply = useSyncExternalStore(questionReplies.subscribe, () =>

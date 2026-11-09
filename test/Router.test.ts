@@ -40,6 +40,13 @@ const reply = async (response: Response) => ({
   body: await response.json(),
 });
 
+test("without a peer configured, only Local is listed and peer paths never fall back to it", async () => {
+  assert.deepEqual(await (await server.handle("/api/machines")).json(), {
+    machines: [{ id: "local", name: "Local" }],
+  });
+  assert.equal((await server.handle("/peer/local/api/session/commands")).status, 404);
+});
+
 test("written files: each path a session wrote, as sent, is outside, ignored by Git, removed or listed; inside ones are placed", async (t) => {
   const { writeFileSync, rmSync } = await import("node:fs");
   const { join } = await import("node:path");

@@ -15,7 +15,7 @@ import { MarkdownWebLink } from "@/components/MarkdownWebLink";
 import { LOCAL_PATH, markdownPlugins, markdownWithinBudget } from "@/lib/markdown";
 
 /** The owning session supplies workspace-scoped preview navigation to every prose surface. */
-export const LocalFileContext = createContext<(path: string) => void>(() => {});
+export const LocalFileContext = createContext<((path: string) => void) | undefined>(() => {});
 const ImagesContext = createContext<ReadonlyMap<string, string> | undefined>(undefined);
 const DiagramsContext = createContext(true);
 
@@ -93,7 +93,8 @@ function MarkdownLink({ href = "", children, title, node }: ComponentProps<"a"> 
     )
   )
     return <>{children}</>;
-  if (path) {
+  if (path && !openFile) return <>{children}</>;
+  if (path && openFile) {
     // Custom inline action: no shadcn primitive represents a Markdown local-file link.
     return (
       <button
@@ -120,7 +121,7 @@ function MarkdownImage({ alt, node }: ComponentProps<"img"> & ExtraProps) {
   const path = localPath(node?.properties);
   const url = path && images?.get(path);
   const [failed, setFailed] = useState<string>();
-  if (!path || !images) return <>{alt}</>;
+  if (!path || !images || !openFile) return <>{alt}</>;
   // Only workspace-checked blobs, never Markdown resource URLs. Like local-file links, this
   // inline prose action has no shadcn equivalent; the image itself is the control, not a card.
   return (

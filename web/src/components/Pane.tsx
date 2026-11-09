@@ -5,6 +5,7 @@
  * a way back to the sidebar once it is collapsed or below the breakpoint.
  */
 import { cn } from "cn";
+import { PaneMachineSwitcher } from "@/components/MachineSwitcher";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import {
   Empty,
@@ -34,6 +35,7 @@ export function PaneHeader({
     // No shadcn component is a page header; this row is Piano's own.
     <header className={paneHeaderRow}>
       <ShowSidebarButton className="-ml-(--glyph-pad) -mr-2" />
+      <PaneMachineSwitcher />
       {children}
       {actions}
     </header>
@@ -65,6 +67,9 @@ export function PaneShowSidebar() {
       )}
     >
       <ShowSidebarButton className="pointer-events-auto -ml-(--glyph-pad)" />
+      <div className="pointer-events-auto">
+        <PaneMachineSwitcher />
+      </div>
     </div>
   );
 }

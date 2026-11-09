@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { workspaceFile } from "./api.ts";
+import { machineAddress } from "./machine.ts";
 import {
   browserAddressBar,
   browserSurfaceMemory,
@@ -9,6 +10,7 @@ import {
   type NavigationState,
 } from "./navigation.ts";
 import { createPreference } from "./preference.ts";
+import { useMachine } from "./useMachine.ts";
 
 /** Whether the session rail is on, for every session in this browser. The key predates the name. */
 const railPreference = createPreference<boolean>({
@@ -23,13 +25,19 @@ export function useNavigationController(
   client: NavigationOptions["client"],
   moved: () => void,
 ): Navigation {
+  const machine = useMachine()?.machine;
+  const remote = machine && machine.id !== "local";
   const [navigation] = useState(() =>
     createNavigation({
       client,
-      address: browserAddressBar,
-      readFile: workspaceFile,
-      memory: browserSurfaceMemory,
-      rail: railPreference,
+      address: machine ? machineAddress(machine.id, browserAddressBar) : browserAddressBar,
+      readFile: remote
+        ? async () => {
+            throw new Error("Files are unavailable on this machine.");
+          }
+        : workspaceFile,
+      memory: remote ? undefined : browserSurfaceMemory,
+      rail: remote ? undefined : railPreference,
       moved,
     }),
   );

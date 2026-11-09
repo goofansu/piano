@@ -131,8 +131,14 @@ tests are only the critical paths, which must keep working on every change and r
 - `test/browser/open-session.mjs`: open a session from the sidebar; read its transcript; jump to an
   earlier message; read the session cost; send a follow-up and see the reply and updated cost;
   stop a running reply.
+- `test/browser/remote-session.mjs`: a main and two independent scratch peers with colliding
+  workspace/session identities; list existing sessions, continue each, switch/back/forward with
+  isolated drafts/catalogs, answer a dialog, disconnect/reconnect/reload without replay, and Stop
+  on the same remote generation/PID. One unavailable peer cannot stop the other's stream or
+  redirect input. Local receives no remote prompt or HTTP/socket request. The harness's optional
+  `peers` fixtures each own separate database/history/audit; `remote` is the one-peer shorthand.
 
-`npm run test:browser` runs both (about 6 seconds each) against a scratch registry, Pi history and
+`npm run test:browser` runs these and the transcript-row alignment check against scratch registries, Pi history and
 `test/browser/fake-pi.mjs`, with no model calls. They drive the UI by role and accessible name and
 assert what a user sees and what Pi receives, not markup. Add a journey only for a new critical
 path; cover rules and edge cases with module tests. Earlier documents cite `test/browser-*.mjs`

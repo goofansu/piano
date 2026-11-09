@@ -28,6 +28,7 @@ import {
   type WorkspaceWrittenFiles,
   type WrittenFile,
 } from "../../../shared/wire.ts";
+import { peerApiPath } from "./machine.ts";
 
 export type { RadiusSetupAction };
 export const listWebhooks = (options?: RequestOptions) => call(Endpoints.webhooks, {}, options);
@@ -62,6 +63,8 @@ export class ApiError extends Error {
 }
 
 export interface RequestOptions {
+  /** Captured by the caller, never read from mutable selected-machine state. */
+  machineId?: string;
   signal?: AbortSignal;
 }
 
@@ -74,10 +77,11 @@ type Input<Q extends IdParam, B extends Json | undefined> = ([Q] extends [never]
 async function call<Q extends IdParam, B extends Json | undefined, R extends Json>(
   endpoint: Endpoint<Q, B, R>,
   input: Input<Q, B>,
-  { signal }: RequestOptions = {},
+  { signal, machineId = "local" }: RequestOptions = {},
   readSuccess?: (response: Response) => Promise<unknown>,
 ): Promise<R["Type"]> {
-  const { method, path, noStore, fallback } = endpoint;
+  const { method, noStore, fallback } = endpoint;
+  const path = peerApiPath(machineId, endpoint.path);
   const { query, body } = input as { query?: Record<string, string>; body?: unknown };
   const failure = (status: number) => (typeof fallback === "string" ? fallback : fallback(status));
   let response: Response;

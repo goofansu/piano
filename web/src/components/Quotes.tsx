@@ -4,7 +4,8 @@ import { PianoButton } from "@/components/PianoButton";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/PianoPopover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { Button } from "@/components/ui/button";
-import { type DraftKey, drafts } from "@/lib/messageDraft";
+import { type DraftKey } from "@/lib/messageDraft";
+import { useDrafts } from "@/lib/useMachine";
 
 /** A draft's quotes and the chips' remove move; messageDraft owns them and how they join the message. */
 export interface QuoteDraft {
@@ -78,6 +79,7 @@ export function AddToChat({
   className?: string;
   children: ReactNode;
 }) {
+  const drafts = useDrafts();
   const area = useRef<HTMLDivElement>(null);
   const pill = useRef<HTMLDivElement>(null);
   const [range, setRange] = useState<Range | null>(null);

@@ -47,6 +47,8 @@ machines and persistent terminals, and identifies the missing interface for stru
 The [practical runner synthesis](research/2026-10-14-practical-remote-runners.md) checks five GitHub
 implementations and recommends federating existing Piano backends through system OpenSSH, with no
 Herdr integration or separate runner framework, following the user's minimal-dependency constraint.
+[ADR 0004](adr/0004-same-owner-piano-peer.md) supersedes that transport recommendation for the
+same-owner exe.dev peer slice; [remote Piano](remote-piano.md) documents its bounded setup and use.
 The [MCP management research](research/2026-10-09-mcp-management.md) documents setup through Pi,
 current RPC/browser limitations and a proposed management surface; it does not claim that surface exists.
 [Radius setup](radius-setup.md) describes the implemented, narrower Radius section of the

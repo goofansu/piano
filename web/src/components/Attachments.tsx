@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { type DraftKey, drafts, type ImageDraft } from "@/lib/messageDraft";
+import { useRemote } from "@/lib/useMachine";
 import { wheelSideways } from "@/lib/wheelSideways";
 
 /** Reads a file as base64 with the browser's native encoder. */
@@ -29,11 +30,11 @@ const encode = (file: File) =>
     reader.readAsDataURL(file);
   });
 /** A draft's images (`null` while no draft is addressed) with the moves these controls offer; messageDraft owns them and their policy. */
-export function attachmentDraft(key: DraftKey | null, images: ImageDraft) {
+export function attachmentDraft(key: DraftKey | null, images: ImageDraft, store = drafts) {
   return {
     ...images,
-    add: (files: File[]) => drafts.addImages(key, files, encode),
-    remove: (index: number) => drafts.removeImage(key, index),
+    add: (files: File[]) => store.addImages(key, files, encode),
+    remove: (index: number) => store.removeImage(key, index),
   };
 }
 export type AttachmentDraft = ReturnType<typeof attachmentDraft>;
@@ -197,7 +198,8 @@ function ImagePreview({ url }: { url: string }) {
 }
 /** The group clips overflow, so inline padding (offset by the margin) keeps the first tile's focus ring visible. */
 export function MessageAttachments({ items }: { items: RenderMsg["attachments"] }) {
-  return items?.length ? (
+  const remote = useRemote();
+  return !remote && items?.length ? (
     <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1" ref={wheelSideways}>
       {items.map((a, i) => (
         /* Index keys: a message's attachments are fixed and may repeat a URL. */ <ImagePreview

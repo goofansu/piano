@@ -20,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { isImeKey } from "@/lib/keys";
 import { modelPickerView } from "@/lib/modelPicker";
 import { footerPicker, footerPickerMenu } from "@/lib/styles";
+import { useRemote } from "@/lib/useMachine";
 import type { ModelControl } from "@/lib/useModelChoice";
 
 interface Props {
@@ -43,6 +44,7 @@ export function ModelSelect({
   disabled,
   variant = "ghost",
 }: Props) {
+  const remote = useRemote();
   const { models, model: value, effort, noDirectory } = control;
   const { catalog, refresh, refreshing, saving } = models;
   const [localOpen, setLocalOpen] = useState(false);
@@ -239,46 +241,48 @@ export function ModelSelect({
             disabled={!view.effortEnabled}
           />
           {/* Keep the description and action in place while selection and saving change. */}
-          <div className="flex min-h-6 items-center justify-between gap-2 text-xs text-ink-3 pointer-coarse:min-h-11">
-            <span className="min-w-0">
-              <span className="block">New sessions</span>
-              <span className="block truncate" title={view.defaultLabel ?? undefined}>
-                {view.defaultLabel ?? "Not available"}
+          {!remote && (
+            <div className="flex min-h-6 items-center justify-between gap-2 text-xs text-ink-3 pointer-coarse:min-h-11">
+              <span className="min-w-0">
+                <span className="block">New sessions</span>
+                <span className="block truncate" title={view.defaultLabel ?? undefined}>
+                  {view.defaultLabel ?? "Not available"}
+                </span>
               </span>
-            </span>
-            <ButtonGroup className="shrink-0">
-              <IconButton
-                variant="outline"
-                size="header"
-                label="Use default"
-                disabled={!view.canUseDefault}
-                onClick={() => {
-                  // Stay open to show the defaults taking effect; the button disables, so focus
-                  // moves to the default's effort once Pi shows that model.
-                  setFocusModel(catalog?.defaultModel ?? null);
-                  control.chooseDefaults();
-                }}
-              >
-                <Undo2Icon aria-hidden />
-              </IconButton>
-              <IconButton
-                variant="outline"
-                size="header"
-                label={view.isDefault ? "Default" : "Make default"}
-                disabled={!view.canSaveDefault}
-                aria-busy={saving}
-                onClick={() => void models.saveDefaults(want, effort)}
-              >
-                {saving ? (
-                  <Spinner aria-hidden />
-                ) : view.isDefault ? (
-                  <SaveCheckIcon aria-hidden />
-                ) : (
-                  <SaveIcon aria-hidden />
-                )}
-              </IconButton>
-            </ButtonGroup>
-          </div>
+              <ButtonGroup className="shrink-0">
+                <IconButton
+                  variant="outline"
+                  size="header"
+                  label="Use default"
+                  disabled={!view.canUseDefault}
+                  onClick={() => {
+                    // Stay open to show the defaults taking effect; the button disables, so focus
+                    // moves to the default's effort once Pi shows that model.
+                    setFocusModel(catalog?.defaultModel ?? null);
+                    control.chooseDefaults();
+                  }}
+                >
+                  <Undo2Icon aria-hidden />
+                </IconButton>
+                <IconButton
+                  variant="outline"
+                  size="header"
+                  label={view.isDefault ? "Default" : "Make default"}
+                  disabled={!view.canSaveDefault}
+                  aria-busy={saving}
+                  onClick={() => void models.saveDefaults(want, effort)}
+                >
+                  {saving ? (
+                    <Spinner aria-hidden />
+                  ) : view.isDefault ? (
+                    <SaveCheckIcon aria-hidden />
+                  ) : (
+                    <SaveIcon aria-hidden />
+                  )}
+                </IconButton>
+              </ButtonGroup>
+            </div>
+          )}
         </div>
       </PickerContent>
     </Popover>

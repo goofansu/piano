@@ -12,6 +12,7 @@ import { type ClientOutput, InputNotSent, makeClientSessions } from "./ClientSes
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
+import { type PeerSelection, peerVerdict } from "./PeerScope.ts";
 import { sessionActionPolicy } from "./PiSessions.ts";
 import { Registry } from "./Registry.ts";
 import { SessionHosts, SessionNotCreated } from "./SessionHosts.ts";
@@ -33,15 +34,21 @@ export interface ClientDispatch {
   readonly report: (error: unknown, selectionId?: string) => Effect.Effect<void>;
 }
 
-/** Why a request ends without its ordinary answer: refused unstarted at admission, or failed. */
+/**
+ * Why a request ends without its ordinary answer: refused unstarted at admission, not offered to
+ * another machine's Piano (PeerScope), or failed.
+ */
 type Unanswered =
   | { readonly _tag: "refused" }
+  | { readonly _tag: "unsupported" }
   | { readonly _tag: "failed"; readonly error: unknown };
 
 const unansweredText = (reason: Unanswered) =>
   reason._tag === "refused"
     ? "Client input capacity is full. Request was not started; wait for pending work before trying again."
-    : errorText(reason.error);
+    : reason._tag === "unsupported"
+      ? "Not available from another machine: this session is not listed here, or the request is not supported remotely."
+      : errorText(reason.error);
 
 /**
  * How `receive` admits a request, in arrival order:
@@ -98,7 +105,7 @@ const worktreeUnanswered = (
   _tag: "worktree_result",
   requestId: request.requestId,
   result:
-    reason._tag === "refused"
+    reason._tag !== "failed"
       ? { status: "error", detail: unansweredText(reason), unconfirmed: false }
       : worktreeFailure(reason.error),
 });
@@ -106,6 +113,8 @@ const worktreeUnanswered = (
 /** Sends the current hosts and sidebar, then forwards updates until the surrounding scope closes. */
 export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   output: ClientOutput,
+  /** Another machine's Piano through its gateway: only PeerScope's slice is admitted. */
+  { peer = false }: { readonly peer?: boolean } = {},
 ) {
   const hosts = yield* SessionHosts;
   const facts = yield* DirectoryFacts;
@@ -129,7 +138,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       admission: "claim",
       claim: sessions.select,
       unanswered: ({ selectionId }, reason) =>
-        reason._tag === "refused"
+        reason._tag !== "failed"
           ? { _tag: "selection_rejected", selectionId, message: unansweredText(reason) }
           : { _tag: "selection_failed", selectionId, message: unansweredText(reason) },
       confirmed: null,
@@ -155,7 +164,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       // unless SessionHosts says it failed before any session existed, so nothing was started, or
       // the session's host refused the first message before Pi saw it, which names it.
       unanswered: ({ selectionId }, reason) =>
-        reason._tag === "refused" ||
+        reason._tag !== "failed" ||
         (reason._tag === "failed" && reason.error instanceof SessionNotCreated)
           ? { _tag: "selection_rejected", selectionId, message: unansweredText(reason) }
           : {
@@ -207,7 +216,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
               // Refused at admission or before Pi saw it: the input was never delivered.
               ...("inputId" in action &&
               action.inputId !== undefined &&
-              (reason._tag === "refused" || reason.error instanceof InputNotSent)
+              (reason._tag !== "failed" || reason.error instanceof InputNotSent)
                 ? { inputId: action.inputId }
                 : {}),
             },
@@ -436,7 +445,18 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       );
 
   const capacity = makeInboundCapacity(inboundLimits.client);
+  let peerSelection: PeerSelection | undefined;
   const receive = Effect.fn("ClientDispatch.receive")(function* (request: ClientRequest) {
+    if (peer) {
+      const verdict = peerVerdict(yield* registry.get, request, peerSelection);
+      if (verdict === "skip") return Effect.void;
+      if (verdict === "refuse") {
+        yield* settle(request, { _tag: "unsupported" });
+        return Effect.void;
+      }
+      if (request._tag === "select" && request.sessionId !== null)
+        peerSelection = { ...request, sessionId: request.sessionId };
+    }
     const policy = policyOf(request);
     const admission =
       typeof policy.admission === "function" ? policy.admission(request) : policy.admission;

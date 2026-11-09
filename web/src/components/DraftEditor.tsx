@@ -24,11 +24,12 @@ import { Kbd } from "@/components/ui/kbd";
 import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { ControlHint } from "@/lib/composerControl";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
-import { type DraftKey, type DraftMessage, draftMessage, drafts } from "@/lib/messageDraft";
+import { type DraftKey, type DraftMessage, draftMessage } from "@/lib/messageDraft";
 import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerAction, composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
+import { useDrafts, useRemote } from "@/lib/useMachine";
 import type { ModelControl } from "@/lib/useModelChoice";
 import type { SendDisposition } from "@/lib/ws";
 
@@ -38,16 +39,17 @@ import type { SendDisposition } from "@/lib/ws";
  * (see composerControl) can read the draft, then renders `DraftEditor` with the result.
  */
 export function useDraftEditor(key: DraftKey | null) {
+  const drafts = useDrafts();
   const draft = useSyncExternalStore(drafts.subscribe, () => drafts.get(key));
   const ref = useRef<HTMLTextAreaElement>(null);
   // Stable per key, so type-to-focus does not resubscribe on every keystroke.
-  const append = useCallback((value: string) => drafts.append(key, value), [key]);
+  const append = useCallback((value: string) => drafts.append(key, value), [drafts, key]);
   return {
     key,
     text: draft.text,
     /** The text a send delivers; send rules read this, not `text`, so quotes alone can be sent. */
     message: draftMessage(draft).text,
-    attachments: attachmentDraft(key, draft.images),
+    attachments: attachmentDraft(key, draft.images, drafts),
     quotes: {
       items: draft.quotes,
       remove: (index: number) => drafts.removeQuote(key, index),
@@ -112,6 +114,7 @@ export function DraftEditor({
   actions,
   voice,
 }: Props) {
+  const remote = useRemote();
   const { ref, text, attachments, quotes } = editor;
   const [modelOpen, setModelOpen] = useState(false);
   useAutoGrow(ref, text, maxHeight);
@@ -132,7 +135,7 @@ export function DraftEditor({
     <div
       data-motion="ring"
       className={cn(composerCard, className)}
-      {...attachmentEvents(attachments, attachmentsDisabled)}
+      {...attachmentEvents(attachments, attachmentsDisabled || remote)}
     >
       <AttachmentDraftView draft={attachments} disabled={attachmentsDisabled} />
       <QuoteChips draft={quotes} disabled={disabled} />
@@ -162,8 +165,10 @@ export function DraftEditor({
         }}
       />
       <div className={composerToolbar}>
-        <AttachButton draft={attachments} disabled={attachmentsDisabled} />
-        <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
+        {!remote && <AttachButton draft={attachments} disabled={attachmentsDisabled} />}
+        {!remote && (
+          <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
+        )}
         <ModelSelect
           open={modelOpen}
           onOpenChange={setModelOpen}

@@ -39,7 +39,11 @@ const makeDisplayFrames = () => {
   };
 };
 
-export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket: Socket.Socket) {
+export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (
+  socket: Socket.Socket,
+  /** Another machine's Piano through its gateway (`/ws/peer`); see PeerScope. */
+  options: { readonly peer?: boolean } = {},
+) {
   // The reader performs the upgrade handshake; the writer waits on it.
   const reader = yield* socket.reader;
   const writer = yield* socket.writer;
@@ -51,14 +55,17 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket
     (m: ServerMessage, id) => encodeServerMessage(m, id),
   );
   const frames = makeDisplayFrames();
-  const client = yield* makeClientDispatch({
-    send: (message) =>
-      Effect.suspend(() => {
-        const shown = frames(message);
-        return shown ? delivery.offer(shown) : Effect.void;
-      }),
-    overflow: (error) => delivery.close(error.detail, error.oversized ? 1009 : 1013),
-  });
+  const client = yield* makeClientDispatch(
+    {
+      send: (message) =>
+        Effect.suspend(() => {
+          const shown = frames(message);
+          return shown ? delivery.offer(shown) : Effect.void;
+        }),
+      overflow: (error) => delivery.close(error.detail, error.oversized ? 1009 : 1013),
+    },
+    options,
+  );
 
   const decoder = new TextDecoder();
   yield* Effect.gen(function* () {
