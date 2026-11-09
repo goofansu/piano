@@ -8,7 +8,9 @@
 // Relative, not @shared: module tests load this file directly in Node.
 import {
   type ClientMessage,
+  type DisconnectReason,
   decodeServerMessage,
+  disconnectReason,
   encodeClientMessage,
   type ServerMessage,
 } from "../../../shared/wire.ts";
@@ -24,11 +26,8 @@ export interface Connection {
   close: () => void;
 }
 
-/**
- * Why a socket closed when the person should hear about it: the server dropped a reader that
- * fell behind (1013, reconnects), or a frame exceeded the delivery limit (1009, stays closed).
- */
-export type DisconnectReason = "behind" | "too-large";
+/** Why a socket closed when the person should hear about it (`CloseCode` in shared/wire.ts). */
+export type { DisconnectReason };
 
 export interface ConnectionHandlers {
   onMessage: (m: ServerMessage) => void;
@@ -102,8 +101,6 @@ const PONG_TIMEOUT = 8_000;
 /** Milliseconds between losing a socket and opening the next. */
 const RECONNECT_DELAY = 2_000;
 
-const reasons: Partial<Record<number, DisconnectReason>> = { 1013: "behind", 1009: "too-large" };
-
 /** Whether a frame's UTF-8 bytes stay within `limit`; it counts them only when its length
  * leaves the answer open (a UTF-16 unit takes one to three bytes). */
 const fits = (data: string, limit: number) =>
@@ -133,7 +130,7 @@ export function openConnection(
       // rather than waiting for onclose to disable actions and start recovery.
       socket.current = null;
       env.clearTimeout(heartbeat);
-      const reason = code === undefined ? undefined : reasons[code];
+      const reason = code === undefined ? undefined : disconnectReason(code);
       // Fatal loss ends the whole connection, including online recovery, before notifying callers.
       if (reason === "too-large") close();
       handlers.onStatus(false, reason);

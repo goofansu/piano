@@ -1174,3 +1174,24 @@ export const decodeServerMessage = (text: string): ServerMessage & { deliveryId:
   ...decodeDelivery(text),
 });
 export const encodeClientMessage = Schema.encodeSync(ClientMessageJson);
+
+/**
+ * What a socket's close code tells the browser, for Local's socket and a remote's gateway alike.
+ * `tooLarge`: a frame or view can never be delivered, so the browser stays closed. `tryAgainLater`:
+ * the reader fell behind and reconnects for a current snapshot, saying so. Any other code, such as
+ * `refused` (an invalid frame) or `ended`, reconnects without a notice.
+ */
+export const CloseCode = {
+  refused: 1008,
+  tooLarge: 1009,
+  ended: 1011,
+  tryAgainLater: 1013,
+} as const;
+/** Why a socket closed when the person should hear about it. */
+export type DisconnectReason = "behind" | "too-large";
+export const disconnectReason = (code: number): DisconnectReason | undefined =>
+  code === CloseCode.tooLarge
+    ? "too-large"
+    : code === CloseCode.tryAgainLater
+      ? "behind"
+      : undefined;

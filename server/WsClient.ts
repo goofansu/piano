@@ -11,6 +11,7 @@ import { Cause, Effect } from "effect";
 import { Socket } from "effect/socket";
 import {
   type ClientMessage,
+  CloseCode,
   decodeClientMessage,
   encodeServerMessage,
   type ServerMessage,
@@ -62,7 +63,11 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (
           const shown = frames(message);
           return shown ? delivery.offer(shown) : Effect.void;
         }),
-      overflow: (error) => delivery.close(error.detail, error.oversized ? 1009 : 1013),
+      overflow: (error) =>
+        delivery.close(
+          error.detail,
+          error.oversized ? CloseCode.tooLarge : CloseCode.tryAgainLater,
+        ),
     },
     options,
   );
@@ -75,7 +80,7 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (
       if (size > inboundLimits.frameBytes) {
         yield* delivery.close(
           "Input exceeds the WebSocket message byte limit. Reduce it before reconnecting.",
-          1009,
+          CloseCode.tooLarge,
         );
         return yield* Effect.never;
       }
@@ -108,7 +113,7 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (
         : writer
             .write(
               new Socket.CloseEvent(
-                1011,
+                CloseCode.ended,
                 "Socket reader failed; reconnect for a current snapshot.",
               ),
             )

@@ -12,7 +12,12 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { type RemoteRequest, RemoteRequests } from "../shared/http.ts";
 import { PEER_FRAME_BYTES } from "../shared/machine.ts";
-import { ClientMessageJson, decodeServerMessage } from "../shared/wire.ts";
+import {
+  ClientMessageJson,
+  CloseCode,
+  decodeServerMessage,
+  disconnectReason,
+} from "../shared/wire.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
 import { ConfiguredPeers, type PeerConfig } from "./PeerConfig.ts";
 
@@ -33,25 +38,37 @@ class PeerFailure extends Data.TaggedError("PeerFailure")<{
   readonly code: number;
 }> {}
 const unavailable = () =>
-  new PeerFailure({ message: "Remote Piano is unavailable or incompatible.", code: 1011 });
+  new PeerFailure({
+    message: "Remote Piano is unavailable or incompatible.",
+    code: CloseCode.ended,
+  });
 const refused = () =>
-  new PeerFailure({ message: "Remote connection received an invalid message.", code: 1008 });
+  new PeerFailure({
+    message: "Remote connection received an invalid message.",
+    code: CloseCode.refused,
+  });
 const overflow = () =>
   new PeerFailure({
     message: "Remote connection capacity exceeded; reconnect for a snapshot.",
-    code: 1013,
+    code: CloseCode.tryAgainLater,
   });
-/** The browser stays closed on 1009 rather than refetching a view it can never receive. */
+/** The browser stays closed on `tooLarge` rather than refetching a view it can never receive. */
 const tooLarge = () =>
-  new PeerFailure({ message: "Remote session view exceeds the delivery limit.", code: 1009 });
-/** Keep the remote's own close meaning: 1009 and 1013 tell the browser whether to reconnect. */
+  new PeerFailure({
+    message: "Remote session view exceeds the delivery limit.",
+    code: CloseCode.tooLarge,
+  });
+/** Keep the remote's own close meaning: every code the browser reads (`disconnectReason`). */
 function peerFailure(error: unknown): PeerFailure {
   if (error instanceof PeerFailure) return error;
   if (Socket.SocketError.is(error)) {
     const reason = error.reason;
-    if (reason._tag === "SocketCloseError" && reason.code === 1009) return tooLarge();
-    if (reason._tag === "SocketCloseError" && reason.code === 1013) return overflow();
-    // ws reports a frame above maxPayload as an error before closing with 1009.
+    if (reason._tag === "SocketCloseError") {
+      const meaning = disconnectReason(reason.code);
+      if (meaning === "too-large") return tooLarge();
+      if (meaning === "behind") return overflow();
+    }
+    // ws reports a frame above maxPayload as an error before closing with `tooLarge`.
     if (
       reason._tag === "SocketReadError" &&
       (reason.cause as { code?: unknown } | undefined)?.code === "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH"
@@ -60,7 +77,7 @@ function peerFailure(error: unknown): PeerFailure {
   }
   return new PeerFailure({
     message: "Remote connection ended; reconnect for a snapshot.",
-    code: 1011,
+    code: CloseCode.ended,
   });
 }
 const envelope = Schema.decodeUnknownSync(
@@ -139,7 +156,8 @@ const connect = Effect.fn("PeerGateway.connect")(
         initial.push(chunk);
       }
     }
-    // 1013 when this pipe's outgoing buffer is full; 1011 when the remote is closing or silent.
+    // `tryAgainLater` when this pipe's outgoing buffer is full; `ended` when the remote is closing
+    // or silent.
     const send = (text: string) =>
       Effect.callback<void, PeerFailure>((resume) => {
         if (ws.readyState !== WebSocket.OPEN) {
@@ -214,7 +232,7 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
         .send(chunk)
         .pipe(
           Effect.catch((failure) =>
-            failure.code === 1011
+            failure.code === CloseCode.ended
               ? Effect.sleep(limits.closeGraceMs).pipe(Effect.andThen(Effect.fail(failure)))
               : Effect.fail(failure),
           ),
