@@ -1,3 +1,4 @@
+import { saveDefaults } from "./api.ts";
 import type { Notify } from "./client.ts";
 import { createDrafts, type Drafts } from "./messageDraft.ts";
 import { createModelCatalogs, type ModelCatalogs } from "./modelCatalogs.ts";
@@ -22,9 +23,8 @@ export function createMachineStores(local: MachineStores, notify: Notify) {
         catalogs: createModelCatalogs({
           storage: { read: () => ({}), write: () => {} },
           notify,
-          saveDefaults: async () => {
-            throw new Error("Defaults are managed on the remote Piano.");
-          },
+          // The remote's own Pi settings; its catalogs then show the new default.
+          saveDefaults: (model, effort) => saveDefaults(model, effort, { machineId: id }),
         }),
       };
       stores.set(id, current);

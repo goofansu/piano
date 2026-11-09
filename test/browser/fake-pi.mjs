@@ -34,9 +34,23 @@ const messages = entries
       ? { role: "compactionSummary", summary: e.summary, tokensBefore: e.tokensBefore }
       : e.message,
   );
-const [provider, id] = (arg("--model") ?? "fake/alpha").split("/");
+// As Pi does, start on the saved defaults (settings.json in the agent dir) unless a flag names one.
+const settings = (() => {
+  try {
+    return JSON.parse(
+      readFileSync(join(process.env.PI_CODING_AGENT_DIR ?? "", "settings.json"), "utf8"),
+    );
+  } catch {
+    return {};
+  }
+})();
+const saved =
+  settings.defaultProvider === "fake" && ["alpha", "gamma"].includes(settings.defaultModel)
+    ? `fake/${settings.defaultModel}`
+    : undefined;
+const [provider, id] = (arg("--model") ?? saved ?? "fake/alpha").split("/");
 let model = { provider, id };
-let thinkingLevel = arg("--thinking") ?? "medium";
+let thinkingLevel = arg("--thinking") ?? settings.defaultThinkingLevel ?? "medium";
 let sessionName = arg("--name");
 let streaming = false;
 let streamTimer;

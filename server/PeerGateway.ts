@@ -21,7 +21,7 @@ const limits = {
   bufferedFrames: 64,
   ackMs: 15_000,
   closeGraceMs: 1_000,
-  /** A folder-commands request carries one path. */
+  /** A folder-commands request carries one path; a defaults save one model reference. */
   folderBodyBytes: 16 * 1024,
 };
 class PeerFailure extends Data.TaggedError("PeerFailure")<{
@@ -264,27 +264,72 @@ const commands = Effect.fn("PeerGateway.commands")(function* (
         redirect: "manual",
         signal: AbortSignal.any([signal, AbortSignal.timeout(limits.requestMs)]),
       });
-      if (response.status !== 200 || !response.body) {
+      if (response.status !== 200) {
         await response.body?.cancel();
         throw unavailable();
       }
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let bytes = 0;
-      try {
-        while (true) {
-          const part = await reader.read();
-          if (part.done) break;
-          bytes += part.value.byteLength;
-          if (bytes > limits.clientBytes) throw unavailable();
-          chunks.push(part.value);
-        }
-        const text = Buffer.concat(chunks).toString("utf8");
-        Schema.decodeUnknownSync(Schema.fromJsonString(Endpoints.sessionCommands.response))(text);
-        return text;
-      } finally {
-        await reader.cancel();
+      const text = await readBounded(response);
+      Schema.decodeUnknownSync(Schema.fromJsonString(Endpoints.sessionCommands.response))(text);
+      return text;
+    },
+    catch: unavailable,
+  });
+});
+
+/** A remote's answer, read up to the client limit; a larger or missing body is unavailable. */
+async function readBounded(response: Response): Promise<string> {
+  if (!response.body) throw unavailable();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      bytes += part.value.byteLength;
+      if (bytes > limits.clientBytes) throw unavailable();
+      chunks.push(part.value);
+    }
+    return Buffer.concat(chunks).toString("utf8");
+  } finally {
+    await reader.cancel();
+  }
+}
+
+const Refusal = Schema.Struct({ error: Schema.String, field: Schema.optional(Schema.String) });
+
+/**
+ * Save the remote's default model and effort through its own settings endpoint, so the remote
+ * checks the model against its own catalog. Its refusal ("Choose an available model.") reaches
+ * the browser as its ordinary 400; anything else is the remote being unavailable.
+ */
+const saveDefaults = Effect.fn("PeerGateway.saveDefaults")(function* (
+  peer: PeerConfig,
+  body: string,
+) {
+  return yield* Effect.tryPromise({
+    try: async (signal) => {
+      const response = await fetch(new URL(Endpoints.saveDefaults.path, peer.endpoint), {
+        method: "PUT",
+        headers: { ...upstreamHeaders(peer), "content-type": "application/json" },
+        body,
+        redirect: "manual",
+        signal: AbortSignal.any([signal, AbortSignal.timeout(limits.requestMs)]),
+      });
+      if (response.status !== 200 && response.status !== 400) {
+        await response.body?.cancel();
+        throw unavailable();
       }
+      const text = await readBounded(response);
+      if (response.status === 200) {
+        Schema.decodeUnknownSync(Schema.fromJsonString(Endpoints.saveDefaults.response))(text);
+        return { status: 200, text };
+      }
+      const { error, field } = Schema.decodeUnknownSync(Schema.fromJsonString(Refusal))(text);
+      return {
+        status: 400,
+        text: JSON.stringify(field === undefined ? { error } : { error, field }),
+      };
     },
     catch: unavailable,
   });
@@ -324,13 +369,20 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = new URL(request.url, "http://localhost");
-    const match = /^\/peer\/([^/]+)(\/ws|\/api\/session\/commands|\/api\/commands)$/.exec(
-      url.pathname,
-    );
+    const match =
+      /^\/peer\/([^/]+)(\/ws|\/api\/session\/commands|\/api\/commands|\/api\/settings\/defaults)$/.exec(
+        url.pathname,
+      );
     // The request owns this immutable destination, including credentials, through completion.
     const peer = match ? byId.get(match[1]) : undefined;
     if (!peer) return json({ error: "Unknown remote machine or unsupported remote request." }, 404);
-    if (request.method !== (match?.[2] === "/api/commands" ? "POST" : "GET"))
+    const method =
+      match?.[2] === "/api/commands"
+        ? "POST"
+        : match?.[2] === Endpoints.saveDefaults.path
+          ? Endpoints.saveDefaults.method
+          : "GET";
+    if (request.method !== method)
       return json({ error: "Remote request method is not supported." }, 405);
     // Every remote request spends the peer's credential, so another site's page must not make the
     // browser send one (an image or script tag needs no Origin). Browsers label such loads.
@@ -360,6 +412,24 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       if (folder._tag === "Failure" || Buffer.byteLength(text) > limits.folderBodyBytes)
         return json({ error: "A remote folder is required." }, 400);
       return commandsResponse(yield* commands(peer, { kind: "folder", cwd: folder.value.cwd }));
+    }
+    if (match?.[2] === Endpoints.saveDefaults.path) {
+      const length = Number(request.headers["content-length"]);
+      if (url.search || !Number.isSafeInteger(length) || length > limits.folderBodyBytes)
+        return json({ error: Endpoints.saveDefaults.invalid }, 400);
+      const text = yield* request.text;
+      const defaults = Schema.decodeUnknownExit(Schema.fromJsonString(Endpoints.saveDefaults.body))(
+        text,
+        { onExcessProperty: "error" },
+      );
+      if (defaults._tag === "Failure" || Buffer.byteLength(text) > limits.folderBodyBytes)
+        return json({ error: Endpoints.saveDefaults.invalid }, 400);
+      const saved = yield* saveDefaults(peer, JSON.stringify(defaults.value));
+      return HttpServerResponse.text(saved.text, {
+        status: saved.status,
+        contentType: "application/json",
+        headers: { "cache-control": "no-store" },
+      });
     }
     const workspaceId = url.searchParams.get("workspaceId"),
       sessionId = url.searchParams.get("sessionId");

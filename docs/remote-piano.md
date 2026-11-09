@@ -160,7 +160,9 @@ switching to tokenless access. Piano never changes integrations.
 ## Use
 
 Choose **eng-1** from **Machine**, open a listed session and send a text follow-up. The existing
-model/effort, context, queue, dialog and Stop controls apply to that remote session. Cmd+K searches
+model/effort, context, queue, dialog and Stop controls apply to that remote session. In the model
+picker, **Use default** and **Make default** read and save the remote's own defaults for new
+sessions there; Local's defaults are unchanged. Cmd+K searches
 only the selected machine and offers a **Switch to …** command for each configured machine. A remote session's
 address is `/m/eng-1/s/<sessionId>`; reload and back/forward retain that machine.
 
@@ -183,12 +185,14 @@ Local's persisted catalog. Remote files, credentials, history and database remai
   first message: no Browse, worktree creation, project, name or attachment. No archive/delete/
   rename/pin, projects management, worktree or machine management. Add folders and manage those on
   the owning Piano.
-- No remote file/Changes/attachment/preview or account/settings controls, folder trust included:
+- No remote file/Changes/attachment/preview or account/settings controls beyond the model picker's
+  defaults, folder trust included:
   trusting a folder would run its project extensions on the remote. These requests are not
   forwarded to Local. Remote transcript attachments/local-file actions are unavailable.
 - The remote enforces these limits on its `/ws/peer` connection and answers a refused request the
   way it answers any failed one (for example "Unable to open session"); the connection stays open.
-- Only configured peers, the remote's `/ws/peer` and its slash-command reads are routed. There is
+- Only configured peers, the remote's `/ws/peer`, its slash-command reads and its defaults save are
+  routed. There is
   no arbitrary URL proxy, redirect following, mutation retry or cross-machine search. The browser never contacts the
   integration hostname.
 - The configured destination is trusted, not an authenticated instance-ID handshake. A remote
