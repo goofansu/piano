@@ -71,8 +71,14 @@ const groupRow = cn(
 const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-(--glyph-pad) text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
+/**
+ * The sidebar any machine shows, holding what its offers allow: Projects leads the list and
+ * Settings closes it only where they are offered, so a remote's sidebar lists its catalog and New
+ * session alone while the remote's own Piano manages it.
+ */
 export function Sidebar({ state }: Props) {
   const { openNew, openProjects, openSettings, setPalette } = useNavigation();
+  const offers = useOffers();
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
       <LayoutHeader title={<MachineSwitcher />}>
@@ -91,33 +97,41 @@ export function Sidebar({ state }: Props) {
         </IconButton>
       </LayoutHeader>
       {/* The way to the Projects index leads the list; it is the current row while the index is open, as a selected session row is. */}
-      <div className="px-(--row-inset) py-2">
-        <Button
-          variant="ghost"
-          leading
-          className={cn(
-            row,
-            "w-full text-ink-2",
-            state.view.kind === "projects" &&
-              "bg-(--selected) font-medium text-ink hover:bg-(--selected)",
-          )}
-          aria-current={state.view.kind === "projects" ? "page" : undefined}
-          onClick={() => openProjects()}
-        >
-          <TargetIcon data-icon="inline-start" /> Projects
-        </Button>
-      </div>
+      {offers.projects && (
+        <div className="px-(--row-inset) py-2">
+          <Button
+            variant="ghost"
+            leading
+            className={cn(
+              row,
+              "w-full text-ink-2",
+              state.view.kind === "projects" &&
+                "bg-(--selected) font-medium text-ink hover:bg-(--selected)",
+            )}
+            aria-current={state.view.kind === "projects" ? "page" : undefined}
+            onClick={() => openProjects()}
+          >
+            <TargetIcon data-icon="inline-start" /> Projects
+          </Button>
+        </div>
+      )}
       <ScrollArea className="min-h-0 flex-1">
-        <nav className="relative px-(--row-inset) pb-4" aria-label="Sessions">
+        {/* The list starts 8px below the Projects row, or below the header without one, and ends 16px above the footer or the sidebar's end. */}
+        <nav
+          className={cn("relative px-(--row-inset) pb-4", !offers.projects && "pt-2")}
+          aria-label="Sessions"
+        >
           <SidebarSessions state={state} />
         </nav>
       </ScrollArea>
-      <LayoutFooter>
-        <Button variant="ghost" leading className="flex-1" onClick={() => openSettings()}>
-          <SettingsIcon data-icon="inline-start" />
-          Settings
-        </Button>
-      </LayoutFooter>
+      {offers.settings && (
+        <LayoutFooter>
+          <Button variant="ghost" leading className="flex-1" onClick={() => openSettings()}>
+            <SettingsIcon data-icon="inline-start" />
+            Settings
+          </Button>
+        </LayoutFooter>
+      )}
     </div>
   );
 }
@@ -125,16 +139,14 @@ export function Sidebar({ state }: Props) {
 /**
  * Pinned, then the catalog in this browser's grouping, sort and row details: one list for this
  * machine's catalog and a remote's. On a remote its groups carry no actions, since grouping by
- * folder or project only presents the remote's metadata. `emptyText` replaces the empty state's
- * text and `unavailable` the loading skeleton, for a remote that cannot be started from here or
- * has not answered.
+ * folder or project only presents the remote's metadata. A machine that cannot be reached says
+ * so in place of the loading rows; where folders are not offered, the empty state names the fact
+ * alone, since its hints lead to starting in a folder this browser does not manage.
  */
-export function SidebarSessions({
-  state,
-  emptyText,
-  unavailable,
-}: Props & { emptyText?: string; unavailable?: string }) {
+export function SidebarSessions({ state }: Props) {
   const { select } = useNavigation();
+  const offers = useOffers();
+  const unavailable = state.unreachable ? "Machine unavailable" : undefined;
   const { view } = useSidebarView();
   const {
     list: { pinned, body },
@@ -208,7 +220,7 @@ export function SidebarSessions({
       case "loading":
         return unavailable ? empty(unavailable) : <SidebarSkeleton />;
       case "empty":
-        return empty(emptyText ?? body.text);
+        return empty(unavailable ?? (offers.folders ? body.text : "No sessions yet"));
       case "sections": {
         // Done projects' groups come last; one label says so for all of them.
         return (

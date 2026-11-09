@@ -9,7 +9,6 @@ import { NewSession } from "@/components/NewSession";
 import { PaneNotFound } from "@/components/Pane";
 import { ProjectHome } from "@/components/ProjectHome";
 import { ProjectsIndex } from "@/components/ProjectsIndex";
-import { RemoteSidebar } from "@/components/RemoteSidebar";
 import { SessionView } from "@/components/SessionView";
 import { SettingsNavigation, SettingsPage } from "@/components/SettingsPage";
 import { SidebarActivityContext } from "@/components/ShowSidebarButton";
@@ -119,9 +118,7 @@ function MachineApp() {
               <AppLayout
                 navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
                 navigation={
-                  !offers.fullSidebar ? (
-                    <RemoteSidebar state={state} />
-                  ) : settings ? (
+                  offers.settings && settings ? (
                     <SettingsNavigation
                       section={settings}
                       onSelect={openSettings}
