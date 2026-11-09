@@ -1,7 +1,7 @@
 # Start a session
 
-The New page asks "What should we work on?" at `/new`, or shows the project name at
-`/projects/<id>/new`. The user chooses a folder, optionally a model, effort and project, types
+The New page asks "What should we work on?" at `/new` and `/projects/<id>/new` on desktop
+(the heading is hidden on narrow screens); the latter preselects the project. The user chooses a folder, optionally a model, effort and project, types
 the first message and sends it. Piano starts Pi in that folder, opens `/s/<sessionId>` and shows Pi's reply. A reload keeps
 the session without sending the message again; a message that cannot be sent keeps the draft.
 
@@ -12,8 +12,10 @@ the session without sending the message again; a message that cannot be sent kee
   registered folder; a fresh `/projects/<id>/new` needs a directory choice.
 - `model-effort`: the "Model: <model>; effort: <level>" button picks a model and effort, passed to
   Pi as `--model` and `--thinking`.
-- `project`: the "Project" button lists "New project…" and the projects, filing the new session
-  in the one chosen ("None" clears a choice).
+- `model-defaults`: the model picker shows New sessions' default, Refresh models, Use default
+  and Make default / Default. Use default restores the current choice without saving a new default.
+- `project`: the "Project" button lists "New project" and the projects, filing the new session
+  in the one chosen ("No project" clears a choice).
 - `first-message`: combobox "First message" plus "Send" starts the session and lands on it.
   Desktop Enter sends; on a coarse-pointer device Enter inserts a newline.
 - `reload`: reloading `/s/<id>` shows the same transcript and sends no second prompt.
@@ -27,8 +29,8 @@ the session without sending the message again; a message that cannot be sent kee
 - The sidebar's "New session" button, or the root URL with no session open.
 - A project home's composer ("First message" above its Sessions), or, with the sidebar grouped by
   project, the group's "New session in <project>".
-- Address bar: `/new`, `/projects/<id>/new` (its `h1` is the project's name, not "What should we
-  work on?").
+- Address bar: `/new`, `/projects/<id>/new`. The project-name heading belongs to the project
+  home at `/projects/<id>`, not its New page.
 
 ## Driving it with agent-browser
 
@@ -45,6 +47,13 @@ project and reload on its own scratch instance, with its own folders and models 
   - Result: the combobox already reads `repo`; listbox "Suggestions" with options `repo`
     (selected), `Browse…`, `Worktrees`. `ab find role option click --name "repo" --exact`.
     Capture `01-new`.
+- `model-defaults` (before sending, with the seed's default browser fake)
+  - Action: `ab click '[aria-label^="Model:"]'; ab wait '[aria-label="Model and effort"]';
+    ab find role option click --name "fake/gamma" --exact`;
+    capture `01b-model-choice`, then `ab find role button click --name "Use default" --exact`.
+  - Result: the trigger returns to `Model: fake/alpha; effort: medium`; the picker remains open,
+    Use default is disabled and Default replaces Make default. Capture `01c-default`, then
+    `ab press Escape`. This checks restoring the choice, not saving a new default.
 - `first-message`
   - Action: `ab fill '[aria-label="First message"]' "hello verify";
     ab wait --fn "!document.querySelector('[aria-label=Send]').disabled"; ab press Enter;
@@ -78,7 +87,7 @@ project and reload on its own scratch instance, with its own folders and models 
 ## Gotchas
 
 - Fake Pi writes no Pi history, so a session started on it is empty after a backend restart.
-- The Directory combobox reads "Choose a folder" only when no folder is chosen yet (an `--empty`
+- The Directory combobox reads "Directory" when no folder is chosen yet (an `--empty`
   launch, an empty project's home); on the seed it already reads `repo`.
 - Count only non-`probe` audit entries: Piano starts a `probe` Pi for the composer's model and
   command lists.

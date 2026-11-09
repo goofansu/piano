@@ -11,6 +11,9 @@ link a person can open.
   `handle.sessionId`, `link`.
 - `worktree`: `--worktree BRANCH` has Piano create a worktree first and start there; the isolated
   scratch configuration uses `<repo>.<BRANCH>`. Use the returned `worktree.path`.
+- `inherit-project`: `--parent-session <id>` inherits that parent's current project, even in a
+  new worktree; `--no-inherit-project` starts ungrouped. Moving the parent later does not move
+  existing children. An unlisted or ambiguous parent refuses inheritance before creation.
 - `status`: `status <sessionId>` prints `disposition`, `needs`, `lastAnswer`, `changes`, `link`.
 - `list`: `list --project <id>` prints one JSON line per active member session.
 - `follow-up`: `follow-up <sessionId> <prompt-file> [--steer]` sends one more message to the
@@ -56,6 +59,15 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
   - Command: `node scripts/dispatch-session.ts list --project verify`
   - Result: one line for `verify-plan` with `"projectId":"verify"`, `"lastAnswer":"Answer 4."`
     (from the baseline; a later prompt to it replaces that), and `changes.pullRequest.number` 222.
+- `inherit-project` (additional starts, after the baseline list check)
+  - Command: `node scripts/dispatch-session.ts "$RUN/prompt.txt" "$REPO" --worktree verify-child
+    --parent-session verify-plan > "$EVIDENCE/session-dispatch/inherited.json"`.
+    Open the returned link and wait for `echo: dispatch hello` before reading `status <id>`.
+  - Result: status has `projectId: "verify"`, branch `verify-child`; `list --project verify`
+    includes the child. Capture `01b-inherited`; `git -C "$REPO" worktree list` confirms placement.
+  - Opt out: `node scripts/dispatch-session.ts "$RUN/prompt.txt" "$REPO" --parent-session verify-plan
+    --no-inherit-project > "$EVIDENCE/session-dispatch/ungrouped.json"`; open its returned link,
+    wait for the reply, then `status <id>` has `projectId: null`.
 - `follow-up`
   - Command: `printf "one more" > "$RUN/more.txt"; node scripts/dispatch-session.ts follow-up <sessionId from start.json> "$RUN/more.txt"; echo $?`
   - Result: exit 0 with `"delivery": "follow-up"`, `"submission": "started"` and `link`; the
@@ -90,6 +102,10 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
   the printed links come from `PIANO_SESSION_ORIGIN`, so they open the UI (`$WEB_URL`).
 - `status`'s `changes.files` counts uncommitted files whatever comparison the Changes pane shows.
 - Run it with the checkout's Node 24 (`node scripts/dispatch-session.ts`), not `npx tsx`.
+- In Pi, `piano_wait_sessions` observes exact returned handles; omission of its timeout waits
+  until completion or attention, while a timeout only bounds observation. There is no CLI wait
+  command. CLI proof does not exercise the extension's tool row, Open session link or child's
+  Dispatched from backlink; those need a real-Pi/scripted-model journey.
 - Start/follow-up report submission, not completion. A status read can still say `running`;
   observe the expected reply in the browser before asserting settled status. Do not resend.
 - `test/fake-pi.mjs` gives each `ask…` dialog the ID `d1`; a second ask in the same session may not

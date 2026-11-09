@@ -38,8 +38,7 @@ the palette (Mod+K) does not search individual outputs.
   Find from branch). Once linked, the button gives way to the PR row below. Removing the link
   brings the button back. Keyboard dismissal returns focus to the visible PR control.
 - `pull-request-row`: region "Pull request" under the toolbar, only while the session has a
-  linked pull request: `<n> <title>` (a link to GitHub; the number without a hash, as the
-  session rail and project home show it), the state badge, "Checks
+  linked pull request: `#<n> <title>` (a link to GitHub; the session rail and project home also show the hash), the state badge, "Checks
   running|passed|failed|unavailable" (unavailable: the token reads the pull request but not its
   checks), "Approved" / "Changes requested" / "Review required", "<n> commits not pushed", "Edits not
   committed", and `head → base` only when the head is not the inspected branch; "Status
@@ -74,15 +73,15 @@ the palette (Mod+K) does not search individual outputs.
   across sessions and reloads, hides while a Surface tab shows, and returns when the last one
   closes; turned on over open tabs, it hides them until the rail goes off. It is offered even
   without Git. One area at a time, neither the header nor the palette offers the rail. The header
-  shows folder/repository and branch below the title; the session menu holds actions and the
+  shows folder and branch (or a ten-character detached commit) below the title; the session menu holds actions and the
   linked pull request, not Environment copy menus or Outputs. Widen to use those sections;
   the desktop rail preference is kept.
 - `environment`: the rail's "Environment" rows are menu buttons named `Folder: repo`, `Branch:
   main` (field names are screen-reader only in the visible text), and, when a pull request is
-  linked, a "Pull request" row showing its number without a hash (`222` on the seed). The Folder
-  row's menu has "Copy working directory" (a Repository row's also "Copy repository name"), the
-  Branch row's "Copy git branch" (a detached commit's "Copy commit SHA"). Repository and branch
-  rows also offer "Open … on GitHub" when their URLs are known. The rail shows no row for the working directory itself.
+  linked, a "Pull request" row showing `#222` on the seed. The Folder
+  row's menu has "Copy directory path" (a Repository row's also "Copy repository name"), the
+  Branch row's "Copy branch" (a detached commit's "Copy commit SHA"). Repository and branch
+  rows also offer "Open repository" / "Open branch" when their URLs are known. The rail shows no row for the working directory itself.
 - `files-list`: The rail's "Outputs" lists files written in the session by name only, and
   appears only once it has a row. There is no Links section.
 - `file-viewer`: an Outputs row opens the file in a tab of its own at the strip's end (tab = file
@@ -111,10 +110,11 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
     ab find role button click --name "Changes" --exact; ab wait --text "new.txt"`
   - Result: tab and region "Changes", the header toggle now "Hide changes"; "Comparison:
-    Uncommitted"; region "Pull request" with link `222`, `Status unavailable` and `Edits not
+    Uncommitted"; region "Pull request" with link `#222`, `Status unavailable` and `Edits not
     committed`; buttons `new.txt, new, 1 added, 0 removed: collapse` and
-    `src/answer.ts, 1 added, 1 removed: collapse`; cells `− export const answer = 4;` and
-    `+ export const answer = 5;`; the name `new.txt` is green. Capture `01-changes`.
+    `src/answer.ts, 1 added, 1 removed: collapse`; wait for `ab wait '[aria-label="Diff of src/answer.ts"]'` before inspecting the rendered
+    patch (removed `answer = 4`, added `answer = 5`); the name `new.txt` is green.
+    Diff text is rendered in a shadow root, not ordinary table cells. Capture `01-changes`.
   - Side effect (same answer over HTTP): take the root workspace ID from
     `curl -s "$API_URL/api/folders"` (`folders[0].worktrees[0].workspace.id`), then
     `curl -s -X POST -H "Origin: $ORIGIN" -d '{}' "$API_URL/api/session/changes?workspaceId=<id>&sessionId=verify-plan"`
@@ -132,15 +132,15 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   - Action: `ab find role button click --name "Show session rail" --exact;
     ab wait "[data-slot=session-rail]:not([inert])"`
   - Result: `ab eval "document.querySelector('[data-slot=session-rail]:not([inert])').innerText"`
-    contains `Environment` / `repo` / `main` / `222` / `Outputs` / `answer.ts` (no Links section; the
-    Folder / Branch / Pull request labels are screen-reader only, and `222` is the seed's linked
+    contains `Environment` / `repo` / `main` / `#222` / `Outputs` / `answer.ts` (no Links section; the
+    Folder / Branch / Pull request labels are screen-reader only, and `#222` is the seed's linked
     PR): bordered lists of icon rows; each heading folds its section, and folds are remembered
     across reloads. Capture `03-rail`.
-    `ab find role button click --name "Branch: main" --exact` opens a menu of `Copy git branch`
-    and "Folder: repo" one of `Copy working directory` (Escape each). Then
+    `ab find role button click --name "Branch: main" --exact` opens a menu of `Copy branch`
+    and "Folder: repo" one of `Copy directory path` (Escape each). Then
     `ab find role button click --name "answer.ts" --exact; ab wait '[aria-label="Close answer.ts"]'`
-    opens a tab `answer.ts` with toolbar `src/answer.ts`, the file's current contents and "Close
-    answer.ts" on the tab, and the rail hides. Capture `03-file-viewer` while it is open;
+    opens a tab `answer.ts` with toolbar `src/answer.ts`, Copy path, Download file, Wrap,
+    the file's current contents and "Close answer.ts" on the tab, and the rail hides. Capture `03-file-viewer` while it is open;
     `ab find role button click --name "Close answer.ts" --exact` shows the rail again.
   - Plain URL: `ab fill '[aria-label="Message"]' 'Read https://example.com/docs/guide please';
     ab press Enter; ab wait --text 'echo: Read https://example.com/docs/guide please'`.
@@ -148,7 +148,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     Capture `04-no-links`.
   - Narrow: with Changes open, `ab set viewport 700 800;
     ab wait '[role=tablist][aria-label="Session views"]'`: tabs read `Agent | Changes`.
-    The header shows `repo · main` below the title and offers Changes and
+    The header shows the folder `repo` and branch `main` below the title and offers Changes and
     "Session information and actions", not Show session rail. Capture `05-narrow-changes`.
     Drive [`open-session.md`](./open-session.md) `phone-menu` for its sheet, dismissal and resize
     checks. Outputs and Environment copy menus require widening; there is no narrow rail
@@ -160,8 +160,7 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
 - Fake Pi makes no tool calls, so Outputs is only reachable through the seeded, hand-written
   history; report it as such. A real Pi write is not exercised.
 - After a successful workspace observation, Outputs filters ignored, removed and outside-workspace
-  paths (the throwaway repo ignores `ignored/`). Without a successful observation, the written
-  paths remain visible.
+  paths (the throwaway repo ignores `ignored/`). Without a successful observation, or after a failed refresh, the written paths remain visible.
 - The Surface area is `[data-slot=surface-area]`; hidden, it stays mounted but `inert` (so its
   scroll survives), so select the shown one with `:not([inert])`.
 - "Changes" is the header's icon, the narrow tabs and the palette; neither the session header's menu nor

@@ -3,7 +3,7 @@
 `/projects` lists every project as one hairline-divided row: its name, the folders its sessions run
 in with the session count ("repo · 1 session", or "No sessions yet"), and when a member last moved,
 newest activity first with empty projects last by name. Done projects sit in a collapsed "Done"
-group below the open projects, dated by when they were marked done. A row opens the project's home and
+group below the open projects, dated with "Done …" by when they were marked done. A row opens the project's home and
 carries the sidebar's project menu, revealed while pointed at; the header's "New project" opens
 the New project dialog. Rows carry no status: session state lives on the home. The page reads
 only what the browser already holds.
@@ -105,7 +105,8 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
 
 ## Gotchas
 
-- Rows are `Item`s with `role=listitem`, as the project home's rows are; the button inside is the
+- Rows are `[data-slot=item]` elements inside `role=listitem` wrappers, as the project home's
+  rows are; the button inside is the
   row's title, named by the project, which a project-grouped sidebar repeats. Scope to `main`
   and identify the intended row by its project-menu label as above; the bare title selector
   matches every project, so the first match changes with activity order.

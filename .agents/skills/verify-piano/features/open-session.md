@@ -13,15 +13,15 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
   opening or dismissing that sheet preserves the desktop column preference on widening.
 - `history`: the saved user message and reply render; "Jump to message" lists them.
 - `header`: on desktop, one line: the project crumb ("Project: <name>", only for a member session) and the
-  title with "Session information and actions" beside it; at its end "Changes" then
-  "Show session rail". An observed app URL adds "Open preview in new tab" in every layout.
+  title with "Session information and actions" beside it; at its end "Changes" / "Hide changes" then
+  "Show session rail" / "Hide session rail". An observed app URL adds "Open preview in new tab" in every layout.
   Where the session runs is in the session rail and, when shown, the sidebar row; the
   pull request is read in Changes. The session's state is the sidebar row's; the header only
   carries it as screen-reader `role=status` text ("Ready", "Not running").
-- `phone-menu`: one area at a time, the header shows folder/repository and branch below the title;
+- `phone-menu`: one area at a time, the header shows folder and branch (or a ten-character detached commit) below the title;
   "Session information and actions" opens the "Session" sheet. It holds the linked "Pull request
   #222", Rename, Pin, Move to project (Add to project for a loose session), Messages only,
-  Archive and Delete; Preview appears only when one is known and pushes a pane in the same sheet:
+  Archive and Delete; Share is conditional on Radius sign-in. Preview appears only when one is known and pushes a pane in the same sheet:
   Back, status/hostname, Open preview in new tab (dismisses the sheet), Preview details and Stop
   preview (confirmation). The app is never embedded. This also applies on wide viewports when the
   measured session area is too narrow for side-by-side. It has no Outputs, Links,
@@ -36,6 +36,8 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 - `cost`: "Context usage" opens "Token and cost breakdown" with the selected response's tokens
   and cost (latest by default). "Response history" switches between tokens and cost and offers
   an "Inspect response" slider; the Session column remains the session totals.
+- `inline-question`: the browser fake's `question` prompt shows Which checks?, Quick checks /
+  Full suite and Send answer; the answer appears in the transcript.
 - `follow-up`: "Message" plus Enter sends to the same Pi session.
 - `stop`: "Stop" aborts a running reply.
 - `nested-calls`: an opened codemode tool row lists the calls its script made, one line each
@@ -68,7 +70,8 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 
 - Harness
   - Command: `node test/browser/open-session.mjs "$EVIDENCE/open-session/harness"`
-  - Result: exit 0 and `PASS open-session ...` (sidebar, jump, cost, follow-up, stop).
+  - Result: exit 0 and `PASS open-session ...` (sidebar, long-history jumps, cost, follow-up,
+    inline questions, stop, streaming scroll anchoring and persistent tool disclosure).
 - `open-from-sidebar` and `history`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/"; ab wait --text "Loose session";
     ab find role button click --name "Loose session" --exact; ab wait --url "**/s/verify-loose";
@@ -128,6 +131,12 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   - Result: "Response 1 / 2" is selected; Response cost remains `$0.0063`, Session cost `$0.0126`
     (both fake responses have the same usage). Capture `02b-response-history`, then
     `ab find role radio click --name "Show tokens history" --exact; ab press Escape`.
+- `inline-question` (after response history)
+  - Action: `ab fill '[aria-label="Message"]' "question"; ab press Enter;
+    ab wait --text "Which checks?"`; capture `02c-question`.
+    `ab find role radio click --name "Full suite" --exact;
+    ab find role button click --name "Send answer" --exact; ab wait --text "Answer: Full suite"`.
+  - Result: the question closes and the answer appears. Capture `02d-answered`.
 - `stop`
   - Action: `ab fill '[aria-label="Message"]' "hold"; ab press Enter; ab wait '[aria-label="Stop"]';
     ab find role button click --name "Stop" --exact`

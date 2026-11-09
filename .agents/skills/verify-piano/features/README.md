@@ -52,7 +52,8 @@ Keep implementation details out; name user paths, handles, required state, comma
 ## Features
 
 - [Start a session](./start-session.md): the New page, its directory, model, effort and project
-  choices, the first message and reply, reload without resending, a kept draft when not sent.
+  choices, restoring model defaults, the first message and reply, reload without resending,
+  a kept draft when not sent.
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
   home; read history and cost; follow up; stop a running reply; archive and delete from the row's
   menu; responsive sidebar controls; the narrow session-menu sheet and its project picker;
@@ -64,13 +65,16 @@ Keep implementation details out; name user paths, handles, required state, comma
   header; member rows and their Archive / Delete, order, PR number, new session in the project,
   settings, Done badge / Reopen and sidebar grouping; empty, deleted and missing projects.
 - [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
-  `follow-up`, `status` and `list --project`, its refusals, and a dialog that needs input.
+  `follow-up`, `status` and `list --project`, project inheritance/opt-out, its refusals,
+  and a dialog that needs input.
 - [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and its
   pull request, and the desktop session rail's Environment and Outputs (no Links section or narrow rail).
 - [Settings › Skills and Prompts](./settings-skills-prompts.md): `/settings/skills` and
   `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
-  empty states; the separate agent-authored approval path's real-Pi prerequisite. Providers and
-  Webhooks are reached the same way but not driven here.
+  empty states; the separate agent-authored approval path's real-Pi prerequisite.
+- [Settings › Providers, Webhooks and Preferences](./settings-other.md): unsigned-in provider/Radius
+  setup, the voice-input key prerequisite and cancellation, inactive webhook CRUD and URL refusal;
+  authenticated setup, transcription and webhook delivery remain separate checks.
 - [Settings › MCP](./settings-mcp.md): `/settings/mcp` over the scratch `mcp.json`; Connect,
   Add MCP server by form and JSON paste (URL/startup refusals and local command success),
   Manage → Edit / Delete, Connect cancellation, and Pi's MCP switch. Authenticated URL-server
@@ -81,12 +85,18 @@ Keep implementation details out; name user paths, handles, required state, comma
 Report entry points individually: one visited path does not prove every branch in a feature file.
 Keep these prerequisites visible when using the default launch:
 
-- Dialog answers need `--fake-pi dialogs` rather than the browser echo fake; see
-  [Session dispatch](./session-dispatch.md). Neither fake proves that an agent-authored library
+- The dispatch recipe's Enter a value dialog needs `--fake-pi dialogs`; the browser fake also
+  supports the separate Which checks? inline-question recipe in [Open a session](./open-session.md).
+  See [Session dispatch](./session-dispatch.md). Neither fake proves that an agent-authored library
   save writes only the approved file; see [Settings](./settings-skills-prompts.md#gotchas).
 - The dialogs fake can supply confirmed artifact results for the header menu, but does not
   publish to Radius or prove authenticated link access; see
   [Open a session](./open-session.md#driving-it-with-agent-browser).
+- Dispatch extension waits, parent tool rows and child backlinks need real Pi/scripted model
+  evidence; the CLI recipe proves creation, inheritance and status, not those UI paths.
+- Voice input and authenticated Share require the setup described in
+  [Providers and Preferences](./settings-other.md#gotchas). A fake echo or an unsigned-in page
+  does not establish transcription, secret checking or sharing.
 - Managed Preview (external tabs, rail actions and the same-sheet Preview pane) needs the isolated real-Pi/native
   supervisor journey in [`docs/testing.md`](../../../../docs/testing.md#managed-preview-host-journey),
   `node test/browser/preview.mjs <evidence-directory>`. The default fake's Changes/rail checks
