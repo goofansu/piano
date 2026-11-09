@@ -6,34 +6,41 @@ the result, and `piano_session_status` to read any session's status by its ID.
 The child is an ordinary session: it appears in the sidebar, has an **Open session** link, and can
 be opened and continued without taking the parent away from its conversation.
 
-User and repository instructions decide when to dispatch; the tools describe how to start and
-observe sessions. Repository instructions can require dispatch without a separate user request
-(INV-13). Piano's own contributor workflow lives in [AGENTS.md](../AGENTS.md#branches).
+Complete the task in the current session by default. Dispatch bounded work when it enables useful
+parallelism, required workspace isolation, or a handoff called for by user or project instructions.
+The tools own this general dispatch and ownership guidance; user and project instructions define
+required outcomes (INV-13). Piano's own contributor workflow, including mandatory worktree
+isolation, lives in [AGENTS.md](../AGENTS.md#branches).
 
 ## Prepare the brief
 
-Choose a bounded task and how its result will be checked, following user and repository
-instructions. Reuse supplied findings; inspect missing context in the current session until
-implementation has a concrete scope. Research, diagnosis or review can be delegated directly
-with a question, boundaries and expected evidence. This is guidance for a useful brief, not a
-runtime planning gate or a required skill.
+Before dispatching, identify the benefit, the bounded task and the child's completion check.
+Reuse supplied findings; inspect missing context in the current session until the work has a
+concrete scope. Supply a self-contained brief with the objective, relevant findings, decisions and
+files, constraints, expected output and necessary checks: the child does not inherit the parent's
+transcript. This is guidance for a useful brief, not a runtime planning gate or a required skill.
 
-State what the child owns and what remains in the parent, including follow-up questions and
-delivery. A dispatched child carries out its assigned task; further dispatch is for distinct
-subtasks or a user-requested handoff.
+State what the child owns and what remains in the parent, including delivery and follow-up.
+A dispatched child carries out its assigned task; further dispatch is for distinct subtasks or
+an authorized handoff. Isolate concurrent writers in separate workspaces, using worktrees for
+Git changes (INV-07).
 
-## Handoff or dependency
+## Delivery ownership
 
-Choose from the responsibility stated in the brief, not merely from having started a session:
+Delegating execution preserves the parent's responsibility for the requested outcome. Transfer
+delivery and follow-up only when user or project instructions call for a handoff. A new session or
+worktree does not itself transfer ownership; required workspace isolation is not a handoff.
 
-- **Handoff:** the child owns the whole deliverable, including follow-up questions and delivery.
-  Inspect creation, submission and detail. For a created child, return its **Open session** link
-  with any blocker and end the parent turn only when no work or requested completion report remains
-  there. Moving implementation into a required worktree does not by itself determine ownership.
-- **Dependency:** remaining parent work consumes the child's result, such as combining independent
-  reviews or applying research findings. Do independent work first, then wait when blocked. Also
-  wait when the user explicitly asks for completion to be reported in the parent. Merely relaying
-  the child's summary does not create a dependency.
+After starting a child, inspect creation, submission and detail, then follow the retained
+responsibility:
+
+- **Parent delivery (default):** do independent work first, then wait for required child results
+  when blocked. Evaluate each result's status, answer, detail and evidence against the child's
+  completion check, and deliver the requested outcome in the parent. This includes a requested
+  completion report; the parent need not have additional implementation work to retain delivery.
+- **Authorized handoff:** for a created child, return its **Open session** link with any blocker.
+  End the parent turn only when no retained work or requested completion report remains there.
+  The child owns the transferred delivery and follow-up.
 
 If any dispatch tool reports `needs_input`, direct the user to that session's question
 rather than asking it again here; the answer belongs in the session that asked.
@@ -41,7 +48,7 @@ rather than asking it again here; the answer belongs in the session that asked.
 A pending wait resumes its parent when it returns. Child completion does not start another parent
 turn after a handoff: point to the child for progress and delivery rather than promising an
 automatic update in the parent. Ending the parent turn leaves the child running (INV-02); successful
-creation and submission establish a handoff, not completion of the task (INV-03).
+creation and submission establish admission, not ownership transfer or task completion (INV-03).
 
 ## From a terminal (Linux and macOS)
 
@@ -245,9 +252,9 @@ result. Creation alone is not prompt admission: the tool waits for the initial i
 If a session was created but its prompt failed or needs a dialog answered, the result retains its
 link. Resolve supported dialogs in the child's ordinary Piano UI.
 
-When [waiting is needed](#handoff-or-dependency), pass the returned handle unchanged to
-`piano_wait_sessions` and omit `timeoutMs`. One call stays open until all
-sessions complete or any needs attention (needs input, failure, cancellation or unavailable facts).
+When [the parent retains delivery](#delivery-ownership), pass the required children's returned handles
+unchanged to `piano_wait_sessions` and omit `timeoutMs`. One call stays open until all sessions
+complete or any needs attention (needs input, failure, cancellation or unavailable facts).
 Do not poll with repeated short waits or status reads when waiting for completion. For an explicitly
 bounded observation only, `timeoutMs` accepts 1000–60000 milliseconds and returns partial results
 at that deadline. When using codemode, await the call and omit the script's `timeout_ms` too.
