@@ -4,6 +4,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { socketLimits } from "../server/BoundedDelivery.ts";
 import { loadPeerConfigs } from "../server/PeerConfig.ts";
 import { PEER_FRAME_BYTES } from "../shared/machine.ts";
 import { CloseCode } from "../shared/wire.ts";
@@ -434,6 +435,21 @@ test(
       }
     });
 
+    await t.test("a frame the remote's own socket admits reaches the browser", async () => {
+      const connection = await f.open();
+      const empty = JSON.stringify({ _tag: "pong", nonce: "", deliveryId: 3 });
+      const frame = JSON.stringify({
+        _tag: "pong",
+        nonce: "x".repeat(socketLimits.frameBytes - empty.length),
+        deliveryId: 3,
+      });
+      assert.equal(Buffer.byteLength(frame), socketLimits.frameBytes);
+      for (const ws of f.wss.clients) ws.send(frame);
+      await f.until(() => connection.messages.some((raw) => raw.length === frame.length));
+      connection.ws.close();
+      await connection.closed;
+    });
+
     await t.test(
       "bounded WS input and output fail closed rather than retaining an unbounded relay",
       async () => {
@@ -448,7 +464,7 @@ test(
 
         const slow = await f.open({}, false);
         for (const ws of f.wss.clients) {
-          for (let deliveryId = 3; deliveryId <= 70; deliveryId++) {
+          for (let deliveryId = 3; deliveryId <= socketLimits.window.frames + 6; deliveryId++) {
             ws.send(JSON.stringify({ _tag: "pong", nonce: "bounded", deliveryId }));
           }
         }
@@ -457,7 +473,7 @@ test(
           1013,
           "unacknowledged relay frames have a finite window",
         );
-        assert.ok(slow.messages.length <= 64);
+        assert.ok(slow.messages.length <= socketLimits.window.frames);
 
         const dead = await f.open();
         const connections = f.state.connections;

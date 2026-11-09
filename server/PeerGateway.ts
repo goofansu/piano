@@ -7,7 +7,7 @@
  * remote process ownership lives here (INV-01/02/05).
  */
 import { WebSocket } from "@effect/platform-node/NodeWS";
-import { Data, Effect, Redacted, Schema } from "effect";
+import { Data, Duration, Effect, Redacted, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { type RemoteRequest, RemoteRequests } from "../shared/http.ts";
@@ -18,6 +18,7 @@ import {
   decodeServerMessage,
   disconnectReason,
 } from "../shared/wire.ts";
+import { socketLimits } from "./BoundedDelivery.ts";
 import { AllowedOrigins } from "./OriginPolicy.ts";
 import { ConfiguredPeers, type PeerConfig } from "./PeerConfig.ts";
 
@@ -26,9 +27,15 @@ const limits = {
   requestMs: 10_000,
   /** The browser's own frames (`machineFrameBytes`, which the browser checks before sending). */
   clientBytes: PEER_FRAME_BYTES,
-  serverBytes: 8 * 1024 * 1024,
-  bufferedFrames: 64,
-  ackMs: 15_000,
+  /**
+   * The remote's frames and its window of unacknowledged ones are the remote socket's own
+   * (`socketLimits`): the remote sees each acknowledgement after this pipe does, so it never has
+   * fewer frames pending, and its close arrives first. These bounds only stop a remote that
+   * ignores its own. The deadline adds a margin for the same reason.
+   */
+  serverBytes: socketLimits.frameBytes,
+  window: socketLimits.window,
+  ackMs: Duration.toMillis(socketLimits.ackTimeout) + 5_000,
   closeGraceMs: 1_000,
   /** A remote request body carries one folder path or one model reference. */
   bodyBytes: 16 * 1024,
@@ -146,7 +153,7 @@ const connect = Effect.fn("PeerGateway.connect")(
       for (const chunk of yield* reader.pull) {
         if (typeof chunk !== "string") return yield* Effect.fail(unavailable());
         initialBytes += Buffer.byteLength(chunk);
-        if (initialBytes > limits.serverBytes || initial.length >= limits.bufferedFrames)
+        if (initialBytes > limits.window.bytes || initial.length >= limits.window.frames)
           return yield* Effect.fail(overflow());
         const frame = yield* Effect.try({ try: () => inspectFrame(chunk), catch: unavailable });
         if (frame.registry) {
@@ -195,7 +202,7 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
     if (bytes > limits.serverBytes) return yield* Effect.fail(tooLarge());
     const frame = yield* Effect.try({ try: () => inspectFrame(text), catch: unavailable });
     if (frame.deliveryId <= lastDeliveryId) return yield* Effect.fail(unavailable());
-    if (pendingBytes + bytes > limits.serverBytes || pending.size >= limits.bufferedFrames)
+    if (pendingBytes + bytes > limits.window.bytes || pending.size >= limits.window.frames)
       return yield* Effect.fail(overflow());
     lastDeliveryId = frame.deliveryId;
     pending.set(frame.deliveryId, { bytes, at: Date.now() });
