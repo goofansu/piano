@@ -10,7 +10,7 @@ import {
   type NavigationState,
 } from "./navigation.ts";
 import { createPreference } from "./preference.ts";
-import { useMachine } from "./useMachine.ts";
+import { useMachine, useOffers } from "./useMachine.ts";
 
 /** Whether the session rail is on, for every session in this browser. The key predates the name. */
 const railPreference = createPreference<boolean>({
@@ -26,18 +26,18 @@ export function useNavigationController(
   moved: () => void,
 ): Navigation {
   const machine = useMachine()?.machine;
-  const remote = machine && machine.id !== "local";
+  const offers = useOffers();
   const [navigation] = useState(() =>
     createNavigation({
       client,
       address: machine ? machineAddress(machine.id, browserAddressBar) : browserAddressBar,
-      readFile: remote
-        ? async () => {
+      readFile: offers.files
+        ? workspaceFile
+        : async () => {
             throw new Error("Files are unavailable on this machine.");
-          }
-        : workspaceFile,
-      memory: remote ? undefined : browserSurfaceMemory,
-      rail: remote ? undefined : railPreference,
+          },
+      memory: offers.files ? browserSurfaceMemory : undefined,
+      rail: offers.rail ? railPreference : undefined,
       moved,
     }),
   );

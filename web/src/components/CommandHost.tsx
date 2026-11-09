@@ -57,7 +57,6 @@ import { pointerLast } from "@/lib/pointerClose";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { signedInToRadius } from "@/lib/providerAccounts";
-import { remoteCommandAllowed } from "@/lib/remoteCapabilities";
 import {
   type SessionCommand,
   type SessionCommandIcon,
@@ -67,7 +66,7 @@ import {
 import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
 import { useCodeWrap } from "@/lib/useCodeWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
-import { useMachine, useRemote } from "@/lib/useMachine";
+import { useMachine, useOffers } from "@/lib/useMachine";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useProviderAccounts } from "@/lib/useProviderAccounts";
@@ -142,7 +141,7 @@ export function useCommands() {
 
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
-  const remote = useRemote();
+  const offers = useOffers();
   const { state, run, messagesOnly, codeWrap, radiusSignedIn, layout } = useCommands();
   const observed = useSyncExternalStore(previewObservation.subscribe, previewObservation.getState);
   return {
@@ -151,8 +150,8 @@ export function useSessionCommands(target?: SessionTarget) {
       codeWrap,
       radiusSignedIn,
       layout,
-      previewObservation: remote ? undefined : observed,
-    }).filter((command) => !remote || remoteCommandAllowed(command)),
+      previewObservation: offers.previews ? observed : undefined,
+    }).filter(offers.command),
     run,
     messagesOnly,
   };
@@ -160,12 +159,12 @@ export function useSessionCommands(target?: SessionTarget) {
 
 /**
  * The selected session's project membership (`sessionProjectMenu`), for the header's phone sheet
- * and the palette; none until the session has a Pi session ID.
+ * and the palette; none until the session has a Pi session ID, or where projects are not offered.
  */
 export function useSessionProjectMenu() {
   const { state } = useCommands();
-  const remote = useRemote();
-  const session = remote ? null : state.session;
+  const offers = useOffers();
+  const session = offers.projects ? state.session : null;
   return session?.sessionId
     ? sessionProjectMenu(state, { cwd: session.cwd, sessionId: session.sessionId })
     : undefined;
@@ -179,10 +178,8 @@ export function useSessionProjectMenu() {
 export function useGlobalCommands() {
   const { state, run, global } = useCommands();
   const scope = useMachine();
-  const remote = useRemote();
-  const commands = globalCommands(state, global).filter(
-    (command) => !remote || remoteCommandAllowed(command),
-  );
+  const offers = useOffers();
+  const commands = globalCommands(state, global).filter(offers.command);
   if (scope && scope.machines.length > 1)
     commands.push(
       ...scope.machines.map((machine): GlobalCommand => ({
@@ -276,7 +273,7 @@ export function CommandHost({
     settings,
     layout,
   } = useNavigation();
-  const remote = useRemote();
+  const offers = useOffers();
   const machineScope = useMachine();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [codeWrap, setCodeWrap] = useCodeWrap();
@@ -352,7 +349,7 @@ export function CommandHost({
     openPageEditor,
   };
   const run = (command: Command) => {
-    if (remote && !remoteCommandAllowed(command)) return;
+    if (!offers.command(command)) return;
     runCommand(command, effects);
   };
 

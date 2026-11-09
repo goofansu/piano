@@ -47,7 +47,7 @@ import { folderFor } from "@/lib/sessionCatalog";
 import { completionTarget, directoryChoices, startPlace } from "@/lib/sessionContext";
 import { startPage } from "@/lib/startPage";
 import { composerInput, picker } from "@/lib/styles";
-import { useRemote } from "@/lib/useMachine";
+import { useOffers } from "@/lib/useMachine";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useWorktreeOperation } from "@/lib/useWorktreeOperation";
@@ -120,18 +120,18 @@ export function NewSessionComposer({
 }) {
   const { send } = client;
   const { run } = useCommands();
-  const remote = useRemote();
+  const offers = useOffers();
   // The client starts a fresh New page in the last directory used, else the first folder; a
   // project's New page starts without one, and its home in its most recent member's folder.
   const page = startPage(state.view);
   const cwd = page?.cwd ?? "";
-  const projectId = remote ? undefined : page?.projectId;
+  const projectId = offers.projects ? page?.projectId : undefined;
   const editor = useDraftEditor(NEW_SESSION_DRAFT);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const folder = folderFor(state, cwd);
   const place = startPlace(state, cwd, projectId);
-  const trust = remote ? undefined : trustCommand(state, cwd);
+  const trust = offers.trust ? trustCommand(state, cwd) : undefined;
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
@@ -171,9 +171,9 @@ export function NewSessionComposer({
                 state={state}
                 value={cwd}
                 onChange={chooseDirectory}
-                onBrowse={remote ? undefined : () => setPickerOpen(true)}
+                onBrowse={offers.browse ? () => setPickerOpen(true) : undefined}
                 client={client}
-                worktreesOffered={!remote}
+                worktreesOffered={offers.worktrees}
               />
             </div>
             {trust && <TrustToggle command={trust} run={run} />}
@@ -198,7 +198,7 @@ export function NewSessionComposer({
           voice={() => place}
           actions={<ComposerSend disabled={!ready} onClick={submit} />}
         />
-        {!remote && folder?.discovery.status === "error" && (
+        {offers.worktrees && folder?.discovery.status === "error" && (
           <Alert data-motion="fade" variant="destructive" className="mt-2">
             <AlertDescription>
               Git status unavailable. Open Worktrees to inspect and refresh.
@@ -206,7 +206,7 @@ export function NewSessionComposer({
           </Alert>
         )}
       </div>
-      {!remote && (
+      {offers.browse && (
         <FolderPicker
           open={pickerOpen}
           onOpenChange={setPickerOpen}

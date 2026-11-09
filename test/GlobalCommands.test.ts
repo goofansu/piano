@@ -12,13 +12,13 @@ import {
   radioChoice,
   trustCommand,
 } from "../web/src/lib/globalCommands.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import {
   type EditorPage,
   openPageEditor,
   PAGE_EDITORS,
   pageEditor,
 } from "../web/src/lib/pageEditor.ts";
-import { remoteCommandAllowed } from "../web/src/lib/remoteCapabilities.ts";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../web/src/lib/routes.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 
@@ -124,7 +124,9 @@ test("exactly the current grouping and sort are checked", () => {
 });
 
 test("on a remote machine the View options and New session stay, and nothing that manages the remote does", () => {
-  const remote = globalCommands(onNewPage, ctx).filter(remoteCommandAllowed);
+  const remote = globalCommands(onNewPage, ctx).filter(
+    machineOffers({ id: "eng-1", name: "eng-1" }).command,
+  );
   const groups = new Set<string>(remote.map((command) => command.group));
   for (const group of ["group-by", "sort-by", "row-details", "appearance"])
     assert.ok(groups.has(group), `${group} offered`);

@@ -19,17 +19,18 @@ import { Toaster } from "@/components/ui/sonner";
 import { checkoutRefresh } from "@/lib/checkoutRefresh";
 import type { NotifyLevel } from "@/lib/client";
 import { machineLocation, machineSocketPath } from "@/lib/machine";
+import { isLocal } from "@/lib/machineOffers";
 import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
 import { previewObservation } from "@/lib/previewObservation";
 import { parseRoute } from "@/lib/routes";
 import { useClient } from "@/lib/useClient";
-import { useMachine } from "@/lib/useMachine";
+import { useMachine, useOffers } from "@/lib/useMachine";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
 import { providerAccounts } from "@/lib/useProviderAccounts";
 import { SessionFilesContext, useSessionFilesController } from "@/lib/useSessionFiles";
 import { SidebarLayoutContext, useSidebarLayoutController } from "@/lib/useSidebarLayout";
-import { browserSocketEnvironment, openConnection } from "@/lib/ws";
+import { browserSocketEnvironment, type ConnectionHandlers, openConnection } from "@/lib/ws";
 import { type AppState, initialState } from "@/store";
 
 const notify = (message: string, level?: NotifyLevel) =>
@@ -54,7 +55,7 @@ export default function App() {
 function MachineApp() {
   const scope = useMachine()!;
   const { machine, catalogs: modelCatalogs, drafts, questions: questionReplies } = scope;
-  const remote = machine.id !== "local";
+  const offers = useOffers();
   const { state, client } = useClient(
     (): AppState => {
       // Stored catalogs let the model picker open before Pi answers.
@@ -66,27 +67,34 @@ function MachineApp() {
       };
     },
     notify,
-    remote
-      ? {
-          connect: (handlers) =>
-            openConnection(handlers, {
-              ...browserSocketEnvironment,
-              url: () =>
-                `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}${machineSocketPath(machine.id)}`,
-            }),
-          lastDirectory: { read: () => null, write: () => {} },
-        }
-      : {},
+    {
+      // Local keeps this Piano's own socket; a remote's goes through the gateway.
+      ...(!isLocal(machine) && {
+        connect: (handlers: ConnectionHandlers) =>
+          openConnection(handlers, {
+            ...browserSocketEnvironment,
+            url: () =>
+              `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}${machineSocketPath(machine.id)}`,
+          }),
+      }),
+      ...(!offers.lastDirectory && { lastDirectory: { read: () => null, write: () => {} } }),
+    },
   );
   const { dispatch, send } = client;
-  useEffect(() => (remote ? undefined : providerAccounts.follow(client)), [client, remote]);
+  useEffect(
+    () => (offers.providerAccounts ? providerAccounts.follow(client) : undefined),
+    [client, offers],
+  );
   useEffect(() => modelCatalogs.follow(client), [client, modelCatalogs]);
-  useEffect(() => (remote ? undefined : checkoutRefresh.follow(client)), [client, remote]);
+  useEffect(
+    () => (offers.worktrees ? checkoutRefresh.follow(client) : undefined),
+    [client, offers],
+  );
   useEffect(() => drafts.follow(client), [client, drafts]);
   useEffect(() => questionReplies.follow(client), [client, questionReplies]);
   useEffect(
-    () => (remote ? undefined : previewObservation.follow(client, notify)),
-    [client, remote],
+    () => (offers.previews ? previewObservation.follow(client, notify) : undefined),
+    [client, offers],
   );
   const layout = useSidebarLayoutController();
   // Details' Outputs reads this one answer, filtered by Git once per change.
@@ -111,7 +119,7 @@ function MachineApp() {
               <AppLayout
                 navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
                 navigation={
-                  remote ? (
+                  !offers.fullSidebar ? (
                     <RemoteSidebar state={state} />
                   ) : settings ? (
                     <SettingsNavigation
@@ -126,8 +134,8 @@ function MachineApp() {
                 content={
                   <>
                     {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
-                    <LayoutView key={state.view.kind} active={remote || !settings}>
-                      {remote && state.view.kind !== "session" && state.view.kind !== "new" ? (
+                    <LayoutView key={state.view.kind} active={!offers.settings || !settings}>
+                      {!offers.view(state.view.kind) ? (
                         <PaneNotFound
                           title={
                             state.view.kind === "missing-session"
@@ -141,7 +149,9 @@ function MachineApp() {
                           state={state}
                           client={client}
                           chooseDirectory={chooseDirectory}
-                          onProjectChange={remote ? undefined : (id) => openNew(undefined, id)}
+                          onProjectChange={
+                            offers.projects ? (id) => openNew(undefined, id) : undefined
+                          }
                         />
                       ) : state.view.kind === "projects" ? (
                         <ProjectsIndex state={state} />
@@ -166,7 +176,7 @@ function MachineApp() {
                         <SessionView state={state} send={send} />
                       )}
                     </LayoutView>
-                    {!remote && settings && (
+                    {offers.settings && settings && (
                       <LayoutView>
                         <SettingsPage section={settings} />
                       </LayoutView>
