@@ -14,6 +14,7 @@ import {
   type ServerMessage,
   sessionKey,
 } from "../shared/wire.ts";
+import { AllowedOrigins } from "./OriginPolicy.ts";
 import { ConfiguredPeers, type PeerConfig } from "./PeerConfig.ts";
 
 const limits = {
@@ -332,6 +333,7 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
   router: HttpRouter.HttpRouter,
 ) {
   const peers = yield* ConfiguredPeers;
+  const allowedOrigins = yield* AllowedOrigins;
   const byId = new Map(peers.map((peer) => [peer.id, peer]));
   yield* router.add(
     "GET",
@@ -351,6 +353,15 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
     if (!peer) return json({ error: "Unknown remote machine or unsupported remote request." }, 404);
     if (request.method !== "GET")
       return json({ error: "Remote request method is not supported." }, 405);
+    // Every remote request spends the peer's credential, so another site's page must not make the
+    // browser send one (an image or script tag needs no Origin). Browsers label such loads.
+    const site = request.headers["sec-fetch-site"];
+    const origin = request.headers.origin;
+    if (
+      (site !== undefined && site !== "same-origin") ||
+      (origin !== undefined && !allowedOrigins.has(origin))
+    )
+      return json({ error: "Remote requests must come from this Piano's own page." }, 403);
     if (match?.[2] === "/ws") {
       if (url.search || request.headers.upgrade?.toLowerCase() !== "websocket")
         return json({ error: "A remote WebSocket upgrade is required." }, 400);

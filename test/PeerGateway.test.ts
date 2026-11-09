@@ -155,6 +155,16 @@ test(
           405,
         );
         assert.equal((await fetch(`${f.base}${commandPath}&cwd=/arbitrary`)).status, 400);
+        // Another site's <img>/<script> or CORS read must not spend the peer credential.
+        for (const crossSite of [
+          { "Sec-Fetch-Site": "cross-site" },
+          { "Sec-Fetch-Site": "same-site" },
+          { Origin: "https://evil.example" },
+        ] as Record<string, string>[]) {
+          const response = await fetch(`${f.base}${commandPath}`, { headers: crossSite });
+          assert.equal(response.status, 403, JSON.stringify(crossSite));
+          assert.match((await response.json()).error, /remote/i);
+        }
         assert.equal(
           await new Promise<number>((resolve, reject) => {
             const req = request(
