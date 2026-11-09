@@ -67,17 +67,12 @@ function history(sessions, { sessionId, cwd, messages }) {
   );
 }
 
-/**
- * `setup({ repository, history })` creates folders and Pi history and returns the registry seed.
- * `journey(page)` drives the browser; a thrown error fails the run after capturing the page.
- */
-export async function run(name, setup, journey, options = {}) {
-  const evidence = resolve(process.argv[2] ?? join(ROOT, ".scratch/browser", name));
-  mkdirSync(evidence, { recursive: true });
-  const root = mkdtempSync(join(tmpdir(), `piano-${name}-`));
+/** One machine's state. A peer may share a throwaway checkout, never its database or Pi dirs. */
+async function fixture(root, setup) {
   const sessions = join(root, "sessions");
-  const audit = join(root, "audit.jsonl");
-  for (const dir of [sessions, join(root, "agent"), join(root, "home")]) mkdirSync(dir);
+  for (const dir of ["sessions", "agent", "home", "config", "cache", "state", "data"])
+    mkdirSync(join(root, dir), { recursive: true });
+  writeFileSync(join(root, "config/worktrunk.toml"), "");
   const database = join(root, "piano.db");
   seedRegistry(
     database,
@@ -87,42 +82,94 @@ export async function run(name, setup, journey, options = {}) {
       history: (session) => history(sessions, session),
     }),
   );
+  const audit = join(root, "audit.jsonl");
+  const received = () =>
+    existsSync(audit)
+      ? readFileSync(audit, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse)
+      : [];
+  return { root, sessions, database, audit, received };
+}
 
+/**
+ * `setup({ root, repository, history })` returns the main machine's registry seed.
+ * `options.remote = { id, name, setup, backendEnv? }` adds an independent headless peer, seeded
+ * with the same helpers. Only the main backend receives its generated PIANO_PEER_CONFIG.
+ * `journey(page)` drives the browser; a thrown error fails the run after capturing the page.
+ */
+export async function run(name, setup, journey, options = {}) {
+  const evidence = resolve(process.argv[2] ?? join(ROOT, ".scratch/browser", name));
+  mkdirSync(evidence, { recursive: true });
+  const root = mkdtempSync(join(tmpdir(), `piano-${name}-`));
+  const local = await fixture(root, setup);
+  const remote = options.remote && (await fixture(join(root, "peer"), options.remote.setup));
   const [backendPort, webPort] = [await freePort(), await freePort()];
+  const remotePort = remote && (await freePort());
   const web = `http://127.0.0.1:${webPort}`;
-  const env = {
-    ...process.env,
-    HOME: join(root, "home"),
+  const peer = remote && {
+    id: options.remote.id,
+    name: options.remote.name ?? options.remote.id,
+    endpoint: `http://127.0.0.1:${remotePort}`,
+    origin: `http://127.0.0.1:${remotePort}`,
+  };
+  const peerConfig = join(root, "peer.json");
+  if (peer) writeFileSync(peerConfig, JSON.stringify(peer));
+  // Do not inherit a live backend's socket, peers, integration paths or Worktrunk overrides.
+  const inherited = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !/^(PIANO_|WORKTRUNK_)/.test(key)),
+  );
+  const environment = (machine) => ({
+    ...inherited,
+    HOME: join(machine.root, "home"),
+    XDG_CONFIG_HOME: join(machine.root, "config"),
+    XDG_CONFIG_DIRS: join(machine.root, "config"),
+    XDG_CACHE_HOME: join(machine.root, "cache"),
+    XDG_STATE_HOME: join(machine.root, "state"),
+    XDG_DATA_HOME: join(machine.root, "data"),
+    WORKTRUNK_CONFIG_PATH: join(machine.root, "config/worktrunk.toml"),
+    WORKTRUNK_SYSTEM_CONFIG_PATH: join(machine.root, "config/worktrunk.toml"),
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
-    PIANO_TEST_AUDIT: audit,
-  };
+    PIANO_TEST_AUDIT: machine.audit,
+    PI_OFFLINE: "1",
+    PI_CODING_AGENT_DIR: join(machine.root, "agent"),
+    PI_CODING_AGENT_SESSION_DIR: machine.sessions,
+  });
+  const env = environment(local);
   let log = "";
+  const logs = {};
   const relaunch = new WeakMap();
-  const start = (args, options) => {
+  const start = (label, args, options) => {
     const child = spawn(process.execPath, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
-    child.stdout.on("data", (d) => (log += d));
-    child.stderr.on("data", (d) => (log += d));
-    relaunch.set(child, () => start(args, options));
+    const record = (data) => {
+      log += `[${label}] ${data}`;
+      logs[label] = (logs[label] ?? "") + data;
+    };
+    child.stdout.on("data", record);
+    child.stderr.on("data", record);
+    relaunch.set(child, () => start(label, args, options));
     return child;
   };
-  const children = [
-    start([join(ROOT, "server/main.ts")], {
+  const backend = (label, machine, port, extra) =>
+    start(label, [join(ROOT, "server/main.ts")], {
       cwd: ROOT,
       env: {
-        ...env,
+        ...environment(machine),
         HOST: "127.0.0.1",
-        PORT: String(backendPort),
-        PIANO_ALLOWED_ORIGINS: `${web},http://localhost:${webPort}`,
-        PIANO_DB_PATH: database,
+        PORT: String(port),
+        PIANO_ALLOWED_ORIGINS: `${web},http://localhost:${webPort},http://127.0.0.1:${port}`,
+        PIANO_DB_PATH: machine.database,
         PIANO_PI_CLI: join(ROOT, "test/browser/fake-pi.mjs"),
         PIANO_PI_ARGS: "",
-        PI_CODING_AGENT_DIR: join(root, "agent"),
-        PI_CODING_AGENT_SESSION_DIR: sessions,
-        ...options.backendEnv,
+        ...extra,
       },
+    });
+  const children = [
+    backend("backend", local, backendPort, {
+      ...options.backendEnv,
+      ...(peer ? { PIANO_PEER_CONFIG: peerConfig } : {}),
     }),
     start(
+      "web",
       [
         join(ROOT, "node_modules/vite/bin/vite.js"),
         "--host",
@@ -137,6 +184,8 @@ export async function run(name, setup, journey, options = {}) {
       },
     ),
   ];
+  if (remote)
+    children.push(backend("remote-backend", remote, remotePort, options.remote.backendEnv));
 
   const browser = `piano-${name}-${process.pid}`;
   const ab = async (...args) => {
@@ -170,6 +219,16 @@ export async function run(name, setup, journey, options = {}) {
   let mod;
   const page = {
     ab,
+    evidence,
+    remote: remote && {
+      ...peer,
+      received: remote.received,
+      prompts: () =>
+        remote
+          .received()
+          .filter((r) => r.command === "prompt")
+          .map((r) => r.text),
+    },
     /** Restart only this harness's recorded backend; retain its isolated database and Pi history. */
     restartBackend: async ({ signal = "SIGTERM", beforeRestart = async () => {} } = {}) => {
       const previous = children[0];
@@ -251,7 +310,13 @@ export async function run(name, setup, journey, options = {}) {
           targetId: target.targetId,
           flatten: true,
         });
-        return await observe((method, params) => call(method, params, sessionId));
+        // Optional event observation is scoped to this page and ends when the CDP socket closes.
+        const onEvent = (listener) =>
+          socket.addEventListener("message", ({ data }) => {
+            const event = JSON.parse(data);
+            if (event.sessionId === sessionId && event.method) listener(event);
+          });
+        return await observe((method, params) => call(method, params, sessionId), onEvent);
       } finally {
         socket.close();
       }
@@ -269,13 +334,7 @@ export async function run(name, setup, journey, options = {}) {
         return (await count()) - before;
       }),
     /** What the fake Pis received, in order: `{ command, text?, args?, sessionId }`. */
-    received: () =>
-      existsSync(audit)
-        ? readFileSync(audit, "utf8")
-            .trim()
-            .split("\n")
-            .map((line) => JSON.parse(line))
-        : [],
+    received: local.received,
   };
   page.prompts = () =>
     page
@@ -284,6 +343,19 @@ export async function run(name, setup, journey, options = {}) {
       .map((r) => r.text);
 
   const started = Date.now();
+  const provenance = {
+    name,
+    revision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim(),
+    dirty: execFileSync("git", ["status", "--short"], { cwd: ROOT, encoding: "utf8" }).trim(),
+    node: process.version,
+    platform: process.platform,
+    web,
+    backend: `http://127.0.0.1:${backendPort}`,
+    peer,
+    pids: children.map((child) => child.pid),
+    startedAt: new Date(started).toISOString(),
+    outcome: "failed",
+  };
   try {
     for (let attempt = 0; ; attempt++) {
       for (const child of children)
@@ -291,6 +363,7 @@ export async function run(name, setup, journey, options = {}) {
       try {
         if (
           (await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok &&
+          (!peer || (await fetch(`${peer.endpoint}/api/folders`)).ok) &&
           (await fetch(web)).ok
         )
           break;
@@ -300,6 +373,7 @@ export async function run(name, setup, journey, options = {}) {
     }
     await ab("set", "viewport", "1280", "900");
     await journey(page);
+    provenance.outcome = "passed";
     console.log(
       `PASS ${name} (${((Date.now() - started) / 1000).toFixed(1)}s), evidence in ${evidence}`,
     );
@@ -307,7 +381,7 @@ export async function run(name, setup, journey, options = {}) {
     try {
       await page.capture("failure");
     } catch {}
-    writeFileSync(join(evidence, "process.log"), log);
+    provenance.error = String(error.stack ?? error);
     throw error;
   } finally {
     try {
@@ -319,6 +393,25 @@ export async function run(name, setup, journey, options = {}) {
         child.kill("SIGTERM");
         await exited;
       }
+    writeFileSync(join(evidence, "process.log"), log);
+    for (const [label, content] of Object.entries(logs))
+      writeFileSync(join(evidence, `${label}.log`), content);
+    for (const [label, machine] of [
+      ["local", local],
+      ["remote", remote],
+    ])
+      if (machine)
+        writeFileSync(
+          join(evidence, `${label}-audit.jsonl`),
+          machine
+            .received()
+            .map((entry) => JSON.stringify(entry))
+            .join("\n") + "\n",
+        );
+    writeFileSync(
+      join(evidence, "run.json"),
+      JSON.stringify({ ...provenance, finishedAt: new Date().toISOString() }, null, 2),
+    );
     rmSync(root, { recursive: true, force: true });
   }
 }

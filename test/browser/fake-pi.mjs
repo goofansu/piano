@@ -54,7 +54,7 @@ const audit = (record) => {
   if (process.env.PIANO_TEST_AUDIT)
     appendFileSync(process.env.PIANO_TEST_AUDIT, `${JSON.stringify(record)}\n`);
 };
-audit({ command: "start", args, sessionId, cwd: process.cwd() });
+audit({ command: "start", args, sessionId, cwd: process.cwd(), pid: process.pid });
 const cost = () => messages.reduce((sum, m) => sum + (m.usage?.cost?.total ?? 0), 0);
 
 function reply(text) {
@@ -178,12 +178,15 @@ function handle(cmd) {
         out({ type: "message_start", message: { role: "assistant", content: [] } });
         let line = 0;
         streamTimer = setInterval(() => {
+          line += 1;
+          // Observe production continuing while the browser is offline, independently of its view.
+          audit({ command: "stream", sessionId, line, pid: process.pid });
           out({
             type: "message_update",
             assistantMessageEvent: {
               type: "text_delta",
               contentIndex: 0,
-              delta: `Streaming line ${++line}. ${"Variable height output. ".repeat(12)}\n\n`,
+              delta: `Streaming line ${line}. ${"Variable height output. ".repeat(12)}\n\n`,
             },
           });
         }, 120);
