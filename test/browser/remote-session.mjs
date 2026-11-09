@@ -78,9 +78,10 @@ const machine = async (page, name, capture) => {
   await page.click(role, name);
   await page.until(`!document.querySelector('[role="menu"], [role="listbox"]')`);
 };
-const catalog = async (page, own, other, restore) => {
+const catalog = async (page, own, other, restore, capture) => {
   await page.ab("fill", composer, "/");
   await page.see(`/${own}-only`);
+  if (capture) await page.capture(capture);
   const commands = await page.evaluate(
     `document.querySelector('[aria-label="Slash commands"]').textContent`,
   );
@@ -204,6 +205,8 @@ await run(
           ),
           false,
         );
+        // Saved history only, Pi not running: the remote lists its folder's commands.
+        await catalog(page, "remote", "local", "", "2b-remote-saved-session-commands");
         await send(page, echo);
         await page.see(`echo: ${echo}`);
         assert.deepEqual(page.remote.prompts(), [echo], "peer receives one prompt");

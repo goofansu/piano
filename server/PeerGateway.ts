@@ -21,6 +21,8 @@ const limits = {
   bufferedFrames: 64,
   ackMs: 15_000,
   closeGraceMs: 1_000,
+  /** A folder-commands request carries one path. */
+  folderBodyBytes: 16 * 1024,
 };
 class PeerFailure extends Data.TaggedError("PeerFailure")<{
   readonly message: string;
@@ -230,19 +232,35 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
   );
 });
 
+/** The two slash-command reads; both answer with the same command list. */
+type CommandsRead =
+  | { readonly kind: "session"; readonly workspaceId: string; readonly sessionId: string }
+  | { readonly kind: "folder"; readonly cwd: string };
+
 const commands = Effect.fn("PeerGateway.commands")(function* (
   peer: PeerConfig,
-  workspaceId: string,
-  sessionId: string,
+  read: CommandsRead,
 ) {
-  // The remote resolves both IDs in its own registry and refuses a session it does not list.
-  const url = new URL("/api/session/commands", peer.endpoint);
-  url.searchParams.set("workspaceId", workspaceId);
-  url.searchParams.set("sessionId", sessionId);
+  // The remote resolves the session IDs in its own registry; its peer folder read answers only for
+  // a registered folder. Either refuses what it does not list.
+  const url = new URL(
+    read.kind === "session" ? "/api/session/commands" : "/api/peer/commands",
+    peer.endpoint,
+  );
+  if (read.kind === "session") {
+    url.searchParams.set("workspaceId", read.workspaceId);
+    url.searchParams.set("sessionId", read.sessionId);
+  }
   return yield* Effect.tryPromise({
     try: async (signal) => {
       const response = await fetch(url, {
-        headers: upstreamHeaders(peer),
+        ...(read.kind === "folder"
+          ? {
+              method: "POST",
+              headers: { ...upstreamHeaders(peer), "content-type": "application/json" },
+              body: JSON.stringify({ cwd: read.cwd }),
+            }
+          : { headers: upstreamHeaders(peer) }),
         redirect: "manual",
         signal: AbortSignal.any([signal, AbortSignal.timeout(limits.requestMs)]),
       });
@@ -272,6 +290,14 @@ const commands = Effect.fn("PeerGateway.commands")(function* (
   });
 });
 
+const FolderRead = Schema.Struct({ cwd: Schema.NonEmptyString });
+
+const commandsResponse = (body: string) =>
+  HttpServerResponse.text(body, {
+    contentType: "application/json",
+    headers: { "cache-control": "no-store" },
+  });
+
 const json = (body: unknown, status = 200) =>
   HttpServerResponse.text(JSON.stringify(body), {
     status,
@@ -298,11 +324,13 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = new URL(request.url, "http://localhost");
-    const match = /^\/peer\/([^/]+)(\/ws|\/api\/session\/commands)$/.exec(url.pathname);
+    const match = /^\/peer\/([^/]+)(\/ws|\/api\/session\/commands|\/api\/commands)$/.exec(
+      url.pathname,
+    );
     // The request owns this immutable destination, including credentials, through completion.
     const peer = match ? byId.get(match[1]) : undefined;
     if (!peer) return json({ error: "Unknown remote machine or unsupported remote request." }, 404);
-    if (request.method !== "GET")
+    if (request.method !== (match?.[2] === "/api/commands" ? "POST" : "GET"))
       return json({ error: "Remote request method is not supported." }, 405);
     // Every remote request spends the peer's credential, so another site's page must not make the
     // browser send one (an image or script tag needs no Origin). Browsers label such loads.
@@ -320,6 +348,19 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       yield* bridge(yield* request.upgrade, upstream);
       return HttpServerResponse.empty();
     }
+    if (match?.[2] === "/api/commands") {
+      // A folder path travels only in this bounded body, never in a URL.
+      const length = Number(request.headers["content-length"]);
+      if (url.search || !Number.isSafeInteger(length) || length > limits.folderBodyBytes)
+        return json({ error: "A remote folder is required." }, 400);
+      const text = yield* request.text;
+      const folder = Schema.decodeUnknownExit(Schema.fromJsonString(FolderRead))(text, {
+        onExcessProperty: "error",
+      });
+      if (folder._tag === "Failure" || Buffer.byteLength(text) > limits.folderBodyBytes)
+        return json({ error: "A remote folder is required." }, 400);
+      return commandsResponse(yield* commands(peer, { kind: "folder", cwd: folder.value.cwd }));
+    }
     const workspaceId = url.searchParams.get("workspaceId"),
       sessionId = url.searchParams.get("sessionId");
     if (
@@ -331,18 +372,14 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       request.headers.upgrade
     )
       return json({ error: "Remote workspace and session IDs are required." }, 400);
-    const body = yield* commands(peer, workspaceId, sessionId);
-    return HttpServerResponse.text(body, {
-      contentType: "application/json",
-      headers: { "cache-control": "no-store" },
-    });
+    return commandsResponse(yield* commands(peer, { kind: "session", workspaceId, sessionId }));
   }).pipe(
     Effect.catch(() =>
       Effect.succeed(
         json(
           {
             error:
-              "Remote request refused: machine unavailable, incompatible, or session not listed.",
+              "Remote request refused: machine unavailable, incompatible, or session or folder not listed.",
           },
           502,
         ),

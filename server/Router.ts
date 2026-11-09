@@ -16,11 +16,12 @@ import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup } from "./McpSetup.ts";
 import { AllowedOrigins, hostAllowed } from "./OriginPolicy.ts";
 import { addPeerRoutes } from "./PeerGateway.ts";
+import { registered } from "./PeerScope.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { Prompts } from "./Prompts.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { RadiusSetup } from "./RadiusSetup.ts";
-import { Registry, type SessionEntry } from "./Registry.ts";
+import { Registry, RegistryLookupError, type SessionEntry } from "./Registry.ts";
 import { SessionChanges } from "./SessionChanges.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
@@ -310,6 +311,17 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.flatMap(DirectoryFacts, (facts) => facts.commands(body.cwd)).pipe(
         Effect.map((commands) => ({ commands })),
       ),
+    );
+    yield* serve(Endpoints.peerSlashCommands, ({ body }) =>
+      Effect.gen(function* () {
+        if (!registered(yield* Effect.flatMap(Registry, (registry) => registry.get), body.cwd))
+          return yield* new RegistryLookupError({
+            subject: "workspace",
+            detail: "Not a registered folder on this machine.",
+          });
+        const commands = yield* Effect.flatMap(DirectoryFacts, (facts) => facts.commands(body.cwd));
+        return { commands };
+      }),
     );
     yield* serve(Endpoints.sessionCommands, ({ session }) =>
       Effect.flatMap(SessionHosts, (hosts) => hosts.commands(session.cwd, session.sessionId)).pipe(

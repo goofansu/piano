@@ -302,6 +302,51 @@ test(
       );
     });
 
+    await t.test(
+      "a folder's commands go to the remote's peer read as a POST body, never a URL",
+      async () => {
+        const folderPath = "/peer/eng-1/api/commands";
+        const post = (body: string, extra: Record<string, string> = {}) =>
+          fetch(`${f.base}${folderPath}`, {
+            method: "POST",
+            headers: { Origin: f.base, "content-type": "application/json", ...headers, ...extra },
+            body,
+          });
+        const before = f.state.requests.length;
+        const response = await post(JSON.stringify({ cwd: identity.cwd }));
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), {
+          commands: [{ name: "remote-only", source: "extension" }],
+        });
+        const sent = f.state.requests.slice(before);
+        assert.deepEqual(
+          sent.map(({ url, method, body }) => ({ url, method, body })),
+          [
+            {
+              url: "/api/peer/commands",
+              method: "POST",
+              body: JSON.stringify({ cwd: identity.cwd }),
+            },
+          ],
+          "one POST to the remote's peer read; the path is only in the body",
+        );
+        assert.equal(sent[0]!.headers.origin, f.config.origin);
+        assert.equal(sent[0]!.headers.cookie, undefined);
+
+        const refused = f.state.requests.length;
+        for (const [body, extra, status] of [
+          [JSON.stringify({ cwd: "" }), {}, 400],
+          [JSON.stringify({ cwd: identity.cwd, path: "/elsewhere" }), {}, 400],
+          ["x".repeat(17 * 1024), {}, 400],
+          [JSON.stringify({ cwd: identity.cwd }), { "Sec-Fetch-Site": "cross-site" }, 403],
+        ] as const) {
+          assert.equal((await post(body, extra)).status, status, body.slice(0, 60));
+        }
+        assert.equal((await fetch(`${f.base}${folderPath}`, { headers })).status, 405);
+        assert.equal(f.state.requests.length, refused, "refused requests never reach the remote");
+      },
+    );
+
     await t.test("well-formed messages pass unchanged; the remote decides", async () => {
       const connection = await f.open();
       const messages = [

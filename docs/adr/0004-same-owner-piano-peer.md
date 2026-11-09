@@ -21,7 +21,7 @@ turn Piano into a fleet manager.
 - The browser speaks only to its current origin. Main validates Host, browser Origin and
   `Sec-Fetch-Site` before dialing; upstream receives the configured target Origin, not the
   browser's headers or the integration hostname. Only configured destinations, the remote's
-  `/ws/peer` and its session-commands read are routed; redirects, unknown IDs and other endpoints
+  `/ws/peer` and its two slash-command reads are routed; redirects, unknown IDs and other endpoints
   fail closed (INV-11).
 - The peer decides the slice, not the gateway. Main attaches at the peer's `/ws/peer`, where the
   peer admits only its registered sessions and the slice's actions, and answers every refusal with
@@ -29,8 +29,10 @@ turn Piano into a fleet manager.
   authenticated pipe: it neither filters requests nor injects or renumbers frames, so a refusal
   never has to end the connection. A separate path, not a header, marks the connection: nothing in
   transit can strip it, and a peer without it fails closed. Folder trust is outside the slice, since
-  it runs project extensions on the peer. The session-commands read needs no peer mode: the peer
-  already resolves its IDs in its own registry. No browser-supplied
+  it runs project extensions on the peer. Slash commands come from two reads: a running
+  session's own read needs no peer mode, because the peer resolves its IDs in its own registry;
+  a saved session's folder read goes to the peer's `/api/peer/commands`, which answers only for a
+  registered folder, with the path in the POST body. No browser-supplied
   cookies or bearer tokens, or developer credential environment, are copied to the peer.
 - This is the existing trusted-developer boundary: the same owner controls both Pianos and the
   attached peer integration or VM token. exe.dev supplies private access and authentication. It is

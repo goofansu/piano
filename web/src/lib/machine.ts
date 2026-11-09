@@ -40,6 +40,7 @@ export function machineAddress(id: string, address: AddressBar): AddressBar {
 /** No relative fallback: the sole supported remote HTTP read has an immutable owner. */
 export function peerApiPath(id: string, path: string): string {
   if (id === "local") return path;
-  if (path !== "/api/session/commands") throw new Error("Unavailable on this machine.");
+  if (path !== "/api/session/commands" && path !== "/api/commands")
+    throw new Error("Unavailable on this machine.");
   return `/peer/${encodeURIComponent(id)}${path}`;
 }

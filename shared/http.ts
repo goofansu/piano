@@ -383,6 +383,19 @@ export const Endpoints = {
     refused: 502,
     fallback: "Could not load commands.",
   }),
+  /**
+   * `slashCommands` for another machine's gateway only: answers for a folder registered on this
+   * machine and refuses any other path, as `/ws/peer` does (ADR 0004).
+   */
+  peerSlashCommands: endpoint({
+    method: "POST",
+    path: "/api/peer/commands",
+    body: Schema.Struct({ cwd: Schema.NonEmptyString }),
+    invalid: "Directory is required.",
+    response: Schema.Struct({ commands: Schema.Array(SlashCommand) }),
+    refused: 409,
+    fallback: "Could not load commands.",
+  }),
   /** A running session answers from its own child; a stopped one is never started to answer. */
   sessionCommands: endpoint({
     method: "GET",

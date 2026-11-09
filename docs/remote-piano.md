@@ -181,7 +181,7 @@ Local's persisted catalog. Remote files, credentials, history and database remai
   forwarded to Local. Remote transcript attachments/local-file actions are unavailable.
 - The remote enforces these limits on its `/ws/peer` connection and answers a refused request the
   way it answers any failed one (for example "Unable to open session"); the connection stays open.
-- Only configured peers, the remote's `/ws/peer` and its session-commands read are routed. There is
+- Only configured peers, the remote's `/ws/peer` and its slash-command reads are routed. There is
   no arbitrary URL proxy, redirect following, mutation retry or cross-machine search. The browser never contacts the
   integration hostname.
 - The configured destination is trusted, not an authenticated instance-ID handshake. A remote

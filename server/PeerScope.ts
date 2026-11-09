@@ -28,7 +28,8 @@ export interface PeerSelection {
  */
 export type PeerVerdict = "admit" | "skip" | "refuse";
 
-const registered = (data: RegistryData, cwd: string) =>
+/** A folder or worktree registered on this machine: the only directories a peer may ask about. */
+export const registered = (data: RegistryData, cwd: string) =>
   data.workspaces.some((workspace) => workspace.path === cwd);
 const listed = (data: RegistryData, cwd: string, sessionId: string) =>
   registered(data, cwd) && data.sessions.some((entry) => sameSession(entry, { cwd, sessionId }));

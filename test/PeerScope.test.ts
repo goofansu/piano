@@ -164,6 +164,25 @@ test(
       );
     });
 
+    await t.test("the peer folder-commands read answers only for registered folders", async () => {
+      const read = (path: string, cwd: string) =>
+        fetch(`${f.base}${path}`, {
+          method: "POST",
+          headers: { Origin: f.base, "content-type": "application/json" },
+          body: JSON.stringify({ cwd }),
+        });
+      const notRegistered = /not a registered folder/i;
+      // The fixture's registered folder is not on disk: reaching discovery shows as its own error.
+      const listed = await read("/api/peer/commands", identity.cwd);
+      assert.doesNotMatch((await listed.json()).error ?? "", notRegistered);
+      const unlisted = await read("/api/peer/commands", "/different");
+      assert.equal(unlisted.status, 409);
+      assert.match((await unlisted.json()).error, notRegistered);
+      // This machine's own browser read is not limited to registered folders.
+      const own = await read("/api/commands", "/different");
+      assert.doesNotMatch((await own.json()).error ?? "", notRegistered);
+    });
+
     await t.test("refusals never end the connection", () => {
       assert.equal(peer.ws.readyState, WebSocket.OPEN);
     });

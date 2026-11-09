@@ -42,7 +42,12 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
     connections: 0,
     disconnected: 0,
     initial: registry as unknown,
-    requests: [] as { url: string; headers: IncomingHttpHeaders }[],
+    requests: [] as {
+      url: string;
+      headers: IncomingHttpHeaders;
+      method?: string;
+      body?: string;
+    }[],
     received: [] as string[],
     sent: [] as string[],
     pendingHttp: [] as Array<() => void>,
@@ -70,8 +75,10 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       check();
     });
   };
-  const upstream = createServer((req, res) => {
-    state.requests.push({ url: req.url!, headers: req.headers });
+  const upstream = createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    state.requests.push({ url: req.url!, headers: req.headers, method: req.method, body });
     changed();
     if (
       state.requiredToken &&
