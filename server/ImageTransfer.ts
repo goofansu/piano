@@ -1,6 +1,13 @@
 /** Pull-based HTTP bounds shared by the two image hops. Never trust Content-Length alone. */
 import { Data } from "effect";
-import { remoteImageLimits } from "../shared/remoteImages.ts";
+import {
+  IMAGE_CANCEL_PATH,
+  IMAGE_PREVIEW_PATH,
+  IMAGE_UPLOAD_PATH,
+  IMAGE_UPLOAD_TYPE,
+  previewQuery,
+  remoteImageLimits,
+} from "../shared/remoteImages.ts";
 
 export class ImageTransferError extends Data.TaggedError("ImageTransferError")<{
   readonly detail: string;
@@ -91,4 +98,57 @@ export async function readImageResponse(response: Response, signal: AbortSignal)
   if (!response.body) throw imageFailure();
   const stream = boundedImageStream(response.body, remoteImageLimits.responseBytes, { signal });
   return new Response(stream).text();
+}
+
+/** What an admitted image request is; a body route's length is its declared Content-Length. */
+export type ImageRoute =
+  | {
+      readonly kind: "upload" | "cancel";
+      readonly contentType: string;
+      readonly maximum: number;
+      readonly length: number | undefined;
+    }
+  | {
+      readonly kind: "preview";
+      readonly maximum: number;
+      readonly query: NonNullable<ReturnType<typeof previewQuery>>;
+    };
+
+/** The one shape of each image route, for the relay on main and the owning peer alike, so a
+ * request one hop forwards is never one the other refuses. Each hop's own origin and capacity
+ * checks stay with it; this decides only method, transport headers, address and body. */
+export function imageRoute(
+  path: string,
+  method: string,
+  headers: Readonly<Record<string, string | undefined>>,
+  /** The request URL's raw search, `?` included, as `URL.search` gives it. */
+  search: string,
+): ImageRoute | ImageTransferError {
+  const kind =
+    path === IMAGE_UPLOAD_PATH
+      ? "upload"
+      : path === IMAGE_CANCEL_PATH
+        ? "cancel"
+        : path === IMAGE_PREVIEW_PATH
+          ? "preview"
+          : undefined;
+  if (!kind) return imageFailure("Unknown image route.", 404);
+  if (headers.upgrade || headers["content-encoding"])
+    return imageFailure("Unsupported image request.");
+  if (method !== (kind === "preview" ? "GET" : "POST"))
+    return imageFailure("Unsupported image method.", 405);
+  if (kind === "preview") {
+    const query = previewQuery(new URLSearchParams(search));
+    if (!query) return imageFailure("Invalid image address.");
+    return { kind, maximum: remoteImageLimits.previewBytes, query };
+  }
+  if (search) return imageFailure("Invalid image request.");
+  const contentType = kind === "upload" ? IMAGE_UPLOAD_TYPE : "application/json";
+  if (headers["content-type"] !== contentType) return imageFailure("Unsupported image body.", 415);
+  const maximum = kind === "upload" ? remoteImageLimits.bodyBytes : remoteImageLimits.responseBytes;
+  try {
+    return { kind, contentType, maximum, length: imageContentLength(headers, maximum) };
+  } catch (error) {
+    return error instanceof ImageTransferError ? error : imageFailure();
+  }
 }

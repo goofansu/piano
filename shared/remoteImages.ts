@@ -15,7 +15,11 @@ import { URL_ID } from "./urlId.ts";
 export const remoteImageLimits = {
   manifestBytes: 16 * 1024,
   bodyBytes: MAX_ATTACHMENT_BYTES + 16 * 1024 + 4,
+  /** Peer staging slots across reading, unclaimed and consumed batches (the memory budget). */
   batches: 2,
+  /** Concurrent HTTP transfers per image lane, with no waiting queue: on main per peer for each
+   * of uploads, reads and cancellations; on the peer for streaming preview reads. */
+  laneTransfers: 2,
   ttlMs: 10 * 60_000,
   idleMs: 30_000,
   totalMs: 180_000,

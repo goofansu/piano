@@ -7,15 +7,14 @@ import {
   IMAGE_CANCEL_PATH,
   IMAGE_PREVIEW_PATH,
   IMAGE_UPLOAD_PATH,
-  IMAGE_UPLOAD_TYPE,
   PreparedImages,
-  previewQuery,
   remoteImageLimits,
 } from "../shared/remoteImages.ts";
 import {
   boundedImageStream,
   imageContentLength,
   imageFailure,
+  imageRoute,
   ImageTransferError,
   readImageResponse,
 } from "./ImageTransfer.ts";
@@ -33,26 +32,14 @@ export function makePeerImageRelay() {
     request: HttpServerRequest.HttpServerRequest,
     headers: Record<string, string>,
   ) {
-    const preview = path === IMAGE_PREVIEW_PATH;
-    if (request.method !== (preview ? "GET" : "POST"))
-      return imageJson({ error: "Unsupported image method." }, 405);
     const browserUrl = new URL(request.url, "http://localhost");
-    if (
-      request.headers.upgrade ||
-      request.headers["content-encoding"] ||
-      (preview ? !previewQuery(browserUrl.searchParams) : !!browserUrl.search)
-    )
-      return imageJson({ error: "Invalid image request." }, 400);
-    if (
-      !preview &&
-      request.headers["content-type"] !==
-        (path === IMAGE_UPLOAD_PATH ? IMAGE_UPLOAD_TYPE : "application/json")
-    )
-      return imageJson({ error: "Unsupported image body." }, 415);
-    const lane = `${peer.id}:${preview ? "read" : "upload"}`;
+    const route = imageRoute(path, request.method, request.headers, browserUrl.search);
+    if (route instanceof ImageTransferError)
+      return imageJson({ error: route.detail }, route.status);
+    const preview = route.kind === "preview";
     // Cancellation has a tiny independent lane, so saturated uploads can still be discarded.
-    const key = path === IMAGE_CANCEL_PATH ? `${peer.id}:cancel` : lane;
-    if ((active.get(key) ?? 0) >= 2)
+    const key = `${peer.id}:${preview ? "read" : route.kind}`;
+    if ((active.get(key) ?? 0) >= remoteImageLimits.laneTransfers)
       return imageJson({ error: "Image transfer is busy. Try again after the pending send." }, 429);
     active.set(key, (active.get(key) ?? 0) + 1);
     const controller = new AbortController();
@@ -72,27 +59,22 @@ export function makePeerImageRelay() {
         ]);
         const url = new URL(path, peer.endpoint);
         if (preview) url.search = browserUrl.search;
-        const maximum =
-          path === IMAGE_UPLOAD_PATH
-            ? remoteImageLimits.bodyBytes
-            : remoteImageLimits.responseBytes;
-        const length = preview ? undefined : imageContentLength(request.headers, maximum);
-        const body = preview
-          ? undefined
-          : boundedImageStream(Stream.toReadableStream(request.stream), maximum, {
-              signal: combined,
-              length,
-            });
+        const body =
+          route.kind === "preview"
+            ? undefined
+            : boundedImageStream(Stream.toReadableStream(request.stream), route.maximum, {
+                signal: combined,
+                length: route.length,
+              });
         const response = await fetch(url, {
           method: request.method,
           headers: {
             ...headers,
-            ...(preview
+            ...(route.kind === "preview"
               ? {}
               : {
-                  "content-type":
-                    path === IMAGE_UPLOAD_PATH ? IMAGE_UPLOAD_TYPE : "application/json",
-                  ...(length === undefined ? {} : { "content-length": String(length) }),
+                  "content-type": route.contentType,
+                  ...(route.length === undefined ? {} : { "content-length": String(route.length) }),
                 }),
           },
           body,
@@ -121,13 +103,13 @@ export function makePeerImageRelay() {
           try {
             responseLength = imageContentLength(
               Object.fromEntries(response.headers),
-              remoteImageLimits.previewBytes,
+              route.maximum,
             );
           } catch {
             await response.body.cancel();
             throw imageFailure("Remote image exceeds its byte limit.", 502);
           }
-          const stream = boundedImageStream(response.body, remoteImageLimits.previewBytes, {
+          const stream = boundedImageStream(response.body, route.maximum, {
             signal: combined,
             length: responseLength,
             done: release,
@@ -144,7 +126,7 @@ export function makePeerImageRelay() {
           throw imageFailure("Invalid image preparation response.", 502);
         });
         const value =
-          path === IMAGE_UPLOAD_PATH
+          route.kind === "upload"
             ? Schema.decodeUnknownSync(Schema.fromJsonString(PreparedImages))(text, {
                 onExcessProperty: "error",
               })

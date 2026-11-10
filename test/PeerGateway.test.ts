@@ -8,6 +8,7 @@ import { socketLimits } from "../server/BoundedDelivery.ts";
 import { loadPeerConfigs } from "../server/PeerConfig.ts";
 import { PEER_FRAME_BYTES } from "../shared/machine.ts";
 import {
+  IMAGE_CANCEL_PATH,
   IMAGE_UPLOAD_PATH,
   IMAGE_PREVIEW_PATH,
   IMAGE_UPLOAD_TYPE,
@@ -183,6 +184,69 @@ test(
     assert.ok(remoteImageLimits.bodyBytes < 52 * 1024 * 1024);
   },
 );
+
+test("both image hops refuse a malformed image request with the same status and error", async (t) => {
+  const f = await gatewayFixture(t);
+  const preview = `${IMAGE_PREVIEW_PATH}?${new URLSearchParams({ workspaceId: identity.workspaceId, sessionId: identity.sessionId, hash: "a".repeat(64) })}`;
+  const json = { "content-type": "application/json" };
+  const binary = { "content-type": IMAGE_UPLOAD_TYPE };
+  const cases: [string, string, string, Record<string, string>, number][] = [
+    ["upload by GET", "GET", IMAGE_UPLOAD_PATH, {}, 405],
+    ["cancel by GET", "GET", IMAGE_CANCEL_PATH, {}, 405],
+    ["preview by POST", "POST", preview, json, 405],
+    ["query on upload", "POST", `${IMAGE_UPLOAD_PATH}?x=1`, binary, 400],
+    ["query on cancel", "POST", `${IMAGE_CANCEL_PATH}?x=1`, json, 400],
+    ["bad preview hash", "GET", preview.replace("a".repeat(64), "..%2Fsecret"), {}, 400],
+    ["extra preview key", "GET", `${preview}&extra=1`, {}, 400],
+    ["upload as JSON", "POST", IMAGE_UPLOAD_PATH, json, 415],
+    ["cancel as binary", "POST", IMAGE_CANCEL_PATH, binary, 415],
+    [
+      "compressed upload",
+      "POST",
+      IMAGE_UPLOAD_PATH,
+      { ...binary, "content-encoding": "gzip" },
+      400,
+    ],
+    ["upgrade on preview", "GET", preview, { upgrade: "h2c" }, 400],
+    [
+      "oversized upload",
+      "POST",
+      IMAGE_UPLOAD_PATH,
+      { ...binary, "content-length": String(remoteImageLimits.bodyBytes + 1) },
+      413,
+    ],
+    [
+      "oversized cancel",
+      "POST",
+      IMAGE_CANCEL_PATH,
+      { ...json, "content-length": String(remoteImageLimits.responseBytes + 1) },
+      413,
+    ],
+  ];
+  // node:http, since fetch cannot send Upgrade or a Content-Length its body does not match.
+  const send = (path: string, method: string, headers: Record<string, string>) =>
+    new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+      const req = request(`${f.base}${path}`, {
+        method,
+        agent: false,
+        headers: { Origin: f.base, ...headers },
+      });
+      req.on("response", async (res) => {
+        let text = "";
+        for await (const chunk of res) text += chunk;
+        resolve({ status: res.statusCode!, body: JSON.parse(text) });
+      });
+      req.on("error", reject);
+      req.end();
+    });
+  for (const [name, method, path, headers, status] of cases) {
+    const peer = await send(path, method, headers);
+    const relayed = await send(`/peer/eng-1${path}`, method, headers);
+    assert.equal(peer.status, status, name);
+    assert.deepEqual(relayed, peer, name);
+  }
+  assert.equal(f.state.requests.length, 0, "the relay refuses before dialing the peer");
+});
 
 // These new policy/transport boundaries have no protection in local ClientDispatch tests.
 test("peer startup configuration is explicit, bounded and fail-closed", (t) => {
