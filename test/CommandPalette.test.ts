@@ -447,7 +447,7 @@ test("a refreshed palette finds renamed sessions and excludes archived ones", ()
   assert.deepEqual(searchPalette(catalog(archived, input), "Unique renamed"), []);
 });
 
-test("session availability updates the palette and keyboard selection", () => {
+test("only readable sessions enter recents and search as availability changes", () => {
   const catalog = createPaletteCatalog();
   const input = { globalCommands: [], sessionCommands: [] };
   catalog(home, input);
@@ -461,17 +461,30 @@ test("session availability updates the palette and keyboard selection", () => {
   const changed = catalog(unavailable, input);
   const sessions = changed.find((g) => g.id === "sessions");
   assert.ok(sessions?.id === "sessions");
-  assert.equal(sessions.rows[0].enabled, false, "missing history cannot be opened");
+  assert.deepEqual(changed, commandPalette(unavailable, input), "cached and direct catalogs agree");
+  assert.ok(sessions.rows.every((r) => r.enabled));
+  assert.deepEqual(
+    sessionIds(unavailable),
+    ["s8", "s7", "s6", "s5", "s4", "s3", "s2", "s1"],
+    "missing history does not consume a recent slot; readable Untitled remains",
+  );
+  assert.deepEqual(searchPalette(changed, "s9"), [], "missing history is not searchable");
+  assert.deepEqual(sessionIds(unavailable, "s9"), []);
+  assert.equal(sessions.rows[0].session.sessionId, "s8");
   assert.equal(
     sessions.rows[0].hint,
-    "History unavailable. Restore the Pi session file to open it.",
-  );
-  assert.equal(sessions.rows[1].enabled, true, "a missing checkout still permits reading history");
-  assert.equal(
-    sessions.rows[1].hint,
     "Folder missing. History can be read; restore the folder to continue.",
   );
   for (const query of ["", "Session"]) {
+    assert.deepEqual(
+      searchPalette(changed, query),
+      searchPalette(commandPalette(unavailable, input), query),
+    );
+    assert.ok(
+      searchPalette(changed, query).every((g) =>
+        g.rows.every((r) => r.key !== sessionKey({ cwd: "/work/repo.feature", sessionId: "s9" })),
+      ),
+    );
     assert.equal(
       paletteSelection(
         pagePalette(searchPalette(changed, query)),
@@ -483,10 +496,24 @@ test("session availability updates the palette and keyboard selection", () => {
     );
   }
   const restored = catalog(home, input);
+  assert.deepEqual(restored, commandPalette(home, input));
+  assert.equal(searchPalette(restored, "s9")[0]?.rows[0].enabled, true);
   assert.equal(
     paletteSelection(pagePalette(searchPalette(restored, "")), "", true),
     `sessions:${sessionKey({ cwd: "/work/repo.feature", sessionId: "s9" })}`,
   );
+});
+
+test("unavailable-only catalogs have no sessions group", () => {
+  const state: AppState = {
+    ...home,
+    sessionReferences: [sessionReference("/repo", "gone", { unavailable: "history" })],
+  };
+  const input = { globalCommands: [], sessionCommands: [] };
+  for (const groups of [commandPalette(state, input), createPaletteCatalog()(state, input)]) {
+    assert.ok(groups.every((g) => g.id !== "sessions"));
+    assert.deepEqual(searchPalette(groups, "gone"), []);
+  }
 });
 
 test("worker search replaces its catalog even when the query is unchanged", () => {
