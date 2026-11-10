@@ -35,12 +35,18 @@ export const registered = (data: RegistryData, cwd: string) =>
  * Where a peer may start a session: an open folder or one of its worktrees. Starting a session in
  * a closed folder's directory reopens the folder, and registering folders stays with this machine.
  */
-export const openDirectory = (data: RegistryData, cwd: string) =>
+const openDirectory = (data: RegistryData, cwd: string) =>
   data.workspaces.some(
     (workspace) => workspace.path === cwd && data.folders.includes(workspace.folder),
   );
 const listed = (data: RegistryData, cwd: string, sessionId: string) =>
   registered(data, cwd) && data.sessions.some((entry) => sameSession(entry, { cwd, sessionId }));
+/**
+ * Where a peer's input may go: a listed session, or, before Pi names a session, an open
+ * directory. Its actions and the images it prepares and claims for them are held to this one rule.
+ */
+export const inputTarget = (data: RegistryData, cwd: string, sessionId: string | null) =>
+  sessionId === null ? openDirectory(data, cwd) : listed(data, cwd, sessionId);
 
 /** Inline remote images stay forbidden: ClientDispatch resolves prepared references after this check. */
 function actionAllowed({ action, start }: Act): boolean {
@@ -102,9 +108,7 @@ export function peerVerdict(
       return openDirectory(data, request.cwd) && creationAllowed(request) ? "admit" : "refuse";
     case "act":
       return selection?.selectionId === request.selectionId &&
-        (selection.sessionId === null
-          ? openDirectory(data, selection.cwd)
-          : listed(data, selection.cwd, selection.sessionId)) &&
+        inputTarget(data, selection.cwd, selection.sessionId) &&
         actionAllowed(request)
         ? "admit"
         : "refuse";

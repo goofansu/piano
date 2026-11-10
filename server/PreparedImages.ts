@@ -13,14 +13,11 @@ import {
 } from "../shared/remoteImages.ts";
 import type { Attachment } from "../shared/wire.ts";
 import { boundedImageStream, imageFailure, ImageTransferError } from "./ImageTransfer.ts";
-import { openDirectory, registered } from "./PeerScope.ts";
+import { inputTarget } from "./PeerScope.ts";
 import type { RegistryData } from "./Registry.ts";
 
 const allowed = (data: RegistryData, target: ImageTarget) =>
-  "sessionId" in target
-    ? registered(data, target.cwd) &&
-      data.sessions.some((s) => s.cwd === target.cwd && s.sessionId === target.sessionId)
-    : openDirectory(data, target.cwd);
+  inputTarget(data, target.cwd, "sessionId" in target ? target.sessionId : null);
 const sameTarget = (a: ImageTarget, b: ImageTarget) =>
   a.cwd === b.cwd &&
   ("sessionId" in a ? "sessionId" in b && a.sessionId === b.sessionId : !("sessionId" in b));
