@@ -208,9 +208,8 @@ export function DraftEditor({
       />
       <div className={composerToolbar}>
         {offers.attachments && <AttachButton draft={attachments} disabled={attachmentsDisabled} />}
-        {offers.voiceInput && (
-          <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
-        )}
+        {/* Main-origin on every machine: the main machine's preference decides whether it shows. */}
+        <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
         <ModelSelect
           open={modelOpen}
           onOpenChange={setModelOpen}

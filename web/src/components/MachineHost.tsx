@@ -42,10 +42,10 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
       window.removeEventListener("popstate", pop);
     };
   }, []);
-  const switchMachine = (next: string, path?: string) => {
+  const switchMachine = (next: string) => {
     if (next === id || !machines.some((m) => m.id === next)) return;
     paths.set(id, machineLocation(location.pathname).pathname);
-    history.pushState(null, "", machinePath(next, path ?? paths.get(next) ?? "/new"));
+    history.pushState(null, "", machinePath(next, paths.get(next) ?? "/new"));
     setId(next);
   };
   const machine = machines.find((m) => m.id === id);
