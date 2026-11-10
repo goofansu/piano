@@ -18,6 +18,14 @@ Linux and macOS alike: `lib.sh` reads processes and ports from whatever the host
 put `~/node/bin` and `~/.local/bin` (Node 24, `wt`) on `PATH` themselves. The feature map in
 [`features/README.md`](features/README.md) says what to drive; this file says how.
 
+## Run limits
+
+Keep at most one scratch Piano instance and at most one browser session active for a verification
+run. Drive checks serially, reusing that instance and browser across the run. Before replacing
+either, finish teardown of the previous run-owned resource using [Cleanup](#cleanup), preserving
+its [evidence](#evidence). If teardown cannot be confirmed, stop and report the blocker rather than
+start a replacement.
+
 ## Launch
 
 ```bash
@@ -128,9 +136,12 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    ```
 
    Each prints `PASS <name> (<s>), evidence in <dir>` and exits 0, or fails with the assertion.
-   They do not need `launch.sh`. `npm run test:browser` runs all three into `.scratch/browser/`.
+   They do not need `launch.sh`: run them one at a time before Launch (or after cleaning up an
+   existing run), and let each finish its own teardown before the next journey or Launch.
+   `npm run test:browser` also includes a multi-peer journey, which exceeds the run limit; use the
+   individual commands above and report any required multi-instance coverage as blocked.
 
-2. **Then `agent-browser` on the launched instance** for anything the harness does not cover,
+2. **Then launch once and reuse `agent-browser`** for anything the harness does not cover,
    through `ab.sh`, which runs `agent-browser --session "$AB_SESSION"` from `PATH`.
    `cleanup.sh` closes the session with the same installed CLI:
 
@@ -199,9 +210,10 @@ Proof standards:
 It closes this run's browser session, sends TERM (KILL after 10 s) only to the PIDs in
 `$RUN/pids` whose kernel start time still matches, confirms both ports are free, copies logs, audit,
 `run.env` and `pids` into `$EVIDENCE/_run/`, deletes `$RUN` (only under the scratch root) and lists
-the kept evidence. Never kill by name (`pkill`, `pgrep -f`): other agents' scratch instances and the
-user's Piano run the same `node server/main.ts`. Run Cleanup after every failed attempt too. The
-harness journeys clean up their own instance and browser.
+the kept evidence. Stop only instances and browser sessions this run owns; leave unrelated ones
+alone. Never kill by name (`pkill`, `pgrep -f`): other agents' scratch instances and the user's Piano
+run the same `node server/main.ts`. Run Cleanup after every failed attempt too. The harness journeys
+clean up their own instance and browser.
 
 ## Gotchas
 
