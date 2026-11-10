@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { LOCAL } from "@/lib/machine";
-import { type DraftKey, drafts, type ImageDraft } from "@/lib/messageDraft";
+import type { DraftKey, Drafts, ImageDraft } from "@/lib/messageDraft";
 import { remoteImageUrl } from "@/lib/remoteImages";
 import { useMachine, useOffers } from "@/lib/useMachine";
 
@@ -35,8 +35,9 @@ const encode = (file: File) =>
     reader.onerror = () => reject(new Error(`Could not read ${file.name}. Try again.`));
     reader.readAsDataURL(file);
   });
-/** A draft's images (`null` while no draft is addressed) with the moves these controls offer; messageDraft owns them and their policy. */
-export function attachmentDraft(key: DraftKey | null, images: ImageDraft, store = drafts) {
+/** A draft's images (`null` while no draft is addressed) with the moves these controls offer, in
+ * the store of the machine that owns the draft; messageDraft owns them and their policy. */
+export function attachmentDraft(key: DraftKey | null, images: ImageDraft, store: Drafts) {
   return {
     ...images,
     add: (files: File[]) => store.addImages(key, files, encode),
