@@ -198,6 +198,8 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     await switchMachine("eng-2");
     assert.equal(await page.evaluate(`window.voiceFixture.tracks.some(t => t.live)`), false);
     await page.evaluate(`window.voiceFixture.mode = 'pending'`);
+    // The switched-to composer is disabled until its machine connects; click once it is enabled.
+    await ready();
     await page.click("button", "Voice input");
     await page.until(`!!document.querySelector('[aria-label="Cancel recording"]')`);
     await switchMachine("eng-1");
@@ -215,6 +217,7 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     await answer("cancelled", 499);
     assert.equal(await value(), "REMOTE spoken");
     await page.evaluate(`window.voiceFixture.mode = 'denied'`);
+    await ready();
     await page.click("button", "Voice input");
     await page.see("Allow microphone access to use voice input.");
     await page.evaluate(`window.voiceFixture.mode = 'normal'`);
