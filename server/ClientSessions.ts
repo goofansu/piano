@@ -73,6 +73,8 @@ export class InputNotSent extends Data.TaggedError("InputNotSent")<{
   readonly inputId: string;
   readonly detail: string;
   readonly cause: ActRefused | PiSessionError;
+  /** A new session's first input: the session that was created and still awaits it. */
+  readonly session?: { readonly cwd: string; readonly sessionId: string };
 }> {}
 
 const refuse = (reason: ActRefused["reason"], detail: string = refused[reason]) =>
@@ -505,8 +507,39 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   // waits on a pending creation.
   const create = Effect.fn("ClientSessions.create")(function* (
     selectionId: string,
-    { text, attachments, attemptId = selectionId, ...spec }: CreateSessionRequest,
+    { text, attachments, attemptId, ...spec }: CreateSessionRequest,
   ) {
+    const first = (opening: Effect.Effect<PiSession, PiSessionError | SessionNotCreated>) =>
+      Effect.gen(function* () {
+        const { session } = yield* openThenAttach(
+          selectionId,
+          opening.pipe(Effect.map((session) => ({ session }))),
+        );
+        const trimmed = text?.trim() ?? "";
+        if (!trimmed && !attachments?.length) return;
+        // Sent only once this client has attached, so it observes the prompt. A refusal names
+        // the session that exists, so the input returns to its draft and not to a second start.
+        yield* deliver(session, {
+          _tag: "prompt",
+          text: trimmed,
+          attachments,
+          inputId: attemptId ?? selectionId,
+        }).pipe(
+          Effect.mapError((e) =>
+            e instanceof InputNotSent
+              ? new InputNotSent({
+                  inputId: e.inputId,
+                  detail: e.detail,
+                  cause: e.cause,
+                  session: { cwd: session.spec.cwd, sessionId: session.spec.sessionId },
+                })
+              : e,
+          ),
+        );
+      });
+    // A selection ID lives only as long as its connection: a client that names no attempt gets
+    // no durable claim, so a reused ID is never mistaken for an earlier creation.
+    if (attemptId === undefined) return first(hosts.create(spec));
     // Claim before Worktrunk, registration or Pi. A duplicate observes the original; it never
     // takes ownership of that request's first input, even after a restart or reference deletion.
     // Image bytes are hashed where they are, each framed by its length: serializing them would
@@ -531,14 +564,12 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       cwd: spec.cwd,
       state: "starting" as const,
     };
-    const claimed = yield* registry
-      .claimCreation(attempt)
-      .pipe(Effect.mapError((e) => rejected(e.detail)));
-    if (!claimed) {
+    const creation = yield* hosts.begin({ ...spec, attempt });
+    if (!creation) {
       const previous = yield* registry
         .creationAttempt(attemptId)
         .pipe(Effect.mapError((e) => rejected(e.detail)));
-      if (previous?.fingerprint !== fingerprint)
+      if (previous && previous.fingerprint !== fingerprint)
         return Effect.fail(
           rejected(
             "This creation attempt was already used for different input. Nothing was restarted or resent.",
@@ -546,16 +577,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         );
       return reconcile({ cwd: spec.cwd, sessionId: null, selectionId, attemptId });
     }
-    return Effect.gen(function* () {
-      const { session } = yield* openThenAttach(
-        selectionId,
-        hosts.create({ ...spec, attempt }).pipe(Effect.map((session) => ({ session }))),
-      );
-      const trimmed = text?.trim() ?? "";
-      if (!trimmed && !attachments?.length) return;
-      // Sent only once this client has attached, so it observes the prompt.
-      yield* deliver(session, { _tag: "prompt", text: trimmed, attachments, inputId: attemptId });
-    });
+    return first(creation);
   });
 
   return {

@@ -989,7 +989,8 @@ export const ClientMessage = Schema.Union([
   /** Create and start a session in a directory (registering it as a folder when needed) and send its first prompt. */
   Schema.TaggedStruct("create_session", {
     selectionId: Schema.String,
-    /** Stable creation identity, distinct from later navigation. Legacy clients use selectionId. */
+    /** Stable creation identity, distinct from later navigation. Without one the creation makes
+     * no durable claim and cannot be reconciled. */
     attemptId: Schema.optional(Schema.String),
     cwd: Schema.String,
     projectId: Schema.optional(Schema.String),
@@ -1162,6 +1163,10 @@ export const ServerMessage = Schema.Union([
     /** The `inputId` of a prompt or steer this error refused before Pi saw it: never delivered,
      * so the browser returns it to its draft. */
     inputId: Schema.optional(Schema.String),
+    /** With `inputId`, the session a refused first input created: the input belongs to its
+     * draft, not to another start. */
+    cwd: Schema.optional(Schema.String),
+    sessionId: Schema.optional(Schema.String),
   }),
   /** A notice for the person; `level` picks the icon. */
   Schema.TaggedStruct("toast", {

@@ -190,7 +190,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
               message: unansweredText(reason),
               selectionId,
               ...(reason._tag === "failed" && reason.error instanceof InputNotSent
-                ? { inputId: reason.error.inputId }
+                ? { inputId: reason.error.inputId, ...reason.error.session }
                 : {}),
             },
       confirmed: null,
@@ -435,10 +435,8 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     yield* Effect.logWarning(`${request._tag} ${reason._tag}: ${unansweredText(reason)}`);
     // Refusing this delivery does not undo an older request with the same durable identity.
     // This also covers an expired image capability on a duplicate remote start.
-    if (request._tag === "create_session" && reason._tag !== "failed") {
-      const known = yield* registry
-        .creationAttempt(request.attemptId ?? request.selectionId)
-        .pipe(Effect.result);
+    if (request._tag === "create_session" && request.attemptId && reason._tag !== "failed") {
+      const known = yield* registry.creationAttempt(request.attemptId).pipe(Effect.result);
       if (known._tag === "Failure" || (known.success && known.success.state !== "failed")) {
         yield* send({
           _tag: "error",

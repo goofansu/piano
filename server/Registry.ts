@@ -395,7 +395,15 @@ export class Registry extends Context.Service<
       scope: ChangesScope | undefined,
     ) => Effect.Effect<void, RegistryError>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
-    readonly removeSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
+    /**
+     * `reopened` names the done mark `addSession` cleared for this session: removing a start that
+     * failed gives it back, unless the project took a later session or is no longer open.
+     */
+    readonly removeSession: (
+      cwd: string,
+      sessionId: string,
+      reopened?: { readonly projectId: string; readonly doneAt: string },
+    ) => Effect.Effect<void, RegistryError>;
   }
 >()("piano/Registry") {}
 
@@ -783,11 +791,26 @@ export const RegistryLive = Layer.effect(
             isSession(cwd, sessionId)(t) ? { ...t, archived: true } : t,
           ),
         })),
-      removeSession: (cwd, sessionId) =>
-        update((d) => ({
-          ...d,
-          sessions: d.sessions.filter((t) => !isSession(cwd, sessionId)(t)),
-        })),
+      removeSession: (cwd, sessionId, reopened) =>
+        update((d) => {
+          const at = d.sessions.findIndex(isSession(cwd, sessionId));
+          const sessions = d.sessions.filter((t) => !isSession(cwd, sessionId)(t));
+          const later =
+            !reopened ||
+            at < 0 ||
+            d.sessions.slice(at + 1).some((t) => t.projectId === reopened.projectId);
+          return {
+            ...d,
+            sessions,
+            projects: later
+              ? d.projects
+              : d.projects.map((p) =>
+                  p.id === reopened.projectId && p.doneAt === undefined
+                    ? { ...p, doneAt: reopened.doneAt }
+                    : p,
+                ),
+          };
+        }),
     });
   }),
 );

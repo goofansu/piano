@@ -685,6 +685,38 @@ test("a machine that names no input in its rejection still settles the creation'
   assert.equal(h.client.getState().view.kind, "session");
 });
 
+test("a creation that fails after the person moved to another session is announced", () => {
+  const h = harness();
+  h.status(true);
+  h.client.send({
+    _tag: "create_session",
+    cwd: "/scratch",
+    options: {},
+    text: "first",
+    attemptId: "attempt-1",
+  });
+  const creation = h.client.getState().selectionId!;
+  h.client.select("/scratch", "other");
+  h.server(h.selected("other"));
+  const shown = h.client.getState();
+  h.server({
+    _tag: "selection_rejected",
+    selectionId: creation,
+    inputId: "attempt-1",
+    message: "Pi exited during startup.",
+  });
+  assert.deepEqual(h.notes, [["Could not start session: Pi exited during startup.", "error"]]);
+  assert.equal(h.client.getState(), shown, "the session on screen is untouched");
+  // A rejection of the selection on screen is shown in place, not as a toast.
+  h.client.select("/scratch", "missing");
+  h.server({
+    _tag: "selection_rejected",
+    selectionId: h.client.getState().selectionId!,
+    message: "Refused",
+  });
+  assert.equal(h.notes.length, 1);
+});
+
 /** What the client asked Pi about, as `tag cwd` pairs, since the last call. */
 function focusHarness(options: { remembered?: string | null; initial?: typeof initialState } = {}) {
   const sent: ClientMessage[] = [];

@@ -99,6 +99,8 @@ const run = <A, E>(
     holdShutdown?: boolean;
     holdReadiness?: boolean;
     failReadiness?: "empty" | "saved";
+    /** Pi's runtime is not installed, so no child is ever spawned. */
+    missingNode?: boolean;
     unconfirmedStop?: boolean;
     holdStats?: boolean;
     statsFile?: string;
@@ -147,6 +149,7 @@ const run = <A, E>(
           }
         : {
             ...cli,
+            ...(options.missingNode ? { node: join(root, "no-such-node") } : {}),
             extraArgs: [
               ...cli.extraArgs,
               ...(options.holdShutdown ? ["--hold-shutdown"] : []),
@@ -213,6 +216,42 @@ test("INV-01/02: a failed fresh startup whose Pi had to be killed is still a con
       assert.deepEqual((yield* (yield* Registry).get).sessions, []);
     }),
     { failReadiness: "empty", holdShutdown: true, registry: "killed-start-failure" },
+  );
+});
+
+test("INV-01/02: a fresh startup that never spawned Pi leaves no reference", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const error = yield* Effect.flip(hosts.create({ cwd, options: {} }));
+      assert.equal(error._tag, "SessionNotCreated");
+      assert.deepEqual((yield* (yield* Registry).get).sessions, []);
+    }),
+    { missingNode: true, registry: "never-spawned" },
+  );
+});
+
+test("a failed fresh startup gives a done project its done mark back", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      yield* registry.saveProject({ id: "shipped", name: "Shipped" });
+      yield* registry.setProjectDone("shipped", true);
+      const doneAt = (yield* registry.get).projects[0]!.doneAt;
+      assert.ok(doneAt);
+      let reopened = false;
+      yield* registry.onChange((_before, after) =>
+        Effect.sync(() => {
+          if (after.sessions.length && after.projects[0]!.doneAt === undefined) reopened = true;
+        }),
+      );
+      const error = yield* Effect.flip(hosts.create({ cwd, projectId: "shipped", options: {} }));
+      assert.equal(error._tag, "SessionNotCreated");
+      assert.ok(reopened, "the start reopened the project while its reference existed");
+      assert.equal((yield* registry.get).projects[0]!.doneAt, doneAt);
+    }),
+    { failReadiness: "empty", registry: "done-start-failure" },
   );
 });
 

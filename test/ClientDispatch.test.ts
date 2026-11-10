@@ -1451,6 +1451,13 @@ test("INV-03: a first message its new session refuses before Pi sees it reads no
         [create.selectionId],
         "the refusal names the first message",
       );
+      const shown = browser.getState().session;
+      assert.ok(shown?.sessionId);
+      assert.deepEqual(
+        errors.map((m) => m._tag === "error" && [m.cwd, m.sessionId]),
+        [[shown.cwd, shown.sessionId]],
+        "and the session that was created, where the message belongs",
+      );
       assert.equal(browser.getState().pendingCreate?.outcome, "not_sent");
     }),
   );

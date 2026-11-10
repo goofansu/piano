@@ -70,7 +70,7 @@ export type SessionReadback =
   | { readonly _tag: "saved"; readonly cwd: string; readonly snapshot: Snapshot };
 /** A new session in a directory; an unregistered one is placed by `place` first. */
 export interface CreateSpec {
-  /** Internal durable claim made by ClientSessions, never accepted as a browser-supplied ID. */
+  /** The durable claim `begin` makes for this creation; `create` starts one without a claim. */
   readonly attempt?: CreationAttempt;
   readonly cwd: string;
   /** Initial project; it must be active, checked before anything is registered. */
@@ -140,6 +140,17 @@ export class SessionHosts extends Context.Service<
     readonly create: (
       spec: CreateSpec,
     ) => Effect.Effect<PiSession, PiSessionError | SessionNotCreated>;
+    /**
+     * Claim `spec.attempt`'s durable identity and start its creation under server ownership in one
+     * step. Answers the creation to await, or `undefined` when the identity was already claimed:
+     * the original owns it and its first input, so read it with `reconcileCreation`.
+     */
+    readonly begin: (
+      spec: CreateSpec & { readonly attempt: CreationAttempt },
+    ) => Effect.Effect<
+      Effect.Effect<PiSession, PiSessionError | SessionNotCreated> | undefined,
+      PiSessionError
+    >;
     /** Wait for an already running creation, then read its durable outcome. Never starts/resends. */
     readonly reconcileCreation: (
       id: string,
@@ -310,6 +321,11 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               if (stopping) return yield* rejected("Piano is shutting down.");
               if (ref.checkoutMissing) return yield* checkoutMissing;
               if (existing) return { session: existing.session, launched: false };
+              // Registering reopens a done project; a start that leaves nothing gives the mark back.
+              const doneAt =
+                creation?.projectId === undefined
+                  ? undefined
+                  : (yield* registry.get).projects.find((p) => p.id === creation.projectId)?.doneAt;
               if (creation)
                 yield* registry
                   .addSession(ref.cwd, spec.sessionId, spec.name, creation.projectId)
@@ -361,7 +377,13 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                         .pipe(Effect.orElseSucceed(() => undefined));
                       if (inspected && !inspected.file) {
                         yield* registry
-                          .removeSession(ref.cwd, spec.sessionId)
+                          .removeSession(
+                            ref.cwd,
+                            spec.sessionId,
+                            creation.projectId !== undefined && doneAt !== undefined
+                              ? { projectId: creation.projectId, doneAt }
+                              : undefined,
+                          )
                           .pipe(Effect.mapError((e) => rejected(e.detail)));
                         return yield* Effect.fail(refuse(error));
                       }
@@ -528,13 +550,21 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           projectId = parents[0]!.projectId;
         }
         const cwd = yield* destination({ ...spec, projectId });
+        const kept = (error: SessionNotCreated) =>
+          spec.worktree
+            ? new SessionNotCreated({
+                ...error,
+                detail: `${error.detail} The worktree at ${cwd} was created and kept. Retry in that worktree, not by creating the branch again.`,
+              })
+            : error;
         // Only a fresh server-generated ID may create a reference. Registration and initial
         // membership survive a disconnected requester, as acquisition is server-owned.
         const sessionId = spec.attempt?.sessionId ?? randomUUID();
+        // No reference or Pi exists yet: a destination that cannot be recorded starts nothing.
         if (spec.attempt)
           yield* registry
             .saveCreation({ ...spec.attempt, cwd })
-            .pipe(Effect.mapError((e) => rejected(e.detail)));
+            .pipe(Effect.mapError((e) => kept(notCreated(rejected(e.detail)))));
         starting.set(sessionId, { cwd, sessionId, working: false, starting: true });
         yield* announce;
         const { session } = yield* start(
@@ -542,14 +572,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           notCreated,
           { projectId },
         ).pipe(
-          Effect.mapError((error) =>
-            spec.worktree && error instanceof SessionNotCreated
-              ? new SessionNotCreated({
-                  ...error,
-                  detail: `${error.detail} The worktree at ${cwd} was created and kept. Retry in that worktree, not by creating the branch again.`,
-                })
-              : error,
-          ),
+          Effect.mapError((error) => (error instanceof SessionNotCreated ? kept(error) : error)),
           Effect.ensuring(
             Effect.sync(() => {
               starting.delete(sessionId);
@@ -565,31 +588,47 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
             .pipe(Effect.catchTag("RegistryError", (e) => Effect.logWarning(e.detail)));
         return session;
       });
-      const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
+      const create = Effect.fn("SessionHosts.create")(createOnce, owned);
+      const begin = Effect.fn("SessionHosts.begin")(function* (
+        spec: CreateSpec & { readonly attempt: CreationAttempt },
+      ) {
+        const { id } = spec.attempt;
         const done = yield* Deferred.make<void>();
-        if (spec.attempt) creating.set(spec.attempt.id, done);
-        return yield* createOnce(spec).pipe(
-          Effect.tapError((error) =>
-            spec.attempt
-              ? Effect.gen(function* () {
-                  const attempt = yield* registry.creationAttempt(spec.attempt!.id);
-                  if (attempt)
-                    yield* registry.saveCreation({
-                      ...attempt,
-                      state: error._tag === "SessionNotCreated" ? "failed" : "uncertain",
-                      detail: error.detail,
-                    });
-                }).pipe(Effect.catchTag("RegistryError", (e) => Effect.logWarning(e.detail)))
-              : Effect.void,
-          ),
-          Effect.ensuring(
-            Effect.gen(function* () {
-              yield* Deferred.succeed(done, undefined);
-              if (spec.attempt) creating.delete(spec.attempt.id);
-            }),
-          ),
+        // Owned here before the claim is written, so no read of this identity falls between the
+        // claim and its creation and takes a start under way for one it cannot confirm.
+        if (creating.has(id)) return undefined;
+        creating.set(id, done);
+        const settle = Effect.gen(function* () {
+          creating.delete(id);
+          yield* Deferred.succeed(done, undefined);
+        });
+        const claimed = yield* registry.claimCreation(spec.attempt).pipe(
+          Effect.mapError((e) => rejected(e.detail)),
+          Effect.onError(() => settle),
         );
-      }, owned);
+        if (!claimed) {
+          yield* settle;
+          return undefined;
+        }
+        // Forked with the claim: a requester that goes away after it cannot abandon the creation.
+        const fiber = yield* createOnce(spec).pipe(
+          Effect.tapError((error) =>
+            Effect.gen(function* () {
+              const attempt = yield* registry.creationAttempt(id);
+              if (attempt)
+                yield* registry.saveCreation({
+                  ...attempt,
+                  state: error._tag === "SessionNotCreated" ? "failed" : "uncertain",
+                  detail: error.detail,
+                });
+            }).pipe(Effect.catchTag("RegistryError", (e) => Effect.logWarning(e.detail))),
+          ),
+          Effect.ensuring(settle),
+          Effect.interruptible,
+          Effect.forkIn(layerScope),
+        );
+        return Fiber.join(fiber);
+      }, Effect.uninterruptible);
       const reconcileCreation = Effect.fn("SessionHosts.reconcileCreation")(function* (id: string) {
         const pending = creating.get(id);
         if (pending) yield* Deferred.await(pending);
@@ -718,6 +757,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         start: (spec) => start(spec, reopenFailed),
         commands,
         create,
+        begin,
         reconcileCreation,
         rename,
         release,

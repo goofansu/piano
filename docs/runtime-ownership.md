@@ -57,7 +57,8 @@ file splitting.
 ## Failed creation and reconnect
 
 A `create_session` claims its durable `attemptId` before checkout creation, session registration
-or Pi startup. Older clients use their creation's `selectionId` as that identity. The claim stores
+or Pi startup. A client that sends no `attemptId` makes no claim: its creation runs once and cannot
+be reconciled, because a `selectionId` lives only as long as its connection. The claim stores
 only a request digest, the server-generated session identity, destination and startup outcome in
 Piano's database: no prompt, attachments or competing transcript. Claims are retained after session
 removal, including confirmed failures; they are not an expiring retry queue.
@@ -71,11 +72,14 @@ Navigation still belongs to `selectionId`, so a slow reconciliation cannot repla
 
 While acquiring Pi, the sidebar shows **Starting**. On startup failure, SessionHosts removes only
 the fresh reference, under its ownership lock, when PiSessions observed OS exit after scope closure
-and strict history inspection conclusively found no file. An unreadable store/header, saved history,
+(or no child was ever spawned) and strict history inspection conclusively found no file. A done
+project that the start reopened gets its done mark back, unless it took another session since. An unreadable store/header, saved history,
 or unconfirmed teardown preserves the reference. A title or ordinary sidebar availability is never
 deletion evidence. Worktrees are always kept. Confirmed failure returns the first input to the New
 session draft with its options and attachments, with **Retry** (a new attempt) and **Dismiss**.
-An uncertain outcome offers **Check start**. No legacy sessions are migrated or cleaned up.
+A first input refused after its session was created returns to that session's draft instead, so
+sending it again cannot start a second session. A failure that arrives after the person moved to
+another session is announced with a toast. An uncertain outcome offers **Check start**. No legacy sessions are migrated or cleaned up.
 
 Creation claims survive restart; drafts remain browser-memory state, as other drafts do. Reloading
 or closing the tab does not persist attachment bytes or automatically retry an abandoned attempt.

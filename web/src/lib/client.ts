@@ -241,12 +241,18 @@ export function createClient({
     // Decide before applying: a frame the projection rejects must not notify either.
     const notifySession = m._tag === "session" && sessionDelivery(state, m) === "apply";
     const wasResync = state.resync;
+    // A creation's verdict arriving after the person moved on changes nothing on screen.
+    const elsewhere =
+      m._tag === "selection_rejected" &&
+      m.inputId !== undefined &&
+      m.selectionId !== state.selectionId;
     const notice =
       m._tag === "trust" ? trustNotice(state, focusedDirectory(state)?.cwd, m) : undefined;
     apply({ type: "server", message: m });
     if (notice) notify(notice, "info");
     if (!wasResync && state.resync && state.connected) reselect(state.session);
     if (m._tag === "error" || m._tag === "trust_failed") notify(m.message, "error");
+    else if (elsewhere) notify(`Could not start session: ${m.message}`, "error");
     else if (m._tag === "toast") notify(m.message, m.level);
     else if (m._tag === "action_result" && m.result._tag === "queue_restored" && m.result.stopError)
       notify(m.result.stopError, "error");

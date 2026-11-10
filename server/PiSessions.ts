@@ -939,7 +939,8 @@ export const PiSessionsLive: Layer.Layer<PiSessions, never, ChildProcessSpawner>
           Effect.catchTag("PiSessionError", (error) =>
             Effect.gen(function* () {
               yield* Scope.close(scope, Exit.void);
-              const stopped = child && (yield* child.stopped);
+              // No child means the preview owner or the spawn itself failed: no process exists.
+              const stopped = child ? yield* child.stopped : true;
               return yield* new PiSessionError({
                 ...error,
                 ...(stopped ? { startupStopped: true as const } : {}),

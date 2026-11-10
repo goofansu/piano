@@ -328,6 +328,43 @@ test("a message larger than a remote admits keeps its draft and says why", (t) =
   assert.match(h.notices[0]!, /too large/);
 });
 
+test("a first message refused after its session was created returns to that session's draft", (t) => {
+  const h = harness({ select: false });
+  t.after(h.stop);
+  const drafts = createDrafts();
+  t.after(drafts.follow(h.client));
+  drafts.setText(NEW_SESSION_DRAFT, "Start here");
+  drafts.submit(NEW_SESSION_DRAFT, (message, attemptId) =>
+    h.client.send({
+      ...newSessionCommand({ cwd: "/scratch", projectId: undefined }, message, {}),
+      attemptId,
+    }),
+  );
+  const { attemptId } = h.creations()[0]!;
+  h.selected();
+  h.last().events.message(
+    encodeServerMessage(
+      {
+        _tag: "error",
+        selectionId: h.client.getState().selectionId!,
+        inputId: attemptId,
+        cwd: "/scratch",
+        sessionId: "existing",
+        message: "Session is closing. Nothing was sent.",
+      },
+      2,
+    ),
+  );
+  const created = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
+  assert.equal(drafts.get(created).text, "Start here");
+  assert.equal(
+    drafts.get(NEW_SESSION_DRAFT).text,
+    "",
+    "sending it again from the New page would start a second session",
+  );
+  assert.equal(h.client.getState().view.kind, "session");
+});
+
 test("a new session's first message that is known not sent stays on the New page as a draft", (t) => {
   const h = harness({ select: false });
   t.after(h.stop);

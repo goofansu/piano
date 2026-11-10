@@ -1096,9 +1096,18 @@ test("INV-02: a durable claim interrupted before startup stays uncertain after r
   };
   await run(
     Effect.gen(function* () {
-      const { sessions } = yield* client;
-      yield* sessions.create(request); // Claim received; its work is never run before shutdown.
-      assert.deepEqual(yield* (yield* SessionHosts).list, []);
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      // The server stops right after writing the claim, before its creation does anything.
+      const { sessions } = yield* client.pipe(
+        Effect.provideService(SessionHosts, {
+          ...hosts,
+          begin: (spec) =>
+            registry.claimCreation(spec.attempt).pipe(Effect.orDie, Effect.as(Effect.never)),
+        }),
+      );
+      yield* sessions.create(request);
+      assert.deepEqual(yield* hosts.list, []);
     }),
     path,
   );
@@ -1114,6 +1123,49 @@ test("INV-02: a durable claim interrupted before startup stays uncertain after r
       assert.equal((yield* (yield* Registry).creationAttempt("abandoned"))?.state, "starting");
     }),
     path,
+  );
+});
+
+test("INV-02: a duplicate that arrives before the original's work runs waits for it and attaches", async () => {
+  await run(
+    Effect.gen(function* () {
+      const a = yield* client,
+        b = yield* client;
+      const request = { cwd, options: {}, text: "one input", attemptId: "early-duplicate" };
+      const first = yield* a.sessions.create({ ...request, selectionId: "first" });
+      // The original is claimed but its client has not run its work yet.
+      yield* yield* b.sessions.create({ ...request, selectionId: "second" });
+      const [ref] = (yield* (yield* Registry).get).sessions;
+      assert.ok(ref, "the claimed creation started without waiting for its requester");
+      assert.deepEqual(
+        b.sent.filter((m) => m._tag === "selected" || m._tag === "error").map((m) => m._tag),
+        ["selected"],
+        "the duplicate reads the start under way, not an unconfirmed one",
+      );
+      assert.ok(b.sent.some((m) => m._tag === "selected" && m.sessionId === ref.sessionId));
+      yield* first;
+      assert.equal((yield* (yield* SessionHosts).list).length, 1);
+    }),
+  );
+});
+
+test("a creation that names no attempt makes no lasting claim on its selection ID", async () => {
+  await run(
+    Effect.gen(function* () {
+      const request = { cwd, options: {}, text: "one input", selectionId: "s1" };
+      // A scripted client reuses the same selection ID on each connection.
+      for (const _ of [1, 2]) {
+        const { sessions, sent } = yield* client;
+        yield* yield* sessions.create(request);
+        assert.ok(sent.some((m) => m._tag === "selected" && m.hosted));
+      }
+      const refs = (yield* (yield* Registry).get).sessions;
+      assert.equal(refs.length, 2, "each connection's creation ran");
+      for (const ref of refs) {
+        const session = (yield* (yield* SessionHosts).get(cwd, ref.sessionId))!;
+        assert.equal(yield* prompted(session), true);
+      }
+    }),
   );
 });
 
@@ -1238,6 +1290,7 @@ test("INV-01/02/07: an interrupted creation keeps its project membership and sen
       });
       const creating = yield* (yield* sessions.create({
         selectionId: "new",
+        attemptId: "interrupted",
         cwd,
         projectId: "launch",
         options: {},
@@ -1273,6 +1326,7 @@ test("INV-01/02/07: an interrupted creation keeps its project membership and sen
       const { sessions, sent } = yield* client;
       yield* yield* sessions.create({
         selectionId: "new",
+        attemptId: "interrupted",
         cwd,
         projectId: "launch",
         options: {},
