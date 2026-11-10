@@ -8,7 +8,6 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -16,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { configuredOrigins, sessionLinkOrigin } from "../server/OriginPolicy.ts";
 import { defaultPiCli } from "../server/PiCli.ts";
 import { sessionEndpoint, sessionEnvironment } from "../server/SessionEndpoint.ts";
+import { freePort } from "./fixtures/ports.ts";
 
 test("Piano's extensions are resolved from the installation, never from the session's cwd", () => {
   const installed = (name: string) =>
@@ -118,13 +118,7 @@ test(
   },
   async () => {
     const root = mkdtempSync(join(tmpdir(), "piano-launch-"));
-    const reservation = createServer();
-    reservation.listen(0, "127.0.0.1");
-    await once(reservation, "listening");
-    const address = reservation.address();
-    assert.ok(address && typeof address !== "string");
-    const port = address.port;
-    await new Promise<void>((resolve) => reservation.close(() => resolve()));
+    const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const proxy = "https://piano.example";
 

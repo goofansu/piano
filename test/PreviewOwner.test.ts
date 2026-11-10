@@ -3,7 +3,6 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, get, type Server } from "node:http";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -14,6 +13,7 @@ import { PreviewOwner } from "../scripts/PreviewOwner.ts";
 import { WARMUP_SECONDS } from "../scripts/PreviewReadiness.ts";
 import { projectPreview } from "../server/PreviewProjection.ts";
 import type { SessionPreview } from "../shared/wire.ts";
+import { freePort, freePorts } from "./fixtures/ports.ts";
 import { type FakeHost, fakeAdapter, type Platform } from "./fixtures/preview-host.ts";
 
 for (const dead of [true, false])
@@ -649,7 +649,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
   test(`[${platform}] another workspace's start waiting for readiness never stalls a warming app's checks`, async (t) => {
     if (foreign) return t.skip("needs native process ownership");
     const f = await fixture(t);
-    const [port, silent] = [await freePort(), await freePort()];
+    const [port, silent] = await freePorts(2);
     f.config.ports = [port, silent];
     let warm = false;
     const server = createHttpServer((_request, response) => {
@@ -802,16 +802,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     await new Promise((resolve) => setTimeout(resolve, 2500));
     assert.equal(failures, last, "checking stopped after the warm-up window");
   });
-}
-
-async function freePort() {
-  const server = createServer();
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const address = server.address();
-  assert.ok(address && typeof address !== "string");
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  return address.port;
 }
 
 function statusAt(port: number) {

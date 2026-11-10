@@ -26,7 +26,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { createServer as createSocketServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -37,6 +36,7 @@ import {
   encodeClientMessage,
   type ServerMessage,
 } from "../../shared/wire.ts";
+import { freePort } from "./ports.ts";
 import { seedRegistry } from "./registry.ts";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -129,16 +129,6 @@ export interface RealPiDispatchOptions {
   /** A scratch Vite origin, when a browser drives the fixture instead of only the wire client. */
   readonly browserOrigin?: string;
 }
-
-const freePort = async () => {
-  const server = createSocketServer();
-  await new Promise<void>((resolve, reject) =>
-    server.once("error", reject).listen(0, "127.0.0.1", resolve),
-  );
-  const { port } = server.address() as { port: number };
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  return port;
-};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

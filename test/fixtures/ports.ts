@@ -21,3 +21,9 @@ export async function freePorts(count: number): Promise<number[]> {
     );
   }
 }
+
+/** Select one free loopback port. Take ports for one journey from a single `freePorts` call. */
+export async function freePort(): Promise<number> {
+  const [port] = await freePorts(1);
+  return port;
+}

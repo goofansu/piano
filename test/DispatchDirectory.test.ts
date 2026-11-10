@@ -8,7 +8,6 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
-import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -17,16 +16,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import pianoDispatch from "../extensions/piano-dispatch/index.ts";
 import type { SessionStatus, StartArguments, StartToolResult } from "../shared/dispatch.ts";
 import type { ClientMessage } from "../shared/wire.ts";
-
-const freePort = async () => {
-  const reservation = createServer();
-  reservation.listen(0, "127.0.0.1");
-  await once(reservation, "listening");
-  const address = reservation.address();
-  assert.ok(address && typeof address !== "string");
-  await new Promise<void>((resolve) => reservation.close(() => resolve()));
-  return address.port;
-};
+import { freePort } from "./fixtures/ports.ts";
 
 test(
   "dispatch inherits current project membership independently of its checkout, with an opt-out",

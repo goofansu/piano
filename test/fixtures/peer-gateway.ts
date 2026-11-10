@@ -8,6 +8,7 @@ import { join } from "node:path";
 import type { TestContext } from "node:test";
 import { WebSocket, WebSocketServer } from "@effect/platform-node/NodeWS";
 import { emptySnapshot } from "../../shared/sessionProjection.ts";
+import { freePort } from "./ports.ts";
 import { seedRegistry } from "./registry.ts";
 
 export const identity = {
@@ -313,13 +314,8 @@ export async function gatewayFixture(
     join(root, "peer.json"),
     JSON.stringify(options.peers ? { peers: peers.map((peer) => peer.config) } : config),
   );
-  const reservation = createServer();
-  reservation.listen(0, "127.0.0.1");
-  await once(reservation, "listening");
-  const local = reservation.address();
-  assert.ok(local && typeof local !== "string");
-  await new Promise<void>((resolve) => reservation.close(() => resolve()));
-  const base = `http://127.0.0.1:${local.port}`;
+  const port = await freePort();
+  const base = `http://127.0.0.1:${port}`;
   const child = spawn(process.execPath, ["server/main.ts"], {
     cwd: new URL("../..", import.meta.url),
     env: {
@@ -327,7 +323,7 @@ export async function gatewayFixture(
       HOME: join(root, "home"),
       PIANO_TEST_HTTP_LOOPBACK_PEERS: "1",
       HOST: "127.0.0.1",
-      PORT: String(local.port),
+      PORT: String(port),
       PIANO_ALLOWED_ORIGINS: base,
       PIANO_DB_PATH: database,
       PIANO_PEER_CONFIG: join(root, "peer.json"),
