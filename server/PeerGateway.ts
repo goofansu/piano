@@ -12,6 +12,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { type RemoteRequest, RemoteRequests } from "../shared/http.ts";
 import { PEER_FRAME_BYTES } from "../shared/machine.ts";
+import { URL_ID } from "../shared/urlId.ts";
 import {
   ClientMessageJson,
   CloseCode,
@@ -335,8 +336,6 @@ const json = (body: unknown, status = 200) =>
     headers: { "cache-control": "no-store" },
   });
 
-/** The IDs a URL may carry, as the remote's own router reads them. */
-const ID = /^[a-zA-Z0-9_-]{1,200}$/;
 const remoteRequests = new Map<string, RemoteRequest>(
   RemoteRequests.map((request) => [request.browser.path, request]),
 );
@@ -386,7 +385,7 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       (query.length === 0
         ? url.search !== ""
         : [...url.searchParams.keys()].length !== query.length ||
-          query.some(([, value]) => !ID.test(value)))
+          query.some(([, value]) => !URL_ID.test(value)))
     )
       return invalid;
     let body: string | undefined;

@@ -9,6 +9,8 @@ import {
   MAX_ATTACHMENT_BYTES,
   MAX_IMAGE_BYTES,
 } from "./attachments.ts";
+import { IMAGE_PREVIEW_BYTES, IMAGE_PREVIEW_HASH } from "./imagePreviews.ts";
+import { URL_ID } from "./urlId.ts";
 
 export const remoteImageLimits = {
   manifestBytes: 16 * 1024,
@@ -17,14 +19,14 @@ export const remoteImageLimits = {
   ttlMs: 10 * 60_000,
   idleMs: 30_000,
   totalMs: 180_000,
-  previewBytes: 64 * 1024 * 1024,
+  previewBytes: IMAGE_PREVIEW_BYTES,
   responseBytes: 1024,
 } as const;
 export const IMAGE_UPLOAD_PATH = "/api/peer/images";
 export const IMAGE_CANCEL_PATH = "/api/peer/images/cancel";
 export const IMAGE_PREVIEW_PATH = "/api/peer/image-preview";
 export const IMAGE_UPLOAD_TYPE = "application/vnd.piano.images";
-const ID = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,200}$/));
+const ID = Schema.String.check(Schema.isPattern(URL_ID));
 export const PreparedImages = Schema.Struct({ id: ID, draftId: Schema.optional(ID) });
 export type PreparedImages = typeof PreparedImages.Type;
 export const ImageTarget = Schema.Union([
@@ -54,9 +56,7 @@ export const previewQuery = (search: URLSearchParams) => {
   const workspaceId = search.get("workspaceId") ?? "";
   const sessionId = search.get("sessionId") ?? "";
   const hash = search.get("hash") ?? "";
-  return /^[a-zA-Z0-9_-]{1,200}$/.test(workspaceId) &&
-    /^[a-zA-Z0-9_-]{1,200}$/.test(sessionId) &&
-    /^[a-f0-9]{64}$/.test(hash)
+  return URL_ID.test(workspaceId) && URL_ID.test(sessionId) && IMAGE_PREVIEW_HASH.test(hash)
     ? { workspaceId, sessionId, hash }
     : undefined;
 };

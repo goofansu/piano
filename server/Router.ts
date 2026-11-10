@@ -9,6 +9,11 @@ import {
   type SignInEndpoints,
   type Upload,
 } from "../shared/http.ts";
+import {
+  IMAGE_PREVIEW_HEADERS,
+  IMAGE_PREVIEW_ROUTE,
+  imagePreviewHash,
+} from "../shared/imagePreviews.ts";
 import { machineList } from "../shared/machine.ts";
 import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
@@ -510,18 +515,15 @@ export const AppRouter = HttpRouter.use((router) =>
     // Image bytes, not JSON: outside the endpoint table. The ID is a content hash, never a path.
     yield* router.add(
       "GET",
-      "/api/image-previews/:id",
+      IMAGE_PREVIEW_ROUTE,
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const id = new URL(request.url, "http://localhost").pathname.split("/").pop() ?? "";
-        const image = /^[a-f0-9]{64}$/.test(id) ? getImagePreview(id) : undefined;
+        const hash = imagePreviewHash(new URL(request.url, "http://localhost").pathname);
+        const image = hash ? getImagePreview(hash) : undefined;
         return image
           ? HttpServerResponse.uint8Array(image.bytes, {
               contentType: image.mimeType,
-              headers: {
-                "cache-control": "private, no-store",
-                "x-content-type-options": "nosniff",
-              },
+              headers: IMAGE_PREVIEW_HEADERS,
             })
           : HttpServerResponse.empty({ status: 404 });
       }),
