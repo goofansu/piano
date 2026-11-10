@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { base64Bytes } from "../../../shared/attachments.ts";
+import { imagePreviewHash } from "../../../shared/imagePreviews.ts";
 import { isLocalId } from "../../../shared/machine.ts";
 import {
   IMAGE_CANCEL_PATH,
@@ -11,6 +12,7 @@ import {
   PreparedImages,
   remoteImageLimits,
 } from "../../../shared/remoteImages.ts";
+import { URL_ID } from "../../../shared/urlId.ts";
 import type { Attachment, ClientCommand } from "../../../shared/wire.ts";
 import { peerApiPath } from "./machine.ts";
 
@@ -118,13 +120,8 @@ export function remoteImageUrl(
   target?: { workspaceId: string; sessionId: string },
 ) {
   if (isLocalId(machineId)) return url;
-  const match = /^\/api\/image-previews\/([a-f0-9]{64})$/.exec(url);
-  if (
-    !match ||
-    !target ||
-    !/^[a-zA-Z0-9_-]{1,200}$/.test(target.workspaceId) ||
-    !/^[a-zA-Z0-9_-]{1,200}$/.test(target.sessionId)
-  )
+  const hash = imagePreviewHash(url);
+  if (!hash || !target || !URL_ID.test(target.workspaceId) || !URL_ID.test(target.sessionId))
     return "";
-  return `${peerApiPath(machineId, IMAGE_PREVIEW_PATH)}?${new URLSearchParams({ ...target, hash: match[1] })}`;
+  return `${peerApiPath(machineId, IMAGE_PREVIEW_PATH)}?${new URLSearchParams({ ...target, hash })}`;
 }

@@ -1,6 +1,7 @@
 /** The owning peer's image HTTP boundary. Global Host/Origin policy runs before these routes. */
 import { Effect, Schema, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { IMAGE_PREVIEW_HEADERS } from "../shared/imagePreviews.ts";
 import {
   IMAGE_CANCEL_PATH,
   IMAGE_PREVIEW_PATH,
@@ -27,10 +28,6 @@ export const imageJson = (body: unknown, status = 200) =>
     contentType: "application/json",
     headers: { "cache-control": "no-store" },
   });
-export const imageHeaders = {
-  "cache-control": "private, no-store",
-  "x-content-type-options": "nosniff",
-};
 
 export const addPeerImageRoutes = Effect.fn("PeerImages.routes")(function* (
   router: HttpRouter.HttpRouter,
@@ -83,7 +80,7 @@ export const addPeerImageRoutes = Effect.fn("PeerImages.routes")(function* (
           evaluate: () => stream,
           onError: () => imageFailure("Image read interrupted.", 408),
         }),
-        { contentType: image.mimeType, headers: imageHeaders },
+        { contentType: image.mimeType, headers: IMAGE_PREVIEW_HEADERS },
       );
     }
     if (request.method !== "POST") return imageJson({ error: "Unsupported image method." }, 405);

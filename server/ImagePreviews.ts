@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
 import { imageType } from "../shared/attachments.ts";
+import {
+  IMAGE_PREVIEW_BYTES as limit,
+  imagePreviewAddress,
+  imagePreviewHash,
+} from "../shared/imagePreviews.ts";
 import { type RenderMsg, sessionKey } from "../shared/wire.ts";
 
 /** Bounded, disposable display cache. Pi remains the only durable image store.
  * Reprojecting history repopulates it; image bytes never inflate WS snapshots.
  */
-const limit = 64 * 1024 * 1024;
 export interface ImagePreview {
   readonly id: string;
   readonly bytes: Uint8Array;
@@ -31,7 +35,7 @@ export function imagePreview(data: string, mimeType: string): string | undefined
   if (!bytes.length || bytes.length > limit || imageType(bytes) !== mimeType) return undefined;
   const id = createHash("sha256").update(bytes).digest("hex");
   retainImagePreview({ id, bytes, mimeType });
-  return `/api/image-previews/${id}`;
+  return imagePreviewAddress(id);
 }
 
 /** Already validated/hashed by this process's projector, possibly in its history worker. */
@@ -58,8 +62,8 @@ export function bindImagePreviews(cwd: string, sessionId: string, messages: read
   const key = sessionKey(cwd, sessionId);
   for (const message of messages)
     for (const attachment of message.attachments ?? []) {
-      const match = /^\/api\/image-previews\/([a-f0-9]{64})$/.exec(attachment.url);
-      const image = match && previews.get(match[1]);
+      const hash = imagePreviewHash(attachment.url);
+      const image = hash && previews.get(hash);
       if (!image || image.sessions.has(key)) continue;
       // Bound metadata globally, not per hash: many tiny images must not multiply provenance.
       if (memberships.size >= membershipLimit) {

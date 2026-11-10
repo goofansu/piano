@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   bindImagePreviews,
@@ -6,6 +7,8 @@ import {
   imagePreview,
   sessionImagePreview,
 } from "../server/ImagePreviews.ts";
+import { previewQuery } from "../shared/remoteImages.ts";
+import { remoteImageUrl } from "../web/src/lib/remoteImages.ts";
 
 // A byte-only cache cap cannot bound provenance for many small images and sessions.
 test("disposable preview bytes and provenance are globally bounded and can be reprojected", () => {
@@ -47,4 +50,17 @@ test("disposable preview bytes and provenance are globally bounded and can be re
   );
   bindImagePreviews("/same", "session-0", messages);
   assert.ok(sessionImagePreview("/same", "session-0", id));
+});
+
+// Cross-machine: the address one Piano projects is the one a browser and the peer accept, or a
+// remote session's image renders blank.
+test("a projected preview address reaches the owning peer as the same hash", () => {
+  const bytes = Buffer.from([255, 216, 255, 1]);
+  const url = imagePreview(bytes.toString("base64"), "image/jpeg")!;
+  const target = { workspaceId: "workspace-1", sessionId: "session-1" };
+  const remote = new URL(remoteImageUrl("eng-1", url, target), "http://localhost");
+  assert.deepEqual(previewQuery(remote.searchParams), {
+    ...target,
+    hash: createHash("sha256").update(bytes).digest("hex"),
+  });
 });

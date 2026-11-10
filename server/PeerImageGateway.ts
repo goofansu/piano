@@ -2,6 +2,7 @@
 import { Effect, Schema, Stream } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { IMAGE_TYPES } from "../shared/attachments.ts";
+import { IMAGE_PREVIEW_HEADERS } from "../shared/imagePreviews.ts";
 import {
   IMAGE_CANCEL_PATH,
   IMAGE_PREVIEW_PATH,
@@ -19,7 +20,7 @@ import {
   readImageResponse,
 } from "./ImageTransfer.ts";
 import type { PeerConfig } from "./PeerConfig.ts";
-import { imageHeaders, imageJson } from "./PeerImages.ts";
+import { imageJson } from "./PeerImages.ts";
 
 export const peerImagePaths = new Set([IMAGE_UPLOAD_PATH, IMAGE_CANCEL_PATH, IMAGE_PREVIEW_PATH]);
 
@@ -136,7 +137,7 @@ export function makePeerImageRelay() {
               evaluate: () => stream,
               onError: () => imageFailure("Remote image interrupted.", 502),
             }),
-            { contentType: mimeType, headers: imageHeaders },
+            { contentType: mimeType, headers: IMAGE_PREVIEW_HEADERS },
           );
         }
         const text = await readImageResponse(response, combined).catch(() => {
