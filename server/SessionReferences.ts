@@ -59,7 +59,7 @@ export class SessionReferences extends Context.Service<
     readonly resolve: (
       cwd: string,
       sessionId: string,
-      options?: { readonly create?: boolean },
+      options?: { readonly create?: boolean; readonly confirmAbsent?: boolean },
     ) => Effect.Effect<SessionLocation, PiSessionError>;
     /**
      * Why each registered session could not be resolved to history it can continue from: no Pi
@@ -113,7 +113,7 @@ export const SessionReferencesLive = Layer.effect(
     const resolve = Effect.fn("SessionReferences.resolve")(function* (
       cwd: string,
       sessionId: string,
-      options?: { readonly create?: boolean },
+      options?: { readonly create?: boolean; readonly confirmAbsent?: boolean },
     ): Effect.fn.Return<SessionLocation, PiSessionError> {
       const create = options?.create ?? false;
       const { physical } = yield* checkout(cwd);
@@ -140,7 +140,7 @@ export const SessionReferencesLive = Layer.effect(
       if (entry && create) return yield* rejected("This session ID is already registered.");
       const owner = entry?.cwd ?? directoryPath(cwd);
       const at = yield* observe(owner);
-      const located = yield* history.locate(sessionId, [...at.spellings, cwd, physical]);
+      const located = yield* history.locate(sessionId, [...at.spellings, cwd, physical], options);
       if (located._tag === "conflict")
         return yield* rejected(
           `Conflicting Pi files for checkout aliases (${owner}, ${physical}). Piano has not merged or moved history. Resolve the conflicting session ID before starting it.`,

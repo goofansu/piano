@@ -43,7 +43,7 @@ const submissionOf = (frame: ServerMessage): PromptSubmission | undefined => {
 export const inputVerdictOf = (
   frame: ServerMessage,
 ): (InputVerdict & { readonly inputId: string }) | undefined => {
-  if (frame._tag === "error")
+  if (frame._tag === "error" || frame._tag === "selection_rejected")
     return frame.inputId === undefined
       ? undefined
       : { inputId: frame.inputId, outcome: "not_sent", detail: frame.message };

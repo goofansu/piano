@@ -54,6 +54,33 @@ rather than a bag of functions, so the boundary has one owner and readback tests
 one. PiRecords is not split by size. These are explicit ownership choices, not deferred mechanical
 file splitting.
 
+## Failed creation and reconnect
+
+A `create_session` claims its durable `attemptId` before checkout creation, session registration
+or Pi startup. Older clients use their creation's `selectionId` as that identity. The claim stores
+only a request digest, the server-generated session identity, destination and startup outcome in
+Piano's database: no prompt, attachments or competing transcript. Claims are retained after session
+removal, including confirmed failures; they are not an expiring retry queue.
+
+Only the original claim can create and send the first input, after its attachment completes.
+Duplicates observe that attempt, even after a server restart; changed input under the same identity
+is refused without replay. `select` with `attemptId` reads the original outcome (waiting for a
+currently owned startup), never starts Pi or resends input. Browser and dispatch reconnect use that
+read when the session ID was not received. Missed dispatch observations remain unattributable.
+Navigation still belongs to `selectionId`, so a slow reconciliation cannot replace a newer selection.
+
+While acquiring Pi, the sidebar shows **Starting**. On startup failure, SessionHosts removes only
+the fresh reference, under its ownership lock, when PiSessions observed OS exit after scope closure
+and strict history inspection conclusively found no file. An unreadable store/header, saved history,
+or unconfirmed teardown preserves the reference. A title or ordinary sidebar availability is never
+deletion evidence. Worktrees are always kept. Confirmed failure returns the first input to the New
+session draft with its options and attachments, with **Retry** (a new attempt) and **Dismiss**.
+An uncertain outcome offers **Check start**. No legacy sessions are migrated or cleaned up.
+
+Creation claims survive restart; drafts remain browser-memory state, as other drafts do. Reloading
+or closing the tab does not persist attachment bytes or automatically retry an abandoned attempt.
+The caller must retain the attempt identity to reconcile an unnamed start after losing that memory.
+
 ## Publication mutation contract (PIN-28)
 
 `SessionPublication.transaction(use)` supplies the only capability exposing `publish` and

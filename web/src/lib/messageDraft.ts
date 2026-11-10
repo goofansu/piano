@@ -354,7 +354,7 @@ export function createDrafts(): Drafts {
       if (!key || !isSendable(draft)) return false;
       const inputId = `input-${prefix}-${++inputs}`;
       if (deliver(draftMessage(draft), inputId) === "not-sent") return false;
-      if (key !== NEW_SESSION_DRAFT) unconfirmed.set(inputId, { key, draft });
+      unconfirmed.set(inputId, { key, draft });
       update(key, () => EMPTY_DRAFT);
       return true;
     },
@@ -371,8 +371,7 @@ export function createDrafts(): Drafts {
       } catch (e) {
         error = e instanceof Error ? e.message : "Could not upload images. Try again.";
       }
-      if (disposition !== "not-sent" && key !== NEW_SESSION_DRAFT)
-        unconfirmed.set(inputId, { key, draft });
+      if (disposition !== "not-sent") unconfirmed.set(inputId, { key, draft });
       update(key, (now) => {
         const remaining = { ...now, preparing: undefined, prepareError: error };
         return disposition === "not-sent" ? restore(draft, remaining) : remaining;

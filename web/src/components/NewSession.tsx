@@ -9,6 +9,7 @@ import {
   TargetIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
+import { Banner } from "@/components/Banner";
 import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
 import { ComposerSend, DraftEditor, useDraftEditor } from "@/components/DraftEditor";
@@ -56,7 +57,7 @@ import { useWorktreeOperation } from "@/lib/useWorktreeOperation";
 import type { WorktreeOperationOptions } from "@/lib/worktreeOperation";
 import type { AppState } from "@/store";
 
-type WorktreeClient = WorktreeOperationOptions["client"] & Pick<Client, "captureSend">;
+type WorktreeClient = WorktreeOperationOptions["client"] & Pick<Client, "captureSend" | "dispatch">;
 
 interface Props {
   state: AppState;
@@ -137,7 +138,15 @@ export function NewSessionComposer({
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
-  const choice = useModelChoice(models, { kind: "new", cwd });
+  const choice = useModelChoice(
+    models,
+    { kind: "new", cwd },
+    undefined,
+    true,
+    state.pendingCreate?.outcome === "rejected" && state.pendingCreate.cwd === cwd
+      ? state.pendingCreate.options
+      : undefined,
+  );
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
   const ready =
     !editor.preparing &&
@@ -158,7 +167,10 @@ export function NewSessionComposer({
     const join = findProject(state, projectId)?.id;
     const start = choice.start;
     imageSend.send(
-      (message) => newSessionCommand({ cwd, projectId: join }, message, start),
+      (message, attemptId) => ({
+        ...newSessionCommand({ cwd, projectId: join }, message, start),
+        attemptId,
+      }),
       (consumed) => {
         if (consumed) choice.consume();
       },
@@ -190,6 +202,28 @@ export function NewSessionComposer({
             <ProjectSelect state={state} value={projectId} onChange={onProjectChange} />
           )}
         </div>
+        {state.selectionFailure && state.pendingCreate?.outcome === "rejected" && (
+          <Banner
+            variant="destructive"
+            title="Could not start session"
+            action={
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => client.dispatch({ type: "dismiss_creation" })}
+                >
+                  Dismiss
+                </Button>
+                <Button variant="outline" size="sm" disabled={!ready} onClick={submit}>
+                  Retry
+                </Button>
+              </>
+            }
+          >
+            {state.selectionFailure.message}
+          </Banner>
+        )}
         <DraftEditor
           editor={editor}
           cancelUpload={imageSend.cancel}

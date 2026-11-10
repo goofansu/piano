@@ -133,8 +133,32 @@ export function sessionNotices(state: AppState, _messagesOnly: boolean): Session
   const answerNotice = resolution && answerReceipt(resolution).notice;
   if (answerNotice)
     notices.push(notice("dialog-resolution", "status", answerNotice.tone, answerNotice.title));
-  if (receipt?.text)
-    notices.push(notice("submission", "status", receipt.tone, receipt.text, [receipt.detail]));
+  if (receipt?.text) {
+    const pending = state.pendingCreate;
+    const reconcile = pending?.outcome === "uncertain" && !t?.sessionId;
+    notices.push(
+      notice(
+        "submission",
+        reconcile ? "banner" : "status",
+        receipt.tone,
+        receipt.text,
+        [receipt.detail],
+        reconcile
+          ? {
+              action: {
+                label: "Check start",
+                command: {
+                  _tag: "select",
+                  cwd: pending.cwd,
+                  sessionId: null,
+                  attemptId: pending.attemptId,
+                },
+              },
+            }
+          : {},
+      ),
+    );
+  }
   const extension = t?.state.extension;
   // Pi reports an extension block for every session; only one that says something is shown.
   if (

@@ -98,7 +98,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 14);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 15);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -479,7 +479,7 @@ for (const version of [4, 5, 6]) {
     assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 14);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 15);
       assert.deepEqual(
         stored
           .prepare(

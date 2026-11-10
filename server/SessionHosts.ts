@@ -7,7 +7,18 @@
  */
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { Context, Data, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
+import {
+  Context,
+  Data,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  PubSub,
+  Scope,
+  Semaphore,
+  Stream,
+} from "effect";
 import {
   type HostInfo,
   type SessionClosure,
@@ -18,6 +29,7 @@ import {
   sessionKey,
   type WorktreeRequest,
 } from "../shared/wire.ts";
+import type { CreationAttempt } from "./CreationAttempt.ts";
 import { Directories } from "./Directories.ts";
 import { FolderWorktrees, FolderWorktreesLive } from "./FolderWorktrees.ts";
 import { directoryPath } from "./PiEnv.ts";
@@ -58,6 +70,8 @@ export type SessionReadback =
   | { readonly _tag: "saved"; readonly cwd: string; readonly snapshot: Snapshot };
 /** A new session in a directory; an unregistered one is placed by `place` first. */
 export interface CreateSpec {
+  /** Internal durable claim made by ClientSessions, never accepted as a browser-supplied ID. */
+  readonly attempt?: CreationAttempt;
   readonly cwd: string;
   /** Initial project; it must be active, checked before anything is registered. */
   readonly projectId?: string;
@@ -79,8 +93,8 @@ interface Resolved {
   readonly host: SessionHost | undefined;
 }
 /**
- * A creation that failed before any session was registered or Pi started, so its first message
- * was never sent. `detail` is written for people; `checkoutUnconfirmed` when Worktrunk ran and
+ * A creation refused before startup, or a failed startup whose child is confirmed stopped and
+ * whose fresh reference was removed after conclusive absence of history. No first input was sent. `detail` is written for people; `checkoutUnconfirmed` when Worktrunk ran and
  * may have left a checkout behind.
  */
 export class SessionNotCreated extends Data.TaggedError("SessionNotCreated")<{
@@ -119,12 +133,17 @@ export class SessionHosts extends Context.Service<
     /**
      * Start a new session under a fresh server-generated ID. The project is checked before the
      * folder is registered; the folder, reference and project are written before Pi starts.
-     * Every failure before then is `SessionNotCreated`; a PiSessionError comes once a reference
-     * may exist and Pi may have saved history.
+     * `SessionNotCreated` means no reference remains and no first input was sent. Startup removes
+     * only a fresh reference with confirmed child exit and conclusively absent history; all other
+     * failures keep their evidence and remain PiSessionError.
      */
     readonly create: (
       spec: CreateSpec,
     ) => Effect.Effect<PiSession, PiSessionError | SessionNotCreated>;
+    /** Wait for an already running creation, then read its durable outcome. Never starts/resends. */
+    readonly reconcileCreation: (
+      id: string,
+    ) => Effect.Effect<CreationAttempt | undefined, PiSessionError>;
     /** Pi owns the name, so a stopped session is started for it; returns the mirrored title. */
     readonly rename: (
       cwd: string,
@@ -174,6 +193,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         PiSessions | Registry | SessionReferences | Webhooks
       >();
       const hosts = new Map<string, SessionHost>();
+      const starting = new Map<string, HostInfo>();
+      const creating = new Map<string, Deferred.Deferred<void>>();
       const locks = new Map<string, Semaphore.Semaphore>();
       // Runtime diagnostics, not a competing history. Retained across child reopen,
       // not across server restart; no execution records are written into registry.
@@ -210,7 +231,9 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         );
 
       const list = Effect.gen(function* () {
-        const out: HostInfo[] = [];
+        const out: HostInfo[] = [...starting]
+          .filter(([key]) => !hosts.has(key))
+          .map(([, info]) => info);
         for (const h of hosts.values()) {
           const state = yield* h.session.state;
           // A disappearing/closing child is not an idle (successfully settled) host.
@@ -327,6 +350,24 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                 // Pi may have saved history before readiness failed. makeSessionHost has
                 // closed the failed child's scope before the failure reaches here.
                 Effect.onError(() => invalidateHistory),
+                Effect.catchTag("PiSessionError", (error) =>
+                  Effect.gen(function* () {
+                    if (creation && error.startupStopped) {
+                      // Only this fresh reference, under its ownership lock. A display projection,
+                      // unreadable header or failed inspection is never proof that history is absent.
+                      const inspected = yield* references
+                        .resolve(ref.cwd, spec.sessionId, { confirmAbsent: true })
+                        .pipe(Effect.orElseSucceed(() => undefined));
+                      if (inspected && !inspected.file) {
+                        yield* registry
+                          .removeSession(ref.cwd, spec.sessionId)
+                          .pipe(Effect.mapError((e) => rejected(e.detail)));
+                        return yield* Effect.fail(refuse(error));
+                      }
+                    }
+                    return yield* error;
+                  }),
+                ),
               );
               hosts.set(key, host);
               yield* invalidateHistory;
@@ -338,7 +379,9 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               return { session: host.session, launched: true };
             }),
           { create: creation !== undefined },
-        ).pipe(Effect.mapError((e) => (registered ? e : refuse(e))));
+        ).pipe(
+          Effect.mapError((e) => (!registered && e instanceof PiSessionError ? refuse(e) : e)),
+        );
       };
       const open = (spec: OpenSpec) =>
         start(spec, reopenFailed).pipe(Effect.map(({ session }) => session));
@@ -462,43 +505,102 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         ),
       );
 
-      const create = Effect.fn("SessionHosts.create")(
-        function* (spec: CreateSpec) {
-          const { model, thinkingLevel, name, dispatchedFrom } = spec.options;
-          let projectId = spec.projectId;
-          // Snapshot Piano-owned membership before any checkout effects, never from cwd or Pi’s
-          // launch environment. A saved/archived parent is enough; its history need not be readable.
-          if (
-            projectId === undefined &&
-            spec.inheritProject !== false &&
-            dispatchedFrom !== undefined
-          ) {
-            const parents = (yield* registry.get).sessions.filter(
-              (session) => session.sessionId === dispatchedFrom,
-            );
-            if (parents.length !== 1)
-              return yield* new SessionNotCreated({
-                detail:
-                  "Cannot inherit project: parent session is unlisted or ambiguous. Choose a listed parent or set inheritProject to false to start ungrouped.",
-                checkoutUnconfirmed: false,
-              });
-            projectId = parents[0]!.projectId;
-          }
-          const cwd = yield* destination({ ...spec, projectId });
-          // Only a fresh server-generated ID may create a reference. Registration and initial
-          // membership survive a disconnected requester, as acquisition is server-owned.
-          const { session } = yield* start(
-            { cwd, sessionId: randomUUID(), model, thinkingLevel, name, dispatchedFrom },
-            notCreated,
-            { projectId },
+      const createOnce = Effect.fn("SessionHosts.createOnce")(function* (spec: CreateSpec) {
+        const { model, thinkingLevel, name, dispatchedFrom } = spec.options;
+        let projectId = spec.projectId;
+        // Snapshot Piano-owned membership before any checkout effects, never from cwd or Pi’s
+        // launch environment. A saved/archived parent is enough; its history need not be readable.
+        if (
+          projectId === undefined &&
+          spec.inheritProject !== false &&
+          dispatchedFrom !== undefined
+        ) {
+          const parents = (yield* registry.get).sessions.filter(
+            (session) => session.sessionId === dispatchedFrom,
           );
-          return session;
-        },
-        // Creation is server-owned from its first step: a requester that leaves while Worktrunk
-        // runs cannot interrupt it into a half-made checkout; the worktree, the registration and
-        // the launch complete, and the session is found by the ID the registry holds.
-        owned,
-      );
+          if (parents.length !== 1)
+            return yield* new SessionNotCreated({
+              detail:
+                "Cannot inherit project: parent session is unlisted or ambiguous. Choose a listed parent or set inheritProject to false to start ungrouped.",
+              checkoutUnconfirmed: false,
+            });
+          projectId = parents[0]!.projectId;
+        }
+        const cwd = yield* destination({ ...spec, projectId });
+        // Only a fresh server-generated ID may create a reference. Registration and initial
+        // membership survive a disconnected requester, as acquisition is server-owned.
+        const sessionId = spec.attempt?.sessionId ?? randomUUID();
+        if (spec.attempt)
+          yield* registry
+            .saveCreation({ ...spec.attempt, cwd })
+            .pipe(Effect.mapError((e) => rejected(e.detail)));
+        const key = sessionKey(cwd, sessionId);
+        starting.set(key, { cwd, sessionId, working: false, starting: true });
+        yield* announce;
+        const { session } = yield* start(
+          { cwd, sessionId, model, thinkingLevel, name, dispatchedFrom },
+          notCreated,
+          { projectId },
+        ).pipe(
+          Effect.mapError((error) =>
+            spec.worktree && error instanceof SessionNotCreated
+              ? new SessionNotCreated({
+                  ...error,
+                  detail: `${error.detail} The worktree at ${cwd} was created and kept. Retry in that worktree, not by creating the branch again.`,
+                })
+              : error,
+          ),
+          Effect.ensuring(
+            Effect.sync(() => {
+              starting.delete(key);
+            }).pipe(Effect.andThen(announce)),
+          ),
+        );
+        if (spec.attempt)
+          yield* registry
+            .saveCreation({ ...spec.attempt, cwd, state: "created" })
+            .pipe(Effect.mapError((e) => rejected(e.detail)));
+        return session;
+      });
+      const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
+        const done = yield* Deferred.make<void>();
+        if (spec.attempt) creating.set(spec.attempt.id, done);
+        return yield* createOnce(spec).pipe(
+          Effect.tapError((error) =>
+            spec.attempt
+              ? Effect.gen(function* () {
+                  const attempt = yield* registry.creationAttempt(spec.attempt!.id);
+                  if (attempt)
+                    yield* registry.saveCreation({
+                      ...attempt,
+                      state: error._tag === "SessionNotCreated" ? "failed" : "uncertain",
+                      detail: error.detail,
+                    });
+                }).pipe(Effect.catchTag("RegistryError", (e) => Effect.logWarning(e.detail)))
+              : Effect.void,
+          ),
+          Effect.ensuring(
+            Effect.gen(function* () {
+              yield* Deferred.succeed(done, undefined);
+              if (spec.attempt) creating.delete(spec.attempt.id);
+            }),
+          ),
+        );
+      }, owned);
+      const reconcileCreation = Effect.fn("SessionHosts.reconcileCreation")(function* (id: string) {
+        const pending = creating.get(id);
+        if (pending) yield* Deferred.await(pending);
+        const attempt = yield* registry
+          .creationAttempt(id)
+          .pipe(Effect.mapError((e) => rejected(e.detail)));
+        return attempt?.state === "starting"
+          ? {
+              ...attempt,
+              state: "uncertain" as const,
+              detail: "Piano cannot confirm the original start. Nothing was restarted or resent.",
+            }
+          : attempt;
+      });
 
       const get = (cwd: string, id: string) =>
         resolved(cwd, id, ({ host }) => Effect.succeed(host?.session));
@@ -613,6 +715,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         start: (spec) => start(spec, reopenFailed),
         commands,
         create,
+        reconcileCreation,
         rename,
         release,
         get,

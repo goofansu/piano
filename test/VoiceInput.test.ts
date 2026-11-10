@@ -348,7 +348,7 @@ test("a version-13 database upgrades with voice input off, then saves it", async
   );
   const upgraded = new DatabaseSync(join(root, "upgrade.db"), { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 14);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 15);
   } finally {
     upgraded.close();
   }

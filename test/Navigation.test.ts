@@ -433,7 +433,13 @@ for (const failure of ["disconnect", "error"] as const)
     p.navigation.closeSettings();
     assert.equal(p.client.getState().pendingCreate, uncertain);
     assert.equal(p.sent.filter((m) => m._tag === "create_session").length, 1);
-    assert.deepEqual(p.selects(), [], "no automatic retry even after reconnect");
+    assert.deepEqual(
+      p.selects(),
+      failure === "disconnect" ? [null] : [],
+      "reconnect only reads the original attempt",
+    );
+    if (failure === "disconnect")
+      assert.ok(p.sent.some((m) => m._tag === "select" && m.attemptId === selectionId));
   });
 
 test("history can revisit a superseded session route or cancel it by returning to Settings", () => {

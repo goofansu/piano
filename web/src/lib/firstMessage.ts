@@ -4,7 +4,7 @@
  * connection) and is never part of Pi's transcript or the registry (INV-01). The store decides
  * when each transition applies; this module decides what each one does to the record.
  */
-import type { RenderMsg, ServerMessage, Snapshot } from "@shared/wire";
+import type { RenderMsg, ServerMessage, Snapshot, StartOptions } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
 import { inputVerdictOf } from "../../../shared/inputVerdict.ts";
 import { type SubmissionPhase, submissionPhase } from "./submissionReceipt.ts";
@@ -14,8 +14,10 @@ type ErrorFrame = Extract<ServerMessage, { _tag: "error" }>;
 /** Browser-only submitted input, never part of Pi's transcript or registry. */
 export interface PendingCreate {
   /** The creation request, not a later attachment to the same session. */
-  selectionId: string;
+  attemptId: string;
   cwd: string;
+  projectId?: string;
+  options?: StartOptions;
   text: string;
   attachments?: RenderMsg["attachments"];
   /** Every phase but `submitting`: until Pi answers, the record still reads `starting`. */
@@ -27,10 +29,10 @@ export interface PendingCreate {
 
 /** The first message, sent with the selection that starts its session. */
 export const started = (
-  selectionId: string,
+  attemptId: string,
   cwd: string,
   message: Pick<PendingCreate, "text" | "attachments">,
-): PendingCreate => ({ selectionId, cwd, ...message, outcome: "starting" });
+): PendingCreate => ({ attemptId, cwd, ...message, outcome: "starting" });
 
 /** A socket that closes before delivery is confirmed leaves the first message's fate unknown. */
 export const connectionLost = (input: PendingCreate | null): PendingCreate | null =>
@@ -41,10 +43,10 @@ export const connectionLost = (input: PendingCreate | null): PendingCreate | nul
 /** The server refused the selection that carried the first message. */
 export const rejected = (
   input: PendingCreate | null,
-  selectionId: string,
+  attemptId: string,
   detail: string,
 ): PendingCreate | null =>
-  input?.selectionId === selectionId ? { ...input, outcome: "rejected", detail } : input;
+  input?.attemptId === attemptId ? { ...input, outcome: "rejected", detail } : input;
 
 /**
  * An error on the first message's selection. One naming the message says Piano refused it before
@@ -52,7 +54,7 @@ export const rejected = (
  */
 export const failed = (input: PendingCreate, error: ErrorFrame): PendingCreate => ({
   ...input,
-  outcome: inputVerdictOf(error)?.inputId === input.selectionId ? "not_sent" : "uncertain",
+  outcome: inputVerdictOf(error)?.inputId === input.attemptId ? "not_sent" : "uncertain",
   detail: error.message,
 });
 

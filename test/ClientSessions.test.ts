@@ -1035,6 +1035,119 @@ const firstSnapshot = (session: PiSession) =>
 const prompted = (session: PiSession) =>
   firstSnapshot(session).pipe(Effect.map((s) => s.messages.some((m) => m.role === "user")));
 
+test("INV-01/02: an empty failed attempt remains a tombstone across restart; only explicit new identity retries", async () => {
+  const path = join(root, "failed-attempt.db");
+  const request = {
+    cwd,
+    options: {},
+    text: "kept input",
+    attemptId: "failed-attempt",
+    selectionId: "first",
+  };
+  await run(
+    Effect.gen(function* () {
+      const { sessions } = yield* client;
+      const failure = yield* Effect.flip(yield* sessions.create(request));
+      assert.equal(failure._tag, "SessionNotCreated");
+      assert.deepEqual((yield* (yield* Registry).get).sessions, []);
+    }),
+    path,
+    {
+      cli: new URL("./fake-host-pi.mjs", import.meta.url).pathname,
+      extraArgs: ["--fail-readiness"],
+    },
+  );
+  await run(
+    Effect.gen(function* () {
+      const { sessions, sent } = yield* client;
+      yield* yield* sessions.create({ ...request, selectionId: "duplicate" });
+      yield* yield* sessions.select({
+        cwd,
+        sessionId: null,
+        selectionId: "read-only",
+        attemptId: request.attemptId,
+      });
+      assert.equal(
+        sent.filter((m) => m._tag === "selection_rejected" && m.inputId === request.attemptId)
+          .length,
+        2,
+      );
+      assert.deepEqual(yield* (yield* SessionHosts).list, []);
+      assert.deepEqual((yield* (yield* Registry).get).sessions, []);
+      yield* yield* sessions.create({
+        ...request,
+        attemptId: "explicit-retry",
+        selectionId: "retry",
+      });
+      assert.equal((yield* (yield* Registry).get).sessions.length, 1);
+    }),
+    path,
+  );
+});
+
+test("INV-02: a durable claim interrupted before startup stays uncertain after restart, never retried", async () => {
+  const path = join(root, "abandoned-claim.db");
+  const request = {
+    cwd,
+    options: {},
+    text: "never replay",
+    attemptId: "abandoned",
+    selectionId: "old",
+  };
+  await run(
+    Effect.gen(function* () {
+      const { sessions } = yield* client;
+      yield* sessions.create(request); // Claim received; its work is never run before shutdown.
+      assert.deepEqual(yield* (yield* SessionHosts).list, []);
+    }),
+    path,
+  );
+  await run(
+    Effect.gen(function* () {
+      const { sessions, sent } = yield* client;
+      yield* yield* sessions.create({ ...request, selectionId: "again" });
+      assert.ok(
+        sent.some((m) => m._tag === "error" && !m.inputId && /cannot confirm/.test(m.message)),
+      );
+      assert.deepEqual(yield* (yield* SessionHosts).list, []);
+      assert.deepEqual((yield* (yield* Registry).get).sessions, []);
+      assert.equal((yield* (yield* Registry).creationAttempt("abandoned"))?.state, "starting");
+    }),
+    path,
+  );
+});
+
+test("INV-02/05: duplicate creation identities across clients attach once and never resubmit", async () => {
+  await run(
+    Effect.gen(function* () {
+      const a = yield* client,
+        b = yield* client;
+      const request = { cwd, options: {}, text: "one input", attemptId: "stable-attempt" };
+      const first = yield* a.sessions.create({ ...request, selectionId: "first-navigation" });
+      const duplicate = yield* b.sessions.create({ ...request, selectionId: "second-navigation" });
+      yield* first;
+      yield* duplicate;
+      const hosts = yield* SessionHosts;
+      assert.equal((yield* hosts.list).length, 1);
+      const [ref] = (yield* (yield* Registry).get).sessions;
+      const session = (yield* hosts.get(cwd, ref.sessionId))!;
+      const snapshot = yield* firstSnapshot(session);
+      assert.equal(snapshot.messages.filter((m) => m.role === "user").length, 1);
+      assert.equal(snapshot.state.submission?.inputId, "stable-attempt");
+      assert.ok(b.sent.some((m) => m._tag === "selected" && m.sessionId === ref.sessionId));
+      // Navigation after a claimed duplicate remains newer, even though the duplicate still finishes.
+      const stale = yield* a.sessions.create({ ...request, selectionId: "stale" });
+      yield* yield* a.sessions.select({ cwd, sessionId: null, selectionId: "newer" });
+      yield* stale;
+      assert.equal((yield* a.sessions.selection)?.selectionId, "newer");
+      assert.equal(
+        a.sent.some((m) => m._tag === "selected" && m.selectionId === "stale"),
+        false,
+      );
+    }),
+  );
+});
+
 test("INV-01/02: creating registers the folder, reference and project, attaches, then records the first prompt before Pi sees it", async () => {
   await run(
     Effect.gen(function* () {
@@ -1154,6 +1267,26 @@ test("INV-01/02/07: an interrupted creation keeps its project membership and sen
     reopened.sessions.map((s) => [s.cwd, s.sessionId, s.projectId]),
     [[cwd, id, "launch"]],
     "membership survives reopening SQLite",
+  );
+  await run(
+    Effect.gen(function* () {
+      const { sessions, sent } = yield* client;
+      yield* yield* sessions.create({
+        selectionId: "new",
+        cwd,
+        projectId: "launch",
+        options: {},
+        text: "must not reach Pi",
+      });
+      assert.deepEqual(
+        yield* (yield* SessionHosts).list,
+        [],
+        "duplicate after server restart never launches Pi",
+      );
+      assert.ok(sent.some((m) => m._tag === "selected" && m.sessionId === id && !m.hosted));
+      assert.equal((yield* (yield* Registry).get).sessions.length, 1);
+    }),
+    path,
   );
 });
 

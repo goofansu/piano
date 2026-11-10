@@ -18,7 +18,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { Cause, Context, Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect";
 import { ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
@@ -315,7 +315,11 @@ const displayed = <A>(effect: Effect.Effect<A, PiSessionError>) =>
 const replacedDetail =
   "Pi switched this process to another session, so Piano closed it. Reopen this session to continue; no input was resent.";
 
-const openSession = (spec: PiSessionSpec, history: PiHistory) =>
+const openSession = (
+  spec: PiSessionSpec,
+  history: PiHistory,
+  spawned: (child: PiTransport) => void,
+) =>
   Effect.gen(function* () {
     // A generation belongs to this concrete Pi open, never a saved ID, PID or browser.
     const generation = randomUUID();
@@ -346,6 +350,7 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
       },
       onExit: () => preview?.disconnect(),
     });
+    spawned(child);
     const sessionScope = yield* Effect.scope;
     const recoveryMs = yield* PiDialogRecoveryMs;
 
@@ -923,8 +928,26 @@ export const PiSessionsLive: Layer.Layer<PiSessions, never, ChildProcessSpawner>
     const spawner = yield* ChildProcessSpawner;
     const history = yield* makePiHistory();
     return PiSessions.of({
-      open: (spec) =>
-        openSession(spec, history).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
+      open: Effect.fn("PiSessions.open")(function* (spec) {
+        const scope = yield* Scope.fork(yield* Effect.scope, "sequential");
+        let child: PiTransport | undefined;
+        return yield* openSession(spec, history, (value) => {
+          child = value;
+        }).pipe(
+          Scope.provide(scope),
+          Effect.provideService(ChildProcessSpawner, spawner),
+          Effect.catchTag("PiSessionError", (error) =>
+            Effect.gen(function* () {
+              yield* Scope.close(scope, Exit.void);
+              const stopped = child && (yield* child.stopped);
+              return yield* new PiSessionError({
+                ...error,
+                ...(stopped ? { startupStopped: true as const } : {}),
+              });
+            }),
+          ),
+        );
+      }),
       probe: (cwd, options) =>
         probe(cwd, options).pipe(Effect.provideService(ChildProcessSpawner, spawner)),
       history,

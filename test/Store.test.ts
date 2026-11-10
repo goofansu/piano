@@ -191,7 +191,7 @@ test("INV-01/03: first input survives selection and submission until authoritati
   );
   assert.equal(state.session, null, "no invented session or history before Pi starts");
   assert.deepEqual(state.pendingCreate, {
-    selectionId: "sent",
+    attemptId: "sent",
     cwd: "/scratch",
     ...firstMessage,
     outcome: "starting",

@@ -23,6 +23,8 @@ import { PiCli } from "../server/PiCli.ts";
 import {
   PiRequestTimeoutMs,
   type PiSession,
+  PiSessionError,
+  PiSessions,
   PiSessionsLive,
   PreviewOwnerOptions,
 } from "../server/PiSessions.ts";
@@ -96,6 +98,8 @@ const run = <A, E>(
     idleMs?: number;
     holdShutdown?: boolean;
     holdReadiness?: boolean;
+    failReadiness?: "empty" | "saved";
+    unconfirmedStop?: boolean;
     holdStats?: boolean;
     statsFile?: string;
     clock?: boolean;
@@ -109,7 +113,24 @@ const run = <A, E>(
   } = {},
 ) => {
   const layer = SessionHostsLive({ idleMs: options.idleMs ?? 0 }).pipe(
-    Layer.provide(PiSessionsLive),
+    Layer.provide(
+      options.unconfirmedStop
+        ? Layer.effect(
+            PiSessions,
+            Effect.map(PiSessions, (pi) => ({
+              ...pi,
+              open: (spec: Parameters<typeof pi.open>[0]) =>
+                pi
+                  .open(spec)
+                  .pipe(
+                    Effect.mapError(
+                      (e) => new PiSessionError({ reason: e.reason, detail: e.detail }),
+                    ),
+                  ),
+            })),
+          ).pipe(Layer.provide(PiSessionsLive))
+        : PiSessionsLive,
+    ),
     Layer.provideMerge(RegistryLive),
     Layer.provide(NodeServices.layer),
   );
@@ -130,6 +151,13 @@ const run = <A, E>(
               ...cli.extraArgs,
               ...(options.holdShutdown ? ["--hold-shutdown"] : []),
               ...(options.holdReadiness ? ["--hold-readiness"] : []),
+              ...(options.failReadiness
+                ? [
+                    options.failReadiness === "saved"
+                      ? "--persist-before-readiness-failure"
+                      : "--fail-readiness",
+                  ]
+                : []),
               ...(options.holdStats ? ["--hold-stats"] : []),
               ...(options.statsFile ? ["--stats-file", options.statsFile] : []),
             ],
@@ -149,6 +177,83 @@ const run = <A, E>(
   );
   return Effect.runPromise(options.clock ? work.pipe(Effect.provide(TestClock.layer())) : work);
 };
+test("INV-01/02: failed fresh startup removes only its conclusively empty reference after Pi exits", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      const registry = yield* Registry;
+      let id = "";
+      yield* registry.onChange((before, after) =>
+        Effect.sync(() => {
+          if (after.sessions.length) id = after.sessions[0].sessionId;
+          if (before.sessions.length && !after.sessions.length)
+            assert.ok(
+              records(id).some((r) => r.event === "exit"),
+              "Pi stopped before removing the reference",
+            );
+        }),
+      );
+      const error = yield* Effect.flip(hosts.create({ cwd, options: {} }));
+      assert.equal(error._tag, "SessionNotCreated");
+      assert.deepEqual((yield* registry.get).sessions, []);
+      assert.ok(records(id).some((r) => r.event === "exit"));
+      assert.equal(records(id).filter((r) => r.command === "prompt").length, 0);
+    }),
+    { failReadiness: "empty", registry: "empty-start-failure" },
+  );
+});
+
+for (const scenario of [
+  "saved",
+  "unreadable",
+  "unattributed-history",
+  "stop-unconfirmed",
+] as const) {
+  test(`INV-01/02: failed startup preserves evidence when ${scenario}`, async () => {
+    const unreadable = join(root, "sessions", "unreadable-start.jsonl");
+    if (scenario === "unreadable") mkdirSync(unreadable);
+    try {
+      await run(
+        Effect.gen(function* () {
+          const hosts = yield* SessionHosts;
+          const registry = yield* Registry;
+          if (scenario === "unattributed-history")
+            yield* registry.onChange((_before, after) =>
+              Effect.sync(() => {
+                for (const ref of after.sessions)
+                  writeFileSync(
+                    join(root, "sessions", `unattributed-${ref.sessionId}.jsonl`),
+                    JSON.stringify({ type: "session", version: 3, id: ref.sessionId }) + "\n",
+                  );
+              }),
+            );
+          const error = yield* Effect.flip(hosts.create({ cwd, options: {} }));
+          assert.equal(error._tag, "PiSessionError", "unknown is not proof nothing happened");
+          const [reference] = (yield* registry.get).sessions;
+          assert.ok(reference && !reference.archived);
+          assert.equal(
+            records(reference.sessionId).filter((r) => r.command === "prompt").length,
+            0,
+          );
+          if (scenario === "saved") {
+            const view = yield* hosts.read(cwd, reference.sessionId);
+            assert.equal(view._tag, "saved");
+            if (view._tag === "saved")
+              assert.equal(view.snapshot.messages[0]?.text, "Saved before readiness failed");
+          }
+        }),
+        {
+          failReadiness: scenario === "saved" ? "saved" : "empty",
+          unconfirmedStop: scenario === "stop-unconfirmed",
+          registry: `start-failure-${scenario}`,
+        },
+      );
+    } finally {
+      if (scenario === "unreadable") rmSync(unreadable, { recursive: true });
+    }
+  });
+}
+
 const observe = (session: PiSession, until: (e: SessionEvent) => boolean) =>
   Effect.gen(function* () {
     const ready = yield* Deferred.make<void>();

@@ -114,6 +114,7 @@ export const initialState: AppState = {
 };
 
 export type Action =
+  | { type: "dismiss_creation" }
   /** `lost`: a socket failed or closed, as opposed to a selection landing on a closed connection. */
   | { type: "connected"; connected: boolean; lost?: boolean }
   | { type: "server"; message: ServerMessage }
@@ -124,6 +125,10 @@ export type Action =
       cwd: string;
       sessionId: string | null;
       firstMessage?: Pick<FirstMessage.PendingCreate, "text" | "attachments">;
+      attemptId?: string;
+      projectId?: string;
+      options?: FirstMessage.PendingCreate["options"];
+      reconciling?: boolean;
     }
   /** Opens a page, leaving the session; see `opened` for what a page already on screen keeps. */
   | { type: "open"; page: Page }
@@ -149,6 +154,8 @@ function reduceAction(s: AppState, a: Action): AppState {
         selecting: !a.connected && s.pendingCreate ? null : s.selecting,
         pendingCreate: a.connected ? s.pendingCreate : FirstMessage.connectionLost(s.pendingCreate),
       };
+    case "dismiss_creation":
+      return { ...s, selectionFailure: null, pendingCreate: null };
     case "trust_pending":
       return beginTrustDecision(s, a.cwd);
     case "selecting": {
@@ -159,11 +166,17 @@ function reduceAction(s: AppState, a: Action): AppState {
         view: { kind: "session" },
         selecting: { cwd: a.cwd, sessionId: a.sessionId },
         selectionFailure: null,
-        pendingCreate: a.firstMessage
-          ? FirstMessage.started(a.selectionId, a.cwd, a.firstMessage)
-          : s.session && sessionKey(s.session) === sessionKey(a)
-            ? s.pendingCreate
-            : null,
+        pendingCreate: a.reconciling
+          ? s.pendingCreate
+          : a.firstMessage
+            ? {
+                ...FirstMessage.started(a.attemptId ?? a.selectionId, a.cwd, a.firstMessage),
+                ...(a.projectId === undefined ? {} : { projectId: a.projectId }),
+                ...(a.options === undefined ? {} : { options: a.options }),
+              }
+            : s.session && sessionKey(s.session) === sessionKey(a)
+              ? s.pendingCreate
+              : null,
         session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
         done: s.done.filter((k) => k !== sessionKey(a)),
       };
@@ -313,10 +326,22 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         ...s,
         selectionId: null,
         selectionFailure: { ...s.selecting, message: m.message },
+        ...(m._tag === "selection_rejected" &&
+        s.pendingCreate &&
+        (m.inputId ?? m.selectionId) === s.pendingCreate.attemptId
+          ? {
+              view: {
+                kind: "new" as const,
+                cwd: s.pendingCreate.cwd,
+                projectId: s.pendingCreate.projectId,
+              },
+              session: null,
+            }
+          : {}),
         selecting: null,
         pendingCreate:
           m._tag === "selection_rejected"
-            ? FirstMessage.rejected(s.pendingCreate, m.selectionId, m.message)
+            ? FirstMessage.rejected(s.pendingCreate, m.inputId ?? m.selectionId, m.message)
             : s.pendingCreate,
       };
     case "error":

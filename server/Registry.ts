@@ -21,6 +21,7 @@ import {
   sessionKey,
   Workspace,
 } from "../shared/wire.ts";
+import type { CreationAttempt } from "./CreationAttempt.ts";
 import { Directories } from "./Directories.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { openRegistryDatabase } from "./RegistryDatabase.ts";
@@ -263,6 +264,12 @@ export class Registry extends Context.Service<
   Registry,
   {
     readonly get: Effect.Effect<RegistryData>;
+    readonly creationAttempt: (
+      id: string,
+    ) => Effect.Effect<CreationAttempt | undefined, RegistryError>;
+    /** Atomic durable claim, before checkout/child/input effects. Existing claims are never reused. */
+    readonly claimCreation: (attempt: CreationAttempt) => Effect.Effect<boolean, RegistryError>;
+    readonly saveCreation: (attempt: CreationAttempt) => Effect.Effect<void, RegistryError>;
     readonly webhooks: Effect.Effect<readonly StoredWebhook[], RegistryError>;
     readonly saveWebhook: (hook: StoredWebhook) => Effect.Effect<void, RegistryError>;
     readonly removeWebhook: (id: string) => Effect.Effect<void, RegistryError>;
@@ -470,6 +477,12 @@ export const RegistryLive = Layer.effect(
 
     return Registry.of({
       get: Ref.get(state),
+      creationAttempt: (id) =>
+        Effect.try({ try: () => database.creationAttempt(id), catch: (e) => recovery(path, e) }),
+      claimCreation: (attempt) =>
+        Effect.try({ try: () => database.claimCreation(attempt), catch: (e) => recovery(path, e) }),
+      saveCreation: (attempt) =>
+        Effect.try({ try: () => database.saveCreation(attempt), catch: (e) => recovery(path, e) }),
       webhooks: Effect.try({
         try: database.webhooks,
         catch: () => new RegistryError({ detail: "Could not read webhooks." }),

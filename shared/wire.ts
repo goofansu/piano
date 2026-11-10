@@ -857,6 +857,8 @@ export const HostInfo = Schema.Struct({
   sessionId: Schema.String,
   /** `workUnderWay` of the host's state: the session is working. */
   working: Schema.Boolean,
+  /** Fresh acquisition, before Pi is ready; not an idle/empty conversation. */
+  starting: Schema.optional(Schema.Boolean),
   /** This generation owns an app that may still be running; ending Pi stops it. */
   preview: Schema.optional(Schema.Boolean),
 });
@@ -979,12 +981,16 @@ export const ClientMessage = Schema.Union([
   /** Show a session. */
   Schema.TaggedStruct("select", {
     selectionId: Schema.String,
+    /** Read-only reconciliation of an original creation, never a retry. */
+    attemptId: Schema.optional(Schema.String),
     cwd: Schema.String,
     sessionId: Schema.NullOr(Schema.String),
   }),
   /** Create and start a session in a directory (registering it as a folder when needed) and send its first prompt. */
   Schema.TaggedStruct("create_session", {
     selectionId: Schema.String,
+    /** Stable creation identity, distinct from later navigation. Legacy clients use selectionId. */
+    attemptId: Schema.optional(Schema.String),
     cwd: Schema.String,
     projectId: Schema.optional(Schema.String),
     /** Without explicit projectId, inherit dispatchedFrom’s current membership by default. */
@@ -1138,9 +1144,11 @@ export const ServerMessage = Schema.Union([
       Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
     ]),
   }),
-  /** Admission refused, or the requested worktree failed, before selection or session creation started. */
+  /** Selection refused before work, or creation conclusively failed with no session/input left. */
   Schema.TaggedStruct("selection_rejected", {
     selectionId: Schema.String,
+    /** Original first input, including when a later selection reconciles its creation. */
+    inputId: Schema.optional(Schema.String),
     message: Schema.String,
   }),
   /** An admitted attachment failed. Makes no claim about prior creation or message delivery. */

@@ -246,7 +246,11 @@ repository facts, so neither is in the registry.
 
 Piano refuses to start on a corrupt database, an unrecognized one, or one from a newer Piano. It
 never resets a database. It upgrades an older database in place when it opens it, and the current
-schema is version 13, which adds project done (`done_at`). Version 12 qualifies pull request branches with their repositories, version 11 adds the Changes
+schema is version 15, which adds durable `creation_attempts` claims for
+[failed-creation recovery](runtime-ownership.md#failed-creation-and-reconnect). These small records
+are retained even after a session is removed, so replaying an old attempt cannot create again.
+They contain no prompt or attachments and do not clean up legacy sessions. Version 14 adds voice
+input preferences; version 13 adds project done (`done_at`). Version 12 qualifies pull request branches with their repositories, version 11 adds the Changes
 comparison and version 10 adds project instructions. Version 9 retires project archive: each archived project comes back as an
 ordinary one. Version 8 adds user-configured [webhooks](webhooks.md). Version 7 drops retired
 notification preference tables without changing session data. Before it upgrades a version 1 database, which still has project goals, Piano

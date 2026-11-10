@@ -752,7 +752,7 @@ const refusals: {
   ],
   create_session: [
     { _tag: "create_session", selectionId: "s2", cwd, options: {}, text: "hi" },
-    { _tag: "selection_rejected", selectionId: "s2", message: "REFUSED" },
+    { _tag: "selection_rejected", selectionId: "s2", inputId: "s2", message: "REFUSED" },
   ],
   session_status: [
     { _tag: "session_status", requestId: "st1", target: { sessionId: "x" } },
@@ -918,7 +918,12 @@ test("a session start in a missing directory is rejected as never started", asyn
         text: "hi",
       });
       assert.deepEqual(answers(from), [
-        { _tag: "selection_rejected", selectionId: "new", message: `Not a directory: ${missing}` },
+        {
+          _tag: "selection_rejected",
+          selectionId: "new",
+          inputId: "new",
+          message: `Not a directory: ${missing}`,
+        },
       ]);
     }),
   );

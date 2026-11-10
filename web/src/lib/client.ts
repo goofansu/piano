@@ -177,6 +177,10 @@ export function createClient({
           cwd: m.cwd,
           sessionId: m._tag === "select" ? m.sessionId : null,
           firstMessage: m._tag === "create_session" ? (preview ?? firstMessage(m)) : undefined,
+          attemptId: m.attemptId,
+          projectId: m._tag === "create_session" ? m.projectId : undefined,
+          options: m._tag === "create_session" ? m.options : undefined,
+          reconciling: m._tag === "select" && !!m.attemptId,
         });
       // A select is navigation: the pane switches at once and a reconnect re-sends it (INV-02/05).
       if (m._tag === "select") {
@@ -225,8 +229,12 @@ export function createClient({
 
   const onStatus = (connected: boolean, reason?: DisconnectReason) => {
     apply({ type: "connected", connected, lost: !connected });
-    if (connected) reselect(state.session ?? state.selecting);
-    else if (reason) notify(...disconnectNotices[reason]);
+    if (connected) {
+      const pending = state.pendingCreate;
+      if (pending && pending.outcome === "uncertain" && !state.session?.sessionId)
+        send({ _tag: "select", cwd: pending.cwd, sessionId: null, attemptId: pending.attemptId });
+      else reselect(state.session ?? state.selecting);
+    } else if (reason) notify(...disconnectNotices[reason]);
   };
 
   const onMessage = (m: ServerMessage) => {

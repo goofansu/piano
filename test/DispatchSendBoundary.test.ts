@@ -145,8 +145,8 @@ test(
       };
       const result = await startSession({ cwd: repo, prompt: "write marker child.txt" }, faulty);
       assert.deepEqual(
-        [result.creation, result.submission, result.handle],
-        ["uncertain", "uncertain", null],
+        [result.creation, result.submission, result.handle?.submissionId],
+        ["created", "uncertain", null],
         JSON.stringify(result),
       );
 
@@ -158,10 +158,12 @@ test(
         await delay(50);
       }
       assert.ok(readFileSync(marker, "utf8").trim());
-      // Longer than the transport's reconnect delay: nothing reconnects to send it again.
+      assert.ok(result.handle?.sessionId, "reconciliation identifies the original child");
+      assert.equal(result.handle.inputFingerprint, "", "missed observations remain unattributable");
+      // Longer than the transport's reconnect delay: nothing sends creation again.
       await delay(3_000);
       assert.equal(creations, 1, "the creation was sent once");
-      assert.equal(opened, 1, "the start stopped observing instead of reconnecting");
+      assert.equal(opened, 2, "one read-only reconnect finds the original start");
       assert.equal(children().length, 1, "exactly one child exists");
     } finally {
       const exited = once(piano, "exit");

@@ -174,12 +174,17 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
             ),
           ),
       // Creation may already have submitted its first message; a failure keeps that uncertain,
-      // unless SessionHosts says it failed before any session existed, so nothing was started, or
-      // the session's host refused the first message before Pi saw it, which names it.
-      unanswered: ({ selectionId }, reason) =>
+      // unless SessionHosts confirms no session/input remains (including a stopped, empty startup),
+      // or the session's host refused the first message before Pi saw it, which names it.
+      unanswered: ({ selectionId, attemptId }, reason) =>
         reason._tag !== "failed" ||
         (reason._tag === "failed" && reason.error instanceof SessionNotCreated)
-          ? { _tag: "selection_rejected", selectionId, message: unansweredText(reason) }
+          ? {
+              _tag: "selection_rejected",
+              selectionId,
+              inputId: attemptId ?? selectionId,
+              message: unansweredText(reason),
+            }
           : {
               _tag: "error",
               message: unansweredText(reason),
@@ -428,6 +433,22 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     reason: Unanswered,
   ) {
     yield* Effect.logWarning(`${request._tag} ${reason._tag}: ${unansweredText(reason)}`);
+    // Refusing this delivery does not undo an older request with the same durable identity.
+    // This also covers an expired image capability on a duplicate remote start.
+    if (request._tag === "create_session" && reason._tag !== "failed") {
+      const known = yield* registry
+        .creationAttempt(request.attemptId ?? request.selectionId)
+        .pipe(Effect.result);
+      if (known._tag === "Failure" || (known.success && known.success.state !== "failed")) {
+        yield* send({
+          _tag: "error",
+          selectionId: request.selectionId,
+          message:
+            "Could not admit this request. The original start may already have run; inspect it before retrying.",
+        });
+        return;
+      }
+    }
     yield* send(policyOf(request).unanswered(request, reason));
   });
 

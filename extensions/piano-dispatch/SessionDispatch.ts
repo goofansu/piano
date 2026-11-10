@@ -293,6 +293,7 @@ export function startSession(
     (link, settle) => {
       let selectionId: string | null = null;
       let inputId: string | null = null;
+      let reconciling = false;
       let handle: SessionHandle | null = null;
       let snapshot: Snapshot | null = null;
       let sequence = 0;
@@ -367,6 +368,7 @@ export function startSession(
             const sent = link.commit({
               _tag: "create_session",
               selectionId,
+              attemptId: inputId,
               cwd,
               options: { dispatchedFrom },
               ...(inheritProject === undefined ? {} : { inheritProject }),
@@ -379,7 +381,9 @@ export function startSession(
           // Only an identity may be re-sent. Creating again would start a second session for
           // one request, and no acknowledgement is worth that.
           if (!handle) {
-            settle(unnamed("The connection was lost before Pi named the session."));
+            reconciling = true;
+            selectionId = link.nonce();
+            link.send({ _tag: "select", selectionId, cwd, sessionId: null, attemptId: inputId! });
             return;
           }
           selectionId = link.nonce();
@@ -392,7 +396,7 @@ export function startSession(
         },
         disconnected: (fatal) => {
           if (!link.committed()) settle(unsent("Piano could not be reached."));
-          else if (!handle)
+          else if (!handle && fatal)
             settle(
               unnamed(
                 fatal
@@ -433,6 +437,16 @@ export function startSession(
                   inputFingerprint: "", // Filled only by this submission's server-owned proof.
                   anchorMessageId: null,
                 };
+                if (reconciling) {
+                  settle(
+                    result(
+                      "created",
+                      "uncertain",
+                      "Found the original session. Initial observations were missed; nothing was restarted or resent.",
+                    ),
+                  );
+                  return;
+                }
                 expectedSubmission = (snapshot.state.submission?.id ?? 0) + 1;
                 if (oversized(snapshot) || !message.hosted || !message.cursor) {
                   settle(

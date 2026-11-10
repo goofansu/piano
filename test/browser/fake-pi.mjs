@@ -129,6 +129,26 @@ function handle(cmd) {
     case "extension_ui_response":
       return reply(`Answer: ${cmd.cancelled ? "cancelled" : cmd.value}`);
     case "get_state":
+      // Opt-in scratch failure, never probes or saved sessions. Remove the marker to retry.
+      if (
+        sessionId !== "probe" &&
+        !file &&
+        process.env.PIANO_TEST_STARTUP_FAILURE &&
+        existsSync(process.env.PIANO_TEST_STARTUP_FAILURE)
+      ) {
+        setTimeout(
+          () =>
+            out({
+              type: "response",
+              command: cmd.type,
+              id: cmd.id,
+              success: false,
+              error: "Fixture: Pi could not become ready",
+            }),
+          4000,
+        );
+        return;
+      }
       return respond(cmd, {
         sessionId,
         sessionFile,

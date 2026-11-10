@@ -98,6 +98,7 @@ test(
     const create = {
       _tag: "create_session",
       selectionId: "images-new",
+      attemptId: "images-attempt",
       cwd: f.checkout,
       options: {},
       text: "",
@@ -159,7 +160,11 @@ test(
       (await peer.answers({ ...create, selectionId: "duplicate" })).find(
         (m) => m.selectionId === "duplicate",
       )?._tag,
-      "selection_rejected",
+      "error", // Expired capability cannot claim the original attempt was never sent.
+    );
+    assert.equal(
+      (await readRegistry("unused", f.database)).sessions.length,
+      listing.sessions.length,
     );
     assert.ok(
       !(
@@ -169,9 +174,22 @@ test(
     );
     // Re-select the created session: a small reference on act is resolved only for that selection.
     peer.ws.send(
-      JSON.stringify({ _tag: "select", cwd: f.checkout, sessionId, selectionId: "continue" }),
+      JSON.stringify({
+        _tag: "select",
+        cwd: f.checkout,
+        sessionId: null,
+        selectionId: "continue",
+        attemptId: "images-attempt",
+      }),
     );
-    await peer.next((m) => m._tag === "selected" && m.selectionId === "continue");
+    const reconciled = await peer.next(
+      (m) => m._tag === "selected" && m.selectionId === "continue",
+    );
+    assert.equal(
+      reconciled.sessionId,
+      sessionId,
+      "read-only attempt reconciliation preserves the original session",
+    );
     const nextUpload = await fetch(f.base + IMAGE_UPLOAD_PATH, {
       method: "POST",
       headers: { Origin: f.base },

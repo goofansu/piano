@@ -96,6 +96,63 @@ function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {
   };
 }
 
+test("failed creation restores text, quotes, images and options; reconnect only reads the original attempt", async (t) => {
+  const h = harness({ select: false });
+  t.after(h.stop);
+  const drafts = createDrafts();
+  t.after(drafts.follow(h.client));
+  const key = NEW_SESSION_DRAFT;
+  drafts.setText(key, "Keep the first input");
+  drafts.addQuote(key, "Context");
+  const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+  await drafts.addImages(key, [new File([bytes], "shot.png", { type: "image/png" })], async () =>
+    Buffer.from(bytes).toString("base64"),
+  );
+  const before = drafts.get(key);
+  const options = { model: "fake/beta", thinkingLevel: "high" as const };
+  const submit = () =>
+    drafts.submit(key, (message, attemptId) =>
+      h.client.send({
+        ...newSessionCommand({ cwd: "/scratch", projectId: "project" }, message, options),
+        attemptId,
+      }),
+    );
+  assert.equal(submit(), true);
+  const original = h.creations()[0];
+  h.last().events.close(1006);
+  h.reconnect();
+  h.accept();
+  const reconcile = h
+    .last()
+    .sent.find((m) => m._tag === "select" && m.attemptId === original.attemptId);
+  assert.ok(reconcile);
+  assert.equal(h.creations().length, 1, "disconnect never resubmits");
+  assert.equal(drafts.get(key).text, "", "unknown input is not returned as safe to resend");
+  h.last().events.message(
+    encodeServerMessage(
+      {
+        _tag: "selection_rejected",
+        selectionId: h.client.getState().selectionId!,
+        inputId: original.attemptId,
+        message: "fixture startup failure",
+      },
+      1,
+    ),
+  );
+  assert.equal(drafts.get(key).text, before.text);
+  assert.deepEqual(drafts.get(key).quotes, before.quotes);
+  assert.deepEqual(drafts.get(key).images, before.images);
+  assert.deepEqual(h.client.getState().pendingCreate?.options, options);
+  assert.deepEqual(h.client.getState().view, {
+    kind: "new",
+    cwd: "/scratch",
+    projectId: "project",
+  });
+  assert.equal(submit(), true, "explicit retry uses the restored draft");
+  assert.notEqual(h.creations()[1].attemptId, original.attemptId);
+  assert.deepEqual(h.creations()[1].attachments, original.attachments);
+});
+
 test("async image preparation preserves newer typing and rejects a captured send after navigation", async (t) => {
   const h = harness();
   t.after(h.stop);

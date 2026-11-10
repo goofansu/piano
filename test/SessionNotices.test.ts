@@ -173,7 +173,7 @@ test("an answer card owns its delivery feedback without a duplicate status line"
 
 test("an uncertain first message explains with the browser's own detail before Pi's", () => {
   const input: PendingCreate = {
-    selectionId: "create",
+    attemptId: "create",
     cwd: "/repo",
     text: "hi",
     outcome: "uncertain",
@@ -203,7 +203,7 @@ test("an uncertain first message explains with the browser's own detail before P
 
 test("a first message that never reached Pi warns, whatever stopped it", () => {
   const input: PendingCreate = {
-    selectionId: "create",
+    attemptId: "create",
     cwd: "/repo",
     text: "hi",
     outcome: "starting",
@@ -249,7 +249,7 @@ test("a first message that never reached Pi warns, whatever stopped it", () => {
 
 test("a handled command is a quiet line whether the browser or Pi reports it", () => {
   const input: PendingCreate = {
-    selectionId: "create",
+    attemptId: "create",
     cwd: "/repo",
     text: "/x",
     outcome: "handled",
