@@ -78,18 +78,53 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
       if (status !== 499) throw error;
     });
   };
-  try {
-    // Off remotely is a discoverable main-Preferences action, not remote settings mutation.
-    await switchMachine("eng-1");
-    await ready();
-    await page.click("button", "Voice input");
-    await page.see("Voice input uses Local’s OpenAI key for every machine.");
-    await page.capture("voice-1-main-setup");
-    // The action itself deliberately leaves the peer and goes to Local.
-    await switchMachine(null);
-    await page.click("button", "Open Local Preferences");
+  const visibility = [];
+  const preferences = async () => {
+    await switchMachine("Local");
+    await page.click("button", "Settings");
+    await page.click("button", "Preferences");
     await page.until(`location.pathname === '/settings/preferences'`);
-    await page.until(`!document.querySelector('[data-sonner-toast]')`);
+    await page.until(`document.querySelector('[role="switch"]')?.disabled === false`);
+    if (await page.evaluate(`!!document.querySelector('[data-sonner-toast]')`)) {
+      await page.click("button", "Close toast");
+      await page.until(`!document.querySelector('[data-sonner-toast]')`);
+    }
+  };
+  const checkComposers = async (enabled, step) => {
+    for (const [machine, title] of [
+      ["Local", "Local collision session"],
+      ["eng-1", "Remote collision session"],
+      ["eng-2", "Second collision session"],
+    ]) {
+      await switchMachine(machine);
+      await page.see(title);
+      await page.click("button", title);
+      await page.see(`${title} saved history`);
+      await page.until(`document.querySelector('[aria-label^="Model:"]')?.disabled === false`);
+      for (const composer of ["existing", "new"]) {
+        if (composer === "new") await page.click("button", "New session");
+        const label = composer === "new" ? "First message" : "Message";
+        await page.until(`!!document.querySelector('[aria-label="${label}"]')`);
+        if (enabled) await ready();
+        assert.equal(
+          await page.evaluate(`!!document.querySelector('[aria-label="Voice input"]')`),
+          enabled,
+          `${step}: ${machine} ${composer} composer follows main Voice input preference`,
+        );
+        visibility.push({ step, machine, composer, enabled });
+        await page.capture(`voice-visibility-${step}-${machine}-${composer}`);
+      }
+    }
+  };
+  try {
+    // Main's preference controls idle microphones on every machine, in both composers.
+    await preferences();
+    await page.until(
+      `document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'false'`,
+    );
+    await page.click("button", "Home");
+    await checkComposers(false, "initial-off");
+    await preferences();
     await page.click("switch", "Voice input");
     await page.see(
       "Voice input for every machine sends recordings and session context through this Piano to OpenAI.",
@@ -97,6 +132,30 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     await page.ab("fill", 'input[type="password"]', "sk-fixture-no-provider-call");
     await page.click("button", "Save");
     await page.see("Voice input turned on");
+    await page.click("button", "Home");
+    await checkComposers(true, "on");
+    // Turning off only hides idle controls, not an already committed operation's Cancel.
+    await begin();
+    await stop();
+    await requested();
+    await preferences();
+    await page.click("switch", "Voice input");
+    await page.see("Voice input turned off");
+    await page.click("button", "Home");
+    await switchMachine("eng-2");
+    await page.until(`!!document.querySelector('[aria-label="Cancel transcription"]')`);
+    await page.capture("voice-off-active-cancel");
+    await page.click("button", "Cancel transcription");
+    await answer("cancelled-while-off", 499);
+    await page.until(`!document.querySelector('[aria-label="Cancel transcription"]')`);
+    assert.equal(await value(), "");
+    await checkComposers(false, "off-again");
+    // Re-enable with the saved dummy key for the existing source-isolation checks below.
+    await preferences();
+    await page.click("switch", "Voice input");
+    await page.until(
+      `document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'true'`,
+    );
     await page.click("button", "Home");
     await page.click("button", "Local collision session");
     await page.see("Local collision session saved history");
@@ -198,6 +257,7 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
         {
           boundary:
             "fake browser microphone/MediaRecorder; CDP transcription response stub; real main settings and peer backends; no real microphone or provider",
+          visibility,
           requests: requests.map(({ url, mimeType, hints, audio }) => ({
             url,
             mimeType,

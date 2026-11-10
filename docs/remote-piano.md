@@ -203,11 +203,14 @@ a busy peer refuses additional preparations instead of waiting in an unbounded q
 
 ### Voice input
 
-**Voice input** works in both composers using the **main Piano's** dedicated OpenAI key, set in
-**Local → Settings → Preferences**. If it is off, the remote microphone offers **Open Local
-Preferences**. Main may itself be a VM. Recordings and the source session's spelling context go
-through main to OpenAI, not to the peer. Review the inserted text before Send; audio is never an
-attachment and transcription never sends a message by itself. Existing attached images stay intact.
+The **Voice input** toggle in **Local → Settings → Preferences** on the **main Piano** controls
+the microphone in existing-session and New-session composers on Local and every peer. Off hides
+the idle microphone everywhere; on shows it everywhere. Active **Stop recording**, **Cancel
+recording** and **Cancel transcription** controls remain available even if the preference is turned
+off. All composers use main's dedicated OpenAI key; main may itself be a VM. Recordings and the
+source session's spelling context go through main to OpenAI, not to the peer. Review the inserted
+text before Send; audio is never an attachment and transcription never sends a message by itself.
+Existing attached images stay intact.
 
 **Stop recording** commits transcription to that machine's draft, even if you switch away before
 it finishes. Switching away before Stop, or hiding/locking the page during recording, discards the

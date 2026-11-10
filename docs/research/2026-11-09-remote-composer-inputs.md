@@ -7,6 +7,13 @@ matching installed packages in `/home/exedev/piano/node_modules` were inspected 
 This dedicated research worktree has no installed dependencies. Source inspection and
 public documentation establish the findings below, not runtime compatibility. [C1]
 
+**Implementation follow-up:** [ADR 0004](../adr/0004-same-owner-piano-peer.md#voice-input-main-origin-assistance-machine-owned-drafts)
+accepts main-owned dictation. Its subsequent visibility amendment supersedes this research
+note's suggestion of a remote setup shortcut: main's **Local → Settings → Preferences → Voice
+input** toggle shows or hides idle microphones in both composers on every machine. Setup stays
+in Local Preferences; active Stop/Cancel controls remain available. The findings below retain
+their original research baseline, not current tested policy.
+
 ## Recommendation
 
 1. Support **the existing raster image policy**, on both New session and existing remote

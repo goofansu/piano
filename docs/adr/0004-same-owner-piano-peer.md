@@ -135,13 +135,18 @@ This amendment accepts the main-owned option in the
 - Both composers use the browser's microphone and the main Piano's dedicated voice key and
   preference. Main can itself be a VM. Only main-origin `GET /api/settings/voice-input` and
   `POST /api/voice/transcribe` are composer utilities on remote views; they are explicit, never
-  peer-to-Local fallback. Settings writes remain in Local's Preferences. No voice route is added
-  to the peer allowlist, and no peer/OpenAI credential enters a conversation (INV-01/11).
+  peer-to-Local fallback. Settings writes remain in **Local → Settings → Preferences**. Its
+  **Voice input** toggle controls existing-session and New-session composers on Local and all
+  peers: off hides every idle microphone; on shows them. Active Stop/Cancel controls remain
+  available; turning the preference off does not cancel an operation. This visibility amendment
+  supersedes the off-state remote setup shortcut, not dictation ownership or draft isolation
+  (INV-01/07/11). Verify off/on/off across both composers on Local and peers. No voice route is
+  added to the peer allowlist, and no peer/OpenAI credential enters a conversation (INV-01/11).
 - Recordings and source project/folder/branch/session spelling hints go browser → main → OpenAI
-  (`gpt-transcribe`). The key dialog discloses that this applies to every machine; an off remote
-  microphone offers **Open Local Preferences**. Audio is ephemeral input assistance, not an
-  attachment or history. Only the reviewed draft text reaches the peer on explicit Send; the
-  existing image lane and 1 MiB conversation cap are unchanged (INV-01/02/04).
+  (`gpt-transcribe`). The key dialog discloses that this applies to every machine. Audio is
+  ephemeral input assistance, not an attachment or history. Only the reviewed draft text reaches
+  the peer on explicit Send; the existing image lane and 1 MiB conversation cap are unchanged
+  (INV-01/02/04).
 - The page-lifetime controller captures the source draft **store and key** and an operation's
   cancellation identity. Colliding IDs on different machines cannot share results. One live
   microphone/permission acquisition is allowed per page. Navigation or hiding the page cancels
