@@ -2,8 +2,8 @@
  * The start's send boundary through the real transport: the extension's Node socket and the shared
  * auto-reconnecting connection, against a running `server/main.ts` with the fake Pi. A socket that
  * never opens sent nothing, so the start is `refused` / `not_sent`. A send that throws after the
- * socket took the creation frame may have started a child, so the start is `uncertain` and the
- * creation is never sent again (PIN-137).
+ * socket took the creation frame may have started a child. Read-only reconciliation can find
+ * that child, but missed input observations stay uncertain and creation is never resent (PIN-137).
  */
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -52,7 +52,7 @@ test(
 );
 
 test(
-  "a send that throws after the socket took the creation frame stays uncertain and is never resent",
+  "a creation send that throws but reaches Pi reconciles its child without resending",
   {
     timeout: 60_000,
   },
@@ -98,6 +98,9 @@ test(
         return [];
       }
     };
+    const controller = new AbortController();
+    let pendingStart: ReturnType<typeof startSession> | undefined;
+    let closeFaulted: (() => void) | undefined;
     try {
       const deadline = Date.now() + 30_000;
       for (;;) {
@@ -110,8 +113,9 @@ test(
         await delay(50);
       }
 
-      // The real Node socket, except that the creation frame's send enqueues it and then throws,
-      // and the socket closes only after a delay, so its acknowledgement is lost to this client.
+      // Enqueue creation, then throw and hide its replies. Keep the underlying connection alive
+      // until Pi receives the input: closing after a fixed delay races startup/attachment, and a
+      // disconnect before attachment legitimately sends no prompt (covered in ClientSessions).
       const real = nodeSocketEnvironment({ url: wsUrl, origin: base });
       let opened = 0;
       let creations = 0;
@@ -134,7 +138,7 @@ test(
               if (!data.includes('"create_session"')) return;
               creations++;
               faulted = true;
-              setTimeout(() => socket.close(), 500);
+              closeFaulted = socket.close;
               throw new Error("send failed after enqueueing the frame");
             },
             close: () => {
@@ -143,22 +147,30 @@ test(
           };
         },
       };
-      const result = await startSession({ cwd: repo, prompt: "write marker child.txt" }, faulty);
-      assert.deepEqual(
-        [result.creation, result.submission, result.handle?.submissionId],
-        ["created", "uncertain", null],
-        JSON.stringify(result),
+      pendingStart = startSession(
+        { cwd: repo, prompt: "write marker child.txt" },
+        faulty,
+        controller.signal,
       );
 
-      // The frame did reach Piano: its child ran.
+      // The fake Pi writes synchronously on receiving this prompt, before acknowledging it.
+      // This is the delivery barrier, not an assumption about how fast the child starts.
       const marker = join(repo, "child.txt");
       const until = Date.now() + 15_000;
       while (!existsSync(marker)) {
         assert.ok(Date.now() < until, `the child never wrote its marker\n${logs}`);
         await delay(50);
       }
-      assert.ok(readFileSync(marker, "utf8").trim());
+      assert.ok(closeFaulted, "the creation send threw after enqueueing its frame");
+      closeFaulted();
+      const result = await pendingStart;
+      assert.deepEqual(
+        [result.creation, result.submission, result.handle?.submissionId],
+        ["created", "uncertain", null],
+        JSON.stringify(result),
+      );
       assert.ok(result.handle?.sessionId, "reconciliation identifies the original child");
+      assert.equal(readFileSync(marker, "utf8").trim(), result.handle.sessionId);
       assert.equal(result.handle.inputFingerprint, "", "missed observations remain unattributable");
       // Longer than the transport's reconnect delay: nothing sends creation again.
       await delay(3_000);
@@ -166,6 +178,9 @@ test(
       assert.equal(opened, 2, "one read-only reconnect finds the original start");
       assert.equal(children().length, 1, "exactly one child exists");
     } finally {
+      controller.abort();
+      closeFaulted?.();
+      await pendingStart;
       const exited = once(piano, "exit");
       piano.kill("SIGTERM");
       const force = setTimeout(() => piano.kill("SIGKILL"), 5000);
