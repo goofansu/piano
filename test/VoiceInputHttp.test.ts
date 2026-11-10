@@ -126,6 +126,8 @@ test(
       assert.equal(next.status, 200);
       assert.deepEqual(await next.json(), { text: "review me" });
       assert.equal(called, 3, "released capacity, no mutation retries");
+      for (const _ of [1, 2]) assert.equal((await post()).status, 200);
+      assert.equal(called, 5, "a finished transcription releases its capacity");
     } finally {
       controllers.forEach((controller) => controller.abort());
       await router.dispose();

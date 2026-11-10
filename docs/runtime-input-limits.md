@@ -121,8 +121,8 @@ Local and peer composers. No audio traverses the conversation socket or peer gat
 | Recording | 10 minutes; 25,000,000 actual Blob bytes; one live microphone/permission operation per page |
 | Browser encoding | Refuse oversized chunks/Blob before FileReader; request a 1-second recorder timeslice |
 | Main HTTP body | 33,333,336 base64 bytes + 32 KiB JSON envelope, actual streamed bytes before text/JSON allocation; compressed uploads refused |
-| Ingestion | Two requests across upload and transcription, immediate 429 when busy; 30 s total body-read deadline |
-| Service | Two active transcriptions per backend; no waiting queue; canonical base64 and decoded-byte validation before provider upload |
+| Ingestion | Two requests per backend across upload and transcription (the endpoint's `upload` in `shared/http.ts`), immediate 429 before the body is read when busy, no waiting queue; 30 s total body-read deadline |
+| Service | Canonical base64 and decoded-byte validation before provider upload |
 | Provider | 120 s operation deadline including response body; 1 MiB response JSON and 65,536 transcript characters; no redirects or automatic retries |
 | Cancellation | Browser abort reaches fetch; HTTP disconnect/Effect interruption cancels provider fetch and releases capacity |
 

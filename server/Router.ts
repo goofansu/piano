@@ -7,9 +7,9 @@ import {
   type Json,
   type RefusedStatus,
   type SignInEndpoints,
+  type Upload,
 } from "../shared/http.ts";
 import { machineList } from "../shared/machine.ts";
-import { MAX_VOICE_REQUEST_BYTES, MAX_VOICE_REQUESTS } from "../shared/voiceInput.ts";
 import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
@@ -49,26 +49,31 @@ class ApiFailure extends Data.TaggedError("ApiFailure")<{
 
 const fail = (status: number, error: string) => Effect.fail(new ApiFailure({ status, error }));
 
-/** Count actual bytes, including chunked/misdeclared uploads, before allocating JSON text. */
-const voiceBody = Effect.fn("Router.voiceBody")(function* (
+/** How long an upload's whole body may take to arrive. */
+const UPLOAD_READ_MS = 30_000;
+
+/** An upload's body read within its bounds: actual bytes are counted, chunked or misdeclared
+ * uploads included, before any JSON text is allocated. */
+const uploadBody = Effect.fn("Router.uploadBody")(function* (
   request: HttpServerRequest.HttpServerRequest,
+  upload: Upload,
 ) {
   if (request.headers["content-encoding"] && request.headers["content-encoding"] !== "identity")
-    return yield* fail(415, "Compressed recordings are not supported.");
-  const tooLarge = () => fail(413, "The recording is too long. Record a shorter message.");
-  if (Number(request.headers["content-length"]) > MAX_VOICE_REQUEST_BYTES) return yield* tooLarge();
+    return yield* fail(415, upload.compressed);
+  const tooLarge = () => fail(413, upload.tooLarge);
+  if (Number(request.headers["content-length"]) > upload.bytes) return yield* tooLarge();
   const chunks: Uint8Array[] = [];
   let size = 0;
   yield* Stream.runForEach(request.stream, (chunk) => {
     size += chunk.byteLength;
-    if (size > MAX_VOICE_REQUEST_BYTES) return tooLarge();
+    if (size > upload.bytes) return tooLarge();
     chunks.push(chunk);
     return Effect.void;
   }).pipe(
-    Effect.catchTag("HttpServerError", () => fail(400, "Could not read the recording.")),
+    Effect.catchTag("HttpServerError", () => fail(400, upload.unreadable)),
     Effect.timeoutOrElse({
-      duration: 30_000,
-      orElse: () => fail(408, "Recording upload timed out."),
+      duration: UPLOAD_READ_MS,
+      orElse: () => fail(408, upload.timedOut),
     }),
   );
   return Buffer.concat(chunks, size).toString("utf8");
@@ -135,10 +140,11 @@ const respond = (body: unknown, status: number, { noStore = false, redact = true
 /**
  * One route per endpoint of shared/http.ts. IDs are resolved and the body decoded before the
  * handler runs; its result leaves through the response Schema, so the server cannot answer
- * outside the contract the browser decodes.
+ * outside the contract the browser decodes. An endpoint that declares an `upload` gets its own
+ * capacity, claimed before anything is read, and a bounded body read.
  */
 const route =
-  (router: HttpRouter.HttpRouter, voiceUploads: Semaphore.Semaphore) =>
+  (router: HttpRouter.HttpRouter) =>
   <
     Q extends IdParam,
     B extends Json | undefined,
@@ -156,8 +162,11 @@ const route =
       Req
     >,
     respondWith?: (result: R["Type"]) => HttpServerResponse.HttpServerResponse,
-  ) =>
-    router.add(
+  ) => {
+    const { upload } = endpoint;
+    // Created once per route, so every request to the endpoint shares it.
+    const slots = upload && Semaphore.makeUnsafe(upload.concurrent);
+    return router.add(
       endpoint.method,
       endpoint.path,
       Effect.gen(function* () {
@@ -184,8 +193,8 @@ const route =
           Object.assign(input, found);
         }
         if (endpoint.body) {
-          const text = yield* endpoint.path === Endpoints.transcribe.path
-            ? voiceBody(request)
+          const text = yield* upload
+            ? uploadBody(request, upload)
             : request.text.pipe(Effect.orElseSucceed(() => ""));
           const body = Schema.decodeUnknownExit(Schema.fromJsonString(endpoint.body as Json))(text);
           if (body._tag === "Failure") return yield* fail(400, endpoint.invalid);
@@ -208,13 +217,11 @@ const route =
       }).pipe(
         // Guard the matched route, not its raw URL: router-normalized aliases share capacity.
         (handler) =>
-          endpoint.path === Endpoints.transcribe.path
+          upload && slots
             ? handler.pipe(
-                Semaphore.withPermitsIfAvailable(voiceUploads, 1),
+                Semaphore.withPermitsIfAvailable(slots, 1),
                 Effect.map((result) =>
-                  Option.getOrElse(result, () =>
-                    respond({ error: "Voice input is busy. Try again later." }, 429),
-                  ),
+                  Option.getOrElse(result, () => respond({ error: upload.busy }, 429)),
                 ),
               )
             : handler,
@@ -227,11 +234,11 @@ const route =
         ),
       ),
     );
+  };
 
 export const AppRouter = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const allowedOrigins = yield* AllowedOrigins;
-    const voiceUploads = yield* Semaphore.make(MAX_VOICE_REQUESTS);
     // INV-11: run before body decoding, side effects, and WebSocket upgrade/dispatch.
     yield* router.addGlobalMiddleware((handler) =>
       Effect.gen(function* () {
@@ -281,7 +288,7 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* addPeerRoutes(router);
     yield* addPeerImageRoutes(router);
 
-    const serve = route(router, voiceUploads);
+    const serve = route(router);
 
     const machines = machineList(yield* ConfiguredPeers);
     yield* serve(Endpoints.machines, () => Effect.succeed({ machines }));
