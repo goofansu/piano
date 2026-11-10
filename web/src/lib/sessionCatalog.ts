@@ -151,11 +151,11 @@ export function inSidebarGroups(s: Pick<SessionEntry, "listed" | "pinned">): boo
   return s.listed && !s.pinned;
 }
 
-/** The palette's order: every session that is not archived, newest created first, wherever its folder is. */
+/** The palette's openable sessions, newest created first, wherever their folders are. */
 export function recentSessions(state: AppState): SessionEntry[] {
-  return sessionCatalog(state).sort(
-    (a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0),
-  );
+  return sessionCatalog(state)
+    .filter((s) => !s.disabled)
+    .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
 }
 
 /** One session by its ID, archived or not: what a `/s/<id>` address resolves to. */
