@@ -101,9 +101,13 @@ export function peerVerdict(
     case "trust":
       return registered(data, request.cwd) ? "admit" : "skip";
     case "select":
-      return request.sessionId !== null && listed(data, request.cwd, request.sessionId)
-        ? "admit"
-        : "refuse";
+      return request.attemptId && request.sessionId === null
+        ? registered(data, request.cwd)
+          ? "admit"
+          : "refuse"
+        : request.sessionId !== null && listed(data, request.cwd, request.sessionId)
+          ? "admit"
+          : "refuse";
     case "create_session":
       return openDirectory(data, request.cwd) && creationAllowed(request) ? "admit" : "refuse";
     case "act":

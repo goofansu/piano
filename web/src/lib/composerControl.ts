@@ -183,7 +183,7 @@ export const newSessionCommand = (
   target: { cwd: string; projectId: string | undefined },
   message: DraftMessage,
   options: StartOptions,
-): ClientCommand => ({
+): Extract<ClientCommand, { _tag: "create_session" }> => ({
   _tag: "create_session",
   cwd: target.cwd.trim(),
   projectId: target.projectId,

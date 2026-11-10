@@ -12,6 +12,7 @@
  * session; SessionHosts keeps one child per session (INV-02). A selected session shown stopped
  * attaches once another client starts it, without starting Pi itself.
  */
+import { createHash, randomUUID } from "node:crypto";
 import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import {
@@ -24,11 +25,13 @@ import {
 } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { bindSessionEvent } from "./ImagePreviews.ts";
-import { type PiSession, type PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
+import { type PiSession, PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
+import { Registry } from "./Registry.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
 
 /** A new session and the first message to send it, if any. */
-export interface CreateSessionRequest extends CreateSpec {
+export interface CreateSessionRequest extends Omit<CreateSpec, "attempt"> {
+  readonly attemptId?: string;
   readonly text?: string;
   readonly attachments?: ReadonlyArray<Attachment>;
 }
@@ -36,6 +39,7 @@ export interface CreateSessionRequest extends CreateSpec {
 export type RetireMode = "archive" | "delete";
 
 export interface Selection {
+  readonly attemptId?: string;
   readonly cwd: string;
   /** `null` is a new session that is not created yet. */
   readonly sessionId: string | null;
@@ -69,10 +73,13 @@ export class InputNotSent extends Data.TaggedError("InputNotSent")<{
   readonly inputId: string;
   readonly detail: string;
   readonly cause: ActRefused | PiSessionError;
+  /** A new session's first input: the session that was created and still awaits it. */
+  readonly session?: { readonly cwd: string; readonly sessionId: string };
 }> {}
 
 const refuse = (reason: ActRefused["reason"], detail: string = refused[reason]) =>
   Effect.fail(new ActRefused({ reason, detail }));
+const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 
 interface ClientSessions {
   /** The selection last claimed or shown; a created session's ID once it is shown. */
@@ -117,6 +124,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   output: ClientOutput,
 ) {
   const hosts = yield* SessionHosts;
+  const registry = yield* Registry;
   const { send } = output;
   let selected: Selection | null = null;
   /** The session last shown, live or saved, with the checkout answer its view carries. */
@@ -229,7 +237,10 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     opening: Effect.Effect<A, E>,
   ) => opening.pipe(Effect.tap(({ session }) => navigate(attachOpened(selectionId, session))));
 
-  const show = Effect.fn("ClientSessions.show")(function* (selection: Selection) {
+  const show = Effect.fn("ClientSessions.show")(function* (
+    selection: Selection,
+  ): Effect.fn.Return<void, PiSessionError> {
+    if (selection.attemptId) return yield* reconcile(selection);
     const { cwd, sessionId, selectionId } = selection;
     const view = sessionId
       ? yield* hosts.read(cwd, sessionId)
@@ -267,6 +278,44 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         });
       }),
     );
+  });
+
+  const reconcile = Effect.fn("ClientSessions.reconcile")(function* (
+    selection: Selection,
+  ): Effect.fn.Return<void, PiSessionError> {
+    const attempt = yield* hosts.reconcileCreation(selection.attemptId!);
+    if (!current(selection)) return;
+    if (attempt?.state === "failed") {
+      yield* send({
+        _tag: "selection_rejected",
+        selectionId: selection.selectionId,
+        inputId: attempt.id,
+        message: attempt.detail ?? "Nothing was sent.",
+      });
+      return;
+    }
+    const reference =
+      attempt &&
+      (yield* registry.get).sessions.find(
+        (s) => s.sessionId === attempt.sessionId && s.cwd === attempt.cwd && !s.archived,
+      );
+    if (reference) {
+      const target = {
+        cwd: reference.cwd,
+        sessionId: reference.sessionId,
+        selectionId: selection.selectionId,
+      };
+      yield* navigate(Effect.suspend(() => (current(selection) ? claim(target) : Effect.void)));
+      yield* show(target);
+    } else {
+      yield* send({
+        _tag: "error",
+        selectionId: selection.selectionId,
+        message:
+          attempt?.detail ??
+          "Could not confirm the original session start. Nothing was restarted or resent.",
+      });
+    }
   });
 
   // Another client may start the session this one shows stopped. Its live frames arrive only
@@ -458,21 +507,77 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   // waits on a pending creation.
   const create = Effect.fn("ClientSessions.create")(function* (
     selectionId: string,
-    { text, attachments, ...spec }: CreateSessionRequest,
+    { text, attachments, attemptId, ...spec }: CreateSessionRequest,
   ) {
-    const { session } = yield* openThenAttach(
-      selectionId,
-      hosts.create(spec).pipe(Effect.map((session) => ({ session }))),
+    const first = (opening: Effect.Effect<PiSession, PiSessionError | SessionNotCreated>) =>
+      Effect.gen(function* () {
+        const { session } = yield* openThenAttach(
+          selectionId,
+          opening.pipe(Effect.map((session) => ({ session }))),
+        );
+        const trimmed = text?.trim() ?? "";
+        if (!trimmed && !attachments?.length) return;
+        // Sent only once this client has attached, so it observes the prompt. A refusal names
+        // the session that exists, so the input returns to its draft and not to a second start.
+        yield* deliver(session, {
+          _tag: "prompt",
+          text: trimmed,
+          attachments,
+          inputId: attemptId ?? selectionId,
+        }).pipe(
+          Effect.mapError((e) =>
+            e instanceof InputNotSent
+              ? new InputNotSent({
+                  inputId: e.inputId,
+                  detail: e.detail,
+                  cause: e.cause,
+                  session: { cwd: session.spec.cwd, sessionId: session.spec.sessionId },
+                })
+              : e,
+          ),
+        );
+      });
+    // A selection ID lives only as long as its connection: a client that names no attempt gets
+    // no durable claim, so a reused ID is never mistaken for an earlier creation.
+    if (attemptId === undefined) return first(hosts.create(spec));
+    // Claim before Worktrunk, registration or Pi. A duplicate observes the original; it never
+    // takes ownership of that request's first input, even after a restart or reference deletion.
+    // Image bytes are hashed where they are, each framed by its length: serializing them would
+    // copy up to the whole attachment limit on the receive path.
+    const digest = createHash("sha256").update(
+      JSON.stringify({
+        cwd: spec.cwd,
+        projectId: spec.projectId,
+        inheritProject: spec.inheritProject,
+        options: spec.options,
+        worktree: spec.worktree,
+        text,
+        attachments: attachments?.map(({ data, ...image }) => ({ ...image, length: data.length })),
+      }),
     );
-    const trimmed = text?.trim() ?? "";
-    if (!trimmed && !attachments?.length) return;
-    // Sent only once this client has attached, so it observes the prompt.
-    yield* deliver(session, {
-      _tag: "prompt",
-      text: trimmed,
-      attachments,
-      inputId: selectionId,
-    });
+    for (const image of attachments ?? []) digest.update(image.data);
+    const fingerprint = digest.digest("hex");
+    const attempt = {
+      id: attemptId,
+      fingerprint,
+      sessionId: randomUUID(),
+      cwd: spec.cwd,
+      state: "starting" as const,
+    };
+    const creation = yield* hosts.begin({ ...spec, attempt });
+    if (!creation) {
+      const previous = yield* registry
+        .creationAttempt(attemptId)
+        .pipe(Effect.mapError((e) => rejected(e.detail)));
+      if (previous && previous.fingerprint !== fingerprint)
+        return Effect.fail(
+          rejected(
+            "This creation attempt was already used for different input. Nothing was restarted or resent.",
+          ),
+        );
+      return reconcile({ cwd: spec.cwd, sessionId: null, selectionId, attemptId });
+    }
+    return first(creation);
   });
 
   return {
@@ -480,7 +585,11 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     select: (selection) => claim(selection).pipe(Effect.as(show(selection))),
     create: ({ selectionId, ...request }) =>
       claim({ cwd: request.cwd, sessionId: null, selectionId }).pipe(
-        Effect.as(create(selectionId, request)),
+        Effect.andThen(
+          create(selectionId, request).pipe(
+            Effect.catch((error) => Effect.succeed(Effect.fail(error))),
+          ),
+        ),
       ),
     act,
     recheck,

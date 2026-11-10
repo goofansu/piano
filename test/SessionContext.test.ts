@@ -270,7 +270,7 @@ test("readiness needs a connected, settled attachment", () => {
 
 test("status precedence: startup, delivery, reconnecting, read-only, exited, then activity", () => {
   const status = (state: AppState) => sessionActivity(state, false).status;
-  const pending = { selectionId: "create", cwd: "/repo", text: "hi", outcome: "starting" as const };
+  const pending = { attemptId: "create", cwd: "/repo", text: "hi", outcome: "starting" as const };
   assert.equal(status({ ...base, pendingCreate: pending }), "Starting");
   assert.equal(
     status({
@@ -352,7 +352,7 @@ test("reply activity yields to visible pending text, except in Messages display"
     sessionActivity(
       {
         ...base,
-        pendingCreate: { selectionId: "create", cwd: "/repo", text: "", outcome: "starting" },
+        pendingCreate: { attemptId: "create", cwd: "/repo", text: "", outcome: "starting" },
       },
       false,
     ).replyActivity,
@@ -370,7 +370,7 @@ test("the session pane: a loading session shows the skeleton and nothing else", 
 });
 
 test("the session pane: a first message shows at once, without skeleton, until Pi has the session", () => {
-  const input = { selectionId: "create", cwd: "/repo", text: "hi", outcome: "starting" as const };
+  const input = { attemptId: "create", cwd: "/repo", text: "hi", outcome: "starting" as const };
   assert.deepEqual(sessionPane({ ...base, pendingCreate: input }), {
     list: true,
     skeleton: false,

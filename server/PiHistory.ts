@@ -33,10 +33,13 @@ export type HistoryLocation =
 
 /** Saved sessions, read without starting Pi. */
 export interface PiHistory {
-  /** Find a session's file under any of these checkout spellings, without moving or copying it. */
+  /** Find a session's file under these checkout spellings. `confirmAbsent` refuses unreadable
+   * stores/headers and keeps even unattributed matching IDs in a shared store; only that strict
+   * missing answer can support removing a fresh failed reference. Never moves or copies files. */
   readonly locate: (
     sessionId: string,
     checkouts: Iterable<string>,
+    options?: { readonly confirmAbsent?: boolean },
   ) => Effect.Effect<HistoryLocation, PiSessionError>;
   /** The session IDs Pi has history for in this directory. An unreadable store has none. */
   readonly sessionIds: (cwd: string) => Effect.Effect<ReadonlySet<string>>;
@@ -178,7 +181,7 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
     }
   };
 
-  const listed = Effect.fn("PiHistory.listed")(function* (cwd: string) {
+  const listed = Effect.fn("PiHistory.listed")(function* (cwd: string, strict = false) {
     // Match Pi's default directory encoding. Only a non-default shared store filters by header cwd;
     // old headers in a checkout's own store may omit cwd. Never create a store while inspecting it.
     const defaultDir = join(
@@ -187,21 +190,40 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
       `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`,
     );
     const dir = sessionDirFor(cwd) ?? defaultDir;
-    const names = yield* Effect.tryPromise(() => readdir(dir)).pipe(Effect.orElseSucceed(() => []));
+    const names = yield* Effect.tryPromise({
+      try: async () => {
+        try {
+          return await readdir(dir);
+        } catch (error) {
+          if (!strict || (error as NodeJS.ErrnoException).code === "ENOENT") return [];
+          throw error;
+        }
+      },
+      catch: (error) => rejected(`Cannot inspect Pi history ${dir}: ${String(error)}`),
+    });
     const infos = yield* Effect.forEach(
       names.filter((name) => name.endsWith(".jsonl")),
       (name) =>
-        Effect.tryPromise(async () => {
-          const path = join(dir, name);
-          const info = await header(path);
-          if (
-            !info ||
-            (dir !== defaultDir &&
-              (typeof info.cwd !== "string" || !info.cwd || directoryPath(info.cwd) !== cwd))
-          )
-            return undefined;
-          return { id: info.id, path };
-        }).pipe(Effect.orElseSucceed(() => undefined)),
+        Effect.tryPromise({
+          try: async () => {
+            const path = join(dir, name);
+            const info = await header(path);
+            if (strict && !info) throw new Error(`Unreadable session header: ${path}`);
+            if (
+              !info ||
+              (!strict &&
+                dir !== defaultDir &&
+                (typeof info.cwd !== "string" || !info.cwd || directoryPath(info.cwd) !== cwd))
+            )
+              return undefined;
+            return { id: info.id, path };
+          },
+          catch: (error) => rejected(`Cannot inspect Pi history: ${String(error)}`),
+        }).pipe(
+          Effect.catchTag("PiSessionError", (error) =>
+            strict ? Effect.fail(error) : Effect.succeed(undefined),
+          ),
+        ),
       { concurrency: 16 },
     );
     return infos.filter((info) => info !== undefined);
@@ -210,11 +232,12 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
   const locate = Effect.fn("PiHistory.locate")(function* (
     sessionId: string,
     checkouts: Iterable<string>,
+    options?: { readonly confirmAbsent?: boolean },
   ): Effect.fn.Return<HistoryLocation, PiSessionError> {
     // One physical file can be listed through several spellings; count it once.
     const files = new Map<string, string>();
     for (const cwd of new Set([...checkouts].map(directoryPath))) {
-      for (const info of yield* listed(cwd)) {
+      for (const info of yield* listed(cwd, options?.confirmAbsent)) {
         if (info.id !== sessionId) continue;
         // A listed file must resolve; unlike a checkout it has no missing state to fall back on.
         const physical = yield* Effect.tryPromise({
@@ -233,7 +256,10 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
   });
 
   const sessionIds = (cwd: string): Effect.Effect<ReadonlySet<string>> =>
-    Effect.map(listed(directoryPath(cwd)), (infos) => new Set(infos.map((info) => info.id)));
+    listed(directoryPath(cwd)).pipe(
+      Effect.map((infos) => new Set(infos.map((info) => info.id))),
+      Effect.orElseSucceed(() => new Set<string>()),
+    );
 
   return {
     metadata,

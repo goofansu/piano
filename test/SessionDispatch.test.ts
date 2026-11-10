@@ -507,7 +507,7 @@ test("a dialog on the first prompt returns the handle at once", bounded, async (
 });
 
 test(
-  "a loss before Pi names the session leaves creation uncertain and creates nothing twice",
+  "a loss before Pi names the session reconciles its durable identity without attributing missed input",
   bounded,
   async () => {
     const h = world();
@@ -515,10 +515,21 @@ test(
     h.last().accept();
     // The acknowledgement is lost after the creation frame was sent.
     h.last().serverClose(1006);
+    h.advance(2_000);
+    h.last().accept();
+    const read = h.sentOf("select").at(-1)!;
+    assert.equal(read.attemptId, h.sentOf("create_session")[0].attemptId);
+    assert.equal(read.sessionId, null);
+    h.last().frame(selected(read.selectionId, snapshotOf()));
     const result = await start;
-    assert.equal(result.creation, "uncertain");
+    assert.equal(result.creation, "created");
     assert.equal(result.submission, "uncertain");
-    assert.equal(result.handle, null);
+    assert.equal(result.handle?.sessionId, sessionId);
+    assert.equal(
+      result.handle?.inputFingerprint,
+      "",
+      "missed input cannot acquire attribution proof",
+    );
     // Give the transport every chance to reconnect and repeat the mutation.
     h.advance(10_000);
     assert.equal(h.sentOf("create_session").length, 1, "the prompt is created at most once");
@@ -527,10 +538,39 @@ test(
       {},
       "omitted options keep normal defaults",
     );
-    assert.equal(h.sockets.length, 1, "a settled start opens no further sockets");
+    assert.equal(h.sockets.length, 2, "only the read-only reconciliation reconnects");
     assert.equal(h.pendingTimers(), 0);
   },
 );
+
+// Refusing the read (client capacity, a peer's scope) is not the attempt's own outcome: only a
+// rejection naming the attempt says the original start left nothing behind.
+for (const named of [true, false])
+  test(
+    `a rejected reconciliation read ${named ? "naming the attempt reports nothing started" : "that names no attempt stays uncertain"}`,
+    bounded,
+    async () => {
+      const h = world();
+      const start = startSession({ cwd: asked, prompt: "hi" }, h.env);
+      h.last().accept();
+      h.last().serverClose(1006);
+      h.advance(2_000);
+      h.last().accept();
+      const read = h.sentOf("select").at(-1)!;
+      h.last().frame({
+        _tag: "selection_rejected",
+        selectionId: read.selectionId,
+        ...(named ? { inputId: read.attemptId } : {}),
+        message: "refused",
+      });
+      const result = await start;
+      assert.deepEqual(
+        [result.creation, result.submission],
+        named ? ["refused", "not_sent"] : ["uncertain", "uncertain"],
+      );
+      assert.equal(h.sentOf("create_session").length, 1);
+    },
+  );
 
 // The send boundary: before the creation frame reaches an open socket nothing can exist, so the
 // start says so; once it may have been sent, only uncertainty is honest.
@@ -594,6 +634,7 @@ test("a creation send that throws after enqueueing stays uncertain", bounded, as
   const start = startSession({ cwd: asked, prompt: "hi" }, h.env);
   h.last().failAfterSending("create_session");
   h.last().accept();
+  h.advance(30_001); // Unobservable reconciliation stays uncertain at the bounded start deadline.
   const result = await start;
   assert.deepEqual(
     {
@@ -605,7 +646,7 @@ test("a creation send that throws after enqueueing stays uncertain", bounded, as
   );
   h.advance(60_000);
   assert.equal(h.sentOf("create_session").length, 1);
-  assert.equal(h.sockets.length, 1, "it does not reconnect to send it again");
+  assert.equal(h.sentOf("act").length, 0, "reconciliation never submits input");
   assert.equal(h.pendingTimers(), 0);
 });
 

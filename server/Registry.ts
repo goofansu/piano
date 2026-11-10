@@ -21,6 +21,7 @@ import {
   sessionKey,
   Workspace,
 } from "../shared/wire.ts";
+import type { CreationAttempt } from "./CreationAttempt.ts";
 import { Directories } from "./Directories.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { openRegistryDatabase } from "./RegistryDatabase.ts";
@@ -263,6 +264,12 @@ export class Registry extends Context.Service<
   Registry,
   {
     readonly get: Effect.Effect<RegistryData>;
+    readonly creationAttempt: (
+      id: string,
+    ) => Effect.Effect<CreationAttempt | undefined, RegistryError>;
+    /** Atomic durable claim, before checkout/child/input effects. Existing claims are never reused. */
+    readonly claimCreation: (attempt: CreationAttempt) => Effect.Effect<boolean, RegistryError>;
+    readonly saveCreation: (attempt: CreationAttempt) => Effect.Effect<void, RegistryError>;
     readonly webhooks: Effect.Effect<readonly StoredWebhook[], RegistryError>;
     readonly saveWebhook: (hook: StoredWebhook) => Effect.Effect<void, RegistryError>;
     readonly removeWebhook: (id: string) => Effect.Effect<void, RegistryError>;
@@ -388,7 +395,15 @@ export class Registry extends Context.Service<
       scope: ChangesScope | undefined,
     ) => Effect.Effect<void, RegistryError>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
-    readonly removeSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
+    /**
+     * `reopened` names the done mark `addSession` cleared for this session: removing a start that
+     * failed gives it back, unless the project took a later session or is no longer open.
+     */
+    readonly removeSession: (
+      cwd: string,
+      sessionId: string,
+      reopened?: { readonly projectId: string; readonly doneAt: string },
+    ) => Effect.Effect<void, RegistryError>;
   }
 >()("piano/Registry") {}
 
@@ -470,6 +485,12 @@ export const RegistryLive = Layer.effect(
 
     return Registry.of({
       get: Ref.get(state),
+      creationAttempt: (id) =>
+        Effect.try({ try: () => database.creationAttempt(id), catch: (e) => recovery(path, e) }),
+      claimCreation: (attempt) =>
+        Effect.try({ try: () => database.claimCreation(attempt), catch: (e) => recovery(path, e) }),
+      saveCreation: (attempt) =>
+        Effect.try({ try: () => database.saveCreation(attempt), catch: (e) => recovery(path, e) }),
       webhooks: Effect.try({
         try: database.webhooks,
         catch: () => new RegistryError({ detail: "Could not read webhooks." }),
@@ -770,11 +791,26 @@ export const RegistryLive = Layer.effect(
             isSession(cwd, sessionId)(t) ? { ...t, archived: true } : t,
           ),
         })),
-      removeSession: (cwd, sessionId) =>
-        update((d) => ({
-          ...d,
-          sessions: d.sessions.filter((t) => !isSession(cwd, sessionId)(t)),
-        })),
+      removeSession: (cwd, sessionId, reopened) =>
+        update((d) => {
+          const at = d.sessions.findIndex(isSession(cwd, sessionId));
+          const sessions = d.sessions.filter((t) => !isSession(cwd, sessionId)(t));
+          const later =
+            !reopened ||
+            at < 0 ||
+            d.sessions.slice(at + 1).some((t) => t.projectId === reopened.projectId);
+          return {
+            ...d,
+            sessions,
+            projects: later
+              ? d.projects
+              : d.projects.map((p) =>
+                  p.id === reopened.projectId && p.doneAt === undefined
+                    ? { ...p, doneAt: reopened.doneAt }
+                    : p,
+                ),
+          };
+        }),
     });
   }),
 );

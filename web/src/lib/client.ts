@@ -177,6 +177,10 @@ export function createClient({
           cwd: m.cwd,
           sessionId: m._tag === "select" ? m.sessionId : null,
           firstMessage: m._tag === "create_session" ? (preview ?? firstMessage(m)) : undefined,
+          attemptId: m.attemptId,
+          projectId: m._tag === "create_session" ? m.projectId : undefined,
+          options: m._tag === "create_session" ? m.options : undefined,
+          reconciling: m._tag === "select" && !!m.attemptId,
         });
       // A select is navigation: the pane switches at once and a reconnect re-sends it (INV-02/05).
       if (m._tag === "select") {
@@ -225,20 +229,30 @@ export function createClient({
 
   const onStatus = (connected: boolean, reason?: DisconnectReason) => {
     apply({ type: "connected", connected, lost: !connected });
-    if (connected) reselect(state.session ?? state.selecting);
-    else if (reason) notify(...disconnectNotices[reason]);
+    if (connected) {
+      const pending = state.pendingCreate;
+      if (pending && pending.outcome === "uncertain" && !state.session?.sessionId)
+        send({ _tag: "select", cwd: pending.cwd, sessionId: null, attemptId: pending.attemptId });
+      else reselect(state.session ?? state.selecting);
+    } else if (reason) notify(...disconnectNotices[reason]);
   };
 
   const onMessage = (m: ServerMessage) => {
     // Decide before applying: a frame the projection rejects must not notify either.
     const notifySession = m._tag === "session" && sessionDelivery(state, m) === "apply";
     const wasResync = state.resync;
+    // A creation's verdict arriving after the person moved on changes nothing on screen.
+    const elsewhere =
+      m._tag === "selection_rejected" &&
+      m.inputId !== undefined &&
+      m.selectionId !== state.selectionId;
     const notice =
       m._tag === "trust" ? trustNotice(state, focusedDirectory(state)?.cwd, m) : undefined;
     apply({ type: "server", message: m });
     if (notice) notify(notice, "info");
     if (!wasResync && state.resync && state.connected) reselect(state.session);
     if (m._tag === "error" || m._tag === "trust_failed") notify(m.message, "error");
+    else if (elsewhere) notify(`Could not start session: ${m.message}`, "error");
     else if (m._tag === "toast") notify(m.message, m.level);
     else if (m._tag === "action_result" && m.result._tag === "queue_restored" && m.result.stopError)
       notify(m.result.stopError, "error");

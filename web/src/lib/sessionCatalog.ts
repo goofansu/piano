@@ -135,7 +135,7 @@ function entries(state: AppState): SessionEntry[] {
       cwd: ref.cwd,
       sessionId: ref.sessionId,
       title: ref.title,
-      label: sessionLabel(ref.title),
+      label: host?.starting ? "Starting" : sessionLabel(ref.title),
       createdAt: ref.createdAt,
       updatedAt: ref.updatedAt,
       folderPath: folder?.path,
@@ -150,7 +150,7 @@ function entries(state: AppState): SessionEntry[] {
       selected: isSession(current, ref),
       unavailable: ref.unavailable,
       hint: ref.unavailable && HINTS[ref.unavailable],
-      disabled: !sessionOpenable(ref),
+      disabled: !!host?.starting || !sessionOpenable(ref),
     };
   });
 }

@@ -1,7 +1,13 @@
 import type { SessionAction, StartOptions, ThinkingLevel } from "@shared/wire";
 import { useState } from "react";
 import type { ModelCatalogView } from "@/lib/modelCatalogs";
-import { emptyChoice, type ModelChange, type ModelTarget, modelChoice } from "@/lib/modelChoice";
+import {
+  emptyChoice,
+  type ModelChange,
+  type ModelPick,
+  type ModelTarget,
+  modelChoice,
+} from "@/lib/modelChoice";
 
 /**
  * Everything the composer's model picker reads and does for one target. The page hands it to
@@ -30,13 +36,14 @@ export function useModelChoice(
   target: ModelTarget,
   act?: (action: SessionAction) => void,
   ready = true,
+  initialPick: ModelPick = {},
 ): ModelControl & {
   /** Sends with the start options; a send that consumed its input clears the pick it carried. */
   submit: (send: (start: StartOptions) => boolean) => void;
   start: StartOptions;
   consume: () => void;
 } {
-  const [held, setHeld] = useState(() => emptyChoice(target));
+  const [held, setHeld] = useState(() => ({ ...emptyChoice(target), pick: initialPick }));
   const choice = modelChoice(held, models.catalog, target, ready);
   const apply = (change: ModelChange) => {
     if (change.kind === "act") act?.(change.action);

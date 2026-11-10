@@ -113,9 +113,12 @@ does not wait for the agent to finish. The handle can be passed unchanged to the
 `creation: "refused"` with `submission: "not_sent"` means no session exists: Piano refused the
 start (the reason is in `detail`) or never received it, because its WebSocket did not open (a wrong
 port, Piano not running, a connection timeout) or the start was cancelled before the creation
-request was sent. Address `detail` and dispatch again. Once the request may have been sent, a lost
-connection, deadline or cancellation reports `uncertain` instead, and the client never sends it a
-second time. A send that fails on an open socket counts as possibly sent: the socket may already
+request was sent. It also covers a failed startup whose child is confirmed stopped and whose
+history is conclusively absent; Piano removes only that fresh reference. Startup extensions or
+worktree hooks may have run, and any created worktree is kept: refusal is not a rollback of side
+effects. Address `detail` and dispatch again. After a lost connection, the client reconciles the
+original attempt without creating or sending again. Missing observations, a deadline or a cancellation
+remain `uncertain`; finding the session does not establish first-input delivery. A send that fails on an open socket counts as possibly sent: the socket may already
 have taken the frame. `creation: "created"` with `submission: "not_sent"` means the session exists
 but Piano refused its first prompt before Pi saw it (Pi stopped, or its checkout went, between
 startup and the prompt): the handle names the session, and sending the prompt to it cannot
@@ -124,8 +127,8 @@ duplicate it.
 The optional output file is reserved exclusively before network side effects, including against
 concurrent invocations, and kept once creation is attempted, even if the run was interrupted and
 left it empty. An existing or empty output file is **not proof of success**. A file holding a
-`refused` result records that nothing was started: remove it, or use a fresh path, to dispatch
-again. Inspect Piano before retrying an uncertain dispatch, or one whose file is empty; never
+`refused` result records that no session remains and the brief was not sent: after addressing its
+`detail`, remove it or use a fresh path to dispatch again. Inspect Piano before retrying an uncertain dispatch, or one whose file is empty; never
 blindly delete that file and resend. Without an output file there is no file-based
 duplicate-dispatch guard.
 

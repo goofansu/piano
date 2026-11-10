@@ -276,10 +276,11 @@ const dispositionOf = (
  * Creates a session in `cwd` and sends `prompt` as its first input, then returns as soon as Pi's
  * handling of that input is known — including when Pi answers with a dialog, which it cannot
  * resolve on its own. `create_session` is sent at most once: a connection lost before the session
- * is named leaves creation uncertain rather than creating a second session, and a loss after it
- * only re-attaches by identity. Until the frame is handed to an open socket nothing can exist, so
- * a socket that never opens, a deadline or an abort before then reports `refused` / `not_sent`.
- * A send that throws on an open socket may already have enqueued the frame: that is `uncertain`.
+ * is named reads the original attempt back by its `attemptId` rather than creating a second
+ * session, and a loss after it only re-attaches by identity. Until the frame is handed to an open
+ * socket nothing can exist, so a socket that never opens, a deadline or an abort before then
+ * reports `refused` / `not_sent`. A send that throws on an open socket may already have enqueued
+ * the frame: that is `uncertain`.
  */
 export function startSession(
   request: StartRequest,
@@ -293,6 +294,7 @@ export function startSession(
     (link, settle) => {
       let selectionId: string | null = null;
       let inputId: string | null = null;
+      let reconciling = false;
       let handle: SessionHandle | null = null;
       let snapshot: Snapshot | null = null;
       let sequence = 0;
@@ -367,6 +369,7 @@ export function startSession(
             const sent = link.commit({
               _tag: "create_session",
               selectionId,
+              attemptId: inputId,
               cwd,
               options: { dispatchedFrom },
               ...(inheritProject === undefined ? {} : { inheritProject }),
@@ -379,7 +382,9 @@ export function startSession(
           // Only an identity may be re-sent. Creating again would start a second session for
           // one request, and no acknowledgement is worth that.
           if (!handle) {
-            settle(unnamed("The connection was lost before Pi named the session."));
+            reconciling = true;
+            selectionId = link.nonce();
+            link.send({ _tag: "select", selectionId, cwd, sessionId: null, attemptId: inputId! });
             return;
           }
           selectionId = link.nonce();
@@ -392,12 +397,11 @@ export function startSession(
         },
         disconnected: (fatal) => {
           if (!link.committed()) settle(unsent("Piano could not be reached."));
-          else if (!handle)
+          // An ordinary loss before the session is named reconnects and reads the attempt back.
+          else if (!handle && fatal)
             settle(
               unnamed(
-                fatal
-                  ? "The connection was dropped for a frame over the delivery limit, before Pi named the session."
-                  : "The connection was lost before Pi named the session.",
+                "The connection was dropped for a frame over the delivery limit, before Pi named the session.",
               ),
             );
           else if (fatal)
@@ -433,6 +437,16 @@ export function startSession(
                   inputFingerprint: "", // Filled only by this submission's server-owned proof.
                   anchorMessageId: null,
                 };
+                if (reconciling) {
+                  settle(
+                    result(
+                      "created",
+                      "uncertain",
+                      "Found the original session. Initial observations were missed; nothing was restarted or resent.",
+                    ),
+                  );
+                  return;
+                }
                 expectedSubmission = (snapshot.state.submission?.id ?? 0) + 1;
                 if (oversized(snapshot) || !message.hosted || !message.cursor) {
                   settle(
@@ -523,7 +537,11 @@ export function startSession(
               settle(
                 handle
                   ? result("created", "uncertain", message.message)
-                  : result("refused", "not_sent", message.message),
+                  : // A refused reconciliation read (capacity, a peer's scope) is not the original
+                    // start's outcome: only a rejection naming this attempt says nothing remains.
+                    reconciling && message.inputId !== inputId
+                    ? unnamed(message.message)
+                    : result("refused", "not_sent", message.message),
               );
               return;
             // `selection_failed` answers an attach; creation fails with `error`. Either way an

@@ -168,6 +168,11 @@ export const draftMessage = (draft: Draft): DraftMessage => ({
 /** The client to follow for restored queues and refused input; the page's `Client` is one. */
 export interface DraftSource {
   listen: (listener: (message: ServerMessage) => void) => () => void;
+  /** The selection on screen, read after a frame is applied: a session frame names only that. */
+  getState?: () => {
+    selectionId: string | null;
+    session: { cwd: string; sessionId: string | null } | null;
+  };
 }
 
 /** Every draft on the page. A `null` key addresses no draft: reads are empty and changes do nothing. */
@@ -273,11 +278,29 @@ export function createDrafts(): Drafts {
       ...d,
       images: images.items.length || images.busy || images.error ? images : NO_IMAGES,
     }));
-  /** Input that never reached Pi returns to its draft, once: the first refusal claims it. */
-  const giveBack = (inputId: string) => {
+  /**
+   * Input that never reached Pi returns to its draft, once: the first refusal claims it. A new
+   * session's first input goes to the session it created when there is one, so sending it again
+   * cannot start a second session; only a creation that left nothing returns it to the New page.
+   */
+  const giveBack = (inputId: string, created: DraftKey | undefined) => {
     const refused = unconfirmed.get(inputId);
     unconfirmed.delete(inputId);
-    if (refused) update(refused.key, (now) => restore(refused.draft, now));
+    if (!refused) return;
+    const key = refused.key === NEW_SESSION_DRAFT && created ? created : refused.key;
+    update(key, (now) => restore(refused.draft, now));
+  };
+  /** The session a frame's verdict belongs to, when the frame or the screen names one. */
+  const sessionOf = (m: ServerMessage, source: DraftSource): DraftKey | undefined => {
+    if (m._tag === "selected" || m._tag === "error")
+      return m.cwd !== undefined && m.sessionId
+        ? sessionDraftKey({ cwd: m.cwd, sessionId: m.sessionId })
+        : undefined;
+    if (m._tag !== "session") return undefined;
+    const shown = source.getState?.();
+    return shown?.selectionId === m.selectionId && shown.session?.sessionId
+      ? sessionDraftKey(shown.session)
+      : undefined;
   };
   const isSendable = (draft: Draft) =>
     !draft.preparing && sendable({ text: draftMessage(draft).text, images: draft.images });
@@ -354,7 +377,7 @@ export function createDrafts(): Drafts {
       if (!key || !isSendable(draft)) return false;
       const inputId = `input-${prefix}-${++inputs}`;
       if (deliver(draftMessage(draft), inputId) === "not-sent") return false;
-      if (key !== NEW_SESSION_DRAFT) unconfirmed.set(inputId, { key, draft });
+      unconfirmed.set(inputId, { key, draft });
       update(key, () => EMPTY_DRAFT);
       return true;
     },
@@ -371,8 +394,7 @@ export function createDrafts(): Drafts {
       } catch (e) {
         error = e instanceof Error ? e.message : "Could not upload images. Try again.";
       }
-      if (disposition !== "not-sent" && key !== NEW_SESSION_DRAFT)
-        unconfirmed.set(inputId, { key, draft });
+      if (disposition !== "not-sent") unconfirmed.set(inputId, { key, draft });
       update(key, (now) => {
         const remaining = { ...now, preparing: undefined, prepareError: error };
         return disposition === "not-sent" ? restore(draft, remaining) : remaining;
@@ -386,7 +408,7 @@ export function createDrafts(): Drafts {
         // it stays sent.
         const verdict = inputVerdictOf(m);
         if (verdict)
-          if (verdict.outcome === "not_sent") giveBack(verdict.inputId);
+          if (verdict.outcome === "not_sent") giveBack(verdict.inputId, sessionOf(m, source));
           else unconfirmed.delete(verdict.inputId);
         else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
           const restored = m.result.messages.map((message) => message.text).join("\n\n");

@@ -116,8 +116,9 @@ process.stdin.on("end", () => {
 function handle(cmd) {
   audit("command", { command: cmd.type, text: cmd.message });
   if (cmd.type === "get_state") {
-    if (args.includes("--persist-before-readiness-failure")) {
-      persist({ role: "user", content: "Saved before readiness failed", timestamp: Date.now() });
+    if (args.includes("--fail-readiness") || args.includes("--persist-before-readiness-failure")) {
+      if (args.includes("--persist-before-readiness-failure"))
+        persist({ role: "user", content: "Saved before readiness failed", timestamp: Date.now() });
       out({
         type: "response",
         command: cmd.type,

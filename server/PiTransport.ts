@@ -29,6 +29,8 @@ export class PiSessionError extends Data.TaggedError("PiSessionError")<{
   /** Refused before Pi saw the action (a closing host, a missing checkout, Stop in progress, full
    * input capacity, an exited Pi): never delivered. Build it with `refusedUnsent`. */
   readonly notSent?: true;
+  /** Failed startup only: its child was observed stopped after closing the startup scope. */
+  readonly startupStopped?: true;
 }> {}
 
 /** A refusal before Pi saw the action, so its sender may take the input back. */
@@ -97,6 +99,8 @@ export interface PiTransport {
   /** Every accepted non-response record, in stdout order. Ends after stdout drains or fails. */
   readonly records: Stream.Stream<{ record: PiRecord; receivedAt: number }>;
   readonly exited: Deferred.Deferred<SessionClosure>;
+  /** OS exit evidence, independent of protocol failure/closure announcements. Never kills. */
+  readonly stopped: Effect.Effect<boolean>;
   /** Stop an unusable session and settle all transport work before killing Pi. */
   readonly fail: (detail: string) => Effect.Effect<void>;
   /** Includes queued records, so readbacks cannot race output not yet projected. */
@@ -593,6 +597,15 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     write,
     records: recordStream,
     exited,
+    // `exitCode` fails for a child a signal ended, which shutdown's own kill does to one that
+    // outlives its closed stdin. That is still an exit: wait for either outcome, then ask the OS.
+    stopped: handle.exitCode.pipe(
+      Effect.exit,
+      Effect.timeoutOption("1 second"),
+      Effect.andThen(handle.isRunning),
+      Effect.map((running) => !running),
+      Effect.orElseSucceed(() => false),
+    ),
     fail: failOutput,
     observationVersion: () => observationVersion,
     hasPendingWork: () =>

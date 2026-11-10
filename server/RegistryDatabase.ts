@@ -2,6 +2,8 @@
 import { chmodSync, closeSync, lstatSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
+import { Schema } from "effect";
+import { CreationAttempt } from "./CreationAttempt.ts";
 import type { RegistryData, StoredVoiceInput, StoredWebhook } from "./Registry.ts";
 
 const schema = `
@@ -331,7 +333,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 11 &&
         version !== 12 &&
         version !== 13 &&
-        version !== 14
+        version !== 14 &&
+        version !== 15
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -409,6 +412,11 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           openai_api_key TEXT,
           CHECK (voice_input = 0 OR openai_api_key IS NOT NULL)
         ) STRICT; INSERT OR IGNORE INTO preferences (id) VALUES (1); PRAGMA user_version = 14;`);
+      // Intent is retained independently of session retention. Never replay or expire it.
+      if (Number(version) < 15)
+        db.exec(`CREATE TABLE IF NOT EXISTS creation_attempts (
+          id TEXT PRIMARY KEY NOT NULL, record TEXT NOT NULL CHECK (json_valid(record))
+        ) STRICT; PRAGMA user_version = 15;`);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -455,6 +463,31 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
     };
     return {
       data,
+      creationAttempt: (id: string): CreationAttempt | undefined => {
+        const row = db.prepare("SELECT record FROM creation_attempts WHERE id = ?").get(id);
+        return row
+          ? Schema.decodeUnknownSync(CreationAttempt)(JSON.parse(row.record as string))
+          : undefined;
+      },
+      claimCreation: (attempt: CreationAttempt): boolean => {
+        let claimed = false;
+        write(() => {
+          claimed =
+            db
+              .prepare("INSERT OR IGNORE INTO creation_attempts (id, record) VALUES (?, ?)")
+              .run(attempt.id, JSON.stringify(attempt)).changes === 1;
+        });
+        return claimed;
+      },
+      saveCreation: (attempt: CreationAttempt) =>
+        write(() => {
+          if (
+            db
+              .prepare("UPDATE creation_attempts SET record = ? WHERE id = ?")
+              .run(JSON.stringify(attempt), attempt.id).changes !== 1
+          )
+            throw new Error("Creation attempt is not registered.");
+        }),
       webhooks: (): StoredWebhook[] =>
         db
           .prepare("SELECT * FROM webhooks ORDER BY created_at, id")
