@@ -478,7 +478,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       const input = request._tag === "create_session" ? request : request.action;
       const target =
         request._tag === "create_session"
-          ? { cwd: request.cwd, draftId: reference.draftId ?? "" }
+          ? { cwd: request.cwd }
           : selection?.sessionId
             ? { cwd: selection.cwd, sessionId: selection.sessionId }
             : undefined;

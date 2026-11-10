@@ -89,7 +89,7 @@ test("closing a folder refuses new-session images but preserves images for liste
     Effect.gen(function* () {
       const images = yield* PreparedImages;
       const closed = { ...data, folders: [] };
-      const destination = { cwd, draftId: "new-draft" };
+      const destination = { cwd };
       const prepared = yield* images.prepare(data, imageUploadBody(destination, [png]).stream());
       assert.equal(
         (yield* images.claim(closed, prepared, destination).pipe(Effect.result))._tag,
@@ -111,20 +111,28 @@ test("closing a folder refuses new-session images but preserves images for liste
   );
 });
 
-test("new-session preparations require their draft nonce; abandoned preparations expire", async (t) => {
+test("new-session preparations stay with their folder; abandoned preparations expire", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: 1_000 });
+  const other = "/other";
+  const both: RegistryData = {
+    ...data,
+    folders: [cwd, other],
+    workspaces: [...data.workspaces, { id: "other", path: other, folder: other }],
+  };
   await run(
     Effect.gen(function* () {
       const images = yield* PreparedImages;
-      const destination = { cwd, draftId: "draft-1" };
-      const first = yield* images.prepare(data, imageUploadBody(destination, [png]).stream());
+      const destination = { cwd };
+      const first = yield* images.prepare(both, imageUploadBody(destination, [png]).stream());
       assert.equal(
-        (yield* images.claim(data, first, { cwd, draftId: "draft-2" }).pipe(Effect.result))._tag,
+        (yield* images.claim(both, first, { cwd: other }).pipe(Effect.result))._tag,
         "Failure",
+        "another folder's new session cannot claim them",
       );
       assert.equal(
-        (yield* images.claim(data, { id: first.id }, destination).pipe(Effect.result))._tag,
+        (yield* images.claim(both, first, target).pipe(Effect.result))._tag,
         "Failure",
+        "an existing session cannot claim a new session's images",
       );
       t.mock.timers.setTime(1_000 + remoteImageLimits.ttlMs);
       assert.equal(

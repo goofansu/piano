@@ -73,7 +73,7 @@ test(
       mimeType: "image/png" as const,
       data: "iVBORw0KGgo=",
     };
-    const target = { cwd: f.checkout, draftId: "new-draft" };
+    const target = { cwd: f.checkout };
     const upload = (image = png, destination = target) =>
       fetch(f.base + IMAGE_UPLOAD_PATH, {
         method: "POST",
@@ -82,7 +82,7 @@ test(
       });
     const before = await readRegistry("unused", f.database);
     assert.equal((await upload({ ...png, data: "YQ==" })).status, 400);
-    assert.equal((await upload(png, { cwd: "/unregistered", draftId: "new-draft" })).status, 404);
+    assert.equal((await upload(png, { cwd: "/unregistered" })).status, 404);
     assert.equal(
       (
         await fetch(f.base + IMAGE_UPLOAD_PATH, {
@@ -105,12 +105,7 @@ test(
     };
     for (const invalid of [
       { ...create, selectionId: "mixed", attachments: [png] },
-      {
-        ...create,
-        selectionId: "wrong-draft",
-        preparedImages: { ...preparedImages, draftId: "wrong" },
-      },
-      { ...create, selectionId: "absent", preparedImages: { id: "missing", draftId: "new-draft" } },
+      { ...create, selectionId: "absent", preparedImages: { id: "missing" } },
     ])
       assert.equal((await peer.answers(invalid))[0]?._tag, "selection_rejected");
     assert.deepEqual(
