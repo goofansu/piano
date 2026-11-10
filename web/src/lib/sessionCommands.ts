@@ -9,6 +9,7 @@ import type { SessionLayout } from "./navigation.ts";
 import { type PreviewObservationState, seenPreview } from "./previewObservation.ts";
 import { pullRequestView } from "./pullRequestView.ts";
 import { sessionArtifacts } from "./sessionArtifacts.ts";
+import { sessionOpenable } from "./sessionCatalog.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
@@ -242,7 +243,7 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
     !!workspaceFor(state, target.cwd) &&
     !!reference &&
     !reference.archived &&
-    reference.unavailable !== "history" &&
+    sessionOpenable(reference) &&
     !sessionWorking(state, target)
   );
 }

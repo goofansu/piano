@@ -74,7 +74,8 @@ export type Page =
   | { kind: "new"; cwd?: string; projectId?: string }
   | { kind: "projects" }
   | { kind: "project"; projectId: string; cwd?: string }
-  | { kind: "missing-session"; sessionId: string };
+  /** A session address nothing opens: unknown to Piano's database, or (`reason`) its history is gone. */
+  | { kind: "missing-session"; sessionId: string; reason?: "history" };
 
 /** The session's key for sets and maps; a session not yet started has an empty ID. */
 export const sessionKey = (s: { cwd: string; sessionId: string | null }) =>
