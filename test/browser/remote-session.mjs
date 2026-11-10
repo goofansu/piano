@@ -600,28 +600,38 @@ await run(
         await page.capture("7-reconnected-same-generation");
 
         const beforeReload = selected().length;
-        await page.ab("reload");
-        await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
-        await waitFor(
-          "deep-link reload attaches to remote generation without resend",
-          () =>
-            selected().length > beforeReload &&
-            selected().at(-1).message.cursor.generation === generation &&
-            selected().at(-1).message.snapshot.state.isStreaming,
-        );
-        await page.see("Streaming line");
-        await page.until(`!!document.querySelector('button[aria-label="Stop"]')`);
-        process.kill(pid, 0);
-        assert.equal(starts().length, 1, "disconnect and reload never replace remote Pi");
-        await page.capture("8-remote-deep-link-reload");
-        await imageEvent(page, "paste", "stop-upload.png");
+        const promptsBeforeStopUpload = page.remote.prompts();
+        // Arm before navigation creates the new document's network factories. Fetch.enable
+        // acknowledges before the renderer applies an update to existing factories; a key
+        // event after reload can otherwise send the upload through the old, unpaused factory.
         await call("Fetch.enable", {
           patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
         });
         try {
+          await page.ab("reload");
+          await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
+          await waitFor(
+            "deep-link reload attaches to remote generation without resend",
+            () =>
+              selected().length > beforeReload &&
+              selected().at(-1).message.cursor.generation === generation &&
+              selected().at(-1).message.snapshot.state.isStreaming,
+          );
+          await page.see("Streaming line");
+          await page.until(`!!document.querySelector('button[aria-label="Stop"]')`);
+          process.kill(pid, 0);
+          assert.equal(starts().length, 1, "disconnect and reload never replace remote Pi");
+          await page.capture("8-remote-deep-link-reload");
+          await imageEvent(page, "paste", "stop-upload.png");
           await page.press("Enter");
           await waitFor("stop image upload paused", () => !!heldUpload);
           await page.see("Uploading images…");
+          assert.deepEqual(
+            page.remote.prompts(),
+            promptsBeforeStopUpload,
+            "the paused upload has not delivered an input to Pi",
+          );
+          await page.capture("8a-stop-upload-paused");
           await page.click("button", "Stop");
           await page.until(`document.querySelector('[aria-label="Send"]') !== null`);
           await call("Fetch.continueRequest", { requestId: heldUpload }).catch(() => {});
