@@ -16,7 +16,7 @@ import {
   imageRoute,
   ImageTransferError,
 } from "./ImageTransfer.ts";
-import { AllowedOrigins } from "./OriginPolicy.ts";
+import { AllowedOrigins, fromOwnPage } from "./OriginPolicy.ts";
 import { PreparedImages } from "./PreparedImages.ts";
 import { Registry } from "./Registry.ts";
 
@@ -37,11 +37,7 @@ export const addPeerImageRoutes = Effect.fn("PeerImages.routes")(function* (
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = new URL(request.url, "http://localhost");
-    if (
-      (request.headers["sec-fetch-site"] !== undefined &&
-        request.headers["sec-fetch-site"] !== "same-origin") ||
-      (request.headers.origin !== undefined && !origins.has(request.headers.origin))
-    )
+    if (!fromOwnPage(request.headers, origins))
       return imageJson({ error: "Images must be requested from this Piano's own page." }, 403);
     const route = imageRoute(url.pathname, request.method, request.headers, url.search);
     if (route instanceof ImageTransferError)
