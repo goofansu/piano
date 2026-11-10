@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { createServer, request } from "node:http";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import * as NodeWS from "@effect/platform-node/NodeWS";
 import { inboundLimits } from "../server/InboundCapacity.ts";
 import { configuredOrigins } from "../server/OriginPolicy.ts";
+import { freePort } from "./fixtures/ports.ts";
 
 test("origin configuration fails closed and does not implicitly extend explicit origins", () => {
   assert.deepEqual(
@@ -41,13 +42,7 @@ test(
   },
   async () => {
     const root = mkdtempSync(join(tmpdir(), "piano-origin-"));
-    const reservation = createServer();
-    reservation.listen(0, "127.0.0.1");
-    await once(reservation, "listening");
-    const address = reservation.address();
-    assert.ok(address && typeof address !== "string");
-    const port = address.port;
-    await new Promise<void>((resolve) => reservation.close(() => resolve()));
+    const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const proxy = "https://piano.example";
     const child = spawn(process.execPath, ["server/main.ts"], {

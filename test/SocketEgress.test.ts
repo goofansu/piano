@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import * as NodeWS from "@effect/platform-node/NodeWS";
+import { freePort } from "./fixtures/ports.ts";
 
 test(
   "INV-11: a message Pi did not produce is redacted at socket egress; the directories it names are not",
@@ -15,13 +15,7 @@ test(
   },
   async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-egress-")));
-    const reservation = createServer();
-    reservation.listen(0, "127.0.0.1");
-    await once(reservation, "listening");
-    const address = reservation.address();
-    assert.ok(address && typeof address !== "string");
-    const port = address.port;
-    await new Promise<void>((resolve) => reservation.close(() => resolve()));
+    const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const canary = "egress-canary-0123456789";
     const child = spawn(process.execPath, ["server/main.ts"], {

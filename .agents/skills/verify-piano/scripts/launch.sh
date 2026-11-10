@@ -37,11 +37,12 @@ EVIDENCE=${VERIFY_EVIDENCE:-${TMPDIR:-/tmp}/verify-piano-evidence}/$RUN_ID
 [ -e "$RUN" ] && die "$RUN already exists"
 [ -d "$ROOT/node_modules" ] || (cd "$ROOT" && npm ci --no-audit --no-fund)
 
-free_port() {
-  node -e 'const s=require("node:net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})'
-}
-PORT=${VERIFY_PORT:-$(free_port)}
-WEB_PORT=${VERIFY_WEB_PORT:-$(free_port)}
+# Both ports come from one batch so the OS cannot hand the same port to the backend and the UI.
+read -r FREE_PORT FREE_WEB_PORT < <(cd "$ROOT" && node --input-type=module -e \
+  'const { freePorts } = await import("./test/fixtures/ports.ts"); console.log((await freePorts(2)).join(" "))') || true
+PORT=${VERIFY_PORT:-$FREE_PORT}
+WEB_PORT=${VERIFY_WEB_PORT:-$FREE_WEB_PORT}
+[ -n "$PORT" ] && [ -n "$WEB_PORT" ] || die "could not select free ports"
 [ "$PORT" != "$WEB_PORT" ] || die "backend and UI need different ports"
 for p in "$PORT" "$WEB_PORT"; do
   case "$p" in 7070 | 8000 | 8001 | 5173) die "port $p belongs to a real Piano or its dev server; pick another" ;; esac
