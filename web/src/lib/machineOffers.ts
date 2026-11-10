@@ -2,7 +2,7 @@ import type { AppState } from "../store.ts";
 /**
  * What a machine offers in this browser, decided once (ADR 0004). Local offers everything; a
  * remote offers the slice: its registered sessions, their conversation, and a new session with a
- * text first message in a folder or worktree it already registered. Whatever would manage the
+ * text/image first message in a folder or worktree it already registered. Whatever would manage the
  * remote, read its files or follow its accounts stays on the remote's own Piano.
  */
 import type { Command } from "./commands.ts";
@@ -68,7 +68,7 @@ const LOCAL_OFFERS: MachineOffers = {
 const REMOTE_OFFERS: MachineOffers = {
   files: false,
   rail: false,
-  attachments: false,
+  attachments: true,
   voiceInput: false,
   pullRequests: false,
   previews: false,

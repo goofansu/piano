@@ -7,6 +7,11 @@ import {
   type Machine,
   machineFrameBytes,
 } from "../../../shared/machine.ts";
+import {
+  IMAGE_UPLOAD_PATH,
+  IMAGE_CANCEL_PATH,
+  IMAGE_PREVIEW_PATH,
+} from "../../../shared/remoteImages.ts";
 import type { AddressBar } from "./navigation.ts";
 
 export { isLocalId, LOCAL, type Machine, machineFrameBytes };
@@ -48,11 +53,16 @@ export function machineAddress(id: string, address: AddressBar): AddressBar {
   };
 }
 
-const remotePaths = new Set<string>(RemoteRequests.map((request) => request.browser.path));
+const remotePaths = new Set<string>([
+  ...RemoteRequests.map((request) => request.browser.path),
+  IMAGE_UPLOAD_PATH,
+  IMAGE_CANCEL_PATH,
+  IMAGE_PREVIEW_PATH,
+]);
 
 /**
  * No relative fallback: each supported remote request has an immutable owner. A remote answers
- * only the requests its gateway relays (`RemoteRequests`, ADR 0004).
+ * only the JSON requests and fixed image routes its gateway relays (ADR 0004).
  */
 export function peerApiPath(id: string, path: string): string {
   if (isLocalId(id)) return path;

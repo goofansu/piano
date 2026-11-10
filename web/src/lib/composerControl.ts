@@ -56,6 +56,7 @@ export interface ComposerSituation {
   streaming: boolean;
   compacting: boolean;
   stopping: boolean;
+  preparing?: boolean;
   queued: number;
   /** The sticky delivery preference. */
   mode: DeliveryMode;
@@ -107,7 +108,7 @@ export function composerControl(s: ComposerSituation): ComposerControl {
       delivery: () => null,
     };
   }
-  const enabled = idle && sendable(draft);
+  const enabled = idle && !s.preparing && sendable(draft);
   return {
     primary: s.streaming ? "queue" : "send",
     enabled,

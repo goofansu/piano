@@ -33,6 +33,8 @@ export function useModelChoice(
 ): ModelControl & {
   /** Sends with the start options; a send that consumed its input clears the pick it carried. */
   submit: (send: (start: StartOptions) => boolean) => void;
+  start: StartOptions;
+  consume: () => void;
 } {
   const [held, setHeld] = useState(() => emptyChoice(target));
   const choice = modelChoice(held, models.catalog, target, ready);
@@ -46,6 +48,8 @@ export function useModelChoice(
     effort: choice.effort,
     noDirectory: target.kind === "new" && !target.cwd,
     submit: (send) => setHeld(choice.submit(send)),
+    start: choice.start,
+    consume: () => setHeld((now) => (now === held ? choice.submit(() => true) : now)),
     chooseModel: (model) => apply(choice.chooseModel(model)),
     chooseEffort: (level) => apply(choice.chooseEffort(level)),
     chooseDefaults: () => {

@@ -145,6 +145,9 @@ export interface Draft {
   text: string;
   images: ImageDraft;
   quotes: readonly string[];
+  /** Input held off the socket while its images are prepared; newer typing is a separate draft. */
+  preparing?: DraftMessage;
+  prepareError?: string;
 }
 
 /** What a send takes from the draft: its quotes and trimmed text as one message, and its images. */
@@ -208,6 +211,10 @@ export interface Drafts {
    * stop function. Nothing is sent again.
    */
   follow: (source: DraftSource) => () => void;
+  prepareSubmit: (
+    key: DraftKey | null,
+    deliver: (message: DraftMessage, inputId: string) => Promise<SendDisposition>,
+  ) => Promise<boolean>;
 }
 
 /**
@@ -222,6 +229,8 @@ const restore = (submitted: Draft, now: Draft): Draft => {
     text: now.text.trim() ? appendParagraph(submitted.text, now.text) : submitted.text,
     images: { ...now.images, items, error: overLimit(items) || now.images.error },
     quotes: [...submitted.quotes, ...now.quotes.filter((q) => !submitted.quotes.includes(q))],
+    preparing: now.preparing,
+    prepareError: now.prepareError,
   };
 };
 
@@ -248,7 +257,14 @@ export function createDrafts(): Drafts {
     const before = get(key);
     const next = change(before);
     if (next === before) return;
-    if (next.text || next.quotes.length || next.images !== NO_IMAGES) drafts.set(key, next);
+    if (
+      next.text ||
+      next.quotes.length ||
+      next.images !== NO_IMAGES ||
+      next.preparing ||
+      next.prepareError
+    )
+      drafts.set(key, next);
     else drafts.delete(key);
     for (const notify of listeners) notify();
   };
@@ -264,7 +280,7 @@ export function createDrafts(): Drafts {
     if (refused) update(refused.key, (now) => restore(refused.draft, now));
   };
   const isSendable = (draft: Draft) =>
-    sendable({ text: draftMessage(draft).text, images: draft.images });
+    !draft.preparing && sendable({ text: draftMessage(draft).text, images: draft.images });
   const paragraph = (key: DraftKey | null, text: string) =>
     update(key, (d) => ({ ...d, text: appendParagraph(d.text, text) }));
 
@@ -341,6 +357,27 @@ export function createDrafts(): Drafts {
       if (key !== NEW_SESSION_DRAFT) unconfirmed.set(inputId, { key, draft });
       update(key, () => EMPTY_DRAFT);
       return true;
+    },
+    async prepareSubmit(key, deliver) {
+      const draft = get(key);
+      if (!key || !isSendable(draft)) return false;
+      const inputId = `input-${prefix}-${++inputs}`;
+      const message = draftMessage(draft);
+      update(key, () => ({ ...EMPTY_DRAFT, preparing: message }));
+      let disposition: SendDisposition = "not-sent";
+      let error = "";
+      try {
+        disposition = await deliver(message, inputId);
+      } catch (e) {
+        error = e instanceof Error ? e.message : "Could not upload images. Try again.";
+      }
+      if (disposition !== "not-sent" && key !== NEW_SESSION_DRAFT)
+        unconfirmed.set(inputId, { key, draft });
+      update(key, (now) => {
+        const remaining = { ...now, preparing: undefined, prepareError: error };
+        return disposition === "not-sent" ? restore(draft, remaining) : remaining;
+      });
+      return disposition !== "not-sent";
     },
     follow: (source) =>
       source.listen((m) => {

@@ -11,6 +11,9 @@ second session implementation or a new registry store.
 
 | Owner | State and obligations |
 | --- | --- |
+| `PreparedImages` / `PeerImages` | Peer-owned ephemeral raster preparations, registered target validation and one-use references. Two slots cover ingestion through consumed-operation settlement; TTL/cancellation applies only before consumption. No filesystem staging, registry bytes or durable history. ClientDispatch resolves references before starting/creating, then passes ordinary image actions through PiSessions. |
+| `PeerImageGateway` / `ImageTransfer` | Main's fixed HTTP image routes: immutable configured destination/credentials, actual-byte bounds, backpressure, cancellation and independent concurrency/deadlines. No conversation frame rewriting, upload retry, Local fallback or Pi protocol. |
+| `ImagePreviews` / `ClientSessions` | Disposable content-hash bytes; ClientSessions binds projected transcript hashes to their observed session before delivery. Peer reads require registered session membership and that provenance. Cache eviction drops metadata with bytes; reselecting/reopening can reproject history. |
 | `PiTransport` (internal) | One scoped process, bounded stdin/record queues and byte framing, request IDs/deferreds, capacity leases, pending/uncertain delivery, stdout/stderr/exit readers. `fail` settles callers and ends records before killing Pi. Scope cleanup closes stdin then kills after its deadline. |
 | `PiSessions` publication (`SessionPublication`) | One generation per open, created by PiSessions. `SessionPublication` owns the snapshot, its one lock (held for projector correlation, snapshot fold, sequence assignment and subscriber attachment), sequence numbers, the cursor, subscribers, state merges and the closure announcement. State changes reach SessionReadbacks through its `onStateChange` listener. Publish never waits on a browser. A subscriber receives an atomic snapshot/cursor and then contiguous frames (INV-05). |
 | `PiSessions` dialog lifecycle (`SessionDialogs`) | Open dialogs live in the snapshot. An ordinary extension dialog has a deadline (Pi's advertised timeout, or the earlier host recovery bound `PiDialogRecoveryMs`). A dialog its tool call owns (Piano's `ask_user`) has none: that call's end closes it and its stored result confirms the answer. Answer/cancel/abort/deadline/tool end/exit compete under the publication lock. Claim and publish before transport yields; no late acknowledgement or uncertain write reopens a claim (INV-04). |
@@ -27,6 +30,16 @@ The transport seam hides OS and RPC correlation details from session orchestrati
 Its `observationVersion` counts **received**, not merely projected, output; context
 readbacks must not overtake queued records. `hasPendingWork` includes uncertainty
 left after caller timeout so retirement cannot infer false quiescence.
+
+Admission retains byte counts, not serialized image-payload strings (`InputBytes`). PiTransport
+creates one final newline-terminated stdin byte buffer; queued bytes keep their lease through
+uncertain writes until accepted or closed. Stdout framing reuses buffers up to 1 MiB; larger
+buffers get a one-second reuse window after a large line, not renewed by small records. Expiry
+releases empty storage, never an unfinished line; completion of that line schedules release
+again. This avoids repeating the geometric allocation/copy ladder during image/history bursts.
+Reader completion/failure/cancellation clears the timer and releases the remainder. This storage is distinct
+from Pi-owned history and the disposable image-preview cache; neither policy changes. See
+[runtime input limits](runtime-input-limits.md).
 
 Process exit stops input and disconnects preview ownership immediately, but is not stdout EOF.
 The transport allows one second after exit for stdout framing and response correlation to finish,
@@ -113,6 +126,7 @@ Contracts: INV-02/03/04/05/11. Pi RPC record validation is in the
 | RPC acknowledgement / write deadline | Report uncertain delivery, retain uncertainty for retirement, never retry a mutation. A refusal before any byte is queued (full capacity, closed input, an exited Pi) is `not_sent`, not uncertain: the prompt's submission receipt says so and the composer gives the draft back. |
 | Dialog deadline / abort cancellation | `resolveDialog` claims once and publishes written/uncertain/not-sent before returning its typed failure. Timer/abort callers suppress that already-reported error to continue resolving other dialogs. Exit resolution sends nothing. |
 | Usage/context/state readbacks | Continue with retained values and existing refresh-error state. Obsolete observations cannot overwrite newer operations. Optional run-ledger reads retain last usage on failure; cursor reset retries only a read, never a mutation. |
+| Remote image preparation | Failed/cancelled uploads start no Pi work and restore the machine-owned draft. A consumed reference stays unavailable to replay; only proven not-sent receipts restore input. Socket teardown cannot free a started operation's preparation slot before settlement. Lost unclaimed results expire; peer restart forgets them. |
 | Socket reader | Peer close and scope interruption end the client scope normally. Unexpected read/dispatch failure sends 1011 with reconnect guidance. Session-owned Pi work survives; reconnect is snapshot-only. |
 | Socket close write | Best effort: a dead peer cannot receive its close reason. Client scope still closes. No resend. |
 | Bounded socket delivery | Overflow/encoding/write failure or missing ack resolves the first close reason. 1009 means oversized view; 1013 means reconnect for a snapshot. Writer failure never retries frames. |

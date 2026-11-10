@@ -7,9 +7,182 @@ import { test } from "node:test";
 import { socketLimits } from "../server/BoundedDelivery.ts";
 import { loadPeerConfigs } from "../server/PeerConfig.ts";
 import { PEER_FRAME_BYTES } from "../shared/machine.ts";
+import {
+  IMAGE_UPLOAD_PATH,
+  IMAGE_PREVIEW_PATH,
+  IMAGE_UPLOAD_TYPE,
+  remoteImageLimits,
+} from "../shared/remoteImages.ts";
 import { CloseCode } from "../shared/wire.ts";
+import { imageUploadBody } from "../web/src/lib/remoteImages.ts";
 import { gatewayFixture, identity, registry } from "./fixtures/peer-gateway.ts";
 import { readRegistry } from "./fixtures/registry.ts";
+
+test(
+  "image gateway streams only fixed routes with per-peer bounds, no credentials or retry leakage",
+  { timeout: 30_000 },
+  async (t) => {
+    const f = await gatewayFixture(t, {
+      peers: [
+        { id: "eng-1", vmToken: "exe1.dummy-one" },
+        { id: "eng-2", vmToken: "exe1.dummy-two" },
+      ],
+    });
+    const [one, two] = f.peers;
+    const image = {
+      kind: "image" as const,
+      name: "x.png",
+      mimeType: "image/png" as const,
+      data: "iVBORw0KGgo=",
+    };
+    const blob = imageUploadBody({ cwd: identity.cwd, sessionId: identity.sessionId }, [image]);
+    const headers = {
+      Origin: f.base,
+      Cookie: "browser=secret",
+      Authorization: "Bearer browser-secret",
+      "X-Exedev-Authorization": "Bearer browser-injected",
+    };
+    const upload = (id = "eng-1", body: BodyInit = blob) =>
+      fetch(`${f.base}/peer/${id}${IMAGE_UPLOAD_PATH}`, {
+        method: "POST",
+        headers: { ...headers, "content-type": IMAGE_UPLOAD_TYPE },
+        body,
+      });
+    const response = await upload();
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { id: "prepared-eng-1" });
+    assert.deepEqual(one.state.requests.at(-1)!.bytes, Buffer.from(await blob.arrayBuffer()));
+    const preview = `${f.base}/peer/eng-1${IMAGE_PREVIEW_PATH}?${new URLSearchParams({ workspaceId: identity.workspaceId, sessionId: identity.sessionId, hash: "a".repeat(64) })}`;
+    const shown = await fetch(preview, { headers });
+    assert.equal(shown.status, 200);
+    assert.equal(shown.headers.get("set-cookie"), null);
+    assert.equal(shown.headers.get("cache-control"), "private, no-store");
+    assert.equal(shown.headers.get("x-content-type-options"), "nosniff");
+    assert.deepEqual(Buffer.from(await shown.arrayBuffer()), Buffer.from(image.data, "base64"));
+    for (const recorded of one.state.requests) {
+      assert.equal(recorded.headers.cookie, undefined);
+      assert.equal(recorded.headers.authorization, undefined);
+      assert.equal(recorded.headers["x-exedev-authorization"], "Bearer exe1.dummy-one");
+      assert.equal(recorded.headers.origin, one.config.origin);
+    }
+    const before = one.state.requests.length;
+    for (const url of [
+      preview + "&extra=1",
+      preview.replace("hash=", "bogus="),
+      preview.replace("a".repeat(64), "..%2Fsecret"),
+    ])
+      assert.equal((await fetch(url)).status, 400);
+    assert.equal(
+      (await fetch(preview, { headers: { "Sec-Fetch-Site": "cross-site" } })).status,
+      403,
+    );
+    assert.equal(
+      (await fetch(preview, { method: "POST", headers: { Origin: f.base } })).status,
+      405,
+    );
+    assert.equal((await upload("missing")).status, 404);
+    assert.equal(one.state.requests.length, before, "refuse before dialing");
+    for (const mode of ["http-redirect", "http-dead", "http-large", "http-unauthorized"]) {
+      one.state.mode = mode;
+      const count = one.state.requests.length;
+      assert.equal((await upload()).status, 502, mode);
+      assert.equal(one.state.requests.length, count + 1, "never retry uploads");
+    }
+    for (const mode of ["image-mime", "image-large"]) {
+      one.state.mode = mode;
+      assert.ok((await fetch(preview)).status >= 400, mode);
+    }
+    for (const mode of ["image-interrupted", "image-chunked-large"]) {
+      one.state.mode = mode;
+      const response = await fetch(preview);
+      if (response.ok) await assert.rejects(response.arrayBuffer(), mode);
+    }
+    // Held HTTP responses cannot occupy WS input/control lanes or another peer's HTTP slots.
+    one.state.mode = "http-held";
+    const a = upload(),
+      b = upload();
+    await one.until(() => one.state.pendingHttp.length === 2);
+    assert.equal((await upload()).status, 429);
+    const healthy = await upload("eng-2");
+    assert.equal(healthy.status, 200);
+    await healthy.body?.cancel();
+    assert.equal(
+      two.state.requests.at(-1)!.headers["x-exedev-authorization"],
+      "Bearer exe1.dummy-two",
+    );
+    const socket = await f.open({}, true, "eng-1");
+    socket.send({ _tag: "ping", nonce: "upload-ping" });
+    socket.send({ _tag: "act", selectionId: "selected", action: { _tag: "stop" } });
+    await one.until(() =>
+      one.state.received.some((raw) => JSON.parse(raw).nonce === "upload-ping"),
+    );
+    await one.until(() =>
+      one.state.received.some((raw) => JSON.parse(raw).action?._tag === "stop"),
+    );
+    for (const release of one.state.pendingHttp.splice(0)) release();
+    for (const reply of await Promise.all([a, b])) {
+      assert.equal(reply.status, 200);
+      await reply.body?.cancel();
+    }
+    socket.ws.close();
+    await socket.closed;
+    // Backpressure on the second hop of a maximum accepted batch must not hold controls.
+    one.state.mode = "image-body-held";
+    const pixels = Buffer.alloc(10 * 1024 * 1024);
+    pixels.set(Buffer.from(image.data, "base64"));
+    const maximum = imageUploadBody(
+      { cwd: identity.cwd, sessionId: identity.sessionId },
+      Array.from({ length: 5 }, () => ({ ...image, data: pixels.toString("base64") })),
+    );
+    const maximumResponse = upload("eng-1", maximum);
+    await one.until(() => one.state.pendingBodies.length === 1);
+    const live = await f.open({}, true, "eng-1");
+    live.send({ _tag: "ping", nonce: "large-upload-ping" });
+    live.send({
+      _tag: "act",
+      selectionId: "selected",
+      action: {
+        _tag: "answer",
+        id: "dialog",
+        generation: "remote",
+        value: "answer while uploading",
+      },
+    });
+    await one.until(() =>
+      one.state.received.some((raw) => JSON.parse(raw).action?.value === "answer while uploading"),
+    );
+    await one.until(() =>
+      one.state.received.some((raw) => JSON.parse(raw).nonce === "large-upload-ping"),
+    );
+    one.state.pendingBodies.pop()!();
+    const accepted = await maximumResponse;
+    assert.equal(accepted.status, 200);
+    await accepted.body?.cancel();
+    assert.equal(
+      one.state.requests.findLast((req) => req.url === IMAGE_UPLOAD_PATH)!.bytes!.length,
+      maximum.size,
+    );
+    live.ws.close();
+    await live.closed;
+    one.state.mode = "ready";
+    // No Content-Length: count the actual streamed bytes, not an absent or lying header.
+    let chunks = 0;
+    const overflowing = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (++chunks <= 52) controller.enqueue(new Uint8Array(1024 * 1024));
+        else controller.close();
+      },
+    });
+    const over = await fetch(`${f.base}/peer/eng-1${IMAGE_UPLOAD_PATH}`, {
+      method: "POST",
+      headers: { Origin: f.base, "content-type": IMAGE_UPLOAD_TYPE },
+      body: overflowing,
+      duplex: "half",
+    } as RequestInit);
+    assert.ok(over.status >= 400);
+    assert.ok(remoteImageLimits.bodyBytes < 52 * 1024 * 1024);
+  },
+);
 
 // These new policy/transport boundaries have no protection in local ClientDispatch tests.
 test("peer startup configuration is explicit, bounded and fail-closed", (t) => {

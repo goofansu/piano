@@ -159,7 +159,7 @@ switching to tokenless access. Piano never changes integrations.
 
 ## Use
 
-Choose **eng-1** from **Machine**, open a listed session and send a text follow-up. The existing
+Choose **eng-1** from **Machine**, open a listed session and send text, images or both. The existing
 model/effort, context, queue, dialog and Stop controls apply to that remote session. In the model
 picker, **Use default** and **Make default** read and save the remote's own defaults for new
 sessions there; Local's defaults are unchanged. Cmd+K searches
@@ -167,7 +167,8 @@ only the selected machine and offers a **Switch to …** command for each config
 address is `/m/eng-1/s/<sessionId>`; reload and back/forward retain that machine.
 
 **New session** (or **New session here** in Cmd+K) starts a session on the selected machine. Its
-directory picker lists only the folders open on that machine, and the first message is text.
+directory picker lists only the folders open on that machine; its first message may contain
+text, images or both.
 The session runs and stays on the remote. A worktree for parallel work comes from the remote
 session's own dispatch, which runs on the remote, not from this picker.
 
@@ -179,20 +180,42 @@ Unsent drafts and question replies are isolated by machine and retained only for
 Reload discards drafts as in Local. Remote model catalogs are memory-only and cannot populate
 Local's persisted catalog. Remote files, credentials, history and database remain remote.
 
+### Images
+
+Use **Attach images**, paste or drop in either composer. The same
+[image policy](image-attachments.md) applies as Local: PNG/JPEG/GIF/WebP, ten images, 10 MiB each,
+50 MiB combined. Thumbnails appear immediately; remove them before sending. Image-only input,
+steering and follow-up work too. Pi's queue still shows text only; Edit and Stop restore text,
+not images. Piano preserves Pi's reported empty image-only queue entries.
+
+After Send, **Uploading images…** means preparation on the selected peer, not model receipt.
+You can keep typing and answer dialogs. **Cancel**, changing directory/session/machine, or Stop
+before submission cancels the pending send and keeps its original draft. New typing is preserved.
+If upload fails, the draft comes back for an explicit retry; there is no automatic upload retry.
+Once a prompt may have reached Pi, check the authoritative conversation before sending it again.
+
+Transcript thumbnails and **Open attached image** read from that session's peer, never Local.
+The image cache is disposable; if a preview is unavailable, reopen the session to reproject its
+history. This does not resend input. A full browser reload discards unsent image drafts.
+Temporary prepared uploads disappear when the peer restarts or after ten minutes unclaimed;
+a busy peer refuses additional preparations instead of waiting in an unbounded queue. See
+[HTTP resource budgets](runtime-input-limits.md#remote-image-http-lane).
+
 ## Deliberate limits
 
-- A new remote session starts only in a folder open on the remote or one of its worktrees, with a text
-  first message: no Browse, worktree creation, project, name or attachment. No archive/delete/
+- A new remote session starts only in a folder open on the remote or one of its worktrees, with text
+  and/or raster images: no Browse, worktree creation, project or name. No archive/delete/
   rename/pin, projects management, worktree or machine management. Add, close and reopen folders
   on the owning Piano.
-- No remote file/Changes/attachment/preview or account/settings controls beyond the model picker's
-  defaults, folder trust included:
+- No remote general files, Changes, managed app previews, voice input or account/settings controls
+  beyond the model picker's defaults, folder trust included:
   trusting a folder would run its project extensions on the remote. These requests are not
-  forwarded to Local. Remote transcript attachments/local-file actions are unavailable.
+  forwarded to Local. Remote transcript local-file actions remain unavailable; image attachments
+  do not grant workspace file access.
 - The remote enforces these limits on its `/ws/peer` connection and answers a refused request the
   way it answers any failed one (for example "Unable to open session"); the connection stays open.
-- Only configured peers, the remote's `/ws/peer`, its slash-command reads and its defaults save are
-  routed. There is
+- Only configured peers, the remote's `/ws/peer`, slash-command reads, defaults save and fixed
+  image preparation/cancellation/preview routes are routed. There is
   no arbitrary URL proxy, redirect following, mutation retry or cross-machine search. The browser never contacts the
   integration hostname.
 - The configured destination is trusted, not an authenticated instance-ID handshake. A remote

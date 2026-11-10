@@ -10,6 +10,7 @@ import { test } from "node:test";
 import type { Selection } from "../server/ClientSessions.ts";
 import { peerVerdict } from "../server/PeerScope.ts";
 import type { RegistryData } from "../server/Registry.ts";
+import { isLocalId, type Machine } from "../shared/machine.ts";
 import type { Attachment, ClientMessage, Dialog, ModelCatalog } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import {
@@ -20,10 +21,11 @@ import {
 } from "../web/src/lib/composerControl.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import { LOCAL } from "../web/src/lib/machine.ts";
-import { type MachineOffers, machineOffers } from "../web/src/lib/machineOffers.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { draftMessage, EMPTY_DRAFT } from "../web/src/lib/messageDraft.ts";
 import { emptyChoice, type ModelTarget, modelChoice } from "../web/src/lib/modelChoice.ts";
 import { createDialogAnswer } from "../web/src/lib/piDialogs.ts";
+import { preparedImageCommand } from "../web/src/lib/remoteImages.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
@@ -85,8 +87,9 @@ const question: Dialog = {
   toolCallId: "call-1",
 };
 
-/** Everything the browser sends while a person works on a machine with `offers`, as sent. */
-function browserSends(offers: MachineOffers): ClientMessage[] {
+/** Everything the browser sends while a person works on `machine`, as sent. */
+function browserSends(machine: Machine): ClientMessage[] {
+  const offers = machineOffers(machine);
   const sent: ClientMessage[] = [];
   let handlers: ConnectionHandlers | undefined;
   let ids = 0;
@@ -108,7 +111,25 @@ function browserSends(offers: MachineOffers): ClientMessage[] {
   });
   client.start();
   handlers!.onStatus(true);
-  const send = client.send;
+  let preparations = 0;
+  const send: typeof client.send = (command) => {
+    const input =
+      command._tag === "act"
+        ? command.action
+        : command._tag === "create_session"
+          ? command
+          : undefined;
+    // HTTP preparation has its own boundary tests. Model its successful reference here, then
+    // use the same post-preparation builder as useImageSend, not an inline remote upload.
+    if (!isLocalId(machine.id) && input && "attachments" in input && input.attachments?.length)
+      return client.send(
+        preparedImageCommand(command, {
+          id: `prepared-${++preparations}`,
+          ...(command._tag === "create_session" ? { draftId: "new-draft" } : {}),
+        }),
+      );
+    return client.send(command);
+  };
   // A message as the composer drafts it: an image only where the attach button is offered.
   const message = draftMessage({
     ...EMPTY_DRAFT,
@@ -203,7 +224,24 @@ const kinds = (sent: readonly ClientMessage[]) =>
   sent.map((m) => (m._tag === "act" ? `act:${m.action._tag}` : m._tag));
 
 test("every message the browser builds for a remote is one the remote admits", () => {
-  const sent = browserSends(machineOffers({ id: "eng-1", name: "Eng" }));
+  const sent = browserSends({ id: "eng-1", name: "Eng" });
+  const inputs = sent.filter(
+    (m) =>
+      m._tag === "create_session" ||
+      (m._tag === "act" && (m.action._tag === "prompt" || m.action._tag === "steer")),
+  );
+  assert.equal(inputs.length, 5);
+  for (const input of inputs) {
+    assert.ok(
+      "preparedImages" in input && input.preparedImages,
+      "remote image input carries its preparation reference",
+    );
+    const message = input._tag === "act" ? input.action : input;
+    assert.ok(
+      !("attachments" in message) || message.attachments === undefined,
+      "remote image input carries no inline bytes",
+    );
+  }
   // The journey reached every builder, so admitting all of it covers each one.
   for (const kind of [
     "select",
@@ -223,7 +261,7 @@ test("every message the browser builds for a remote is one the remote admits", (
 });
 
 test("what Local adds to the same journey, the remote refuses", () => {
-  const refused = verdicts(browserSends(machineOffers(LOCAL)))
+  const refused = verdicts(browserSends(LOCAL))
     .filter(({ verdict }) => verdict === "refuse")
     .map(({ message }) => message);
   const prompts = refused.filter(

@@ -210,7 +210,11 @@ export function MessageList({
             {dispatchedFrom && <DispatchedFrom parent={dispatchedFrom} />}
             <PromptMeasurementsContext value={promptMeasurements}>
               {submittedInput && (
-                <UserMessage text={submittedInput.text} attachments={submittedInput.attachments} />
+                <UserMessage
+                  text={submittedInput.text}
+                  attachments={submittedInput.attachments}
+                  draft
+                />
               )}
               <TranscriptDisclosures value={disclosures}>
                 <TranscriptMeasure value={measureRow}>
@@ -697,11 +701,13 @@ function UserMessage({
   text,
   skill,
   attachments,
+  draft = false,
 }: {
   id?: string;
   text: string;
   skill?: RenderMsg["skill"];
   attachments: RenderMsg["attachments"];
+  draft?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const textId = useId();
@@ -783,7 +789,7 @@ function UserMessage({
             </Button>
           </div>
         )}
-        <MessageAttachments items={attachments} />
+        <MessageAttachments items={attachments} draft={draft} />
       </Row>
     </article>
   );

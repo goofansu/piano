@@ -86,6 +86,11 @@ export interface Client {
   start: () => () => void;
   /** Sends a command, correlating `select`, `create_session` and `act` with the current attachment. */
   send: (command: ClientCommand) => SendDisposition;
+  /** Capture navigation and connection identity before async preparation; never retarget a late send. */
+  captureSend: () => (
+    command: ClientCommand,
+    preview?: ReturnType<typeof firstMessage>,
+  ) => SendDisposition;
   /** Selects a session unless it is already the one on screen or being fetched. */
   select: (cwd: string, sessionId: string | null) => void;
   dispatch: (action: LocalAction) => void;
@@ -118,6 +123,7 @@ export function createClient({
 
   let state = withNewPageDirectory(initial);
   let connection: Connection | null = null;
+  let navigationEpoch = 0;
   /** The focused directory and catalog revision last asked about on this connection. */
   let asked: string | null = null;
   const listeners = new Set<(update: ClientUpdate) => void>();
@@ -145,6 +151,13 @@ export function createClient({
   const apply = (action: Action) => {
     const next = withNewPageDirectory(reduce(state, action));
     if (next === state) return;
+    if (
+      next.selectionId !== state.selectionId ||
+      next.view.kind !== state.view.kind ||
+      focusedDirectory(next)?.cwd !== focusedDirectory(state)?.cwd ||
+      next.connected !== state.connected
+    )
+      navigationEpoch++;
     state = next;
     askAboutFocus();
     for (const listener of listeners) listener(action.type === "server" ? "live" : "immediate");
@@ -154,7 +167,7 @@ export function createClient({
    * returns, so one still connected afterwards refused the message itself: it can never fit. */
   const notSent = () => (state.connected ? TOO_LARGE : NOT_SENT);
 
-  const send = (m: ClientCommand): SendDisposition => {
+  const send = (m: ClientCommand, preview?: ReturnType<typeof firstMessage>): SendDisposition => {
     if (m._tag === "select" || m._tag === "create_session") {
       const selectionId = newSelectionId();
       const selecting = () =>
@@ -163,7 +176,7 @@ export function createClient({
           selectionId,
           cwd: m.cwd,
           sessionId: m._tag === "select" ? m.sessionId : null,
-          firstMessage: m._tag === "create_session" ? firstMessage(m) : undefined,
+          firstMessage: m._tag === "create_session" ? (preview ?? firstMessage(m)) : undefined,
         });
       // A select is navigation: the pane switches at once and a reconnect re-sends it (INV-02/05).
       if (m._tag === "select") {
@@ -263,6 +276,14 @@ export function createClient({
       };
     },
     send,
+    captureSend: () => {
+      const epoch = navigationEpoch;
+      const socket = connection;
+      return (command, preview) =>
+        epoch === navigationEpoch && socket === connection && state.connected
+          ? send(command, preview)
+          : "not-sent";
+    },
     select: (cwd, sessionId) => {
       const current = state.session ?? state.selecting;
       if (

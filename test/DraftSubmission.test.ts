@@ -96,6 +96,76 @@ function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {
   };
 }
 
+test("async image preparation preserves newer typing and rejects a captured send after navigation", async (t) => {
+  const h = harness();
+  t.after(h.stop);
+  const drafts = createDrafts();
+  const other = createDrafts();
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
+  drafts.setText(key, "original");
+  other.setText(key, "other peer");
+  const captured = h.client.captureSend();
+  let finish!: () => void;
+  const prepared = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const pending = drafts.prepareSubmit(key, async (message, id) => {
+    await prepared;
+    return captured({
+      ...messageCommand("follow-up", { ...message, attachments: [] }, {}, id),
+      preparedImages: { id: "prepared" },
+    } as Parameters<typeof captured>[0]);
+  });
+  assert.equal(drafts.get(key).preparing?.text, "original");
+  assert.equal(
+    drafts.submit(key, () => "sent"),
+    false,
+    "one send per draft during preparation",
+  );
+  drafts.setText(key, "new typing");
+  h.client.select("/scratch", "other");
+  h.client.select("/scratch", "existing");
+  h.selected();
+  finish();
+  assert.equal(await pending, false);
+  assert.equal(drafts.get(key).text, "original\n\nnew typing");
+  assert.equal(other.get(key).text, "other peer");
+  assert.equal(
+    h.actions().length,
+    0,
+    "returning to the same identity cannot revive a cancelled send",
+  );
+});
+
+test("failed image preparation restores its draft; uncertain prepared input is never replayed", async (t) => {
+  const h = harness();
+  t.after(h.stop);
+  const drafts = createDrafts();
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
+  drafts.setText(key, "keep me");
+  assert.equal(
+    await drafts.prepareSubmit(key, async () => {
+      throw new Error("upload refused");
+    }),
+    false,
+  );
+  assert.equal(drafts.get(key).text, "keep me");
+  assert.equal(drafts.get(key).prepareError, "upload refused");
+  const captured = h.client.captureSend();
+  h.last().throws = true;
+  assert.equal(
+    await drafts.prepareSubmit(key, async (message) =>
+      captured(messageCommand("steering", message, {})),
+    ),
+    true,
+  );
+  assert.equal(drafts.get(key).text, "");
+  h.reconnect();
+  h.accept();
+  h.selected();
+  assert.equal(h.actions().length, 1);
+});
+
 test("PIN-61: CLOSING before onclose retains the full draft for explicit retry after selection", async (t) => {
   const h = harness();
   t.after(h.stop);
