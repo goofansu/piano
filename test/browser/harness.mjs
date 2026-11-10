@@ -4,21 +4,13 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { freePorts } from "../fixtures/ports.ts";
 import { seedRegistry } from "../fixtures/registry.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
-
-async function freePort() {
-  const server = createServer();
-  await new Promise((done, fail) => server.once("error", fail).listen(0, "127.0.0.1", done));
-  const { port } = server.address();
-  await new Promise((done) => server.close(done));
-  return port;
-}
 
 /** A committed Git repository in the scratch root. */
 function repository(root, name) {
@@ -102,11 +94,11 @@ export async function run(name, setup, journey, options = {}) {
   const root = mkdtempSync(join(tmpdir(), `piano-${name}-`));
   const local = await fixture(root, setup);
   const peers = [];
-  for (const [index, spec] of (
-    options.peers ?? (options.remote ? [options.remote] : [])
-  ).entries()) {
+  const specs = options.peers ?? (options.remote ? [options.remote] : []);
+  const [backendPort, webPort, ...peerPorts] = await freePorts(2 + specs.length);
+  for (const [index, spec] of specs.entries()) {
     const machine = await fixture(join(root, `peer-${index}`), spec.setup);
-    const port = await freePort();
+    const port = peerPorts[index];
     peers.push({
       machine,
       port,
@@ -119,7 +111,6 @@ export async function run(name, setup, journey, options = {}) {
       },
     });
   }
-  const [backendPort, webPort] = [await freePort(), await freePort()];
   const web = `http://127.0.0.1:${webPort}`;
   const peerConfig = join(root, "peers.json");
   if (peers.length)
