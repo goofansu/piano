@@ -60,9 +60,10 @@ export interface SessionHandle {
   readonly anchorMessageId: string | null;
 }
 
-/** Whether the session exists. "refused" started nothing: Piano refused the request, or it was never
- * sent (`submission` is then `not_sent`), so dispatching again cannot duplicate it. "uncertain" may
- * have started everything. */
+/** Whether a session remains. "refused" means no session and no first input: refusal before start,
+ * a request never sent, or confirmed stopped startup with conclusively absent history. Startup
+ * extensions/worktree hooks may have run; refusal is not a rollback of their side effects.
+ * "uncertain" may have started everything. */
 export type SessionCreation = "created" | "refused" | "uncertain";
 
 /** The worktree Piano created and placed the session in. */

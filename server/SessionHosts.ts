@@ -107,7 +107,7 @@ export class SessionCommandsError extends Data.TaggedError("SessionCommandsError
 }> {}
 
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
-/** A creation's failure before its reference is written: nothing registered, Pi never started. */
+/** Safe creation refusal: before registration, or after confirmed stopped/empty cleanup. */
 const notCreated = (e: PiSessionError) =>
   new SessionNotCreated({ detail: e.detail, checkoutUnconfirmed: false });
 /** An open's failures stay its own: its reference was written before this call. */
