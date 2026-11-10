@@ -112,8 +112,9 @@ const SessionRow = memo(
         style={{ position: "absolute", top, left: 0, right: 0 }}
         className={cn(
           rowClassName,
-          // The menu shows from md up; the phone opens a session's sheet instead.
-          "group relative flex items-center rounded-lg pr-1 hover:bg-fill-hover md:[--row-actions:1.75rem]",
+          // Openable sessions use their sheet on phones; disabled rows need their own recovery menu.
+          "group relative flex items-center rounded-lg pr-1 hover:bg-fill-hover",
+          disabled ? "[--row-actions:1.75rem]" : "md:[--row-actions:1.75rem]",
           selected && "bg-(--selected) hover:bg-(--selected)",
         )}
       >
@@ -162,7 +163,7 @@ const SessionRow = memo(
           {hint && <span className="sr-only">{hint}</span>}
         </button>
         {offers.sessionManagement && (
-          <RowActions className="inset-y-0 right-1 max-md:hidden">
+          <RowActions className={cn("inset-y-0 right-1", !disabled && "max-md:hidden")}>
             <DropdownMenu
               onOpenChange={(open) => {
                 if (open) onMenuChange(sessionKey(t), true);

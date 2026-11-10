@@ -90,7 +90,7 @@ test("saved session path copies without a running Pi, and is unavailable without
   assert.equal(enabled(base)["copy-session-path"], false);
 });
 
-test("session command availability: settled, disconnected, resyncing, missing checkout, no workspace", () => {
+test("session command availability: settled, disconnected, resyncing, unavailable session, no workspace", () => {
   const settled = enabled(base);
   assert.deepEqual(settled, {
     "copy-working-directory": true,
@@ -150,19 +150,19 @@ test("session command availability: settled, disconnected, resyncing, missing ch
     "unavailable Changes says why, never No changes",
   );
   assert.equal(changesOf(base), undefined);
-  const missingRow = enabled(
-    {
-      ...base,
-      sessionReferences: [
-        sessionReference(other.cwd, other.sessionId, {
-          title: other.title,
-          unavailable: "checkout",
-        }),
-      ],
-    },
-    other,
-  );
-  assert.deepEqual(missingRow, { rename: false, pin: true, archive: true, delete: true });
+  // Recovery belongs to the unselected row even when its history cannot be opened.
+  for (const unavailable of ["checkout", "history"] as const) {
+    const missingRow = enabled(
+      {
+        ...base,
+        sessionReferences: [
+          sessionReference(other.cwd, other.sessionId, { title: other.title, unavailable }),
+        ],
+      },
+      other,
+    );
+    assert.deepEqual(missingRow, { rename: false, pin: true, archive: true, delete: true });
+  }
 
   const noWorkspace = enabled({ ...base, workspaces: [] });
   assert.equal(noWorkspace.changes, false);
