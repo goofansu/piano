@@ -543,6 +543,35 @@ test(
   },
 );
 
+// Refusing the read (client capacity, a peer's scope) is not the attempt's own outcome: only a
+// rejection naming the attempt says the original start left nothing behind.
+for (const named of [true, false])
+  test(
+    `a rejected reconciliation read ${named ? "naming the attempt reports nothing started" : "that names no attempt stays uncertain"}`,
+    bounded,
+    async () => {
+      const h = world();
+      const start = startSession({ cwd: asked, prompt: "hi" }, h.env);
+      h.last().accept();
+      h.last().serverClose(1006);
+      h.advance(2_000);
+      h.last().accept();
+      const read = h.sentOf("select").at(-1)!;
+      h.last().frame({
+        _tag: "selection_rejected",
+        selectionId: read.selectionId,
+        ...(named ? { inputId: read.attemptId } : {}),
+        message: "refused",
+      });
+      const result = await start;
+      assert.deepEqual(
+        [result.creation, result.submission],
+        named ? ["refused", "not_sent"] : ["uncertain", "uncertain"],
+      );
+      assert.equal(h.sentOf("create_session").length, 1);
+    },
+  );
+
 // The send boundary: before the creation frame reaches an open socket nothing can exist, so the
 // start says so; once it may have been sent, only uncertainty is honest.
 const unsentStarts: ReadonlyArray<{

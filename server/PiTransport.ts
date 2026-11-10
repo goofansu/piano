@@ -597,9 +597,13 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     write,
     records: recordStream,
     exited,
+    // `exitCode` fails for a child a signal ended, which shutdown's own kill does to one that
+    // outlives its closed stdin. That is still an exit: wait for either outcome, then ask the OS.
     stopped: handle.exitCode.pipe(
+      Effect.exit,
       Effect.timeoutOption("1 second"),
-      Effect.map((exit) => exit._tag === "Some"),
+      Effect.andThen(handle.isRunning),
+      Effect.map((running) => !running),
       Effect.orElseSucceed(() => false),
     ),
     fail: failOutput,

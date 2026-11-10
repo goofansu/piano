@@ -664,6 +664,27 @@ test("rejected creation marks only its own first message as not started", () => 
   assert.equal(h.client.getState().pendingCreate?.detail, "Creation was not started");
 });
 
+test("a machine that names no input in its rejection still settles the creation's first message", () => {
+  const h = harness();
+  h.status(true);
+  h.client.send({
+    _tag: "create_session",
+    cwd: "/scratch",
+    options: {},
+    text: "kept on screen",
+    attemptId: "attempt-1",
+  });
+  // A Piano from before creation attempts answers by selection alone.
+  h.server({
+    _tag: "selection_rejected",
+    selectionId: h.client.getState().selectionId!,
+    message: "Creation was not started",
+  });
+  assert.equal(h.client.getState().pendingCreate?.outcome, "rejected");
+  // Nothing returned the input to the draft, so it stays where it is shown.
+  assert.equal(h.client.getState().view.kind, "session");
+});
+
 /** What the client asked Pi about, as `tag cwd` pairs, since the last call. */
 function focusHarness(options: { remembered?: string | null; initial?: typeof initialState } = {}) {
   const sent: ClientMessage[] = [];

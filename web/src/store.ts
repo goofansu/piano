@@ -320,30 +320,34 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         },
       };
     case "selection_failed":
-    case "selection_rejected":
+    case "selection_rejected": {
       if (m.selectionId !== s.selectionId || !s.selecting) return s;
+      const inputId = m._tag === "selection_rejected" ? m.inputId : undefined;
+      const pending = m._tag === "selection_rejected" ? s.pendingCreate : null;
+      // The rejection names the creation: its input is back in the draft, so return to the New page.
+      const named = !!pending && (inputId ?? m.selectionId) === pending.attemptId;
+      // A machine from before creation attempts names no input. While a first message is still
+      // starting with no session shown, the only selection in flight is its creation; a read of an
+      // attempt is sent only once that message is uncertain.
+      const unnamed =
+        !!pending && inputId === undefined && pending.outcome === "starting" && !s.session;
       return {
         ...s,
         selectionId: null,
         selectionFailure: { ...s.selecting, message: m.message },
-        ...(m._tag === "selection_rejected" &&
-        s.pendingCreate &&
-        (m.inputId ?? m.selectionId) === s.pendingCreate.attemptId
+        ...(pending && named
           ? {
-              view: {
-                kind: "new" as const,
-                cwd: s.pendingCreate.cwd,
-                projectId: s.pendingCreate.projectId,
-              },
+              view: { kind: "new" as const, cwd: pending.cwd, projectId: pending.projectId },
               session: null,
             }
           : {}),
         selecting: null,
         pendingCreate:
-          m._tag === "selection_rejected"
-            ? FirstMessage.rejected(s.pendingCreate, m.inputId ?? m.selectionId, m.message)
+          pending && (named || unnamed)
+            ? FirstMessage.rejected(pending, pending.attemptId, m.message)
             : s.pendingCreate,
       };
+    }
     case "error":
       if (!m.selectionId || m.selectionId !== s.selectionId || !s.pendingCreate) return s;
       return {

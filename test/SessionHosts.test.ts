@@ -203,6 +203,19 @@ test("INV-01/02: failed fresh startup removes only its conclusively empty refere
   );
 });
 
+test("INV-01/02: a failed fresh startup whose Pi had to be killed is still a confirmed stop", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts;
+      // The fixture outlives its closed stdin, so shutdown ends it with a signal, not an exit code.
+      const error = yield* Effect.flip(hosts.create({ cwd, options: {} }));
+      assert.equal(error._tag, "SessionNotCreated");
+      assert.deepEqual((yield* (yield* Registry).get).sessions, []);
+    }),
+    { failReadiness: "empty", holdShutdown: true, registry: "killed-start-failure" },
+  );
+});
+
 for (const scenario of [
   "saved",
   "unreadable",

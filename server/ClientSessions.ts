@@ -77,6 +77,7 @@ export class InputNotSent extends Data.TaggedError("InputNotSent")<{
 
 const refuse = (reason: ActRefused["reason"], detail: string = refused[reason]) =>
   Effect.fail(new ActRefused({ reason, detail }));
+const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 
 interface ClientSessions {
   /** The selection last claimed or shown; a created session's ID once it is shown. */
@@ -508,19 +509,21 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   ) {
     // Claim before Worktrunk, registration or Pi. A duplicate observes the original; it never
     // takes ownership of that request's first input, even after a restart or reference deletion.
-    const fingerprint = createHash("sha256")
-      .update(
-        JSON.stringify({
-          cwd: spec.cwd,
-          projectId: spec.projectId,
-          inheritProject: spec.inheritProject,
-          options: spec.options,
-          worktree: spec.worktree,
-          text,
-          attachments,
-        }),
-      )
-      .digest("hex");
+    // Image bytes are hashed where they are, each framed by its length: serializing them would
+    // copy up to the whole attachment limit on the receive path.
+    const digest = createHash("sha256").update(
+      JSON.stringify({
+        cwd: spec.cwd,
+        projectId: spec.projectId,
+        inheritProject: spec.inheritProject,
+        options: spec.options,
+        worktree: spec.worktree,
+        text,
+        attachments: attachments?.map(({ data, ...image }) => ({ ...image, length: data.length })),
+      }),
+    );
+    for (const image of attachments ?? []) digest.update(image.data);
+    const fingerprint = digest.digest("hex");
     const attempt = {
       id: attemptId,
       fingerprint,
@@ -530,18 +533,16 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     };
     const claimed = yield* registry
       .claimCreation(attempt)
-      .pipe(Effect.mapError((e) => new PiSessionError({ reason: "rejected", detail: e.detail })));
+      .pipe(Effect.mapError((e) => rejected(e.detail)));
     if (!claimed) {
       const previous = yield* registry
         .creationAttempt(attemptId)
-        .pipe(Effect.mapError((e) => new PiSessionError({ reason: "rejected", detail: e.detail })));
+        .pipe(Effect.mapError((e) => rejected(e.detail)));
       if (previous?.fingerprint !== fingerprint)
         return Effect.fail(
-          new PiSessionError({
-            reason: "rejected",
-            detail:
-              "This creation attempt was already used for different input. Nothing was restarted or resent.",
-          }),
+          rejected(
+            "This creation attempt was already used for different input. Nothing was restarted or resent.",
+          ),
         );
       return reconcile({ cwd: spec.cwd, sessionId: null, selectionId, attemptId });
     }

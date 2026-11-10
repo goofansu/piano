@@ -231,9 +231,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         );
 
       const list = Effect.gen(function* () {
-        const out: HostInfo[] = [...starting]
-          .filter(([key]) => !hosts.has(key))
-          .map(([, info]) => info);
+        // By its fresh session ID: a host is keyed by its physical checkout, a creation knows only
+        // the registered spelling, so their keys differ whenever the directory has an alias.
+        const live = new Set([...hosts.values()].map((h) => h.session.spec.sessionId));
+        const out: HostInfo[] = [...starting.values()].filter((info) => !live.has(info.sessionId));
         for (const h of hosts.values()) {
           const state = yield* h.session.state;
           // A disappearing/closing child is not an idle (successfully settled) host.
@@ -534,8 +535,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           yield* registry
             .saveCreation({ ...spec.attempt, cwd })
             .pipe(Effect.mapError((e) => rejected(e.detail)));
-        const key = sessionKey(cwd, sessionId);
-        starting.set(key, { cwd, sessionId, working: false, starting: true });
+        starting.set(sessionId, { cwd, sessionId, working: false, starting: true });
         yield* announce;
         const { session } = yield* start(
           { cwd, sessionId, model, thinkingLevel, name, dispatchedFrom },
@@ -552,14 +552,17 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           ),
           Effect.ensuring(
             Effect.sync(() => {
-              starting.delete(key);
+              starting.delete(sessionId);
             }).pipe(Effect.andThen(announce)),
           ),
         );
+        // The session is live and its claim already forbids a replay. An outcome that cannot be
+        // recorded must not fail the creation and strand its first input: reconciliation reads a
+        // claim still `starting` by its reference.
         if (spec.attempt)
           yield* registry
             .saveCreation({ ...spec.attempt, cwd, state: "created" })
-            .pipe(Effect.mapError((e) => rejected(e.detail)));
+            .pipe(Effect.catchTag("RegistryError", (e) => Effect.logWarning(e.detail)));
         return session;
       });
       const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
