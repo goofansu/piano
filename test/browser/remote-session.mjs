@@ -7,6 +7,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { run } from "./harness.mjs";
+import { voiceInputs } from "./voice-input.mjs";
 
 const sessionId = "same-session";
 const workspaceId = "same-workspace";
@@ -182,7 +183,8 @@ await run(
     try {
       await page.cdp(async (call, onEvent) => {
         onEvent(({ method, params }) => {
-          if (method === "Fetch.requestPaused") heldUpload = params.requestId;
+          if (method === "Fetch.requestPaused" && params.request.url.endsWith("/api/peer/images"))
+            heldUpload = params.requestId;
           if (
             method === "Network.requestWillBeSent" &&
             params.request.url.includes("/api/peer/image")
@@ -190,7 +192,10 @@ await run(
             imageRequests.push(params.request.url);
           if (onRemote && method === "Network.requestWillBeSent") {
             const path = new URL(params.request.url).pathname;
-            if (path.startsWith("/api/") && path !== "/api/machines")
+            const mainUtility =
+              (path === "/api/settings/voice-input" && params.request.method === "GET") ||
+              (path === "/api/voice/transcribe" && params.request.method === "POST");
+            if (path.startsWith("/api/") && path !== "/api/machines" && !mainUtility)
               localRequestsFromRemote.push(path);
           }
           if (
@@ -223,6 +228,10 @@ await run(
           }
         });
         await call("Network.enable");
+        const dictate = await voiceInputs(page, call, onEvent, async (name) => {
+          onRemote = name !== null && name !== "Local";
+          if (name !== null) await machine(page, name);
+        });
         const received = () => frames.filter((frame) => frame.direction === "received");
         const selected = () =>
           received().filter(
@@ -274,7 +283,7 @@ await run(
         );
         assert.equal(
           await page.evaluate(`!!document.querySelector('[aria-label="Voice input"]')`),
-          false,
+          true,
         );
         await page.ab("upload", 'input[aria-label="Image files"]', imageFile);
         await page.until(`!!document.querySelector('[aria-label="Remove picker.png"]')`);
@@ -289,11 +298,13 @@ await run(
           "invalid addition preserves accepted image",
         );
         await page.capture("2c-remote-image-draft");
+        await dictate(echo);
+        assert.deepEqual(page.remote.prompts(), [], "reviewed voice text is still unsent");
         await call("Fetch.enable", {
           patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
         });
         try {
-          await send(page, echo);
+          await page.click("button", "Send");
           await waitFor("upload failure request paused", () => !!heldUpload);
           await call("Fetch.fulfillRequest", {
             requestId: heldUpload,
@@ -823,7 +834,7 @@ await run(
         assert.deepEqual(
           localRequestsFromRemote,
           [],
-          "remote UI never calls a Local HTTP endpoint or socket",
+          "remote UI calls only named main voice utilities, never Local session/file endpoints or socket",
         );
         await page.open("/m/not-configured/s/same-session");
         await page.see("Machine unavailable");

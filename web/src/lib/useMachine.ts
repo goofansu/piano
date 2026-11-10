@@ -9,7 +9,7 @@ import { questionReplies, type QuestionReplies } from "./piDialogs.ts";
 export interface MachineScope {
   machine: Machine;
   machines: readonly Machine[];
-  switchMachine: (id: string) => void;
+  switchMachine: (id: string, path?: string) => void;
   drafts: Drafts;
   questions: QuestionReplies;
   catalogs: ModelCatalogs;

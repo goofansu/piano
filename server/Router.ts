@@ -1,4 +1,4 @@
-import { Cause, Data, Effect, Option, Schema } from "effect";
+import { Cause, Data, Effect, Option, Schema, Semaphore, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import {
   type Endpoint,
@@ -9,6 +9,7 @@ import {
   type SignInEndpoints,
 } from "../shared/http.ts";
 import { machineList } from "../shared/machine.ts";
+import { MAX_VOICE_REQUEST_BYTES, MAX_VOICE_REQUESTS } from "../shared/voiceInput.ts";
 import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
@@ -47,6 +48,31 @@ class ApiFailure extends Data.TaggedError("ApiFailure")<{
 }> {}
 
 const fail = (status: number, error: string) => Effect.fail(new ApiFailure({ status, error }));
+
+/** Count actual bytes, including chunked/misdeclared uploads, before allocating JSON text. */
+const voiceBody = Effect.fn("Router.voiceBody")(function* (
+  request: HttpServerRequest.HttpServerRequest,
+) {
+  if (request.headers["content-encoding"] && request.headers["content-encoding"] !== "identity")
+    return yield* fail(415, "Compressed recordings are not supported.");
+  const tooLarge = () => fail(413, "The recording is too long. Record a shorter message.");
+  if (Number(request.headers["content-length"]) > MAX_VOICE_REQUEST_BYTES) return yield* tooLarge();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  yield* Stream.runForEach(request.stream, (chunk) => {
+    size += chunk.byteLength;
+    if (size > MAX_VOICE_REQUEST_BYTES) return tooLarge();
+    chunks.push(chunk);
+    return Effect.void;
+  }).pipe(
+    Effect.catchTag("HttpServerError", () => fail(400, "Could not read the recording.")),
+    Effect.timeoutOrElse({
+      duration: 30_000,
+      orElse: () => fail(408, "Recording upload timed out."),
+    }),
+  );
+  return Buffer.concat(chunks, size).toString("utf8");
+});
 
 /** A service's refusal: a tagged error whose `detail` is written for people, and optionally the
  * form `field` it belongs to. Its endpoint declares the status (`refused`). SignInAttempts keeps
@@ -112,7 +138,7 @@ const respond = (body: unknown, status: number, { noStore = false, redact = true
  * outside the contract the browser decodes.
  */
 const route =
-  (router: HttpRouter.HttpRouter) =>
+  (router: HttpRouter.HttpRouter, voiceUploads: Semaphore.Semaphore) =>
   <
     Q extends IdParam,
     B extends Json | undefined,
@@ -158,7 +184,9 @@ const route =
           Object.assign(input, found);
         }
         if (endpoint.body) {
-          const text = yield* request.text.pipe(Effect.orElseSucceed(() => ""));
+          const text = yield* endpoint.path === Endpoints.transcribe.path
+            ? voiceBody(request)
+            : request.text.pipe(Effect.orElseSucceed(() => ""));
           const body = Schema.decodeUnknownExit(Schema.fromJsonString(endpoint.body as Json))(text);
           if (body._tag === "Failure") return yield* fail(400, endpoint.invalid);
           input.body = body.value;
@@ -178,6 +206,18 @@ const route =
         if (respondWith) return respondWith(result);
         return respond(encoded.value, 200, { noStore: endpoint.noStore, redact: endpoint.redact });
       }).pipe(
+        // Guard the matched route, not its raw URL: router-normalized aliases share capacity.
+        (handler) =>
+          endpoint.path === Endpoints.transcribe.path
+            ? handler.pipe(
+                Semaphore.withPermitsIfAvailable(voiceUploads, 1),
+                Effect.map((result) =>
+                  Option.getOrElse(result, () =>
+                    respond({ error: "Voice input is busy. Try again later." }, 429),
+                  ),
+                ),
+              )
+            : handler,
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.failCause(cause)
@@ -191,6 +231,7 @@ const route =
 export const AppRouter = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const allowedOrigins = yield* AllowedOrigins;
+    const voiceUploads = yield* Semaphore.make(MAX_VOICE_REQUESTS);
     // INV-11: run before body decoding, side effects, and WebSocket upgrade/dispatch.
     yield* router.addGlobalMiddleware((handler) =>
       Effect.gen(function* () {
@@ -240,7 +281,7 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* addPeerRoutes(router);
     yield* addPeerImageRoutes(router);
 
-    const serve = route(router);
+    const serve = route(router, voiceUploads);
 
     const machines = machineList(yield* ConfiguredPeers);
     yield* serve(Endpoints.machines, () => Effect.succeed({ machines }));

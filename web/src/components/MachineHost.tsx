@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { listMachines } from "@/lib/api";
+import { observeDictationPage } from "@/lib/browserDictation";
 import { LOCAL, type Machine, machineLocation, machinePath } from "@/lib/machine";
 import { createMachineStores } from "@/lib/machineStores";
 import { drafts } from "@/lib/messageDraft";
@@ -23,6 +24,7 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
     ),
   );
   const [paths] = useState(() => new Map<string, string>());
+  useEffect(observeDictationPage, []);
   useEffect(() => {
     const controller = new AbortController();
     void listMachines(controller.signal)
@@ -40,10 +42,10 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
       window.removeEventListener("popstate", pop);
     };
   }, []);
-  const switchMachine = (next: string) => {
+  const switchMachine = (next: string, path?: string) => {
     if (next === id || !machines.some((m) => m.id === next)) return;
     paths.set(id, machineLocation(location.pathname).pathname);
-    history.pushState(null, "", machinePath(next, paths.get(next) ?? "/new"));
+    history.pushState(null, "", machinePath(next, path ?? paths.get(next) ?? "/new"));
     setId(next);
   };
   const machine = machines.find((m) => m.id === id);

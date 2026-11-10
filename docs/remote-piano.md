@@ -201,13 +201,30 @@ Temporary prepared uploads disappear when the peer restarts or after ten minutes
 a busy peer refuses additional preparations instead of waiting in an unbounded queue. See
 [HTTP resource budgets](runtime-input-limits.md#remote-image-http-lane).
 
+### Voice input
+
+**Voice input** works in both composers using the **main Piano's** dedicated OpenAI key, set in
+**Local → Settings → Preferences**. If it is off, the remote microphone offers **Open Local
+Preferences**. Main may itself be a VM. Recordings and the source session's spelling context go
+through main to OpenAI, not to the peer. Review the inserted text before Send; audio is never an
+attachment and transcription never sends a message by itself. Existing attached images stay intact.
+
+**Stop recording** commits transcription to that machine's draft, even if you switch away before
+it finishes. Switching away before Stop, or hiding/locking the page during recording, discards the
+recording. **Cancel recording** cancels pending permission; **Cancel transcription** aborts a stopped
+recording's request. Closing/reloading the page cancels pending work and discards drafts. Cancellation
+cannot guarantee OpenAI did no work or charged nothing. Errors preserve existing draft text.
+
+Microphone permission and HTTPS or localhost are required. See [voice limits](runtime-input-limits.md#voice-input).
+No peer voice settings or transcription endpoints are proxied, and no peer credential is used.
+
 ## Deliberate limits
 
 - A new remote session starts only in a folder open on the remote or one of its worktrees, with text
   and/or raster images: no Browse, worktree creation, project or name. No archive/delete/
   rename/pin, projects management, worktree or machine management. Add, close and reopen folders
   on the owning Piano.
-- No remote general files, Changes, managed app previews, voice input or account/settings controls
+- No remote general files, Changes, managed app previews or account/settings controls
   beyond the model picker's defaults, folder trust included:
   trusting a folder would run its project extensions on the remote. These requests are not
   forwarded to Local. Remote transcript local-file actions remain unavailable; image attachments

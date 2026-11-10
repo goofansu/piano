@@ -72,13 +72,15 @@ the slice's actions. The model picker saves the peer's default model and effort 
 through the peer's own settings
 endpoint, which checks the model against the peer's catalog; Pi on the peer owns the file. Registering
 folders, worktree creation, machine CRUD/provisioning, cross-machine projects or search,
-files/Changes/managed app previews, voice input and other remote settings/accounts are out. Parallel worktree sessions
+files/Changes/managed app previews and other remote settings/accounts are out. Voice input is the
+main-origin composer utility defined below, not a remote service. Parallel worktree sessions
 come from a remote session's own dispatch, which runs on the peer.
 [Setup and limits](../remote-piano.md) describe the exact startup configuration.
 
 ## Raster images: separate preparation, unchanged conversation ownership
 
-This extends the original text-only slice, not general file access or dictation. Both composers
+This extends the original text-only slice, not general file access. Dictation has its separate
+main-origin boundary below. Both composers
 use the existing PNG/JPEG/GIF/WebP policy: ten images, 10 MiB each, 50 MiB combined original bytes.
 Raising the conversation WebSocket cap would put Stop, dialog answers and heartbeats behind
 base64 uploads on slow links. Keep that cap at 1 MiB and use a separate bounded HTTP lane:
@@ -122,3 +124,39 @@ compatibility fallback (INV-12). Scratch fake-Pi, fault-injected and throttled e
 Piano's boundaries, not external edge limits, real-device memory or provider image acceptance
 (INV-09). Pi still owns processing, persistence and text-only queue restoration, including its
 reported empty image-only queue entries.
+
+## Voice input: main-origin assistance, machine-owned drafts
+
+This amendment accepts the main-owned option in the
+[remote-composer research](../research/2026-11-09-remote-composer-inputs.md). It deliberately does
+**not** accept peer enrollment, machine CRUD or credential management proposed by the
+[configuration research](../research/2026-11-09-peer-configuration-ui.md).
+
+- Both composers use the browser's microphone and the main Piano's dedicated voice key and
+  preference. Main can itself be a VM. Only main-origin `GET /api/settings/voice-input` and
+  `POST /api/voice/transcribe` are composer utilities on remote views; they are explicit, never
+  peer-to-Local fallback. Settings writes remain in Local's Preferences. No voice route is added
+  to the peer allowlist, and no peer/OpenAI credential enters a conversation (INV-01/11).
+- Recordings and source project/folder/branch/session spelling hints go browser → main → OpenAI
+  (`gpt-transcribe`). The key dialog discloses that this applies to every machine; an off remote
+  microphone offers **Open Local Preferences**. Audio is ephemeral input assistance, not an
+  attachment or history. Only the reviewed draft text reaches the peer on explicit Send; the
+  existing image lane and 1 MiB conversation cap are unchanged (INV-01/02/04).
+- The page-lifetime controller captures the source draft **store and key** and an operation's
+  cancellation identity. Colliding IDs on different machines cannot share results. One live
+  microphone/permission acquisition is allowed per page. Navigation or hiding the page cancels
+  uncommitted recording; late grants release all tracks. Stop commits immediately and snapshots
+  hints before final recorder events. Transcription then survives ordinary navigation and appends
+  to its original hidden draft, or replaces the visible draft's current selection. A result after
+  Send becomes an unsent addition, not another prompt. Late render work cannot focus a different
+  field or displace newer typing (INV-02/07).
+- Explicit **Cancel recording**, **Cancel transcription**, pagehide or host teardown releases
+  resources and aborts pending transcription; stale successes/errors cannot settle a replacement
+  operation. Cancellation cannot promise provider work or charges were prevented. No automatic
+  retries. Constructor/start/recorder/track failures discard audio and preserve the draft.
+- Actual recording bytes, main HTTP ingestion before JSON parsing, concurrent work, provider
+  response bytes/text and deadlines are bounded; see [voice budgets](../runtime-input-limits.md#voice-input).
+  These are resource limits, not a guarantee about browser heap on delayed mobile chunks or a
+  transcription provider's entitlement/quality. Fake devices/providers establish Piano ownership
+  and failure handling; real microphone, codecs, mobile background/lock and paid-provider behavior
+  require separate evidence (INV-09/11/12).
