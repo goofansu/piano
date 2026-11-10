@@ -52,7 +52,7 @@ export function PreferencesSettings() {
           {editing && voice && (
             <ApiKeyDialog
               title="OpenAI API key"
-              description="Voice input sends recordings and session context to OpenAI."
+              description="Voice input for every machine sends recordings and session context through this Piano to OpenAI."
               // Saving a key while turning on also turns voice input on; replacing keeps it as is.
               save={(key) =>
                 voiceInputSettings.save({ enabled: editing === "turn-on" || voice.enabled, key })

@@ -111,6 +111,26 @@ many peers multiplies main's per-peer concurrency, but each relay backpressures 
 collecting whole images. Reserved controls still cannot overtake bytes already written to Pi's
 local stdin. The separate HTTP lane solves network head-of-line blocking, not that runtime limit.
 
+## Voice input
+
+`shared/voiceInput.ts`, `dictation`, `Router` and `VoiceInput` bound main-owned transcription for
+Local and peer composers. No audio traverses the conversation socket or peer gateway.
+
+| Resource | Bound |
+| --- | --- |
+| Recording | 10 minutes; 25,000,000 actual Blob bytes; one live microphone/permission operation per page |
+| Browser encoding | Refuse oversized chunks/Blob before FileReader; request a 1-second recorder timeslice |
+| Main HTTP body | 33,333,336 base64 bytes + 32 KiB JSON envelope, actual streamed bytes before text/JSON allocation; compressed uploads refused |
+| Ingestion | Two requests across upload and transcription, immediate 429 when busy; 30 s total body-read deadline |
+| Service | Two active transcriptions per backend; no waiting queue; canonical base64 and decoded-byte validation before provider upload |
+| Provider | 120 s operation deadline including response body; 1 MiB response JSON and 65,536 transcript characters; no redirects or automatic retries |
+| Cancellation | Browser abort reaches fetch; HTTP disconnect/Effect interruption cancels provider fetch and releases capacity |
+
+The browser timeslice is not a hard chunk/heap ceiling: backgrounding/locking can delay events.
+Hidden pages discard active recordings; Stop commits before final audio arrives. Provider cancellation
+cannot promise billing reversal. Main stores neither audio nor transcripts as history; only reviewed
+text explicitly sent to Pi becomes conversation input.
+
 ## Verification
 
 `test/PiInbound.test.ts` exercises PiSessions' public interface: capacity rejection,
@@ -134,3 +154,10 @@ observes the two-peer affected journey, including uploads, dialogs, queues, Stop
 gateway module test separately backpressures the main→peer hop of a maximum batch while sending
 controls. Fake Pi and signature-valid padded rasters do not establish worst-case pixel decoding,
 real phone memory, provider acceptance or authenticated exe.dev edge body/time limits.
+
+`Dictation.test.ts` covers source-store identity, Stop/navigation, late permission, explicit abort,
+newer typing/Send, recorder errors and actual byte accounting. `VoiceInput.test.ts` uses a stub
+provider for canonical input, bounded responses, concurrency and timeout/abort. `VoiceInputHttp.test.ts`
+checks the real Node streamed-body boundary and denied peer voice routes. The remote browser journey
+also covers Local and peer dictation using fake device APIs and stub transcription responses; it is
+not a real microphone, codec, mobile lock or credentialed OpenAI check.

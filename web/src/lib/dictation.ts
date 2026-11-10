@@ -1,103 +1,79 @@
 /**
- * Dictation into a draft: the microphone, the recording and its transcript, for every composer on
- * the page. A dictation belongs to the draft it started in, never to whichever draft the composer
- * shows when it ends:
- *
- * - A recording not yet stopped (asking for the microphone, or recording) is cancelled when its
- *   composer switches to another draft or goes away: the microphone is released, the audio is
- *   dropped and nothing is transcribed. A microphone granted after the cancel is released at once.
- * - A recording the user stopped is transcribed with the hints of the session it started in, and
- *   its transcript lands in that draft even if the composer has moved on: the user spoke for it.
- *   While the draft's textarea is shown, the transcript replaces its selection and the caret
- *   follows it; otherwise it is added at the draft's end.
- *
- * Browser APIs, the transcription request and toasts are injected. Nothing here depends on React.
+ * Page-lifetime dictation. The source draft store AND key own every operation, even when machines
+ * share IDs. Navigation cancels a live microphone, but Stop commits transcription to that source.
+ * Only explicit cancellation/page teardown aborts a committed recording. Nothing auto-sends.
  */
-// Relative, not @shared: module tests load this file directly in Node.
-import { MAX_RECORDING_MS, type VoiceHints } from "../../../shared/voiceInput.ts";
+import { MAX_AUDIO_BYTES, MAX_RECORDING_MS, type VoiceHints } from "../../../shared/voiceInput.ts";
 import type { DraftKey, Drafts } from "./messageDraft.ts";
 import { insertDictation, voiceHints } from "./voiceInput.ts";
 
 export type DictationPhase = "idle" | "starting" | "recording" | "transcribing";
-
-/** The microphone's audio; stopping every track releases it. */
 export interface MicrophoneStream {
   getTracks: () => readonly { stop: () => void }[];
 }
-
-/** A recording of a stream; `stop` ends it, after which its last data and then its stop arrive. */
 export interface Recorder {
   readonly state: "inactive" | "recording" | "paused";
-  /** The audio format it records; empty when the browser has not said. */
   readonly mimeType: string;
   start: () => void;
   stop: () => void;
 }
-
-/** The textarea a draft is edited in, while that draft is the one shown. */
 export interface DictationField {
   readonly selectionStart: number;
   readonly selectionEnd: number;
   focus: () => void;
   setSelectionRange: (start: number, end: number) => void;
 }
-
-export interface DictationOptions {
+/** A machine's page-memory store is its identity, not an unqualified session ID or cwd. */
+export interface DictationTarget {
   drafts: Pick<Drafts, "get" | "setText">;
-  /** False where this browser cannot record (no microphone API, or not a secure context). */
+  key: DraftKey | null;
+}
+export interface DictationOptions {
   supported: () => boolean;
   microphone: () => Promise<MicrophoneStream>;
-  /** Records `stream`, handing each non-empty chunk to `data` and calling `stop` when it ends. */
   record: (
     stream: MicrophoneStream,
-    events: { data: (chunk: Blob) => void; stop: () => void },
+    events: { data: (chunk: Blob) => void; stop: () => void; error: () => void },
   ) => Recorder;
-  /** The transcript of `audio`, empty when no speech was heard. */
-  transcribe: (audio: Blob, hints: VoiceHints) => Promise<string>;
-  /** A transcription failed; the caller tells the user. */
+  transcribe: (audio: Blob, hints: VoiceHints, signal: AbortSignal) => Promise<string>;
   failed: (error: unknown) => void;
   notify: { info: (message: string) => void; error: (message: string) => void };
-  /** Runs after the next render, when a changed draft is in its textarea. */
   nextFrame: (run: () => void) => void;
   setTimeout?: (run: () => void, ms: number) => unknown;
   clearTimeout?: (handle: unknown) => void;
 }
-
 export interface DictationStart {
-  /** Where the draft is spoken, read when the recording stops; only that session's names. */
+  /** Snapshot at Stop, before asynchronous recorder events or navigation can change context. */
   session: () => VoiceHints;
-  /** The draft's textarea while it is the one shown, else null. */
   field: () => DictationField | null;
 }
-
 export interface Dictation {
-  /** The draft's dictation; `idle` when there is none. */
-  phase: (key: DraftKey | null) => DictationPhase;
+  phase: (target: DictationTarget) => DictationPhase;
   subscribe: (listener: () => void) => () => void;
-  /** Asks for the microphone and records for `key`; does nothing while `key` already dictates. */
-  start: (key: DraftKey | null, start: DictationStart) => Promise<void>;
-  /** Stops `key`'s recording; its transcript lands in `key`'s draft. */
-  stop: (key: DraftKey | null) => void;
-  /** Drops `key`'s recording not yet stopped, releasing the microphone; a transcription stays. */
-  cancel: (key: DraftKey | null) => void;
+  start: (target: DictationTarget, start: DictationStart) => Promise<void>;
+  stop: (target: DictationTarget) => void;
+  /** Navigation cancels only uncommitted recording; explicit cancellation also aborts transcription. */
+  cancel: (target: DictationTarget, includingTranscription?: boolean) => void;
+  cancelRecording: () => void;
+  dispose: () => void;
 }
-
 export const UNSUPPORTED =
   "This browser cannot record audio here. Voice input needs HTTPS or localhost.";
-
 const microphoneRefusal = (error: unknown) =>
   error instanceof DOMException && error.name === "NotAllowedError"
     ? "Allow microphone access to use voice input."
     : error instanceof DOMException && error.name === "NotFoundError"
       ? "No microphone found."
       : "Could not start recording.";
-
 const release = (stream: MicrophoneStream) => {
   for (const track of stream.getTracks()) track.stop();
 };
-
 interface Entry {
+  target: DictationTarget;
+  start: DictationStart;
   phase: DictationPhase;
+  abort: AbortController;
+  hints?: VoiceHints;
   stream?: MicrophoneStream;
   recorder?: Recorder;
   limit?: unknown;
@@ -105,38 +81,52 @@ interface Entry {
 
 export function createDictation(options: DictationOptions): Dictation {
   const {
-    drafts,
     notify,
     setTimeout: later = (run, ms) => globalThis.setTimeout(run, ms),
     clearTimeout: clear = (handle) =>
       globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
   } = options;
-  const entries = new Map<DraftKey, Entry>();
+  const entries = new Set<Entry>();
   const listeners = new Set<() => void>();
   const changed = () => {
-    for (const notifyListener of listeners) notifyListener();
+    for (const listener of listeners) listener();
   };
-  const set = (entry: Entry, phase: DictationPhase) => {
-    entry.phase = phase;
+  const find = ({ drafts, key }: DictationTarget) =>
+    [...entries].find((entry) => entry.target.drafts === drafts && entry.target.key === key);
+  const end = (entry: Entry) => {
+    entries.delete(entry);
     changed();
   };
-  const end = (key: DraftKey, entry: Entry) => {
-    if (entries.get(key) !== entry) return;
-    entries.delete(key);
-    changed();
-  };
-  /** Releases the microphone and the time limit; the recorder may still deliver its stop. */
   const letGo = (entry: Entry) => {
     if (entry.limit !== undefined) clear(entry.limit);
     entry.limit = undefined;
     if (entry.stream) release(entry.stream);
     entry.stream = undefined;
   };
-
-  const land = (key: DraftKey, field: () => DictationField | null, transcript: string) => {
+  const cancel = (entry: Entry) => {
+    // Invalidate BEFORE stop/release: recorder callbacks and promises may still arrive.
+    entry.abort.abort();
+    end(entry);
+    try {
+      if (entry.recorder && entry.recorder.state !== "inactive") entry.recorder.stop();
+    } catch {
+      // Cancellation must still release tracks if a broken recorder refuses Stop.
+    } finally {
+      letGo(entry);
+    }
+  };
+  const fail = (entry: Entry, message: string) => {
+    if (!entries.has(entry)) return;
+    cancel(entry);
+    notify.error(message);
+  };
+  const cancelRecording = () => {
+    for (const entry of entries) if (entry.phase !== "transcribing") cancel(entry);
+  };
+  const land = (entry: Entry, transcript: string) => {
+    const { drafts, key } = entry.target;
     const draft = drafts.get(key).text;
-    // Where the cursor is now: typing may have moved it while the transcript was on its way.
-    const input = field();
+    const input = entry.start.field();
     const at = input
       ? { start: input.selectionStart, end: input.selectionEnd }
       : { start: draft.length, end: draft.length };
@@ -144,89 +134,121 @@ export function createDictation(options: DictationOptions): Dictation {
     drafts.setText(key, next.text);
     if (!input) return;
     options.nextFrame(() => {
-      const target = field();
-      if (!target) return;
-      target.focus();
-      target.setSelectionRange(next.caret, next.caret);
+      if (
+        entry.abort.signal.aborted ||
+        entry.start.field() !== input ||
+        drafts.get(key).text !== next.text
+      )
+        return;
+      input.focus();
+      input.setSelectionRange(next.caret, next.caret);
     });
   };
-
-  const finish = async (key: DraftKey, entry: Entry, start: DictationStart, audio: Blob) => {
-    if (audio.size === 0) return end(key, entry);
-    set(entry, "transcribing");
+  const commit = (entry: Entry) => {
+    if (entry.phase === "transcribing") return;
+    entry.hints = voiceHints(entry.start.session());
+    entry.phase = "transcribing";
+    changed();
+  };
+  const stop = (entry: Entry) => {
+    if (entry.phase !== "recording") return;
+    commit(entry);
     try {
-      const text = await options.transcribe(audio, voiceHints(start.session()));
-      if (!text) notify.info("No speech was heard.");
-      else land(key, start.field, text);
-    } catch (error) {
-      options.failed(error);
+      entry.recorder!.stop();
+    } catch {
+      fail(entry, "Could not finish recording.");
     } finally {
-      end(key, entry);
+      letGo(entry);
     }
   };
-
+  const finish = async (entry: Entry, audio: Blob) => {
+    try {
+      if (!audio.size) {
+        notify.info("No speech was heard.");
+        return;
+      }
+      const text = await options.transcribe(audio, entry.hints!, entry.abort.signal);
+      if (!entries.has(entry)) return;
+      if (!text) notify.info("No speech was heard.");
+      else land(entry, text);
+    } catch (error) {
+      if (entries.has(entry)) options.failed(error);
+    } finally {
+      if (entries.has(entry)) end(entry);
+    }
+  };
   return {
-    phase: (key) => (key && entries.get(key)?.phase) || "idle",
+    phase: (target) => find(target)?.phase ?? "idle",
     subscribe(listener) {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
       };
     },
-    async start(key, start) {
-      if (!key || entries.has(key)) return;
-      if (!options.supported()) {
-        notify.error(UNSUPPORTED);
-        return;
-      }
-      const entry: Entry = { phase: "starting" };
-      entries.set(key, entry);
+    async start(target, start) {
+      if (!target.key || find(target)) return;
+      if (!options.supported()) return notify.error(UNSUPPORTED);
+      // At most one permission request/active microphone per page, across all machine stores.
+      cancelRecording();
+      const entry: Entry = { target, start, phase: "starting", abort: new AbortController() };
+      entries.add(entry);
       changed();
       let stream: MicrophoneStream;
       try {
         stream = await options.microphone();
       } catch (error) {
-        if (entries.get(key) !== entry) return;
-        end(key, entry);
-        notify.error(microphoneRefusal(error));
+        if (entries.has(entry)) fail(entry, microphoneRefusal(error));
         return;
       }
-      // Cancelled while the browser asked: the microphone is not kept a moment longer.
-      if (entries.get(key) !== entry) return release(stream);
+      if (!entries.has(entry)) return release(stream);
       entry.stream = stream;
       const chunks: Blob[] = [];
-      const recorder = options.record(stream, {
-        data: (chunk) => chunks.push(chunk),
-        stop: () => {
-          letGo(entry);
-          if (entries.get(key) !== entry) return;
-          void finish(
-            key,
-            entry,
-            start,
-            new Blob(chunks, { type: recorder.mimeType || "audio/webm" }),
-          );
-        },
-      });
-      entry.recorder = recorder;
-      entry.limit = later(() => {
-        if (recorder.state === "inactive") return;
-        notify.info("Recording stopped at 10 minutes.");
-        recorder.stop();
-      }, MAX_RECORDING_MS);
-      recorder.start();
-      set(entry, "recording");
+      let bytes = 0;
+      try {
+        const recorder = options.record(stream, {
+          data: (chunk) => {
+            if (!entries.has(entry)) return;
+            bytes += chunk.size;
+            if (bytes > MAX_AUDIO_BYTES) {
+              chunks.length = 0;
+              fail(entry, "The recording is too long. Record a shorter message.");
+            } else chunks.push(chunk);
+          },
+          stop: () => {
+            letGo(entry);
+            if (!entries.has(entry)) return;
+            // Unexpected track termination is a failure, not implicit consent to upload.
+            if (entry.phase !== "transcribing") return fail(entry, "Recording ended unexpectedly.");
+            const audio = new Blob(chunks, { type: recorder.mimeType });
+            chunks.length = 0;
+            void finish(entry, audio);
+          },
+          error: () => fail(entry, "Could not record audio."),
+        });
+        entry.recorder = recorder;
+        recorder.start();
+        entry.phase = "recording";
+        entry.limit = later(() => {
+          if (!entries.has(entry) || entry.phase !== "recording") return;
+          notify.info("Recording stopped at 10 minutes.");
+          stop(entry);
+        }, MAX_RECORDING_MS);
+        changed();
+      } catch {
+        fail(entry, "Could not start recording.");
+      }
     },
-    stop(key) {
-      const recorder = key && entries.get(key)?.recorder;
-      if (recorder && recorder.state !== "inactive") recorder.stop();
+    stop(target) {
+      const entry = find(target);
+      if (entry) stop(entry);
     },
-    cancel(key) {
-      const entry = key && entries.get(key);
-      if (!key || !entry || entry.phase === "transcribing") return;
-      end(key, entry);
-      letGo(entry);
-      if (entry.recorder && entry.recorder.state !== "inactive") entry.recorder.stop();
+    cancel(target, includingTranscription = false) {
+      const entry = find(target);
+      if (entry && (includingTranscription || entry.phase !== "transcribing")) cancel(entry);
+    },
+    cancelRecording,
+    dispose() {
+      for (const entry of entries) cancel(entry);
     },
   };
 }

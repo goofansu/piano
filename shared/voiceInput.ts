@@ -9,6 +9,12 @@ export const TRANSCRIPTION_MODEL = "gpt-transcribe";
 
 /** OpenAI's upload limit, before base64 encoding. */
 export const MAX_AUDIO_BYTES = 25_000_000;
+export const MAX_AUDIO_BASE64 = Math.ceil(MAX_AUDIO_BYTES / 3) * 4;
+/** Base64 plus bounded JSON metadata, counted before decoding/parsing. */
+export const MAX_VOICE_REQUEST_BYTES = MAX_AUDIO_BASE64 + 32 * 1024;
+export const MAX_TRANSCRIPTION_RESPONSE_BYTES = 1024 * 1024;
+export const MAX_TRANSCRIPTION_LENGTH = 64 * 1024;
+export const MAX_VOICE_REQUESTS = 2;
 
 /** The longest recording the composer makes; dictation is a message, not a meeting. */
 export const MAX_RECORDING_MS = 10 * 60_000;
@@ -72,15 +78,14 @@ export type VoiceHints = typeof VoiceHints.Type;
 
 export const TranscriptionRequest = Schema.Struct({
   /** The recording, base64-encoded. */
-  audio: Schema.String.check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(Math.ceil(MAX_AUDIO_BYTES / 3) * 4),
-  ),
+  audio: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(MAX_AUDIO_BASE64)),
   /** The recording's media type, as MediaRecorder reported it. */
   mimeType: Short,
   hints: VoiceHints,
 });
 export type TranscriptionRequest = typeof TranscriptionRequest.Type;
 
-export const Transcription = Schema.Struct({ text: Schema.String });
+export const Transcription = Schema.Struct({
+  text: Schema.String.check(Schema.isMaxLength(MAX_TRANSCRIPTION_LENGTH)),
+});
 export type Transcription = typeof Transcription.Type;

@@ -69,7 +69,7 @@ const REMOTE_OFFERS: MachineOffers = {
   files: false,
   rail: false,
   attachments: true,
-  voiceInput: false,
+  voiceInput: true, // Main-origin utility, not a peer settings/transcription proxy.
   pullRequests: false,
   previews: false,
   providerAccounts: false,

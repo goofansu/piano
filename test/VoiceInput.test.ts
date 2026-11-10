@@ -4,15 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
-import { Effect, Exit, Layer } from "effect";
+import { Effect, Exit, Fiber, Layer } from "effect";
 import { RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import {
   TranscriptionFetch,
+  TranscriptionTimeoutMs,
   TranscriptionUrl,
   VoiceInput,
   VoiceInputLive,
 } from "../server/VoiceInput.ts";
 import {
+  MAX_AUDIO_BYTES,
+  MAX_TRANSCRIPTION_LENGTH,
+  MAX_TRANSCRIPTION_RESPONSE_BYTES,
   RECORDING_TYPES,
   type TranscriptionRequest,
   type VoiceHints,
@@ -44,6 +48,7 @@ const run = <A, E>(
   db: string,
   work: Effect.Effect<A, E, VoiceInput>,
   fetch: typeof globalThis.fetch = openAi([]),
+  timeout = 120_000,
 ) =>
   Effect.runPromise(
     work.pipe(
@@ -51,6 +56,7 @@ const run = <A, E>(
       Effect.provideService(RegistryDatabasePath, join(root, `${db}.db`)),
       Effect.provideService(TranscriptionFetch, fetch),
       Effect.provideService(TranscriptionUrl, URL),
+      Effect.provideService(TranscriptionTimeoutMs, timeout),
     ),
   );
 
@@ -346,6 +352,135 @@ test("a version-13 database upgrades with voice input off, then saves it", async
   } finally {
     upgraded.close();
   }
+});
+
+test("malformed and oversized audio never reaches the provider", async () => {
+  const sent: Sent[] = [];
+  await run(
+    "invalid-audio",
+    Effect.gen(function* () {
+      const v = yield* VoiceInput;
+      yield* v.save({ enabled: true, key: KEY });
+      for (const audio of [
+        "",
+        "aGVsbG8",
+        "aGVsbG8=\n",
+        "Zh==",
+        "!!!!",
+        Buffer.alloc(MAX_AUDIO_BYTES + 1).toString("base64"),
+      ]) {
+        const result = yield* Effect.exit(v.transcribe({ ...recording(), audio }));
+        assert.ok(Exit.isFailure(result));
+      }
+    }),
+    openAi(sent),
+  );
+  assert.equal(sent.length, 0);
+});
+
+test("provider JSON and transcript text are bounded and refused without echoing response data", async () => {
+  for (const text of [
+    "x".repeat(MAX_TRANSCRIPTION_LENGTH + 1),
+    "x".repeat(MAX_TRANSCRIPTION_RESPONSE_BYTES),
+  ]) {
+    let cancelled = false;
+    await run(
+      "large-response",
+      Effect.gen(function* () {
+        const v = yield* VoiceInput;
+        yield* v.save({ enabled: true, key: KEY });
+        const result = yield* failure(v.transcribe(recording()));
+        assert.match(detail(result).detail, /transcript/);
+        assert.ok(!JSON.stringify(result).includes(KEY));
+      }),
+      openAi(
+        [],
+        () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode(JSON.stringify({ text, secret: KEY })));
+              },
+              cancel() {
+                cancelled = true;
+              },
+              pull(controller) {
+                if (text.length <= MAX_TRANSCRIPTION_RESPONSE_BYTES / 2) controller.close();
+              },
+            }),
+          ),
+      ),
+    );
+    if (text.length > MAX_TRANSCRIPTION_RESPONSE_BYTES / 2) assert.equal(cancelled, true);
+  }
+});
+
+test("two concurrent transcriptions admit no waiter; abort releases capacity without retry", async () => {
+  let ready!: () => void;
+  const readyPromise = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  let calls = 0,
+    aborted = 0;
+  const fetch = (async (_url, init) => {
+    calls++;
+    if (calls > 2) return Response.json({ text: "next" });
+    if (calls === 2) ready();
+    return new Promise<Response>((_resolve, reject) =>
+      init!.signal!.addEventListener(
+        "abort",
+        () => {
+          aborted++;
+          reject(new DOMException("cancelled", "AbortError"));
+        },
+        { once: true },
+      ),
+    );
+  }) as typeof globalThis.fetch;
+  await run(
+    "concurrent",
+    Effect.gen(function* () {
+      const v = yield* VoiceInput;
+      yield* v.save({ enabled: true, key: KEY });
+      const first = yield* Effect.forkChild(v.transcribe(recording()));
+      const second = yield* Effect.forkChild(v.transcribe(recording()));
+      yield* Effect.promise(() => readyPromise);
+      assert.match(detail(yield* failure(v.transcribe(recording()))).detail, /busy/);
+      assert.equal(calls, 2);
+      yield* Fiber.interrupt(first);
+      yield* Fiber.interrupt(second);
+      assert.equal(aborted, 2);
+      assert.deepEqual(yield* v.transcribe(recording()), { text: "next" });
+      assert.equal(calls, 3);
+    }),
+    fetch,
+  );
+});
+
+test("the provider deadline cancels a stalled response body, with no retry", async () => {
+  let calls = 0,
+    cancelled = false;
+  await run(
+    "timeout",
+    Effect.gen(function* () {
+      const v = yield* VoiceInput;
+      yield* v.save({ enabled: true, key: KEY });
+      assert.match(detail(yield* failure(v.transcribe(recording()))).detail, /in time/);
+    }),
+    (async () => {
+      calls++;
+      return new Response(
+        new ReadableStream({
+          cancel() {
+            cancelled = true;
+          },
+        }),
+      );
+    }) as typeof globalThis.fetch,
+    30,
+  );
+  assert.equal(calls, 1);
+  assert.equal(cancelled, true);
 });
 
 test("every format the composer may record in is uploaded to OpenAI", async () => {
