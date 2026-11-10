@@ -28,7 +28,7 @@
     "@earendil-works/pi-schema": "^1.5.1",
     "@effect/platform-node": "^4.1.2",
     "effect": "^4.1.2",
-    "file-type": "^22.2.0",
+    "file-type": "^22.3.0",
     "ipaddr.js": "^2.5.0"
   },
   "devDependencies": {
