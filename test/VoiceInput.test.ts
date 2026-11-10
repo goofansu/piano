@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
-import { Effect, Exit, Fiber, Layer } from "effect";
+import { Effect, Exit, Layer } from "effect";
 import { RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import {
   TranscriptionFetch,
@@ -413,48 +413,6 @@ test("provider JSON and transcript text are bounded and refused without echoing 
     );
     if (text.length > MAX_TRANSCRIPTION_RESPONSE_BYTES / 2) assert.equal(cancelled, true);
   }
-});
-
-test("two concurrent transcriptions admit no waiter; abort releases capacity without retry", async () => {
-  let ready!: () => void;
-  const readyPromise = new Promise<void>((resolve) => {
-    ready = resolve;
-  });
-  let calls = 0,
-    aborted = 0;
-  const fetch = (async (_url, init) => {
-    calls++;
-    if (calls > 2) return Response.json({ text: "next" });
-    if (calls === 2) ready();
-    return new Promise<Response>((_resolve, reject) =>
-      init!.signal!.addEventListener(
-        "abort",
-        () => {
-          aborted++;
-          reject(new DOMException("cancelled", "AbortError"));
-        },
-        { once: true },
-      ),
-    );
-  }) as typeof globalThis.fetch;
-  await run(
-    "concurrent",
-    Effect.gen(function* () {
-      const v = yield* VoiceInput;
-      yield* v.save({ enabled: true, key: KEY });
-      const first = yield* Effect.forkChild(v.transcribe(recording()));
-      const second = yield* Effect.forkChild(v.transcribe(recording()));
-      yield* Effect.promise(() => readyPromise);
-      assert.match(detail(yield* failure(v.transcribe(recording()))).detail, /busy/);
-      assert.equal(calls, 2);
-      yield* Fiber.interrupt(first);
-      yield* Fiber.interrupt(second);
-      assert.equal(aborted, 2);
-      assert.deepEqual(yield* v.transcribe(recording()), { text: "next" });
-      assert.equal(calls, 3);
-    }),
-    fetch,
-  );
 });
 
 test("the provider deadline cancels a stalled response body, with no retry", async () => {

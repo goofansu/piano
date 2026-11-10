@@ -18,6 +18,8 @@ import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
 import { SessionShare } from "./share.ts";
 import { UserSkill, UserSkillCreate, UserSkillProposal, UserSkillUpdate } from "./skills.ts";
 import {
+  MAX_VOICE_REQUEST_BYTES,
+  MAX_VOICE_REQUESTS,
   Transcription,
   TranscriptionRequest,
   VoiceInputSave,
@@ -78,6 +80,23 @@ export function readRefusal(body: unknown, fallback: string): { error: string; f
   return typeof answer.field === "string" ? { error, field: answer.field } : { error };
 }
 
+/**
+ * A large request body the router admits under its own bounds before decoding it: at most
+ * `concurrent` requests at once, the next refused 429 with `busy` before its body is read, and at
+ * most `bytes` actually streamed (413 `tooLarge`), uncompressed (415 `compressed`). A body that
+ * fails to arrive is refused 400 `unreadable`, or 408 `timedOut` when it takes too long. The
+ * sentences name what the endpoint uploads, so each is the endpoint's own.
+ */
+export interface Upload {
+  readonly bytes: number;
+  readonly concurrent: number;
+  readonly busy: string;
+  readonly tooLarge: string;
+  readonly compressed: string;
+  readonly unreadable: string;
+  readonly timedOut: string;
+}
+
 /** The status a service's refusal (a tagged error carrying a `detail` for people) is answered with. */
 export type RefusedStatus = 400 | 409 | 502;
 
@@ -103,6 +122,8 @@ export interface Endpoint<
    * and URLs reach the user intact; everything else leaves through the display projection. */
   readonly redact: boolean;
   readonly fallback: Fallback;
+  /** Set for a large body: the router bounds its admission and read (`Upload`). */
+  readonly upload: Upload | undefined;
 }
 
 type NoPathParams<P extends string> = P extends `${string}${":" | "?" | "*"}${string}` ? never : P;
@@ -125,6 +146,7 @@ const endpoint = <
   refused?: F;
   redact?: boolean;
   fallback: Fallback;
+  upload?: M extends "GET" ? undefined : Upload;
 }): Endpoint<Q, B, R, F> => ({
   method: e.method,
   path: e.path,
@@ -136,6 +158,7 @@ const endpoint = <
   refused: e.refused as F,
   redact: e.redact ?? true,
   fallback: e.fallback,
+  upload: e.upload,
 });
 
 const RadiusReply = Schema.Struct({ state: RadiusSetupState });
@@ -553,6 +576,15 @@ export const Endpoints = {
     noStore: true,
     refused: 502,
     fallback: "Could not transcribe the recording.",
+    upload: {
+      bytes: MAX_VOICE_REQUEST_BYTES,
+      concurrent: MAX_VOICE_REQUESTS,
+      busy: "Voice input is busy. Try again later.",
+      tooLarge: "The recording is too long. Record a shorter message.",
+      compressed: "Compressed recordings are not supported.",
+      unreadable: "Could not read the recording.",
+      timedOut: "Recording upload timed out.",
+    },
   }),
   providerApiKeys: endpoint({
     method: "GET",
