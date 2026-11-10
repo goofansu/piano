@@ -19,6 +19,7 @@ import type { SessionClosure } from "../shared/wire.ts";
 import { childEnvironment } from "./ChildEnvironment.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
+import { inputBytes } from "./InputBytes.ts";
 import { PiCli } from "./PiCli.ts";
 import type { PiExchange, PiReadback, PiRecord } from "./PiRecords.ts";
 
@@ -40,9 +41,11 @@ export const PiRequestTimeoutMs = Context.Reference<number>("piano/PiRequestTime
   defaultValue: () => 30_000,
 });
 
-const encoder = new TextEncoder();
-
 const MiB = 1024 * 1024;
+// Reuse small stdout storage. Large image/history bursts get a short reuse window,
+// not a maximum-size buffer pinned for this live child's lifetime.
+const RETAINED_STDOUT_BYTES = MiB;
+const LARGE_STDOUT_REUSE_MS = 1000;
 /** Extra acknowledgement time per whole MiB a request writes. Pi's JSONL reader rescans its buffer
  * for every stdin chunk, so a line's read time grows faster than its size: on an exe.dev VM a
  * 28 MiB line took about 4.5 s and a 67 MiB line (a full attachment batch) about 23 s, roughly
@@ -276,6 +279,19 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
   // splitLines' internal string without bound; multibyte UTF-8 may span chunks.
   let partial = Buffer.alloc(0),
     partialLength = 0;
+  let partialRelease: ReturnType<typeof setTimeout> | undefined;
+  const retainPartial = (lineBytes: number) => {
+    if (partial.length <= RETAINED_STDOUT_BYTES) return;
+    // Small records must not indefinitely renew a large allocation's lifetime.
+    if (lineBytes <= RETAINED_STDOUT_BYTES && partialRelease) return;
+    clearTimeout(partialRelease);
+    partialRelease = setTimeout(() => {
+      partialRelease = undefined;
+      // Never discard an unfinished line. Its completion schedules another release.
+      if (partialLength === 0) partial = Buffer.alloc(0);
+    }, LARGE_STDOUT_REUSE_MS);
+    partialRelease.unref();
+  };
   const onChunk = Effect.fnUntraced(function* (chunk: Uint8Array) {
     let start = 0;
     for (let end = 0; end <= chunk.length; end++) {
@@ -299,6 +315,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       if (end < chunk.length) {
         yield* onLine(partial.toString("utf8", 0, partialLength));
         partialLength = 0;
+        retainPartial(length);
       }
       start = end + 1;
     }
@@ -313,6 +330,14 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       ),
     )
     .pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          clearTimeout(partialRelease);
+          partialRelease = undefined;
+          partial = Buffer.alloc(0);
+          partialLength = 0;
+        }),
+      ),
       Effect.andThen(Deferred.succeed(stdoutDrained, undefined)),
       // Normal EOF usually precedes exitCode notification. A child that closes
       // stdout but stays alive cannot acknowledge further commands.
@@ -419,14 +444,16 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     }),
   );
 
-  const write = Effect.fn("PiTransport.write")(function* (
+  // Finish serialization/enqueueing before awaiting delivery: only the queued bytes,
+  // not a second full JSON string, need to live while Pi is slow to read.
+  const enqueue = Effect.fnUntraced(function* (
     record: Record<string, unknown>,
     options: { readonly lane: PiLane },
   ) {
     if (inputClosure) return yield* refusedUnsent("exited", inputClosure.detail);
     if (transportError) return yield* transportError;
-    const text = `${JSON.stringify(record)}\n`;
-    const size = Buffer.byteLength(text);
+    const text = JSON.stringify(record);
+    const size = Buffer.byteLength(text) + 1;
     if (size > inboundLimits.rpcLineBytes)
       return yield* refusedUnsent(
         "rejected",
@@ -439,8 +466,13 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
         "rejected",
         "Pi input capacity is full. Nothing was sent; wait for pending work before trying again.",
       );
+    // Encode directly into the final byte buffer. Appending LF to the JSON string
+    // would force another full string allocation when byteLength flattens the rope.
+    const bytes = Buffer.allocUnsafe(size);
+    bytes.write(text, 0, size - 1, "utf8");
+    bytes[size - 1] = 10;
     writes.set(done, release);
-    if (!Queue.offerUnsafe(stdin, { bytes: encoder.encode(text), done })) {
+    if (!Queue.offerUnsafe(stdin, { bytes, done })) {
       release();
       writes.delete(done);
       return yield* refusedUnsent(
@@ -448,6 +480,14 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
         "Pi input queue is closed or full. Nothing was sent.",
       );
     }
+    return { done, size };
+  });
+
+  const write = Effect.fn("PiTransport.write")(function* (
+    record: Record<string, unknown>,
+    options: { readonly lane: PiLane },
+  ) {
+    const { done, size } = yield* enqueue(record, options);
     yield* Deferred.await(done).pipe(
       Effect.timeoutOrElse({
         duration: deliveryDeadline(timeoutMs, size),
@@ -478,7 +518,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       readback,
     }: { lane: PiLane; dispatched?: Deferred.Deferred<void>; readback: boolean },
   ) {
-    const size = Buffer.byteLength(JSON.stringify(command));
+    const size = inputBytes(command);
     const d = yield* Deferred.make<unknown, PiSessionError>();
     const release = requestCapacity.acquire(size, lane === "control");
     if (!release) {

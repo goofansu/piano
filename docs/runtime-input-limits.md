@@ -17,7 +17,15 @@ below with it; about 83 MiB for today's 50 MiB policy.
 | Pi stdin writes not yet accepted by the sink | 32 writes / 2 maximum messages | 8 writes / 32 MiB |
 | Pi output awaiting projection | 256 records / 1 maximum message | No reserved lane; overflow fails the child |
 
-Both count and byte limits apply. Control means dialog answers/cancellation, Abort,
+Both count and byte limits apply. Admission counts exact serialized UTF-8 bytes.
+`InputBytes` lets JSON handle traversal, omissions, escapes and errors, replacing only
+escape-free base64-alphabet `data` strings with empty strings and adding their byte lengths.
+It is not validation: invalid attachments still reach the existing validation/refusal path,
+and other data keeps normal JSON behavior. No serialized payload cache is retained.
+Pi stdin serializes once for delivery and encodes into one final buffer with its newline,
+without constructing a second newline-appended JSON string.
+
+Control means dialog answers/cancellation, Abort,
 Stop and queue restoration; at the RPC boundary this is UI responses, `abort` and
 `clear_queue`. The reserved lanes do not reorder stdin or bypass a child that has
 stopped reading. Delivery acknowledgements and heartbeat pings are handled promptly
@@ -31,6 +39,15 @@ without acquiring ordinary-work capacity, so a pending prompt cannot starve them
   decoding, JSON parsing, or waiting for a newline. This permits a full image upload batch
   plus JSON overhead, without an unlimited text allowance. Each ordinary lane holds two such
   prompts. The newline on a stdin write counts toward the input limit.
+  Stdout framing grows geometrically while a partial line needs it. Storage over **1 MiB**
+  has a **one-second reuse window** after a large line, so consecutive image events/history
+  readbacks can reuse it rather than repeatedly allocate/copy the full growth ladder. Small
+  records do not renew that window; smaller buffers remain reusable. At expiry an empty
+  buffer is released. An unfinished line always keeps its bytes, and its completion schedules
+  release again. One unreferenced timer per child owns this grace period; EOF, failure and
+  reader cancellation clear it and release all framing storage. Growth remains amortized
+  linear per line. This changes storage lifetime, not the line limit, history, preview-cache
+  policy or output ordering.
 - **Acknowledgement deadline:** a request's stdin write and Pi's acknowledgement share one
   deadline: `PiRequestTimeoutMs` (30 s), plus one second per whole MiB written
   (`server/PiTransport.ts`). Pi's JSONL reader rescans its buffer for every stdin chunk, so
@@ -99,7 +116,10 @@ local stdin. The separate HTTP lane solves network head-of-line blocking, not th
 `test/PiInbound.test.ts` exercises PiSessions' public interface: capacity rejection,
 reserved answer/Abort/Stop, recovery, count/byte record overflow during readiness,
 newline-free oversized output, oversized input, fragmented UTF-8, and a prompt Pi reads
-more slowly than the base acknowledgement deadline.
+more slowly than the base acknowledgement deadline. Repeated large records followed by small
+records and fragmented UTF-8 cover framing release boundaries. `test/InputBytes.test.ts`
+compares admission sizing with JSON serialization, including image envelopes, optional fields,
+arrays, escaped/non-ASCII strings, invalid direct inputs and JSON failures.
 `test/ClientDispatch.test.ts` covers selection preservation and live heartbeats and
 controls at client capacity. `test/OriginPolicy.test.ts` sends oversized single and
 fragmented messages through the real Node server. The scratch-only

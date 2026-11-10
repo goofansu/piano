@@ -31,6 +31,16 @@ Its `observationVersion` counts **received**, not merely projected, output; cont
 readbacks must not overtake queued records. `hasPendingWork` includes uncertainty
 left after caller timeout so retirement cannot infer false quiescence.
 
+Admission retains byte counts, not serialized image-payload strings (`InputBytes`). PiTransport
+creates one final newline-terminated stdin byte buffer; queued bytes keep their lease through
+uncertain writes until accepted or closed. Stdout framing reuses buffers up to 1 MiB; larger
+buffers get a one-second reuse window after a large line, not renewed by small records. Expiry
+releases empty storage, never an unfinished line; completion of that line schedules release
+again. This avoids repeating the geometric allocation/copy ladder during image/history bursts.
+Reader completion/failure/cancellation clears the timer and releases the remainder. This storage is distinct
+from Pi-owned history and the disposable image-preview cache; neither policy changes. See
+[runtime input limits](runtime-input-limits.md).
+
 Process exit stops input and disconnects preview ownership immediately, but is not stdout EOF.
 The transport allows one second after exit for stdout framing and response correlation to finish,
 then ends the record queue without dropping accepted records. PiSessions drains those records
