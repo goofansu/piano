@@ -12,6 +12,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { type RemoteRequest, RemoteRequests } from "../shared/http.ts";
 import { PEER_FRAME_BYTES } from "../shared/machine.ts";
+import { IMAGE_PATHS } from "../shared/remoteImages.ts";
 import { URL_ID } from "../shared/urlId.ts";
 import {
   ClientMessageJson,
@@ -22,7 +23,9 @@ import {
 import { socketLimits } from "./BoundedDelivery.ts";
 import { AllowedOrigins, fromOwnPage } from "./OriginPolicy.ts";
 import { ConfiguredPeers, type PeerConfig } from "./PeerConfig.ts";
-import { makePeerImageRelay, peerImagePaths } from "./PeerImageGateway.ts";
+import { makePeerImageRelay } from "./PeerImageGateway.ts";
+
+const imagePaths: ReadonlySet<string> = new Set(IMAGE_PATHS);
 
 const limits = {
   connectMs: 5_000,
@@ -355,7 +358,7 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
     // The request owns this immutable destination, including credentials, through completion.
     const peer = match ? byId.get(match[1]) : undefined;
     const remote = match ? remoteRequests.get(match[2]) : undefined;
-    const imagePath = match && peerImagePaths.has(match[2]) ? match[2] : undefined;
+    const imagePath = match && imagePaths.has(match[2]) ? match[2] : undefined;
     if (!peer || (!remote && !imagePath && match?.[2] !== "/ws"))
       return json({ error: "Unknown remote machine or unsupported remote request." }, 404);
     if (!imagePath && request.method !== (remote?.browser.method ?? "GET"))

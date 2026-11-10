@@ -7,11 +7,7 @@ import {
   type Machine,
   machineFrameBytes,
 } from "../../../shared/machine.ts";
-import {
-  IMAGE_UPLOAD_PATH,
-  IMAGE_CANCEL_PATH,
-  IMAGE_PREVIEW_PATH,
-} from "../../../shared/remoteImages.ts";
+import { IMAGE_PATHS } from "../../../shared/remoteImages.ts";
 import type { AddressBar } from "./navigation.ts";
 
 export { isLocalId, LOCAL, type Machine, machineFrameBytes };
@@ -55,9 +51,7 @@ export function machineAddress(id: string, address: AddressBar): AddressBar {
 
 const remotePaths = new Set<string>([
   ...RemoteRequests.map((request) => request.browser.path),
-  IMAGE_UPLOAD_PATH,
-  IMAGE_CANCEL_PATH,
-  IMAGE_PREVIEW_PATH,
+  ...IMAGE_PATHS,
 ]);
 
 /**
