@@ -45,6 +45,7 @@ import type {
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
+import { inputBytes } from "./InputBytes.ts";
 import { makePiHistory, type PiHistory } from "./PiHistory.ts";
 import {
   dispatchedFromOf,
@@ -845,7 +846,7 @@ const openSession = (spec: PiSessionSpec, history: PiHistory) =>
               );
             }
             const release = actionCapacity.acquire(
-              Buffer.byteLength(JSON.stringify(action)),
+              inputBytes(action),
               sessionActionPolicy[action._tag].priority,
             );
             if (!release)

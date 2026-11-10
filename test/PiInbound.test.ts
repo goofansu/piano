@@ -275,6 +275,35 @@ test("oversized Pi input is rejected before delivery; fragmented UTF-8 records s
   );
 });
 
+test("large stdout records preserve subsequent small records and fragmented UTF-8 tails", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "large-framing",
+      });
+      const notices = yield* session.events.pipe(
+        Stream.filter((e) => e._tag === "notice"),
+        Stream.take(4),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* session.act({ _tag: "prompt", text: "capacity fragmented-large" });
+      assert.deepEqual(
+        (yield* Fiber.join(notices)).map((e) => e.message),
+        ["Large 1", "Small", "Large 2", "Fragmented € record"],
+      );
+      // The newline-terminated stdin encoding must preserve escapes and multi-byte text,
+      // and leave the next command on a separate line.
+      const name = '雪 😀 " \\t \\\\';
+      yield* session.act({ _tag: "set_name", name });
+      yield* session.commands;
+      assert.equal((yield* session.state).sessionName, name);
+      assert.equal((yield* session.state).closure, undefined);
+    }).pipe(Effect.scoped, Effect.timeout("10 seconds")),
+  );
+});
+
 // Pi's JSONL reader takes time that grows with a line's size, so a large prompt can need longer
 // than the base deadline to reach Pi. This fake Pi reads at most 4 MiB a second, so the 4 MiB image
 // (about 5.3 MiB of base64) cannot arrive within the 1 s base on any machine.

@@ -546,7 +546,22 @@ function handle(cmd) {
         process.stdout.write("x".repeat(inboundLimits.rpcLineBytes + 1));
         return; // Intentionally no newline and no response.
       }
-      if (cmd.message === "capacity fragmented") {
+      if (cmd.message === "capacity fragmented" || cmd.message === "capacity fragmented-large") {
+        // Repeated oversized framing storage followed by small records and a partial
+        // UTF-8 tail. The same write can end a large line and begin the next record.
+        const prefix = cmd.message.endsWith("-large")
+          ? ["Large 1", "Small", "Large 2"]
+              .map(
+                (message) =>
+                  JSON.stringify({
+                    type: "extension_ui_request",
+                    method: "notify",
+                    message,
+                    padding: message === "Small" ? "" : "x".repeat(2 * 1024 * 1024),
+                  }) + "\n",
+              )
+              .join("")
+          : "";
         const bytes = Buffer.from(
           JSON.stringify({
             type: "extension_ui_request",
@@ -556,11 +571,15 @@ function handle(cmd) {
           }) + "\n",
         );
         const split = bytes.indexOf(Buffer.from("€")) + 1;
-        process.stdout.write(bytes.subarray(0, split));
-        setImmediate(() => {
+        process.stdout.write(Buffer.concat([Buffer.from(prefix), bytes.subarray(0, split)]));
+        const complete = () => {
           process.stdout.write(bytes.subarray(split));
           respond(cmd, { disposition: "handled" });
-        });
+        };
+        // Cross the documented one-second large-buffer reuse window with an unfinished
+        // UTF-8 record. An idle-release callback must not discard that partial tail.
+        if (prefix) setTimeout(complete, 1200);
+        else setImmediate(complete);
         return;
       }
       if (cmd.message.startsWith("exit tail ")) {

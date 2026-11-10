@@ -12,6 +12,7 @@ import { type ClientOutput, InputNotSent, makeClientSessions } from "./ClientSes
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
+import { inputBytes } from "./InputBytes.ts";
 import { type PeerSelection, peerVerdict } from "./PeerScope.ts";
 import { sessionActionPolicy } from "./PiSessions.ts";
 import { PreparedImages } from "./PreparedImages.ts";
@@ -536,10 +537,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       yield* answered(request)(yield* admitted);
       return Effect.void;
     }
-    const release = capacity.acquire(
-      Buffer.byteLength(JSON.stringify(request)),
-      admission === "control",
-    );
+    const release = capacity.acquire(inputBytes(request), admission === "control");
     if (!release) {
       // Reject before claiming a selection or mutating anything. The receive loop
       // remains available for acknowledgements, dialog answers and cancellation.
