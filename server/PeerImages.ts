@@ -3,9 +3,7 @@ import { Effect, Schema, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { IMAGE_PREVIEW_HEADERS } from "../shared/imagePreviews.ts";
 import {
-  IMAGE_CANCEL_PATH,
-  IMAGE_PREVIEW_PATH,
-  IMAGE_UPLOAD_PATH,
+  IMAGE_PATHS,
   PreparedImages as ImageReference,
   remoteImageLimits,
 } from "../shared/remoteImages.ts";
@@ -109,6 +107,5 @@ export const addPeerImageRoutes = Effect.fn("PeerImages.routes")(function* (
       ),
     ),
   );
-  for (const path of [IMAGE_UPLOAD_PATH, IMAGE_CANCEL_PATH, IMAGE_PREVIEW_PATH] as const)
-    yield* router.add("*", path, handler);
+  for (const path of IMAGE_PATHS) yield* router.add("*", path, handler);
 });

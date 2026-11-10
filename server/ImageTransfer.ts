@@ -1,9 +1,7 @@
 /** Pull-based HTTP bounds shared by the two image hops. Never trust Content-Length alone. */
 import { Data } from "effect";
 import {
-  IMAGE_CANCEL_PATH,
-  IMAGE_PREVIEW_PATH,
-  IMAGE_UPLOAD_PATH,
+  IMAGE_ROUTES,
   IMAGE_UPLOAD_TYPE,
   previewQuery,
   remoteImageLimits,
@@ -124,14 +122,9 @@ export function imageRoute(
   /** The request URL's raw search, `?` included, as `URL.search` gives it. */
   search: string,
 ): ImageRoute | ImageTransferError {
-  const kind =
-    path === IMAGE_UPLOAD_PATH
-      ? "upload"
-      : path === IMAGE_CANCEL_PATH
-        ? "cancel"
-        : path === IMAGE_PREVIEW_PATH
-          ? "preview"
-          : undefined;
+  const kind = (Object.keys(IMAGE_ROUTES) as (keyof typeof IMAGE_ROUTES)[]).find(
+    (key) => IMAGE_ROUTES[key] === path,
+  );
   if (!kind) return imageFailure("Unknown image route.", 404);
   if (headers.upgrade || headers["content-encoding"])
     return imageFailure("Unsupported image request.");

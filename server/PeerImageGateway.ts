@@ -3,13 +3,7 @@ import { Effect, Schema, Stream } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { IMAGE_TYPES } from "../shared/attachments.ts";
 import { IMAGE_PREVIEW_HEADERS } from "../shared/imagePreviews.ts";
-import {
-  IMAGE_CANCEL_PATH,
-  IMAGE_PREVIEW_PATH,
-  IMAGE_UPLOAD_PATH,
-  PreparedImages,
-  remoteImageLimits,
-} from "../shared/remoteImages.ts";
+import { PreparedImages, remoteImageLimits } from "../shared/remoteImages.ts";
 import {
   boundedImageStream,
   imageContentLength,
@@ -20,8 +14,6 @@ import {
 } from "./ImageTransfer.ts";
 import type { PeerConfig } from "./PeerConfig.ts";
 import { imageJson } from "./PeerImages.ts";
-
-export const peerImagePaths = new Set([IMAGE_UPLOAD_PATH, IMAGE_CANCEL_PATH, IMAGE_PREVIEW_PATH]);
 
 /** Per-gateway-instance, per-peer caps, independent of conversation/control traffic. */
 export function makePeerImageRelay() {

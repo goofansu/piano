@@ -29,6 +29,13 @@ export const remoteImageLimits = {
 export const IMAGE_UPLOAD_PATH = "/api/peer/images";
 export const IMAGE_CANCEL_PATH = "/api/peer/images/cancel";
 export const IMAGE_PREVIEW_PATH = "/api/peer/image-preview";
+/** Every image route a remote answers and main relays: the one list each side serves from. */
+export const IMAGE_ROUTES = {
+  upload: IMAGE_UPLOAD_PATH,
+  cancel: IMAGE_CANCEL_PATH,
+  preview: IMAGE_PREVIEW_PATH,
+} as const;
+export const IMAGE_PATHS = Object.values(IMAGE_ROUTES);
 export const IMAGE_UPLOAD_TYPE = "application/vnd.piano.images";
 const ID = Schema.String.check(Schema.isPattern(URL_ID));
 /** The capability itself: an unguessable ID the remote issued for one upload. */
