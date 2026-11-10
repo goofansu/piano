@@ -1,5 +1,5 @@
 /** Fixed binary image routes. The main streams uploads; only the owning peer retains them. */
-import { Effect, Schema, Stream } from "effect";
+import { Effect, Option, Schema, Stream } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { IMAGE_TYPES } from "../shared/attachments.ts";
 import { IMAGE_PREVIEW_HEADERS } from "../shared/imagePreviews.ts";
@@ -14,6 +14,8 @@ import {
 } from "./ImageTransfer.ts";
 import type { PeerConfig } from "./PeerConfig.ts";
 import { imageJson } from "./PeerImages.ts";
+
+const Refusal = Schema.Struct({ error: Schema.NonEmptyString });
 
 /** Per-gateway-instance, per-peer caps, independent of conversation/control traffic. */
 export function makePeerImageRelay() {
@@ -75,10 +77,20 @@ export function makePeerImageRelay() {
           signal: combined,
         } as RequestInit);
         if (response.status !== 200) {
-          await response.body?.cancel();
-          throw imageFailure(
+          const unavailable = imageFailure(
             "Could not transfer images: remote unavailable, busy, or image request refused.",
-            [400, 404, 408, 413, 415, 429].includes(response.status) ? response.status : 502,
+            502,
+          );
+          if (![400, 404, 408, 413, 415, 429].includes(response.status)) {
+            await response.body?.cancel();
+            throw unavailable;
+          }
+          // The owning peer knows why it refused; its bounded sentence is the user's to read.
+          const text = await readImageResponse(response, combined).catch(() => "");
+          const refusal = Schema.decodeUnknownOption(Schema.fromJsonString(Refusal))(text);
+          throw imageFailure(
+            Option.match(refusal, { onNone: () => unavailable.detail, onSome: (r) => r.error }),
+            response.status,
           );
         }
         if (preview) {

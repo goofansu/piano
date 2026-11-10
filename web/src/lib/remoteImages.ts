@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { base64Bytes } from "../../../shared/attachments.ts";
+import { readRefusal } from "../../../shared/http.ts";
 import { imagePreviewHash } from "../../../shared/imagePreviews.ts";
 import { isLocalId } from "../../../shared/machine.ts";
 import {
@@ -42,6 +43,14 @@ export function imageUploadBody(target: ImageTarget, images: readonly Attachment
   );
 }
 
+function parsed(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function prepareImages(
   machineId: string,
   target: ImageTarget,
@@ -74,9 +83,12 @@ export async function prepareImages(
   }
   if (!response.ok)
     throw new Error(
-      response.status === 429
-        ? "Image upload is busy. Try again after the pending send."
-        : "Could not upload images. Your draft is kept; try again.",
+      readRefusal(
+        parsed(text),
+        response.status === 429
+          ? "Image upload is busy. Try again after the pending send."
+          : "Could not upload images. Your draft is kept; try again.",
+      ).error,
     );
   return Schema.decodeUnknownSync(Schema.fromJsonString(PreparedImages))(text, {
     onExcessProperty: "error",
