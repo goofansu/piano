@@ -41,7 +41,7 @@
     "jsdom": "^31.0.0",
     "oxfmt": "^0.75.0",
     "oxlint": "^1.90.0",
-    "stylelint": "^17.16.0",
+    "stylelint": "^18.0.0",
     "stylelint-value-no-unknown-custom-properties": "^6.1.1",
     "typescript": "~7.0.2"
   },
