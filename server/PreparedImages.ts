@@ -23,9 +23,7 @@ const allowed = (data: RegistryData, target: ImageTarget) =>
     : openDirectory(data, target.cwd);
 const sameTarget = (a: ImageTarget, b: ImageTarget) =>
   a.cwd === b.cwd &&
-  ("sessionId" in a
-    ? "sessionId" in b && a.sessionId === b.sessionId
-    : "draftId" in b && a.draftId === b.draftId);
+  ("sessionId" in a ? "sessionId" in b && a.sessionId === b.sessionId : !("sessionId" in b));
 interface Lease {
   readonly attachments: readonly Attachment[];
   readonly release: () => void;
@@ -139,10 +137,7 @@ export const PreparedImagesLive = Layer.effect(
               expires: Date.now() + remoteImageLimits.ttlMs,
               consumed: false,
             });
-            return {
-              id,
-              ...("draftId" in manifest.target ? { draftId: manifest.target.draftId } : {}),
-            };
+            return { id };
           } finally {
             await reader.cancel().catch(() => {});
           }
@@ -163,15 +158,7 @@ export const PreparedImagesLive = Layer.effect(
     ) {
       sweep();
       const entry = entries.get(reference.id);
-      if (
-        !entry ||
-        entry.consumed ||
-        !allowed(data, target) ||
-        !sameTarget(entry.target, target) ||
-        ("draftId" in target
-          ? reference.draftId !== target.draftId
-          : reference.draftId !== undefined)
-      )
+      if (!entry || entry.consumed || !allowed(data, target) || !sameTarget(entry.target, target))
         return yield* Effect.fail(
           imageFailure(
             "Images expired, were already used, or belong to another draft. Attach and send again.",

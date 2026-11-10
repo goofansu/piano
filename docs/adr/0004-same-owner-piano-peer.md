@@ -97,7 +97,8 @@ base64 uploads on slow links. Keep that cap at 1 MiB and use a separate bounded 
    [resource budgets](../runtime-input-limits.md#remote-image-http-lane).
 3. Normal `act`/`create_session` carries a small `preparedImages` reference. PeerScope still
    refuses inline remote images. ClientDispatch rejects mixed inline/reference input, verifies
-   the reference's session or pre-session draft nonce, and consumes it once **before** starting
+   that the reference was prepared for this session (or, before a session exists, for this
+   folder or worktree), and consumes it once **before** starting
    Pi or creating a session. It resolves to the existing SessionAction images; PiRecords retains
    all Pi translation. A consumed slot stays reserved through operation settlement, including
    when the observer disconnects. Expiry/cancellation cannot release an in-flight input's slot.

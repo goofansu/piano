@@ -122,12 +122,7 @@ function browserSends(machine: Machine): ClientMessage[] {
     // HTTP preparation has its own boundary tests. Model its successful reference here, then
     // use the same post-preparation builder as useImageSend, not an inline remote upload.
     if (!isLocalId(machine.id) && input && "attachments" in input && input.attachments?.length)
-      return client.send(
-        preparedImageCommand(command, {
-          id: `prepared-${++preparations}`,
-          ...(command._tag === "create_session" ? { draftId: "new-draft" } : {}),
-        }),
-      );
+      return client.send(preparedImageCommand(command, { id: `prepared-${++preparations}` }));
     return client.send(command);
   };
   // A message as the composer drafts it: an image only where the attach button is offered.

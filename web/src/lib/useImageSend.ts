@@ -45,7 +45,7 @@ export function useImageSend(
               machineId,
               target.sessionId
                 ? { cwd: target.cwd, sessionId: target.sessionId }
-                : { cwd: target.cwd, draftId: id },
+                : { cwd: target.cwd },
               message.attachments,
               controller.signal,
             );

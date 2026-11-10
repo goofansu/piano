@@ -31,16 +31,17 @@ export const IMAGE_CANCEL_PATH = "/api/peer/images/cancel";
 export const IMAGE_PREVIEW_PATH = "/api/peer/image-preview";
 export const IMAGE_UPLOAD_TYPE = "application/vnd.piano.images";
 const ID = Schema.String.check(Schema.isPattern(URL_ID));
-export const PreparedImages = Schema.Struct({ id: ID, draftId: Schema.optional(ID) });
+/** The capability itself: an unguessable ID the remote issued for one upload. */
+export const PreparedImages = Schema.Struct({ id: ID });
 export type PreparedImages = typeof PreparedImages.Type;
 export const ImageTarget = Schema.Union([
   Schema.Struct({
     cwd: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096)),
     sessionId: ID,
   }),
+  /** A new session's first message, in this folder or worktree. */
   Schema.Struct({
     cwd: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096)),
-    draftId: ID,
   }),
 ]);
 export type ImageTarget = typeof ImageTarget.Type;
