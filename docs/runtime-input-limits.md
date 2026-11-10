@@ -96,6 +96,14 @@ images travel separately; the peer resolves the reference before the runtime lim
 | Transcript image response | 64 MiB, matching the independent disposable preview cache, not the 10 MiB original-upload ceiling; MIME allowlist, no compressed response |
 | Preview metadata | At most 4096 cached images and 4096 observed session/hash memberships **globally**; oldest entries/memberships drop when full; byte eviction drops provenance too |
 
+Both hops admit a request by the same rule, `imageRoute` in `ImageTransfer`: the route's method,
+refused upgrade or compression headers, query (a valid preview address, none on a POST), content
+type and declared length, so main never forwards what the peer refuses and both answer a malformed
+request with the same status and error. Each hop adds only its own concerns: main its per-peer
+lanes and forwarding, the peer its same-origin check (run first), preparation and preview reads.
+The two-slot staging budget (`batches`) and the two transfers per lane (`laneTransfers`) are
+separate limits that happen to be equal.
+
 Main backpressures a binary stream without storing the batch. The peer validates before returning
 an opaque reference and before creating work; a failed/cancelled ingest frees its slot. A consumed
 reference is not reusable even after a known-unsent refusal. It holds its slot until the operation
