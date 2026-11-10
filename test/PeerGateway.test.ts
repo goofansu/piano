@@ -89,6 +89,17 @@ test(
       assert.equal((await upload()).status, 502, mode);
       assert.equal(one.state.requests.length, count + 1, "never retry uploads");
     }
+    // The peer's refusal reaches the browser as its status and its own sentence.
+    one.state.mode = "image-refused";
+    const refused = await upload();
+    assert.equal(refused.status, 404);
+    assert.deepEqual(await refused.json(), {
+      error: "Image target is not listed on this machine.",
+    });
+    one.state.mode = "image-refused-unreadable";
+    const unreadable = await upload();
+    assert.equal(unreadable.status, 404);
+    assert.match((await unreadable.json()).error, /^Could not transfer images/);
     for (const mode of ["image-mime", "image-large"]) {
       one.state.mode = mode;
       assert.ok((await fetch(preview)).status >= 400, mode);

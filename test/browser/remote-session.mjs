@@ -308,10 +308,12 @@ await run(
           await waitFor("upload failure request paused", () => !!heldUpload);
           await call("Fetch.fulfillRequest", {
             requestId: heldUpload,
-            responseCode: 502,
-            body: Buffer.from("{}").toString("base64"),
+            responseCode: 404,
+            body: Buffer.from(
+              JSON.stringify({ error: "Image target is not listed on this machine." }),
+            ).toString("base64"),
           });
-          await page.see("Could not upload images.");
+          await page.see("Image target is not listed on this machine.");
           assert.equal(await draft(page), echo);
           assert.ok(
             await page.evaluate(`!!document.querySelector('[aria-label="Remove picker.png"]')`),

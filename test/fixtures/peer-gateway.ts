@@ -143,6 +143,17 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       return;
     }
     res.setHeader("content-type", "application/json");
+    // The owning peer refuses a target it no longer lists, in its own words or in none.
+    if (req.url === "/api/peer/images" && state.mode.startsWith("image-refused")) {
+      res
+        .writeHead(404)
+        .end(
+          state.mode === "image-refused"
+            ? JSON.stringify({ error: "Image target is not listed on this machine." })
+            : "<html>not found</html>",
+        );
+      return;
+    }
     if (req.url === "/api/peer/images" || req.url === "/api/peer/images/cancel") {
       const respond = () =>
         res.end(

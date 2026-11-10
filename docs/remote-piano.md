@@ -191,7 +191,8 @@ not images. Piano preserves Pi's reported empty image-only queue entries.
 After Send, **Uploading images…** means preparation on the selected peer, not model receipt.
 You can keep typing and answer dialogs. **Cancel**, changing directory/session/machine, or Stop
 before submission cancels the pending send and keeps its original draft. New typing is preserved.
-If upload fails, the draft comes back for an explicit retry; there is no automatic upload retry.
+If upload fails, the draft comes back for an explicit retry, with the peer's own reason when it
+refused the images; there is no automatic upload retry.
 Once a prompt may have reached Pi, check the authoritative conversation before sending it again.
 
 Transcript thumbnails and **Open attached image** read from that session's peer, never Local.
