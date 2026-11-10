@@ -277,7 +277,6 @@ const PaletteResults = memo(function PaletteResults({
                   <CommandItem
                     key={r.key}
                     value={`${group.id}:${r.key}`}
-                    disabled={!r.enabled}
                     title={r.hint}
                     onSelect={() => run(() => select(r.session.cwd, r.session.sessionId))}
                   >

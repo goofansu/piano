@@ -40,8 +40,8 @@ export interface PaletteSessionRow {
   /** What the session is called on screen, as the catalog labels it. */
   label: string;
   untitled: boolean;
-  /** Availability comes from the session catalog, just as it does for the sidebar. */
-  enabled: boolean;
+  /** Why the session cannot be used normally, from the catalog. Every row opens: the catalog's
+   * `recentSessions` holds only sessions that can be opened. */
   hint: string | undefined;
   /** The session on screen, which the row names in bold. */
   selected: boolean;
@@ -98,7 +98,6 @@ function sessionRow(t: SessionEntry): PaletteSessionRow {
     keywords: [t.folder, t.branch, project],
     label,
     untitled: !t.title,
-    enabled: !t.disabled,
     hint: t.hint,
     selected: t.selected,
     folder: t.folder,
