@@ -98,3 +98,20 @@ export function sessionLinkOrigin(
     allowed[0]
   );
 }
+
+/**
+ * Whether a credentialed request came from this Piano's own page. Another site's page can make the
+ * browser send one without an Origin header (an image or script tag needs none), but browsers label
+ * every such load with `Sec-Fetch-Site`; so a request passes only when neither header names another
+ * site. The allowed origins decide, never a forwarded header (INV-11).
+ */
+export function fromOwnPage(
+  headers: Readonly<Record<string, string | undefined>>,
+  origins: ReadonlySet<string>,
+): boolean {
+  const site = headers["sec-fetch-site"];
+  const origin = headers.origin;
+  return (
+    (site === undefined || site === "same-origin") && (origin === undefined || origins.has(origin))
+  );
+}

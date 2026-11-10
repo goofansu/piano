@@ -20,7 +20,7 @@ import {
   disconnectReason,
 } from "../shared/wire.ts";
 import { socketLimits } from "./BoundedDelivery.ts";
-import { AllowedOrigins } from "./OriginPolicy.ts";
+import { AllowedOrigins, fromOwnPage } from "./OriginPolicy.ts";
 import { ConfiguredPeers, type PeerConfig } from "./PeerConfig.ts";
 import { makePeerImageRelay, peerImagePaths } from "./PeerImageGateway.ts";
 
@@ -361,13 +361,8 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
     if (!imagePath && request.method !== (remote?.browser.method ?? "GET"))
       return json({ error: "Remote request method is not supported." }, 405);
     // Every remote request spends the peer's credential, so another site's page must not make the
-    // browser send one (an image or script tag needs no Origin). Browsers label such loads.
-    const site = request.headers["sec-fetch-site"];
-    const origin = request.headers.origin;
-    if (
-      (site !== undefined && site !== "same-origin") ||
-      (origin !== undefined && !allowedOrigins.has(origin))
-    )
+    // browser send one.
+    if (!fromOwnPage(request.headers, allowedOrigins))
       return json({ error: "Remote requests must come from this Piano's own page." }, 403);
     if (imagePath) return yield* relayImages(peer, imagePath, request, upstreamHeaders(peer));
     if (!remote) {
