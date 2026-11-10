@@ -23,7 +23,7 @@ import {
   sameSession,
 } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
-import { bindImagePreviews } from "./ImagePreviews.ts";
+import { bindSessionEvent } from "./ImagePreviews.ts";
 import { type PiSession, type PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
 
@@ -120,8 +120,16 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   const { send } = output;
   let selected: Selection | null = null;
   /** The session last shown, live or saved, with the checkout answer its view carries. */
-  let shown: { selectionId: string; cwd: string; checkoutMissing: boolean } | null = null;
-  let attachment: { session: PiSession; scope: Scope.Closeable; selectionId: string } | null = null;
+  let shown: {
+    selectionId: string;
+    cwd: string;
+    checkoutMissing: boolean;
+  } | null = null;
+  let attachment: {
+    session: PiSession;
+    scope: Scope.Closeable;
+    selectionId: string;
+  } | null = null;
   // Serializes attach, detach and the stale checks that decide between them.
   const navigation = yield* Semaphore.make(1);
   const navigate = Semaphore.withPermits(navigation, 1);
@@ -144,7 +152,11 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     selection: Selection,
   ) {
     if (!current(selection)) return;
-    shown = { selectionId: selection.selectionId, cwd: session.spec.cwd, checkoutMissing: false };
+    shown = {
+      selectionId: selection.selectionId,
+      cwd: session.spec.cwd,
+      checkoutMissing: false,
+    };
     yield* detach;
     const scope = yield* Scope.make();
     const mine = { session, scope, selectionId: selection.selectionId };
@@ -153,15 +165,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     yield* session.events.pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
-          bindImagePreviews(
-            session.spec.cwd,
-            session.spec.sessionId,
-            event._tag === "snapshot"
-              ? event.snapshot.messages
-              : event._tag === "message_update" || event._tag === "message_end"
-                ? [event.message]
-                : [],
-          );
+          bindSessionEvent(session.spec.cwd, session.spec.sessionId, event);
           if (current(selection))
             yield* event._tag === "snapshot"
               ? send({
@@ -203,7 +207,11 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     selectionId: string,
     session: PiSession,
   ) {
-    const selection = { cwd: session.spec.cwd, sessionId: session.spec.sessionId, selectionId };
+    const selection = {
+      cwd: session.spec.cwd,
+      sessionId: session.spec.sessionId,
+      selectionId,
+    };
     if (!current(selection)) return;
     selected = selection;
     if (attachment?.selectionId === selectionId && attachment.session === session) return;
@@ -237,9 +245,17 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         }
         yield* detach;
         shown = sessionId
-          ? { selectionId, cwd: view.cwd, checkoutMissing: !!view.snapshot.state.checkoutMissing }
+          ? {
+              selectionId,
+              cwd: view.cwd,
+              checkoutMissing: !!view.snapshot.state.checkoutMissing,
+            }
           : null;
-        if (sessionId) bindImagePreviews(view.cwd, sessionId, view.snapshot.messages);
+        if (sessionId)
+          bindSessionEvent(view.cwd, sessionId, {
+            _tag: "snapshot",
+            snapshot: view.snapshot,
+          });
         yield* send({
           _tag: "selected",
           selectionId,
@@ -288,7 +304,10 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   ) {
     if (start?.model) yield* session.act({ _tag: "set_model", model: start.model });
     if (start?.thinkingLevel)
-      yield* session.act({ _tag: "set_thinking_level", level: start.thinkingLevel });
+      yield* session.act({
+        _tag: "set_thinking_level",
+        level: start.thinkingLevel,
+      });
     return session;
   });
 
@@ -339,15 +358,17 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   // archive another client asked for or Pi's exit, a checkout that went) names it, for a
   // follow-up and a new session's first message alike.
   const deliver = (session: PiSession, action: SessionAction) =>
-    session
-      .act(action)
-      .pipe(
-        Effect.mapError((cause) =>
-          "inputId" in action && action.inputId !== undefined && cause.notSent
-            ? new InputNotSent({ inputId: action.inputId, detail: cause.detail, cause })
-            : cause,
-        ),
-      );
+    session.act(action).pipe(
+      Effect.mapError((cause) =>
+        "inputId" in action && action.inputId !== undefined && cause.notSent
+          ? new InputNotSent({
+              inputId: action.inputId,
+              detail: cause.detail,
+              cause,
+            })
+          : cause,
+      ),
+    );
 
   const act = Effect.fn("ClientSessions.act")(function* (
     selectionId: string,
@@ -446,7 +467,12 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     const trimmed = text?.trim() ?? "";
     if (!trimmed && !attachments?.length) return;
     // Sent only once this client has attached, so it observes the prompt.
-    yield* deliver(session, { _tag: "prompt", text: trimmed, attachments, inputId: selectionId });
+    yield* deliver(session, {
+      _tag: "prompt",
+      text: trimmed,
+      attachments,
+      inputId: selectionId,
+    });
   });
 
   return {

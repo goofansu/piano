@@ -5,7 +5,7 @@ import {
   imagePreviewAddress,
   imagePreviewHash,
 } from "../shared/imagePreviews.ts";
-import { type RenderMsg, sessionKey } from "../shared/wire.ts";
+import { type RenderMsg, type SessionEvent, sessionKey } from "../shared/wire.ts";
 
 /** Bounded, disposable display cache. Pi remains the only durable image store.
  * Reprojecting history repopulates it; image bytes never inflate WS snapshots.
@@ -75,6 +75,33 @@ export function bindImagePreviews(cwd: string, sessionId: string, messages: read
       image.sessions.set(key, membership);
       memberships.add(membership);
     }
+}
+/** The transcript images a session event projects; each of them is that session's to serve. */
+function eventMessages(event: SessionEvent): readonly RenderMsg[] {
+  switch (event._tag) {
+    case "snapshot":
+      return event.snapshot.pending
+        ? [...event.snapshot.messages, event.snapshot.pending]
+        : event.snapshot.messages;
+    case "message_update":
+    case "message_end":
+      return [event.message];
+    case "context":
+      return event.messages;
+    case "state":
+    case "response_completed":
+    case "queue_update":
+    case "submission":
+    case "tool_update":
+    case "dialog":
+    case "dialog_resolved":
+    case "notice":
+    case "closed":
+      return [];
+  }
+}
+export function bindSessionEvent(cwd: string, sessionId: string, event: SessionEvent) {
+  bindImagePreviews(cwd, sessionId, eventMessages(event));
 }
 export function sessionImagePreview(cwd: string, sessionId: string, id: string) {
   return previews.get(id)?.sessions.has(sessionKey(cwd, sessionId))

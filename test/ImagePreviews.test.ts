@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   bindImagePreviews,
+  bindSessionEvent,
   getImagePreview,
   imagePreview,
   sessionImagePreview,
@@ -50,6 +51,37 @@ test("disposable preview bytes and provenance are globally bounded and can be re
   );
   bindImagePreviews("/same", "session-0", messages);
   assert.ok(sessionImagePreview("/same", "session-0", id));
+});
+
+// A context readback reprojects the whole transcript after every settle; an image it re-caches
+// after eviction must stay that session's, or the peer answers its preview with 404.
+test("a context event binds the images it reprojects to its session", () => {
+  const data = Buffer.from([255, 216, 255, 2]).toString("base64");
+  const url = imagePreview(data, "image/jpeg")!;
+  const id = url.split("/").at(-1)!;
+  const message = {
+    id: "message",
+    role: "user" as const,
+    text: "",
+    attachments: [{ kind: "image" as const, url }],
+  };
+  bindSessionEvent("/ctx", "session", { _tag: "message_end", message });
+  assert.ok(sessionImagePreview("/ctx", "session", id));
+  for (let i = 1; i <= 4096; i++) {
+    const bytes = Buffer.alloc(8);
+    bytes.set([255, 216, 255, 3]);
+    bytes.writeUInt32BE(i, 4);
+    imagePreview(bytes.toString("base64"), "image/jpeg");
+  }
+  assert.equal(getImagePreview(id), undefined, "evicted");
+  imagePreview(data, "image/jpeg");
+  assert.equal(
+    sessionImagePreview("/ctx", "session", id),
+    undefined,
+    "re-cached without provenance",
+  );
+  bindSessionEvent("/ctx", "session", { _tag: "context", messages: [message] });
+  assert.ok(sessionImagePreview("/ctx", "session", id), "the readback restores provenance");
 });
 
 // Cross-machine: the address one Piano projects is the one a browser and the peer accept, or a
