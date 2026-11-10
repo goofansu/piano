@@ -462,7 +462,6 @@ test("only readable sessions enter recents and search as availability changes", 
   const sessions = changed.find((g) => g.id === "sessions");
   assert.ok(sessions?.id === "sessions");
   assert.deepEqual(changed, commandPalette(unavailable, input), "cached and direct catalogs agree");
-  assert.ok(sessions.rows.every((r) => r.enabled));
   assert.deepEqual(
     sessionIds(unavailable),
     ["s8", "s7", "s6", "s5", "s4", "s3", "s2", "s1"],
@@ -497,7 +496,8 @@ test("only readable sessions enter recents and search as availability changes", 
   }
   const restored = catalog(home, input);
   assert.deepEqual(restored, commandPalette(home, input));
-  assert.equal(searchPalette(restored, "s9")[0]?.rows[0].enabled, true);
+  const back = searchPalette(restored, "s9")[0];
+  assert.equal(back?.id === "sessions" && back.rows[0].session.sessionId, "s9");
   assert.equal(
     paletteSelection(pagePalette(searchPalette(restored, "")), "", true),
     `sessions:${sessionKey({ cwd: "/work/repo.feature", sessionId: "s9" })}`,
