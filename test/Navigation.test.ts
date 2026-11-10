@@ -532,6 +532,34 @@ test("an unknown session keeps its URL and shows Session not found", () => {
   assert.equal(p.title(), "Session not found - Piano");
 });
 
+test("a session without history keeps its URL, is not selected, and says so", () => {
+  const p = page("/s/gone");
+  p.server({
+    _tag: "registry",
+    folders: [],
+    projects: [],
+    sessionReferences: [sessionReference("/scratch", "gone", { unavailable: "history" })],
+  });
+  assert.deepEqual(p.client.getState().view, {
+    kind: "missing-session",
+    sessionId: "gone",
+    reason: "history",
+  });
+  assert.deepEqual(p.selects(), []);
+  assert.deepEqual(p.entries, ["/s/gone"]);
+  assert.equal(p.title(), "History unavailable - Piano");
+
+  // A missing checkout still lets history be read, so its address opens the session.
+  const q = page("/s/gone");
+  q.server({
+    _tag: "registry",
+    folders: [],
+    projects: [],
+    sessionReferences: [sessionReference("/scratch", "gone", { unavailable: "checkout" })],
+  });
+  assert.deepEqual(q.selects(), ["gone"]);
+});
+
 test("aliases are replaced and real moves are pushed, with a title for each screen", () => {
   const p = page("/");
   p.registry();

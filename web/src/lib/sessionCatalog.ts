@@ -56,8 +56,22 @@ export function sessionLabel(title: string | undefined): string {
   return title || "Untitled";
 }
 
+/**
+ * Whether a session can be opened: its Pi history is there. The one rule the sidebar, the palette,
+ * links to a session and its `/s/<id>` address follow; a missing checkout still lets history be read.
+ */
+export function sessionOpenable(ref: Pick<SessionReference, "unavailable">): boolean {
+  return ref.unavailable !== "history";
+}
+
+/** What a session that cannot be opened says, on its row and at its address. */
+export const HISTORY_UNAVAILABLE = {
+  title: "History unavailable",
+  description: "Restore the Pi session file to open it.",
+} as const;
+
 const HINTS = {
-  history: "History unavailable. Restore the Pi session file to open it.",
+  history: `${HISTORY_UNAVAILABLE.title}. ${HISTORY_UNAVAILABLE.description}`,
   checkout: "Folder missing. History can be read; restore the folder to continue.",
 } as const;
 
@@ -136,7 +150,7 @@ function entries(state: AppState): SessionEntry[] {
       selected: isSession(current, ref),
       unavailable: ref.unavailable,
       hint: ref.unavailable && HINTS[ref.unavailable],
-      disabled: ref.unavailable === "history",
+      disabled: !sessionOpenable(ref),
     };
   });
 }
@@ -158,7 +172,7 @@ export function recentSessions(state: AppState): SessionEntry[] {
     .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
 }
 
-/** One session by its ID, archived or not: what a `/s/<id>` address resolves to. */
+/** One session's display-ready entry by its ID, archived or not. */
 export function catalogEntry(state: AppState, sessionId: string): SessionEntry | undefined {
   return entries(state).find((s) => s.sessionId === sessionId);
 }
@@ -174,8 +188,8 @@ export interface SessionDestination {
  * Whether a session can be opened, and where: the one rule every link to a session follows. A
  * session opens when the catalog offers it (it is not archived, as `sessionCatalog` decides for
  * the sidebar and palette) and its history is there, at the catalog's directory; otherwise it is
- * "unlisted" and nothing offers to open it. A `/s/<id>` address resolves through `catalogEntry`
- * instead, so it still names an archived session.
+ * "unlisted" and nothing offers to open it. A `/s/<id>` address still opens an archived session;
+ * one without history shows History unavailable (see `decideRoute`).
  */
 export function sessionDestination(
   state: AppState,

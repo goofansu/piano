@@ -22,6 +22,7 @@ import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
 import { previewObservation } from "@/lib/previewObservation";
 import { parseRoute } from "@/lib/routes";
+import { HISTORY_UNAVAILABLE } from "@/lib/sessionCatalog";
 import { useClient } from "@/lib/useClient";
 import { useMachine, useOffers } from "@/lib/useMachine";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
@@ -158,8 +159,12 @@ function MachineApp() {
                         />
                       ) : state.view.kind === "missing-session" ? (
                         <PaneNotFound
-                          title="Session not found"
-                          description="This session is not in Piano's database."
+                          {...(state.view.reason === "history"
+                            ? HISTORY_UNAVAILABLE
+                            : {
+                                title: "Session not found",
+                                description: "This session is not in Piano's database.",
+                              })}
                           action={
                             <Button variant="outline" onClick={() => openNew()}>
                               New session

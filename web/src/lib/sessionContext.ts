@@ -20,7 +20,7 @@ import { directoryTrust } from "./directoryTrust.ts";
 import { abbrevHome, branchLabel } from "./format.ts";
 import { type DraftKey, sessionDraftKey } from "./messageDraft.ts";
 import { findProject } from "./projectCommands.ts";
-import { sessionDirectories, sessionLabel } from "./sessionCatalog.ts";
+import { sessionDirectories, sessionLabel, sessionOpenable } from "./sessionCatalog.ts";
 import { startPage } from "./startPage.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
@@ -215,10 +215,8 @@ export function sessionWorking(state: AppState, target: SessionRef): boolean {
 
 /** Pi cannot run where the checkout or history is gone, and renaming starts Pi. */
 export function sessionCheckoutMissing(state: AppState, target: SessionRef): boolean {
-  return (
-    checkoutMissingAt(state, target.cwd) ||
-    sessionReference(state, target)?.unavailable === "history"
-  );
+  const reference = sessionReference(state, target);
+  return checkoutMissingAt(state, target.cwd) || (!!reference && !sessionOpenable(reference));
 }
 
 export interface SessionContext {

@@ -18,7 +18,7 @@ import {
   routePath,
   type SettingsSection,
 } from "./routes.ts";
-import { sessionLabel } from "./sessionCatalog.ts";
+import { HISTORY_UNAVAILABLE, sessionLabel, sessionOpenable } from "./sessionCatalog.ts";
 import { checkoutMissingAt, workspaceFor } from "./sessionContext.ts";
 
 /** The session's own views in the Surface area, one tab each. */
@@ -284,7 +284,10 @@ function pageAddress(state: AppState, page: Page): { route: Route; title: string
         title: findProject(state, page.projectId)?.name || "Project",
       };
     case "missing-session":
-      return { route: { kind: "session", sessionId: page.sessionId }, title: "Session not found" };
+      return {
+        route: { kind: "session", sessionId: page.sessionId },
+        title: page.reason === "history" ? HISTORY_UNAVAILABLE.title : "Session not found",
+      };
   }
 }
 
@@ -314,9 +317,15 @@ export function decideRoute(route: Route, state: AppState): RouteDecision {
   }
   if (!state.registryLoaded) return { kind: "wait" };
   const session = state.sessionReferences.find((ref) => ref.sessionId === route.sessionId);
-  return session
+  if (!session)
+    return { kind: "open", page: { kind: "missing-session", sessionId: route.sessionId } };
+  // The address follows the catalog's rule, as the sidebar and palette do: no history, no session.
+  return sessionOpenable(session)
     ? { kind: "select", cwd: session.cwd, sessionId: session.sessionId }
-    : { kind: "open", page: { kind: "missing-session", sessionId: route.sessionId } };
+    : {
+        kind: "open",
+        page: { kind: "missing-session", sessionId: route.sessionId, reason: "history" },
+      };
 }
 
 export interface Address {
