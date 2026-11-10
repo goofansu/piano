@@ -15,8 +15,6 @@ export interface MachineOffers {
   rail: boolean;
   /** Images attached to a message: the attach button, paste and drop, and sent images shown. */
   attachments: boolean;
-  /** Voice input in the composer. */
-  voiceInput: boolean;
   /** The session's pull request, followed in Changes and the session header. */
   pullRequests: boolean;
   /** The selected session's preview, observed for its commands. */
@@ -49,7 +47,6 @@ const LOCAL_OFFERS: MachineOffers = {
   files: true,
   rail: true,
   attachments: true,
-  voiceInput: true,
   pullRequests: true,
   previews: true,
   providerAccounts: true,
@@ -69,7 +66,6 @@ const REMOTE_OFFERS: MachineOffers = {
   files: false,
   rail: false,
   attachments: true,
-  voiceInput: true, // Main-origin utility, not a peer settings/transcription proxy.
   pullRequests: false,
   previews: false,
   providerAccounts: false,
