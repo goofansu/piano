@@ -2,6 +2,7 @@ import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { ownerRequest } from "../../scripts/PreviewClient.ts";
 import { START_TIMEOUT_SECONDS } from "../../scripts/PreviewReadiness.ts";
 import { PreviewParameters, type PreviewArguments } from "../../scripts/PreviewRequest.ts";
+import { PREVIEW_OWNER_ENV } from "../../shared/dispatch.ts";
 
 /** Bundled Pi extension: one managed app preview per workspace, run for this session. */
 export default function pianoPreview(pi: ExtensionAPI) {
@@ -10,7 +11,7 @@ export default function pianoPreview(pi: ExtensionAPI) {
 
 /** A short-lived observation client; the trusted server endpoint fixes workspace and owner. */
 export function previewRequest(request: PreviewArguments, signal?: AbortSignal): Promise<string> {
-  const endpoint = process.env.PIANO_PREVIEW_OWNER;
+  const endpoint = process.env[PREVIEW_OWNER_ENV];
   if (!endpoint) return Promise.reject(new Error("Preview requires a live Piano session owner."));
   return ownerRequest(endpoint, request, signal);
 }
@@ -40,7 +41,7 @@ export function registerPreview(
   env: NodeJS.ProcessEnv = process.env,
 ) {
   const host = previewHost(platform, env);
-  if (!host || !env.PIANO_PREVIEW_OWNER) return;
+  if (!host || !env[PREVIEW_OWNER_ENV]) return;
   pi.registerTool(
     defineTool({
       name: "piano_preview",

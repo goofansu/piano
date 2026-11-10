@@ -3,6 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { PREVIEW_OWNER_ENV } from "../shared/dispatch.ts";
 import { PreviewAdapter, type PreviewConfig, type PreviewRequest } from "./PreviewAdapter.ts";
 import { ownerRequest } from "./PreviewClient.ts";
 
@@ -20,8 +21,8 @@ try {
     : {};
   const root = process.env.PIANO_PREVIEW_STATE ?? join(homedir(), ".local/state/piano/previews");
   console.log(
-    process.env.PIANO_PREVIEW_OWNER
-      ? await ownerRequest(process.env.PIANO_PREVIEW_OWNER, request)
+    process.env[PREVIEW_OWNER_ENV]
+      ? await ownerRequest(process.env[PREVIEW_OWNER_ENV], request)
       : JSON.stringify(await new PreviewAdapter().request(request, root, config)),
   );
 } catch (error) {

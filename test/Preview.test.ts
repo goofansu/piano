@@ -13,6 +13,7 @@ import {
   type PreviewConfig,
   type PreviewRequest,
 } from "../scripts/PreviewAdapter.ts";
+import { PREVIEW_OWNER_ENV } from "../shared/dispatch.ts";
 import { type FakeHost, fakeAdapter, type Platform } from "./fixtures/preview-host.ts";
 
 type Result = Awaited<ReturnType<PreviewAdapter["request"]>>;
@@ -786,7 +787,7 @@ test("the tool is offered only where a supervisor can own the app", () => {
     registerPreview(
       { registerTool: (tool: (typeof tools)[number]) => tools.push(tool) } as never,
       platform,
-      { PIANO_PREVIEW_OWNER: "/test-owner", ...env },
+      { [PREVIEW_OWNER_ENV]: "/test-owner", ...env },
     );
     return tools;
   };
