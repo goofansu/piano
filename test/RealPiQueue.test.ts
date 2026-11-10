@@ -139,7 +139,7 @@ await import(${JSON.stringify(cli)});`,
               kind: "image" as const,
               name: "pixel.png",
               mimeType: "image/png" as const,
-              data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGZkAAAAASUVORK5CYII=",
+              data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=",
             },
           ];
           yield* session.act({
@@ -148,9 +148,8 @@ await import(${JSON.stringify(cli)});`,
             attachments: [...attachments, ...attachments],
           });
           yield* session.act({ _tag: "steer", text: "duplicate", attachments });
-          // Unpatched Pi 1.2.0 leaves an empty-text display entry after image-only delivery.
-          // Verify image-only restoration, but use text for the queue-consumption contract.
-          const lastText = finish === "restore" ? "" : "image message";
+          // Pi 1.5.1 removes delivered image-only entries from the pending queue too.
+          const lastText = "";
           yield* session.act({ _tag: "prompt", text: lastText, attachments });
           assert.equal((yield* session.state).submission?.outcome, "queued");
           yield* Fiber.join(queued);
