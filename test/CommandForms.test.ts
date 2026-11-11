@@ -311,15 +311,19 @@ test("project answers: a new project opens its home, create-and-assign stays put
   });
   assert.deepEqual(newProject({ name: "  " }), { allowed: false });
   // Instructions travel in the same save, trimmed; blank ones are left out; over the limit refuses.
-  assert.deepEqual(newProject({ name: "Ship", instructions: "\n Reply in French. \n" }).command, {
-    _tag: "save_project",
-    project: { id: "new-id", name: "Ship", instructions: "Reply in French." },
-    assign: undefined,
+  assert.deepEqual(newProject({ name: "Ship", instructions: "\n Reply in French. \n" }), {
+    allowed: true,
+    command: {
+      _tag: "save_project",
+      project: { id: "new-id", name: "Ship", instructions: "Reply in French." },
+      assign: undefined,
+    },
+    open: { kind: "project", projectId: "new-id" },
   });
-  assert.deepEqual(newProject({ name: "Ship", instructions: "  " }).command, {
-    _tag: "save_project",
-    project: { id: "new-id", name: "Ship" },
-    assign: undefined,
+  assert.deepEqual(newProject({ name: "Ship", instructions: "  " }), {
+    allowed: true,
+    command: { _tag: "save_project", project: { id: "new-id", name: "Ship" }, assign: undefined },
+    open: { kind: "project", projectId: "new-id" },
   });
   assert.equal(newProject({ name: "Ship", instructions: "x".repeat(20_001) }).allowed, false);
   assert.deepEqual(newProject({ name: "Ship" }, offline), { allowed: false });
@@ -515,7 +519,9 @@ test("an allowed form sends its answer once, then closes", () => {
     subject.edit("Renamed");
     assert.equal(subject.submit(), true, form.kind);
     assert.equal(subject.getState().form, null, form.kind);
-    assert.deepEqual(sent, [answerForm(withWorkspace, form, "Renamed").command], form.kind);
+    const answered = answerForm(withWorkspace, form, "Renamed");
+    assert.ok(answered.allowed, form.kind);
+    assert.deepEqual(sent, [answered.command], form.kind);
     assert.equal(subject.submit(), false, form.kind);
     assert.equal(sent.length, 1, form.kind);
   }
