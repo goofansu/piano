@@ -506,6 +506,13 @@ export type Workspace = typeof Workspace.Type;
 export const CHANGES_INITIAL_PATCH_BYTES = 120_000;
 export const CHANGES_FILE_PATCH_BYTES = 1024 * 1024;
 /**
+ * The largest Changes answer (a list, one file's patch, a saved comparison) as the server sends it,
+ * JSON-encoded: past it, the server answers `{ status: "error", detail }` with no partial list,
+ * so Local and a remote relayed through the gateway fail alike. It holds a file's patch at
+ * CHANGES_FILE_PATCH_BYTES even if escaping triples it, and tens of thousands of listed files.
+ */
+export const CHANGES_ANSWER_BYTES = 4 * 1024 * 1024;
+/**
  * How long one Git observation of a checkout may run once it holds a permit (Changes and written
  * files): past it, the server answers `{ status: "error", detail }` rather than failing the request.
  */
