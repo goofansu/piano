@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { socketLimits } from "../server/BoundedDelivery.ts";
 import { loadPeerConfigs } from "../server/PeerConfig.ts";
+import { Endpoints, RemoteRequests } from "../shared/http.ts";
 import { PEER_FRAME_BYTES } from "../shared/machine.ts";
 import {
   IMAGE_CANCEL_PATH,
@@ -14,7 +15,7 @@ import {
   IMAGE_UPLOAD_TYPE,
   remoteImageLimits,
 } from "../shared/remoteImages.ts";
-import { CloseCode } from "../shared/wire.ts";
+import { CHECKOUT_TIMEOUT_MS, CloseCode } from "../shared/wire.ts";
 import { imageUploadBody } from "../web/src/lib/remoteImages.ts";
 import { gatewayFixture, identity, registry } from "./fixtures/peer-gateway.ts";
 import { readRegistry } from "./fixtures/registry.ts";
@@ -312,6 +313,26 @@ test("peer startup configuration is explicit, bounded and fail-closed", (t) => {
   assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
   writeFileSync(file, " ".repeat(16 * 1024 + 1));
   assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
+});
+
+// The remote answers a Git observation that outlasts its checkout timeout as a 200 with
+// `{ status: "error", detail }`. The gateway's own deadline starts earlier (before dialing), so it
+// must be longer, or the browser gets "machine unavailable" in place of the remote's error.
+test("the gateway waits out the remote's checkout timeout for Changes and written files", () => {
+  const checkoutBacked = [
+    Endpoints.sessionChanges,
+    Endpoints.sessionChangedFile,
+    Endpoints.setSessionChangesScope,
+    Endpoints.workspaceWrittenFiles,
+  ];
+  for (const endpoint of checkoutBacked) {
+    const relayed = RemoteRequests.find((request) => request.browser === endpoint);
+    assert.ok(relayed, `${endpoint.path} is relayed`);
+    assert.ok(
+      (relayed.requestMs ?? 0) > CHECKOUT_TIMEOUT_MS,
+      `${endpoint.path}: ${relayed.requestMs} ms must outlast ${CHECKOUT_TIMEOUT_MS} ms`,
+    );
+  }
 });
 
 test("peer lists retain configured order and reject ambiguous or partially invalid configurations", (t) => {

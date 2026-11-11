@@ -13,7 +13,7 @@
 import { lstat, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { Data, Effect, Semaphore } from "effect";
-import type { Workspace } from "../shared/wire.ts";
+import { CHECKOUT_TIMEOUT_MS, type Workspace } from "../shared/wire.ts";
 import { gitEnvironment } from "./GitEnvironment.ts";
 import {
   GitCommand,
@@ -554,7 +554,8 @@ export interface ObserveOptions {
   readonly writes?: "index";
   /** The caller's phrasing for failures this module detects. */
   readonly messages?: Partial<CheckoutMessages>;
-  /** Cancels the read after this many milliseconds (default 30 s). */
+  /** Cancels the read after this many milliseconds (default CHECKOUT_TIMEOUT_MS, which a remote's
+   * gateway outlasts: shared/http.ts). */
   readonly timeout?: number;
 }
 
@@ -575,7 +576,7 @@ export const observeCheckout = Effect.fn("GitCheckout.observeCheckout")(function
   read: (checkout: Checkout, signal: AbortSignal) => Promise<R>,
 ): Effect.fn.Return<CheckoutObservation<R>> {
   const git = yield* GitCommand;
-  const { slots, limit, writes, messages, timeout = 30_000 } = options;
+  const { slots, limit, writes, messages, timeout = CHECKOUT_TIMEOUT_MS } = options;
   return yield* Semaphore.withPermits(
     slots,
     1,
