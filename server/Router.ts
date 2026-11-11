@@ -2,6 +2,7 @@ import { Cause, Data, Effect, Option, Schema, Semaphore, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import {
   type Endpoint,
+  answerJson,
   Endpoints,
   type IdParam,
   type Json,
@@ -135,7 +136,7 @@ const attachment = (name: string) =>
   `attachment; filename="${name.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 
 const respond = (body: unknown, status: number, { noStore = false, redact = true } = {}) =>
-  HttpServerResponse.text(JSON.stringify(redact ? projectDisplay(body) : body, null, 2), {
+  HttpServerResponse.text(answerJson(redact ? projectDisplay(body) : body), {
     status,
     contentType: "application/json",
     ...(noStore ? { headers: { "cache-control": "no-store" } } : {}),

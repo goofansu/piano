@@ -15,7 +15,7 @@ import {
   IMAGE_UPLOAD_TYPE,
   remoteImageLimits,
 } from "../shared/remoteImages.ts";
-import { CHECKOUT_TIMEOUT_MS, CloseCode } from "../shared/wire.ts";
+import { CHANGES_ANSWER_BYTES, CHECKOUT_TIMEOUT_MS, CloseCode } from "../shared/wire.ts";
 import { imageUploadBody } from "../web/src/lib/remoteImages.ts";
 import { gatewayFixture, identity, registry } from "./fixtures/peer-gateway.ts";
 import { readRegistry } from "./fixtures/registry.ts";
@@ -331,6 +331,23 @@ test("the gateway waits out the remote's checkout timeout for Changes and writte
     assert.ok(
       (relayed.requestMs ?? 0) > CHECKOUT_TIMEOUT_MS,
       `${endpoint.path}: ${relayed.requestMs} ms must outlast ${CHECKOUT_TIMEOUT_MS} ms`,
+    );
+  }
+});
+
+// The remote refuses a Changes answer past CHANGES_ANSWER_BYTES with `{ status: "error" }`; the
+// gateway must relay every answer it allows, or the browser gets "machine unavailable" instead.
+test("the gateway relays any Changes answer the remote's budget allows", () => {
+  for (const endpoint of [
+    Endpoints.sessionChanges,
+    Endpoints.sessionChangedFile,
+    Endpoints.setSessionChangesScope,
+  ]) {
+    const relayed = RemoteRequests.find((request) => request.browser === endpoint);
+    assert.ok(relayed, `${endpoint.path} is relayed`);
+    assert.ok(
+      (relayed.answerBytes ?? 0) >= CHANGES_ANSWER_BYTES,
+      `${endpoint.path}: ${relayed.answerBytes} bytes must hold ${CHANGES_ANSWER_BYTES}`,
     );
   }
 });

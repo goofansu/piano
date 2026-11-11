@@ -5,7 +5,9 @@ import { copyFile, lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Semaphore } from "effect";
+import { answerJson } from "../shared/http.ts";
 import {
+  CHANGES_ANSWER_BYTES,
   CHANGES_FILE_PATCH_BYTES,
   CHANGES_INITIAL_PATCH_BYTES,
   type ChangeFile,
@@ -181,6 +183,19 @@ async function preview(
   }
 }
 
+/** The observation unless its answer, as sent, exceeds CHANGES_ANSWER_BYTES: then an error, never
+ * a partial list, so a remote's gateway relays it as it would Local's. */
+const bounded = (observation: Observation): Observation =>
+  Buffer.byteLength(answerJson(observation)) <= CHANGES_ANSWER_BYTES
+    ? observation
+    : {
+        ...observation,
+        result: {
+          status: "error",
+          detail: "Changes are too large to list; no partial file list is shown.",
+        },
+      };
+
 /** What is still only here, whatever the scope and whether it can be read: edits HEAD lacks
  * (untracked, non-ignored files included) and commits the remote-tracking ref lacks. */
 async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<LocalWork> {
@@ -268,7 +283,7 @@ export const WorkspaceChangesLive = Layer.effect(
       preview: (workspace, options = {}) =>
         observeCheckout(workspace, changes, async (checkout) =>
           preview(await checkout.withUserExcludes(), options, options.path, true),
-        ),
+        ).pipe(Effect.map(bounded)),
       summary: (workspace, options = {}) =>
         observeCheckout(workspace, changes, async (checkout) =>
           preview(await checkout.withUserExcludes(), options, undefined, false),

@@ -18,7 +18,8 @@ import {
   WorkspaceChanges,
   WorkspaceChangesLive,
 } from "../server/WorkspaceChanges.ts";
-import type { WorkspaceChanges as Observation } from "../shared/wire.ts";
+import { answerJson } from "../shared/http.ts";
+import { CHANGES_ANSWER_BYTES, type WorkspaceChanges as Observation } from "../shared/wire.ts";
 import { parseUnifiedDiff } from "../web/src/lib/diff.ts";
 import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
@@ -195,6 +196,40 @@ test("live changes: metadata overflow is an error, never a partial or empty file
     assert.match(observation.result.detail, /metadata exceeds 16 MiB; no partial file list/);
   assert.equal("files" in observation.result, false);
   assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
+});
+
+// A remote's gateway relays an answer only up to its own bound; a list larger than the answer
+// budget must be refused where it is answered, alike for Local and a remote.
+test("live changes: an answer past the answer budget is an error, never a partial file list", async (t) => {
+  // Index-only paths, deleted from the worktree, list without writing thousands of files.
+  const directory = join("d".repeat(200), "e".repeat(200), "f".repeat(200));
+  const commitPaths = (count: number) => {
+    const fixed = fixture(t);
+    const blob = fixed.gitInput("base\n", "hash-object", "-w", "--stdin").trim();
+    const entries = Array.from(
+      { length: count },
+      (_, i) => `100644 ${blob}\t${directory}/${i}.txt\0`,
+    ).join("");
+    fixed.gitInput(entries, "update-index", "--add", "-z", "--index-info");
+    fixed.git("commit", "-qm", "index-only base");
+    return fixed;
+  };
+  // Each listed path costs more than its 600 bytes of name once encoded.
+  const over = commitPaths(Math.ceil(CHANGES_ANSWER_BYTES / 600));
+  const refused = await over.preview();
+  assert.equal(refused.result.status, "error");
+  if (refused.result.status === "error")
+    assert.equal(
+      refused.result.detail,
+      "Changes are too large to list; no partial file list is shown.",
+    );
+  // One file's read of the same checkout is small and still answers.
+  assert.equal((await over.preview(`${directory}/7.txt`)).result.status, "ready");
+
+  const count = Math.floor(CHANGES_ANSWER_BYTES / 1_000);
+  const answer = await commitPaths(count).preview();
+  assert.equal(ready(answer).files.length, count);
+  assert.ok(Buffer.byteLength(answerJson(answer)) <= CHANGES_ANSWER_BYTES);
 });
 
 test("live changes: local filters and diff programs never run and intent-to-add never modifies user index", async (t) => {

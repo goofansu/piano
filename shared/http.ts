@@ -26,6 +26,7 @@ import {
 } from "./voiceInput.ts";
 import { Webhook, WebhookDelivery, WebhookSave } from "./webhooks.ts";
 import {
+  CHANGES_ANSWER_BYTES,
   CHECKOUT_TIMEOUT_MS,
   ChangesScope,
   DirListing,
@@ -650,7 +651,17 @@ export interface RemoteRequest {
   readonly requestMs?: number;
 }
 
+/** A JSON answer's text as the server sends it, so a budget can measure what is actually sent. */
+export const answerJson = (body: unknown): string => JSON.stringify(body, null, 2);
+
 const MiB = 1024 * 1024;
+/**
+ * The remote bounds its own Changes answer at CHANGES_ANSWER_BYTES, measured before display
+ * redaction, which swaps a secret for a marker and can lengthen only a secret shorter than it. The
+ * margin covers that, so the gateway's bound only catches a misbehaving remote; with none, an
+ * answer the remote allows could reach the browser as "machine unavailable".
+ */
+const changesAnswerBytes = CHANGES_ANSWER_BYTES + 64 * 1024;
 /**
  * A remote's Git observation answers within CHECKOUT_TIMEOUT_MS, as `{ status: "error" }` when Git
  * outlasts it. The gateway's deadline starts first (before dialing; the remote's only once it holds
@@ -694,15 +705,18 @@ export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
     invalid: Endpoints.saveDefaults.invalid,
     passRefusal: true,
   },
-  // Changes: a list with its first patch excerpt, one file's patch (CHANGES_FILE_PATCH_BYTES of
-  // text, larger as JSON), and the saved comparison, each one Git observation of the checkout.
-  sessionSurface(Endpoints.sessionChanges, { answerBytes: 4 * MiB, requestMs: checkoutRequestMs }),
+  // Changes: a list with its first patch excerpt, one file's patch, and the saved comparison, each
+  // one Git observation of the checkout.
+  sessionSurface(Endpoints.sessionChanges, {
+    answerBytes: changesAnswerBytes,
+    requestMs: checkoutRequestMs,
+  }),
   sessionSurface(Endpoints.sessionChangedFile, {
-    answerBytes: 4 * MiB,
+    answerBytes: changesAnswerBytes,
     requestMs: checkoutRequestMs,
   }),
   sessionSurface(Endpoints.setSessionChangesScope, {
-    answerBytes: 4 * MiB,
+    answerBytes: changesAnswerBytes,
     requestMs: checkoutRequestMs,
   }),
   // Outputs: up to WRITTEN_PATHS_LIMIT paths as the session's tool calls named them, checked in
