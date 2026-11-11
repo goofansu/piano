@@ -73,6 +73,25 @@ parsed objects/strings, one active record, framing storage, runtime buffers and
 existing session history also consume memory. It does not bound Pi's own context,
 number of browser connections, number of sessions, or HTTP request bodies.
 
+## Remote session surfaces
+
+The gateway relays a remote session's [Changes, pull request, Outputs and file reads](adr/0004-same-owner-piano-peer.md#session-surfaces-changes-files-and-the-session-rail)
+as single requests, each bounded before and after dialing. `RemoteRequests` in `shared/http.ts`
+and `PeerGateway` define:
+
+| Request | Request body | Answer | Deadline |
+| --- | --- | --- | --- |
+| Changes read, one file's patch, saved comparison | 16 KiB | 4 MiB JSON | 30 s |
+| Written paths (Outputs) | 1 MiB, at most 1,000 paths | 1 MiB JSON | 30 s |
+| Pull request read and change | 16 KiB | 1 MiB JSON | 30 s |
+| File preview and download | 16 KiB | 34 MiB, relayed as sent | 60 s |
+
+A file answer is held whole in memory before it is passed on, at most **two per configured peer**
+at once (68 MiB); a third is refused with 429, not queued. The 34 MiB ceiling covers the largest
+preview format (a 32 MiB video) in its multipart answer; the peer applies the per-format limits
+first. A compressed, oversized, late or malformed answer is the remote unavailable (502). Nothing
+is retried. These bound main's memory and time, not the peer's Git or GitHub work.
+
 ## Remote image HTTP lane
 
 The [same-owner remote image extension](adr/0004-same-owner-piano-peer.md#raster-images-separate-preparation-unchanged-conversation-ownership)

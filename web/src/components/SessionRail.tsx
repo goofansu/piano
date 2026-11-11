@@ -29,6 +29,7 @@ import { pullRequestView } from "@/lib/pullRequestView";
 import { type EnvironmentRowKind, environmentRowMenu } from "@/lib/sessionCommands";
 import { sessionContext, sessionPlace } from "@/lib/sessionContext";
 import type { TranscriptViewport } from "@/lib/transcriptViewport";
+import { useOffers } from "@/lib/useMachine";
 import { usePreference } from "@/lib/usePreference";
 import { useSessionFiles } from "@/lib/useSessionFiles";
 import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
@@ -131,7 +132,10 @@ function passWheel(event: React.WheelEvent<HTMLElement>, viewport: TranscriptVie
 
 /** The rail's folding sections for the selected session. */
 function RailSections({ state }: { state: AppState }) {
-  const preview = useSeenPreview(state);
+  // The app is shown only where previews are offered.
+  const offers = useOffers();
+  const seen = useSeenPreview(state);
+  const preview = offers.previews ? seen : undefined;
   const files = useSessionFiles();
   const { cwd } = sessionContext(state);
   const [collapsed, setCollapsed] = usePreference(collapsedPreference);

@@ -25,6 +25,7 @@ import { workspaceFileDownload } from "@/lib/api";
 import { relativeToDocument } from "@/lib/file-link";
 import type { FileTab } from "@/lib/navigation";
 import { previewImage } from "@/lib/previewImage";
+import { useMachineId } from "@/lib/useMachine";
 import { useMarkdownImages } from "@/lib/useMarkdownImages";
 import { useNavigation } from "@/lib/useNavigation";
 
@@ -74,6 +75,7 @@ export function FileTabIcon({ path, className }: { path: string; className?: str
  * Renderers own only disposable presentation resources; they never initiate the file read. */
 export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab }) {
   const { openFile } = useNavigation();
+  const machineId = useMachineId();
   const { result, status, workspaceId } = file;
   const previewId = useId();
   const [mode, setMode] = useState("preview");
@@ -103,7 +105,9 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
     if (!workspaceId || saving) return;
     setSaving(true);
     try {
-      const { name, mime, bytes } = await workspaceFileDownload(workspaceId, file.path);
+      const { name, mime, bytes } = await workspaceFileDownload(workspaceId, file.path, {
+        machineId,
+      });
       const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mime }));
       const anchor = Object.assign(document.createElement("a"), { href: url, download: name });
       document.body.append(anchor);

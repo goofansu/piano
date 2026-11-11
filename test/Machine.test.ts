@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { loadPeerConfigs } from "../server/PeerConfig.ts";
 import type { ModelCatalog } from "../shared/wire.ts";
-import { sessionCommands, workspaceFile } from "../web/src/lib/api.ts";
+import { listDirectory, sessionCommands, workspaceFile } from "../web/src/lib/api.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import {
   machineAddress,
@@ -179,10 +179,8 @@ test("HTTP request captures its peer; unsupported remote reads never fall throug
   assert.deepEqual(urls, [
     "/peer/eng-1/api/session/commands?workspaceId=same-workspace&sessionId=same-id",
   ]);
-  await assert.rejects(
-    workspaceFile("same-workspace", "secret.txt", { machineId: "eng-1" }),
-    /Unavailable/,
-  );
+  // Browsing the remote's directories is not offered: it is refused here, before any request.
+  await assert.rejects(listDirectory("/home", { machineId: "eng-1" }), /Unavailable/);
   assert.equal(urls.length, 1);
   finish(
     new Response(JSON.stringify({ commands: [] }), {
@@ -190,6 +188,11 @@ test("HTTP request captures its peer; unsupported remote reads never fall throug
     }),
   );
   assert.deepEqual(await pending, []);
+  // A session's file is the remote's: asked through its gateway, never Local's endpoint.
+  const file = workspaceFile("same-workspace", "notes.md", { machineId: "eng-1" });
+  assert.equal(urls.at(-1), "/peer/eng-1/api/workspace/file?workspaceId=same-workspace");
+  finish(Response.json({ error: "File not found." }, { status: 400 }));
+  await assert.rejects(file, /File not found/);
   assert.equal(peerApiPath("local", "/api/workspace/file"), "/api/workspace/file");
   assert.throws(() => peerApiPath("unknown", "/api/settings"), /Unavailable/);
 });

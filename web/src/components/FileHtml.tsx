@@ -3,6 +3,7 @@ import { FileNotice } from "@/components/FileNotice";
 import { workspaceFile } from "@/lib/api";
 import { prepareHtmlPreview } from "@/lib/html-preview";
 import { listenHtmlPreviewLinks, type HtmlPreviewDocument } from "@/lib/html-preview-bridge";
+import { useMachineId } from "@/lib/useMachine";
 import { useNavigation } from "@/lib/useNavigation";
 
 type Props = { content: string; path: string; workspaceId: string; active: boolean };
@@ -16,6 +17,7 @@ export default function FileHtml(props: Props) {
 
 function HtmlDocument({ content, path, workspaceId, active }: Props) {
   const { openFile } = useNavigation();
+  const machineId = useMachineId();
   const frame = useRef<HTMLIFrameElement>(null);
   const [document, setDocument] = useState<HtmlPreviewDocument>();
   const [error, setError] = useState<string>();
@@ -24,7 +26,7 @@ function HtmlDocument({ content, path, workspaceId, active }: Props) {
     void prepareHtmlPreview(
       content,
       path,
-      (resource, signal) => workspaceFile(workspaceId, resource, { signal }),
+      (resource, signal) => workspaceFile(workspaceId, resource, { signal, machineId }),
       controller.signal,
     ).then(
       (document) => {
@@ -36,7 +38,7 @@ function HtmlDocument({ content, path, workspaceId, active }: Props) {
       },
     );
     return () => controller.abort();
-  }, [content, path, workspaceId]);
+  }, [content, path, workspaceId, machineId]);
   useLayoutEffect(() => {
     if (!active || !document || !frame.current) return;
     return listenHtmlPreviewLinks(window, frame.current, document, (link) => {

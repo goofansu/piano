@@ -18,5 +18,7 @@ export const MachineContext = createContext<MachineScope | null>(null);
 export const useMachine = () => useContext(MachineContext);
 /** What the selected machine offers in this browser; outside a machine scope, Local's. */
 export const useOffers = (): MachineOffers => machineOffers(useMachine()?.machine ?? LOCAL);
+/** The machine a request is for, captured where it is made (`RequestOptions.machineId`). */
+export const useMachineId = (): string => useMachine()?.machine.id ?? LOCAL.id;
 export const useDrafts = () => useMachine()?.drafts ?? drafts;
 export const useQuestionReplies = () => useMachine()?.questions ?? questionReplies;

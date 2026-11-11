@@ -5,7 +5,7 @@ import { workspaceWrittenFiles } from "./api.ts";
 import { refreshKey } from "./changesView.ts";
 import { sessionContext } from "./sessionContext.ts";
 import { type SessionFile, sessionFiles, visibleFiles } from "./sessionFiles.ts";
-import { useOffers } from "./useMachine.ts";
+import { useMachineId } from "./useMachine.ts";
 import { useObservation } from "./useObservation.ts";
 
 /**
@@ -19,11 +19,7 @@ import { useObservation } from "./useObservation.ts";
  * read restores filtering. The app provides it through `SessionFilesContext`.
  */
 export function useSessionFilesController(state: AppState): SessionFile[] {
-  const offers = useOffers();
-  return useVisibleFiles(
-    offers.files ? state.session : null,
-    offers.files ? sessionContext(state).changesWorkspace : undefined,
-  );
+  return useVisibleFiles(state.session, sessionContext(state).changesWorkspace);
 }
 
 export const SessionFilesContext = createContext<SessionFile[] | null>(null);
@@ -39,6 +35,7 @@ function useVisibleFiles(
   session: SessionView | null,
   workspace: Workspace | undefined,
 ): SessionFile[] {
+  const machineId = useMachineId();
   const messages = session?.messages;
   const files = useMemo(() => sessionFiles(messages ?? []), [messages]);
   const key =
@@ -53,7 +50,7 @@ function useVisibleFiles(
     async (signal, k) => {
       // The adapter refuses a reply naming another workspace (INV-07).
       const [asked, paths] = JSON.parse(k) as [Workspace, string[]];
-      return workspaceWrittenFiles(asked, paths, { signal });
+      return workspaceWrittenFiles(asked, paths, { signal, machineId });
     },
     { focus: true, trigger: refreshKey(session), debounce: 600 },
   );

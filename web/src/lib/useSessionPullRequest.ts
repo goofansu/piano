@@ -5,6 +5,7 @@ import { sessionPullRequest } from "@/lib/api";
 import { pullRequestTrigger } from "@/lib/changesView";
 import type { PullRequestTarget } from "@/lib/sessionContext";
 import { createSessionPullRequest, pullRequestKey } from "@/lib/sessionPullRequest";
+import { useMachineId } from "@/lib/useMachine";
 
 /**
  * Only the selected session's `target` is observed (none where its pull request cannot be
@@ -28,11 +29,14 @@ export function useSessionPullRequest(
     dialog: { open: boolean; onOpenChange: (open: boolean) => void };
   },
 ) {
+  const machineId = useMachineId();
   const latest = useRef(dialog);
   latest.current = dialog;
   const [pr] = useState(() =>
     createSessionPullRequest({
-      api: sessionPullRequest,
+      // This mount's machine: the app remounts when the machine changes.
+      api: (workspaceId, sessionId, action, options) =>
+        sessionPullRequest(workspaceId, sessionId, action, { ...options, machineId }),
       notify: {
         error: (message) => toast.error(message),
         info: (message) => toast(message),

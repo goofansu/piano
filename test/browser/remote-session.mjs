@@ -67,6 +67,16 @@ const seed = (machine, { root, history }) => {
             ],
             timestamp: Date.now(),
           },
+          // A file link the peer's own checkout answers.
+          ...(id === "remote-only"
+            ? [
+                {
+                  role: "assistant",
+                  content: [{ type: "text", text: "See [peer notes](peer-notes.md)." }],
+                  timestamp: Date.now(),
+                },
+              ]
+            : []),
         ],
       });
       return { sessionId: id, cwd, title, createdAt: now, updatedAt: now };
@@ -124,15 +134,7 @@ const unsupported = async (page) => {
     await page.evaluate(`[...document.querySelectorAll('button, a, [role="menuitem"], [role="tab"]')]
     .filter(e => e.getClientRects().length)
     .map(e => e.getAttribute('aria-label') ?? e.textContent.trim())`);
-  for (const label of [
-    "Add folder",
-    "Settings",
-    "Files",
-    "Search files",
-    "Changes",
-    "Preview",
-    "Open preview in new tab",
-  ])
+  for (const label of ["Add folder", "Settings", "Preview", "Open preview in new tab"])
     assert.ok(!controls.includes(label), `remote does not offer unsupported ${label}`);
 };
 // The remote New page starts only in the remote's registered directories, changing nothing else there.
@@ -178,6 +180,7 @@ await run(
     let onRemote = false;
     let heldUpload;
     const imageRequests = [];
+    const surfaceRequests = [];
     try {
       await page.cdp(async (call, onEvent) => {
         onEvent(({ method, params }) => {
@@ -188,6 +191,11 @@ await run(
             params.request.url.includes("/api/peer/image")
           )
             imageRequests.push(params.request.url);
+          if (method === "Network.requestWillBeSent") {
+            const { pathname } = new URL(params.request.url);
+            if (/^\/peer\/[^/]+\/api\/(session|workspace)\//.test(pathname))
+              surfaceRequests.push(`${params.request.method} ${pathname}`);
+          }
           if (onRemote && method === "Network.requestWillBeSent") {
             const path = new URL(params.request.url).pathname;
             const mainUtility =
@@ -846,6 +854,33 @@ await run(
           [],
           "remote UI calls only named main voice utilities, never Local session/file endpoints or socket",
         );
+        // A remote session's rail, Changes and files are read on the peer, through its gateway.
+        writeFileSync(join(cwd, "peer-notes.md"), "# Peer notes\n\nRead on eng-1.\n");
+        await page.open("/m/eng-1/s/remote-only");
+        await page.see("Remote host-only session saved history");
+        await page.ab("click", "[data-rail-trigger]");
+        await page.see("Environment");
+        await page.click("button", "Changes");
+        await page.until(
+          `!!document.querySelector('[aria-label="Changed files"]')?.textContent.includes('peer-notes.md')`,
+        );
+        await page.capture("9f-remote-changes");
+        await page.ab("click", '[data-local-file="peer-notes.md"]');
+        await page.until(
+          `[...document.querySelectorAll('[aria-label="File viewer"] h1')].some(h => h.textContent === 'Peer notes')`,
+        );
+        await page.capture("9f-remote-file");
+        await unsupported(page);
+        for (const request of [
+          "POST /peer/eng-1/api/session/changes",
+          "POST /peer/eng-1/api/workspace/file",
+        ])
+          assert.ok(surfaceRequests.includes(request), `${request}: ${surfaceRequests}`);
+        assert.deepEqual(
+          localRequestsFromRemote,
+          [],
+          "a remote session's surfaces never read Local's endpoints",
+        );
         // The peer's projects are its own: created and filled from here, kept in its database.
         await page.open("/m/eng-1/projects");
         await page.see("No projects yet");
@@ -857,7 +892,7 @@ await run(
         const projectId = decodeURIComponent(
           (await page.evaluate(`location.pathname`)).split("/").at(-1),
         );
-        await page.capture("9f-remote-project-home");
+        await page.capture("9g-remote-project-home");
         // An empty project has no member's folder to start in: choose one of the peer's.
         await page.ab("click", '[aria-label="Directory"]');
         await page.until(`!!document.querySelector('[aria-label="Choose a directory"]')`);
@@ -878,7 +913,7 @@ await run(
         for (const label of ["Rename", "Pin", "Archive", "Delete"])
           assert.ok(actions.includes(label), `remote session menu offers ${label}`);
         assert.ok(!actions.includes("Share"), "remote session menu does not offer Share");
-        await page.capture("9g-remote-session-menu");
+        await page.capture("9h-remote-session-menu");
         await page.click("menuitem", "Rename");
         await page.ab("fill", '[aria-label="Session name"]', "Renamed on peer");
         await page.click("button", "Rename");
@@ -889,7 +924,7 @@ await run(
         await page.click("button", "Project: Peer project");
         await page.until(`location.pathname === '/m/eng-1/projects/${projectId}'`);
         await page.see("Renamed on peer");
-        await page.capture("9h-remote-project-session");
+        await page.capture("9i-remote-project-session");
         const joined = frames.filter(
           ({ direction, message }) =>
             direction === "sent" &&
@@ -912,7 +947,7 @@ await run(
         await machine(page, "Local");
         await page.click("button", "Projects");
         await page.see("No projects yet");
-        await page.capture("9i-local-has-no-peer-project");
+        await page.capture("9j-local-has-no-peer-project");
         onRemote = true;
         await page.open("/m/not-configured/s/same-session");
         await page.see("Machine unavailable");
