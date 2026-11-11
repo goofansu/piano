@@ -30,7 +30,7 @@ export function useNavigationController(
   const [navigation] = useState(() =>
     createNavigation({
       client,
-      address: machine ? machineAddress(machine.id, browserAddressBar) : browserAddressBar,
+      address: machineAddress(machineId, browserAddressBar),
       // Each machine's files and remembered tabs are its own: IDs may collide across machines.
       readFile: (workspaceId, path, options) =>
         workspaceFile(workspaceId, path, { ...options, machineId }),

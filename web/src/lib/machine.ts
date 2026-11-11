@@ -8,6 +8,7 @@ import {
   machineFrameBytes,
 } from "../../../shared/machine.ts";
 import { IMAGE_PATHS } from "../../../shared/remoteImages.ts";
+import { machineLocationMemory } from "./machineMemory.ts";
 import type { AddressBar } from "./navigation.ts";
 
 export { isLocalId, LOCAL, type Machine, machineFrameBytes };
@@ -32,20 +33,48 @@ export const machineSocketUrl = (
   { protocol, host }: Pick<Location, "protocol" | "host"> = location,
 ) => `${protocol === "https:" ? "wss:" : "ws:"}//${host}${machineSocketPath(id)}`;
 
-/** Each navigation owns its prefix; late work cannot adopt the newly selected machine. */
-export function machineAddress(id: string, address: AddressBar): AddressBar {
+/**
+ * Each navigation owns its prefix; late work cannot adopt the newly selected machine. Every page
+ * shown on the machine is remembered on arrival (start, push, replace, back/forward onto it), so
+ * switching back opens the last one however the user left: a switch, back/forward across
+ * machines, or closing the tab.
+ */
+export function machineAddress(
+  id: string,
+  address: AddressBar,
+  remembered: Pick<ReturnType<typeof machineLocationMemory>, "write"> = machineLocationMemory(id),
+): AddressBar {
+  const arrive = (path: string) => remembered.write(path.replace(/[?#].*$/, ""));
+  /** The page in the address bar, if it is on this machine. */
+  const shown = () => {
+    const at = machineLocation(address.location().pathname);
+    return at.id === id ? at.pathname : undefined;
+  };
   return {
     ...address,
     location: () => ({
       ...address.location(),
       pathname: machineLocation(address.location().pathname).pathname,
     }),
-    push: (path) => address.push(machinePath(id, path)),
-    replace: (path) => address.replace(machinePath(id, path)),
-    onPop: (listener) =>
-      address.onPop(() => {
-        if (machineLocation(address.location().pathname).id === id) listener();
-      }),
+    push: (path) => {
+      address.push(machinePath(id, path));
+      arrive(path);
+    },
+    replace: (path) => {
+      address.replace(machinePath(id, path));
+      arrive(path);
+    },
+    // Subscribing is when the navigation starts showing the address: the page there has arrived.
+    onPop: (listener) => {
+      const start = shown();
+      if (start !== undefined) arrive(start);
+      return address.onPop(() => {
+        const page = shown();
+        if (page === undefined) return;
+        arrive(page);
+        listener();
+      });
+    },
   };
 }
 
