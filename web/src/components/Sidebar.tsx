@@ -86,8 +86,8 @@ export function Sidebar({ state }: Props) {
       <LayoutHeader title={<MachineSwitcher />}>
         <IconButton
           size="header"
-          label="Search sessions and commands"
-          tooltip={<Hint of={["mod", "K"]}>Search sessions and commands</Hint>}
+          label="Search sessions, projects and commands"
+          tooltip={<Hint of={["mod", "K"]}>Search sessions, projects and commands</Hint>}
           onClick={() => setPalette(true)}
         >
           <SearchIcon />

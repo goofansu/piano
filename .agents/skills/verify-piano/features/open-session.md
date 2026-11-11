@@ -169,7 +169,7 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     `mv "$RUN/pi-sessions/verify-loose.jsonl" "$RUN/verify-loose.saved"; ab reload;
     ab wait --text 'History unavailable'`. Capture `18-history-unavailable`.
   - Palette: Mod+K, fill `[cmdk-input]` with `Loose session`, wait for
-    `'[cmdk-list][aria-busy="false"]'`; `No sessions or commands match.` appears. Capture
+    `'[cmdk-list][aria-busy="false"]'`; `No sessions, projects or commands match.` appears. Capture
     `19-palette-omitted`, then Escape.
   - Phone recovery: `ab set viewport 390 844;
     ab find role button click --name 'Show sidebar' --exact; ab wait '[role=dialog]'`.

@@ -6,7 +6,13 @@
 import { defaultFilter } from "cmdk";
 import { type AppState, sessionKey } from "../store.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
-import type { ProjectCommand, SessionProjectMenu } from "./projectCommands.ts";
+import {
+  isProjectDone,
+  openProjectCommand,
+  type ProjectCommand,
+  projectDestinations,
+  type SessionProjectMenu,
+} from "./projectCommands.ts";
 import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
 import { type SessionCommand, type SessionMenuSection, sessionRowMenu } from "./sessionCommands.ts";
 
@@ -73,6 +79,7 @@ export type PaletteSessionCommandRow =
 
 export type PaletteGroup =
   | { id: "sessions"; heading: "Recent sessions" | "Sessions"; rows: PaletteSessionRow[] }
+  | { id: "projects"; heading: "Projects"; rows: PaletteCommandRow<ProjectCommand>[] }
   | { id: "global"; heading: "Global commands"; rows: PaletteCommandRow<GlobalCommand>[] }
   | {
       id: "session";
@@ -189,6 +196,17 @@ export function commandPalette(
       id: "sessions",
       heading: "Sessions",
       rows: sessions,
+    });
+  const projects = projectDestinations(state, undefined, { keepCurrent: true }).filter(
+    (project) => !isProjectDone(project),
+  );
+  if (projects.length > 0)
+    groups.push({
+      id: "projects",
+      heading: "Projects",
+      rows: projects.map((project) =>
+        commandRow({ ...openProjectCommand(project), label: project.name }, project.id),
+      ),
     });
   groups.push({
     id: "global",

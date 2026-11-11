@@ -138,11 +138,16 @@ test("a command only the other layout offers is left out, while an unavailable o
 });
 
 test("groups come in order, with Session commands only while a session is selected", () => {
-  assert.deepEqual(headings(home), ["Recent sessions", "Global commands"]);
-  assert.deepEqual(headings(inSession), ["Recent sessions", "Global commands", "Session commands"]);
+  assert.deepEqual(headings(home), ["Recent sessions", "Projects", "Global commands"]);
+  assert.deepEqual(headings(inSession), [
+    "Recent sessions",
+    "Projects",
+    "Global commands",
+    "Session commands",
+  ]);
   assert.deepEqual(
     headings({ ...inSession, view: { kind: "new", cwd: "/repo" } }),
-    ["Recent sessions", "Global commands"],
+    ["Recent sessions", "Projects", "Global commands"],
     "a session still loaded behind the New page offers no session commands",
   );
   assert.deepEqual(
@@ -152,6 +157,59 @@ test("groups come in order, with Session commands only while a session is select
   );
   const commands = palette(inSession).find((g) => g.id === "session");
   assert.ok(commands?.id === "session" && commands.rows.length > 0);
+});
+
+test("Projects offers active projects by name on every page, with navigation-only intents", () => {
+  const projects = [
+    { id: "z", name: "Zebra" },
+    { id: "done", name: "Finished", doneAt: "" }, // Presence, not truthiness, marks done.
+    { id: "a", name: "Alpha" },
+    { id: "other-a", name: "Alpha" },
+  ];
+  for (const base of [home, inSession, { ...home, view: { kind: "projects" } } as AppState]) {
+    const state = { ...base, connected: false, projects };
+    const group = palette(state).find((g) => g.id === "projects");
+    assert.ok(group?.id === "projects");
+    assert.deepEqual(
+      group.rows.map((r) => [r.key, r.label, r.enabled, r.command.intent]),
+      [
+        ["a", "Alpha", true, { kind: "open-project", projectId: "a" }],
+        ["other-a", "Alpha", true, { kind: "open-project", projectId: "other-a" }],
+        ["z", "Zebra", true, { kind: "open-project", projectId: "z" }],
+      ],
+    );
+    assert.deepEqual(
+      palette(state, "alpha")
+        .find((g) => g.id === "projects")
+        ?.rows.map((r) => r.key),
+      ["a", "other-a"],
+    );
+    assert.ok(!palette(state, "Finished").some((g) => g.id === "projects"));
+  }
+  assert.ok(!palette({ ...home, projects: [projects[1]] }).some((g) => g.id === "projects"));
+});
+
+test("project catalog refreshes preserve selection and find renames, completion and reopening", () => {
+  const catalog = createPaletteCatalog();
+  const input = { globalCommands: [], sessionCommands: [] };
+  const first = catalog(home, input);
+  assert.equal(catalog({ ...home, projects: home.projects.map((p) => ({ ...p })) }, input), first);
+  const renamed = { ...home, projects: [{ id: "launch", name: "Release" }] };
+  const updated = catalog(renamed, input);
+  const result = pagePalette(searchPalette(updated, "Release"));
+  assert.equal(result[0].group.id, "projects");
+  assert.equal(result[0].group.rows[0].label, "Release");
+  assert.equal(paletteSelection(result, "projects:launch", false), "projects:launch");
+  const done = catalog(
+    { ...renamed, projects: [{ ...renamed.projects[0], doneAt: "2026-01-01T00:00:00Z" }] },
+    input,
+  );
+  assert.ok(!done.some((g) => g.id === "projects"));
+  assert.notEqual(
+    paletteSelection(pagePalette(searchPalette(done, "")), "projects:launch", false),
+    "projects:launch",
+  );
+  assert.deepEqual(catalog(renamed, input), updated, "reopened project is reachable again");
 });
 
 test("a search ranks groups by their best row; blank input keeps the declared order", () => {
@@ -165,7 +223,7 @@ test("a search ranks groups by their best row; blank input keeps the declared or
 });
 
 test("Session commands offer the session's project membership, named as the menu's buttons", () => {
-  const billing = { id: "billing", name: "Billing" };
+  const billing = { id: "billing", name: "Billing", doneAt: "2026-01-01T00:00:00Z" };
   const loose: AppState = { ...inSession, projects: [...inSession.projects, billing] };
   const member: AppState = {
     ...loose,
