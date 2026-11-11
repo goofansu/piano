@@ -12,7 +12,6 @@
  * session; SessionHosts keeps one child per session (INV-02). A selected session shown stopped
  * attaches once another client starts it, without starting Pi itself.
  */
-import { createHash, randomUUID } from "node:crypto";
 import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import {
@@ -24,9 +23,9 @@ import {
   sameSession,
 } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
+import { CreationAttempts } from "./CreationAttempts.ts";
 import { bindSessionEvent } from "./ImagePreviews.ts";
 import { type PiSession, PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
-import { Registry } from "./Registry.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
 
 /** A new session and the first message to send it, if any. */
@@ -79,7 +78,6 @@ export class InputNotSent extends Data.TaggedError("InputNotSent")<{
 
 const refuse = (reason: ActRefused["reason"], detail: string = refused[reason]) =>
   Effect.fail(new ActRefused({ reason, detail }));
-const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 
 interface ClientSessions {
   /** The selection last claimed or shown; a created session's ID once it is shown. */
@@ -124,7 +122,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   output: ClientOutput,
 ) {
   const hosts = yield* SessionHosts;
-  const registry = yield* Registry;
+  const attempts = yield* CreationAttempts;
   const { send } = output;
   let selected: Selection | null = null;
   /** The session last shown, live or saved, with the checkout answer its view carries. */
@@ -283,38 +281,35 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   const reconcile = Effect.fn("ClientSessions.reconcile")(function* (
     selection: Selection,
   ): Effect.fn.Return<void, PiSessionError> {
-    const attempt = yield* hosts.reconcileCreation(selection.attemptId!);
+    const outcome = yield* attempts.outcome(selection.attemptId!);
     if (!current(selection)) return;
-    if (attempt?.state === "failed") {
-      yield* send({
-        _tag: "selection_rejected",
-        selectionId: selection.selectionId,
-        inputId: attempt.id,
-        message: attempt.detail ?? "Nothing was sent.",
-      });
-      return;
-    }
-    const reference =
-      attempt &&
-      (yield* registry.get).sessions.find(
-        (s) => s.sessionId === attempt.sessionId && s.cwd === attempt.cwd && !s.archived,
-      );
-    if (reference) {
-      const target = {
-        cwd: reference.cwd,
-        sessionId: reference.sessionId,
-        selectionId: selection.selectionId,
-      };
-      yield* navigate(Effect.suspend(() => (current(selection) ? claim(target) : Effect.void)));
-      yield* show(target);
-    } else {
-      yield* send({
-        _tag: "error",
-        selectionId: selection.selectionId,
-        message:
-          attempt?.detail ??
-          "Could not confirm the original session start. Nothing was restarted or resent.",
-      });
+    switch (outcome._tag) {
+      case "failed":
+        return yield* send({
+          _tag: "selection_rejected",
+          selectionId: selection.selectionId,
+          inputId: selection.attemptId!,
+          message: outcome.detail,
+        });
+      case "created": {
+        const target = {
+          cwd: outcome.cwd,
+          sessionId: outcome.sessionId,
+          selectionId: selection.selectionId,
+        };
+        yield* navigate(Effect.suspend(() => (current(selection) ? claim(target) : Effect.void)));
+        return yield* show(target);
+      }
+      case "uncertain":
+      case "unclaimed":
+        return yield* send({
+          _tag: "error",
+          selectionId: selection.selectionId,
+          message:
+            outcome._tag === "uncertain"
+              ? outcome.detail
+              : "Could not confirm the original session start. Nothing was restarted or resent.",
+        });
     }
   });
 
@@ -540,44 +535,14 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     // A selection ID lives only as long as its connection: a client that names no attempt gets
     // no durable claim, so a reused ID is never mistaken for an earlier creation.
     if (attemptId === undefined) return first(hosts.create(spec));
-    // Claim before Worktrunk, registration or Pi. A duplicate observes the original; it never
-    // takes ownership of that request's first input, even after a restart or reference deletion.
-    // Image bytes are hashed where they are, each framed by its length: serializing them would
-    // copy up to the whole attachment limit on the receive path.
-    const digest = createHash("sha256").update(
-      JSON.stringify({
-        cwd: spec.cwd,
-        projectId: spec.projectId,
-        inheritProject: spec.inheritProject,
-        options: spec.options,
-        worktree: spec.worktree,
-        text,
-        attachments: attachments?.map(({ data, ...image }) => ({ ...image, length: data.length })),
-      }),
+    // A duplicate observes the original; it never takes ownership of that request's first
+    // input, even after a restart or reference deletion.
+    const begun = yield* attempts.begin({ ...spec, id: attemptId, text, attachments }, (attempt) =>
+      hosts.create({ ...spec, attempt }),
     );
-    for (const image of attachments ?? []) digest.update(image.data);
-    const fingerprint = digest.digest("hex");
-    const attempt = {
-      id: attemptId,
-      fingerprint,
-      sessionId: randomUUID(),
-      cwd: spec.cwd,
-      state: "starting" as const,
-    };
-    const creation = yield* hosts.begin({ ...spec, attempt });
-    if (!creation) {
-      const previous = yield* registry
-        .creationAttempt(attemptId)
-        .pipe(Effect.mapError((e) => rejected(e.detail)));
-      if (previous && previous.fingerprint !== fingerprint)
-        return Effect.fail(
-          rejected(
-            "This creation attempt was already used for different input. Nothing was restarted or resent.",
-          ),
-        );
+    if (begun._tag === "duplicate")
       return reconcile({ cwd: spec.cwd, sessionId: null, selectionId, attemptId });
-    }
-    return first(creation);
+    return first(begun.creation);
   });
 
   return {
