@@ -8,7 +8,7 @@
 import type { FolderView, Project } from "@shared/wire";
 import type { AppState } from "../store.ts";
 import { LOCAL } from "./machine.ts";
-import { machineKey } from "./machineMemory.ts";
+import { machineMemory } from "./machineMemory.ts";
 import {
   createPreference,
   type Preference,
@@ -114,10 +114,8 @@ export function sidebarPreferences(
   machineId: string = LOCAL.id,
 ): SidebarPreferences {
   return {
-    openGroups: createPreference<readonly string[]>({
-      key: machineKey(machineId, "openGroups"),
+    openGroups: machineMemory(machineId, "openGroups", storage).preference<readonly string[]>({
       decode: keyList,
-      storage,
     }),
     closedGroups: createPreference<readonly string[]>({
       key: "piano.closedGroups",

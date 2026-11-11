@@ -13,12 +13,11 @@ import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
 import { LOCAL } from "./machine.ts";
-import { machineKey } from "./machineMemory.ts";
+import { machineMemory } from "./machineMemory.ts";
 import { projectStartDirectory } from "./projectHome.ts";
 import { folderFor } from "./sessionCatalog.ts";
 import { focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
-import { readStorage, writeStorage } from "./storage.ts";
 import type { Connection, ConnectionHandlers, DisconnectReason, SendDisposition } from "./ws.ts";
 
 export type NotifyLevel = "success" | "info" | "warning" | "error";
@@ -65,8 +64,8 @@ const firstMessage = (m: Extract<ClientCommand, { _tag: "create_session" }>) =>
 
 /** The last directory a session started in on one machine, in this browser's storage. */
 export function storedLastDirectory(machineId: string): LastDirectory {
-  const key = machineKey(machineId, "lastDir");
-  return { read: () => readStorage(key), write: (cwd) => writeStorage(key, cwd) };
+  const memory = machineMemory(machineId, "lastDir");
+  return { read: memory.read, write: memory.write };
 }
 
 export interface ClientOptions {

@@ -8,8 +8,8 @@
  */
 import type { ClientCommand, ModelCatalog, ServerMessage, ThinkingLevel } from "@shared/wire";
 import type { Notify } from "./client.ts";
-import { machineKey } from "./machineMemory.ts";
-import { readJson, writeJson } from "./storage.ts";
+import { machineMemory } from "./machineMemory.ts";
+import { parseJson } from "./preference.ts";
 
 export type Catalogs = Readonly<Record<string, ModelCatalog>>;
 
@@ -21,10 +21,10 @@ export interface CatalogStorage {
 
 /** This browser's storage for one machine's catalogs; without it the server's cache still answers. */
 export function browserCatalogStorage(machineId: string): CatalogStorage {
-  const key = machineKey(machineId, "catalogs");
+  const memory = machineMemory(machineId, "catalogs");
   return {
-    read: () => readJson<Catalogs>(key, {}),
-    write: (catalogs) => writeJson(key, catalogs),
+    read: () => (parseJson(memory.read()) ?? {}) as Catalogs,
+    write: (catalogs) => memory.write(JSON.stringify(catalogs)),
   };
 }
 

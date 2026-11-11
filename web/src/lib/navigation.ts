@@ -9,7 +9,7 @@
 import { type AppState, type Page, sessionKey } from "../store.ts";
 import type { workspaceFile } from "./api.ts";
 import type { Client } from "./client.ts";
-import { machineKey } from "./machineMemory.ts";
+import { machineMemory } from "./machineMemory.ts";
 import type { Preference } from "./preference.ts";
 import { findProject } from "./projectCommands.ts";
 import {
@@ -935,13 +935,12 @@ export function createNavigation({
   };
 }
 
-/** This browser tab's sessionStorage: a reload keeps the surface, a new tab starts without it. */
+/** This browser tab's surface: a reload keeps it, a new tab starts without it. */
 export function browserSurfaceMemory(machineId: string): SurfaceMemory {
-  const key = machineKey(machineId, "surface");
+  const memory = machineMemory(machineId, "surface");
   return {
-    read: () => sessionStorage.getItem(key),
-    write: (value) =>
-      value === null ? sessionStorage.removeItem(key) : sessionStorage.setItem(key, value),
+    read: memory.read,
+    write: (value) => (value === null ? memory.remove() : memory.write(value)),
   };
 }
 
