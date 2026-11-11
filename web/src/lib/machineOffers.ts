@@ -1,7 +1,8 @@
 /**
  * What a machine offers in this browser, decided once (ADR 0004). Local offers everything; a
  * remote offers the slice: its registered sessions, their conversation, a new session with a
- * text/image first message in a folder or worktree it already registered, and its projects.
+ * text/image first message in a folder or worktree it already registered, its projects, and a
+ * session's rename, pin, archive and delete.
  * Whatever else would manage the remote, read its files or follow its accounts stays on the
  * remote's own Piano.
  */
@@ -53,12 +54,16 @@ const LOCAL_OFFERS: MachineOffers = {
   command: () => true,
 };
 
-/** `save_project` leaves through the New project dialog, which sends it itself. */
-const PROJECT_CHANGES: ReadonlySet<string> = new Set([
+/**
+ * The registry changes a menu row sends by itself: a project's, a session's place in one, and a
+ * session's pin. The rest leave through their dialogs (New project, Rename, Archive, Delete).
+ */
+const REGISTRY_CHANGES: ReadonlySet<string> = new Set([
   "update_project",
   "delete_project",
   "set_project_done",
   "assign_project",
+  "pin_session",
 ]);
 
 const REMOTE_OFFERS: MachineOffers = {
@@ -77,9 +82,12 @@ const REMOTE_OFFERS: MachineOffers = {
   lastDirectory: false,
   command: (command) => {
     switch (command.intent.kind) {
-      // A registry change: only a project's, or a session's place in one.
       case "send":
-        return PROJECT_CHANGES.has(command.intent.command._tag);
+        return REGISTRY_CHANGES.has(command.intent.command._tag);
+      // A session's own life. Sharing publishes through the remote's Radius sign-in: not here.
+      case "rename":
+      case "archive":
+      case "delete":
       case "projects":
       case "open-project":
       case "project-dialog":

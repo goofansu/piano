@@ -6,7 +6,8 @@
  * The slice lists registered sessions, opens them, starts a session in an open folder or one of
  * its worktrees, sends text/prepared raster images, answers dialogs and stops. It also manages this
  * machine's projects: create, rename, instruct, mark done, delete, and file a listed session in
- * one. Files, worktree creation and settings (trust included: trusting a folder runs its project
+ * one; and a listed session's own life: rename, pin, archive and delete. Sharing, files, worktree
+ * creation and settings (trust included: trusting a folder runs its project
  * extensions here) are not offered.
  */
 import { type ClientMessage, sameSession } from "../shared/wire.ts";
@@ -121,6 +122,12 @@ export function peerVerdict(
         ? "admit"
         : "refuse";
     case "assign_project":
+    // A listed session's own life, as this machine's browser changes it: archive and delete stop
+    // its Pi, and delete removes its history.
+    case "rename_session":
+    case "pin_session":
+    case "archive_session":
+    case "delete_session":
       return listed(data, request.cwd, request.sessionId) ? "admit" : "refuse";
     case "create_session":
       return openDirectory(data, request.cwd) && creationAllowed(request) ? "admit" : "refuse";

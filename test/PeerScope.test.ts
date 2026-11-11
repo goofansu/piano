@@ -536,6 +536,104 @@ test(
       );
     });
 
+    await t.test(
+      "a listed session is renamed, pinned, archived and deleted from another machine",
+      async () => {
+        type Entry = { sessionId: string; title?: string; pinned?: boolean; archived: boolean };
+        const entries = (frame: Frame) => frame.sessionReferences as Entry[];
+        /** Send a change and wait for the sidebar that shows it; the toast that confirms it, if any. */
+        const change = async (message: object, shown: (entries: Entry[]) => boolean) => {
+          const from = peer.frames.length;
+          peer.ws.send(JSON.stringify(message));
+          await peer.next((frame) => frame._tag === "registry" && shown(entries(frame)), from);
+          return peer.frames
+            .slice(from)
+            .filter((frame) => frame._tag === "toast" || frame._tag === "error")
+            .map((frame) => String(frame.message));
+        };
+        const confirmed = async (
+          message: object,
+          toast: string,
+          shown: (entries: Entry[]) => boolean,
+        ) => {
+          const from = peer.frames.length;
+          await change(message, shown);
+          const answer = await peer.next(
+            (frame) => frame._tag === "toast" || frame._tag === "error",
+            from,
+          );
+          assert.equal(answer.message, toast);
+        };
+
+        // Rename and Delete act on a session whose checkout exists: Pi starts there for the name.
+        const from = peer.frames.length;
+        peer.ws.send(
+          JSON.stringify({
+            _tag: "create_session",
+            selectionId: "managed",
+            cwd: f.checkout,
+            options: {},
+            text: "Reply with exactly: X",
+          }),
+        );
+        const selected = await peer.next(
+          (frame) =>
+            (frame._tag === "selected" || frame._tag === "selection_rejected") &&
+            frame.selectionId === "managed",
+          from,
+        );
+        assert.equal(selected._tag, "selected", JSON.stringify(selected));
+        const managed = { cwd: f.checkout, sessionId: String(selected.sessionId) };
+        const find = (list: Entry[], sessionId: string) =>
+          list.find((entry) => entry.sessionId === sessionId);
+        await peer.next(
+          (frame) => frame._tag === "registry" && !!find(entries(frame), managed.sessionId),
+          from,
+        );
+
+        await confirmed(
+          { _tag: "rename_session", ...managed, title: "Named from main" },
+          "Session renamed",
+          (list) => find(list, managed.sessionId)?.title === "Named from main",
+        );
+        const listed = { cwd: identity.cwd, sessionId: identity.sessionId };
+        assert.deepEqual(
+          await change(
+            { _tag: "pin_session", ...listed, pinned: true },
+            (list) => find(list, identity.sessionId)?.pinned === true,
+          ),
+          [],
+          "pinning answers in the list alone",
+        );
+        await confirmed(
+          { _tag: "delete_session", ...managed },
+          "Session deleted",
+          (list) => !find(list, managed.sessionId),
+        );
+        await confirmed(
+          { _tag: "archive_session", ...listed },
+          "Session archived",
+          (list) => find(list, identity.sessionId)?.archived === true,
+        );
+
+        // Only a session listed here: nothing else on this machine is named, started or removed.
+        for (const _tag of ["rename_session", "pin_session", "archive_session", "delete_session"]) {
+          const answers = (
+            await peer.answers({
+              _tag,
+              cwd: "/different",
+              sessionId: identity.sessionId,
+              title: "x",
+              pinned: true,
+            })
+          ).filter((frame) => frame._tag === "error" || frame._tag === "toast");
+          assert.equal(answers.length, 1, _tag);
+          assert.equal(answers[0]?._tag, "error", _tag);
+          assert.match(String(answers[0]?.message), notAvailable, _tag);
+        }
+      },
+    );
+
     // After the creation above: closing its folder here is what this subtest needs.
     await t.test("a folder closed here cannot be reopened by a peer's new session", async () => {
       const folderPaths = (frame: Frame) =>

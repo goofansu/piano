@@ -868,22 +868,27 @@ await run(
         await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
         await page.click("button", "Send");
         await page.see("echo: PROJECT-ONCE");
-        // Its menu changes its project; its own life stays with the peer's Piano.
+        // Its menu is Local's, without Share, which publishes through the peer's Radius sign-in.
         await page.click("button", "Session information and actions");
         await page.until(`!!document.querySelector('[role="menu"]')`);
         const actions = await page.evaluate(
           `[...document.querySelectorAll('[role="menu"] [role^="menuitem"]')].map(e => e.getAttribute('aria-label') ?? e.textContent.trim())`,
         );
         assert.ok(actions.includes("Move to project"), JSON.stringify(actions));
-        for (const label of ["Rename", "Pin", "Share", "Archive", "Delete"])
-          assert.ok(!actions.includes(label), `remote session menu does not offer ${label}`);
+        for (const label of ["Rename", "Pin", "Archive", "Delete"])
+          assert.ok(actions.includes(label), `remote session menu offers ${label}`);
+        assert.ok(!actions.includes("Share"), "remote session menu does not offer Share");
         await page.capture("9g-remote-session-menu");
-        await page.press("Escape");
-        await page.until(`!document.querySelector('[role="menu"]')`);
+        await page.click("menuitem", "Rename");
+        await page.ab("fill", '[aria-label="Session name"]', "Renamed on peer");
+        await page.click("button", "Rename");
+        await page.see("Session renamed");
+        await page.until(`document.querySelector('main h1')?.textContent === 'Renamed on peer'`);
+        await page.until(`!document.querySelector('[role="dialog"]')`);
         // The session header names the project the session joined, and leads back to it.
         await page.click("button", "Project: Peer project");
         await page.until(`location.pathname === '/m/eng-1/projects/${projectId}'`);
-        await page.see("PROJECT-ONCE");
+        await page.see("Renamed on peer");
         await page.capture("9h-remote-project-session");
         const joined = frames.filter(
           ({ direction, message }) =>
