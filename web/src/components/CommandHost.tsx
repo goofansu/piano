@@ -63,7 +63,7 @@ import {
 import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
 import { useCodeWrap } from "@/lib/useCodeWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
-import { useMachine, useOffers } from "@/lib/useMachine";
+import { useMachineScope, useOffers } from "@/lib/useMachine";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
@@ -169,10 +169,10 @@ export function useSessionProjectMenu() {
  */
 export function useGlobalCommands() {
   const { state, run, global } = useCommands();
-  const scope = useMachine();
+  const scope = useMachineScope();
   const offers = useOffers();
   const commands = globalCommands(state, global).filter(offers.command);
-  if (scope && scope.machines.length > 1)
+  if (scope.machines.length > 1)
     commands.push(
       ...scope.machines.map((machine): GlobalCommand => ({
         id: `machine-${machine.id}`,
@@ -266,7 +266,7 @@ export function CommandHost({
     layout,
   } = useNavigation();
   const offers = useOffers();
-  const machineScope = useMachine();
+  const machineScope = useMachineScope();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [codeWrap, setCodeWrap] = useCodeWrap();
   const { view, setView } = useSidebarView();
@@ -306,7 +306,7 @@ export function CommandHost({
   const stopFocus = useRef<((event: Event) => void) | undefined>(undefined);
 
   const effects: CommandEffects = {
-    switchMachine: machineScope?.switchMachine,
+    switchMachine: machineScope.switchMachine,
     send,
     closeSettings,
     openSettings,

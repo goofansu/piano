@@ -8,10 +8,13 @@ import { act, createElement, type ComponentType, type Context } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { createServer } from "vite";
+import { LOCAL } from "../shared/machine.ts";
 import { workspaceFile } from "../web/src/lib/api.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { createNavigation, type Navigation } from "../web/src/lib/navigation.ts";
+import type { MachineScope } from "../web/src/lib/useMachine.ts";
 import { initialState, type AppState } from "../web/src/store.ts";
+import { localMachineScope } from "./fixtures/machineScope.ts";
 
 test("retained HTML viewer stops admitting links under Settings and resumes without rereading", async (t) => {
   const dom = new JSDOM("<div id='root'></div>", { url: "http://piano.test/s/session" });
@@ -95,6 +98,9 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
   const { NavigationContext } = (await vite.ssrLoadModule("/src/lib/useNavigation.ts")) as {
     NavigationContext: Context<Navigation | null>;
   };
+  const { MachineContext } = (await vite.ssrLoadModule("/src/lib/useMachine.ts")) as {
+    MachineContext: Context<MachineScope | null>;
+  };
   const state: AppState = {
     ...initialState,
     view: { kind: "session" },
@@ -118,7 +124,8 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
   });
   const navigation = createNavigation({
     client,
-    readFile: workspaceFile,
+    readFile: (workspaceId, path, options) =>
+      workspaceFile(workspaceId, path, { ...options, machineId: LOCAL.id }),
     address: {
       location: () => ({ pathname: "/s/session", search: "" }),
       push: () => {},
@@ -132,12 +139,16 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
   await act(async () => {
     root!.render(
       createElement(
-        NavigationContext.Provider,
-        { value: navigation },
+        MachineContext.Provider,
+        { value: localMachineScope() },
         createElement(
-          Tooltip.Provider,
-          null,
-          createElement(SessionPanel, { state, id: "surface", labelledBy: undefined }),
+          NavigationContext.Provider,
+          { value: navigation },
+          createElement(
+            Tooltip.Provider,
+            null,
+            createElement(SessionPanel, { state, id: "surface", labelledBy: undefined }),
+          ),
         ),
       ),
     );

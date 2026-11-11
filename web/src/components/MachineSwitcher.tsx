@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { isLocalId, type Machine } from "@/lib/machine";
-import { useMachine } from "@/lib/useMachine";
+import { useMachineScope } from "@/lib/useMachine";
 import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useSidebarLayoutState } from "@/lib/useSidebarLayout";
 
@@ -43,8 +43,8 @@ function MachineTile({ machine }: { machine: Machine }) {
  * In a pane header, where it stands in for a hidden sidebar, it keeps to a compact width.
  */
 export function MachineSwitcher({ place = "sidebar" }: { place?: "sidebar" | "pane" }) {
-  const scope = useMachine();
-  if (!scope || scope.machines.length < 2) return null;
+  const scope = useMachineScope();
+  if (scope.machines.length < 2) return null;
   const menu = (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

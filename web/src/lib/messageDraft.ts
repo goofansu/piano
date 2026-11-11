@@ -417,6 +417,3 @@ export function createDrafts(): Drafts {
       }),
   };
 }
-
-/** The page's drafts; App follows the client with them so restored queues reach their drafts. */
-export const drafts = createDrafts();

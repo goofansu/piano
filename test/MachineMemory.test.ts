@@ -130,7 +130,7 @@ test("what every reader remembers for a configured machine survives the sweep", 
   const remember = {
     catalogs: () => browserCatalogStorage("eng-1").write(catalogs),
     lastDir: () => storedLastDirectory("eng-1").write("/repo"),
-    openGroups: () => sidebarPreferences(undefined, "eng-1").openGroups.set(["/repo"]),
+    openGroups: () => sidebarPreferences("eng-1").openGroups.set(["/repo"]),
     surface: () => browserSurfaceMemory("eng-1").write("surface"),
     location: () => machineLocationMemory("eng-1").write("/s/1"),
   } satisfies Record<keyof typeof MACHINE_MEMORY, () => void>;
@@ -141,7 +141,7 @@ test("what every reader remembers for a configured machine survives the sweep", 
   forgetUnconfiguredMachines([{ id: "local" }, { id: "eng-1" }], stores);
   assert.deepEqual(browserCatalogStorage("eng-1").read(), catalogs);
   assert.equal(storedLastDirectory("eng-1").read(), "/repo");
-  assert.deepEqual(sidebarPreferences(undefined, "eng-1").openGroups.get(), ["/repo"]);
+  assert.deepEqual(sidebarPreferences("eng-1").openGroups.get(), ["/repo"]);
   assert.equal(browserSurfaceMemory("eng-1").read(), "surface");
   assert.equal(machineLocationMemory("eng-1").read(), "/s/1");
   browserSurfaceMemory("eng-1").write(null);

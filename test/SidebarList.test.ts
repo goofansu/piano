@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { LOCAL } from "../shared/machine.ts";
 import type { FolderView, SessionEvent } from "../shared/wire.ts";
 import type { PreferenceStorage } from "../web/src/lib/preference.ts";
 import type { SessionEntry } from "../web/src/lib/sessionCatalog.ts";
@@ -97,7 +98,10 @@ function fakeClock(start: Date) {
 function sidebar(stored: Record<string, string> = {}, now = new Date(2026, 9, 2)) {
   const { items, storage } = memoryStorage(stored);
   const time = fakeClock(now);
-  const model = createSidebarList({ clock: time.clock, preferences: sidebarPreferences(storage) });
+  const model = createSidebarList({
+    clock: time.clock,
+    preferences: sidebarPreferences(LOCAL.id, storage),
+  });
   let changes = 0;
   model.subscribe(() => changes++);
   return { model, items, time, changes: () => changes };
@@ -873,7 +877,7 @@ test("sidebar list: date sections roll over at local midnight and after the page
 
 test("the folder and project groups left open are one machine's: the same path elsewhere stays folded", () => {
   const { storage } = memoryStorage({});
-  sidebarPreferences(storage).openGroups.set(["/repo"]);
-  assert.deepEqual(sidebarPreferences(storage, "eng-1").openGroups.get(), []);
-  assert.deepEqual(sidebarPreferences(storage).openGroups.get(), ["/repo"]);
+  sidebarPreferences(LOCAL.id, storage).openGroups.set(["/repo"]);
+  assert.deepEqual(sidebarPreferences("eng-1", storage).openGroups.get(), []);
+  assert.deepEqual(sidebarPreferences(LOCAL.id, storage).openGroups.get(), ["/repo"]);
 });

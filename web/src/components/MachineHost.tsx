@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { listMachines } from "@/lib/api";
@@ -7,10 +6,8 @@ import { observeDictationPage } from "@/lib/browserDictation";
 import { LOCAL, type Machine, machineLocation, machinePath } from "@/lib/machine";
 import { forgetUnconfiguredMachines, machineLocationMemory } from "@/lib/machineMemory";
 import { createMachineStores } from "@/lib/machineStores";
-import { drafts } from "@/lib/messageDraft";
-import { questionReplies } from "@/lib/piDialogs";
+import { toastNotify } from "@/lib/toastNotify";
 import { MachineContext } from "@/lib/useMachine";
-import { modelCatalogs } from "@/lib/useModelCatalog";
 
 /** Drafts and question replies live for this page load; a machine switch disposes its connection, not them. */
 export function MachineHost({ children }: { children: React.ReactNode }) {
@@ -18,12 +15,7 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
   const [machines, setMachines] = useState<Machine[]>([LOCAL]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
-  const [storesFor] = useState(() =>
-    createMachineStores(
-      { drafts, catalogs: modelCatalogs, questions: questionReplies },
-      (message) => toast.error(message),
-    ),
-  );
+  const [storesFor] = useState(() => createMachineStores(toastNotify));
   useEffect(observeDictationPage, []);
   useEffect(() => {
     const controller = new AbortController();

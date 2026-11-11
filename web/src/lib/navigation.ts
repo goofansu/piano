@@ -7,7 +7,7 @@
  * render timing.
  */
 import { type AppState, type Page, sessionKey } from "../store.ts";
-import type { workspaceFile } from "./api.ts";
+import type { RequestOptions, workspaceFile } from "./api.ts";
 import type { Client } from "./client.ts";
 import { machineMemory } from "./machineMemory.ts";
 import type { Preference } from "./preference.ts";
@@ -194,8 +194,12 @@ export interface SurfaceMemory {
 export interface NavigationOptions {
   client: Pick<Client, "getState" | "subscribe" | "select" | "dispatch">;
   address: AddressBar;
-  /** The workspace HTTP read; navigation owns its lifetime together with the tab. */
-  readFile: typeof workspaceFile;
+  /** The workspace HTTP read on this navigation's machine; navigation owns its lifetime together with the tab. */
+  readFile: (
+    workspaceId: string,
+    path: string,
+    options: RequestOptions,
+  ) => ReturnType<typeof workspaceFile>;
   /** Without one, a reload starts every session on its Agent area. */
   memory?: SurfaceMemory;
   /** Whether the session rail is on; without one it starts off and lasts for this navigation only. */

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { toast } from "sonner";
 import { AppLayout, LayoutView } from "@/components/AppLayout";
 import { CommandHost } from "@/components/CommandHost";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -16,32 +15,22 @@ import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { checkoutRefresh } from "@/lib/checkoutRefresh";
-import { type NotifyLevel, storedLastDirectory } from "@/lib/client";
+import { storedLastDirectory } from "@/lib/client";
 import { machineFrameBytes, machineLocation, machineSocketUrl } from "@/lib/machine";
 import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
 import { previewObservation } from "@/lib/previewObservation";
 import { parseRoute } from "@/lib/routes";
 import { HISTORY_UNAVAILABLE } from "@/lib/sessionCatalog";
+import { toastNotify as notify } from "@/lib/toastNotify";
 import { useClient } from "@/lib/useClient";
-import { useMachine, useOffers } from "@/lib/useMachine";
+import { useMachineScope, useOffers } from "@/lib/useMachine";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
 import { providerAccounts } from "@/lib/useProviderAccounts";
 import { SessionFilesContext, useSessionFilesController } from "@/lib/useSessionFiles";
 import { SidebarLayoutContext, useSidebarLayoutController } from "@/lib/useSidebarLayout";
 import { browserSocketEnvironment, type ConnectionHandlers, openConnection } from "@/lib/ws";
 import { type AppState, initialState } from "@/store";
-
-const notify = (message: string, level?: NotifyLevel) =>
-  level === "success"
-    ? toast.success(message)
-    : level === "info"
-      ? toast.info(message)
-      : level === "warning"
-        ? toast.warning(message)
-        : level === "error"
-          ? toast.error(message)
-          : toast(message);
 
 export default function App() {
   return (
@@ -52,7 +41,7 @@ export default function App() {
 }
 
 function MachineApp() {
-  const scope = useMachine()!;
+  const scope = useMachineScope();
   const { machine, catalogs: modelCatalogs, drafts, questions: questionReplies } = scope;
   const offers = useOffers();
   const { state, client } = useClient(

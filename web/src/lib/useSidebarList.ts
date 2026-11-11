@@ -14,7 +14,7 @@ import { useMachineId } from "./useMachine.ts";
 const preferences = new Map<string, SidebarPreferences>();
 function preferencesFor(machineId: string): SidebarPreferences {
   let own = preferences.get(machineId);
-  if (!own) preferences.set(machineId, (own = sidebarPreferences(undefined, machineId)));
+  if (!own) preferences.set(machineId, (own = sidebarPreferences(machineId)));
   return own;
 }
 

@@ -296,6 +296,3 @@ export function createQuestionReplies(): QuestionReplies {
       }),
   };
 }
-
-/** The page's question replies; App follows the client with them so closed questions drop theirs. */
-export const questionReplies = createQuestionReplies();
