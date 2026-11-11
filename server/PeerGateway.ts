@@ -42,8 +42,13 @@ const limits = {
   window: socketLimits.window,
   ackMs: Duration.toMillis(socketLimits.ackTimeout) + 5_000,
   closeGraceMs: 1_000,
-  /** A remote request body carries one folder path or one model reference. */
+  /** A remote request body carries one folder path or one model reference, unless it says more. */
   bodyBytes: 16 * 1024,
+  /**
+   * File answers held at once for one remote, each up to its own `answerBytes`: a file is read
+   * whole before it is passed on, so this bounds the memory one remote's files take here.
+   */
+  fileTransfers: 2,
 };
 class PeerFailure extends Data.TaggedError("PeerFailure")<{
   readonly message: string;
@@ -266,8 +271,8 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
   );
 });
 
-/** A remote's answer, read up to the client limit; a larger or missing body is unavailable. */
-async function readBounded(response: Response): Promise<string> {
+/** A remote's answer, read up to `maximum`; a larger or missing body is unavailable. */
+async function readBounded(response: Response, maximum: number): Promise<Buffer> {
   if (!response.body) throw unavailable();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -277,14 +282,21 @@ async function readBounded(response: Response): Promise<string> {
       const part = await reader.read();
       if (part.done) break;
       bytes += part.value.byteLength;
-      if (bytes > limits.clientBytes) throw unavailable();
+      if (bytes > maximum) throw unavailable();
       chunks.push(part.value);
     }
-    return Buffer.concat(chunks).toString("utf8");
+    return Buffer.concat(chunks);
   } finally {
     await reader.cancel();
   }
 }
+
+const json = (body: unknown, status = 200) =>
+  HttpServerResponse.text(JSON.stringify(body), {
+    status,
+    contentType: "application/json",
+    headers: { "cache-control": "no-store" },
+  });
 
 const Refusal = Schema.Struct({ error: Schema.String, field: Schema.optional(Schema.String) });
 
@@ -294,7 +306,7 @@ const Refusal = Schema.Struct({ error: Schema.String, field: Schema.optional(Sch
  */
 const relay = Effect.fn("PeerGateway.relay")(function* (
   peer: PeerConfig,
-  { upstream, passRefusal }: RemoteRequest,
+  { upstream, passRefusal, answer, answerBytes, requestMs }: RemoteRequest,
   query: ReadonlyArray<readonly [string, string]>,
   body: string | undefined,
 ) {
@@ -310,38 +322,58 @@ const relay = Effect.fn("PeerGateway.relay")(function* (
             : { ...upstreamHeaders(peer), "content-type": "application/json" },
         body,
         redirect: "manual",
-        signal: AbortSignal.any([signal, AbortSignal.timeout(limits.requestMs)]),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(requestMs ?? limits.requestMs)]),
       });
       const refusal = passRefusal && response.status === upstream.refused;
       if (response.status !== 200 && !refusal) {
         await response.body?.cancel();
         throw unavailable();
       }
-      const text = await readBounded(response);
-      if (!refusal) {
-        Schema.decodeUnknownSync(Schema.fromJsonString(upstream.response))(text);
-        return { status: 200, text };
+      if (refusal) {
+        const text = (await readBounded(response, limits.clientBytes)).toString("utf8");
+        const { error, field } = Schema.decodeUnknownSync(Schema.fromJsonString(Refusal))(text);
+        return json(field === undefined ? { error } : { error, field }, response.status);
       }
-      const { error, field } = Schema.decodeUnknownSync(Schema.fromJsonString(Refusal))(text);
-      return {
-        status: response.status,
-        text: JSON.stringify(field === undefined ? { error } : { error, field }),
-      };
+      if (answer === "bytes") {
+        // A file as the remote sent it. Only its type and attachment name come with it: no
+        // cookie, redirect or compressed body, and the browser never guesses another type.
+        const contentType = response.headers.get("content-type");
+        const disposition = response.headers.get("content-disposition");
+        if (!contentType || response.headers.has("content-encoding")) {
+          await response.body?.cancel();
+          throw unavailable();
+        }
+        const bytes = await readBounded(response, answerBytes ?? limits.clientBytes);
+        return HttpServerResponse.uint8Array(new Uint8Array(bytes), {
+          contentType,
+          headers: {
+            "cache-control": "no-store",
+            "x-content-type-options": "nosniff",
+            ...(disposition ? { "content-disposition": disposition } : {}),
+          },
+        });
+      }
+      const text = (await readBounded(response, answerBytes ?? limits.clientBytes)).toString(
+        "utf8",
+      );
+      Schema.decodeUnknownSync(Schema.fromJsonString(upstream.response))(text);
+      return HttpServerResponse.text(text, {
+        status: 200,
+        contentType: "application/json",
+        headers: { "cache-control": "no-store" },
+      });
     },
     catch: unavailable,
   });
 });
 
-const json = (body: unknown, status = 200) =>
-  HttpServerResponse.text(JSON.stringify(body), {
-    status,
-    contentType: "application/json",
-    headers: { "cache-control": "no-store" },
-  });
-
-const remoteRequests = new Map<string, RemoteRequest>(
-  RemoteRequests.map((request) => [request.browser.path, request]),
-);
+/** A path names one request per method: Changes reads with POST and saves its comparison with PUT. */
+const remoteRequests = new Map<string, RemoteRequest[]>();
+for (const request of RemoteRequests)
+  remoteRequests.set(request.browser.path, [
+    ...(remoteRequests.get(request.browser.path) ?? []),
+    request,
+  ]);
 
 /** Installed after Router's global Host/Origin middleware, including unsupported paths. */
 export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
@@ -351,17 +383,20 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
   const allowedOrigins = yield* AllowedOrigins;
   const byId = new Map(peers.map((peer) => [peer.id, peer]));
   const relayImages = makePeerImageRelay();
+  /** File answers in flight, by remote. */
+  const files = new Map<string, number>();
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = new URL(request.url, "http://localhost");
     const match = /^\/peer\/([^/]+)(\/.*)$/.exec(url.pathname);
     // The request owns this immutable destination, including credentials, through completion.
     const peer = match ? byId.get(match[1]) : undefined;
-    const remote = match ? remoteRequests.get(match[2]) : undefined;
+    const known = match ? remoteRequests.get(match[2]) : undefined;
+    const remote = known?.find(({ browser }) => browser.method === request.method);
     const imagePath = match && imagePaths.has(match[2]) ? match[2] : undefined;
-    if (!peer || (!remote && !imagePath && match?.[2] !== "/ws"))
+    if (!peer || (!known && !imagePath && match?.[2] !== "/ws"))
       return json({ error: "Unknown remote machine or unsupported remote request." }, 404);
-    if (!imagePath && request.method !== (remote?.browser.method ?? "GET"))
+    if (!imagePath && (known ? !remote : request.method !== "GET"))
       return json({ error: "Remote request method is not supported." }, 405);
     // Every remote request spends the peer's credential, so another site's page must not make the
     // browser send one.
@@ -388,22 +423,25 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       return invalid;
     let body: string | undefined;
     if (browser.body !== undefined) {
-      // A folder path travels only in this bounded body, never in a URL.
+      // A folder or file path travels only in this bounded body, never in a URL.
+      const maximum = remote.bodyBytes ?? limits.bodyBytes;
       const length = Number(request.headers["content-length"]);
-      if (!Number.isSafeInteger(length) || length > limits.bodyBytes) return invalid;
+      if (!Number.isSafeInteger(length) || length > maximum) return invalid;
       const text = yield* request.text;
       const decoded = Schema.decodeUnknownExit(Schema.fromJsonString(browser.body))(text, {
         onExcessProperty: "error",
       });
-      if (decoded._tag === "Failure" || Buffer.byteLength(text) > limits.bodyBytes) return invalid;
+      if (decoded._tag === "Failure" || Buffer.byteLength(text) > maximum) return invalid;
       body = JSON.stringify(decoded.value);
     }
-    const answer = yield* relay(peer, remote, query, body);
-    return HttpServerResponse.text(answer.text, {
-      status: answer.status,
-      contentType: "application/json",
-      headers: { "cache-control": "no-store" },
-    });
+    if (remote.answer !== "bytes") return yield* relay(peer, remote, query, body);
+    // A busy remote refuses another file rather than queueing it here.
+    if ((files.get(peer.id) ?? 0) >= limits.fileTransfers)
+      return json({ error: "Remote files are busy. Try again." }, 429);
+    files.set(peer.id, (files.get(peer.id) ?? 0) + 1);
+    return yield* relay(peer, remote, query, body).pipe(
+      Effect.ensuring(Effect.sync(() => files.set(peer.id, (files.get(peer.id) ?? 1) - 1))),
+    );
   }).pipe(
     Effect.catch(() =>
       Effect.succeed(

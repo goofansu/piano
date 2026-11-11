@@ -3,6 +3,7 @@ import { workspaceFile } from "@/lib/api";
 import { relativeToDocument } from "@/lib/file-link";
 import { markdownImages } from "@/lib/markdown";
 import { type MarkdownImageLoader, markdownImageLoader } from "@/lib/markdownImageLoader";
+import { useMachineId } from "@/lib/useMachine";
 
 const empty: ReadonlyMap<string, string> = new Map();
 
@@ -13,6 +14,7 @@ export function useMarkdownImages(
   text: string,
   document = "",
 ): ReadonlyMap<string, string> {
+  const machineId = useMachineId();
   const paths = useMemo(() => markdownImages(text), [text]);
   const [owner, setOwner] = useState<{
     workspaceId: string;
@@ -24,7 +26,7 @@ export function useMarkdownImages(
     if (!workspaceId) return;
     const loader = markdownImageLoader({
       read: (path, signal) =>
-        workspaceFile(workspaceId, relativeToDocument(document, path), { signal }),
+        workspaceFile(workspaceId, relativeToDocument(document, path), { signal, machineId }),
       createUrl: (blob) => URL.createObjectURL(blob),
       revokeUrl: (url) => URL.revokeObjectURL(url),
     });
@@ -36,7 +38,7 @@ export function useMarkdownImages(
       unsubscribe();
       loader.dispose();
     };
-  }, [workspaceId, document]);
+  }, [workspaceId, document, machineId]);
   // Never show an old workspace's blobs, even for the render before effect cleanup.
   const current =
     owner?.workspaceId === workspaceId && owner?.document === document ? owner : undefined;

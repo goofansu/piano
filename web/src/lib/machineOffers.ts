@@ -2,22 +2,16 @@
  * What a machine offers in this browser, decided once (ADR 0004). Local offers everything; a
  * remote offers the slice: its registered sessions, their conversation, a new session with a
  * text/image first message in a folder or worktree it already registered, its projects, and a
- * session's rename, pin, archive and delete.
- * Whatever else would manage the remote, read its files or follow its accounts stays on the
+ * session's rename, pin, archive and delete, with its Changes, files and session rail.
+ * Whatever else would manage the remote, run its apps or follow its accounts stays on the
  * remote's own Piano.
  */
 import type { Command } from "./commands.ts";
 import { isLocalId, type Machine } from "./machine.ts";
 
 export interface MachineOffers {
-  /** Files and Changes in the Surface area, file links in the transcript, the session rail's Outputs. */
-  files: boolean;
-  /** The session rail and this browser's switch for it. */
-  rail: boolean;
   /** Images attached to a message: the attach button, paste and drop, and sent images shown. */
   attachments: boolean;
-  /** The session's pull request, followed in Changes and the session header. */
-  pullRequests: boolean;
   /** The selected session's preview, observed for its commands. */
   previews: boolean;
   /** Provider accounts, followed for the commands that need a sign-in. */
@@ -39,10 +33,7 @@ export interface MachineOffers {
 }
 
 const LOCAL_OFFERS: MachineOffers = {
-  files: true,
-  rail: true,
   attachments: true,
-  pullRequests: true,
   previews: true,
   providerAccounts: true,
   worktrees: true,
@@ -67,10 +58,7 @@ const REGISTRY_CHANGES: ReadonlySet<string> = new Set([
 ]);
 
 const REMOTE_OFFERS: MachineOffers = {
-  files: false,
-  rail: false,
   attachments: true,
-  pullRequests: false,
   previews: false,
   providerAccounts: false,
   worktrees: false,
@@ -88,6 +76,13 @@ const REMOTE_OFFERS: MachineOffers = {
       case "rename":
       case "archive":
       case "delete":
+      // The session's surfaces: Changes with its pull request, the session rail, the Agent area
+      // beside them, and the header's Artifacts.
+      case "changes":
+      case "pull-request":
+      case "session-rail":
+      case "agent":
+      case "artifacts":
       case "projects":
       case "open-project":
       case "project-dialog":

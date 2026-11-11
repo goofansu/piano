@@ -21,7 +21,8 @@ turn Piano into a fleet manager.
 - The browser speaks only to its current origin. Main validates Host, browser Origin and
   `Sec-Fetch-Site` before dialing; upstream receives the configured target Origin, not the
   browser's headers or the integration hostname. Only configured destinations, the remote's
-  `/ws/peer`, its two slash-command reads and its default-model save (the model picker's defaults,
+  `/ws/peer`, its two slash-command reads, its [session surfaces](#session-surfaces-changes-files-and-the-session-rail)
+  and its default-model save (the model picker's defaults,
   checked against the remote's own catalog), plus the fixed image routes below are routed.
   `RemoteRequests` in `shared/http.ts` lists the JSON requests; `shared/remoteImages.ts` names the
   image routes. Redirects, unknown IDs and other endpoints fail closed (INV-11).
@@ -54,7 +55,8 @@ turn Piano into a fleet manager.
   switcher, not discovery, machine CRUD or cross-machine orchestration (INV-07/11).
 - Machine IDs qualify navigation and own separate client, draft, question-reply and catalog
   instances (INV-07). Drafts remain page-memory only. Remote catalogs are not persisted; local
-  caches and surface memory remain local. Unsupported remote views never reuse local HTTP APIs.
+  caches remain local, and each machine's remembered Surface tabs are kept apart from every
+  other's. Unsupported remote views never reuse local HTTP APIs.
 - Reuse the existing session projection, composer, model/context controls and Pi dialog claims;
   preserve the peer's generation, sequence and delivery frames (INV-04/05). The browser remains
   the only reconnect owner. Gateway disconnect/failure does not promise whether an in-flight
@@ -73,7 +75,7 @@ the slice's actions. The model picker saves the peer's default model and effort 
 through the peer's own settings
 endpoint, which checks the model against the peer's catalog; Pi on the peer owns the file. Registering
 folders, worktree creation, machine CRUD/provisioning, cross-machine projects or search,
-files/Changes/managed app previews and other remote settings/accounts are out. Voice input is the
+managed app previews, session sharing and other remote settings/accounts are out. Voice input is the
 main-origin composer utility defined below, not a remote service. Parallel worktree sessions
 come from a remote session's own dispatch, which runs on the peer.
 [Setup and limits](../remote-piano.md) describe the exact startup configuration.
@@ -103,6 +105,35 @@ machines' projects with the same name are unrelated (INV-01/07).
 - The session header is Local's. Its Artifacts menu and the phone sheet's Pull request row are
   links out of Piano to URLs the peer already sent with the session and its list; they add no
   request to the peer. The app preview, which needs the peer's status read and Stop, stays out.
+
+## Session surfaces: Changes, files and the session rail
+
+A remote session shows what a Local one does, except its managed app preview and sharing: the
+session rail (Environment and Outputs), Changes with its comparison and pull request, and files
+opened from the transcript, Changes or Outputs. This supersedes the earlier limit that a remote
+grants no workspace file access.
+
+- Git, GitHub and the files stay on the peer (INV-01). Main relays the peer's own endpoints for
+  the Changes read, one file's patch, the saved comparison, written paths, the pull request read
+  and change, and a file's preview and download. `RemoteRequests` in `shared/http.ts` lists them
+  with their limits. The peer resolves workspace and session IDs in its own database, as for its
+  own browser; main checks IDs, method, body shape and size before dialing, and nothing else.
+- A file read follows the peer's own rule: a path may leave the workspace, including an absolute
+  path, so main can read any file the peer's user can, within the preview formats and sizes. This
+  is the same owner's access on a machine they already send prompts to (INV-11), not a sandbox.
+- JSON answers are read whole under a per-request limit and checked against the endpoint's
+  response before they reach the browser. A file is relayed as the peer sent it, with only its
+  content type and attachment name: no cookie, redirect or compressed body, at most two files in
+  flight per peer and no queue. A larger, slower or malformed answer is the peer unavailable,
+  never a partial one. No request is retried.
+- The peer's refusal reaches the browser in its own words where only the peer can know the reason
+  (a missing file, a comparison it cannot save, GitHub's answer).
+- The pull request uses the peer's GitHub sign-in. Linking, finding and removing a link change
+  the peer's database.
+- Every browser request names the machine it is for, captured where it is made; a remote's
+  request never falls back to Local's endpoint with the remote's IDs (INV-07).
+- Main and peers deploy together (INV-12). An older peer answers these as it always did; an older
+  main never asks.
 
 ## Raster images: separate preparation, unchanged conversation ownership
 

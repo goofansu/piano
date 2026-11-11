@@ -167,6 +167,65 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       } else respond();
       return;
     }
+    // A session's surfaces as the remote's own browser reads them. Changes answers with its
+    // method, so a test can tell the read from the saved comparison on the same path.
+    const workspace = { id: identity.workspaceId, path: identity.cwd, folder: identity.cwd };
+    if (req.url?.startsWith("/api/session/changes")) {
+      res.end(
+        JSON.stringify({
+          workspace,
+          observedAt: "2026-01-01T00:00:00Z",
+          result: { status: "error", detail: `${req.method} ${req.url.split("?")[0]}` },
+        }),
+      );
+      return;
+    }
+    if (req.url?.startsWith("/api/workspace/files/written")) {
+      res.end(
+        JSON.stringify({
+          workspace,
+          observedAt: "2026-01-01T00:00:00Z",
+          result: { status: "ready", files: [] },
+        }),
+      );
+      return;
+    }
+    if (req.url?.startsWith("/api/workspace/file")) {
+      const { path } = JSON.parse(body) as { path: string };
+      if (path === "missing.md") {
+        res.writeHead(400).end(JSON.stringify({ error: "File not found." }));
+        return;
+      }
+      res.setHeader("set-cookie", "upstream-secret=never-forward");
+      const respond = () => {
+        if (state.mode === "file-large") {
+          res.setHeader("content-type", "multipart/form-data; boundary=x");
+          for (let n = 0; n < 35; n++) res.write(Buffer.alloc(1024 * 1024));
+          res.end();
+        } else if (state.mode === "file-compressed") {
+          res.setHeader("content-encoding", "gzip");
+          res.end("{}");
+        } else if (req.url!.startsWith("/api/workspace/file/download")) {
+          res.setHeader("content-type", "text/markdown; charset=utf-8");
+          res.setHeader("content-disposition", "attachment; filename*=UTF-8''notes.md");
+          res.end("# exact bytes\n");
+        } else
+          res.end(
+            JSON.stringify({
+              workspaceId: identity.workspaceId,
+              path,
+              kind: "markdown",
+              language: "markdown",
+              content: "# remote",
+            }),
+          );
+      };
+      if (state.mode === "http-held") {
+        state.pendingHttp.push(respond);
+        changed();
+      } else respond();
+      return;
+    }
     // The remote's own settings endpoint: it refuses a model its catalog does not offer.
     if (req.url === "/api/settings/defaults") {
       const defaults = JSON.parse(body);

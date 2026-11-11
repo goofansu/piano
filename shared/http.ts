@@ -646,7 +646,33 @@ export interface RemoteRequest {
    * for a check only the remote can make. Otherwise any answer but 200 is the remote unavailable.
    */
   readonly passRefusal: boolean;
+  /**
+   * `bytes`: the answer is a file, relayed as the remote sent it (its type and attachment name
+   * with it) under `answerBytes`, never decoded here. Otherwise it is JSON, read whole and checked
+   * against `upstream.response`.
+   */
+  readonly answer?: "bytes";
+  /** The largest request body, where one path or reference (the gateway's default) is too small. */
+  readonly bodyBytes?: number;
+  /** The largest answer, where one conversation frame (the gateway's default) is too small. */
+  readonly answerBytes?: number;
+  /** How long the remote may take, where Git or GitHub outlasts the gateway's default. */
+  readonly requestMs?: number;
 }
+
+const MiB = 1024 * 1024;
+/** A session's own surfaces: the remote resolves both IDs in its registry, as for its own browser. */
+const sessionSurface = (
+  endpoint: Endpoint,
+  limits: Pick<RemoteRequest, "answer" | "bodyBytes" | "answerBytes" | "requestMs"> = {},
+): RemoteRequest => ({
+  browser: endpoint,
+  upstream: endpoint,
+  invalid: "Remote workspace or session ID, or the request itself, is invalid.",
+  // What only the remote knows: a missing file, a comparison it cannot save, GitHub's answer.
+  passRefusal: endpoint.refused !== undefined,
+  ...limits,
+});
 
 export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
   // The remote resolves the IDs in its own registry and refuses what it does not list.
@@ -670,4 +696,26 @@ export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
     invalid: Endpoints.saveDefaults.invalid,
     passRefusal: true,
   },
+  // Changes: a list with its first patch excerpt, one file's patch (CHANGES_FILE_PATCH_BYTES of
+  // text, larger as JSON), and the saved comparison. Git on a large checkout outlasts a setting.
+  sessionSurface(Endpoints.sessionChanges, { answerBytes: 4 * MiB, requestMs: 30_000 }),
+  sessionSurface(Endpoints.sessionChangedFile, { answerBytes: 4 * MiB, requestMs: 30_000 }),
+  sessionSurface(Endpoints.setSessionChangesScope, { answerBytes: 4 * MiB, requestMs: 30_000 }),
+  // Outputs: up to WRITTEN_PATHS_LIMIT paths as the session's tool calls named them.
+  sessionSurface(Endpoints.workspaceWrittenFiles, { bodyBytes: MiB, requestMs: 30_000 }),
+  // The pull request: GitHub answers the remote within 15 seconds.
+  sessionSurface(Endpoints.sessionPullRequest, { requestMs: 30_000 }),
+  sessionSurface(Endpoints.changeSessionPullRequest, { requestMs: 30_000 }),
+  // A file as the remote's own browser reads it: the largest preview is a 32 MiB video, in a
+  // multipart answer with its metadata.
+  sessionSurface(Endpoints.workspaceFile, {
+    answer: "bytes",
+    answerBytes: 34 * MiB,
+    requestMs: 60_000,
+  }),
+  sessionSurface(Endpoints.workspaceFileDownload, {
+    answer: "bytes",
+    answerBytes: 34 * MiB,
+    requestMs: 60_000,
+  }),
 ];

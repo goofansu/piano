@@ -188,6 +188,19 @@ it, and start a session in it, as on Local. A session's menu moves it to another
 same machine or removes it from one. Projects do not span machines: a project on eng-1 holds
 eng-1's sessions only, and its address is `/m/eng-1/projects/<id>`.
 
+### Changes, files and the session rail
+
+A remote session has the same session rail, **Changes** and file tabs as a Local one. Git and
+GitHub are read on the remote, with the remote's GitHub sign-in; linking a pull request saves the
+link there. A file link in the conversation, in Changes or in **Outputs** opens that file from the
+remote, by the same [formats and sizes](file-previews.md#formats-and-limits) as Local, and
+**Download** saves it to this computer. Like Local, a path may point outside the workspace.
+
+The rail's **App** section and **Open preview in new tab** are not shown: a remote's app preview
+stays on its own Piano. Open tabs are remembered per machine for this browser tab. If the remote
+is busy with two files, another read answers "Remote files are busy. Try again."
+See [resource budgets](runtime-input-limits.md#remote-session-surfaces).
+
 ### Session menu
 
 A remote session's menu, in the sidebar and in its header, offers **Rename**, **Pin**,
@@ -197,8 +210,7 @@ Delete removes its history there. **Share** is on the remote's own Piano.
 ### Artifacts and pull request
 
 A remote session's header lists the artifacts it published, and on a phone its menu links to its
-saved pull request. Both open in a new browser tab. Changes, where a pull request's state is read,
-stays on the remote's own Piano.
+saved pull request. Both open in a new browser tab.
 
 ### Images
 
@@ -248,15 +260,14 @@ No peer voice settings or transcription endpoints are proxied, and no peer crede
   and/or raster images, in a project or none: no Browse, worktree creation or name. No sharing
   of a session, and no worktree or machine management. Add, close and reopen folders on the
   owning Piano.
-- No remote general files, Changes, managed app previews or account/settings controls
-  beyond the model picker's defaults, folder trust included:
-  trusting a folder would run its project extensions on the remote. These requests are not
-  forwarded to Local. Remote transcript local-file actions remain unavailable; image attachments
-  do not grant workspace file access.
+- No remote managed app previews, session sharing or account/settings controls beyond the model
+  picker's defaults, folder trust included: trusting a folder would run its project extensions
+  on the remote. These requests are not forwarded to Local.
 - The remote enforces these limits on its `/ws/peer` connection and answers a refused request the
   way it answers any failed one (for example "Unable to open session"); the connection stays open.
-- Only configured peers, the remote's `/ws/peer`, slash-command reads, defaults save and fixed
-  image preparation/cancellation/preview routes are routed. There is
+- Only configured peers, the remote's `/ws/peer`, slash-command reads, defaults save, the
+  session's Changes, pull request, Outputs and file reads, and fixed image
+  preparation/cancellation/preview routes are routed. There is
   no arbitrary URL proxy, redirect following, mutation retry or cross-machine search. The browser never contacts the
   integration hostname.
 - The configured destination is trusted, not an authenticated instance-ID handshake. A remote

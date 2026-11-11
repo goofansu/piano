@@ -41,7 +41,7 @@ import {
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
 import { useLibraryToasts } from "@/lib/useLibraryToasts";
-import { useDrafts, useOffers } from "@/lib/useMachine";
+import { useDrafts } from "@/lib/useMachine";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
@@ -59,7 +59,6 @@ const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" }
 const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
 export function SessionView({ state, send, captureSend }: Props) {
-  const offers = useOffers();
   const drafts = useDrafts();
   // The selected session's PR dialog; navigation closes it when Settings covers the view. Its
   // Changes and open file live in the Surface area (SessionPanel).
@@ -91,9 +90,9 @@ export function SessionView({ state, send, captureSend }: Props) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [setSingle]);
-  const agentHidden = offers.files && !navigation.layout.agent;
+  const agentHidden = !navigation.layout.agent;
   // The rail is pinned beside the transcript side by side; one area at a time it is not shown.
-  const railInside = offers.rail && navigation.layout.rail;
+  const railInside = navigation.layout.rail;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
@@ -136,8 +135,8 @@ export function SessionView({ state, send, captureSend }: Props) {
   // rule, the sidebar's.
   const changesVisible = navigation.shownTab === "changes";
   const pullRequest = useSessionPullRequest(
-    offers.pullRequests ? pullRequestTarget : undefined,
-    offers.pullRequests ? link : undefined,
+    pullRequestTarget,
+    link,
     !!t?.sessionId && sessionWorking(state, { cwd: t.cwd, sessionId: t.sessionId }),
     {
       visible: changesVisible,
@@ -222,9 +221,7 @@ export function SessionView({ state, send, captureSend }: Props) {
           <div className="relative flex min-h-0 flex-1 flex-col">
             <AddToChat draftKey={draftKey} className="relative flex min-h-0 flex-1 flex-col">
               {pane.list && (
-                <LocalFileContext
-                  value={offers.files ? (path) => openFile(path, "agent") : undefined}
-                >
+                <LocalFileContext value={(path) => openFile(path, "agent")}>
                   <SessionDestinationContext value={destination}>
                     <ImageSessionContext
                       value={
@@ -235,7 +232,7 @@ export function SessionView({ state, send, captureSend }: Props) {
                     >
                       <MessageList
                         key={t ? sessionKey(t) : draftKey}
-                        workspaceId={offers.files ? workspace?.id : undefined}
+                        workspaceId={workspace?.id}
                         showTools={!messagesOnly}
                         messages={t?.messages ?? []}
                         pending={t?.pending ?? null}
@@ -285,9 +282,7 @@ export function SessionView({ state, send, captureSend }: Props) {
                   ),
                 )}
               {/* Local file links in a question open the preview, as they do in the transcript. */}
-              <LocalFileContext
-                value={offers.files ? (path) => openFile(path, "agent") : undefined}
-              >
+              <LocalFileContext value={(path) => openFile(path, "agent")}>
                 {answerReceipt && <AnsweredQuestion resolution={answerReceipt} />}
                 <InlineQuestion pending={pendingDialogs(state)} send={send} />
               </LocalFileContext>
@@ -307,15 +302,13 @@ export function SessionView({ state, send, captureSend }: Props) {
             {railInside && <SessionRail state={state} />}
           </div>
         </div>
-        {offers.files && (
-          <SessionPanel
-            state={state}
-            onAsk={onAsk}
-            pullRequest={pullRequest}
-            id={AREA_ID.surface}
-            labelledBy={areaTabs && surface ? tabId(surface.active) : undefined}
-          />
-        )}
+        <SessionPanel
+          state={state}
+          onAsk={onAsk}
+          pullRequest={pullRequest}
+          id={AREA_ID.surface}
+          labelledBy={areaTabs && surface ? tabId(surface.active) : undefined}
+        />
       </div>
     </TranscriptViewportContext>
   );

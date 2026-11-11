@@ -393,7 +393,9 @@ test(
           "/peer/local/ws",
           "/peer/missing/ws",
           "/peer/eng-1/api/folders",
-          "/peer/eng-1/api/workspace/file",
+          // Browsing the remote's directories and sharing a session stay on its own Piano.
+          "/peer/eng-1/api/ls",
+          "/peer/eng-1/api/session/share",
           "/peer/eng-1/ws/extra",
         ]) {
           const response = await fetch(`${f.base}${path}`);
@@ -644,6 +646,179 @@ test(
           original,
           "a remote save must not touch Local",
         );
+      },
+    );
+
+    await t.test(
+      "a session's Changes are read and saved on the remote, each by its own method",
+      async () => {
+        const changesPath = `/peer/eng-1/api/session/changes?workspaceId=${identity.workspaceId}&sessionId=${identity.sessionId}`;
+        const ask = (method: string, body: string, extra: Record<string, string> = {}) =>
+          fetch(`${f.base}${changesPath}`, {
+            method,
+            headers: { Origin: f.base, "content-type": "application/json", ...headers, ...extra },
+            body,
+          });
+        const before = f.state.requests.length;
+        const scope = "uncommitted";
+        for (const [method, body] of [
+          ["POST", "{}"],
+          ["PUT", JSON.stringify({ scope: null })],
+        ] as const) {
+          const response = await ask(method, body);
+          assert.equal(response.status, 200, method);
+          assert.equal(response.headers.get("cache-control"), "no-store");
+          const answer = (await response.json()) as { result: { detail: string } };
+          assert.equal(answer.result.detail, `${method} /api/session/changes`);
+        }
+        const one = await fetch(`${f.base}${changesPath.replace("/changes?", "/changes/file?")}`, {
+          method: "POST",
+          headers: { Origin: f.base, "content-type": "application/json", ...headers },
+          body: JSON.stringify({ path: "src/a.ts", scope }),
+        });
+        assert.equal(one.status, 200);
+        const sent = f.state.requests.slice(before);
+        assert.deepEqual(
+          sent.map(({ url, method }) => `${method} ${url}`),
+          ["POST", "PUT"]
+            .map(
+              (method) =>
+                `${method} /api/session/changes?workspaceId=${identity.workspaceId}&sessionId=${identity.sessionId}`,
+            )
+            .concat(
+              `POST /api/session/changes/file?workspaceId=${identity.workspaceId}&sessionId=${identity.sessionId}`,
+            ),
+        );
+        assert.deepEqual(JSON.parse(sent[2]!.body!), { path: "src/a.ts", scope });
+        for (const request of sent) {
+          assert.equal(request.headers.origin, f.config.origin);
+          assert.equal(request.headers.cookie, undefined);
+          assert.equal(request.headers.authorization, undefined);
+        }
+
+        const refused = f.state.requests.length;
+        assert.equal((await ask("POST", JSON.stringify({ scope: "everything" }))).status, 400);
+        assert.equal((await ask("POST", "{}", { "Sec-Fetch-Site": "cross-site" })).status, 403);
+        assert.equal((await ask("DELETE", "{}")).status, 405);
+        assert.equal(f.state.requests.length, refused, "refused requests never reach the remote");
+      },
+    );
+
+    await t.test(
+      "a file is read from the remote as it sent it, bounded, with only its type and name",
+      async () => {
+        const read = (
+          path: string,
+          {
+            download = false,
+            extra = {} as Record<string, string>,
+            body = undefined as string | undefined,
+          } = {},
+        ) =>
+          fetch(
+            `${f.base}/peer/eng-1/api/workspace/file${download ? "/download" : ""}?workspaceId=${identity.workspaceId}`,
+            {
+              method: "POST",
+              headers: { Origin: f.base, "content-type": "application/json", ...headers, ...extra },
+              body: body ?? JSON.stringify({ path }),
+            },
+          );
+        const before = f.state.requests.length;
+        const preview = await read("docs/notes.md");
+        assert.equal(preview.status, 200);
+        assert.equal(preview.headers.get("cache-control"), "no-store");
+        assert.equal(preview.headers.get("x-content-type-options"), "nosniff");
+        assert.equal(preview.headers.get("set-cookie"), null, "the remote's cookie stays there");
+        assert.deepEqual(await preview.json(), {
+          workspaceId: identity.workspaceId,
+          path: "docs/notes.md",
+          kind: "markdown",
+          language: "markdown",
+          content: "# remote",
+        });
+        const saved = await read("docs/notes.md", { download: true });
+        assert.equal(saved.status, 200);
+        assert.equal(saved.headers.get("content-type"), "text/markdown; charset=utf-8");
+        assert.equal(
+          saved.headers.get("content-disposition"),
+          "attachment; filename*=UTF-8''notes.md",
+        );
+        assert.equal(saved.headers.get("set-cookie"), null);
+        assert.equal(await saved.text(), "# exact bytes\n");
+        const sent = f.state.requests.slice(before);
+        assert.deepEqual(
+          sent.map(({ url, method, body }) => ({ url, method, body })),
+          ["/api/workspace/file", "/api/workspace/file/download"].map((path) => ({
+            url: `${path}?workspaceId=${identity.workspaceId}`,
+            method: "POST",
+            body: JSON.stringify({ path: "docs/notes.md" }),
+          })),
+          "the file's path travels only in the body",
+        );
+
+        // What only the remote knows comes back in its words.
+        const missing = await read("missing.md");
+        assert.equal(missing.status, 400);
+        assert.deepEqual(await missing.json(), { error: "File not found." });
+
+        // A larger or compressed answer is the remote unavailable, never a partial file.
+        for (const mode of ["file-large", "file-compressed"]) {
+          f.state.mode = mode;
+          assert.equal((await read("docs/notes.md")).status, 502, mode);
+        }
+
+        // Two files at once for one remote; a third is refused rather than queued.
+        f.state.mode = "http-held";
+        const held = [read("a.md"), read("b.md")];
+        await f.until(() => f.state.pendingHttp.length === 2);
+        const busy = await read("c.md");
+        assert.equal(busy.status, 429);
+        assert.deepEqual(await busy.json(), { error: "Remote files are busy. Try again." });
+        f.state.mode = "ready";
+        for (const release of f.state.pendingHttp.splice(0)) release();
+        for (const response of await Promise.all(held)) {
+          assert.equal(response.status, 200);
+          await response.body?.cancel();
+        }
+        assert.equal((await read("d.md")).status, 200, "a finished file frees its place");
+
+        const refused = f.state.requests.length;
+        for (const [body, extra, status] of [
+          [JSON.stringify({ path: "" }), {}, 400],
+          [JSON.stringify({ path: "a.md", cwd: "/elsewhere" }), {}, 400],
+          [JSON.stringify({ path: "x".repeat(17 * 1024) }), {}, 400],
+          [JSON.stringify({ path: "a.md" }), { "Sec-Fetch-Site": "cross-site" }, 403],
+        ] as const)
+          assert.equal((await read("", { body, extra })).status, status, body.slice(0, 60));
+        assert.equal(f.state.requests.length, refused, "refused requests never reach the remote");
+      },
+    );
+
+    await t.test(
+      "a session's written paths reach the remote in a body larger than a path",
+      async () => {
+        const paths = Array.from(
+          { length: 1000 },
+          (_, n) => `src/${"deep/".repeat(8)}file-${n}.ts`,
+        );
+        const body = JSON.stringify({ paths });
+        assert.ok(Buffer.byteLength(body) > 16 * 1024);
+        const before = f.state.requests.length;
+        const response = await fetch(
+          `${f.base}/peer/eng-1/api/workspace/files/written?workspaceId=${identity.workspaceId}`,
+          {
+            method: "POST",
+            headers: { Origin: f.base, "content-type": "application/json", ...headers },
+            body,
+          },
+        );
+        assert.equal(response.status, 200);
+        assert.deepEqual(((await response.json()) as { result: unknown }).result, {
+          status: "ready",
+          files: [],
+        });
+        assert.deepEqual(JSON.parse(f.state.requests.at(-1)!.body!), { paths });
+        assert.equal(f.state.requests.length, before + 1);
       },
     );
 
