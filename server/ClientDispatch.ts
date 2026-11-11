@@ -9,7 +9,7 @@
 import { Cause, Effect, Stream } from "effect";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
 import { type ClientOutput, InputNotSent, makeClientSessions } from "./ClientSessions.ts";
-import { CreationAttempts } from "./CreationAttempt.ts";
+import { CreationAttempts } from "./CreationAttempts.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";

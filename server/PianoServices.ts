@@ -12,7 +12,7 @@
  * RegistryDatabasePath, ...). Tests replace those, never the wiring.
  */
 import { Layer } from "effect";
-import { CreationAttemptsLive } from "./CreationAttempt.ts";
+import { CreationAttemptsLive } from "./CreationAttempts.ts";
 import { DirectoryFactsLive } from "./DirectoryFacts.ts";
 import { GitHubPullRequestsLive } from "./GitHubPullRequests.ts";
 import { McpSetupLive } from "./McpSetup.ts";

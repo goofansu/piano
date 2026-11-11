@@ -9,7 +9,7 @@ import {
   CreationAttempts,
   CreationAttemptsLive,
   type StartingAttempt,
-} from "../server/CreationAttempt.ts";
+} from "../server/CreationAttempts.ts";
 import { type PiSession, PiSessionError } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionNotCreated } from "../server/SessionHosts.ts";

@@ -23,7 +23,7 @@ import {
   sameSession,
 } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
-import { CreationAttempts } from "./CreationAttempt.ts";
+import { CreationAttempts } from "./CreationAttempts.ts";
 import { bindSessionEvent } from "./ImagePreviews.ts";
 import { type PiSession, PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";

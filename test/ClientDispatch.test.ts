@@ -6,7 +6,7 @@ import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Layer, Queue, type Scope } from "effect";
 import { type ClientRequest, makeClientDispatch } from "../server/ClientDispatch.ts";
-import type { CreationAttempts } from "../server/CreationAttempt.ts";
+import type { CreationAttempts } from "../server/CreationAttempts.ts";
 import { DirectoryFacts } from "../server/DirectoryFacts.ts";
 import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
 import { inboundLimits } from "../server/InboundCapacity.ts";

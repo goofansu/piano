@@ -18,7 +18,7 @@ import { Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effec
 import { PreviewAdapter } from "../scripts/PreviewAdapter.ts";
 import { ownerRequest } from "../scripts/PreviewClient.ts";
 import { makeClientSessions } from "../server/ClientSessions.ts";
-import { CreationAttempts, CreationAttemptsLive } from "../server/CreationAttempt.ts";
+import { CreationAttempts, CreationAttemptsLive } from "../server/CreationAttempts.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { type PiSession, PiSessionsLive, PreviewOwnerOptions } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";

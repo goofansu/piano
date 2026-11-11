@@ -18,7 +18,7 @@ import {
   sessionKey,
   type WorktreeRequest,
 } from "../shared/wire.ts";
-import type { StartingAttempt } from "./CreationAttempt.ts";
+import type { StartingAttempt } from "./CreationAttempts.ts";
 import { Directories } from "./Directories.ts";
 import { FolderWorktrees, FolderWorktreesLive } from "./FolderWorktrees.ts";
 import { directoryPath } from "./PiEnv.ts";
