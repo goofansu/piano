@@ -149,6 +149,10 @@ existing behavior. Do not point this scratch example at a production service for
 
 `id` is a stable lowercase slug, not `local`; it identifies routes and browser state. Keep it bound
 to the same backend identity; use a different ID for another Piano rather than repointing it.
+The browser remembers each machine's model list, last directory, open file tabs, open sidebar
+groups and the page you were on under its ID:
+renaming an ID starts that machine fresh, and what was remembered for an ID removed from the
+file is deleted the next time the page loads.
 `name` is the picker label. `endpoint` is the integration's or target VM's HTTPS origin, without
 path, credentials, query or fragment. HTTP loopback endpoints require `NODE_ENV=test` and exist
 only for isolated tests with dummy credentials, never real tokens.
@@ -172,13 +176,16 @@ text, images or both.
 The session runs and stays on the remote. A worktree for parallel work comes from the remote
 session's own dispatch, which runs on the remote, not from this picker.
 
-A switch disconnects this browser's attachment, not the run. Returning or reconnecting reads a
+Switching to a machine opens the session or page you last had there, also after a reload; the
+first time, it opens **New session**. A switch disconnects this browser's attachment, not the run. Returning or reconnecting reads a
 fresh authoritative snapshot; it never resends input. Check the conversation before retrying any
 input whose delivery is uncertain. Disconnection makes the remote unavailable, never Local.
 
 Unsent drafts and question replies are isolated by machine and retained only for this page load.
-Reload discards drafts as in Local. Remote model catalogs are memory-only and cannot populate
-Local's persisted catalog. Remote files, credentials, history and database remain remote.
+Reload discards drafts as in Local. Each machine's model list and last directory are remembered
+in this browser under that machine alone, so the model picker opens at once and **New session**
+starts where you last worked there; neither is ever taken from another machine. Remote files,
+credentials, history and database remain remote.
 
 ### Projects
 

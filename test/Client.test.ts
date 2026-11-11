@@ -718,7 +718,13 @@ test("a creation that fails after the person moved to another session is announc
 });
 
 /** What the client asked Pi about, as `tag cwd` pairs, since the last call. */
-function focusHarness(options: { remembered?: string | null; initial?: typeof initialState } = {}) {
+function focusHarness(
+  options: {
+    remembered?: string | null;
+    initial?: typeof initialState;
+    openFoldersOnly?: boolean;
+  } = {},
+) {
   const sent: ClientMessage[] = [];
   const written: string[] = [];
   let handlers: ConnectionHandlers | undefined;
@@ -738,6 +744,7 @@ function focusHarness(options: { remembered?: string | null; initial?: typeof in
     notify: () => {},
     newSelectionId: () => `sel${++ids}`,
     lastDirectory: { read: () => options.remembered ?? null, write: (cwd) => written.push(cwd) },
+    openFoldersOnly: options.openFoldersOnly,
   });
   client.start();
   let seen = 0;
@@ -849,6 +856,35 @@ test("a fresh New page starts in the last directory used, else the first folder,
     { kind: "new", projectId: "p1" },
     "a project's New page starts without a directory",
   );
+});
+
+test("where only open folders can be chosen, a remembered directory no longer open gives way to the first folder", () => {
+  const open = (path: string) =>
+    ({
+      path,
+      name: path.slice(1),
+      worktrees: [{ path }],
+      discovery: { status: "ready", observedAt: "", currentPath: path, worktrees: [] },
+    }) as never;
+  const registry = { _tag: "registry", folders: [open("/one"), open("/two")] } as const;
+
+  const closed = focusHarness({ remembered: "/closed", openFoldersOnly: true });
+  assert.deepEqual(
+    closed.client.getState().view,
+    { kind: "new", cwd: "/closed" },
+    "until the folders are known, the remembered directory stands",
+  );
+  closed.server(registry);
+  assert.deepEqual(closed.client.getState().view, { kind: "new", cwd: "/one" });
+
+  const still = focusHarness({ remembered: "/two", openFoldersOnly: true });
+  still.server(registry);
+  assert.deepEqual(still.client.getState().view, { kind: "new", cwd: "/two" });
+
+  // Local may start anywhere, so its remembered directory stands whether or not it is a folder.
+  const anywhere = focusHarness({ remembered: "/closed" });
+  anywhere.server(registry);
+  assert.deepEqual(anywhere.client.getState().view, { kind: "new", cwd: "/closed" });
 });
 
 test("a project's home starts in its most recent member's folder, at the folder's own checkout", () => {

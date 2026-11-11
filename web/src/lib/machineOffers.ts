@@ -25,8 +25,6 @@ export interface MachineOffers {
   folders: boolean;
   /** Settings, and the sidebar's way to it. */
   settings: boolean;
-  /** The New page starting in the last directory this browser used. */
-  lastDirectory: boolean;
   /** Whether a palette, menu or button command runs here. */
   command: (command: Command) => boolean;
 }
@@ -39,7 +37,6 @@ const LOCAL_OFFERS: MachineOffers = {
   browse: true,
   folders: true,
   settings: true,
-  lastDirectory: true,
   command: () => true,
 };
 
@@ -66,7 +63,6 @@ const REMOTE_OFFERS: MachineOffers = {
   // The palette's New session here starts one in a registered folder; the folder row does not.
   folders: false,
   settings: false,
-  lastDirectory: false,
   command: (command) => {
     switch (command.intent.kind) {
       case "send":

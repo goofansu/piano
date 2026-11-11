@@ -984,7 +984,52 @@ await run(
         await chooseRepo();
         await pressed(false);
         await page.capture("9l-local-folder-still-untrusted");
+        // Each machine's model list and last directory are remembered under its own ID. On load,
+        // a machine no longer configured and Local's keys from before the prefix are forgotten.
+        await page.evaluate(
+          `(localStorage.setItem('piano.machine.gone.catalogs', '{}'), localStorage.setItem('piano.catalogs', '{}'), true)`,
+        );
+        await page.ab("reload");
+        await page.until(
+          `!!document.querySelector('[aria-label="First message"]') && localStorage.getItem('piano.machine.gone.catalogs') === null`,
+        );
+        const remembered = await page.evaluate(
+          `Object.keys(localStorage).filter(k => k.startsWith('piano.machine.') || k === 'piano.catalogs' || k === 'piano.lastDir')`,
+        );
+        for (const key of [
+          "piano.machine.local.catalogs",
+          "piano.machine.eng-1.catalogs",
+          "piano.machine.eng-1.lastDir",
+        ])
+          assert.ok(remembered.includes(key), `${key} in ${remembered}`);
+        for (const key of ["piano.machine.gone.catalogs", "piano.catalogs", "piano.lastDir"])
+          assert.ok(!remembered.includes(key), `${key} forgotten`);
+        assert.equal(
+          await page.evaluate(`localStorage.getItem('piano.machine.eng-1.lastDir')`),
+          cwd,
+          "the peer's last directory is the one a session started in there",
+        );
+        assert.ok(
+          Object.keys(
+            JSON.parse(await page.evaluate(`localStorage.getItem('piano.machine.eng-1.catalogs')`)),
+          ).includes(cwd),
+          "the peer's model list for that directory outlives the reload",
+        );
+        // Where the user was on a machine outlives a reload too: switching back opens there.
         onRemote = true;
+        await machine(page, "eng-1");
+        await page.see("Remote collision session");
+        await page.ab("find", "role", "button", "click", "--name", "Remote collision session");
+        await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
+        onRemote = false;
+        await machine(page, "Local");
+        await page.ab("reload");
+        await page.see("Local collision session");
+        onRemote = true;
+        await machine(page, "eng-1");
+        await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
+        await page.see("Remote collision session saved history");
+        await page.capture("9m-remote-reopened-where-left");
         await page.open("/m/not-configured/s/same-session");
         await page.see("Machine unavailable");
         assert.equal(

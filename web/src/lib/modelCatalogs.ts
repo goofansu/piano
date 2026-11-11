@@ -8,6 +8,7 @@
  */
 import type { ClientCommand, ModelCatalog, ServerMessage, ThinkingLevel } from "@shared/wire";
 import type { Notify } from "./client.ts";
+import { machineKey } from "./machineMemory.ts";
 import { readJson, writeJson } from "./storage.ts";
 
 export type Catalogs = Readonly<Record<string, ModelCatalog>>;
@@ -18,12 +19,14 @@ export interface CatalogStorage {
   write: (catalogs: Catalogs) => void;
 }
 
-const CATALOGS_KEY = "piano.catalogs";
-/** This browser's storage; without it the server's cache still answers. */
-export const browserCatalogStorage: CatalogStorage = {
-  read: () => readJson<Catalogs>(CATALOGS_KEY, {}),
-  write: (catalogs) => writeJson(CATALOGS_KEY, catalogs),
-};
+/** This browser's storage for one machine's catalogs; without it the server's cache still answers. */
+export function browserCatalogStorage(machineId: string): CatalogStorage {
+  const key = machineKey(machineId, "catalogs");
+  return {
+    read: () => readJson<Catalogs>(key, {}),
+    write: (catalogs) => writeJson(key, catalogs),
+  };
+}
 
 /** The connection to follow; the page's `Client` is one. */
 export interface CatalogSource {

@@ -533,7 +533,11 @@ test("sidebar list: a session being started opens its project's group once its r
   const list = model.list(filed, view("project"));
   assert.equal(isOpen(list, "project:p1"), true);
   assert.equal(isOpen(list, "project:"), false);
-  assert.doesNotMatch(items.get("piano.openProjects") ?? "", /"project:"/, "nor on the next load");
+  assert.doesNotMatch(
+    items.get("piano.machine.local.openGroups") ?? "",
+    /"project:"/,
+    "nor on the next load",
+  );
 });
 
 test("sidebar list: selecting an archived session opens no section, since none lists it", () => {
@@ -556,7 +560,7 @@ test("sidebar list: selecting an archived session opens no section, since none l
       groupBy,
     );
   }
-  assert.equal(items.get("piano.openProjects"), undefined, "nor on the next load");
+  assert.equal(items.get("piano.machine.local.openGroups"), undefined, "nor on the next load");
 });
 
 test("sidebar list: a registry refresh never reopens a section the user collapsed; a new selection, grouping or owner does", () => {
@@ -606,7 +610,9 @@ test("sidebar list: a registry refresh never reopens a section the user collapse
 });
 
 test("sidebar list: keys stay the same across a grouping switch, so sections keep how the user left them", () => {
-  const { model, items } = sidebar({ "piano.openProjects": JSON.stringify(["/other"]) });
+  const { model, items } = sidebar({
+    "piano.machine.local.openGroups": JSON.stringify(["/other"]),
+  });
   const state: AppState = {
     ...registry,
     sessionReferences: [
@@ -635,7 +641,7 @@ test("sidebar list: keys stay the same across a grouping switch, so sections kee
     ["project:", false],
   ]);
   // The same keys reach the next page load.
-  assert.deepEqual(JSON.parse(items.get("piano.openProjects") ?? "[]").sort(), [
+  assert.deepEqual(JSON.parse(items.get("piano.machine.local.openGroups") ?? "[]").sort(), [
     "/repo",
     "project:p1",
   ]);
@@ -754,7 +760,7 @@ test("sidebar list: date sections start open, remember a collapse per browser, a
   const reloaded = sidebar(Object.fromEntries(items), new Date(2026, 9, 2, 12)).model;
   assert.equal(isOpen(reloaded.list(state, chosen), YESTERDAY), false, "the next load");
   // Collapsing a date group leaves folders and projects as they were.
-  assert.deepEqual(JSON.parse(items.get("piano.openProjects") ?? "[]"), []);
+  assert.deepEqual(JSON.parse(items.get("piano.machine.local.openGroups") ?? "[]"), []);
 
   // Selecting a session in a collapsed date group opens it; the same selection again does not.
   const selected = selecting(state, "/repo", "earlier");
@@ -863,4 +869,11 @@ test("sidebar list: date sections roll over at local midnight and after the page
   time.jump(new Date(2026, 10, 30));
   time.resume();
   assert.deepEqual(labels(), ["date:2026-10-02"], "and no longer follows the clock");
+});
+
+test("the folder and project groups left open are one machine's: the same path elsewhere stays folded", () => {
+  const { storage } = memoryStorage({});
+  sidebarPreferences(storage).openGroups.set(["/repo"]);
+  assert.deepEqual(sidebarPreferences(storage, "eng-1").openGroups.get(), []);
+  assert.deepEqual(sidebarPreferences(storage).openGroups.get(), ["/repo"]);
 });

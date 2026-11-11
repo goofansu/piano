@@ -16,7 +16,7 @@ import {
 } from "../web/src/lib/machine.ts";
 import { createMachineStores } from "../web/src/lib/machineStores.ts";
 import { createDrafts, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
-import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
+import { type Catalogs, createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import { createQuestionReplies } from "../web/src/lib/piDialogs.ts";
 import { remoteImageUrl } from "../web/src/lib/remoteImages.ts";
 import { parseRoute, routePath } from "../web/src/lib/routes.ts";
@@ -78,7 +78,13 @@ test("machine-qualified session navigation survives reload; late navigation keep
   assert.equal(machineLocation("/new").id, "local");
 });
 
-test("same cwd/session IDs retain separate page-memory drafts, questions and model catalogs", () => {
+test("same cwd/session IDs retain separate drafts, questions and model catalogs, each machine's catalogs in its own storage", () => {
+  // This browser's storage, as `machineStores` asks for it: one place per machine.
+  const stored = new Map<string, Catalogs>();
+  const catalogStorage = (id: string) => ({
+    read: () => stored.get(id) ?? {},
+    write: (catalogs: Catalogs) => void stored.set(id, catalogs),
+  });
   const localCatalog: ModelCatalog = { cwd: "/same", models: [], fetchedAt: "local" };
   const local = {
     drafts: createDrafts(),
@@ -89,7 +95,7 @@ test("same cwd/session IDs retain separate page-memory drafts, questions and mod
       saveDefaults: async () => {},
     }),
   };
-  const forMachine = createMachineStores(local, () => {});
+  const forMachine = createMachineStores(local, () => {}, catalogStorage);
   const remote = forMachine("eng-1");
   const second = forMachine("eng-2");
   const key = sessionDraftKey({ cwd: "/same", sessionId: "same-id" });
@@ -155,11 +161,13 @@ test("same cwd/session IDs retain separate page-memory drafts, questions and mod
   unfollowSecond();
   closeSecond();
   close();
-  assert.notEqual(
-    createMachineStores(local, () => {})("eng-1"),
-    remote,
-    "a page reload has no remote draft storage",
-  );
+  // A reload: drafts start over, and each machine's picker opens on its own stored catalog.
+  const reloaded = createMachineStores(local, () => {}, catalogStorage);
+  assert.notEqual(reloaded("eng-1"), remote);
+  assert.equal(reloaded("eng-1").drafts.get(key).text, "", "a page reload has no remote draft");
+  assert.equal(reloaded("eng-1").catalogs.seed()["/same"].fetchedAt, "remote");
+  assert.equal(reloaded("eng-2").catalogs.seed()["/same"].fetchedAt, "second");
+  assert.equal(local.catalogs.seed()["/same"].fetchedAt, "local");
 });
 
 test("HTTP request captures its peer; unsupported remote reads never fall through to Local", async (t) => {
