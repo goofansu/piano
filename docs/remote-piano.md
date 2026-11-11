@@ -1,7 +1,7 @@
 # Remote Pianos
 
 The machine picker connects this browser to **Local** or one of the configured Pianos owned by the
-same user. It is a conversation surface, not machine management. The remote's registered sessions
+same user. It shows that machine's sessions and projects; it is not machine management. The remote's registered sessions
 appear even when another browser or an agent started them. Terminal Pi history that the remote
 Piano has not registered is not discovered.
 
@@ -180,6 +180,14 @@ Unsent drafts and question replies are isolated by machine and retained only for
 Reload discards drafts as in Local. Remote model catalogs are memory-only and cannot populate
 Local's persisted catalog. Remote files, credentials, history and database remain remote.
 
+### Projects
+
+**Projects** lists the selected machine's projects, kept in that machine's database. Create one,
+open its home, change its name and instructions in **Project settings**, mark it done or delete
+it, and start a session in it, as on Local. A session's menu moves it to another project of the
+same machine or removes it from one. Projects do not span machines: a project on eng-1 holds
+eng-1's sessions only, and its address is `/m/eng-1/projects/<id>`.
+
 ### Images
 
 Use **Attach images**, paste or drop in either composer. The same
@@ -225,9 +233,9 @@ No peer voice settings or transcription endpoints are proxied, and no peer crede
 ## Deliberate limits
 
 - A new remote session starts only in a folder open on the remote or one of its worktrees, with text
-  and/or raster images: no Browse, worktree creation, project or name. No archive/delete/
-  rename/pin, projects management, worktree or machine management. Add, close and reopen folders
-  on the owning Piano.
+  and/or raster images, in a project or none: no Browse, worktree creation or name. No
+  archive/delete/rename/pin of a session, and no worktree or machine management. Add, close and
+  reopen folders on the owning Piano.
 - No remote general files, Changes, managed app previews or account/settings controls
   beyond the model picker's defaults, folder trust included:
   trusting a folder would run its project extensions on the remote. These requests are not

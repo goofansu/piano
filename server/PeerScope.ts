@@ -4,9 +4,10 @@
  * the delivery sequence: the gateway in front stays a pipe that never injects or renumbers frames.
  *
  * The slice lists registered sessions, opens them, starts a session in an open folder or one of
- * its worktrees, sends text/prepared raster images, answers dialogs and stops. Files, worktree creation,
- * projects and settings (trust included: trusting a folder runs its project extensions here) are
- * not offered.
+ * its worktrees, sends text/prepared raster images, answers dialogs and stops. It also manages this
+ * machine's projects: create, rename, instruct, mark done, delete, and file a listed session in
+ * one. Files, worktree creation and settings (trust included: trusting a folder runs its project
+ * extensions here) are not offered.
  */
 import { type ClientMessage, sameSession } from "../shared/wire.ts";
 import type { Selection } from "./ClientSessions.ts";
@@ -68,12 +69,13 @@ function actionAllowed({ action, start }: Act): boolean {
 }
 
 /**
- * A new session starts where it is asked, as this machine's own browser would start it, but adds
- * nothing else here: no worktree, project membership, name, ancestry or inline attachments.
+ * A new session starts where it is asked, as this machine's own browser would start it, joining
+ * the project it names (the registry refuses one it does not hold), but adds nothing else here:
+ * no worktree, name, ancestry, inherited membership (dispatch's, which has a parent) or inline
+ * attachments.
  */
-function creationAllowed({ projectId, inheritProject, worktree, attachments, options }: Create) {
+function creationAllowed({ inheritProject, worktree, attachments, options }: Create) {
   return (
-    projectId === undefined &&
     !inheritProject &&
     worktree === undefined &&
     !attachments?.length &&
@@ -108,6 +110,18 @@ export function peerVerdict(
         : request.sessionId !== null && listed(data, request.cwd, request.sessionId)
           ? "admit"
           : "refuse";
+    // This machine's projects, which the registry checks as it does for its own browser: an
+    // unknown project is refused there. Membership changes only for a session listed here.
+    case "update_project":
+    case "delete_project":
+    case "set_project_done":
+      return "admit";
+    case "save_project":
+      return !request.assign || listed(data, request.assign.cwd, request.assign.sessionId)
+        ? "admit"
+        : "refuse";
+    case "assign_project":
+      return listed(data, request.cwd, request.sessionId) ? "admit" : "refuse";
     case "create_session":
       return openDirectory(data, request.cwd) && creationAllowed(request) ? "admit" : "refuse";
     case "act":

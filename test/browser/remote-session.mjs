@@ -126,7 +126,6 @@ const unsupported = async (page) => {
     .map(e => e.getAttribute('aria-label') ?? e.textContent.trim())`);
   for (const label of [
     "Add folder",
-    "Projects",
     "Settings",
     "Files",
     "Search files",
@@ -139,12 +138,11 @@ const unsupported = async (page) => {
 // The remote New page starts only in the remote's registered directories, changing nothing else there.
 const remoteNewPage = async (page) => {
   await page.until(`!!document.querySelector('[aria-label="First message"]')`);
-  for (const label of ["Directory trust", "Project"])
-    assert.equal(
-      await page.evaluate(`!!document.querySelector('[aria-label="${label}"]')`),
-      false,
-      `remote New page has no ${label} control`,
-    );
+  assert.equal(
+    await page.evaluate(`!!document.querySelector('[aria-label="Directory trust"]')`),
+    false,
+    "remote New page has no Directory trust control",
+  );
   await page.ab("click", '[aria-label="Directory"]');
   await page.until(`!!document.querySelector('[aria-label="Choose a directory"]')`);
   const choices = await page.evaluate(
@@ -729,7 +727,7 @@ await run(
         );
         assert.equal(creations.length, 1, "one creation request");
         assert.equal(creations[0].message.cwd, cwd);
-        assert.equal(creations[0].message.projectId, undefined, "no project on the remote");
+        assert.equal(creations[0].message.projectId, undefined, "no project chosen");
         assert.deepEqual(
           page.remote.prompts(),
           [echo, "question", "stream", "queued image", "", created],
@@ -848,6 +846,69 @@ await run(
           [],
           "remote UI calls only named main voice utilities, never Local session/file endpoints or socket",
         );
+        // The peer's projects are its own: created and filled from here, kept in its database.
+        await page.open("/m/eng-1/projects");
+        await page.see("No projects yet");
+        await page.click("button", "New project");
+        await page.ab("find", "label", "Name", "fill", "Peer project");
+        await page.click("button", "Create project");
+        await page.see("Project created");
+        await page.until(`/^\\/m\\/eng-1\\/projects\\/[^/]+$/.test(location.pathname)`);
+        const projectId = decodeURIComponent(
+          (await page.evaluate(`location.pathname`)).split("/").at(-1),
+        );
+        await page.capture("9f-remote-project-home");
+        // An empty project has no member's folder to start in: choose one of the peer's.
+        await page.ab("click", '[aria-label="Directory"]');
+        await page.until(`!!document.querySelector('[aria-label="Choose a directory"]')`);
+        await page.ab("find", "role", "option", "click", "--name", "repo");
+        await page.until(`!document.querySelector('[aria-label="Choose a directory"]')`);
+        await ready(page);
+        await page.ab("fill", '[aria-label="First message"]', "PROJECT-ONCE");
+        await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
+        await page.click("button", "Send");
+        await page.see("echo: PROJECT-ONCE");
+        // Its menu changes its project; its own life stays with the peer's Piano.
+        await page.click("button", "Session information and actions");
+        await page.until(`!!document.querySelector('[role="menu"]')`);
+        const actions = await page.evaluate(
+          `[...document.querySelectorAll('[role="menu"] [role^="menuitem"]')].map(e => e.getAttribute('aria-label') ?? e.textContent.trim())`,
+        );
+        assert.ok(actions.includes("Move to project"), JSON.stringify(actions));
+        for (const label of ["Rename", "Pin", "Share", "Archive", "Delete"])
+          assert.ok(!actions.includes(label), `remote session menu does not offer ${label}`);
+        await page.capture("9g-remote-session-menu");
+        await page.press("Escape");
+        await page.until(`!document.querySelector('[role="menu"]')`);
+        // The session header names the project the session joined, and leads back to it.
+        await page.click("button", "Project: Peer project");
+        await page.until(`location.pathname === '/m/eng-1/projects/${projectId}'`);
+        await page.see("PROJECT-ONCE");
+        await page.capture("9h-remote-project-session");
+        const joined = frames.filter(
+          ({ direction, message }) =>
+            direction === "sent" &&
+            message._tag === "create_session" &&
+            message.projectId === projectId,
+        );
+        assert.equal(joined.length, 1, "one session started in the peer's project");
+        assert.ok(
+          frames.some(
+            ({ direction, message }) =>
+              direction === "received" &&
+              message._tag === "registry" &&
+              message.projects?.some((p) => p.id === projectId && p.name === "Peer project") &&
+              message.sessionReferences?.filter((s) => s.projectId === projectId).length === 1,
+          ),
+          "the peer lists the project with its one session",
+        );
+        assert.deepEqual(page.prompts(), [], "local Pi receives no project session");
+        onRemote = false;
+        await machine(page, "Local");
+        await page.click("button", "Projects");
+        await page.see("No projects yet");
+        await page.capture("9i-local-has-no-peer-project");
+        onRemote = true;
         await page.open("/m/not-configured/s/same-session");
         await page.see("Machine unavailable");
         assert.equal(

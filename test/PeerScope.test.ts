@@ -263,7 +263,6 @@ test(
         for (const [selectionId, create] of Object.entries({
           unregistered: { ...base, cwd: "/different" },
           worktree: { ...base, worktree: { branch: "feature" } },
-          project: { ...base, projectId: "some-project" },
           inherited: { ...base, inheritProject: true },
           named: { ...base, options: { name: "Named" } },
           dispatched: { ...base, options: { dispatchedFrom: identity.sessionId } },
@@ -416,6 +415,126 @@ test(
         );
       },
     );
+
+    await t.test("this machine's projects are managed from another machine", async () => {
+      type Listing = {
+        projects: { id: string; name: string; instructions?: string; doneAt?: string }[];
+        sessionReferences: { sessionId: string; projectId?: string }[];
+      };
+      const listed = { cwd: identity.cwd, sessionId: identity.sessionId };
+      /** Send a change, then the toast that confirms it and the sidebar that shows it. */
+      const change = async (message: object, shown: (listing: Listing) => boolean) => {
+        const from = peer.frames.length;
+        peer.ws.send(JSON.stringify(message));
+        const answer = await peer.next(
+          (frame) => frame._tag === "toast" || frame._tag === "error",
+          from,
+        );
+        await peer.next(
+          (frame) => frame._tag === "registry" && shown(frame as unknown as Listing),
+          from,
+        );
+        return String(answer.message);
+      };
+      const project = (listing: Listing) => listing.projects.find((p) => p.id === "p-peer");
+      const member = (listing: Listing, sessionId: string) =>
+        listing.sessionReferences.find((s) => s.sessionId === sessionId)?.projectId;
+
+      assert.equal(
+        await change(
+          {
+            _tag: "save_project",
+            project: { id: "p-peer", name: "Peer project", instructions: "Be brief." },
+            assign: listed,
+          },
+          (listing) =>
+            project(listing)?.instructions === "Be brief." &&
+            member(listing, identity.sessionId) === "p-peer",
+        ),
+        "Project created",
+      );
+      assert.equal(
+        await change(
+          { _tag: "update_project", id: "p-peer", name: "Renamed" },
+          (listing) => project(listing)?.name === "Renamed",
+        ),
+        "Project saved",
+      );
+      assert.equal(
+        await change(
+          { _tag: "assign_project", ...listed, projectId: null },
+          (listing) => member(listing, identity.sessionId) === undefined,
+        ),
+        "Session removed from project",
+      );
+      assert.equal(
+        await change(
+          { _tag: "assign_project", ...listed, projectId: "p-peer" },
+          (listing) => member(listing, identity.sessionId) === "p-peer",
+        ),
+        "Session moved to Renamed",
+      );
+      assert.equal(
+        await change(
+          { _tag: "set_project_done", id: "p-peer", done: true },
+          (listing) => project(listing)?.doneAt !== undefined,
+        ),
+        "Project marked done",
+      );
+
+      // A new session joins the project it names, as one started on this machine does.
+      const from = peer.frames.length;
+      peer.ws.send(
+        JSON.stringify({
+          _tag: "create_session",
+          selectionId: "in-project",
+          cwd: f.checkout,
+          projectId: "p-peer",
+          options: {},
+          text: "Reply with exactly: X",
+        }),
+      );
+      const selected = await peer.next(
+        (frame) =>
+          (frame._tag === "selected" || frame._tag === "selection_rejected") &&
+          frame.selectionId === "in-project",
+        from,
+      );
+      assert.equal(selected._tag, "selected", JSON.stringify(selected));
+      await peer.next(
+        (frame) =>
+          frame._tag === "registry" &&
+          member(frame as unknown as Listing, String(selected.sessionId)) === "p-peer",
+        from,
+      );
+
+      // Membership changes only for a session listed here; nothing is created on the way.
+      for (const refused of [
+        { _tag: "assign_project", cwd: "/different", sessionId: "s", projectId: "p-peer" },
+        {
+          _tag: "save_project",
+          project: { id: "p-unlisted", name: "Unlisted" },
+          assign: { cwd: "/different", sessionId: "s" },
+        },
+      ]) {
+        // The session created above may still be reporting; only this request's replies count.
+        const answers = (await peer.answers(refused)).filter(
+          (frame) => frame._tag === "error" || frame._tag === "toast",
+        );
+        assert.equal(answers.length, 1, JSON.stringify(refused));
+        assert.equal(answers[0]?._tag, "error", JSON.stringify(refused));
+        assert.match(String(answers[0]?.message), notAvailable);
+      }
+
+      assert.equal(
+        await change(
+          { _tag: "delete_project", id: "p-peer" },
+          (listing) =>
+            listing.projects.length === 0 && member(listing, identity.sessionId) === undefined,
+        ),
+        "Project deleted",
+      );
+    });
 
     // After the creation above: closing its folder here is what this subtest needs.
     await t.test("a folder closed here cannot be reopened by a peer's new session", async () => {

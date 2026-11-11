@@ -13,6 +13,7 @@ import type { RegistryData } from "../server/Registry.ts";
 import { isLocalId, type Machine } from "../shared/machine.ts";
 import type { Attachment, ClientMessage, Dialog, ModelCatalog } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
+import { answerForm } from "../web/src/lib/commandForms.ts";
 import {
   messageCommand,
   newSessionCommand,
@@ -25,6 +26,11 @@ import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { draftMessage, EMPTY_DRAFT } from "../web/src/lib/messageDraft.ts";
 import { emptyChoice, type ModelTarget, modelChoice } from "../web/src/lib/modelChoice.ts";
 import { createDialogAnswer } from "../web/src/lib/piDialogs.ts";
+import {
+  assignProjectCommand,
+  newProjectCommand,
+  projectCommands,
+} from "../web/src/lib/projectCommands.ts";
 import { preparedImageCommand } from "../web/src/lib/remoteImages.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
@@ -185,13 +191,36 @@ function browserSends(machine: Machine): ClientMessage[] {
   const trust = trustCommand(client.getState(), CWD);
   if (trust && offers.command(trust) && trust.intent.kind === "send") send(trust.intent.command);
 
-  // The New page's first message, joining the page's project only where projects are offered
-  // (NewSessionComposer), with the picker's start options for the directory.
+  // A project's menu, the session's place in one, and the New project dialog filing the session
+  // in the project it creates: each only where the command runs.
+  const listed = { cwd: CWD, sessionId: SESSION };
+  const project = { id: "p1", name: "Launch" };
+  const state = client.getState();
+  const creation = newProjectCommand(state, { assign: listed });
+  for (const command of [
+    ...projectCommands(state, project),
+    assignProjectCommand(state, listed, project.id),
+    assignProjectCommand(state, listed, null),
+    creation,
+  ]) {
+    if (!offers.command(command)) continue;
+    if (command.intent.kind === "send") send(command.intent.command);
+    if (command.intent.kind === "project-dialog") {
+      const answer = answerForm(
+        state,
+        { kind: "project", dialog: command.intent.dialog },
+        { name: "Next", instructions: "" },
+      );
+      if (answer.allowed && answer.command) send(answer.command);
+    }
+  }
+
+  // The New page's first message, joining the page's project (NewSessionComposer), with the
+  // picker's start options for the directory.
   const fresh: ModelTarget = { kind: "new", cwd: CWD };
-  const projectId = offers.projects ? "p1" : undefined;
   send(
     newSessionCommand(
-      { cwd: CWD, projectId },
+      { cwd: CWD, projectId: project.id },
       message,
       modelChoice(emptyChoice(fresh), catalog, fresh).start,
     ),
@@ -248,6 +277,9 @@ test("every message the browser builds for a remote is one the remote admits", (
     "act:set_thinking_level",
     "act:answer",
     "act:abort",
+    "set_project_done",
+    "assign_project",
+    "save_project",
     "create_session",
   ])
     assert.ok(kinds(sent).includes(kind), `the journey sends ${kind}`);
@@ -268,6 +300,6 @@ test("what Local adds to the same journey, the remote refuses", () => {
     "trusting a folder runs its extensions there",
   );
   const create = refused.find((m) => m._tag === "create_session");
-  assert.ok(create, "a first message joining a project, with an attached image");
+  assert.ok(create, "a first message with an attached image");
   for (const m of refused) assert.notEqual(m._tag, "select", "opening a session is the slice");
 });

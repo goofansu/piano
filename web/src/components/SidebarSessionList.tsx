@@ -19,7 +19,6 @@ import { sessionProjectMenu } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import { sessionRowMenu } from "@/lib/sessionCommands";
 import type { SessionRowDetails } from "@/lib/sidebarList";
-import { useOffers } from "@/lib/useMachine";
 import { useSidebarWindow } from "@/lib/useSidebarWindow";
 import { sessionKey } from "@/store";
 
@@ -98,7 +97,6 @@ const SessionRow = memo(
     count: number;
     onMenuChange: (key: string, open: boolean) => void;
   } & Pick<Navigation, "select">) {
-    const offers = useOffers();
     const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
     const { selected, disabled, hint, activity } = t;
     // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
@@ -162,28 +160,26 @@ const SessionRow = memo(
           ) : null}
           {hint && <span className="sr-only">{hint}</span>}
         </button>
-        {offers.sessionManagement && (
-          <RowActions className={cn("inset-y-0 right-1", !disabled && "max-md:hidden")}>
-            <DropdownMenu
-              onOpenChange={(open) => {
-                if (open) onMenuChange(sessionKey(t), true);
-              }}
+        <RowActions className={cn("inset-y-0 right-1", !disabled && "max-md:hidden")}>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              if (open) onMenuChange(sessionKey(t), true);
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="row" aria-label={`Session menu for ${t.label}`}>
+                <MoreHorizontalIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              // Keep the anchor through Radix's close/focus-restore lifecycle, not just open=false.
+              onCloseAutoFocus={() => onMenuChange(sessionKey(t), false)}
             >
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="row" aria-label={`Session menu for ${t.label}`}>
-                  <MoreHorizontalIcon />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                // Keep the anchor through Radix's close/focus-restore lifecycle, not just open=false.
-                onCloseAutoFocus={() => onMenuChange(sessionKey(t), false)}
-              >
-                <SessionMenu target={target} />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </RowActions>
-        )}
+              <SessionMenu target={target} />
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </RowActions>
       </li>
     );
   },

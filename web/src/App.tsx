@@ -130,23 +130,12 @@ function MachineApp() {
                   <>
                     {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
                     <LayoutView key={state.view.kind} active={!offers.settings || !settings}>
-                      {!offers.view(state.view.kind) ? (
-                        <PaneNotFound
-                          title={
-                            state.view.kind === "missing-session"
-                              ? "Session not found"
-                              : "Select a session"
-                          }
-                          description=""
-                        />
-                      ) : state.view.kind === "new" ? (
+                      {state.view.kind === "new" ? (
                         <NewSession
                           state={state}
                           client={client}
                           chooseDirectory={chooseDirectory}
-                          onProjectChange={
-                            offers.projects ? (id) => openNew(undefined, id) : undefined
-                          }
+                          onProjectChange={(id) => openNew(undefined, id)}
                         />
                       ) : state.view.kind === "projects" ? (
                         <ProjectsIndex state={state} />

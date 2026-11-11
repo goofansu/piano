@@ -65,7 +65,7 @@ interface Props {
   client: WorktreeClient;
   /** Picks the directory the session will run in; the page shows the store's `view.cwd`. */
   chooseDirectory: (cwd: string) => void;
-  /** Absent on a remote machine, whose projects stay its own. */
+  /** Absent on a project's home, which is the project. */
   onProjectChange?: (projectId?: string) => void;
 }
 
@@ -106,7 +106,7 @@ export function NewSession({ state, client, chooseDirectory, onProjectChange }: 
  * directory's trust, which project it joins (only where `onProjectChange` lets the page change it),
  * and the first message. The first prompt creates the session in the chosen directory with the
  * chosen model and effort. On a remote machine the directory is one the remote registered: there is
- * no browsing, worktree creation, trust or project choice, which would change the remote.
+ * no browsing, worktree creation or trust, which would change more than its projects.
  */
 export function NewSessionComposer({
   state,
@@ -127,7 +127,7 @@ export function NewSessionComposer({
   // project's New page starts without one, and its home in its most recent member's folder.
   const page = startPage(state.view);
   const cwd = page?.cwd ?? "";
-  const projectId = offers.projects ? page?.projectId : undefined;
+  const projectId = page?.projectId;
   const editor = useDraftEditor(NEW_SESSION_DRAFT);
   const imageSend = useImageSend(editor, client.captureSend, { cwd }, state.selectionId);
   const [pickerOpen, setPickerOpen] = useState(false);

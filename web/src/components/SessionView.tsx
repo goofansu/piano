@@ -12,7 +12,6 @@ import { Composer } from "@/components/Composer";
 import { InlineQuestion } from "@/components/InlineQuestion";
 import { LocalFileContext } from "@/components/Markdown";
 import { MessageList, SessionDestinationContext } from "@/components/MessageList";
-import { PaneHeader } from "@/components/Pane";
 import {
   PianoStripBar,
   PianoStripTab,
@@ -160,16 +159,7 @@ export function SessionView({ state, send, captureSend }: Props) {
 
   return (
     <TranscriptViewportContext value={viewport}>
-      {offers.sessionManagement ? (
-        <SessionHeader state={state} status={status} pullRequest={pullRequest} />
-      ) : (
-        <PaneHeader>
-          <h1 className="min-w-0 truncate text-sm font-medium">{context.title}</h1>
-          <span className="sr-only" role="status">
-            {status}
-          </span>
-        </PaneHeader>
-      )}
+      <SessionHeader state={state} status={status} pullRequest={pullRequest} />
       {areaTabs && <AreaTabs />}
       <div
         ref={areas}

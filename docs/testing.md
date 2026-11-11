@@ -135,7 +135,8 @@ tests are only the critical paths, which must keep working on every change and r
   workspace/session identities; list existing sessions, continue each, switch/back/forward with
   isolated drafts/catalogs, answer a dialog, disconnect/reconnect/reload without replay, and Stop
   on the same remote generation/PID. One unavailable peer cannot stop the other's stream or
-  redirect input. Local receives no remote prompt or HTTP/socket request. The harness's optional
+  redirect input. Local receives no remote prompt or HTTP/socket request. A project created on a
+  peer takes a session there, and Local does not list it. The harness's optional
   `peers` fixtures each own separate database/history/audit; `remote` is the one-peer shorthand.
 
 `npm run test:browser` runs these and the transcript-row alignment check against scratch registries, Pi history and
