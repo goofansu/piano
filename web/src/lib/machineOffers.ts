@@ -11,8 +11,6 @@ import type { Command } from "./commands.ts";
 import { isLocalId, type Machine } from "./machine.ts";
 
 export interface MachineOffers {
-  /** Images attached to a message: the attach button, paste and drop, and sent images shown. */
-  attachments: boolean;
   /** The selected session's preview, observed for its commands. */
   previews: boolean;
   /** Provider accounts, followed for the commands that need a sign-in. */
@@ -30,7 +28,6 @@ export interface MachineOffers {
 }
 
 const LOCAL_OFFERS: MachineOffers = {
-  attachments: true,
   previews: true,
   providerAccounts: true,
   worktrees: true,
@@ -55,7 +52,6 @@ const SENT_CHANGES: ReadonlySet<string> = new Set([
 ]);
 
 const REMOTE_OFFERS: MachineOffers = {
-  attachments: true,
   previews: false,
   providerAccounts: false,
   worktrees: false,
