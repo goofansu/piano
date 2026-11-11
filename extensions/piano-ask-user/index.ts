@@ -30,9 +30,7 @@ export default function pianoAskUser(pi: ExtensionAPI) {
         // The same rule Piano reads the call's records by, so a batch it accepts is one Piano tracks.
         if (!questions.length) throw new Error("At least one question is required.");
         if (!askUserQuestions({ questions }))
-          throw new Error(
-            "Question IDs and questions must not be blank; IDs must be unique and choices must be unique within each question.",
-          );
+          throw new Error("Question IDs and questions must not be blank, and IDs must be unique.");
         if (questions.some(({ options }) => options?.some((option) => !option.trim())))
           throw new Error("Choices must not be blank.");
         if (!ctx.hasUI) throw new Error("ask_user requires an interactive UI.");

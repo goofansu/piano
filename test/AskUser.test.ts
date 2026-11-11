@@ -142,72 +142,7 @@ test("a choice question is asked as a select of its choices, read from raw argum
   );
 });
 
-test("ask_user's registered parameters omit uniqueItems from the model-facing schema", () => {
-  assert.doesNotMatch(JSON.stringify(tool().parameters), /"uniqueItems"\s*:/);
-});
-
-test("ask_user rejects duplicate choices after Pi coercion, before opening any batch dialog", async () => {
-  const ask = tool();
-  let opened = 0;
-  const dialog = async () => {
-    opened++;
-    return "Yes";
-  };
-  const ctx = {
-    hasUI: true,
-    ui: { editor: dialog, select: dialog },
-  } as unknown as ExtensionToolContext;
-  for (const options of [
-    ["Yes", "Yes"],
-    [8080, "8080"],
-    [false, "false"],
-  ]) {
-    const raw = { questions: [question, { id: "choice", question: "Choose", options }] };
-    // The portable schema accepts these; local validation owns choice uniqueness.
-    const converted = validateToolArguments(ask, {
-      type: "toolCall",
-      id: "duplicates",
-      name: ask.name,
-      arguments: raw,
-    });
-    assert.equal(askUserQuestions(raw), undefined, "raw records must use coerced choice equality");
-    assert.equal(askUserQuestions(converted), undefined);
-    await assert.rejects(
-      ask.execute("duplicates", converted, undefined, undefined, ctx),
-      /choices.*unique/i,
-    );
-  }
-  assert.equal(opened, 0, "a duplicate in a later question must reject the entire batch");
-});
-
-test("ask_user keeps exact choice equality within each question", async () => {
-  const questions = ["first", "second"].map((id) => ({
-    id,
-    question: "Choose",
-    options: ["Yes", "yes", " Yes"],
-  }));
-  assert.deepEqual(askUserQuestions({ questions }), questions);
-  const seen: string[][] = [];
-  const result = await tool().execute("distinct", { questions }, undefined, undefined, {
-    hasUI: true,
-    ui: {
-      select: async (_title: string, options: string[]) => {
-        seen.push(options);
-        return options[2];
-      },
-    },
-  } as unknown as ExtensionToolContext);
-  assert.deepEqual(seen, [
-    ["Yes", "yes", " Yes"],
-    ["Yes", "yes", " Yes"],
-  ]);
-  assert.deepEqual(result.details, {
-    status: "answered",
-    answers: { first: " Yes", second: " Yes" },
-  });
-});
-
-test("Piano reads schema-valid questions with the arguments Pi passes the tool", () => {
+test("Piano reads a call's questions only when Pi accepts the call, with the arguments Pi passes the tool", () => {
   const ask = tool();
   const piReads = (args: JsonObject) => {
     try {
@@ -229,6 +164,7 @@ test("Piano reads schema-valid questions with the arguments Pi passes the tool",
     { questions: [{ ...question, multiline: true }] },
     { questions: [question], extra: 1 },
     { questions: [{ ...question, options: [] }] },
+    { questions: [{ ...question, options: ["Yes", "Yes"] }] },
     { questions: [{ ...question, options: [""] }] },
     { questions: [{ ...question, options: [{ label: "Yes" }] }] },
     { questions: [{ question: "No ID" }] },
