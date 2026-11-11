@@ -188,6 +188,12 @@ it, and start a session in it, as on Local. A session's menu moves it to another
 same machine or removes it from one. Projects do not span machines: a project on eng-1 holds
 eng-1's sessions only, and its address is `/m/eng-1/projects/<id>`.
 
+### Artifacts and pull request
+
+A remote session's header lists the artifacts it published, and on a phone its menu links to its
+saved pull request. Both open in a new browser tab. Changes, where a pull request's state is read,
+stays on the remote's own Piano.
+
 ### Images
 
 Use **Attach images**, paste or drop in either composer. The same

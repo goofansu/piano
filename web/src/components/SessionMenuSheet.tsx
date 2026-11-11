@@ -212,11 +212,9 @@ export function SessionMenuSheet({
   const { state } = useCommands();
   const { commands, run } = useSessionCommands();
   const { pullRequest } = sessionContext(state);
-  // Where the pull request and the preview are not offered, the sheet is the session's actions alone.
+  // The saved link opens GitHub from any machine; the app is shown only where previews are offered.
   const offers = useOffers();
-  const pr = offers.pullRequests
-    ? pullRequestView({ link: pullRequest ?? null, pullRequest: null })
-    : undefined;
+  const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const seen = useSeenPreview(state);
   const preview = offers.previews ? seen : undefined;
   const openPreview = useOpenPreview();

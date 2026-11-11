@@ -38,7 +38,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext, sessionPlace } from "@/lib/sessionContext";
-import { useOffers } from "@/lib/useMachine";
 import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
@@ -57,8 +56,6 @@ export function SessionHeader({
   pullRequest: PullRequestControl;
 }) {
   const openPreview = useOpenPreview();
-  // A remote's outputs stay on its own Piano, with its files.
-  const offers = useOffers();
   const narrowViewport = useNarrowViewport();
   // Menu kind/context follow area capacity, plus the narrow-viewport startup/hidden fallback.
   // Placement follows viewport alone; the breadcrumb follows CSS md. Keep these separate.
@@ -221,7 +218,7 @@ export function SessionHeader({
               </CommandLink>
             </IconButton>
           )}
-          {offers.files && <ArtifactsMenu state={state} />}
+          <ArtifactsMenu state={state} />
           <ChangesToggle />
           <SessionRailToggle />
           {narrowViewport && sessionMenu}

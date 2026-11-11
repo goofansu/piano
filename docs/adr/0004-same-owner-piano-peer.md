@@ -97,6 +97,9 @@ machines' projects with the same name are unrelated (INV-01/07).
   prompts to those sessions from main.
 - A session's own life (rename, pin, share, archive, delete) stays with the peer's Piano. Session
   menus on a remote hold the project rows and this browser's display choices only.
+- The session header is Local's. Its Artifacts menu and the phone sheet's Pull request row are
+  links out of Piano to URLs the peer already sent with the session and its list; they add no
+  request to the peer. The app preview, which needs the peer's status read and Stop, stays out.
 
 ## Raster images: separate preparation, unchanged conversation ownership
 
