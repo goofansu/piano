@@ -647,6 +647,62 @@ test("INV-01/12: edits keep Pi's other keys and the Authorization value on the m
   );
 });
 
+test("INV-01/12: an edit keeps a saved sign-in across a switch of authentication, and drops it with a change of name or endpoint", async () => {
+  await fixture((setup, directory, url) =>
+    Effect.gen(function* () {
+      const file = join(directory, "mcp.json");
+      const store = credentialStore(directory);
+      const signIn = (name: string, endpoint: string) =>
+        store.forServer(name, endpoint).save({
+          serverUrl: endpoint,
+          tokens: { access_token: "synthetic", refresh_token: "synthetic-r", token_type: "Bearer" },
+        });
+      save(file, { mcpServers: { docs: { url } } });
+      signIn("docs", url);
+
+      // Switched to a header in Piano, under the same name and endpoint: the sign-in stays.
+      const signedIn = (yield* server(setup, "docs"))!;
+      assert.equal(signedIn.signedIn, true);
+      yield* setup.change({
+        action: "update",
+        name: "docs",
+        removalKey: signedIn.removalKey,
+        config: { url, headers: {}, authorization: "Bearer header-token" },
+      });
+      assert.deepEqual(json(file).mcpServers.docs, {
+        url,
+        headers: { Authorization: "Bearer header-token" },
+      });
+      assert.ok(store.tokens("docs", url), "a switch of authentication keeps the sign-in");
+
+      // Renamed while on the header: nothing could find the old sign-in again.
+      const header = (yield* server(setup, "docs"))!;
+      yield* setup.change({
+        action: "update",
+        name: "docs",
+        removalKey: header.removalKey,
+        rename: "handbook",
+        config: { url, headers: {} },
+      });
+      assert.ok(json(file).mcpServers.handbook);
+      assert.equal(store.tokens("docs", url), undefined, "a rename drops the old sign-in");
+
+      // Pointed at another endpoint: the old endpoint's sign-in goes too.
+      signIn("handbook", url);
+      const handbook = (yield* server(setup, "handbook"))!;
+      const keyed = url.replace(/\/mcp$/, "/keyed");
+      yield* setup.change({
+        action: "update",
+        name: "handbook",
+        removalKey: handbook.removalKey,
+        config: { url: keyed, headers: {} },
+      });
+      assert.equal(json(file).mcpServers.handbook.url, keyed);
+      assert.equal(store.tokens("handbook", url), undefined, "a new endpoint drops the sign-in");
+    }),
+  );
+});
+
 test("INV-01/12: a server the user configured at the catalog endpoint is the catalog's; a taken default name and Pi's MCP switch refuse to connect", async () => {
   await fixture((setup, directory, url) =>
     Effect.gen(function* () {
