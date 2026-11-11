@@ -9,7 +9,13 @@
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import { isMachineId } from "../../../shared/machine.ts";
-import { readStorage, writeStorage } from "./storage.ts";
+import {
+  browserPreferenceStorage,
+  createPreference,
+  type Preference,
+  type PreferenceOptions,
+  type PreferenceStorage,
+} from "./preference.ts";
 
 /**
  * Each thing remembered per machine and the store that holds it. What one browser tab is showing
@@ -35,32 +41,86 @@ const FORMER_KEYS = ["piano.catalogs", "piano.lastDir", "piano.surface", "piano.
 export const machineKey = (machineId: string, name: MachineMemoryName) =>
   `${PREFIX}${machineId}.${name}`;
 
-/** A string store, behind a seam so the rule runs in Node. */
+/**
+ * A string store, behind a seam so the rules run in Node. Any call may throw; `machineMemory`
+ * guards each one. `remove` and `onChange` are optional so a test can pass only what it reads.
+ */
 export interface TextStorage {
   read: (key: string) => string | null;
   write: (key: string, value: string) => void;
+  remove?: (key: string) => void;
+  /** Another tab changed `key`, or cleared the store (`null`); returns the unsubscribe function. */
+  onChange?: PreferenceStorage["onChange"];
 }
-/** This tab's sessionStorage, which can be missing or blocked: a read falls back, a write is best effort. */
-const tabText: TextStorage = {
-  read: (key) => {
-    try {
-      return sessionStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  write: (key, value) => {
-    try {
-      sessionStorage.setItem(key, value);
-    } catch {
-      /* storage unavailable: remembered for this page only */
-    }
-  },
-};
+
+/**
+ * This browser's two stores. Globals are read only when called, so this module loads in Node.
+ * Tabs share localStorage and hear each other's writes; each tab has its own sessionStorage.
+ */
 const browserText: Record<StoreKind, TextStorage> = {
-  local: { read: readStorage, write: writeStorage },
-  session: tabText,
+  local: { ...browserPreferenceStorage, remove: (key) => localStorage.removeItem(key) },
+  session: {
+    read: (key) => sessionStorage.getItem(key),
+    write: (key, value) => sessionStorage.setItem(key, value),
+    remove: (key) => sessionStorage.removeItem(key),
+  },
 };
+
+/** One thing remembered for one machine, read and written as text. */
+export interface MachineMemory {
+  /** `null` when nothing is stored, or the store cannot be read. */
+  read: () => string | null;
+  /** Best effort: a store that is missing or blocked keeps nothing. */
+  write: (value: string) => void;
+  remove: () => void;
+  /** The same memory as a page-wide `Preference`, kept in step with other tabs where they share it. */
+  preference: <T>(options: Omit<PreferenceOptions<T>, "key" | "storage">) => Preference<T>;
+}
+
+/**
+ * `name` for `machineId`, in the store `MACHINE_MEMORY` places it: the only place a machine's
+ * memory picks its store, so what is written is what the sweep keeps. Readers encode and decode.
+ */
+export function machineMemory(
+  machineId: string,
+  name: MachineMemoryName,
+  storage: TextStorage = browserText[MACHINE_MEMORY[name]],
+): MachineMemory {
+  const key = machineKey(machineId, name);
+  return {
+    read: () => {
+      try {
+        return storage.read(key);
+      } catch {
+        return null;
+      }
+    },
+    write: (value) => {
+      try {
+        storage.write(key, value);
+      } catch {
+        /* storage unavailable: remembered for this page only */
+      }
+    },
+    remove: () => {
+      try {
+        storage.remove?.(key);
+      } catch {
+        /* storage unavailable: nothing to remove */
+      }
+    },
+    preference: (options) =>
+      createPreference({
+        ...options,
+        key,
+        storage: {
+          read: (stored) => storage.read(stored),
+          write: (stored, value) => storage.write(stored, value),
+          onChange: (listener) => storage.onChange?.(listener) ?? (() => {}),
+        },
+      }),
+  };
+}
 
 /**
  * Where the user was on a machine, as the path within it (`/s/<id>`, `/projects`), so switching
@@ -68,17 +128,14 @@ const browserText: Record<StoreKind, TextStorage> = {
  * Anything stored that is not such a path reads as none. The page may no longer exist (a session
  * deleted since): it then says so, as any old link does.
  */
-export function machineLocationMemory(
-  machineId: string,
-  storage: TextStorage = browserText[MACHINE_MEMORY.location],
-) {
-  const key = machineKey(machineId, "location");
+export function machineLocationMemory(machineId: string, storage?: TextStorage) {
+  const memory = machineMemory(machineId, "location", storage);
   return {
     read: (): string | undefined => {
-      const path = storage.read(key);
+      const path = memory.read();
       return path && /^\/(?![/\\])/.test(path) && !path.startsWith("/m/") ? path : undefined;
     },
-    write: (path: string) => storage.write(key, path),
+    write: (path: string) => memory.write(path),
   };
 }
 

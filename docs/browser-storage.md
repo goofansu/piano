@@ -40,8 +40,9 @@ a `piano.` name through its options, as `next-themes` is given `piano.theme`.
 ## A machine's memory
 
 `web/src/lib/machineMemory.ts` is the single source of truth: `MACHINE_MEMORY` lists each name
-with its store, and `machineKey` builds the key. Local is the machine `local`, with the same keys
-as any other.
+with its store, `machineKey` builds the key, and `machineMemory(machineId, name)` reads, writes and
+removes it in the store the table names. Readers only encode and decode; none picks a store.
+Local is the machine `local`, with the same keys as any other.
 
 | Name | Store | Holds |
 | --- | --- | --- |
@@ -52,10 +53,11 @@ as any other.
 | `location` | `sessionStorage` | The page this tab was on, for the next switch back |
 
 To remember something new for a machine, add its name to `MACHINE_MEMORY` and read and write it
-through `machineKey`. The sweep then covers it: when the server answers the machine list,
-`forgetUnconfiguredMachines` removes, in each store, every key of a machine no longer configured
-and every machine key `MACHINE_MEMORY` does not place in that store. Moving a name to the other
-store or retiring it therefore needs no separate cleanup.
+through `machineMemory` (its `preference` gives a `createPreference` value on the same key). The
+sweep then covers it: when the server answers the machine list, `forgetUnconfiguredMachines`
+removes, in each store, every key of a machine no longer configured and every machine key
+`MACHINE_MEMORY` does not place in that store. Moving a name to the other store or retiring it
+therefore needs no separate cleanup.
 
 The ID is the configured one and the browser's only identity for a machine. A renamed ID starts
 with nothing remembered.
@@ -78,6 +80,7 @@ reads. Keep `piano.theme` identical in that script and in `ThemeProvider`'s `sto
 ## Reading and writing
 
 Storage can be missing or blocked (private windows, embedded webviews, cleared site data). Read
-through a fallback and treat every write as best effort: use `createPreference`, the helpers in
-`web/src/lib/storage.ts`, or a `try`/`catch` of the same shape. Treat a stored value as untrusted
-input and validate it on read, as `machineLocationMemory` accepts only a path within a machine.
+through a fallback and treat every write as best effort: use `createPreference`, `machineMemory`,
+the helpers in `web/src/lib/storage.ts`, or a `try`/`catch` of the same shape. Treat a stored
+value as untrusted input and validate it on read, as `machineLocationMemory` accepts only a path
+within a machine.
