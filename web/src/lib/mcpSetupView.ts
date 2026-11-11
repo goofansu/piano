@@ -75,14 +75,16 @@ export const configValue = (setup: McpServerSetup): string => {
 
 export function mcpServerRow(setup: McpServerSetup): McpServerRow {
   const catalog = catalogServer(setup.catalog);
+  // Only an entry Pi signs in to with MCP OAuth waits for a sign-in here.
+  const oauth = setup.auth.kind === "oauth";
   return {
     setup,
     title: catalog?.name ?? setup.name,
     ...(catalog ? { catalog: catalog.id } : {}),
     value: configValue(setup),
-    ready: !setup.detail && (!setup.oauth || setup.signedIn),
+    ready: !setup.detail && (!oauth || setup.signedIn),
     ...(setup.detail ? { detail: setup.detail } : {}),
-    reconnect: !setup.detail && setup.oauth && !setup.signedIn,
+    reconnect: !setup.detail && oauth && !setup.signedIn,
     editable: !catalog,
     removeVerb: "url" in setup.config ? "Disconnect" : "Delete",
   };

@@ -38,6 +38,19 @@ export const McpCommandConfig = Schema.Struct({
 export const McpServerConfigView = Schema.Union([McpHttpConfig, McpCommandConfig]);
 export type McpServerConfigView = typeof McpServerConfigView.Type;
 
+/**
+ * How Pi authenticates an entry, in Pi's order: a local command needs nothing; a URL server sends
+ * a `/login` provider's token when the entry names one, else its own `Authorization` header, else
+ * signs in with MCP OAuth. Only `oauth` signs in from the MCP page.
+ */
+export const McpAuthView = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("command") }),
+  Schema.Struct({ kind: Schema.Literal("provider"), provider: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("header") }),
+  Schema.Struct({ kind: Schema.Literal("oauth") }),
+]);
+export type McpAuthView = typeof McpAuthView.Type;
+
 /** One entry of Pi's global `mcp.json`: a machine-wide observation, not live session connectivity. */
 export const McpServerSetup = Schema.Struct({
   /** Pi's entry name: the key in `mcpServers` and the namespace of the server's tools. */
@@ -47,9 +60,8 @@ export const McpServerSetup = Schema.Struct({
   config: McpServerConfigView,
   /** A configuration problem the user must fix in Pi, such as the entry being disabled. */
   detail: Schema.optional(Schema.String),
-  /** Whether Pi signs in to this entry with MCP OAuth; false when it sends a configured
-   * Authorization header, and false for a local command, which Pi starts without signing in. */
-  oauth: Schema.Boolean,
+  /** How Pi authenticates this entry, as Pi decides it. */
+  auth: McpAuthView,
   signedIn: Schema.Boolean,
   /** Opaque identity of the configuration reviewed before editing or confirming removal. */
   removalKey: Schema.String,

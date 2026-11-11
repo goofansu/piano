@@ -211,8 +211,8 @@ test("INV-01/11/12: connecting a catalog server saves it only once its sign-in s
       });
       const connected = (yield* linear(setup))!;
       assert.deepEqual(
-        [connected.catalog, connected.oauth, connected.signedIn],
-        ["linear", true, true],
+        [connected.catalog, connected.auth, connected.signedIn],
+        ["linear", { kind: "oauth" }, true],
       );
       assert.deepEqual(available(yield* setup.state), []);
 
@@ -289,8 +289,8 @@ test("INV-01/12: removing clears the endpoint's sign-in after a switch to a head
       });
       const switched = (yield* linear(setup))!;
       assert.deepEqual(
-        [switched.oauth, switched.config],
-        [false, { url, headers: {}, hasAuthorization: true }],
+        [switched.auth, switched.config],
+        [{ kind: "header" }, { url, headers: {}, hasAuthorization: true }],
       );
       assert.ok(
         !JSON.stringify(yield* setup.state).includes("synthetic-header"),
@@ -389,6 +389,11 @@ test("INV-01/12: a URL server authenticated by a /login provider connects with t
       const keyedUrl = url.replace(/\/mcp$/, "/keyed");
       save(file, { mcpServers: { gateway: { url: keyedUrl, auth: { provider: "radius" } } } });
       const gateway = (yield* server(setup, "gateway"))!;
+      // Pi sends the provider's token: the page names it, and never offers a sign-in of its own.
+      assert.deepEqual(
+        [gateway.auth, gateway.signedIn],
+        [{ kind: "provider", provider: "radius" }, false],
+      );
       const edit = {
         action: "update",
         name: "gateway",
@@ -483,8 +488,8 @@ test("INV-01/12: a local command server is saved only once Pi's client has start
 
       const saved = (yield* server(setup, "paper"))!;
       assert.deepEqual(
-        [saved.catalog, saved.oauth, saved.config],
-        [undefined, false, { ...paper, env: {} }],
+        [saved.catalog, saved.auth, saved.config],
+        [undefined, { kind: "command" }, { ...paper, env: {} }],
       );
       assert.match((yield* Effect.flip(setup.signIn.start("paper"))).detail, /does not sign in/);
 
@@ -709,7 +714,10 @@ test("INV-01/12: a server the user configured at the catalog endpoint is the cat
       const file = join(directory, "mcp.json");
       save(file, { mcpServers: { mine: { url } } });
       const mine = (yield* server(setup, "mine"))!;
-      assert.deepEqual([mine.catalog, mine.oauth, mine.signedIn], ["linear", true, false]);
+      assert.deepEqual(
+        [mine.catalog, mine.auth, mine.signedIn],
+        ["linear", { kind: "oauth" }, false],
+      );
       assert.deepEqual(available(yield* setup.state), []);
       const before = readFileSync(file, "utf8");
       const kept = yield* setup.change({ action: "connect", server: "linear" });
