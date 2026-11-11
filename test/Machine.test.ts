@@ -14,6 +14,7 @@ import {
   machineSocketUrl,
   peerApiPath,
 } from "../web/src/lib/machine.ts";
+import { machineLocationMemory } from "../web/src/lib/machineMemory.ts";
 import { createMachineStores } from "../web/src/lib/machineStores.ts";
 import { createDrafts, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { type Catalogs, createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
@@ -22,6 +23,43 @@ import { remoteImageUrl } from "../web/src/lib/remoteImages.ts";
 import { parseRoute, routePath } from "../web/src/lib/routes.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
+
+test("a machine remembers the last page shown on it, however the user then leaves it", () => {
+  const held = new Map<string, string>();
+  const storage = {
+    read: (key: string) => held.get(key) ?? null,
+    write: (key: string, value: string) => void held.set(key, value),
+  };
+  let path = "/m/eng-1/new";
+  let pop = () => {};
+  const address = machineAddress(
+    "eng-1",
+    {
+      location: () => ({ pathname: path, search: "" }),
+      push: (p) => void (path = p),
+      replace: (p) => void (path = p),
+      setTitle: () => {},
+      onPop: (fn) => {
+        pop = fn;
+        return () => {};
+      },
+    },
+    machineLocationMemory("eng-1", storage),
+  );
+  const remembered = () => machineLocationMemory("eng-1", storage).read();
+  address.onPop(() => {});
+  assert.equal(remembered(), "/new", "the page shown when the machine's navigation starts");
+  address.push("/s/x");
+  // Back to Local's page: no switch, and no page left on eng-1 to write on the way out.
+  path = "/s/a";
+  pop();
+  assert.equal(remembered(), "/s/x");
+  path = "/m/eng-1/projects";
+  pop();
+  assert.equal(remembered(), "/projects", "back/forward onto the machine is an arrival too");
+  address.replace("/s/y?tab=1");
+  assert.equal(remembered(), "/s/y", "only the path within the machine");
+});
 
 test("remote thumbnails and full-image links accept only exact peer-owned projection URLs", () => {
   const hash = "a".repeat(64);

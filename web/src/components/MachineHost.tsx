@@ -12,12 +12,6 @@ import { questionReplies } from "@/lib/piDialogs";
 import { MachineContext } from "@/lib/useMachine";
 import { modelCatalogs } from "@/lib/useModelCatalog";
 
-/** Where the user is, remembered for the machine the address names; none names nothing. */
-function rememberLocation() {
-  const { id, pathname } = machineLocation(location.pathname);
-  if (id) machineLocationMemory(id).write(pathname);
-}
-
 /** Drafts and question replies live for this page load; a machine switch disposes its connection, not them. */
 export function MachineHost({ children }: { children: React.ReactNode }) {
   const [id, setId] = useState(() => machineLocation(location.pathname).id);
@@ -43,20 +37,17 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
       .catch(() => {
         if (!controller.signal.aborted) setError(true);
       });
+    // Each machine's navigation remembers the pages shown on it (machineAddress); here only
+    // which machine the address names.
     const pop = () => setId(machineLocation(location.pathname).id);
-    // Leaving the page counts as leaving its machine: the next visit can switch back to here.
-    const leave = () => rememberLocation();
     window.addEventListener("popstate", pop);
-    window.addEventListener("pagehide", leave);
     return () => {
       controller.abort();
       window.removeEventListener("popstate", pop);
-      window.removeEventListener("pagehide", leave);
     };
   }, []);
   const switchMachine = (next: string) => {
     if (next === id || !machines.some((m) => m.id === next)) return;
-    rememberLocation();
     history.pushState(null, "", machinePath(next, machineLocationMemory(next).read() ?? "/new"));
     setId(next);
   };
