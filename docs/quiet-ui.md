@@ -134,7 +134,10 @@ and license attribution, and use `currentColor` to match the UI; see `web/public
 The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the keyboard surface for
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Projects,
 Global commands and Session commands (only with a selected session). Projects lists active projects
-by name and opens their pages; done projects remain reachable through the Projects index. A session's outputs are read in its
+by name and opens their pages; done projects remain reachable through the Projects index. A leading,
+standalone lowercase `!p` scopes results to active project navigation (`!p` browses, `!p launch`
+searches names). The empty input offers a clickable **Projects only !p** footer shortcut; the
+placeholder stays unchanged. A session's outputs are read in its
 session rail, not searched from the palette. A feature that adds an action the sidebar or header offers also adds
 a row in the appropriate command group, named as its button is, including a toggle, whose row
 reads its state ("Hide sidebar" while the sidebar is shown, "Show sidebar" while it is hidden). An
