@@ -31,8 +31,8 @@ turn Piano into a fleet manager.
   that request's ordinary reply in its own delivery sequence. The gateway is a bounded,
   authenticated pipe: it neither filters requests nor injects or renumbers frames, so a refusal
   never has to end the connection. A separate path, not a header, marks the connection: nothing in
-  transit can strip it, and a peer without it fails closed. Folder trust is outside the slice, since
-  it runs project extensions on the peer. Slash commands come from two reads: a running
+  transit can strip it, and a peer without it fails closed. Folder trust is in the slice only for a directory the peer registered
+  (see [Folder trust](#folder-trust-a-registered-directory-only)). Slash commands come from two reads: a running
   session's own read needs no peer mode, because the peer resolves its IDs in its own registry;
   a saved session's folder read goes to the peer's `/api/peer/commands`, which answers only for a
   registered folder, with the path in the POST body. No browser-supplied
@@ -105,6 +105,21 @@ machines' projects with the same name are unrelated (INV-01/07).
 - The session header is Local's. Its Artifacts menu and the phone sheet's Pull request row are
   links out of Piano to URLs the peer already sent with the session and its list; they add no
   request to the peer. The app preview, which needs the peer's status read and Stop, stays out.
+
+## Folder trust: a registered directory only
+
+Pi loads a directory's project extensions and skills only once it is trusted, so trusting one
+runs that directory's code on the peer. The first slice left the decision to the peer's own Piano
+for that reason. It is now offered from main, because the same owner already sends prompts to
+sessions there, and a prompt can run anything the directory holds (INV-11).
+
+- The peer admits the trust decision only for a directory it has registered: a folder, a
+  worktree, or a session's directory. Any other path is refused there, so registering a folder
+  stays the step taken on the peer's own Piano.
+- Pi on the peer owns the decision and its file. The reply is the one the peer's own browser
+  gets: Pi's notice, the directory's trust and its model list, which the decision can change.
+- The New page's trust control and the palette's Trust folder / Untrust folder appear on a remote
+  where Pi says the directory needs the decision, as on Local.
 
 ## Session surfaces: Changes, files and the session rail
 

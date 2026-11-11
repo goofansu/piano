@@ -140,11 +140,6 @@ const unsupported = async (page) => {
 // The remote New page starts only in the remote's registered directories, changing nothing else there.
 const remoteNewPage = async (page) => {
   await page.until(`!!document.querySelector('[aria-label="First message"]')`);
-  assert.equal(
-    await page.evaluate(`!!document.querySelector('[aria-label="Directory trust"]')`),
-    false,
-    "remote New page has no Directory trust control",
-  );
   await page.ab("click", '[aria-label="Directory"]');
   await page.until(`!!document.querySelector('[aria-label="Choose a directory"]')`);
   const choices = await page.evaluate(
@@ -948,6 +943,47 @@ await run(
         await page.click("button", "Projects");
         await page.see("No projects yet");
         await page.capture("9j-local-has-no-peer-project");
+        // A registered folder's trust is the peer's own decision, made from here: the same path
+        // on Local keeps Local's.
+        mkdirSync(join(cwd, ".agents", "skills", "demo"), { recursive: true });
+        writeFileSync(
+          join(cwd, ".agents", "skills", "demo", "SKILL.md"),
+          "---\nname: demo\ndescription: Demo.\n---\n",
+        );
+        const trust = '[aria-label="Directory trust"]';
+        const pressed = (value) =>
+          page.until(
+            `document.querySelector('${trust}')?.getAttribute('aria-pressed') === '${value}' && !document.querySelector('${trust}').disabled`,
+          );
+        const chooseRepo = async () => {
+          await page.ab("click", '[aria-label="Directory"]');
+          await page.until(`!!document.querySelector('[aria-label="Choose a directory"]')`);
+          await page.ab("find", "role", "option", "click", "--name", "repo");
+          await page.until(`!document.querySelector('[aria-label="Choose a directory"]')`);
+        };
+        onRemote = true;
+        await machine(page, "eng-1");
+        await page.click("button", "New session");
+        await page.until(`location.pathname === '/m/eng-1/new'`);
+        await chooseRepo();
+        await pressed(false);
+        await page.ab("click", trust);
+        await pressed(true);
+        await page.capture("9k-remote-folder-trusted");
+        const decisions = frames.filter(
+          ({ direction, message }) => direction === "sent" && message._tag === "set_trust",
+        );
+        assert.deepEqual(
+          decisions.map(({ message }) => [message.path, message.trusted]),
+          [[cwd, true]],
+          "one trust decision, sent to the peer",
+        );
+        onRemote = false;
+        await machine(page, "Local");
+        await page.click("button", "New session");
+        await chooseRepo();
+        await pressed(false);
+        await page.capture("9l-local-folder-still-untrusted");
         onRemote = true;
         await page.open("/m/not-configured/s/same-session");
         await page.see("Machine unavailable");

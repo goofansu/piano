@@ -106,7 +106,7 @@ export function NewSession({ state, client, chooseDirectory, onProjectChange }: 
  * directory's trust, which project it joins (only where `onProjectChange` lets the page change it),
  * and the first message. The first prompt creates the session in the chosen directory with the
  * chosen model and effort. On a remote machine the directory is one the remote registered: there is
- * no browsing, worktree creation or trust, which would change more than its projects.
+ * no browsing or worktree creation, which would change more than its projects and that folder's trust.
  */
 export function NewSessionComposer({
   state,
@@ -134,7 +134,7 @@ export function NewSessionComposer({
 
   const folder = folderFor(state, cwd);
   const place = startPlace(state, cwd, projectId);
-  const trust = offers.trust ? trustCommand(state, cwd) : undefined;
+  const trust = trustCommand(state, cwd);
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
   // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.

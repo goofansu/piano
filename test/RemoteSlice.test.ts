@@ -187,7 +187,7 @@ function browserSends(machine: Machine): ClientMessage[] {
   ])
     reply(createDialogAnswer({ dialog: question, send }));
 
-  // A trust decision, only where the palette runs it.
+  // A trust decision for the registered directory.
   handlers!.onMessage({ _tag: "trust", cwd: CWD, trust: { required: true, trusted: false } });
   const trust = trustCommand(client.getState(), CWD);
   if (trust && offers.command(trust) && trust.intent.kind === "send") send(trust.intent.command);
@@ -299,6 +299,7 @@ test("every message the browser builds for a remote is one the remote admits", (
     "set_project_done",
     "assign_project",
     "save_project",
+    "set_trust",
     "pin_session",
     "rename_session",
     "archive_session",
@@ -318,10 +319,6 @@ test("what Local adds to the same journey, the remote refuses", () => {
     (m) => m._tag === "act" && (m.action._tag === "prompt" || m.action._tag === "steer"),
   );
   assert.equal(prompts.length, 4, "every message with an attached image");
-  assert.ok(
-    refused.some((m) => m._tag === "set_trust"),
-    "trusting a folder runs its extensions there",
-  );
   const create = refused.find((m) => m._tag === "create_session");
   assert.ok(create, "a first message with an attached image");
   for (const m of refused) assert.notEqual(m._tag, "select", "opening a session is the slice");

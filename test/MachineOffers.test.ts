@@ -39,7 +39,7 @@ test("a remote offers the conversation slice, its projects and its sessions' men
   assert.deepEqual(
     surfaces(offers).filter(([, offered]) => offered),
     [["attachments", true]],
-    "previews, accounts, worktrees, browse, trust, folders, settings and last directory stay on the remote",
+    "previews, accounts, worktrees, browse, folders, settings and last directory stay on the remote",
   );
   assert.ok(offers.command(folderCommands(state, folder).create), "New session here");
   for (const command of [
@@ -49,8 +49,8 @@ test("a remote offers the conversation slice, its projects and its sessions' men
     assignProjectCommand(state, session, null),
   ])
     assert.ok(offers.command(command), command.label);
-  // Trusting a folder runs its project extensions on the remote.
-  assert.ok(!offers.command(trustCommand(state, "/repo")!), "folder trust");
+  // A registered folder's trust is decided from here; the remote refuses any other directory.
+  assert.ok(offers.command(trustCommand(state, "/repo")!), "folder trust");
   assert.ok(!offers.command(folderCommands(state, folder).close), "Close folder");
   // A session's own life is managed from here too, except sharing, which publishes through the
   // remote's Radius sign-in.
