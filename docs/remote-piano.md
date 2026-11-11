@@ -188,6 +188,13 @@ it, and start a session in it, as on Local. A session's menu moves it to another
 same machine or removes it from one. Projects do not span machines: a project on eng-1 holds
 eng-1's sessions only, and its address is `/m/eng-1/projects/<id>`.
 
+### Folder trust
+
+Where a remote folder holds project extensions or skills Pi loads only when trusted, the New
+page shows the same **Trust folder** control as Local, and Cmd+K lists it. Trusting it lets that
+folder's extensions run on the remote for sessions started there. Only folders and worktrees the
+remote already registered can be trusted from here.
+
 ### Changes, files and the session rail
 
 A remote session has the same session rail, **Changes** and file tabs as a Local one. Git and
@@ -261,8 +268,7 @@ No peer voice settings or transcription endpoints are proxied, and no peer crede
   of a session, and no worktree or machine management. Add, close and reopen folders on the
   owning Piano.
 - No remote managed app previews, session sharing or account/settings controls beyond the model
-  picker's defaults, folder trust included: trusting a folder would run its project extensions
-  on the remote. These requests are not forwarded to Local.
+  picker's defaults and a registered folder's trust. These requests are not forwarded to Local.
 - The remote enforces these limits on its `/ws/peer` connection and answers a refused request the
   way it answers any failed one (for example "Unable to open session"); the connection stays open.
 - Only configured peers, the remote's `/ws/peer`, slash-command reads, defaults save, the
