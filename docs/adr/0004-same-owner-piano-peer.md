@@ -115,8 +115,11 @@ directory used, while a remote asked again after every reload and started in its
 The first slice stored nothing for a remote so that one machine's values could never appear on
 another. Storing them per machine keeps that guarantee and removes the difference.
 
-- Every machine's keys sit under `piano.machine.<id>.` in this browser's storage: `catalogs` and
-  `lastDir` in localStorage, `surface` in sessionStorage. Local is `piano.machine.local.`, with no
+- Every machine's keys sit under `piano.machine.<id>.` in this browser's storage: `catalogs`,
+  `lastDir`, `openGroups` (the sidebar's folder and project groups left open, which are named by
+  that machine's paths and project IDs) and `location` (where the user was on it, for the next
+  switch back) in localStorage, and `surface` in sessionStorage. How the sidebar looks otherwise
+  (width, view options, date groups, Pinned) is this browser's own and shared by every machine. Local is `piano.machine.local.`, with no
   special case. `web/src/lib/machineMemory.ts` owns the rule.
 - The ID is the configured one, and the only identity the browser has for a machine. Renaming an
   ID starts that machine with nothing remembered; pointing an ID at another Piano would show the
@@ -126,6 +129,8 @@ another. Storing them per machine keeps that guarantee and removes the differenc
   unavailable machine is still configured.
 - A remote starts only in its open folders, so a remembered directory that is no longer one gives
   way to the first folder once the peer's list arrives. The peer still refuses any other path.
+- A remembered location is a path within the machine. Anything else stored there opens the New
+  page, and a session deleted since shows Session not found, as an old link does.
 - This is memory in one browser, not synchronization. A stored catalog is shown until the
   machine's own answer replaces it, as on Local.
 

@@ -7,6 +7,8 @@
  */
 import type { FolderView, Project } from "@shared/wire";
 import type { AppState } from "../store.ts";
+import { LOCAL } from "./machine.ts";
+import { machineKey } from "./machineMemory.ts";
 import {
   createPreference,
   type Preference,
@@ -92,9 +94,9 @@ export interface SidebarClock {
   onResume: (wake: () => void) => () => void;
 }
 
-/** What the sidebar list remembers per browser. */
+/** What the sidebar list remembers: its open folder and project groups per machine, the rest per browser. */
 export interface SidebarPreferences {
-  /** Folder and project groups left open. */
+  /** Folder and project groups left open, named by one machine's paths and project IDs. */
   openGroups: Preference<readonly string[]>;
   /** Date groups left closed. */
   closedGroups: Preference<readonly string[]>;
@@ -107,10 +109,13 @@ const keyList = (raw: string | null): readonly string[] => {
   return Array.isArray(stored) ? stored.filter((key) => typeof key === "string") : [];
 };
 
-export function sidebarPreferences(storage?: PreferenceStorage): SidebarPreferences {
+export function sidebarPreferences(
+  storage?: PreferenceStorage,
+  machineId: string = LOCAL.id,
+): SidebarPreferences {
   return {
     openGroups: createPreference<readonly string[]>({
-      key: "piano.openProjects",
+      key: machineKey(machineId, "openGroups"),
       decode: keyList,
       storage,
     }),

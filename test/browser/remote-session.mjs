@@ -1015,7 +1015,21 @@ await run(
           ).includes(cwd),
           "the peer's model list for that directory outlives the reload",
         );
+        // Where the user was on a machine outlives a reload too: switching back opens there.
         onRemote = true;
+        await machine(page, "eng-1");
+        await page.see("Remote collision session");
+        await page.ab("find", "role", "button", "click", "--name", "Remote collision session");
+        await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
+        onRemote = false;
+        await machine(page, "Local");
+        await page.ab("reload");
+        await page.see("Local collision session");
+        onRemote = true;
+        await machine(page, "eng-1");
+        await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
+        await page.see("Remote collision session saved history");
+        await page.capture("9m-remote-reopened-where-left");
         await page.open("/m/not-configured/s/same-session");
         await page.see("Machine unavailable");
         assert.equal(

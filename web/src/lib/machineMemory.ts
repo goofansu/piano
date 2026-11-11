@@ -8,18 +8,45 @@
  */
 // Relative, not @shared: module tests load this file directly in Node.
 import { isMachineId } from "../../../shared/machine.ts";
+import { readStorage, writeStorage } from "./storage.ts";
 
-/** What is remembered per machine: its model catalogs, the New page's last directory, and the
- * Surface area's open tabs. */
-export type MachineMemoryName = "catalogs" | "lastDir" | "surface";
+/**
+ * What is remembered per machine: its model catalogs, the New page's last directory, the Surface
+ * area's open tabs, the folder and project groups left open in the sidebar (they are named by
+ * the machine's own paths and IDs), and where the user was on it.
+ */
+export type MachineMemoryName = "catalogs" | "lastDir" | "surface" | "openGroups" | "location";
 
 const PREFIX = "piano.machine.";
 /** Where Local's memory lived before every machine had a prefix; removed, never read. */
-const FORMER_KEYS = ["piano.catalogs", "piano.lastDir", "piano.surface"];
+const FORMER_KEYS = ["piano.catalogs", "piano.lastDir", "piano.surface", "piano.openProjects"];
 
 /** The storage key holding `name` for `machineId`. */
 export const machineKey = (machineId: string, name: MachineMemoryName) =>
   `${PREFIX}${machineId}.${name}`;
+
+/** A string store, behind a seam so the rule runs in Node. */
+export interface TextStorage {
+  read: (key: string) => string | null;
+  write: (key: string, value: string) => void;
+}
+const browserText: TextStorage = { read: readStorage, write: writeStorage };
+
+/**
+ * Where the user was on a machine, as the path within it (`/s/<id>`, `/projects`), so switching
+ * back opens there even after a reload. Anything stored that is not such a path reads as none.
+ * The page may no longer exist (a session deleted since): it then says so, as any old link does.
+ */
+export function machineLocationMemory(machineId: string, storage: TextStorage = browserText) {
+  const key = machineKey(machineId, "location");
+  return {
+    read: (): string | undefined => {
+      const path = storage.read(key);
+      return path && /^\/(?![/\\])/.test(path) && !path.startsWith("/m/") ? path : undefined;
+    },
+    write: (path: string) => storage.write(key, path),
+  };
+}
 
 /** The machine a key belongs to; none for a key that is not a machine's. */
 function keyMachine(key: string): string | undefined {
