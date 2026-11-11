@@ -132,11 +132,11 @@ function browserSends(machine: Machine): ClientMessage[] {
       return client.send(preparedImageCommand(command, { id: `prepared-${++preparations}` }));
     return client.send(command);
   };
-  // A message as the composer drafts it: an image only where the attach button is offered.
+  // A message as the composer drafts it, with an image: every machine offers the attach button.
   const message = draftMessage({
     ...EMPTY_DRAFT,
     text: "Reply with exactly: X",
-    images: { ...EMPTY_DRAFT.images, items: offers.attachments ? [image] : [] },
+    images: { ...EMPTY_DRAFT.images, items: [image] },
   });
 
   // Open a listed session; the remote answers, so actions have an attachment.

@@ -31,7 +31,7 @@ import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerAction, composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
-import { useDrafts, useOffers } from "@/lib/useMachine";
+import { useDrafts } from "@/lib/useMachine";
 import type { ModelControl } from "@/lib/useModelChoice";
 import type { SendDisposition } from "@/lib/ws";
 
@@ -123,7 +123,6 @@ export function DraftEditor({
   voice,
   cancelUpload,
 }: Props) {
-  const offers = useOffers();
   const { ref, text, attachments, quotes } = editor;
   const [modelOpen, setModelOpen] = useState(false);
   useAutoGrow(ref, text, maxHeight);
@@ -144,7 +143,7 @@ export function DraftEditor({
     <div
       data-motion="ring"
       className={cn(composerCard, className)}
-      {...attachmentEvents(attachments, attachmentsDisabled || !offers.attachments)}
+      {...attachmentEvents(attachments, attachmentsDisabled)}
     >
       {editor.preparing && (
         <>
@@ -207,7 +206,7 @@ export function DraftEditor({
         }}
       />
       <div className={composerToolbar}>
-        {offers.attachments && <AttachButton draft={attachments} disabled={attachmentsDisabled} />}
+        <AttachButton draft={attachments} disabled={attachmentsDisabled} />
         {/* Main-origin on every machine: the main machine's preference decides whether it shows. */}
         <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
         <ModelSelect
