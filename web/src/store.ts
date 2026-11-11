@@ -12,6 +12,7 @@ import type {
   Workspace,
 } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
+import { type CreationContext, creationVerdictOf } from "../../shared/creationVerdict.ts";
 import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
 import { sameSession, sessionKey as wireSessionKey } from "../../shared/wire.ts";
 import {
@@ -141,6 +142,15 @@ export function reduce(s: AppState, a: Action): AppState {
   const pendingCreate = FirstMessage.reconcile(next.pendingCreate, next.session);
   return pendingCreate === next.pendingCreate ? next : { ...next, pendingCreate };
 }
+
+/** What the browser knows when its creation's result frame arrives. The browser reads an attempt
+ * back only once its first message is uncertain, so one still `starting` awaits the creation's
+ * own answer. */
+const creationContext = (s: AppState, pending: FirstMessage.PendingCreate): CreationContext => ({
+  attemptId: pending.attemptId,
+  readingBack: pending.outcome !== "starting",
+  sessionNamed: !!s.session,
+});
 
 function reduceAction(s: AppState, a: Action): AppState {
   switch (a.type) {
@@ -322,20 +332,20 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     case "selection_failed":
     case "selection_rejected": {
       if (m.selectionId !== s.selectionId || !s.selecting) return s;
-      const inputId = m._tag === "selection_rejected" ? m.inputId : undefined;
-      const pending = m._tag === "selection_rejected" ? s.pendingCreate : null;
-      // The rejection names the creation: its input is back in the draft, so return to the New page.
-      const named = !!pending && (inputId ?? m.selectionId) === pending.attemptId;
-      // A machine from before creation attempts names no input. While a first message is still
-      // starting with no session shown, the only selection in flight is its creation; a read of an
-      // attempt is sent only once that message is uncertain.
-      const unnamed =
-        !!pending && inputId === undefined && pending.outcome === "starting" && !s.session;
+      const pending = s.pendingCreate;
+      // Only a refusal changes the first message: any other verdict leaves it as it stands, since
+      // a read-back is sent only once it is uncertain and a re-attachment's session decides it.
+      const verdict =
+        pending && m._tag === "selection_rejected"
+          ? creationVerdictOf(m, creationContext(s, pending))
+          : undefined;
+      const refused = verdict?.kind === "refused" ? verdict : undefined;
       return {
         ...s,
         selectionId: null,
         selectionFailure: { ...s.selecting, message: m.message },
-        ...(pending && named
+        // A rejection naming the creation put its input back in the draft: return to the New page.
+        ...(pending && refused?.named
           ? {
               view: { kind: "new" as const, cwd: pending.cwd, projectId: pending.projectId },
               session: null,
@@ -343,9 +353,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           : {}),
         selecting: null,
         pendingCreate:
-          pending && (named || unnamed)
-            ? FirstMessage.rejected(pending, pending.attemptId, m.message)
-            : s.pendingCreate,
+          pending && refused ? FirstMessage.rejected(pending, refused.detail) : s.pendingCreate,
       };
     }
     case "error":
@@ -353,7 +361,10 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
       return {
         ...s,
         selecting: null,
-        pendingCreate: FirstMessage.failed(s.pendingCreate, m),
+        pendingCreate: FirstMessage.failed(
+          s.pendingCreate,
+          creationVerdictOf(m, creationContext(s, s.pendingCreate)),
+        ),
       };
     // A restored queue goes to its session's draft, which lib/messageDraft keeps (`drafts.follow`).
     case "session": {

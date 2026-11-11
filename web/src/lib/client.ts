@@ -8,6 +8,7 @@
  */
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
+import { refusedAttempt } from "../../../shared/creationVerdict.ts";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
@@ -257,7 +258,7 @@ export function createClient({
     // A creation's verdict arriving after the person moved on changes nothing on screen.
     const elsewhere =
       m._tag === "selection_rejected" &&
-      m.inputId !== undefined &&
+      refusedAttempt(m) !== undefined &&
       m.selectionId !== state.selectionId;
     const notice =
       m._tag === "trust" ? trustNotice(state, focusedDirectory(state)?.cwd, m) : undefined;

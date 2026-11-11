@@ -12,6 +12,7 @@
  * kept: later interference cannot retract what this call saw.
  */
 import { createHash } from "node:crypto";
+import { creationVerdictOf } from "../../shared/creationVerdict.ts";
 import {
   type Attribution,
   type CreatedWorktree,
@@ -533,29 +534,24 @@ export function startSession(
               applyInput();
               return;
             }
-            case "selection_rejected":
-              settle(
-                handle
-                  ? result("created", "uncertain", message.message)
-                  : // A refused reconciliation read (capacity, a peer's scope) is not the original
-                    // start's outcome: only a rejection naming this attempt says nothing remains.
-                    reconciling && message.inputId !== inputId
-                    ? unnamed(message.message)
-                    : result("refused", "not_sent", message.message),
-              );
-              return;
             // `selection_failed` answers an attach; creation fails with `error`. Either way an
-            // admitted request may already have created the session and sent its input, unless
-            // the error names that input: its session refused it before Pi saw it.
+            // admitted request may already have created the session and sent its input.
+            case "selection_rejected":
             case "selection_failed":
             case "error": {
-              const verdict = inputVerdictOf(message);
+              const verdict = creationVerdictOf(message, {
+                attemptId: inputId!,
+                readingBack: reconciling,
+                sessionNamed: handle !== null,
+              });
               settle(
-                handle && verdict && verdict.inputId === inputId
-                  ? result("created", verdict.outcome, verdict.detail)
-                  : handle
-                    ? result("created", "uncertain", message.message)
-                    : unnamed(message.message),
+                verdict.kind === "refused"
+                  ? result("refused", "not_sent", verdict.detail)
+                  : verdict.kind === "created_not_sent"
+                    ? result("created", "not_sent", verdict.detail)
+                    : verdict.kind === "created_uncertain"
+                      ? result("created", "uncertain", verdict.detail)
+                      : unnamed(verdict.detail),
               );
               return;
             }

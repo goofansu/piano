@@ -4,12 +4,10 @@
  * connection) and is never part of Pi's transcript or the registry (INV-01). The store decides
  * when each transition applies; this module decides what each one does to the record.
  */
-import type { RenderMsg, ServerMessage, Snapshot, StartOptions } from "@shared/wire";
+import type { RenderMsg, Snapshot, StartOptions } from "@shared/wire";
 // Relative, not @shared: module tests load this file directly in Node.
-import { inputVerdictOf } from "../../../shared/inputVerdict.ts";
+import type { CreationVerdict } from "../../../shared/creationVerdict.ts";
 import { type SubmissionPhase, submissionPhase } from "./submissionReceipt.ts";
-
-type ErrorFrame = Extract<ServerMessage, { _tag: "error" }>;
 
 /** Browser-only submitted input, never part of Pi's transcript or registry. */
 export interface PendingCreate {
@@ -40,22 +38,21 @@ export const connectionLost = (input: PendingCreate | null): PendingCreate | nul
     ? { ...input, outcome: "uncertain", detail: "Connection lost before delivery was confirmed." }
     : input;
 
-/** The server refused the selection that carried the first message. */
-export const rejected = (
-  input: PendingCreate | null,
-  attemptId: string,
-  detail: string,
-): PendingCreate | null =>
-  input?.attemptId === attemptId ? { ...input, outcome: "rejected", detail } : input;
+/** The server refused the creation that carried the first message (`creationVerdictOf`). */
+export const rejected = (input: PendingCreate, detail: string): PendingCreate => ({
+  ...input,
+  outcome: "rejected",
+  detail,
+});
 
 /**
- * An error on the first message's selection. One naming the message says Piano refused it before
- * Pi saw it; any other may follow its delivery, so whether it reached Pi is unknown.
+ * An error on the first message's selection, read by `creationVerdictOf`: Piano refused the
+ * message before Pi saw it, or whether it reached Pi is unknown.
  */
-export const failed = (input: PendingCreate, error: ErrorFrame): PendingCreate => ({
+export const failed = (input: PendingCreate, verdict: CreationVerdict): PendingCreate => ({
   ...input,
-  outcome: inputVerdictOf(error)?.inputId === input.attemptId ? "not_sent" : "uncertain",
-  detail: error.message,
+  outcome: verdict.kind === "created_not_sent" ? "not_sent" : "uncertain",
+  detail: verdict.detail,
 });
 
 /**
