@@ -131,7 +131,8 @@ and license attribution, and use `currentColor` to match the UI; see `web/public
 
 ## Command palette and shortcuts
 
-The command palette on Mod+K (`web/src/components/CommandPalette.tsx`) is the keyboard surface for
+The command palette on Mod+K (`web/src/components/CommandPalette.tsx`, whose name, groups, headings
+and `!p` scope `web/src/lib/commandPalette.ts` decides) is the keyboard surface for
 navigation and view commands, grouped as Sessions (Recent sessions before searching), Projects,
 Global commands and Session commands (only with a selected session). Projects lists active projects
 by name and opens their pages; done projects remain reachable through the Projects index. A leading,

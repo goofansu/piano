@@ -28,7 +28,7 @@ import {
   CommandSeparator,
 } from "@/components/PianoCommand";
 import { ProjectCommandIconView } from "@/components/Projects";
-import { createPaletteCatalog } from "@/lib/commandPalette";
+import { createPaletteCatalog, PALETTE_NAME, PROJECTS_ONLY } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod, isImeKey } from "@/lib/keys";
 import { PALETTE_PAGE_SIZE, type PalettePage, paletteSelection } from "@/lib/paletteSearch";
@@ -70,7 +70,7 @@ export function CommandPalette({ state }: Props) {
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Search sessions, projects and commands"
+      title={PALETTE_NAME}
       description="Open a session or project, start a session, or change the view."
       showCloseButton={false}
       commandProps={{ shouldFilter: false, value: selected, onValueChange: setSelected }}
@@ -237,8 +237,8 @@ const PaletteInput = memo(function PaletteInput({
             commit(event.currentTarget.value);
           }
         }}
-        placeholder="Search sessions, projects and commands…"
-        aria-label="Search sessions, projects and commands"
+        placeholder={`${PALETTE_NAME}…`}
+        aria-label={PALETTE_NAME}
       />
       {children}
       {text === "" && (
@@ -254,12 +254,13 @@ const PaletteInput = memo(function PaletteInput({
               clearTimeout(timer.current);
               composing.current = false;
               edit();
-              setText("!p ");
-              commit("!p ");
+              setText(PROJECTS_ONLY.text);
+              commit(PROJECTS_ONLY.text);
               input.current?.focus();
             }}
           >
-            Projects only <span className="font-mono text-muted-foreground">!p</span>
+            {PROJECTS_ONLY.label}{" "}
+            <span className="font-mono text-muted-foreground">{PROJECTS_ONLY.token}</span>
           </PianoButton>
         </div>
       )}

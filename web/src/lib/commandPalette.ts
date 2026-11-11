@@ -1,6 +1,8 @@
 /**
- * The command palette's contents, decided once: which groups it shows, in what order, and each row's
- * name, search text and marks. Search runs outside cmdk, so only a bounded page becomes components.
+ * The command palette's contents, decided once: its name, which groups it shows, in what order,
+ * what each shows before a search, the projects-only scope, and each row's name, search text and
+ * marks. Search only ranks and pages; the component only renders. Search runs outside cmdk, so
+ * only a bounded page becomes components.
  */
 
 import { defaultFilter } from "cmdk";
@@ -35,8 +37,44 @@ export function paletteFilter(value: string, search: string, keywords?: string[]
   return keywords?.length && matchesWords([value, ...keywords].join(" ")) ? 0.5 : 0;
 }
 
+/** The palette's one name: its dialog title, its search field and the sidebar button that opens it. */
+export const PALETTE_NAME = "Search sessions, projects and commands";
+
+const PROJECTS_TOKEN = "!p";
+/** The footer shortcut: its name, the scope token it shows, and the text it puts in the input. */
+export const PROJECTS_ONLY = {
+  label: "Projects only",
+  token: PROJECTS_TOKEN,
+  text: `${PROJECTS_TOKEN} `,
+} as const;
+
+/**
+ * What the input asks for. Only a leading, standalone lowercase `!p` is syntax: it scopes the
+ * palette to Projects and the rest is the query. Any other text, `!pizza` or `!P` included, is a
+ * plain query over every group.
+ */
+export function paletteScope(search: string): { query: string; group?: "projects" } {
+  const trimmed = search.trim();
+  const rest = trimmed.slice(PROJECTS_TOKEN.length);
+  if (!trimmed.startsWith(PROJECTS_TOKEN) || /^\S/.test(rest)) return { query: trimmed };
+  return { query: rest.trim(), group: "projects" };
+}
+
 /** Before a search the palette offers this many recent sessions; a search reaches every one. */
-export const RECENT_SESSION_LIMIT = 8;
+const RECENT_SESSION_LIMIT = 8;
+
+/**
+ * A group as it shows before a search: Sessions as the few most recent, and every group without
+ * the rows only a search reaches (a project destination).
+ */
+export function beforeSearch<
+  G extends { id: PaletteGroup["id"]; heading: string; rows: { searchOnly?: boolean }[] },
+>(group: G): G {
+  const rows = group.rows.filter((row) => !row.searchOnly);
+  return group.id === "sessions"
+    ? ({ ...group, heading: "Recent sessions", rows: rows.slice(0, RECENT_SESSION_LIMIT) } as G)
+    : ({ ...group, rows } as G);
+}
 
 export interface PaletteSessionRow {
   key: string;
