@@ -67,8 +67,7 @@ Only the publisher can view a private artifact, subject to Radius's organization
 transfer policies. These tools do not widen access. Updates omit the visibility parameter and
 verify visibility is unchanged on read-back. A concurrent visibility change is reported as
 unconfirmed, not silently reversed. To share more widely, explicitly use Radius's own visibility
-controls; do not confuse this tool with Piano's organization-only session-sharing feature in
-`server/RadiusArtifacts.ts`, whose policy is unchanged.
+controls.
 
 Supported publication inputs are UTF-8 Markdown, HTML, Mermaid, CSV, NDJSON and asciinema text,
 up to **128 KiB**. These are extension limits, not claims about Radius quotas. Update replaces the

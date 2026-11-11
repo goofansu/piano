@@ -34,7 +34,6 @@ import { Registry, RegistryLookupError, type SessionEntry } from "./Registry.ts"
 import { SessionChanges } from "./SessionChanges.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
-import { SessionSharing } from "./SessionSharing.ts";
 import { SidebarView } from "./SidebarView.ts";
 import type { SignInError, SignInLane, SignInState } from "./SignInAttempts.ts";
 import { UserSkills } from "./UserSkills.ts";
@@ -361,10 +360,6 @@ export const AppRouter = HttpRouter.use((router) =>
     );
     yield* serve(Endpoints.changeSessionPullRequest, ({ session, body }) =>
       Effect.flatMap(SessionPullRequests, (prs) => prs.change(session, body)),
-    );
-
-    yield* serve(Endpoints.shareSession, ({ session }) =>
-      Effect.flatMap(SessionSharing, (sharing) => sharing.share(session)),
     );
 
     yield* serve(Endpoints.slashCommands, ({ body }) =>

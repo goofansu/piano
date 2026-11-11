@@ -74,7 +74,7 @@ Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
 - Voice transcription requires an approved OpenAI key, browser microphone permission and a
   recording-capable browser. The Preferences → Voice input → key-dialog route proves the
   missing-key prerequisite, not recording, context transmission or transcription into the draft.
-- Provider/Radius sign-in, installation, authenticated Share and publication access need controlled
+- Provider/Radius sign-in, installation and publication access need controlled
   credentials. The unsigned-in Providers page proves only the available setup controls.
 - Webhook delivery, event catch-up, Test and delivery-failure recovery need a controlled public HTTPS
   receiver. Loopback/private receivers are refused by design. Inactive CRUD does not prove delivery.

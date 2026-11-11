@@ -54,11 +54,6 @@ export interface PiHistory {
     sessionId: string,
     file: string,
   ) => Effect.Effect<HistoryMetadata, PiSessionError>;
-  /** Read-only, redacted JSONL of Pi's saved active branch; no agent or extra runtime metadata. */
-  readonly exportBranch: (
-    sessionId: string,
-    file: string | undefined,
-  ) => Effect.Effect<string, PiSessionError>;
 }
 
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
@@ -134,16 +129,6 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
       ),
     );
 
-  const exportBranch = Effect.fn("PiHistory.exportBranch")(function* (
-    sessionId: string,
-    file: string | undefined,
-  ) {
-    const reply = file
-      ? yield* Effect.promise(() => jobs.read({ operation: "export", path: file, sessionId }))
-      : { error: true };
-    if ("value" in reply) return reply.value as string;
-    return yield* rejected("This session has no readable saved conversation to share.");
-  });
   const metadata = Effect.fn("PiHistory.metadata")(function* (sessionId: string, file: string) {
     const reply = yield* Effect.promise(() =>
       jobs.read({ operation: "metadata", path: file, sessionId }),
@@ -263,7 +248,6 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
 
   return {
     metadata,
-    exportBranch,
     locate,
     sessionIds,
     peek: (sessionId, file) =>

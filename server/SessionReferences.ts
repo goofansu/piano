@@ -72,8 +72,6 @@ export class SessionReferences extends Context.Service<
     ) => Effect.Effect<(cwd: string, sessionId: string) => SessionReference["unavailable"]>;
     /** The saved conversation without starting Pi, with last known statistics and checkout state. */
     readonly peek: (location: SessionLocation) => Effect.Effect<Snapshot>;
-    /** Read-only, redacted JSONL of Pi's saved active branch. */
-    readonly exportBranch: (location: SessionLocation) => Effect.Effect<string, PiSessionError>;
     /** Keep the history and hide the reference; an archived session cannot be resolved again. */
     readonly archive: (location: SessionLocation) => Effect.Effect<void, PiSessionError>;
     /** Delete Pi's file, then the reference. Pi must not be running for it. */
@@ -209,7 +207,6 @@ export const SessionReferencesLive = Layer.effect(
       resolve,
       availability,
       peek,
-      exportBranch: (location) => history.exportBranch(location.sessionId, location.file),
       archive: (location) =>
         registry
           .archiveSession(location.cwd, location.sessionId)

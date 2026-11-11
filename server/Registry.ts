@@ -9,7 +9,6 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, type Scope, Semaphore } from "effect";
 import { cutText } from "../shared/cutText.ts";
-import { RadiusShareLink } from "../shared/share.ts";
 import type { WebhookEvent } from "../shared/webhooks.ts";
 import {
   ChangesScope,
@@ -55,12 +54,10 @@ const WorktreeEntry = Schema.Struct({
 });
 export type WorktreeEntry = typeof WorktreeEntry.Type;
 
-/** A session reference's integration links: identities owned by Piano, facts owned by the forge or Radius. */
+/** A session reference's integration links: identities owned by Piano, facts owned by the forge. */
 const sessionLinkFields = {
   /** Absent: discover from the checkout. Null: explicitly removed. No forge status is persisted. */
   pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)),
-  /** Stable Radius destination. Its revisions and contents remain owned by Radius. */
-  radiusShare: Schema.optional(RadiusShareLink),
 };
 const SessionLinks = Schema.Struct(sessionLinkFields);
 export type SessionLinks = typeof SessionLinks.Type;
@@ -85,15 +82,14 @@ const SessionEntry = Schema.Struct({
 });
 export type SessionEntry = typeof SessionEntry.Type;
 
-/** What a session reference shows: cached statistics, the Radius share and the Changes scope
- * never reach the sidebar. The pull request link does, so a browser reads GitHub facts only for a
+/** What a session reference shows: cached statistics and the Changes scope never reach the
+ * sidebar. The pull request link does, so a browser reads GitHub facts only for a
  * session that has one. */
 export const shownReference = ({
   stats: _stats,
-  radiusShare: _radiusShare,
   changesScope: _changesScope,
   ...shown
-}: SessionEntry): Omit<SessionEntry, "stats" | "radiusShare" | "changesScope"> => shown;
+}: SessionEntry): Omit<SessionEntry, "stats" | "changesScope"> => shown;
 
 /**
  * `entry` is still the reference `expected` was read as: not recreated (same creation time), not
@@ -374,7 +370,7 @@ export class Registry extends Context.Service<
     ) => Effect.Effect<SessionEntry | undefined>;
     /**
      * Compare-and-set one integration link, applied only while `expected` is `current` with
-     * that link unchanged, so a delayed forge or Radius result cannot undo a removal, overwrite
+     * that link unchanged, so a delayed forge result cannot undo a removal, overwrite
      * a newer choice or resurrect a deleted reference. Returns the saved entry, or undefined
      * when refused.
      */

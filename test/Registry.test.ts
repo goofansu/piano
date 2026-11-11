@@ -89,7 +89,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
-      "ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)); UPDATE projects SET archived = 1 WHERE id = 'project-2'; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
+      "ALTER TABLE sessions DROP COLUMN pinned; ALTER TABLE projects ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)); UPDATE projects SET archived = 1 WHERE id = 'project-2'; ALTER TABLE projects ADD COLUMN goal TEXT; UPDATE projects SET goal = 'An older goal' WHERE id = 'project-1'; PRAGMA user_version = 1;",
     );
   } finally {
     legacy.close();
@@ -98,7 +98,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 15);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 16);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -265,7 +265,6 @@ test("INV-01: a session with every optional field set, linked without an API hos
         pinned: true,
         changesScope: "branch",
         stats: { cost: 1, statsUpdatedAt: 2 },
-        radiusShare: { organizationId: "org", artifactId: "art", url: "https://radius.test/a" },
         pullRequest: {
           url: "https://github.com/example/repo/pull/2",
           source: "manual",
@@ -317,7 +316,7 @@ test("version-11 links migrate without inventing repository proof, then persist 
   assert.deepEqual((await f.get()).sessions[0]?.pullRequest, qualified);
 });
 
-test("version-3 sharing migration preserves sessions; Radius destinations survive restart and reject stale replacements", async (t) => {
+test("version-16 retires session sharing: a saved Radius link is dropped and its session kept", async (t) => {
   const f = fixture(t),
     cwd = join(f.root, "folder");
   await f.run(
@@ -328,78 +327,40 @@ test("version-3 sharing migration preserves sessions; Radius destinations surviv
     }),
   );
   const before = (await f.get()).sessions[0]!;
+  // Reshape it as a version-15 Piano left it: a session that was shared.
   const legacy = new DatabaseSync(f.dbPath);
   try {
-    legacy.exec("ALTER TABLE sessions DROP COLUMN radius_share; PRAGMA user_version = 3;");
+    legacy.exec(
+      `ALTER TABLE sessions ADD COLUMN radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share));
+       UPDATE sessions SET radius_share = '{"organizationId":"org-a","artifactId":"artifact-a","url":"https://radius.earendil.com/a/artifact-a"}';
+       PRAGMA user_version = 15;`,
+    );
   } finally {
     legacy.close();
   }
   assert.deepEqual((await f.get()).sessions, [before]);
-  const link = {
-    organizationId: "org-a",
-    artifactId: "artifact-a",
-    url: "https://radius.earendil.com/a/artifact-a",
-  };
-  assert.equal(
-    await f
-      .run(Effect.flatMap(Registry, (r) => r.setSessionLink(before, "radiusShare", link)))
-      .then(Boolean),
-    true,
-  );
-  assert.deepEqual((await f.get()).sessions, [{ ...before, radiusShare: link }]);
-  assert.equal(
-    await f.run(
-      Effect.flatMap(Registry, (r) =>
-        r.setSessionLink(before, "radiusShare", { ...link, artifactId: "replacement" }),
-      ),
-    ),
-    undefined,
-  );
-  await f.run(
-    Effect.flatMap(Registry, (r) => r.mirrorSession(cwd, "shared", { sessionName: "Renamed" })),
-  );
-  assert.deepEqual((await f.get()).sessions[0]?.radiusShare, link);
-  const replacement = {
-    ...link,
-    artifactId: "replacement",
-    url: "https://radius.earendil.com/a/replacement",
-  };
-  await f.run(
-    Effect.gen(function* () {
-      const r = yield* Registry;
-      const expected = (yield* r.get).sessions[0]!;
-      assert.ok(yield* r.setSessionLink(expected, "radiusShare", replacement));
-      assert.equal(
-        yield* r.setSessionLink(expected, "radiusShare", link),
-        undefined,
-        "a stale replacement cannot undo the new link",
-      );
-    }),
-  );
-  assert.deepEqual((await f.get()).sessions[0]?.radiusShare, replacement);
-  await f.run(Effect.flatMap(Registry, (r) => r.removeSession(cwd, "shared")));
-  assert.equal(
-    await f
-      .run(Effect.flatMap(Registry, (r) => r.setSessionLink(before, "radiusShare", link)))
-      .then(Boolean),
-    false,
-  );
-  assert.deepEqual(
-    (await f.get()).sessions,
-    [],
-    "late share results cannot resurrect a deleted session",
-  );
+  const upgraded = new DatabaseSync(f.dbPath, { readOnly: true });
+  try {
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 16);
+    assert.equal(
+      upgraded
+        .prepare("SELECT name FROM pragma_table_info('sessions')")
+        .all()
+        .some((column) => column.name === "radius_share"),
+      false,
+    );
+  } finally {
+    upgraded.close();
+  }
+  // The upgraded database keeps working: a later change persists.
+  await f.run(Effect.flatMap(Registry, (r) => r.pinSession(cwd, "shared", false)));
+  assert.equal((await f.get()).sessions[0]?.pinned, undefined);
 });
 
 test("INV-01/07: a session link is set only on the same reference, not archived or recreated since, with that link unchanged", async (t) => {
   const f = fixture(t),
     cwd = join(f.root, "folder");
   const linked = { url: "https://github.com/o/r/pull/1", source: "manual" as const };
-  const share = {
-    organizationId: "org-a",
-    artifactId: "artifact-a",
-    url: "https://radius.earendil.com/a/artifact-a",
-  };
   await f.run(
     Effect.gen(function* () {
       const r = yield* Registry;
@@ -415,10 +376,6 @@ test("INV-01/07: a session link is set only on the same reference, not archived 
         "a link changed since it was read is not overwritten",
       );
       assert.equal(yield* r.current(expected, "pullRequest"), undefined);
-      assert.ok(
-        yield* r.setSessionLink(expected, "radiusShare", share),
-        "another link's change does not block this one",
-      );
 
       const latest = (yield* r.get).sessions[0]!;
       const earlier = { ...latest, createdAt: "2000-01-01T00:00:00.000Z" };
@@ -441,8 +398,8 @@ test("INV-01/07: a session link is set only on the same reference, not archived 
   );
   const persisted = (await f.get()).sessions[0];
   assert.deepEqual(
-    persisted && [persisted.archived, persisted.pullRequest, persisted.radiusShare],
-    [true, null, share],
+    persisted && [persisted.archived, persisted.pullRequest],
+    [true, null],
     "links persist across restart",
   );
 });
@@ -479,7 +436,7 @@ for (const version of [4, 5, 6]) {
     assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 15);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 16);
       assert.deepEqual(
         stored
           .prepare(
@@ -504,9 +461,7 @@ test("INV-01: version-2 sessions start unpinned; pins persist without changing h
   );
   const legacy = new DatabaseSync(f.dbPath);
   try {
-    legacy.exec(
-      "ALTER TABLE sessions DROP COLUMN radius_share; ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;",
-    );
+    legacy.exec("ALTER TABLE sessions DROP COLUMN pinned; PRAGMA user_version = 2;");
   } finally {
     legacy.close();
   }

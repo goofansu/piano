@@ -302,7 +302,6 @@ test("INV-01/11/12: API keys persist through Pi, replace and remove without expo
             const providers = yield* login.apiKeys;
             assert.equal(providers.find((p) => p.id === provider)?.saved, true);
             assert(!JSON.stringify(providers).includes("private-"));
-            assert.equal(yield* login.bearer(provider), undefined);
             yield* catalog.catalog(cwd);
             assert.equal(count(), ++expectedProbes);
             // A fresh Pi runtime, not Piano's cache, can resolve the saved credential.
@@ -485,27 +484,6 @@ test("INV-11: API-key setup rejects commands, blank keys, unsupported providers 
         }
         yield* catalog.catalog("/nonexistent/piano-api-key-refusal");
         assert.equal(count(), 1, "rejected writes do not invalidate models");
-      }),
-  );
-});
-
-test("INV-01/11: a bearer token comes only from a signed-in OAuth credential, never an API key", async () => {
-  await fixture(
-    async () => ({
-      type: "oauth",
-      access: "private-access",
-      refresh: "private-refresh",
-      expires: Date.now() + 3600_000,
-    }),
-    (login) =>
-      Effect.gen(function* () {
-        assert.equal(yield* login.bearer("openai"), undefined, "an API key is not a sign-in");
-        assert.equal(yield* login.bearer("radius"), undefined);
-        yield* login.signIn.start("radius");
-        yield* until(login, (s) => s.status === "success");
-        assert.equal(yield* login.bearer("radius"), "private-access");
-        yield* login.signOut("radius");
-        assert.equal(yield* login.bearer("radius"), undefined);
       }),
   );
 });

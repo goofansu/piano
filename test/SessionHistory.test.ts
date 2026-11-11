@@ -275,11 +275,6 @@ test("saved projection refreshes mutations and preserves process-local fingerpri
     const id = snapshot.messages[1].attachments?.[0].url.split("/").at(-1);
     assert.ok(id);
     assert.deepEqual(getImagePreview(id)?.bytes, Buffer.from(png, "base64"));
-    assert.ok(
-      !(await run(history.exportBranch("changing-peek", file))).includes(
-        process.env.PIANO_HISTORY_TEST_SECRET,
-      ),
-    );
   } finally {
     delete process.env.PIANO_HISTORY_TEST_SECRET;
   }
@@ -369,10 +364,6 @@ for (const [name, contents] of [
     assert.deepEqual(snapshot.messages, []);
     assert.equal(snapshot.state.sessionId, name);
     assert.match(snapshot.state.projectionError ?? "", /History was not replaced or repaired/);
-    await assert.rejects(run(history.exportBranch(name, file)), {
-      reason: "rejected",
-      detail: "This session has no readable saved conversation to share.",
-    });
     assert.equal(readFileSync(file, "utf8"), contents);
   });
 }

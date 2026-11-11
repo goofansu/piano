@@ -96,9 +96,9 @@ Keep these prerequisites visible when using the default launch:
   [Open a session](./open-session.md#driving-it-with-agent-browser).
 - Dispatch extension waits, parent tool rows and child backlinks need real Pi/scripted model
   evidence; the CLI recipe proves creation, inheritance and status, not those UI paths.
-- Voice input and authenticated Share require the setup described in
+- Voice input requires the setup described in
   [Providers and Preferences](./settings-other.md#gotchas). A fake echo or an unsigned-in page
-  does not establish transcription, secret checking or sharing.
+  does not establish transcription or secret checking.
 - Remote sessions, image preparation/preview isolation and peer voice checks need configured,
   reachable peers. The default launch has none; use the explicit prerequisite route in
   [Open a session](./open-session.md). The committed remote journey needs three Piano instances,

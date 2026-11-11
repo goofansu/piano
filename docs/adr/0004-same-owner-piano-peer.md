@@ -77,7 +77,7 @@ the slice's actions. The model picker saves the peer's default model and effort 
 through the peer's own settings
 endpoint, which checks the model against the peer's catalog; Pi on the peer owns the file. Registering
 folders, worktree creation, machine CRUD/provisioning, cross-machine projects or search,
-managed app previews, session sharing and other remote settings/accounts are out. Voice input is the
+managed app previews and other remote settings/accounts are out. Voice input is the
 main-origin composer utility defined below, not a remote service. Parallel worktree sessions
 come from a remote session's own dispatch, which runs on the peer.
 [Setup and limits](../remote-piano.md) describe the exact startup configuration.
@@ -102,8 +102,7 @@ machines' projects with the same name are unrelated (INV-01/07).
 - The peer admits rename, pin, archive and delete of a session it lists, so a remote session's
   menus are Local's. Rename starts the session's Pi when it is stopped, because Pi owns the name;
   archive and delete stop it, and delete removes its history on the peer. Each is the explicit
-  action of the same owner, behind the dialogs Local shows. Sharing stays with the peer's Piano:
-  it publishes through the peer's Radius sign-in over HTTP, which the gateway does not route.
+  action of the same owner, behind the dialogs Local shows.
 - The session header is Local's. Its Artifacts menu and the phone sheet's Pull request row are
   links out of Piano to URLs the peer already sent with the session and its list; they add no
   request to the peer. The app preview, which needs the peer's status read and Stop, stays out.

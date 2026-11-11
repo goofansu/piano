@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { SessionShare } from "../shared/share.ts";
 import {
   type ClientCommand,
   decodeClientMessage,
@@ -11,12 +10,7 @@ import {
   type SessionReference,
   type SessionState,
 } from "../shared/wire.ts";
-import {
-  answerForm,
-  confirmation,
-  createCommandForms,
-  SHARE_UNCONFIRMED,
-} from "../web/src/lib/commandForms.ts";
+import { answerForm, confirmation, createCommandForms } from "../web/src/lib/commandForms.ts";
 import type { CommandForm } from "../web/src/lib/commands.ts";
 import { type SessionTarget, sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { previewClaim, previewClaimHolds } from "../web/src/lib/sessionPreview.ts";
@@ -66,11 +60,6 @@ const withWorkspace: AppState = {
   ...online,
   workspaces: [{ id: "ws:/repo", folder: "/repo", path: "/repo" }],
 };
-const shared: SessionShare = {
-  url: "https://radius.example/a/1",
-  expiresAt: "2026-11-01T00:00:00Z",
-  visibility: "organization",
-};
 
 const rename = (target: SessionTarget = other): CommandForm => ({ kind: "rename-session", target });
 const del = (target: SessionTarget = other): CommandForm => ({ kind: "delete-session", target });
@@ -103,8 +92,6 @@ test("preview confirmation stays on its exact attachment, generation and instanc
   const sent: ClientCommand[] = [];
   const forms = createCommandForms({
     getState: () => current,
-    radiusSignedIn: () => false,
-    share: async () => shared,
     send: (command) => {
       sent.push(command);
       return "sent";
@@ -303,7 +290,6 @@ test("archive and close folder name their subject; an untitled session reads Unt
   });
   // Forms with their own dialogs ask nothing here.
   assert.equal(confirmation(online, rename()), undefined);
-  assert.equal(confirmation(online, { kind: "share-session", target: other }), undefined);
   assert.equal(confirmation(online, { kind: "project", dialog: {} }), undefined);
 });
 
@@ -464,36 +450,17 @@ test("a submitted form opens no page once the user has moved to another screen",
   assert.deepEqual(started.opened, [], "the creation keeps the screen");
 });
 
-test("Share needs Radius and a registered workspace", () => {
-  const share: CommandForm = { kind: "share-session", target: other };
-  assert.equal(answerForm(withWorkspace, share, "", { radiusSignedIn: false }).allowed, false);
-  assert.equal(answerForm(online, share, "", { radiusSignedIn: true }).allowed, false);
-  assert.deepEqual(answerForm(withWorkspace, share, "", { radiusSignedIn: true }), {
-    allowed: true,
-    share: { workspaceId: "ws:/repo", sessionId: "s2" },
-  });
-});
-
 // The forms' lifecycle: open, edit, submit, cancel.
 
-function forms(
-  share: (workspaceId: string, sessionId: string) => Promise<SessionShare> = async () => shared,
-  disposition: SendDisposition = "sent",
-) {
+function forms(disposition: SendDisposition = "sent") {
   let state = withWorkspace;
   const sent: ClientCommand[] = [];
   const opened: string[] = [];
-  const published: [string, string][] = [];
   const subject = createCommandForms({
     getState: () => state,
-    radiusSignedIn: () => true,
     send: (command) => {
       sent.push(command);
       return disposition;
-    },
-    share: (workspaceId, sessionId) => {
-      published.push([workspaceId, sessionId]);
-      return share(workspaceId, sessionId);
     },
     // Each page as its address names it: a project's home, the New page for a project, the index.
     openPage: (page) =>
@@ -510,17 +477,13 @@ function forms(
     subject,
     sent,
     opened,
-    published,
     setState: (next: AppState) => {
       state = next;
     },
   };
 }
 
-const settled = () => new Promise((resolve) => setImmediate(resolve));
-
 test("a form submitted after the connection drops stays open and sends nothing", () => {
-  const share: CommandForm = { kind: "share-session", target: other };
   const newProject: CommandForm = { kind: "project", dialog: {} };
   const settings: CommandForm = { kind: "project-settings", projectId: "p1" };
   for (const form of [
@@ -528,12 +491,11 @@ test("a form submitted after the connection drops stays open and sends nothing",
     del(),
     archive(),
     closeFolder,
-    share,
     newProject,
     deleteProject,
     settings,
   ]) {
-    const { subject, sent, published, setState } = forms();
+    const { subject, sent, setState } = forms();
     setState({ ...withWorkspace, projects: [launch] });
     subject.open(form);
     subject.edit("Renamed");
@@ -543,7 +505,6 @@ test("a form submitted after the connection drops stays open and sends nothing",
     assert.equal(subject.submit(), false, form.kind);
     assert.equal(subject.getState().form, form, form.kind);
     assert.deepEqual(sent, [], form.kind);
-    assert.deepEqual(published, [], form.kind);
   }
 });
 
@@ -569,7 +530,7 @@ test("a form whose answer was not sent stays open with its input and opens no pa
     { kind: "project-settings", projectId: "p1" },
   ];
   for (const form of submittable) {
-    const { subject, sent, opened, setState } = forms(undefined, "not-sent");
+    const { subject, sent, opened, setState } = forms("not-sent");
     setState({ ...withWorkspace, projects: [launch] });
     subject.open(form);
     subject.edit("Renamed");
@@ -584,7 +545,7 @@ test("a form whose answer was not sent stays open with its input and opens no pa
     assert.deepEqual(opened, [], form.kind);
   }
   for (const form of submittable) {
-    const { subject, setState } = forms(undefined, "uncertain");
+    const { subject, setState } = forms("uncertain");
     setState({ ...withWorkspace, projects: [launch] });
     subject.open(form);
     subject.edit("Renamed");
@@ -800,48 +761,6 @@ test("opening Project settings replaces the open form, and another form replaces
   // A New project opened next does not inherit the settings draft.
   subject.open({ kind: "project", dialog: {} });
   assert.deepEqual(subject.getState().projectDraft, { name: "", instructions: "" });
-});
-
-test("Share clicked twice publishes once and stays open on the link", async () => {
-  const { subject, published, sent } = forms();
-  subject.open({ kind: "share-session", target: other });
-  assert.equal(subject.submit(), true);
-  assert.equal(subject.submit(), false);
-  assert.deepEqual(subject.getState().share, { phase: "publishing" });
-  // Dismissing while publishing is ignored, so the outcome is never lost.
-  subject.cancel();
-  assert.notEqual(subject.getState().form, null);
-  await settled();
-  assert.deepEqual(subject.getState().share, { phase: "shared", share: shared });
-  assert.equal(subject.submit(), false);
-  assert.deepEqual(published, [["ws:/repo", "s2"]]);
-  assert.deepEqual(sent, []);
-  subject.cancel();
-  assert.equal(subject.getState().form, null);
-});
-
-test("a failed share reports the failure and does not publish again", async () => {
-  const { subject, published } = forms(async () => {
-    throw new Error("Radius refused the upload.");
-  });
-  subject.open({ kind: "share-session", target: other });
-  subject.submit();
-  await settled();
-  assert.deepEqual(subject.getState().share, {
-    phase: "failed",
-    error: "Radius refused the upload.",
-  });
-  assert.equal(subject.submit(), false);
-  assert.equal(published.length, 1);
-
-  const unexplained = forms(() => Promise.reject("lost"));
-  unexplained.subject.open({ kind: "share-session", target: other });
-  unexplained.subject.submit();
-  await settled();
-  assert.deepEqual(unexplained.subject.getState().share, {
-    phase: "failed",
-    error: SHARE_UNCONFIRMED,
-  });
 });
 
 test("archive and delete say they stop the app a session started", () => {

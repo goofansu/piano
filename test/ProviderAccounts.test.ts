@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { OAuthProvider, ServerMessage } from "../shared/wire.ts";
 import type { ObservationEnvironment } from "../web/src/lib/observation.ts";
-import { createProviderAccounts, signedInToRadius } from "../web/src/lib/providerAccounts.ts";
+import { createProviderAccounts } from "../web/src/lib/providerAccounts.ts";
 
 /** Timers that never fire on their own and a focus nobody gives, so every read here is one the test caused. */
 const environment: ObservationEnvironment = {
@@ -14,6 +14,9 @@ const environment: ObservationEnvironment = {
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
+/** Whether the accounts, as last read, show Radius signed in. */
+const radiusSignedIn = (accounts: { getState: () => { value?: readonly OAuthProvider[] } }) =>
+  !!accounts.getState().value?.some((provider) => provider.id === "radius" && provider.signedIn);
 const radius = (signedIn: boolean): OAuthProvider[] => [
   { id: "anthropic", name: "Anthropic", signedIn: true },
   { id: "radius", name: "Radius", signedIn },
@@ -67,14 +70,13 @@ test("another tab's sign-in reaches this page through catalogs_invalidated", asy
   ws.status(true);
   server.reads[0]!(radius(false));
   await settle();
-  assert.equal(signedInToRadius(accounts.getState(), true), false);
+  assert.equal(radiusSignedIn(accounts), false);
 
   ws.server({ _tag: "catalogs_invalidated" });
   assert.equal(server.reads.length, 2);
   server.reads[1]!(radius(true));
   await settle();
-  assert.equal(signedInToRadius(accounts.getState(), true), true);
-  assert.equal(signedInToRadius(accounts.getState(), false), false, "disconnected is signed out");
+  assert.equal(radiusSignedIn(accounts), true);
 });
 
 test("a sign-out supersedes a read that started before it, so the old sign-in never returns", async () => {
@@ -99,7 +101,7 @@ test("a sign-out supersedes a read that started before it, so the old sign-in ne
   server.reads[1]!(radius(true));
   await signingOut;
   await settle();
-  assert.equal(signedInToRadius(accounts.getState(), true), false);
+  assert.equal(radiusSignedIn(accounts), false);
 });
 
 test("a sign-in made here is read even while a read from before it is in flight", async () => {
@@ -113,5 +115,5 @@ test("a sign-in made here is read even while a read from before it is in flight"
   server.reads[0]!(radius(false));
   await signedIn;
   await settle();
-  assert.equal(signedInToRadius(accounts.getState(), true), true);
+  assert.equal(radiusSignedIn(accounts), true);
 });

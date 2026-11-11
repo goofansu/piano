@@ -247,7 +247,7 @@ test("Session commands place the menus' sections in the menus' order, whatever t
     const [group] = searchPalette(
       commandPalette(member, {
         globalCommands: [],
-        sessionCommands: order(sessionCommands(member, undefined, { radiusSignedIn: true })),
+        sessionCommands: order(sessionCommands(member)),
         sessionProject: sessionProjectMenu(member, { cwd: "/repo", sessionId: "s1" }),
       }),
       "",
@@ -257,7 +257,6 @@ test("Session commands place the menus' sections in the menus' order, whatever t
   const menu = [
     "Rename",
     "Pin",
-    "Share",
     "Open project: Launch",
     "Move to project: New project",
     "Remove from project",
@@ -297,7 +296,7 @@ test("search uses direct command synonyms, not related topics or opposite displa
   };
   const commands = [
     ...globalCommands(state, { ...ctx, settings: "providers" }),
-    ...sessionCommands(state, undefined, { radiusSignedIn: true }),
+    ...sessionCommands(state),
   ];
   const matches = (query: string) =>
     commands

@@ -41,7 +41,6 @@ export type CommandForm =
   | Extract<SessionCommand["intent"], { kind: "stop-preview" }>
   | { kind: "rename-session"; target: SessionTarget }
   | { kind: "delete-session"; target: SessionTarget }
-  | { kind: "share-session"; target: SessionTarget }
   | { kind: "archive-session"; target: SessionTarget }
   | { kind: "close-folder"; folder: { path: string; name: string } }
   | { kind: "project"; dialog: ProjectDialog }
@@ -167,10 +166,6 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
     case "rename":
       if (!intent.target) return false;
       effects.openForm({ kind: "rename-session", target: intent.target });
-      break;
-    case "share":
-      if (!intent.target) return false;
-      effects.openForm({ kind: "share-session", target: intent.target });
       break;
     case "delete":
       if (!intent.target) return false;

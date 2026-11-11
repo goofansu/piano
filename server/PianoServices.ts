@@ -6,7 +6,6 @@
  * silently makes a second instance. One SessionHosts owns every Pi child (INV-02) and also
  * provides the SessionReferences every caller shares, so all of them see one alias memory, and
  * the FolderWorktrees that both it and WorkspaceCommands create worktrees through.
- * Sharing reads the Radius credential through the same ProviderLogin the routes use.
  *
  * Callers supply only what lies outside Piano: the platform (child processes, files), the
  * external adapters in `PianoAdaptersLive`, and the Context references with defaults (PiCli,
@@ -21,13 +20,11 @@ import { PiSettingsLive } from "./PiSettings.ts";
 import { PreparedImagesLive } from "./PreparedImages.ts";
 import { PromptsLive } from "./Prompts.ts";
 import { ProviderLoginLive } from "./ProviderLogin.ts";
-import { RadiusArtifactsLive } from "./RadiusArtifacts.ts";
 import { RadiusSetupLive } from "./RadiusSetup.ts";
 import { RegistryLive } from "./Registry.ts";
 import { SessionChangesLive } from "./SessionChanges.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
 import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
-import { SessionSharingLive } from "./SessionSharing.ts";
 import { SessionStatusLive } from "./SessionStatus.ts";
 import { SidebarViewLive, type SidebarViewOptions } from "./SidebarView.ts";
 import { UserSkillsLive } from "./UserSkills.ts";
@@ -55,10 +52,10 @@ export const PianoCoreLive = (options: PianoServicesOptions) =>
   );
 
 /** The network services Piano calls; a test replaces one by providing its own. */
-export const PianoAdaptersLive = Layer.mergeAll(RadiusArtifactsLive, GitHubPullRequestsLive);
+export const PianoAdaptersLive = GitHubPullRequestsLive;
 
 /** Everything the router answers from: the core plus settings, setup, skills, voice input, changes,
- * pull requests, session status and sharing. */
+ * pull requests, session status and provider sign-in. */
 export const PianoServicesLive = (options: PianoServicesOptions) =>
   Layer.mergeAll(
     PiSettingsLive,
@@ -70,5 +67,5 @@ export const PianoServicesLive = (options: PianoServicesOptions) =>
     SessionStatusLive,
     SessionChangesLive,
     SessionPullRequestsLive,
-    SessionSharingLive.pipe(Layer.provideMerge(ProviderLoginLive)),
+    ProviderLoginLive,
   ).pipe(Layer.provideMerge(WorkspaceChangesLive), Layer.provideMerge(PianoCoreLive(options)));

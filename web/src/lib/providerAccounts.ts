@@ -1,6 +1,6 @@
 /**
- * The page's one live read of which OAuth providers Pi is signed in to. Settings, Radius and the
- * Share command all show this value, so they never disagree. It reads while the socket is
+ * The page's one live read of which OAuth providers Pi is signed in to. Settings and Radius
+ * setup both show this value, so they never disagree. It reads while the socket is
  * connected: on (re)connect, on focus, every 30 seconds, and whenever the server invalidates
  * catalogs, which it does after any sign-in or sign-out, including another tab's or Pi's own.
  * A sign-in or sign-out made here is a mutation, so a read that started before it cannot
@@ -87,9 +87,3 @@ export function createProviderAccounts({
       }),
   };
 }
-
-/** Whether Share can publish: connected, read and signed in to Radius; no MCP or model gate. */
-export const signedInToRadius = (state: ProviderAccountsState, connected: boolean) =>
-  connected &&
-  !state.error &&
-  !!state.value?.some((provider) => provider.id === "radius" && provider.signedIn);

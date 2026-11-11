@@ -1079,7 +1079,7 @@ test(
 );
 
 test(
-  "INV-02/03: idle release and branch export agree on busy; a retired host rejects input",
+  "INV-02/03: idle release waits for in-flight input; a retired host rejects input",
   {
     timeout: 15000,
   },
@@ -1087,8 +1087,7 @@ test(
     await run(
       Effect.gen(function* () {
         const hosts = yield* SessionHosts;
-        const busy = /Wait for this session to finish/;
-        // An admitted action Pi has not answered keeps the session busy for both.
+        // An admitted action Pi has not answered keeps the session busy.
         const held = yield* registered("busy-held");
         const received = yield* observe(
           held,
@@ -1098,16 +1097,14 @@ test(
           .act({ _tag: "prompt", text: "/uncertain" })
           .pipe(Effect.forkChild);
         yield* Fiber.join(received);
-        assert.match((yield* hosts.exportBranch(cwd, "busy-held").pipe(Effect.flip)).detail, busy);
         yield* TestClock.adjust(500); // past the idle deadline, before the command times out
         assert.equal(yield* hosts.get(cwd, "busy-held"), held, "in-flight input is not idle");
         yield* hosts.release(cwd, "busy-held");
         yield* Fiber.await(pending); // release interrupts the admitted action
-        // Settled with no action in flight: both see it as not busy.
+        // Settled with no action in flight: not busy, so the idle deadline retires it.
         const s = yield* registered("busy-settled");
         yield* prompt(s, "/final");
         yield* quiescent(s);
-        assert.match(yield* hosts.exportBranch(cwd, "busy-settled"), /Final busy-settled/);
         yield* TestClock.adjust(2000);
         yield* waitAudit("busy-settled", (rs) => rs.some((r) => r.event === "exit"));
         assert.equal(yield* hosts.get(cwd, "busy-settled"), undefined);

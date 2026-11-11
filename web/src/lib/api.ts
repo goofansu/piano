@@ -265,9 +265,6 @@ export const sessionPullRequest = (
       )
     : call(Endpoints.sessionPullRequest, { query: { workspaceId, sessionId } }, options);
 
-export const shareSession = (workspaceId: string, sessionId: string) =>
-  call(Endpoints.shareSession, { query: { workspaceId, sessionId } });
-
 // Composer
 
 /** Before a session starts, from the directory's probe. */

@@ -246,7 +246,8 @@ repository facts, so neither is in the registry.
 
 Piano refuses to start on a corrupt database, an unrecognized one, or one from a newer Piano. It
 never resets a database. It upgrades an older database in place when it opens it, and the current
-schema is version 15, which adds durable `creation_attempts` claims for
+schema is version 16, which drops the saved Radius link of the removed session sharing; artifacts
+already published stay in Radius. Version 15 adds durable `creation_attempts` claims for
 [failed-creation recovery](runtime-ownership.md#failed-creation-and-reconnect). These small records
 are retained even after a session is removed, so replaying an old attempt cannot create again.
 They contain no prompt or attachments and do not clean up legacy sessions. Version 14 adds voice

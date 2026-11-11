@@ -3,12 +3,11 @@
  * current state again: a connection, session attachment or project can change while a form is open.
  * Known non-delivery keeps the input; uncertain delivery closes the form to prevent blind replay.
  *
- * Sharing publishes at most once per opening and keeps its result visible. Project navigation
- * waits for the registry change to appear in client state, not merely for the command to be sent.
+ * Project navigation waits for the registry change to appear in client state, not merely for the
+ * command to be sent.
  * CommandHost and the dialogs render this state and supply its effects.
  */
 // Relative, not @shared: module tests load this file directly in Node.
-import type { SessionShare } from "../../../shared/share.ts";
 import { type ClientCommand, SESSION_TITLE_MAX, type ServerMessage } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
@@ -22,15 +21,15 @@ import {
   projectSettingsSave,
 } from "./projectCommands.ts";
 import { inSidebarGroups, sessionCatalog, sessionLabel } from "./sessionCatalog.ts";
-import { canRenameSession, canShareSession } from "./sessionCommands.ts";
-import { sessionMutable, sessionReady, sessionWorking, workspaceFor } from "./sessionContext.ts";
+import { canRenameSession } from "./sessionCommands.ts";
+import { sessionMutable, sessionReady, sessionWorking } from "./sessionContext.ts";
 import { previewClaimHolds, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
 export interface FormAnswer {
   /** The form may be submitted now; otherwise its submit control is disabled. */
   allowed: boolean;
-  /** The socket command for an allowed non-share form; sharing uses HTTP instead. */
+  /** The socket command for an allowed form. */
   command?: ClientCommand;
   /** Project settings field feedback, from the same decision as its save. */
   projectCheck?: ProjectDraftCheck;
@@ -41,8 +40,6 @@ export interface FormAnswer {
    * project was listed in.
    */
   open?: FormPage;
-  /** What submitting a share form publishes; present exactly when an allowed share form. */
-  share?: { workspaceId: string; sessionId: string };
 }
 
 /** A page a submitted form opens: a project's home, the New page for a project, or the Projects index. */
@@ -52,8 +49,6 @@ export type FormPage =
   | { kind: "projects" };
 
 export interface AnswerContext {
-  /** Share publishes only while signed in to Radius. */
-  radiusSignedIn?: boolean;
   /** Names a new project; called only for an allowed new-project answer. */
   newId?: () => string;
   /** Project settings: the project as the dialog opened on it, which a save changes only where
@@ -69,7 +64,7 @@ export function answerForm(
   state: AppState,
   form: CommandForm,
   input: string | ProjectDraft = "",
-  { radiusSignedIn = false, newId = () => crypto.randomUUID(), opened }: AnswerContext = {},
+  { newId = () => crypto.randomUUID(), opened }: AnswerContext = {},
 ): FormAnswer {
   const text = typeof input === "string" ? input : "";
   switch (form.kind) {
@@ -101,16 +96,6 @@ export function answerForm(
           cwd,
           sessionId,
         },
-      };
-    }
-    // Sharing publishes over HTTP, not through a registry command.
-    case "share-session": {
-      const workspace = workspaceFor(state, form.target.cwd);
-      if (!radiusSignedIn || !workspace || !canShareSession(state, form.target))
-        return { allowed: false };
-      return {
-        allowed: true,
-        share: { workspaceId: workspace.id, sessionId: form.target.sessionId },
       };
     }
     case "close-folder":
@@ -165,7 +150,7 @@ export interface Confirmation {
 
 /**
  * The question a confirmation form asks, as of `state`; undefined for a form with its own dialog
- * (rename, share, project, project settings). Deleting a working session warns that it interrupts the work.
+ * (rename, project, project settings). Deleting a working session warns that it interrupts the work.
  */
 export function confirmation(state: AppState, form: CommandForm): Confirmation | undefined {
   switch (form.kind) {
@@ -236,18 +221,11 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
       };
     }
     case "rename-session":
-    case "share-session":
     case "project":
     case "project-settings":
       return undefined;
   }
 }
-
-export type SharePhase =
-  | { phase: "confirm" }
-  | { phase: "publishing" }
-  | { phase: "shared"; share: SessionShare }
-  | { phase: "failed"; error: string };
 
 export interface CommandFormsState {
   /** The open form; `null` when none is. */
@@ -256,18 +234,13 @@ export interface CommandFormsState {
   text: string;
   /** The New project or Project settings form's Name and Instructions; empty for every other form. */
   projectDraft: ProjectDraft;
-  /** The share form's phase; `confirm` for every other form. */
-  share: SharePhase;
 }
 
 export interface CommandFormsOptions {
   /** The page's state as of now; forms are answered against it when rendered and submitted. */
   getState: () => AppState;
-  radiusSignedIn: () => boolean;
   /** Sends a form's answer; one known not sent ("not-sent") keeps the form open to retry. */
   send: (command: ClientCommand) => SendDisposition;
-  /** Publish a session to Radius; resolves once the publication is confirmed. */
-  share: (workspaceId: string, sessionId: string) => Promise<SessionShare>;
   /** Opens the page a submitted form waits on, once the server confirms its change. */
   openPage: (page: FormPage) => void;
   newId?: () => string;
@@ -288,12 +261,11 @@ export interface CommandForms {
   /** The New project or Project settings form's draft. */
   editProject: (draft: ProjectDraft) => void;
   /**
-   * Send the open form's answer if it is allowed now, then close; a share form publishes instead and
-   * stays open on its result. An answer known not sent leaves the form open with its input. Returns
-   * whether anything was sent (or may have been) or published.
+   * Send the open form's answer if it is allowed now, then close. An answer known not sent leaves
+   * the form open with its input. Returns whether anything was sent (or may have been).
    */
   submit: () => boolean;
-  /** Close the open form; ignored while a share is publishing. */
+  /** Close the open form. */
   cancel: () => void;
   /**
    * Open the page the last submit waits on once the page's state shows its change: the new project
@@ -311,9 +283,6 @@ const editsProject = (form: CommandForm) =>
 /** Said when a form's answer is known not sent; the form stays open to retry. */
 export const FORM_NOT_SENT = "Change not sent. Retry when Piano reconnects.";
 
-export const SHARE_UNCONFIRMED =
-  "Sharing could not be confirmed. Check Radius artifacts before sharing again.";
-
 /** Whether `state` shows the change `command` makes, so the page it opens can show it. */
 const confirmedIn = (state: AppState, command: ClientCommand) =>
   command._tag === "save_project"
@@ -326,14 +295,11 @@ const CLOSED: CommandFormsState = {
   form: null,
   text: "",
   projectDraft: EMPTY_PROJECT_DRAFT,
-  share: { phase: "confirm" },
 };
 
 export function createCommandForms({
   getState,
-  radiusSignedIn,
   send,
-  share,
   openPage,
   newId,
 }: CommandFormsOptions): CommandForms {
@@ -361,25 +327,9 @@ export function createCommandForms({
           getState(),
           state.form,
           editsProject(state.form) ? state.projectDraft : state.text,
-          { radiusSignedIn: radiusSignedIn(), newId, opened },
+          { newId, opened },
         )
       : { allowed: false };
-
-  const publish = (form: CommandForm, workspaceId: string, sessionId: string) => {
-    // Only this opening of the form takes the result; a closed or replaced form ignores it.
-    const settle = (phase: SharePhase) => {
-      if (state.form === form) set({ ...state, share: phase });
-    };
-    set({ ...state, share: { phase: "publishing" } });
-    share(workspaceId, sessionId).then(
-      (result) => settle({ phase: "shared", share: result }),
-      (cause: unknown) =>
-        settle({
-          phase: "failed",
-          error: cause instanceof Error ? cause.message : SHARE_UNCONFIRMED,
-        }),
-    );
-  };
 
   return {
     getState: () => state,
@@ -394,7 +344,6 @@ export function createCommandForms({
         form,
         text: form.kind === "rename-session" ? (form.target.title ?? "") : "",
         projectDraft: opened ?? EMPTY_PROJECT_DRAFT,
-        share: { phase: "confirm" },
       });
     },
     edit: (text) => {
@@ -406,14 +355,8 @@ export function createCommandForms({
     submit: () => {
       const { form } = state;
       if (!form) return false;
-      // Publish at most once per opening: only from the confirmation phase.
-      if (form.kind === "share-session" && state.share.phase !== "confirm") return false;
       const answered = answer();
       if (!answered.allowed) return false;
-      if (answered.share) {
-        publish(form, answered.share.workspaceId, answered.share.sessionId);
-        return true;
-      }
       if (!answered.command) return false;
       // Sent or uncertain closes: an uncertain answer may have arrived, so it is never replayed.
       if (send(answered.command) === "not-sent") return false;
@@ -424,7 +367,7 @@ export function createCommandForms({
       return true;
     },
     cancel: () => {
-      if (state.form && state.share.phase !== "publishing") set(CLOSED);
+      if (state.form) set(CLOSED);
     },
     settle: () => {
       if (!waiting) return;

@@ -15,7 +15,6 @@ import { McpSetupChange, McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { Prompt, PromptCreate, PromptProposal, PromptUpdate } from "./prompts.ts";
 import { ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
-import { SessionShare } from "./share.ts";
 import { UserSkill, UserSkillCreate, UserSkillProposal, UserSkillUpdate } from "./skills.ts";
 import {
   MAX_VOICE_REQUEST_BYTES,
@@ -393,16 +392,6 @@ export const Endpoints = {
     noStore: true,
     refused: 400,
     fallback: "Could not load the pull request.",
-  }),
-
-  shareSession: endpoint({
-    method: "POST",
-    path: "/api/session/share",
-    query: ["workspaceId", "sessionId"],
-    response: SessionShare,
-    noStore: true,
-    refused: 409,
-    fallback: "Sharing could not be confirmed. Check Radius artifacts before sharing again.",
   }),
 
   // Composer

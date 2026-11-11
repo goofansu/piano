@@ -219,7 +219,7 @@ See [resource budgets](runtime-input-limits.md#remote-session-surfaces).
 
 A remote session's menu, in the sidebar and in its header, offers **Rename**, **Pin**,
 **Archive** and **Delete** as on Local. Archive and Delete stop the session on the remote, and
-Delete removes its history there. **Share** is on the remote's own Piano.
+Delete removes its history there.
 
 ### Artifacts and pull request
 
@@ -274,7 +274,7 @@ No peer voice settings or transcription endpoints are proxied, and no peer crede
   and/or raster images, in a project or none: no Browse, worktree creation or name. No sharing
   of a session, and no worktree or machine management. Add, close and reopen folders on the
   owning Piano.
-- No remote managed app previews, session sharing or account/settings controls beyond the model
+- No remote managed app previews or account/settings controls beyond the model
   picker's defaults and a registered folder's trust. These requests are not forwarded to Local.
 - The remote enforces these limits on its `/ws/peer` connection and answers a refused request the
   way it answers any failed one (for example "Unable to open session"); the connection stays open.

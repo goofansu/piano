@@ -251,7 +251,7 @@ test("INV-01/06/07: a prompt, rename, pin or membership starts no reader; sessio
   );
 });
 
-test("INV-01: a registry write made outside any browser request reaches the sidebar; cached statistics and the Radius share do not, a pull request link does", async () => {
+test("INV-01: a registry write made outside any browser request reaches the sidebar; cached statistics do not, a pull request link does", async () => {
   const git = slowGit();
   await run(
     git,
@@ -281,21 +281,16 @@ test("INV-01: a registry write made outside any browser request reaches the side
         stats: { cost: 1, statsUpdatedAt: Date.now() },
       });
       const named = (yield* registry.get).sessions.find((s) => s.sessionId === "pi-named")!;
-      const shared = yield* registry.setSessionLink(named, "radiusShare", {
-        organizationId: "org-a",
-        artifactId: "artifact-a",
-        url: "https://radius.earendil.com/a/artifact-a",
-      });
       yield* registry.touchSession(first, "pi-named");
       const [, next] = [...(yield* Fiber.join(views))];
       const updatedAt = (yield* registry.get).sessions[0]?.updatedAt;
       assert.equal(
         next?.sessionReferences?.[0]?.updatedAt,
         updatedAt,
-        "the view after the statistics and share writes is the touch",
+        "the view after the statistics write is the touch",
       );
       const shown = next?.sessionReferences?.[0] ?? {};
-      for (const hidden of ["stats", "pullRequest", "radiusShare"])
+      for (const hidden of ["stats", "pullRequest"])
         assert.equal(hidden in shown, false, `${hidden} stays off the wire`);
 
       // A pull request link is what tells a browser to read the PR, so its write publishes
@@ -305,7 +300,7 @@ test("INV-01: a registry write made outside any browser request reaches the side
       const [linkedView] = yield* Effect.all(
         [
           nextView(view, (m) => m.sessionReferences?.[0]?.pullRequest?.url === link.url),
-          registry.setSessionLink(shared!, "pullRequest", link),
+          registry.setSessionLink(named, "pullRequest", link),
         ],
         { concurrency: "unbounded" },
       );

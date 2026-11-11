@@ -9,7 +9,6 @@ import type { SessionLayout } from "./navigation.ts";
 import { type PreviewObservationState, seenPreview } from "./previewObservation.ts";
 import { pullRequestView } from "./pullRequestView.ts";
 import { sessionArtifacts } from "./sessionArtifacts.ts";
-import { sessionOpenable } from "./sessionCatalog.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
@@ -19,7 +18,6 @@ import {
   sessionReady,
   sessionReference,
   sessionWorking,
-  workspaceFor,
 } from "./sessionContext.ts";
 import {
   type PreviewClaim,
@@ -59,7 +57,6 @@ export type SessionCommandId =
   | "messages-only"
   | "rename"
   | "pin"
-  | "share"
   | "archive"
   | "delete"
   | "new-session-here";
@@ -79,7 +76,6 @@ export type SessionCommandIcon =
   | "rename"
   | "pin"
   | "unpin"
-  | "share"
   | "archive"
   | "delete"
   | "new";
@@ -109,7 +105,7 @@ export type SessionCommandIntent =
   /** Turn Messages only on or off. */
   | { kind: "messages-only"; on: boolean }
   /** Without a target the selected session has no Pi session ID yet; such a command is never enabled. */
-  | { kind: "rename" | "share" | "delete"; target: SessionTarget | undefined }
+  | { kind: "rename" | "delete"; target: SessionTarget | undefined }
   | { kind: "archive"; target: SessionTarget | undefined; confirm: boolean }
   | { kind: "new-session"; cwd: string };
 
@@ -183,9 +179,9 @@ export function environmentRowMenu(
  * beside Delete, though only Delete is destructive: both end the session's life.
  */
 const END_OF_LIFE = ["archive", "delete"] as const;
-const ROW_SECTIONS = [["rename", "pin"], ["share"], "project", END_OF_LIFE] as const;
+const ROW_SECTIONS = [["rename", "pin"], "project", END_OF_LIFE] as const;
 // Preview and Changes have their own controls; PR linking lives in Changes.
-const HEADER_SECTIONS = [["rename", "pin", "share"], "project", "display", END_OF_LIFE] as const;
+const HEADER_SECTIONS = [["rename", "pin"], "project", "display", END_OF_LIFE] as const;
 const HEADER_DETAILS = ["copy-session-path"] as const;
 
 /** The commands with these IDs, in the IDs' order rather than the descriptors'. */
@@ -233,22 +229,6 @@ export function canRenameSession(state: AppState, target: SessionTarget): boolea
 }
 
 /**
- * A saved, registered session that is not working (`sessionWorking`, the rule Archive and Delete
- * confirm on); capture refuses in-flight work on the server too.
- */
-export function canShareSession(state: AppState, target: SessionTarget): boolean {
-  const reference = sessionReference(state, target);
-  return (
-    sessionMutable(state, target) &&
-    !!workspaceFor(state, target.cwd) &&
-    !!reference &&
-    !reference.archived &&
-    sessionOpenable(reference) &&
-    !sessionWorking(state, target)
-  );
-}
-
-/**
  * Commands for `target`, or for the selected session when it is omitted. The selected session gets
  * every command; any other session only the management actions (rename, pin, archive, delete).
  *
@@ -256,8 +236,6 @@ export function canShareSession(state: AppState, target: SessionTarget): boolean
  * - rename, archive, delete: `sessionMutable` (connected, and a settled attachment for the selected
  *   session); rename also needs the checkout, since renaming starts Pi there.
  * - pin: connected with an active registry reference; independent of Pi attachment or activity.
- * - share (Radius sign-in only): `canShareSession`, mutable, saved and registered, and not
- *   `sessionWorking`, the one busy rule Archive and Delete confirm on.
  * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
  * - artifacts: listed only once the session published a Radius artifact (`sessionArtifacts`).
  * - session rail: side by side only (its facts need neither Git nor a live Pi); "Hide session
@@ -282,7 +260,6 @@ export function sessionCommands(
   options: {
     messagesOnly?: boolean;
     codeWrap?: boolean;
-    radiusSignedIn?: boolean;
     /** The session's layout as navigation has it; by default side by side with only Agent. */
     layout?: SessionLayout;
     /** The page's preview observation (`seenPreview`); without it no preview command is listed. */
@@ -472,18 +449,6 @@ export function sessionCommands(
                   pinned: !reference?.pinned,
                 },
               },
-            },
-          ]
-        : []),
-      ...(options.radiusSignedIn
-        ? [
-            {
-              id: "share" as const,
-              label: "Share",
-              icon: "share" as const,
-              enabled: !!subject && canShareSession(state, subject),
-              keywords: ["link", "publish"],
-              intent: { kind: "share" as const, target: subject },
             },
           ]
         : []),

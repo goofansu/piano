@@ -272,8 +272,7 @@ const headerIds = ({ details, sections, display }: SessionHeaderMenu) => [
 const rowCommands = ({ sections }: SessionRowMenu) => commandsOf(sections);
 
 test("the palette offers every command the session header and the sidebar row menu offer", () => {
-  const options = { radiusSignedIn: true };
-  const commands = sessionCommands(base, undefined, options);
+  const commands = sessionCommands(base);
   const palette = new Set(commands.map((c) => c.id));
   for (const id of headerIds(sessionHeaderMenu(commands)))
     assert.ok(palette.has(id), `header ${id}`);
@@ -281,7 +280,7 @@ test("the palette offers every command the session header and the sidebar row me
     assert.ok(palette.has(id), `row ${id}`);
   // The selected session's own row menu resolves to the same commands, with the same enablement.
   const row = rowCommands(
-    sessionRowMenu(sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" }, options)),
+    sessionRowMenu(sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" })),
   );
   const fromPalette = rowCommands(sessionRowMenu(commands));
   assert.deepEqual(
@@ -291,13 +290,11 @@ test("the palette offers every command the session header and the sidebar row me
 });
 
 test("each session menu places its project section after the manage commands and before Archive and Delete", () => {
-  const row = (radiusSignedIn: boolean) =>
-    ids(sessionRowMenu(sessionCommands(base, other, { radiusSignedIn })).sections);
-  assert.deepEqual(row(true), [["rename", "pin"], ["share"], "project", ["archive", "delete"]]);
-  assert.deepEqual(row(false), [["rename", "pin"], "project", ["archive", "delete"]]);
+  const row = ids(sessionRowMenu(sessionCommands(base, other)).sections);
+  assert.deepEqual(row, [["rename", "pin"], "project", ["archive", "delete"]]);
   // In the declared order, whatever order the descriptors come in.
-  const reversed = sessionCommands(base, other, { radiusSignedIn: true }).reverse();
-  assert.deepEqual(ids(sessionRowMenu(reversed).sections), row(true));
+  const reversed = sessionCommands(base, other).reverse();
+  assert.deepEqual(ids(sessionRowMenu(reversed).sections), row);
   assert.deepEqual(ids(sessionHeaderMenu(sessionCommands(base)).sections), [
     ["rename", "pin"],
     "project",
@@ -306,11 +303,9 @@ test("each session menu places its project section after the manage commands and
   ]);
 });
 
-test("the header menu: copy beside the details, manage with share only when signed in, a Messages only switch, then archive with delete", () => {
+test("the header menu: copy beside the details, manage, a Messages only switch, then archive with delete", () => {
   for (const messagesOnly of [false, true]) {
-    const menu = sessionHeaderMenu(
-      sessionCommands(base, undefined, { messagesOnly, radiusSignedIn: true }),
-    );
+    const menu = sessionHeaderMenu(sessionCommands(base, undefined, { messagesOnly }));
     assert.deepEqual(
       menu.details.map((c) => c.id),
       ["copy-session-path"],
@@ -318,7 +313,7 @@ test("the header menu: copy beside the details, manage with share only when sign
     assert.ok(!headerIds(menu).includes("pull-request"), "PR linking lives in Changes");
     assert.ok(sessionCommands(base).some((c) => c.id === "pull-request" && c.enabled));
     assert.deepEqual(ids(menu.sections), [
-      ["rename", "pin", "share"],
+      ["rename", "pin"],
       "project",
       "display",
       ["archive", "delete"],
@@ -331,38 +326,6 @@ test("the header menu: copy beside the details, manage with share only when sign
   assert.deepEqual(other.details, []);
   assert.equal(other.display, undefined);
   assert.ok(!other.sections.includes("display"));
-});
-
-test("Share is Radius-sign-in only and targets the row, independent of selected model or MCP", () => {
-  assert.ok(!sessionCommands(base).some((command) => command.id === "share"));
-  const share = (state: AppState, target = other) =>
-    sessionCommands(state, target, { radiusSignedIn: true }).find(
-      (command) => command.id === "share",
-    )!;
-  assert.equal(share(base).label, "Share");
-  assert.equal(share(base).enabled, true);
-  assert.deepEqual(share(base).intent, { kind: "share", target: other });
-  assert.equal(share({ ...base, connected: false }).enabled, false);
-  assert.equal(share({ ...base, workspaces: [] }).enabled, false);
-  assert.equal(share({ ...base, sessionReferences: [] }).enabled, false);
-  assert.equal(share({ ...base, hosts: [{ ...other, working: true }] }).enabled, false);
-  // The selected session is busy while its prompt is submitting, before its host streams.
-  const selected = { cwd: "/work/repo.feature", sessionId: "s1", title: "Selected" };
-  const selectedHost = [{ ...selected, working: false }];
-  assert.equal(share({ ...base, hosts: selectedHost }, selected).enabled, true);
-  const submitting = {
-    ...base,
-    hosts: selectedHost,
-    session: session(selected.cwd, { submission: { id: 1, outcome: "submitting" } }),
-  };
-  assert.equal(share(submitting, selected).enabled, false);
-  // An unavailable checkout does not prevent sharing its saved history.
-  const withAvailability = (unavailable: "history" | "checkout") => ({
-    ...base,
-    sessionReferences: [sessionReference(other.cwd, other.sessionId, { unavailable })],
-  });
-  assert.equal(share(withAvailability("history")).enabled, false);
-  assert.equal(share(withAvailability("checkout")).enabled, true);
 });
 
 const app = (preview: Partial<SessionPreview> = {}): SessionPreview => ({

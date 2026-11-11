@@ -57,9 +57,6 @@ export class ProviderLogin extends Context.Service<
     readonly signOut: (provider: string) => Effect.Effect<void, SignInError>;
     readonly apiKeys: Effect.Effect<readonly ApiKeyProvider[], ProvidersError>;
     readonly changeApiKey: (change: ProviderApiKeyChange) => Effect.Effect<void, SignInError>;
-    /** A bearer token valid for at least five more minutes, only while the user is signed in to
-     * the provider; undefined otherwise. Ambient API keys never authorize a Piano feature. */
-    readonly bearer: (provider: string) => Effect.Effect<string | undefined, Error>;
   }
 >()("piano/ProviderLogin") {}
 
@@ -269,20 +266,6 @@ export const ProviderLoginLive = Layer.effect(
             await persisted("logout", () => runtime.logout(provider));
           },
         );
-      }),
-      bearer: Effect.fn("ProviderLogin.bearer")(function* (provider: string) {
-        return yield* Effect.tryPromise(async (signal) => {
-          const runtime = await factory.create(signal);
-          if (!(await signedIn(runtime, signal)).has(provider)) return undefined;
-          const auth = await runtime.getAuth(provider, { minOAuthValidityMs: 300_000, signal });
-          const authorization = Object.entries(auth?.auth.headers ?? {}).find(
-            ([name]) => name.toLowerCase() === "authorization",
-          )?.[1];
-          return (
-            auth?.auth.apiKey ??
-            (authorization ? /^Bearer\s+(.+)$/iu.exec(authorization)?.[1] : undefined)
-          );
-        });
       }),
     });
   }),
