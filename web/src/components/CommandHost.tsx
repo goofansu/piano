@@ -143,6 +143,7 @@ export function useSessionCommands(target?: SessionTarget) {
       codeWrap,
       layout,
       previewObservation: observed,
+      startsSessionIn: offers.startsSessionIn,
     }).filter(offers.command),
     run,
     messagesOnly,

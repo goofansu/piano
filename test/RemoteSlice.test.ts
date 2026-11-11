@@ -323,3 +323,99 @@ test("what Local adds to the same journey, the remote refuses", () => {
   assert.ok(create, "a first message with an attached image");
   for (const m of refused) assert.notEqual(m._tag, "select", "opening a session is the slice");
 });
+
+test("on a remote, every enabled New session here opens a New page where the remote starts it", () => {
+  // A pinned session in a closed folder stays listed, though the remote starts nothing there.
+  const CLOSED = "/closed";
+  const withClosed: RegistryData = {
+    ...registry,
+    workspaces: [...registry.workspaces, { id: "ws2", folder: CLOSED, path: CLOSED }],
+    sessions: [
+      ...registry.sessions,
+      { ...registry.sessions[0]!, cwd: CLOSED, sessionId: "s2", pinned: true },
+    ],
+  };
+  const machine = { id: "eng-1", name: "Eng" };
+  const offers = machineOffers(machine);
+  let handlers: ConnectionHandlers | undefined;
+  let ids = 0;
+  const client = createClient({
+    initial: initialState,
+    connect: (h) => {
+      handlers = h;
+      return { send: () => "sent", close: () => {} };
+    },
+    notify: () => {},
+    newSelectionId: () => `sel${++ids}`,
+    startsSessionIn: offers.startsSessionIn,
+  });
+  client.start();
+  handlers!.onStatus(true);
+  const workspace = withClosed.workspaces[0]!;
+  handlers!.onMessage({
+    _tag: "registry",
+    folders: [
+      {
+        path: CWD,
+        name: "repo",
+        worktrees: [
+          {
+            workspace,
+            trust: { required: false, trusted: false },
+            branch: "main",
+            path: CWD,
+            root: true,
+            status: "current",
+          },
+        ],
+        discovery: { status: "ready", observedAt: "", currentPath: CWD, worktrees: [] },
+      },
+    ],
+    workspaces: withClosed.workspaces,
+    sessionReferences: withClosed.sessions.map((s) => ({
+      ...s,
+      workspaceId: withClosed.workspaces.find((w) => w.path === s.cwd)!.id,
+      branch: null,
+    })),
+  });
+
+  const started: string[] = [];
+  for (const { cwd, sessionId } of withClosed.sessions) {
+    client.select(cwd, sessionId);
+    handlers!.onMessage({
+      _tag: "selected",
+      cwd,
+      sessionId,
+      selectionId: client.getState().selectionId!,
+      hosted: false,
+      cursor: { cwd, sessionId, generation: "g1", sequence: 1 },
+      snapshot: { state: { sessionId, isStreaming: false }, messages: [], dialogs: [] },
+    });
+    // As useSessionCommands lists them for this machine.
+    const commands = sessionCommands(client.getState(), undefined, {
+      startsSessionIn: offers.startsSessionIn,
+    }).filter(offers.command);
+    for (const command of commands) {
+      if (command.intent.kind !== "new-session" || !command.enabled) continue;
+      // What running it does (runCommand's openNew), then the remote's verdict on starting there.
+      const target = command.intent.cwd;
+      client.dispatch({ type: "open", page: { kind: "new", cwd: target } });
+      const view = client.getState().view;
+      assert.equal(view.kind === "new" && view.cwd, target, "no silent retarget");
+      const create: ClientMessage = {
+        _tag: "create_session",
+        cwd: target,
+        selectionId: "sel-new",
+        options: {},
+        text: "Reply with exactly: X",
+      };
+      assert.equal(peerVerdict(withClosed, create, null), "admit", target);
+      started.push(target);
+    }
+  }
+  assert.deepEqual(
+    started,
+    [CWD],
+    "the open folder's session offers it; the closed one's does not",
+  );
+});

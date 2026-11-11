@@ -63,9 +63,9 @@ function MachineApp() {
           url: () => machineSocketUrl(machine.id),
           frameBytes: machineFrameBytes(machine.id),
         }),
-      // Each machine remembers its own last directory; a remote starts only in its open folders.
+      // Each machine remembers its own last directory and decides where a session may start.
       lastDirectory: storedLastDirectory(machine.id),
-      openFoldersOnly: !offers.browse,
+      startsSessionIn: offers.startsSessionIn,
     },
   );
   const { dispatch, send } = client;

@@ -14,7 +14,6 @@ import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
 import { machineMemory } from "./machineMemory.ts";
 import { projectStartDirectory } from "./projectHome.ts";
-import { folderFor } from "./sessionCatalog.ts";
 import { focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
 import type { Connection, ConnectionHandlers, DisconnectReason, SendDisposition } from "./ws.ts";
@@ -79,11 +78,11 @@ export interface ClientOptions {
    */
   lastDirectory?: LastDirectory;
   /**
-   * The New page starts only in a folder open on this machine or one of its worktrees (a remote,
-   * where nothing else can be chosen): a remembered directory that is no longer one gives way to
-   * the first folder once the registry says so.
+   * Where the machine starts a new session (`MachineOffers.startsSessionIn`); anywhere by default.
+   * A New page directory it would refuse, such as a remembered one in a folder closed since,
+   * gives way to the first folder once the registry says so.
    */
-  openFoldersOnly?: boolean;
+  startsSessionIn?: (state: AppState, cwd: string) => boolean;
 }
 
 /** Live projections may share a paint; input and connection changes must render immediately. */
@@ -115,7 +114,7 @@ export function createClient({
   notify,
   newSelectionId = () => crypto.randomUUID(),
   lastDirectory = { read: () => null, write: () => {} },
-  openFoldersOnly = false,
+  startsSessionIn = () => true,
 }: ClientOptions): Client {
   /**
    * A New page opened without a directory or project starts in the last one used, else the first
@@ -124,7 +123,7 @@ export function createClient({
   const withNewPageDirectory = (s: AppState) => {
     const page = startPage(s.view);
     if (!page) return s;
-    const closed = openFoldersOnly && s.registryLoaded && !!page.cwd && !folderFor(s, page.cwd);
+    const closed = s.registryLoaded && !!page.cwd && !startsSessionIn(s, page.cwd);
     if (page.cwd && !closed) return s;
     const remembered = closed ? undefined : lastDirectory.read();
     const cwd =

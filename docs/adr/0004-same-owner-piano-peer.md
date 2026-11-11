@@ -129,8 +129,10 @@ another. Storing them per machine keeps that guarantee and removes the differenc
   longer in it, any machine key left in the store it does not belong to, and Local's keys from
   before the prefix. A failed read deletes nothing, and an
   unavailable machine is still configured.
-- A remote starts only in its open folders, so a remembered directory that is no longer one gives
-  way to the first folder once the peer's list arrives. The peer still refuses any other path.
+- A remote starts only in its open folders, one rule the browser asks in one place
+  (`MachineOffers.startsSessionIn`): a remembered directory that is no longer one gives way to the
+  first folder once the peer's list arrives, and New session here is unavailable for a listed
+  session in a closed folder. The peer still refuses any other path.
 - A remembered location is a path within the machine. Anything else stored there opens the New
   page, and a session deleted since shows Session not found, as an old link does.
 - This is memory in one browser, not synchronization. A stored catalog is shown until the

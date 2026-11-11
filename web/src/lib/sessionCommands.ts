@@ -264,6 +264,8 @@ export function sessionCommands(
     layout?: SessionLayout;
     /** The page's preview observation (`seenPreview`); without it no preview command is listed. */
     previewObservation?: Pick<PreviewObservationState, "unconfirmed">;
+    /** Where the machine starts a new session (`MachineOffers.startsSessionIn`); anywhere by default. */
+    startsSessionIn?: (state: AppState, cwd: string) => boolean;
   } = {},
 ): SessionCommand[] {
   const session = state.session;
@@ -479,7 +481,9 @@ export function sessionCommands(
       id: "new-session-here",
       label: "New session here",
       icon: "new",
-      enabled: !checkoutMissingAt(state, session.cwd),
+      enabled:
+        !checkoutMissingAt(state, session.cwd) &&
+        (options.startsSessionIn?.(state, session.cwd) ?? true),
       keywords: ["directory"],
       detail: session.cwd,
       intent: { kind: "new-session", cwd: session.cwd },
