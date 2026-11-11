@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PaletteGroup } from "./commandPalette.ts";
-import {
-  type PalettePage,
-  type PalettePages,
-  pagePalette,
-  searchPalette,
-} from "./paletteSearch.ts";
+import { answerPalette, type PalettePage, type PalettePages } from "./paletteSearch.ts";
 import { createPaletteSearchClient } from "./paletteSearchClient.ts";
 
 const FIRST_PAGES: PalettePages = {};
@@ -61,7 +56,8 @@ export function usePaletteSearch(groups: PaletteGroup[], query: string, paused: 
     return () => transport.current?.cancel();
   }, [groups, query, currentPages, generation, paused, error, current]);
 
-  const recents = useMemo(() => pagePalette(searchPalette(groups, "")), [groups]);
+  // Blank input is answered here, synchronously; only a search asks the worker.
+  const recents = useMemo(() => answerPalette(groups, "", currentPages), [groups, currentPages]);
   const changePage = useCallback(
     (group: PaletteGroup["id"], page: number) => setPages({ ...currentPages, [group]: page }),
     [currentPages],

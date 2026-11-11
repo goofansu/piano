@@ -105,17 +105,31 @@ export interface PaletteSearchReply {
   pages: PalettePage<PaletteDocuments>[];
 }
 
-/** Worker-owned catalog and last ranking: paging never repeats the fuzzy scan. */
+/** Each catalog's last ranking: paging and recents never repeat the fuzzy scan. */
+const rankings = new WeakMap<readonly PaletteDocuments[], { query: string; ranked: unknown[] }>();
+
+/**
+ * The palette's one answer to (catalog, query, pages): the worker calls it for a search and the
+ * hook calls it synchronously for blank input, so both page the same way.
+ */
+export function answerPalette<G extends PaletteDocuments>(
+  groups: readonly G[],
+  query: string,
+  pages: PalettePages = {},
+): PalettePage<G>[] {
+  let ranking = rankings.get(groups);
+  if (ranking?.query !== query) {
+    ranking = { query, ranked: searchPalette(groups, query) };
+    rankings.set(groups, ranking);
+  }
+  return pagePalette(ranking.ranked as G[], pages);
+}
+
+/** Worker-owned catalog: sent only when it changes, not with each keystroke or page. */
 export function createPaletteSearch() {
   let groups: PaletteDocuments[] = [];
-  let query: string | undefined;
-  let ranked: PaletteDocuments[] = [];
   return (request: PaletteSearchRequest): PaletteSearchReply => {
     if (request.groups) groups = request.groups;
-    if (request.groups || request.query !== query) {
-      query = request.query;
-      ranked = searchPalette(groups, query);
-    }
-    return { id: request.id, pages: pagePalette(ranked, request.pages) };
+    return { id: request.id, pages: answerPalette(groups, request.query, request.pages) };
   };
 }
