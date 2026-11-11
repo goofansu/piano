@@ -440,10 +440,9 @@ test(
       const change = async (message: object, shown: (listing: Listing) => boolean) => {
         const from = peer.frames.length;
         peer.ws.send(JSON.stringify(message));
-        const answer = await peer.next(
-          (frame) => frame._tag === "toast" || frame._tag === "error",
-          from,
-        );
+        // A change is confirmed by its toast. An earlier subtest's session may still be reporting
+        // (a Stop settling answers with an error): that is not this request's reply.
+        const answer = await peer.next((frame) => frame._tag === "toast", from);
         await peer.next(
           (frame) => frame._tag === "registry" && shown(frame as unknown as Listing),
           from,
@@ -531,13 +530,18 @@ test(
           assign: { cwd: "/different", sessionId: "s" },
         },
       ]) {
-        // The session created above may still be reporting; only this request's replies count.
+        // A session created earlier may still be reporting; only this request's replies count:
+        // its refusal, and no confirmation.
         const answers = (await peer.answers(refused)).filter(
-          (frame) => frame._tag === "error" || frame._tag === "toast",
+          (frame) =>
+            frame._tag === "toast" ||
+            (frame._tag === "error" && notAvailable.test(String(frame.message))),
         );
-        assert.equal(answers.length, 1, JSON.stringify(refused));
-        assert.equal(answers[0]?._tag, "error", JSON.stringify(refused));
-        assert.match(String(answers[0]?.message), notAvailable);
+        assert.deepEqual(
+          answers.map((frame) => frame._tag),
+          ["error"],
+          JSON.stringify(refused),
+        );
       }
 
       assert.equal(
@@ -562,7 +566,7 @@ test(
           await peer.next((frame) => frame._tag === "registry" && shown(entries(frame)), from);
           return peer.frames
             .slice(from)
-            .filter((frame) => frame._tag === "toast" || frame._tag === "error")
+            .filter((frame) => frame._tag === "toast")
             .map((frame) => String(frame.message));
         };
         const confirmed = async (
@@ -572,10 +576,7 @@ test(
         ) => {
           const from = peer.frames.length;
           await change(message, shown);
-          const answer = await peer.next(
-            (frame) => frame._tag === "toast" || frame._tag === "error",
-            from,
-          );
+          const answer = await peer.next((frame) => frame._tag === "toast", from);
           assert.equal(answer.message, toast);
         };
 
@@ -640,10 +641,16 @@ test(
               title: "x",
               pinned: true,
             })
-          ).filter((frame) => frame._tag === "error" || frame._tag === "toast");
-          assert.equal(answers.length, 1, _tag);
-          assert.equal(answers[0]?._tag, "error", _tag);
-          assert.match(String(answers[0]?.message), notAvailable, _tag);
+          ).filter(
+            (frame) =>
+              frame._tag === "toast" ||
+              (frame._tag === "error" && notAvailable.test(String(frame.message))),
+          );
+          assert.deepEqual(
+            answers.map((frame) => frame._tag),
+            ["error"],
+            _tag,
+          );
         }
       },
     );

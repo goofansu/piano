@@ -27,6 +27,7 @@ Use the [domain glossary](glossary.md) to distinguish sessions, tasks, evidence 
 on macOS or systemd on Linux, private exe.dev configuration and exact-instance status/stop.
 [ADR 0003](adr/0003-pi-owned-preview-lifetime.md) supersedes PIN-94’s independent lifetime;
 legacy apps must be explicitly stopped before upgrade.
+[Browser storage](browser-storage.md) has the rules for what the web UI keeps in the browser.
 [Configuration and storage](configuration.md), [provider sign-in](provider-sign-in.md) and
 [development checks and policy](development.md) hold the detail the root README links to.
 Contributor skill preferences are optional; see the development handoff.
