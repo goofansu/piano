@@ -53,11 +53,13 @@ Keep implementation details out; name user paths, handles, required state, comma
 
 - [Start a session](./start-session.md): the New page, its directory, model, effort and project
   choices, restoring model defaults, the first message and reply, reload without resending,
-  a kept draft when not sent.
+  navigation-retained drafts, confirmed failed-start recovery, image attachment/refusal/preview,
+  and a kept draft when not sent.
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
   home; read history and cost; follow up; stop a running reply; archive and delete from the row's
   menu; responsive sidebar controls; the narrow session-menu sheet and its project picker;
-  the published-artifact menu, including codemode receipts.
+  the published-artifact menu, including codemode receipts; unavailable-history recovery and
+  the configured-peer prerequisite, including peer image/voice coverage limits.
 - [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
   per project with folders, count, last activity and the project menu; New project in the header;
   Done / Reopen and the folded Done group; empty and phone.
@@ -73,7 +75,7 @@ Keep implementation details out; name user paths, handles, required state, comma
   `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
   empty states; the separate agent-authored approval path's real-Pi prerequisite.
 - [Settings › Providers, Webhooks and Preferences](./settings-other.md): unsigned-in provider/Radius
-  setup, the voice-input key prerequisite and cancellation, inactive webhook CRUD and URL refusal;
+  setup, the main-owned voice-input preference, key prerequisite and cancellation, inactive webhook CRUD and URL refusal;
   authenticated setup, transcription and webhook delivery remain separate checks.
 - [Settings › MCP](./settings-mcp.md): `/settings/mcp` over the scratch `mcp.json`; Connect,
   Add MCP server by form and JSON paste (URL/startup refusals and local command success),
@@ -97,6 +99,10 @@ Keep these prerequisites visible when using the default launch:
 - Voice input and authenticated Share require the setup described in
   [Providers and Preferences](./settings-other.md#gotchas). A fake echo or an unsigned-in page
   does not establish transcription, secret checking or sharing.
+- Remote sessions, image preparation/preview isolation and peer voice checks need configured,
+  reachable peers. The default launch has none; use the explicit prerequisite route in
+  [Open a session](./open-session.md). The committed remote journey needs three Piano instances,
+  exceeding the one-instance limit. Its voice helper is not independently runnable.
 - Managed Preview (external tabs, rail actions and the same-sheet Preview pane) needs the isolated real-Pi/native
   supervisor journey in [`docs/testing.md`](../../../../docs/testing.md#managed-preview-host-journey),
   `node test/browser/preview.mjs <evidence-directory>`. The default fake's Changes/rail checks

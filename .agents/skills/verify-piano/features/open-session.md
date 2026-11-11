@@ -38,7 +38,15 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
   an "Inspect response" slider; the Session column remains the session totals.
 - `inline-question`: the browser fake's `question` prompt shows Which checks?, Quick checks /
   Full suite and Send answer; the answer appears in the transcript.
-- `follow-up`: "Message" plus Enter sends to the same Pi session.
+- `unavailable-history`: a missing Pi history disables the sidebar and project-home title,
+  omits the session from palette results, and makes `/s/<id>` show "History unavailable" /
+  "Restore the Pi session file to open it." The disabled sidebar row keeps its recovery menu
+  on phones too: Rename is disabled, but Archive and Delete remain available while connected.
+- `remote`: a configured Machine opens its own catalog and `/m/<machine>/s/<id>` conversation.
+  Remote New uses only that machine's registered directories. Projects, Settings, Changes,
+  files, session management and managed Preview stay on the remote's own Piano, not this slice.
+- `follow-up`: "Message" plus Enter sends to the same Pi session. Image controls are shared
+  with New; see [Start a session](./start-session.md) `images`.
 - `stop`: "Stop" aborts a running reply.
 - `nested-calls`: an opened codemode tool row lists the calls its script made, one line each
   (status dot, tool name, what it acted on) that opens to its arguments and output. More than 8
@@ -61,7 +69,8 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 
 - Sidebar row (grouped by date by default: "Today").
 - A project home card, or Mod+K and the session's title.
-- Address bar: `/s/<sessionId>`.
+- Address bar: `/s/<sessionId>`, or `/m/<configured-machine>/s/<sessionId>` for a peer.
+  The Machine picker requires a configured peer; a default launch lists only Local.
 
 ## Driving it with agent-browser
 
@@ -150,6 +159,35 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     navigation "Sessions". Capture `04-archived`. Delete is driven on the project home
     ([`project-home.md`](./project-home.md) `row-actions`). Both change the database; relaunch
     afterwards.
+- `unavailable-history` (alternative destructive recipe for the loose seed)
+  - Preconditions: Loose session has not been continued or archived in this run. Reading saved
+    history is fine; a live Pi can still supply history after its file moves. Use this recipe
+    instead of the loose seed's follow-up/stop/archive steps (also covered by the harness).
+  - Action: `ab open "$WEB_URL/s/verify-loose"; ab wait --text 'Answer 4.'`;
+    capture `17-before-history-removal`.
+    Move only this scratch fixture's history out of its history directory:
+    `mv "$RUN/pi-sessions/verify-loose.jsonl" "$RUN/verify-loose.saved"; ab reload;
+    ab wait --text 'History unavailable'`. Capture `18-history-unavailable`.
+  - Palette: Mod+K, fill `[cmdk-input]` with `Loose session`, wait for
+    `'[cmdk-list][aria-busy="false"]'`; `No sessions or commands match.` appears. Capture
+    `19-palette-omitted`, then Escape.
+  - Phone recovery: `ab set viewport 390 844;
+    ab find role button click --name 'Show sidebar' --exact; ab wait '[role=dialog]'`.
+    Wait for the sidebar sheet to settle before clicking its row menu:
+    `ab wait --fn "[...document.querySelectorAll('[role=dialog]')].every(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))"`.
+    `ab find role button click --name 'Session menu for Loose session' --exact;
+    ab wait '[role=menu]'`. Capture `20-recovery-menu`: Rename disabled, Archive/Delete enabled.
+    `ab find role menuitem click --name Archive --exact; ab wait --text 'Session archived'`.
+    Capture `21-unavailable-archived`, Escape and restore the desktop viewport.
+  - This changes the scratch history and database. A missing checkout with intact history is
+    different: history remains readable, as the open-session harness's Gone worktree covers.
+- `remote` prerequisite (safe on the default launch)
+  - Action: `ab open "$WEB_URL/m/not-configured/s/verify-plan";
+    ab wait --text 'Machine unavailable'`; capture `22-peer-prerequisite`.
+  - Result: Local recovery button, no Message composer and no fallback to the local session.
+    `ab find role button click --name Local --exact` returns to Local. Report the remote
+    conversation/image/voice paths as `verified-unreachable`, naming this attempted route and
+    the missing configured, reachable peer. An unknown-machine page is not a peer success check.
 - `artifacts` (separate `--fake-pi dialogs` launch, from `/new`)
   - Action: `ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
     ab fill '[aria-label="First message"]' 'artifact verify confirmed Verification report';
@@ -183,6 +221,18 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 
 ## Gotchas
 
+- Remote conversation, draft isolation, prepared image upload/refusal/cancellation and peer
+  previews require another Piano with its own database/history and a configured peer connection.
+  The committed `test/browser/remote-session.mjs` covers those boundaries with main plus two
+  independent peers; it cannot run under this skill's one-instance limit. Its imported
+  `voice-input.mjs` helper also needs those peers. Record that unmet prerequisite rather than
+  running the helper alone or borrowing the owner's Piano. An exe.dev peer additionally needs
+  an authorized peer integration or VM-scoped token, as described in
+  [Remote Pianos](../../../../docs/remote-piano.md#setup); direct exe.dev UI/link access needs a
+  signed-in browser. Record the actual route attempted and the unmet prerequisite.
+- Remote image thumbnails and full-image links use
+  `/peer/<machine>/api/peer/image-preview?workspaceId=<id>&sessionId=<id>&hash=<hash>`;
+  local image success does not prove peer scoping. Neither path carries a filesystem path.
 - Opening a session can start a `probe` Pi for an uncached composer catalog; it is not a resend.
 - "hold" must be the whole prompt for the fake Pi to keep running.
 - Fake Pi supplies Session cost, not Session token totals (those remain `—`). After the seeded
