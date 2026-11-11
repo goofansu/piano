@@ -8,6 +8,7 @@ import {
 } from "../web/src/lib/commandPalette.ts";
 import { type GlobalCommandContext, globalCommands } from "../web/src/lib/globalCommands.ts";
 import {
+  answerPalette,
   createPaletteSearch,
   pagePalette,
   paletteSelection,
@@ -270,6 +271,34 @@ test("worker project-only browsing keeps bounded pages and switches back to ordi
   );
   assert.ok(
     search({ id: 4, query: "session", pages: {} }).pages.some((p) => p.group.id === "sessions"),
+  );
+});
+
+test("blank input pages active projects as a search does, without the worker", () => {
+  const state = {
+    ...home,
+    projects: Array.from({ length: 51 }, (_, i) => ({
+      id: `p${String(i).padStart(2, "0")}`,
+      name: `Project ${String(i).padStart(2, "0")}`,
+    })),
+  };
+  const groups = commandPalette(state, { globalCommands: [], sessionCommands: [] });
+  const projects = (pages: Parameters<typeof answerPalette>[2]) =>
+    answerPalette(groups, "", pages).find((p) => p.group.id === "projects")!;
+  assert.deepEqual(
+    [projects({}).total, projects({}).group.rows.length, projects({}).page],
+    [51, 50, 0],
+  );
+  const next = projects({ projects: 1 });
+  assert.deepEqual(
+    [next.page, next.group.rows.map((r) => r.key)],
+    [1, ["p50"]],
+    "Next projects shows the 51st project",
+  );
+  assert.equal(
+    answerPalette(groups, "", { projects: 1 }).find((p) => p.group.id === "sessions")?.page,
+    0,
+    "another group's page is unaffected",
   );
 });
 
