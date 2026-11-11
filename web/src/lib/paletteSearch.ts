@@ -20,9 +20,13 @@ export function searchPalette<G extends PaletteDocuments>(
   groups: readonly G[],
   search: string,
 ): G[] {
-  const query = search.trim();
+  const trimmed = search.trim();
+  // Only the leading, standalone lowercase token is syntax; other text stays a normal query.
+  const projectsOnly = /^!p(?:\s|$)/.test(trimmed);
+  const query = projectsOnly ? trimmed.slice(2).trim() : trimmed;
+  const scoped = projectsOnly ? groups.filter((group) => group.id === "projects") : groups;
   if (!query)
-    return groups.map((group) => {
+    return scoped.map((group) => {
       const limit = group.id === "sessions" ? RECENT_SESSION_LIMIT : Infinity;
       return {
         ...group,
@@ -30,7 +34,7 @@ export function searchPalette<G extends PaletteDocuments>(
         rows: group.rows.filter((row) => !row.searchOnly).slice(0, limit),
       } as G;
     });
-  return groups
+  return scoped
     .map((group) => {
       const matches = group.rows
         .map((row) => ({ row, score: paletteFilter(row.value, query, row.keywords) }))

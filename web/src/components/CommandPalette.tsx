@@ -2,6 +2,7 @@ import { cn } from "cn";
 import {
   Fragment,
   memo,
+  type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
@@ -16,6 +17,7 @@ import {
   useSessionProjectMenu,
 } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
+import { PianoButton } from "@/components/PianoButton";
 import {
   CommandDialog,
   CommandEmpty,
@@ -151,8 +153,7 @@ function PaletteContents({
   }, [results.result, results.selectionKey, pending, selected, setSelected]);
 
   return (
-    <>
-      <PaletteInput input={input} active={open} pending={pending} edit={edit} commit={commit} />
+    <PaletteInput input={input} active={open} pending={pending} edit={edit} commit={commit}>
       <CommandList ref={list} aria-busy={pending} className="max-h-[min(24rem,60dvh)]">
         <CommandEmpty>
           {results.error
@@ -169,23 +170,25 @@ function PaletteContents({
           page={changePage}
         />
       </CommandList>
-    </>
+    </PaletteInput>
   );
 }
 
-/** Urgent text state lives here, outside the dialog/catalog/results render path. */
+/** Urgent text and the empty-input shortcut stay outside the catalog/results render path. */
 const PaletteInput = memo(function PaletteInput({
   input,
   active,
   pending,
   edit,
   commit,
+  children,
 }: {
   input: RefObject<HTMLInputElement | null>;
   active: boolean;
   pending: boolean;
   edit: () => void;
   commit: (query: string) => void;
+  children: ReactNode;
 }) {
   const [text, setText] = useState("");
   const composing = useRef(false);
@@ -205,37 +208,62 @@ const PaletteInput = memo(function PaletteInput({
     else timer.current = setTimeout(() => commit(value), 80);
   };
   return (
-    <CommandInput
-      ref={input}
-      value={text}
-      onValueChange={(value) => {
-        setText(value);
-        edit();
-        schedule(value);
-      }}
-      onCompositionStart={() => {
-        composing.current = true;
-        clearTimeout(timer.current);
-        edit();
-      }}
-      onCompositionEnd={(event) => {
-        composing.current = false;
-        schedule(event.currentTarget.value);
-      }}
-      onKeyDown={(event) => {
-        if (pending && ["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key))
-          event.preventDefault();
-        if (event.key !== "Enter") return;
-        if (isImeKey(event) || composing.current || event.repeat) event.preventDefault();
-        else if (pending) {
-          event.preventDefault();
+    <>
+      <CommandInput
+        ref={input}
+        value={text}
+        onValueChange={(value) => {
+          setText(value);
+          edit();
+          schedule(value);
+        }}
+        onCompositionStart={() => {
+          composing.current = true;
           clearTimeout(timer.current);
-          commit(event.currentTarget.value);
-        }
-      }}
-      placeholder="Search sessions, projects and commands…"
-      aria-label="Search sessions, projects and commands"
-    />
+          edit();
+        }}
+        onCompositionEnd={(event) => {
+          composing.current = false;
+          schedule(event.currentTarget.value);
+        }}
+        onKeyDown={(event) => {
+          if (pending && ["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key))
+            event.preventDefault();
+          if (event.key !== "Enter") return;
+          if (isImeKey(event) || composing.current || event.repeat) event.preventDefault();
+          else if (pending) {
+            event.preventDefault();
+            clearTimeout(timer.current);
+            commit(event.currentTarget.value);
+          }
+        }}
+        placeholder="Search sessions, projects and commands…"
+        aria-label="Search sessions, projects and commands"
+      />
+      {children}
+      {text === "" && (
+        <div className="flex px-2 pb-2">
+          <PianoButton
+            variant="ghost"
+            size="sm"
+            // Enter here activates this button, not cmdk's selected result.
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.stopPropagation();
+            }}
+            onClick={() => {
+              clearTimeout(timer.current);
+              composing.current = false;
+              edit();
+              setText("!p ");
+              commit("!p ");
+              input.current?.focus();
+            }}
+          >
+            Projects only <span className="font-mono text-muted-foreground">!p</span>
+          </PianoButton>
+        </div>
+      )}
+    </>
   );
 });
 

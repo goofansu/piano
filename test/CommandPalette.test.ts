@@ -189,6 +189,90 @@ test("Projects offers active projects by name on every page, with navigation-onl
   assert.ok(!palette({ ...home, projects: [projects[1]] }).some((g) => g.id === "projects"));
 });
 
+test("!p browses and searches only active project navigation, not related sessions or commands", () => {
+  const state = {
+    ...inSession,
+    projects: [
+      ...home.projects,
+      { id: "alpha", name: "Alpha" },
+      { id: "done", name: "Launch finished", doneAt: "" },
+    ],
+  };
+  for (const query of ["!p", "  !p  ", "!p\t"]) {
+    const groups = palette(state, query);
+    assert.deepEqual(
+      groups.map((g) => g.id),
+      ["projects"],
+    );
+    assert.deepEqual(
+      groups[0].rows.map((r) => r.key),
+      ["alpha", "launch"],
+    );
+  }
+  for (const query of ["!p lau", "  !p\tLAU  "]) {
+    const groups = palette(state, query);
+    assert.deepEqual(
+      groups.map((g) => g.id),
+      ["projects"],
+    );
+    assert.deepEqual(
+      groups[0].rows.map((r) => r.key),
+      ["launch"],
+    );
+  }
+  assert.deepEqual(palette(state, "!p missing"), []);
+  assert.deepEqual(palette({ ...state, projects: [] }, "!p"), []);
+  assert.deepEqual(
+    new Set(palette(state, "launch").map((g) => g.id)),
+    new Set(["sessions", "projects", "session"]),
+    "ordinary searches still reach project metadata and membership commands",
+  );
+  assert.ok(palette(state, "projects").some((g) => g.id === "global"));
+});
+
+test("only a leading standalone lowercase !p token scopes the palette", () => {
+  for (const query of ["!pizza", "embedded !p", "!P", "!p-launch", "!s", "!c"]) {
+    const state = {
+      ...home,
+      sessionReferences: [sessionReference("/repo", "literal", { title: query })],
+    };
+    assert.deepEqual(sessionIds(state, query), ["literal"], query);
+  }
+});
+
+test("worker project-only browsing keeps bounded pages and switches back to ordinary search", () => {
+  const state = {
+    ...inSession,
+    projects: Array.from({ length: 51 }, (_, i) => ({
+      id: `p${i}`,
+      name: `Launch ${String(i).padStart(2, "0")}`,
+    })),
+  };
+  const groups = commandPalette(state, {
+    globalCommands: globalCommands(state, ctx),
+    sessionCommands: sessionCommands(state),
+  });
+  const search = createPaletteSearch();
+  const first = search({ id: 1, groups, query: "!p", pages: {} });
+  assert.deepEqual(
+    first.pages.map((p) => [p.group.id, p.total, p.group.rows.length]),
+    [["projects", 51, 50]],
+  );
+  const last = search({ id: 2, query: "!p", pages: { projects: 1 } });
+  assert.deepEqual(
+    last.pages[0].group.rows.map((r) => r.key),
+    ["p50"],
+  );
+  const matched = search({ id: 3, query: "!p Launch 50", pages: {} });
+  assert.deepEqual(
+    matched.pages.map((p) => [p.group.id, p.group.rows.map((r) => r.key)]),
+    [["projects", ["p50", "p5"]]], // Existing fuzzy ranking allows the 50/05 transposition.
+  );
+  assert.ok(
+    search({ id: 4, query: "session", pages: {} }).pages.some((p) => p.group.id === "sessions"),
+  );
+});
+
 test("project catalog refreshes preserve selection and find renames, completion and reopening", () => {
   const catalog = createPaletteCatalog();
   const input = { globalCommands: [], sessionCommands: [] };
