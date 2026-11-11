@@ -541,7 +541,6 @@ export function startSession(
             case "error": {
               const verdict = creationVerdictOf(message, {
                 attemptId: inputId!,
-                readingBack: reconciling,
                 sessionNamed: handle !== null,
               });
               settle(

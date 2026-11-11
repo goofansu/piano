@@ -46,7 +46,7 @@ export const rejected = (input: PendingCreate, detail: string): PendingCreate =>
 });
 
 /**
- * An error on the first message's selection, read by `creationVerdictOf`: Piano refused the
+ * A frame on the first message's selection, read by `creationVerdictOf`: Piano refused the
  * message before Pi saw it, or whether it reached Pi is unknown.
  */
 export const failed = (input: PendingCreate, verdict: CreationVerdict): PendingCreate => ({
