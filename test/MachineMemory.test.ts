@@ -36,7 +36,7 @@ test("a machine no longer configured is forgotten whole; the rest of this browse
     machineKey("local", "catalogs"),
     machineKey("local", "lastDir"),
     machineKey("eng-1", "catalogs"),
-    machineKey("eng-1", "surface"),
+    machineKey("eng-1", "openGroups"),
     // This browser's own preferences are no machine's.
     "piano.sidebarView",
     "piano.details",
@@ -45,7 +45,7 @@ test("a machine no longer configured is forgotten whole; the rest of this browse
   const gone = [
     machineKey("eng-2", "catalogs"),
     machineKey("eng-2", "lastDir"),
-    machineKey("eng-2", "surface"),
+    machineKey("eng-2", "openGroups"),
     // eng-1 is configured; a machine whose ID merely starts the same is not.
     machineKey("eng-10", "catalogs"),
     // Where Local's memory lived before machines had prefixes.
@@ -55,13 +55,43 @@ test("a machine no longer configured is forgotten whole; the rest of this browse
     "piano.openProjects",
   ];
   const local = store([...kept, ...gone]);
-  const session = store([machineKey("eng-2", "surface"), machineKey("eng-1", "surface")]);
-  forgetUnconfiguredMachines([{ id: "local" }, { id: "eng-1" }], [local, session]);
+  const session = store([
+    machineKey("eng-2", "surface"),
+    machineKey("eng-2", "location"),
+    machineKey("eng-1", "surface"),
+    machineKey("eng-1", "location"),
+  ]);
+  forgetUnconfiguredMachines([{ id: "local" }, { id: "eng-1" }], { local, session });
   assert.deepEqual([...local.held.keys()].sort(), [...kept].sort());
-  assert.deepEqual([...session.held.keys()], [machineKey("eng-1", "surface")]);
+  assert.deepEqual(
+    [...session.held.keys()].sort(),
+    [machineKey("eng-1", "location"), machineKey("eng-1", "surface")].sort(),
+  );
 });
 
-test("a store that cannot be read forgets nothing and does not stop the others", () => {
+test("a configured machine keeps each memory only in the store it belongs to", () => {
+  // What a tab is showing is the tab's; what outlives it is the browser's. A key left in the
+  // other store (where it lived before it moved), or under a name no longer remembered, goes.
+  const local = store([
+    machineKey("eng-1", "catalogs"),
+    machineKey("eng-1", "location"),
+    machineKey("eng-1", "surface"),
+    "piano.machine.eng-1.retired",
+  ]);
+  const session = store([
+    machineKey("eng-1", "location"),
+    machineKey("eng-1", "surface"),
+    machineKey("eng-1", "catalogs"),
+  ]);
+  forgetUnconfiguredMachines([{ id: "local" }, { id: "eng-1" }], { local, session });
+  assert.deepEqual([...local.held.keys()], [machineKey("eng-1", "catalogs")]);
+  assert.deepEqual(
+    [...session.held.keys()].sort(),
+    [machineKey("eng-1", "location"), machineKey("eng-1", "surface")].sort(),
+  );
+});
+
+test("a store that cannot be read forgets nothing and does not stop the other", () => {
   const blocked = {
     get length(): number {
       throw new Error("blocked");
@@ -69,9 +99,11 @@ test("a store that cannot be read forgets nothing and does not stop the others",
     key: () => null,
     removeItem: () => {},
   };
-  const open = store([machineKey("eng-2", "catalogs")]);
-  forgetUnconfiguredMachines([{ id: "local" }], [blocked, open]);
+  const open = store([machineKey("eng-2", "surface")]);
+  forgetUnconfiguredMachines([{ id: "local" }], { local: blocked, session: open });
   assert.deepEqual([...open.held.keys()], []);
+  // A store this browser does not have at all is skipped.
+  forgetUnconfiguredMachines([{ id: "local" }], { session: open });
 });
 
 test("where the user was on a machine is its own, and only a path within a machine is read back", () => {

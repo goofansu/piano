@@ -987,7 +987,7 @@ await run(
         // Each machine's model list and last directory are remembered under its own ID. On load,
         // a machine no longer configured and Local's keys from before the prefix are forgotten.
         await page.evaluate(
-          `(localStorage.setItem('piano.machine.gone.catalogs', '{}'), localStorage.setItem('piano.catalogs', '{}'), true)`,
+          `(localStorage.setItem('piano.machine.gone.catalogs', '{}'), localStorage.setItem('piano.catalogs', '{}'), localStorage.setItem('piano.machine.eng-1.location', '/projects'), true)`,
         );
         await page.ab("reload");
         await page.until(
@@ -1002,7 +1002,13 @@ await run(
           "piano.machine.eng-1.lastDir",
         ])
           assert.ok(remembered.includes(key), `${key} in ${remembered}`);
-        for (const key of ["piano.machine.gone.catalogs", "piano.catalogs", "piano.lastDir"])
+        for (const key of [
+          "piano.machine.gone.catalogs",
+          "piano.catalogs",
+          "piano.lastDir",
+          // The page a tab was on is the tab's: a copy left in localStorage is no one's.
+          "piano.machine.eng-1.location",
+        ])
           assert.ok(!remembered.includes(key), `${key} forgotten`);
         assert.equal(
           await page.evaluate(`localStorage.getItem('piano.machine.eng-1.lastDir')`),
@@ -1015,7 +1021,7 @@ await run(
           ).includes(cwd),
           "the peer's model list for that directory outlives the reload",
         );
-        // Where the user was on a machine outlives a reload too: switching back opens there.
+        // Where this tab was on a machine outlives a reload too: switching back opens there.
         onRemote = true;
         await machine(page, "eng-1");
         await page.see("Remote collision session");
@@ -1029,6 +1035,13 @@ await run(
         await machine(page, "eng-1");
         await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
         await page.see("Remote collision session saved history");
+        assert.deepEqual(
+          await page.evaluate(
+            `[sessionStorage.getItem('piano.machine.eng-1.location'), localStorage.getItem('piano.machine.eng-1.location')]`,
+          ),
+          [`/s/${sessionId}`, null],
+          "the place is kept with the tab, not for every tab",
+        );
         await page.capture("9m-remote-reopened-where-left");
         await page.open("/m/not-configured/s/same-session");
         await page.see("Machine unavailable");

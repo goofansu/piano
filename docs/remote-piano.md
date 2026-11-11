@@ -149,8 +149,8 @@ existing behavior. Do not point this scratch example at a production service for
 
 `id` is a stable lowercase slug, not `local`; it identifies routes and browser state. Keep it bound
 to the same backend identity; use a different ID for another Piano rather than repointing it.
-The browser remembers each machine's model list, last directory, open file tabs, open sidebar
-groups and the page you were on under its ID:
+The browser remembers each machine's model list, last directory and open sidebar groups, and each
+tab its open file tabs and the page it was on, under the machine's ID:
 renaming an ID starts that machine fresh, and what was remembered for an ID removed from the
 file is deleted the next time the page loads.
 `name` is the picker label. `endpoint` is the integration's or target VM's HTTPS origin, without
@@ -176,8 +176,8 @@ text, images or both.
 The session runs and stays on the remote. A worktree for parallel work comes from the remote
 session's own dispatch, which runs on the remote, not from this picker.
 
-Switching to a machine opens the session or page you last had there, also after a reload; the
-first time, it opens **New session**. A switch disconnects this browser's attachment, not the run. Returning or reconnecting reads a
+Switching to a machine opens the session or page this browser tab last had there, also after a
+reload; in a new tab, or the first time, it opens **New session**. A switch disconnects this browser's attachment, not the run. Returning or reconnecting reads a
 fresh authoritative snapshot; it never resends input. Check the conversation before retrying any
 input whose delivery is uncertain. Disconnection makes the remote unavailable, never Local.
 

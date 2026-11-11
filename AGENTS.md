@@ -70,6 +70,11 @@ path, such as a directory that is not registered yet, in a POST JSON body.
 
 Before writing Effect code or upgrading Effect packages, read [Effect](docs/effect.md).
 
+## Browser storage
+
+Before adding, renaming or moving a `localStorage` or `sessionStorage` key, read
+[browser storage](docs/browser-storage.md).
+
 ## Direction and guardrails
 
 For architecture and workflow changes, read [docs/README.md](docs/README.md), then the ADR,

@@ -117,15 +117,18 @@ another. Storing them per machine keeps that guarantee and removes the differenc
 
 - Every machine's keys sit under `piano.machine.<id>.` in this browser's storage: `catalogs`,
   `lastDir`, `openGroups` (the sidebar's folder and project groups left open, which are named by
-  that machine's paths and project IDs) and `location` (where the user was on it, for the next
-  switch back) in localStorage, and `surface` in sessionStorage. How the sidebar looks otherwise
+  that machine's paths and project IDs) in localStorage; `surface` and `location` (the page a
+  tab was on, for the next switch back) in sessionStorage, because they are what one tab is
+  showing and two tabs must not overwrite each other. [Browser storage](../browser-storage.md)
+  has the rule for choosing. How the sidebar looks otherwise
   (width, view options, date groups, Pinned) is this browser's own and shared by every machine. Local is `piano.machine.local.`, with no
   special case. `web/src/lib/machineMemory.ts` owns the rule.
 - The ID is the configured one, and the only identity the browser has for a machine. Renaming an
   ID starts that machine with nothing remembered; pointing an ID at another Piano would show the
   former one's catalog until the new one answers. Keep an ID bound to one Piano.
 - When the server answers the machine list, the browser deletes the keys of every machine no
-  longer in it, and Local's keys from before the prefix. A failed read deletes nothing, and an
+  longer in it, any machine key left in the store it does not belong to, and Local's keys from
+  before the prefix. A failed read deletes nothing, and an
   unavailable machine is still configured.
 - A remote starts only in its open folders, so a remembered directory that is no longer one gives
   way to the first folder once the peer's list arrives. The peer still refuses any other path.
