@@ -314,7 +314,7 @@ await run(
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
       return true;
     })()`);
-    await page.see("No sessions or commands match.");
+    await page.see("No sessions, projects or commands match.");
     assert.ok(
       await page.evaluate("location.pathname.endsWith('/login-bug')"),
       "pending Enter did not switch sessions",

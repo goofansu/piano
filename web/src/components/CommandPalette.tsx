@@ -44,7 +44,7 @@ function Current() {
 }
 
 /**
- * The command palette: session navigation/actions, new sessions, and view commands. Its groups and
+ * The command palette: session/project navigation, session actions, and view commands. Its groups and
  * rows come from `commandPalette`; this renders them and runs what is chosen.
  */
 export function CommandPalette({ state }: Props) {
@@ -68,8 +68,8 @@ export function CommandPalette({ state }: Props) {
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Search sessions and commands"
-      description="Switch sessions, start a new one, or change the view."
+      title="Search sessions, projects and commands"
+      description="Open a session or project, start a session, or change the view."
       showCloseButton={false}
       commandProps={{ shouldFilter: false, value: selected, onValueChange: setSelected }}
       className="top-[18%] translate-y-0 sm:max-w-xl"
@@ -159,7 +159,7 @@ function PaletteContents({
             ? "Search unavailable. Close and reopen to retry."
             : pending
               ? "Searching…"
-              : "No sessions or commands match."}
+              : "No sessions, projects or commands match."}
         </CommandEmpty>
         <PaletteResults
           pages={results.result}
@@ -233,8 +233,8 @@ const PaletteInput = memo(function PaletteInput({
           commit(event.currentTarget.value);
         }
       }}
-      placeholder="Search sessions and commands…"
-      aria-label="Search sessions and commands"
+      placeholder="Search sessions, projects and commands…"
+      aria-label="Search sessions, projects and commands"
     />
   );
 });
@@ -298,48 +298,59 @@ const PaletteResults = memo(function PaletteResults({
                     {r.hint && <span className="sr-only">{r.hint}</span>}
                   </CommandItem>
                 ))
-              : group.id === "global"
+              : group.id === "projects"
                 ? group.rows.map((r) => (
                     <CommandItem
                       key={r.key}
                       value={`${group.id}:${r.key}`}
                       disabled={!r.enabled}
-                      data-checked={r.checked}
                       onSelect={() => run(() => runCommand(r.command))}
                     >
-                      <GlobalCommandIcon icon={r.command.icon} /> {r.label}
-                      {r.checked && <Current />}
+                      <ProjectCommandIconView icon={r.command.icon} /> {r.label}
                     </CommandItem>
                   ))
-                : group.rows.map((r) => (
-                    <CommandItem
-                      key={r.key}
-                      value={`${group.id}:${r.key}`}
-                      disabled={!r.enabled}
-                      data-checked={r.checked}
-                      variant={
-                        r.kind === "session" && r.command.destructive ? "destructive" : "default"
-                      }
-                      onSelect={() => run(() => runCommand(r.command))}
-                    >
-                      {r.kind === "session" ? (
-                        <CommandIcon icon={r.command.icon} />
-                      ) : (
-                        <ProjectCommandIconView icon={r.command.icon} />
-                      )}{" "}
-                      {r.detail ? (
-                        <>
-                          <span className="shrink-0">{r.label}</span>{" "}
-                          <span className="min-w-0 truncate font-mono text-xs text-ink-3">
-                            {abbrevPath(r.detail)}
-                          </span>
-                        </>
-                      ) : (
-                        r.label
-                      )}
-                      {r.checked && <Current />}
-                    </CommandItem>
-                  ))}
+                : group.id === "global"
+                  ? group.rows.map((r) => (
+                      <CommandItem
+                        key={r.key}
+                        value={`${group.id}:${r.key}`}
+                        disabled={!r.enabled}
+                        data-checked={r.checked}
+                        onSelect={() => run(() => runCommand(r.command))}
+                      >
+                        <GlobalCommandIcon icon={r.command.icon} /> {r.label}
+                        {r.checked && <Current />}
+                      </CommandItem>
+                    ))
+                  : group.rows.map((r) => (
+                      <CommandItem
+                        key={r.key}
+                        value={`${group.id}:${r.key}`}
+                        disabled={!r.enabled}
+                        data-checked={r.checked}
+                        variant={
+                          r.kind === "session" && r.command.destructive ? "destructive" : "default"
+                        }
+                        onSelect={() => run(() => runCommand(r.command))}
+                      >
+                        {r.kind === "session" ? (
+                          <CommandIcon icon={r.command.icon} />
+                        ) : (
+                          <ProjectCommandIconView icon={r.command.icon} />
+                        )}{" "}
+                        {r.detail ? (
+                          <>
+                            <span className="shrink-0">{r.label}</span>{" "}
+                            <span className="min-w-0 truncate font-mono text-xs text-ink-3">
+                              {abbrevPath(r.detail)}
+                            </span>
+                          </>
+                        ) : (
+                          r.label
+                        )}
+                        {r.checked && <Current />}
+                      </CommandItem>
+                    ))}
             {(current + 1) * PALETTE_PAGE_SIZE < total && (
               <CommandItem value={`${group.id}:next`} onSelect={() => page(group.id, current + 1)}>
                 Next {group.heading.toLowerCase()}
