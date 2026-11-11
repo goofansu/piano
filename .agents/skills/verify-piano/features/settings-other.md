@@ -10,7 +10,9 @@ webhook without contacting its receiver. These observations do not prove sign-in
 - `providers`: Providers has Radius, Accounts and API keys groups. Unsigned-in Radius offers
   Sign in to Radius; Install Radius MCP and Install web search are disabled until setup permits them.
 - `preferences`: Voice input is off without a key. Turning it on opens OpenAI API key, explaining
-  that recordings and session context go to OpenAI; Cancel leaves it off.
+  that recordings and session context go through this Piano to OpenAI; Cancel leaves it off.
+  This main preference controls the idle microphone in both New and existing-session composers
+  on Local and every peer. Turning it off hides idle microphones, not an active operation's Cancel.
 - `webhook-empty`: Webhooks shows No webhooks yet and New webhook.
 - `webhook-create`: New webhook has URL, Bearer token Optional, Events and Active. A private HTTP
   URL is refused inline. Creating an inactive public HTTPS entry saves it without a delivery.
@@ -64,6 +66,11 @@ Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
 
 ## Gotchas
 
+- `test/browser/voice-input.mjs` is an exported helper, not a standalone journey. It runs inside
+  `remote-session.mjs` with main and two peers: real scratch settings, controlled browser device
+  APIs and a CDP transcription response, no paid call. It checks all-machine visibility, draft
+  insertion, cancellation and source isolation, but exceeds the one-instance Run limit. Report
+  that coverage as unreachable under the limit; the key-dialog recipe above remains runnable.
 - Voice transcription requires an approved OpenAI key, browser microphone permission and a
   recording-capable browser. The Preferences → Voice input → key-dialog route proves the
   missing-key prerequisite, not recording, context transmission or transcription into the draft.

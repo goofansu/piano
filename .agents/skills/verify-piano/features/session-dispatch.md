@@ -22,7 +22,9 @@ link a person can open.
   session always starts on Piano's default model and effort; `--model` and `--thinkingLevel` are
   unknown options (exit 2).
 - `refusals`: a missing cwd fails locally with exit 2; a refused creation prints
-  `"creation":"refused"` and `"submission":"not_sent"`.
+  `"creation":"refused"` and `"submission":"not_sent"`. No session remains and the first input
+  was not sent, but startup extensions or worktree hooks may already have run. Refusal is not
+  a rollback of their effects; inspect `detail` before retrying.
 - `needs-input`: on `--fake-pi dialogs`, a prompt starting `ask` leaves the session waiting on a
   dialog ("Enter a value") that the web UI answers; `status` meanwhile reports
   `"disposition": "needs_input"`.

@@ -141,6 +141,18 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    `npm run test:browser` also includes a multi-peer journey, which exceeds the run limit; use the
    individual commands above and report any required multi-instance coverage as blocked.
 
+   For mapped Preview behavior, also run `node test/browser/preview.mjs <evidence-directory>`
+   serially before Launch. It needs the native supervisor and free ports described in
+   [the Preview journey](../../../docs/testing.md#managed-preview-host-journey). A scratch JSON
+   `PIANO_PREVIEW_CONFIG` containing `{"origin":"http://127.0.0.1"}` enables external-tab
+   interaction without exe.dev authentication; it does not prove authenticated HTTPS access.
+
+   `test/browser/remote-session.mjs` starts main plus two peers, so it exceeds these Run limits
+   even when invoked alone. `test/browser/voice-input.mjs` exports a helper used by that journey;
+   running it directly performs no checks. Record peer conversation, image and voice isolation
+   as unreachable under this limit, with the configured-peer prerequisite and route attempted
+   (see [Open a session](features/open-session.md)). Do not count a helper's exit 0 as coverage.
+
 2. **Then launch once and reuse `agent-browser`** for anything the harness does not cover,
    through `ab.sh`, which runs `agent-browser --session "$AB_SESSION"` from `PATH`.
    `cleanup.sh` closes the session with the same installed CLI:
