@@ -54,7 +54,9 @@ command's stderr). The dialog says so while a command is entered, since saving r
   - **Edit** (servers the user added; a catalog server's endpoint is Piano's) opens the add
     dialog on the entry: its name, transport, URL or command, headers, arguments, environment and
     working directory. The saved Authorization header shows as a masked placeholder: blank keeps
-    it, typing replaces it, Remove clears it. Pi's other keys (exposure, timeout, OAuth client
+    it, typing replaces it, Remove clears it. An entry Pi authenticates with a `/login`
+    provider's token (`auth.provider`, as Radius's) shows **Provider sign-in** and its provider
+    instead of the choice, and saving keeps it so. Pi's other keys (exposure, timeout, OAuth client
     settings) stay as configured; a change of transport drops the other transport's keys.
     Renaming an entry, or changing its endpoint, drops the sign-in stored for the old name and
     endpoint, since Pi keys tokens by both.

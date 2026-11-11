@@ -7,7 +7,7 @@ const http = (setup: Partial<McpServerSetup> = {}): McpServerSetup => ({
   name: "linear",
   catalog: "linear",
   config: { url: "https://mcp.linear.app/mcp", headers: {}, hasAuthorization: false },
-  oauth: true,
+  auth: { kind: "oauth" },
   signedIn: false,
   removalKey: "k",
   ...setup,
@@ -17,16 +17,22 @@ const docs = (setup: Partial<McpServerSetup> = {}): McpServerSetup =>
     name: "docs",
     catalog: undefined,
     config: { url: "https://mcp.example.com/mcp", headers: {}, hasAuthorization: true },
-    oauth: false,
+    auth: { kind: "header" },
     ...setup,
   });
 const tools: McpServerSetup = {
   name: "tools",
   config: { command: "uvx", args: ["tools-mcp"], env: { API_KEY: "${TOOLS_KEY}" } },
-  oauth: false,
+  auth: { kind: "command" },
   signedIn: false,
   removalKey: "k",
 };
+/** Pi sends a `/login` provider's token, as for Radius. */
+const gateway = docs({
+  name: "gateway",
+  config: { url: "https://gateway.example.com/mcp", headers: {}, hasAuthorization: false },
+  auth: { kind: "provider", provider: "radius" },
+});
 const state = (servers: McpServerSetup[], extra: Partial<McpSetupState> = {}): McpSetupState => ({
   servers,
   available: [],
@@ -57,6 +63,8 @@ test("Reconnect appears only for an OAuth server whose sign-in is gone and that 
   // A configured Authorization header, or a local command, never signs in.
   assert.equal(row(docs())?.reconnect, false);
   assert.equal(row(tools)?.reconnect, false);
+  // Nor does a provider entry: Pi sends the provider's token, signed in on the Providers page.
+  assert.equal(row(gateway)?.reconnect, false);
   // Disabled in Pi: the problem is shown instead.
   const blocked = row(http({ detail: "Disabled." }));
   assert.deepEqual([blocked?.reconnect, blocked?.detail], [false, "Disabled."]);
@@ -67,6 +75,7 @@ test("an entry is ready once configured, and signed in when it uses OAuth", () =
   assert.equal(row(http({ signedIn: true }))?.ready, true);
   assert.equal(row(docs())?.ready, true);
   assert.equal(row(tools)?.ready, true);
+  assert.equal(row(gateway)?.ready, true);
   assert.equal(row(http({ signedIn: true, detail: "Disabled." }))?.ready, false);
 });
 

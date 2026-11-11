@@ -171,9 +171,9 @@ export function McpServerDialog({
   const [name, setName] = useState(entry?.name ?? "");
   const [kind, setKind] = useState<Kind>(config && "command" in config ? "command" : "url");
   const [url, setUrl] = useState(config && "url" in config ? config.url : "");
-  const [auth, setAuth] = useState<Auth>(
-    config && "url" in config && config.hasAuthorization ? "header" : "oauth",
-  );
+  const [auth, setAuth] = useState<Auth>(entry?.auth.kind === "header" ? "header" : "oauth");
+  // Pi sends this provider's token instead: no header or sign-in of the form's would be used.
+  const provider = entry?.auth.kind === "provider" ? entry.auth.provider : undefined;
   const authorization = useSavedSecret(!!config && "url" in config && config.hasAuthorization);
   const [headers, setHeaders] = useState<Pair[]>(
     config && "url" in config ? pairs(config.headers) : [],
@@ -244,11 +244,13 @@ export function McpServerDialog({
         ? {
             url,
             headers: record(headers),
-            ...(auth === "header"
-              ? authorization.change === undefined
-                ? {}
-                : { authorization: authorization.change }
-              : { authorization: null }),
+            ...(provider !== undefined
+              ? {}
+              : auth === "header"
+                ? authorization.change === undefined
+                  ? {}
+                  : { authorization: authorization.change }
+                : { authorization: null }),
           }
         : { command, args: argList, env: record(env), ...(cwd.trim() ? { cwd: cwd.trim() } : {}) };
     if (entry) {
@@ -366,23 +368,33 @@ export function McpServerDialog({
                   />
                   {errorAt("config") && <FieldError role="alert">{errorAt("config")}</FieldError>}
                 </Field>
-                <Field>
-                  <FieldLabel htmlFor="mcp-auth">Authentication</FieldLabel>
-                  <Select
-                    value={auth}
-                    onValueChange={(value) => setAuth(value as Auth)}
-                    disabled={busy}
-                  >
-                    <SelectTrigger id="mcp-auth" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="oauth">Sign in if needed</SelectItem>
-                      <SelectItem value="header">Authorization header</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                {auth === "header" && (
+                {provider !== undefined ? (
+                  <Field aria-labelledby="mcp-auth-label">
+                    <FieldLabel id="mcp-auth-label">Authentication</FieldLabel>
+                    {/* A fact, not a choice: Pi decides it from the entry's provider. */}
+                    <p className="text-sm">
+                      Provider sign-in <span className="font-mono text-xs">{provider}</span>
+                    </p>
+                  </Field>
+                ) : (
+                  <Field>
+                    <FieldLabel htmlFor="mcp-auth">Authentication</FieldLabel>
+                    <Select
+                      value={auth}
+                      onValueChange={(value) => setAuth(value as Auth)}
+                      disabled={busy}
+                    >
+                      <SelectTrigger id="mcp-auth" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="oauth">Sign in if needed</SelectItem>
+                        <SelectItem value="header">Authorization header</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
+                {provider === undefined && auth === "header" && (
                   <Field>
                     <FieldLabel htmlFor="mcp-authorization">Authorization header</FieldLabel>
                     <SavedSecretInput

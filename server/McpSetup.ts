@@ -27,6 +27,7 @@ import {
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/runtime.js";
 import {
   MCP_CATALOG,
+  type McpAuthView,
   type McpCatalogId,
   type McpServerConfigView,
   type McpServerEdit,
@@ -58,6 +59,18 @@ type CatalogServer = McpCatalogEntry & { readonly id: McpCatalogId };
 const oauthUrl = (entry: McpServerEntry) => {
   const auth = authOf(entry.config);
   return auth._tag === "oauth" ? auth.url : undefined;
+};
+/** Pi's decision, as the browser reads it. */
+const authView = (config: McpServerConfig): McpAuthView => {
+  const auth = authOf(config);
+  switch (auth._tag) {
+    case "stdio":
+      return { kind: "command" };
+    case "provider":
+      return { kind: "provider", provider: auth.provider };
+    default:
+      return { kind: auth._tag };
+  }
 };
 /** How long connecting to a URL server before saving it may take, Pi's retries included. */
 const CONNECT_TIMEOUT_MS = 20_000;
@@ -172,7 +185,7 @@ export const McpSetupLive = Layer.effect(
       const common = {
         name: entry.name,
         config: configView(entry.config),
-        oauth: !!url,
+        auth: authView(entry.config),
         removalKey: removalKey(entry),
       };
       const matched = catalogOf(entry.config);

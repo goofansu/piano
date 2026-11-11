@@ -33,7 +33,9 @@ other servers carry the server icon.
   shown, only when an OAuth server's sign-in is gone). The menu holds: Edit (servers the user added only) and a separator, then
   Disconnect (a URL server) or Delete (a command) in red.
 - `edit`: Edit opens the add dialog on the entry (no tabs); a saved Authorization header shows as
-  a masked placeholder with Remove / Keep; Save toasts "MCP server saved".
+  a masked placeholder with Remove / Keep; an entry with `auth.provider` (as Radius's) shows
+  Authentication as "Provider sign-in <provider>" with no choice and no Authorization header
+  field; Save toasts "MCP server saved".
 - `remove`: Disconnect or Delete asks "Disconnect MCP <Name>?" / "Delete MCP <Name>?" with
   Cancel, then removes the entry and toasts "MCP server disconnected" or
   "MCP server deleted"; the entry leaves the file.
