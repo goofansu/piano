@@ -26,21 +26,27 @@ import { sessionMutable, sessionReady, sessionWorking } from "./sessionContext.t
 import { previewClaimHolds, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
-export interface FormAnswer {
-  /** The form may be submitted now; otherwise its submit control is disabled. */
-  allowed: boolean;
-  /** The socket command for an allowed form. */
-  command?: ClientCommand;
+/**
+ * Whether the form may be submitted now (otherwise its submit control is disabled) and, when it
+ * may, the socket command submitting sends.
+ */
+export type FormAnswer = {
   /** Project settings field feedback, from the same decision as its save. */
   projectCheck?: ProjectDraftCheck;
-  /**
-   * The page submitting opens once the server confirms the change. A new project not created for a
-   * session opens its home, or the New page for it when the New page's project picker created it; a
-   * deleted project's home or New page, when on screen, gives way to the Projects index the
-   * project was listed in.
-   */
-  open?: FormPage;
-}
+} & (
+  | { allowed: false }
+  | {
+      allowed: true;
+      command: ClientCommand;
+      /**
+       * The page submitting opens once the server confirms the change. A new project not created
+       * for a session opens its home, or the New page for it when the New page's project picker
+       * created it; a deleted project's home or New page, when on screen, gives way to the Projects
+       * index the project was listed in.
+       */
+      open?: FormPage;
+    }
+);
 
 /** A page a submitted form opens: a project's home, the New page for a project, or the Projects index. */
 export type FormPage =
@@ -357,7 +363,6 @@ export function createCommandForms({
       if (!form) return false;
       const answered = answer();
       if (!answered.allowed) return false;
-      if (!answered.command) return false;
       // Sent or uncertain closes: an uncertain answer may have arrived, so it is never replayed.
       if (send(answered.command) === "not-sent") return false;
       waiting = answered.open
