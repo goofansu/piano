@@ -505,6 +505,11 @@ export type Workspace = typeof Workspace.Type;
 /** Byte budgets for live Changes. */
 export const CHANGES_INITIAL_PATCH_BYTES = 120_000;
 export const CHANGES_FILE_PATCH_BYTES = 1024 * 1024;
+/**
+ * How long one Git observation of a checkout may run once it holds a permit (Changes and written
+ * files): past it, the server answers `{ status: "error", detail }` rather than failing the request.
+ */
+export const CHECKOUT_TIMEOUT_MS = 30_000;
 
 /** Live Git observations, not immutable revisions or verification evidence. */
 export const ChangeFile = Schema.Struct({

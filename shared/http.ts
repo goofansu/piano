@@ -26,6 +26,7 @@ import {
 } from "./voiceInput.ts";
 import { Webhook, WebhookDelivery, WebhookSave } from "./webhooks.ts";
 import {
+  CHECKOUT_TIMEOUT_MS,
   ChangesScope,
   DirListing,
   FolderView,
@@ -650,6 +651,14 @@ export interface RemoteRequest {
 }
 
 const MiB = 1024 * 1024;
+/**
+ * A remote's Git observation answers within CHECKOUT_TIMEOUT_MS, as `{ status: "error" }` when Git
+ * outlasts it. The gateway's deadline starts first (before dialing; the remote's only once it holds
+ * one of its Changes permits), so it adds a margin for the dial, the answer and the remote's own
+ * work around Git; with no margin the gateway always loses and the remote's error never arrives.
+ * A wait for a permit on a busy remote is still unbounded: this covers Git's timeout, not a queue.
+ */
+const checkoutRequestMs = CHECKOUT_TIMEOUT_MS + 5_000;
 /** A session's own surfaces: the remote resolves both IDs in its registry, as for its own browser. */
 const sessionSurface = (
   endpoint: Endpoint,
@@ -686,12 +695,19 @@ export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
     passRefusal: true,
   },
   // Changes: a list with its first patch excerpt, one file's patch (CHANGES_FILE_PATCH_BYTES of
-  // text, larger as JSON), and the saved comparison. Git on a large checkout outlasts a setting.
-  sessionSurface(Endpoints.sessionChanges, { answerBytes: 4 * MiB, requestMs: 30_000 }),
-  sessionSurface(Endpoints.sessionChangedFile, { answerBytes: 4 * MiB, requestMs: 30_000 }),
-  sessionSurface(Endpoints.setSessionChangesScope, { answerBytes: 4 * MiB, requestMs: 30_000 }),
-  // Outputs: up to WRITTEN_PATHS_LIMIT paths as the session's tool calls named them.
-  sessionSurface(Endpoints.workspaceWrittenFiles, { bodyBytes: MiB, requestMs: 30_000 }),
+  // text, larger as JSON), and the saved comparison, each one Git observation of the checkout.
+  sessionSurface(Endpoints.sessionChanges, { answerBytes: 4 * MiB, requestMs: checkoutRequestMs }),
+  sessionSurface(Endpoints.sessionChangedFile, {
+    answerBytes: 4 * MiB,
+    requestMs: checkoutRequestMs,
+  }),
+  sessionSurface(Endpoints.setSessionChangesScope, {
+    answerBytes: 4 * MiB,
+    requestMs: checkoutRequestMs,
+  }),
+  // Outputs: up to WRITTEN_PATHS_LIMIT paths as the session's tool calls named them, checked in
+  // one Git observation.
+  sessionSurface(Endpoints.workspaceWrittenFiles, { bodyBytes: MiB, requestMs: checkoutRequestMs }),
   // The pull request: GitHub answers the remote within 15 seconds.
   sessionSurface(Endpoints.sessionPullRequest, { requestMs: 30_000 }),
   sessionSurface(Endpoints.changeSessionPullRequest, { requestMs: 30_000 }),
