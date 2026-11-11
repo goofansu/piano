@@ -32,13 +32,12 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { returnFocusForKeyboard } from "@/lib/pointerClose";
-import { previewObservation } from "@/lib/previewObservation";
 import type { ProjectCommand } from "@/lib/projectCommands";
 import { pullRequestView } from "@/lib/pullRequestView";
 import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { type PreviewClaim, previewClaim, previewFace, previewHost } from "@/lib/sessionPreview";
-import { useOffers } from "@/lib/useMachine";
+import { usePreviews } from "@/lib/useMachine";
 
 type Page = "actions" | "projects" | "preview";
 
@@ -212,11 +211,10 @@ export function SessionMenuSheet({
   const { state } = useCommands();
   const { commands, run } = useSessionCommands();
   const { pullRequest } = sessionContext(state);
-  // The saved link opens GitHub from any machine; the app is shown only where previews are offered.
-  const offers = useOffers();
+  // The saved link opens GitHub from any machine; the app shows only where its machine observes it.
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
-  const seen = useSeenPreview(state);
-  const preview = offers.previews ? seen : undefined;
+  const preview = useSeenPreview(state);
+  const previews = usePreviews();
   const openPreview = useOpenPreview();
   const [previewPage, setPreviewPage] = useState<PreviewClaim | null>(null);
   const pagePreview = useClaimedPreview(state, previewPage);
@@ -292,7 +290,7 @@ export function SessionMenuSheet({
                 onShow={() => {
                   setPreviewPage(previewClaim(state) ?? null);
                   setPage("preview");
-                  previewObservation.refresh();
+                  previews?.refresh();
                 }}
               />
             )}

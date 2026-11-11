@@ -19,12 +19,11 @@ import { storedLastDirectory } from "@/lib/client";
 import { machineFrameBytes, machineLocation, machineSocketUrl } from "@/lib/machine";
 import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
-import { previewObservation } from "@/lib/previewObservation";
 import { parseRoute } from "@/lib/routes";
 import { HISTORY_UNAVAILABLE } from "@/lib/sessionCatalog";
 import { toastNotify as notify } from "@/lib/toastNotify";
 import { useClient } from "@/lib/useClient";
-import { useMachineScope, useOffers } from "@/lib/useMachine";
+import { useMachineScope, useOffers, usePreviews } from "@/lib/useMachine";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
 import { providerAccounts } from "@/lib/useProviderAccounts";
 import { SessionFilesContext, useSessionFilesController } from "@/lib/useSessionFiles";
@@ -44,6 +43,7 @@ function MachineApp() {
   const scope = useMachineScope();
   const { machine, catalogs: modelCatalogs, drafts, questions: questionReplies } = scope;
   const offers = useOffers();
+  const previews = usePreviews();
   const { state, client } = useClient(
     (): AppState => {
       // Stored catalogs let the model picker open before Pi answers.
@@ -80,10 +80,7 @@ function MachineApp() {
   );
   useEffect(() => drafts.follow(client), [client, drafts]);
   useEffect(() => questionReplies.follow(client), [client, questionReplies]);
-  useEffect(
-    () => (offers.previews ? previewObservation.follow(client, notify) : undefined),
-    [client, offers],
-  );
+  useEffect(() => previews?.follow(client, notify), [client, previews]);
   const layout = useSidebarLayoutController();
   // Details' Outputs reads this one answer, filtered by Git once per change.
   const sessionFiles = useSessionFilesController(state);

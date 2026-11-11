@@ -284,6 +284,3 @@ export function createPreviewObservation({
     },
   };
 }
-
-/** The page's one preview observation; App follows the client with it. */
-export const previewObservation = createPreviewObservation();

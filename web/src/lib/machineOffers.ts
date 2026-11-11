@@ -5,14 +5,13 @@
  * session's rename, pin, archive and delete, with its Changes, files and session rail, and a
  * registered folder's trust.
  * Whatever else would manage the remote, run its apps or follow its accounts stays on the
- * remote's own Piano.
+ * remote's own Piano; its apps are absent from its stores (`MachineStores.previews`), not gated
+ * here.
  */
 import type { Command } from "./commands.ts";
 import { isLocalId, type Machine } from "./machine.ts";
 
 export interface MachineOffers {
-  /** The selected session's preview, observed for its commands. */
-  previews: boolean;
   /** Provider accounts, followed for the commands that need a sign-in. */
   providerAccounts: boolean;
   /** Git's checkout facts kept fresh, worktree creation and Git status on the New page. */
@@ -28,7 +27,6 @@ export interface MachineOffers {
 }
 
 const LOCAL_OFFERS: MachineOffers = {
-  previews: true,
   providerAccounts: true,
   worktrees: true,
   browse: true,
@@ -52,7 +50,6 @@ const SENT_CHANGES: ReadonlySet<string> = new Set([
 ]);
 
 const REMOTE_OFFERS: MachineOffers = {
-  previews: false,
   providerAccounts: false,
   worktrees: false,
   browse: false,
