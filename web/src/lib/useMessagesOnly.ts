@@ -3,7 +3,7 @@ import { usePreference } from "@/lib/usePreference";
 
 /** Messages only: the transcript hides tool calls and pending text. Off by default. */
 const messagesOnly = createPreference<boolean>({
-  key: "piano:messages-only",
+  key: "piano.messagesOnly",
   decode: (raw) => parseJson(raw) === true,
 });
 
