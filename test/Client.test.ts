@@ -665,7 +665,7 @@ test("rejected creation marks only its own first message as not started", () => 
   assert.equal(h.client.getState().pendingCreate?.detail, "Creation was not started");
 });
 
-test("a machine that names no input in its rejection still settles the creation's first message", () => {
+test("a rejection that names no creation leaves the first message uncertain", () => {
   const h = harness();
   h.status(true);
   h.client.send({
@@ -675,13 +675,13 @@ test("a machine that names no input in its rejection still settles the creation'
     text: "kept on screen",
     attemptId: "attempt-1",
   });
-  // A Piano from before creation attempts answers by selection alone.
+  // Every rejection of a creation names it; one naming nothing cannot prove nothing was created.
   h.server({
     _tag: "selection_rejected",
     selectionId: h.client.getState().selectionId!,
     message: "Creation was not started",
   });
-  assert.equal(h.client.getState().pendingCreate?.outcome, "rejected");
+  assert.equal(h.client.getState().pendingCreate?.outcome, "uncertain");
   // Nothing returned the input to the draft, so it stays where it is shown.
   assert.equal(h.client.getState().view.kind, "session");
 });

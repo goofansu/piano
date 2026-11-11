@@ -6,8 +6,7 @@ import {
   creationVerdictOf,
 } from "../shared/creationVerdict.ts";
 
-const creating: CreationContext = { attemptId: "attempt", readingBack: false, sessionNamed: false };
-const readingBack: CreationContext = { ...creating, readingBack: true };
+const creating: CreationContext = { attemptId: "attempt", sessionNamed: false };
 const named: CreationContext = { ...creating, sessionNamed: true };
 
 const rejected = (inputId?: string, selectionId = "sel"): CreationResultFrame => ({
@@ -25,16 +24,10 @@ const error = (inputId?: string): CreationResultFrame => ({
 
 test("a creation's result frame reads as one verdict", () => {
   const cases: Array<[string, CreationResultFrame, CreationContext, string]> = [
-    ["a rejection naming the attempt", rejected("attempt"), creating, "refused named"],
-    ["a read-back's rejection naming it", rejected("attempt"), readingBack, "refused named"],
-    ["a read-back's rejection naming nothing", rejected(), readingBack, "uncertain"],
-    ["an older Piano's rejection of the creation", rejected(), creating, "refused unnamed"],
-    [
-      "an older Piano's rejection by selection",
-      rejected(undefined, "attempt"),
-      creating,
-      "refused named",
-    ],
+    ["a rejection naming the attempt's input", rejected("attempt"), creating, "refused"],
+    ["a rejection naming its selection", rejected(undefined, "attempt"), creating, "refused"],
+    // A read-back's capacity or a peer's scope refuses the read, not the creation.
+    ["a rejection naming nothing", rejected(), creating, "uncertain"],
     ["a rejection after the session was named", rejected("attempt"), named, "created_uncertain"],
     ["an error naming the input", error("attempt"), creating, "created_not_sent"],
     ["an error naming another input", error("other"), named, "created_uncertain"],
@@ -50,10 +43,6 @@ test("a creation's result frame reads as one verdict", () => {
   for (const [what, frame, context, expected] of cases) {
     const verdict = creationVerdictOf(frame, context);
     assert.equal(verdict.detail, "No", what);
-    assert.equal(
-      verdict.kind === "refused" ? `refused ${verdict.named ? "named" : "unnamed"}` : verdict.kind,
-      expected,
-      what,
-    );
+    assert.equal(verdict.kind, expected, what);
   }
 });

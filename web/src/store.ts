@@ -143,12 +143,9 @@ export function reduce(s: AppState, a: Action): AppState {
   return pendingCreate === next.pendingCreate ? next : { ...next, pendingCreate };
 }
 
-/** What the browser knows when its creation's result frame arrives. The browser reads an attempt
- * back only once its first message is uncertain, so one still `starting` awaits the creation's
- * own answer. */
+/** What the browser knows when its creation's result frame arrives. */
 const creationContext = (s: AppState, pending: FirstMessage.PendingCreate): CreationContext => ({
   attemptId: pending.attemptId,
-  readingBack: pending.outcome !== "starting",
   sessionNamed: !!s.session,
 });
 
@@ -333,27 +330,31 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     case "selection_rejected": {
       if (m.selectionId !== s.selectionId || !s.selecting) return s;
       const pending = s.pendingCreate;
-      // Only a refusal changes the first message: any other verdict leaves it as it stands, since
-      // a read-back is sent only once it is uncertain and a re-attachment's session decides it.
+      // A rejection changes the first message only while it awaits the creation's own answer: a
+      // read-back is sent only once it is uncertain, and a re-attachment's session decides it.
       const verdict =
         pending && m._tag === "selection_rejected"
           ? creationVerdictOf(m, creationContext(s, pending))
           : undefined;
-      const refused = verdict?.kind === "refused" ? verdict : undefined;
       return {
         ...s,
         selectionId: null,
         selectionFailure: { ...s.selecting, message: m.message },
-        // A rejection naming the creation put its input back in the draft: return to the New page.
-        ...(pending && refused?.named
+        // A refusal names the creation, which put its input back in the draft: return to New.
+        ...(pending && verdict?.kind === "refused"
           ? {
               view: { kind: "new" as const, cwd: pending.cwd, projectId: pending.projectId },
               session: null,
             }
           : {}),
         selecting: null,
-        pendingCreate:
-          pending && refused ? FirstMessage.rejected(pending, refused.detail) : s.pendingCreate,
+        pendingCreate: !pending
+          ? s.pendingCreate
+          : verdict?.kind === "refused"
+            ? FirstMessage.rejected(pending, verdict.detail)
+            : verdict?.kind === "uncertain" && pending.outcome === "starting"
+              ? FirstMessage.failed(pending, verdict)
+              : pending,
       };
     }
     case "error":
