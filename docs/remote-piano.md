@@ -171,8 +171,9 @@ only the selected machine and offers a **Switch to …** command for each config
 address is `/m/eng-1/s/<sessionId>`; reload and back/forward retain that machine.
 
 **New session** (or **New session here** in Cmd+K) starts a session on the selected machine. Its
-directory picker lists only the folders open on that machine; its first message may contain
-text, images or both.
+directory picker lists only the folders open on that machine, and **New session here** is
+unavailable for a session whose folder is closed there (pinned and project sessions stay listed);
+its first message may contain text, images or both.
 The session runs and stays on the remote. A worktree for parallel work comes from the remote
 session's own dispatch, which runs on the remote, not from this picker.
 

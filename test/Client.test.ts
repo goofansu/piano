@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { ClientMessage, Dialog, ServerMessage, SessionClosure } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { createDialogAnswer, pendingDialogs } from "../web/src/lib/piDialogs.ts";
 import type { ConnectionHandlers, DisconnectReason, SendDisposition } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
@@ -722,7 +723,7 @@ function focusHarness(
   options: {
     remembered?: string | null;
     initial?: typeof initialState;
-    openFoldersOnly?: boolean;
+    startsSessionIn?: (state: typeof initialState, cwd: string) => boolean;
   } = {},
 ) {
   const sent: ClientMessage[] = [];
@@ -744,7 +745,7 @@ function focusHarness(
     notify: () => {},
     newSelectionId: () => `sel${++ids}`,
     lastDirectory: { read: () => options.remembered ?? null, write: (cwd) => written.push(cwd) },
-    openFoldersOnly: options.openFoldersOnly,
+    startsSessionIn: options.startsSessionIn,
   });
   client.start();
   let seen = 0;
@@ -858,7 +859,8 @@ test("a fresh New page starts in the last directory used, else the first folder,
   );
 });
 
-test("where only open folders can be chosen, a remembered directory no longer open gives way to the first folder", () => {
+test("on a remote, which starts only in open folders, a remembered directory no longer open gives way to the first folder", () => {
+  const { startsSessionIn } = machineOffers({ id: "eng-1", name: "Eng" });
   const open = (path: string) =>
     ({
       path,
@@ -868,7 +870,7 @@ test("where only open folders can be chosen, a remembered directory no longer op
     }) as never;
   const registry = { _tag: "registry", folders: [open("/one"), open("/two")] } as const;
 
-  const closed = focusHarness({ remembered: "/closed", openFoldersOnly: true });
+  const closed = focusHarness({ remembered: "/closed", startsSessionIn });
   assert.deepEqual(
     closed.client.getState().view,
     { kind: "new", cwd: "/closed" },
@@ -877,7 +879,7 @@ test("where only open folders can be chosen, a remembered directory no longer op
   closed.server(registry);
   assert.deepEqual(closed.client.getState().view, { kind: "new", cwd: "/one" });
 
-  const still = focusHarness({ remembered: "/two", openFoldersOnly: true });
+  const still = focusHarness({ remembered: "/two", startsSessionIn });
   still.server(registry);
   assert.deepEqual(still.client.getState().view, { kind: "new", cwd: "/two" });
 
