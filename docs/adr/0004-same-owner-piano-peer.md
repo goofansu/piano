@@ -95,8 +95,11 @@ machines' projects with the same name are unrelated (INV-01/07).
   model. Project instructions join Pi's system prompt for the project's later sessions, including
   ones started on the peer itself. The trust boundary is unchanged: the same owner already sends
   prompts to those sessions from main.
-- A session's own life (rename, pin, share, archive, delete) stays with the peer's Piano. Session
-  menus on a remote hold the project rows and this browser's display choices only.
+- The peer admits rename, pin, archive and delete of a session it lists, so a remote session's
+  menus are Local's. Rename starts the session's Pi when it is stopped, because Pi owns the name;
+  archive and delete stop it, and delete removes its history on the peer. Each is the explicit
+  action of the same owner, behind the dialogs Local shows. Sharing stays with the peer's Piano:
+  it publishes through the peer's Radius sign-in over HTTP, which the gateway does not route.
 - The session header is Local's. Its Artifacts menu and the phone sheet's Pull request row are
   links out of Piano to URLs the peer already sent with the session and its list; they add no
   request to the peer. The app preview, which needs the peer's status read and Stop, stays out.

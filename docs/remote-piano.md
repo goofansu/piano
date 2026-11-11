@@ -188,6 +188,12 @@ it, and start a session in it, as on Local. A session's menu moves it to another
 same machine or removes it from one. Projects do not span machines: a project on eng-1 holds
 eng-1's sessions only, and its address is `/m/eng-1/projects/<id>`.
 
+### Session menu
+
+A remote session's menu, in the sidebar and in its header, offers **Rename**, **Pin**,
+**Archive** and **Delete** as on Local. Archive and Delete stop the session on the remote, and
+Delete removes its history there. **Share** is on the remote's own Piano.
+
 ### Artifacts and pull request
 
 A remote session's header lists the artifacts it published, and on a phone its menu links to its
@@ -239,9 +245,9 @@ No peer voice settings or transcription endpoints are proxied, and no peer crede
 ## Deliberate limits
 
 - A new remote session starts only in a folder open on the remote or one of its worktrees, with text
-  and/or raster images, in a project or none: no Browse, worktree creation or name. No
-  archive/delete/rename/pin of a session, and no worktree or machine management. Add, close and
-  reopen folders on the owning Piano.
+  and/or raster images, in a project or none: no Browse, worktree creation or name. No sharing
+  of a session, and no worktree or machine management. Add, close and reopen folders on the
+  owning Piano.
 - No remote general files, Changes, managed app previews or account/settings controls
   beyond the model picker's defaults, folder trust included:
   trusting a folder would run its project extensions on the remote. These requests are not

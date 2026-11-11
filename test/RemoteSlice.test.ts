@@ -32,6 +32,7 @@ import {
   projectCommands,
 } from "../web/src/lib/projectCommands.ts";
 import { preparedImageCommand } from "../web/src/lib/remoteImages.ts";
+import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
@@ -215,6 +216,24 @@ function browserSends(machine: Machine): ClientMessage[] {
     }
   }
 
+  // A session's menu: Pin sends itself; Rename and Delete leave through their dialogs' answers,
+  // Archive directly when nothing is running. Each only where the command runs.
+  for (const command of sessionCommands(state, { ...listed, title: "Session" })) {
+    if (!offers.command(command)) continue;
+    const { intent } = command;
+    if (intent.kind === "send") send(intent.command);
+    if (intent.kind === "archive" && intent.target)
+      send({ _tag: "archive_session", cwd: intent.target.cwd, sessionId: intent.target.sessionId });
+    if ((intent.kind === "rename" || intent.kind === "delete") && intent.target) {
+      const answer = answerForm(
+        state,
+        { kind: `${intent.kind}-session`, target: intent.target },
+        "Renamed",
+      );
+      if (answer.allowed && answer.command) send(answer.command);
+    }
+  }
+
   // The New page's first message, joining the page's project (NewSessionComposer), with the
   // picker's start options for the directory.
   const fresh: ModelTarget = { kind: "new", cwd: CWD };
@@ -280,6 +299,10 @@ test("every message the browser builds for a remote is one the remote admits", (
     "set_project_done",
     "assign_project",
     "save_project",
+    "pin_session",
+    "rename_session",
+    "archive_session",
+    "delete_session",
     "create_session",
   ])
     assert.ok(kinds(sent).includes(kind), `the journey sends ${kind}`);
