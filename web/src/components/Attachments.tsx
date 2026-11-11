@@ -17,10 +17,9 @@ import {
 } from "@/components/ui/attachment";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { LOCAL } from "@/lib/machine";
 import type { DraftKey, Drafts, ImageDraft } from "@/lib/messageDraft";
 import { remoteImageUrl } from "@/lib/remoteImages";
-import { useMachine, useOffers } from "@/lib/useMachine";
+import { useMachineId, useOffers } from "@/lib/useMachine";
 
 export const ImageSessionContext = createContext<
   { workspaceId: string; sessionId: string } | undefined
@@ -212,7 +211,7 @@ export function MessageAttachments({
   /** Browser-created first input, never a peer's transcript. */ draft?: boolean;
 }) {
   const offers = useOffers();
-  const machineId = useMachine()?.machine.id ?? LOCAL.id;
+  const machineId = useMachineId();
   const target = useContext(ImageSessionContext);
   return offers.attachments && items?.length ? (
     <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1" ref={wheelSideways}>

@@ -3,6 +3,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { WRITTEN_PATHS_LIMIT } from "../shared/http.ts";
+import { LOCAL } from "../shared/machine.ts";
 import type { WorkspaceWrittenFiles } from "../shared/wire.ts";
 import {
   ApiError,
@@ -16,6 +17,9 @@ import {
   workspaceWrittenFiles,
 } from "../web/src/lib/api.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
+
+/** These read this Piano's own router. */
+const local = { machineId: LOCAL.id };
 
 // The browser adapter against the real router; only the Pi child is faked.
 let server: RouterFixture;
@@ -60,46 +64,49 @@ test("folder picker: listings decode, and a missing path fails with the server's
 
 test("file previews preserve binary bytes over scoped POST and still redact text", async () => {
   await writeFile(join(repo, "secret.txt"), "token=example-secret");
-  const text = await workspaceFile(workspaceId, "secret.txt");
+  const text = await workspaceFile(workspaceId, "secret.txt", local);
   assert.ok("content" in text);
   assert.equal(text.content, "token=[REDACTED]");
   const pdf = Buffer.from("%PDF-1.7\ntoken=example-secret");
   await writeFile(join(repo, "sample.pdf"), pdf);
-  const binary = await workspaceFile(workspaceId, "sample.pdf");
+  const binary = await workspaceFile(workspaceId, "sample.pdf", local);
   assert.equal(binary.workspaceId, workspaceId);
   assert.equal(binary.path, "sample.pdf");
   assert.equal(binary.kind, "pdf");
   assert.ok("bytes" in binary);
   assert.deepEqual(binary.bytes, new Uint8Array(pdf));
-  await assert.rejects(workspaceFile("unknown", "sample.pdf"), /Workspace is not registered/);
+  await assert.rejects(
+    workspaceFile("unknown", "sample.pdf", local),
+    /Workspace is not registered/,
+  );
   await writeFile(join(root, "outside.pdf"), pdf);
-  const external = await workspaceFile(workspaceId, "../outside.pdf");
+  const external = await workspaceFile(workspaceId, "../outside.pdf", local);
   assert.equal(external.path, join(root, "outside.pdf"));
   assert.ok("bytes" in external);
   assert.deepEqual(external.bytes, new Uint8Array(pdf));
   await writeFile(join(root, "outside.md"), "token=example-secret");
-  const externalText = await workspaceFile(workspaceId, join(root, "outside.md"));
+  const externalText = await workspaceFile(workspaceId, join(root, "outside.md"), local);
   assert.ok("content" in externalText);
   assert.equal(externalText.content, "token=[REDACTED]");
 });
 
 test("downloads are the file's exact bytes: text unredacted, binary intact, same path and format rules", async () => {
   await writeFile(join(repo, "secret.txt"), "token=example-secret");
-  const text = await workspaceFileDownload(workspaceId, "secret.txt");
+  const text = await workspaceFileDownload(workspaceId, "secret.txt", local);
   assert.deepEqual(
     [text.name, text.mime, new TextDecoder().decode(text.bytes)],
     ["secret.txt", "text/plain", "token=example-secret"],
   );
   const pdf = Buffer.from("%PDF-1.7\ntoken=example-secret");
   await writeFile(join(repo, "sample.pdf"), pdf);
-  const binary = await workspaceFileDownload(workspaceId, "sample.pdf");
+  const binary = await workspaceFileDownload(workspaceId, "sample.pdf", local);
   assert.equal(binary.mime, "application/pdf");
   assert.deepEqual(binary.bytes, new Uint8Array(pdf));
   // A ZIP cannot be previewed, so it cannot be downloaded either.
   await writeFile(join(repo, "archive.zip"), Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]));
-  await assert.rejects(workspaceFileDownload(workspaceId, "archive.zip"), /not supported/);
+  await assert.rejects(workspaceFileDownload(workspaceId, "archive.zip", local), /not supported/);
   await writeFile(join(root, "outside.pdf"), pdf);
-  const external = await workspaceFileDownload(workspaceId, "../outside.pdf");
+  const external = await workspaceFileDownload(workspaceId, "../outside.pdf", local);
   assert.equal(external.name, "outside.pdf");
   assert.deepEqual(external.bytes, new Uint8Array(pdf));
 });
@@ -115,7 +122,7 @@ test("a response outside the contract is rejected with the endpoint's message, n
     );
     globalThis.fetch = async () => new Response("<html>Bad gateway</html>", { status: 502 });
     await assert.rejects(
-      sessionChanges(workspaceId, "any-session", undefined),
+      sessionChanges(workspaceId, "any-session", undefined, local),
       (error: unknown) =>
         error instanceof ApiError &&
         error.status === 502 &&
@@ -159,7 +166,7 @@ test("INV-01/07: more paths than one request carries are read in bounded batches
     "../sibling.ts",
     ...filler(7, "b"),
   ];
-  const answer = await workspaceWrittenFiles(workspace(), paths);
+  const answer = await workspaceWrittenFiles(workspace(), paths, local);
   assert.deepEqual(sent, [WRITTEN_PATHS_LIMIT, 10], "bounded batches, in order");
   assert.deepEqual(answer.workspace, { id: workspaceId, folder: repo, path: repo });
   assert.ok(answer.result.status === "ready");
@@ -214,7 +221,7 @@ test("INV-07: a batched read stops at an abort and refuses a reply naming anothe
     return response;
   };
   await assert.rejects(
-    workspaceWrittenFiles(workspace(), paths, { signal: controller.signal }),
+    workspaceWrittenFiles(workspace(), paths, { ...local, signal: controller.signal }),
     (error: unknown) => error instanceof Error && error.name === "AbortError",
   );
   assert.equal(answered, 1, "no request after the abort");
@@ -239,7 +246,7 @@ test("INV-07: a batched read stops at an abort and refuses a reply naming anothe
         Response.json({ ...body, workspace: { ...body.workspace, ...other } }),
       );
       await assert.rejects(
-        workspaceWrittenFiles(workspace(), asked),
+        workspaceWrittenFiles(workspace(), asked, local),
         (error: unknown) =>
           error instanceof ApiError &&
           error.status === 200 &&
@@ -253,14 +260,14 @@ test("INV-07: a batched read stops at an abort and refuses a reply naming anothe
       result: { status: "error", detail: "Files requires the Git checkout root." },
     }),
   );
-  const failed = await workspaceWrittenFiles(workspace(), paths);
+  const failed = await workspaceWrittenFiles(workspace(), paths, local);
   assert.deepEqual(failed.result, {
     status: "error",
     detail: "Files requires the Git checkout root.",
   });
   await second(() => new Response("<html>Bad gateway</html>", { status: 502 }));
   await assert.rejects(
-    workspaceWrittenFiles(workspace(), paths),
+    workspaceWrittenFiles(workspace(), paths, local),
     (error: unknown) => error instanceof ApiError && error.status === 502,
   );
 });

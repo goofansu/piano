@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { loadPeerConfigs } from "../server/PeerConfig.ts";
+import { Endpoints } from "../shared/http.ts";
 import type { ModelCatalog } from "../shared/wire.ts";
-import { listDirectory, sessionCommands, workspaceFile } from "../web/src/lib/api.ts";
-import { createClient } from "../web/src/lib/client.ts";
+import { sessionCommands, workspaceFile } from "../web/src/lib/api.ts";
+import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
 import {
   machineAddress,
   machineLocation,
@@ -16,9 +17,8 @@ import {
 } from "../web/src/lib/machine.ts";
 import { machineLocationMemory } from "../web/src/lib/machineMemory.ts";
 import { createMachineStores } from "../web/src/lib/machineStores.ts";
-import { createDrafts, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
-import { type Catalogs, createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
-import { createQuestionReplies } from "../web/src/lib/piDialogs.ts";
+import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
+import type { Catalogs } from "../web/src/lib/modelCatalogs.ts";
 import { remoteImageUrl } from "../web/src/lib/remoteImages.ts";
 import { parseRoute, routePath } from "../web/src/lib/routes.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
@@ -124,16 +124,9 @@ test("same cwd/session IDs retain separate drafts, questions and model catalogs,
     write: (catalogs: Catalogs) => void stored.set(id, catalogs),
   });
   const localCatalog: ModelCatalog = { cwd: "/same", models: [], fetchedAt: "local" };
-  const local = {
-    drafts: createDrafts(),
-    questions: createQuestionReplies(),
-    catalogs: createModelCatalogs({
-      storage: { read: () => ({ "/same": localCatalog }), write: () => {} },
-      notify: () => {},
-      saveDefaults: async () => {},
-    }),
-  };
-  const forMachine = createMachineStores(local, () => {}, catalogStorage);
+  stored.set("local", { "/same": localCatalog });
+  const forMachine = createMachineStores(() => {}, catalogStorage);
+  const local = forMachine("local");
   const remote = forMachine("eng-1");
   const second = forMachine("eng-2");
   const key = sessionDraftKey({ cwd: "/same", sessionId: "same-id" });
@@ -200,12 +193,38 @@ test("same cwd/session IDs retain separate drafts, questions and model catalogs,
   closeSecond();
   close();
   // A reload: drafts start over, and each machine's picker opens on its own stored catalog.
-  const reloaded = createMachineStores(local, () => {}, catalogStorage);
+  const reloaded = createMachineStores(() => {}, catalogStorage);
   assert.notEqual(reloaded("eng-1"), remote);
   assert.equal(reloaded("eng-1").drafts.get(key).text, "", "a page reload has no remote draft");
   assert.equal(reloaded("eng-1").catalogs.seed()["/same"].fetchedAt, "remote");
   assert.equal(reloaded("eng-2").catalogs.seed()["/same"].fetchedAt, "second");
-  assert.equal(local.catalogs.seed()["/same"].fetchedAt, "local");
+  assert.equal(reloaded("local").catalogs.seed()["/same"].fetchedAt, "local");
+});
+
+test("Local's stores are built as a remote's are: each saves Pi's defaults on its own machine and reports at the level given", async (t) => {
+  const urls: string[] = [];
+  const original = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = original;
+  });
+  globalThis.fetch = async (input) => {
+    urls.push(String(input));
+    return Response.json({ error: "Choose an available model." }, { status: 400 });
+  };
+  const notices: [string, NotifyLevel | undefined][] = [];
+  const forMachine = createMachineStores(
+    (message, level) => void notices.push([message, level]),
+    () => ({ read: () => ({}), write: () => {} }),
+  );
+  for (const id of ["local", "eng-1"]) {
+    const { catalogs } = forMachine(id);
+    await catalogs.view(catalogs.getState(), "/same").saveDefaults("anthropic/opus", "high");
+  }
+  assert.deepEqual(urls, ["/api/settings/defaults", "/peer/eng-1/api/settings/defaults"]);
+  assert.deepEqual(notices, [
+    ["Choose an available model.", "error"],
+    ["Choose an available model.", "error"],
+  ]);
 });
 
 test("HTTP request captures its peer; unsupported remote reads never fall through to Local", async (t) => {
@@ -225,8 +244,9 @@ test("HTTP request captures its peer; unsupported remote reads never fall throug
   assert.deepEqual(urls, [
     "/peer/eng-1/api/session/commands?workspaceId=same-workspace&sessionId=same-id",
   ]);
-  // Browsing the remote's directories is not offered: it is refused here, before any request.
-  await assert.rejects(listDirectory("/home", { machineId: "eng-1" }), /Unavailable/);
+  // Browsing the remote's directories is not offered: `listDirectory` takes no machine, and its
+  // path is refused here, before any request.
+  assert.throws(() => peerApiPath("eng-1", Endpoints.listDirectory.path), /Unavailable/);
   assert.equal(urls.length, 1);
   finish(
     new Response(JSON.stringify({ commands: [] }), {

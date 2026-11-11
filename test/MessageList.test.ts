@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { after, test } from "node:test";
-import { type ComponentType, createElement } from "react";
+import { type ComponentType, type Context, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 import type { RenderMsg, ToolExecution } from "../shared/wire.ts";
 import { jumpEntries, transcriptRows } from "../web/src/lib/transcript.ts";
+import type { MachineScope } from "../web/src/lib/useMachine.ts";
+import { localMachineScope } from "./fixtures/machineScope.ts";
 
 // Load the real TSX component through the application's existing Vite transform.
 const vite = await createServer({
@@ -24,12 +26,22 @@ const { MessageList } = (await vite.ssrLoadModule("/src/components/MessageList.t
     working?: boolean;
   }>;
 };
+const { MachineContext } = (await vite.ssrLoadModule("/src/lib/useMachine.ts")) as {
+  MachineContext: Context<MachineScope | null>;
+};
 const render = (
   messages: RenderMsg[],
   tools: Record<string, ToolExecution> = {},
   pending: RenderMsg | null = null,
   showTools = true,
-) => renderToStaticMarkup(createElement(MessageList, { messages, tools, pending, showTools }));
+) =>
+  renderToStaticMarkup(
+    createElement(
+      MachineContext.Provider,
+      { value: localMachineScope() },
+      createElement(MessageList, { messages, tools, pending, showTools }),
+    ),
+  );
 const apiError =
   'exe-dev-openai API error (429): {"type":"usage_limit_reached","message":"The usage limit has been reached","retry_after":123}';
 const failure = (errorMessage = apiError): RenderMsg => ({
@@ -125,14 +137,18 @@ test("messages-only never flashes a completed intermediate message while the age
   const history = [user, commentary];
   const working = (messages: RenderMsg[], pending: RenderMsg | null = null, showTools = false) =>
     renderToStaticMarkup(
-      createElement(MessageList, {
-        messages,
-        pending,
-        tools: {},
-        showTools,
-        activity: "working",
-        working: true,
-      }),
+      createElement(
+        MachineContext.Provider,
+        { value: localMachineScope() },
+        createElement(MessageList, {
+          messages,
+          pending,
+          tools: {},
+          showTools,
+          activity: "working",
+          working: true,
+        }),
+      ),
     );
   // message_end can arrive before the next message_start, with no pending message.
   assert.doesNotMatch(working(history), /Let me investigate/);

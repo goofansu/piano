@@ -7,7 +7,6 @@
  */
 import type { FolderView, Project } from "@shared/wire";
 import type { AppState } from "../store.ts";
-import { LOCAL } from "./machine.ts";
 import { machineMemory } from "./machineMemory.ts";
 import {
   createPreference,
@@ -110,8 +109,8 @@ const keyList = (raw: string | null): readonly string[] => {
 };
 
 export function sidebarPreferences(
+  machineId: string,
   storage?: PreferenceStorage,
-  machineId: string = LOCAL.id,
 ): SidebarPreferences {
   return {
     openGroups: machineMemory(machineId, "openGroups", storage).preference<readonly string[]>({

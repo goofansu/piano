@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
-import { isLocalId, LOCAL } from "../../../shared/machine.ts";
+import { isLocalId } from "../../../shared/machine.ts";
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { DraftEditorState } from "../components/DraftEditor.tsx";
 import type { Client } from "./client.ts";
 import type { DraftMessage } from "./messageDraft.ts";
 import { discardImages, preparedImageCommand, prepareImages } from "./remoteImages.ts";
-import { useMachine } from "./useMachine.ts";
+import { useMachineId } from "./useMachine.ts";
 
 /** One async send owns its original machine, draft and navigation. Switching cancels, never retargets. */
 export function useImageSend(
@@ -14,7 +14,7 @@ export function useImageSend(
   target: { cwd: string; sessionId?: string | null },
   selection: string | null,
 ) {
-  const machineId = useMachine()?.machine.id ?? LOCAL.id;
+  const machineId = useMachineId();
   const active = useRef<AbortController | null>(null);
   useEffect(
     () => () => {

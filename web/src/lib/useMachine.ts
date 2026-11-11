@@ -1,24 +1,28 @@
 import { createContext, useContext } from "react";
-import { LOCAL, type Machine } from "./machine.ts";
+import type { Machine } from "./machine.ts";
 import { type MachineOffers, machineOffers } from "./machineOffers.ts";
-import type { Drafts } from "./messageDraft.ts";
-import { drafts } from "./messageDraft.ts";
-import type { ModelCatalogs } from "./modelCatalogs.ts";
-import { questionReplies, type QuestionReplies } from "./piDialogs.ts";
+import type { MachineStores } from "./machineStores.ts";
 
-export interface MachineScope {
+export interface MachineScope extends MachineStores {
   machine: Machine;
   machines: readonly Machine[];
   switchMachine: (id: string) => void;
-  drafts: Drafts;
-  questions: QuestionReplies;
-  catalogs: ModelCatalogs;
 }
 export const MachineContext = createContext<MachineScope | null>(null);
-export const useMachine = () => useContext(MachineContext);
-/** What the selected machine offers in this browser; outside a machine scope, Local's. */
-export const useOffers = (): MachineOffers => machineOffers(useMachine()?.machine ?? LOCAL);
-/** The machine a request is for, captured where it is made (`RequestOptions.machineId`). */
-export const useMachineId = (): string => useMachine()?.machine.id ?? LOCAL.id;
-export const useDrafts = () => useMachine()?.drafts ?? drafts;
-export const useQuestionReplies = () => useMachine()?.questions ?? questionReplies;
+
+/**
+ * The machine everything below `MachineHost` is for. There is no default: a component rendered
+ * outside a machine would otherwise reach Local, where the same workspace and session IDs may
+ * name something else (INV-07).
+ */
+export function useMachineScope(): MachineScope {
+  const scope = useContext(MachineContext);
+  if (!scope) throw new Error("useMachineScope requires a MachineHost");
+  return scope;
+}
+/** What the selected machine offers in this browser. */
+export const useOffers = (): MachineOffers => machineOffers(useMachineScope().machine);
+/** The machine a request is for, captured where it is made (`MachineRequest.machineId`). */
+export const useMachineId = (): string => useMachineScope().machine.id;
+export const useDrafts = () => useMachineScope().drafts;
+export const useQuestionReplies = () => useMachineScope().questions;

@@ -12,7 +12,6 @@ import { refusedAttempt } from "../../../shared/creationVerdict.ts";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
-import { LOCAL } from "./machine.ts";
 import { machineMemory } from "./machineMemory.ts";
 import { projectStartDirectory } from "./projectHome.ts";
 import { folderFor } from "./sessionCatalog.ts";
@@ -74,7 +73,10 @@ export interface ClientOptions {
   connect: (handlers: ConnectionHandlers) => Connection;
   notify: Notify;
   newSelectionId?: () => string;
-  /** Defaults to this browser's storage for Local. */
+  /**
+   * The machine's own memory (`storedLastDirectory`). Without one nothing is remembered: never
+   * another machine's, which may list the same paths.
+   */
   lastDirectory?: LastDirectory;
   /**
    * The New page starts only in a folder open on this machine or one of its worktrees (a remote,
@@ -112,7 +114,7 @@ export function createClient({
   connect,
   notify,
   newSelectionId = () => crypto.randomUUID(),
-  lastDirectory = storedLastDirectory(LOCAL.id),
+  lastDirectory = { read: () => null, write: () => {} },
   openFoldersOnly = false,
 }: ClientOptions): Client {
   /**
