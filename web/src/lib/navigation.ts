@@ -1,4 +1,3 @@
-import { isLocalId } from "../../../shared/machine.ts";
 /**
  * What is on screen and how it maps to the address bar. The client owns the main pane's view (a
  * session or a page); navigation owns what sits over it (Settings, the selected session's areas
@@ -10,6 +9,7 @@ import { isLocalId } from "../../../shared/machine.ts";
 import { type AppState, type Page, sessionKey } from "../store.ts";
 import type { workspaceFile } from "./api.ts";
 import type { Client } from "./client.ts";
+import { machineKey } from "./machineMemory.ts";
 import type { Preference } from "./preference.ts";
 import { findProject } from "./projectCommands.ts";
 import {
@@ -937,8 +937,7 @@ export function createNavigation({
 
 /** This browser tab's sessionStorage: a reload keeps the surface, a new tab starts without it. */
 export function browserSurfaceMemory(machineId: string): SurfaceMemory {
-  // Local keeps the key it always had; a remote's tabs are remembered beside it, never in it.
-  const key = isLocalId(machineId) ? "piano.surface" : `piano.surface.${machineId}`;
+  const key = machineKey(machineId, "surface");
   return {
     read: () => sessionStorage.getItem(key),
     write: (value) =>

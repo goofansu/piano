@@ -11,7 +11,10 @@ import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
+import { LOCAL } from "./machine.ts";
+import { machineKey } from "./machineMemory.ts";
 import { projectStartDirectory } from "./projectHome.ts";
+import { folderFor } from "./sessionCatalog.ts";
 import { focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
 import { readStorage, writeStorage } from "./storage.ts";
@@ -59,11 +62,11 @@ const firstMessage = (m: Extract<ClientCommand, { _tag: "create_session" }>) =>
       }
     : undefined;
 
-const LAST_DIR = "piano.lastDir";
-const storedLastDirectory: LastDirectory = {
-  read: () => readStorage(LAST_DIR),
-  write: (cwd) => writeStorage(LAST_DIR, cwd),
-};
+/** The last directory a session started in on one machine, in this browser's storage. */
+export function storedLastDirectory(machineId: string): LastDirectory {
+  const key = machineKey(machineId, "lastDir");
+  return { read: () => readStorage(key), write: (cwd) => writeStorage(key, cwd) };
+}
 
 export interface ClientOptions {
   initial: AppState;
@@ -71,8 +74,14 @@ export interface ClientOptions {
   connect: (handlers: ConnectionHandlers) => Connection;
   notify: Notify;
   newSelectionId?: () => string;
-  /** Defaults to this browser's storage. */
+  /** Defaults to this browser's storage for Local. */
   lastDirectory?: LastDirectory;
+  /**
+   * The New page starts only in a folder open on this machine or one of its worktrees (a remote,
+   * where nothing else can be chosen): a remembered directory that is no longer one gives way to
+   * the first folder once the registry says so.
+   */
+  openFoldersOnly?: boolean;
 }
 
 /** Live projections may share a paint; input and connection changes must render immediately. */
@@ -103,7 +112,8 @@ export function createClient({
   connect,
   notify,
   newSelectionId = () => crypto.randomUUID(),
-  lastDirectory = storedLastDirectory,
+  lastDirectory = storedLastDirectory(LOCAL.id),
+  openFoldersOnly = false,
 }: ClientOptions): Client {
   /**
    * A New page opened without a directory or project starts in the last one used, else the first
@@ -111,13 +121,16 @@ export function createClient({
    */
   const withNewPageDirectory = (s: AppState) => {
     const page = startPage(s.view);
-    if (!page || page.cwd) return s;
+    if (!page) return s;
+    const closed = openFoldersOnly && s.registryLoaded && !!page.cwd && !folderFor(s, page.cwd);
+    if (page.cwd && !closed) return s;
+    const remembered = closed ? undefined : lastDirectory.read();
     const cwd =
       page.kind === "project"
         ? projectStartDirectory(s, page.projectId)
         : page.projectId
           ? undefined
-          : lastDirectory.read() || s.folders[0]?.path;
+          : remembered || s.folders[0]?.path;
     return cwd ? reduce(s, { type: "new_directory", cwd }) : s;
   };
 

@@ -2,7 +2,12 @@ import { saveDefaults } from "./api.ts";
 import type { Notify } from "./client.ts";
 import { LOCAL } from "./machine.ts";
 import { createDrafts, type Drafts } from "./messageDraft.ts";
-import { createModelCatalogs, type ModelCatalogs } from "./modelCatalogs.ts";
+import {
+  browserCatalogStorage,
+  type CatalogStorage,
+  createModelCatalogs,
+  type ModelCatalogs,
+} from "./modelCatalogs.ts";
 import { createQuestionReplies, type QuestionReplies } from "./piDialogs.ts";
 
 export interface MachineStores {
@@ -11,8 +16,15 @@ export interface MachineStores {
   catalogs: ModelCatalogs;
 }
 
-/** One page-memory partition per configured identity; identical remote cwd/IDs never share stores. */
-export function createMachineStores(local: MachineStores, notify: Notify) {
+/**
+ * One partition per configured identity; identical remote cwd/IDs never share stores. Drafts and
+ * question replies last for this page; a remote's catalogs outlive a reload in its own storage.
+ */
+export function createMachineStores(
+  local: MachineStores,
+  notify: Notify,
+  catalogStorage: (machineId: string) => CatalogStorage = browserCatalogStorage,
+) {
   const stores = new Map<string, MachineStores>([[LOCAL.id, local]]);
   return (id: string): MachineStores => {
     let current = stores.get(id);
@@ -20,9 +32,9 @@ export function createMachineStores(local: MachineStores, notify: Notify) {
       current = {
         drafts: createDrafts(),
         questions: createQuestionReplies(),
-        // Deliberately not persisted; remote catalogs never seed from Local's cwd cache.
+        // The remote's own storage: its catalogs never seed from Local's cwd cache.
         catalogs: createModelCatalogs({
-          storage: { read: () => ({}), write: () => {} },
+          storage: catalogStorage(id),
           notify,
           // The remote's own Pi settings; its catalogs then show the new default.
           saveDefaults: (model, effort) => saveDefaults(model, effort, { machineId: id }),

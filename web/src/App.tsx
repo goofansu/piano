@@ -16,7 +16,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { checkoutRefresh } from "@/lib/checkoutRefresh";
-import type { NotifyLevel } from "@/lib/client";
+import { type NotifyLevel, storedLastDirectory } from "@/lib/client";
 import { machineFrameBytes, machineLocation, machineSocketUrl } from "@/lib/machine";
 import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
@@ -74,7 +74,9 @@ function MachineApp() {
           url: () => machineSocketUrl(machine.id),
           frameBytes: machineFrameBytes(machine.id),
         }),
-      ...(!offers.lastDirectory && { lastDirectory: { read: () => null, write: () => {} } }),
+      // Each machine remembers its own last directory; a remote starts only in its open folders.
+      lastDirectory: storedLastDirectory(machine.id),
+      openFoldersOnly: !offers.browse,
     },
   );
   const { dispatch, send } = client;

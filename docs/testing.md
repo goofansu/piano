@@ -138,7 +138,8 @@ tests are only the critical paths, which must keep working on every change and r
   redirect input. Local receives no remote prompt or HTTP/socket request. A project created on a
   peer takes a session there, and Local does not list it. A remote session's Changes, a file
   opened from it and its session rail read the peer, never Local. Trusting a folder on a peer
-  leaves Local's trust for the same path as it was. The harness's optional
+  leaves Local's trust for the same path as it was. Each machine's model list and last directory
+  are stored under its own ID, and a machine no longer configured is forgotten on load. The harness's optional
   `peers` fixtures each own separate database/history/audit; `remote` is the one-peer shorthand.
 
 `npm run test:browser` runs these and the transcript-row alignment check against scratch registries, Pi history and

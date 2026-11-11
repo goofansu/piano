@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { saveDefaults } from "./api.ts";
+import { LOCAL } from "./machine.ts";
 import {
   browserCatalogStorage,
   createModelCatalogs,
@@ -10,7 +11,7 @@ import { useMachine } from "./useMachine.ts";
 
 /** The page's model catalogs; App seeds the client with them and follows its connection. */
 export const modelCatalogs = createModelCatalogs({
-  storage: browserCatalogStorage,
+  storage: browserCatalogStorage(LOCAL.id),
   notify: (message, level) => (level === "error" ? toast.error(message) : toast.success(message)),
   saveDefaults: (model, effort) => saveDefaults(model, effort),
 });

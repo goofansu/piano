@@ -5,13 +5,14 @@ import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/em
 import { listMachines } from "@/lib/api";
 import { observeDictationPage } from "@/lib/browserDictation";
 import { LOCAL, type Machine, machineLocation, machinePath } from "@/lib/machine";
+import { forgetUnconfiguredMachines } from "@/lib/machineMemory";
 import { createMachineStores } from "@/lib/machineStores";
 import { drafts } from "@/lib/messageDraft";
 import { questionReplies } from "@/lib/piDialogs";
 import { MachineContext } from "@/lib/useMachine";
 import { modelCatalogs } from "@/lib/useModelCatalog";
 
-/** Stores live only for this page load. A machine switch disposes its connection, not its drafts. */
+/** Drafts and question replies live for this page load; a machine switch disposes its connection, not them. */
 export function MachineHost({ children }: { children: React.ReactNode }) {
   const [id, setId] = useState(() => machineLocation(location.pathname).id);
   const [machines, setMachines] = useState<Machine[]>([LOCAL]);
@@ -29,6 +30,8 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
     const controller = new AbortController();
     void listMachines(controller.signal)
       .then((list) => {
+        // Only a list the server answered: a failed read forgets nothing.
+        forgetUnconfiguredMachines(list);
         setMachines([...list]);
         setLoaded(true);
       })

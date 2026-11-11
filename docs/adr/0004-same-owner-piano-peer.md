@@ -54,9 +54,11 @@ turn Piano into a fleet manager.
   including its Origin and credential, and never falls back to another. This is a configured
   switcher, not discovery, machine CRUD or cross-machine orchestration (INV-07/11).
 - Machine IDs qualify navigation and own separate client, draft, question-reply and catalog
-  instances (INV-07). Drafts remain page-memory only. Remote catalogs are not persisted; local
-  caches remain local, and each machine's remembered Surface tabs are kept apart from every
-  other's. Unsupported remote views never reuse local HTTP APIs.
+  instances (INV-07). Drafts remain page-memory only. What the browser keeps across reloads
+  (model catalogs, the New page's last directory, open Surface tabs) is stored per machine under
+  that machine's ID, Local's included, so identical directories on two machines never seed each
+  other; [browser memory](#browser-memory-one-prefix-per-machine) has the rule. Unsupported
+  remote views never reuse local HTTP APIs.
 - Reuse the existing session projection, composer, model/context controls and Pi dialog claims;
   preserve the peer's generation, sequence and delivery frames (INV-04/05). The browser remains
   the only reconnect owner. Gateway disconnect/failure does not promise whether an in-flight
@@ -105,6 +107,27 @@ machines' projects with the same name are unrelated (INV-01/07).
 - The session header is Local's. Its Artifacts menu and the phone sheet's Pull request row are
   links out of Piano to URLs the peer already sent with the session and its list; they add no
   request to the peer. The app preview, which needs the peer's status read and Stop, stays out.
+
+## Browser memory: one prefix per machine
+
+Local's picker opened at once from a stored catalog and its New page started in the last
+directory used, while a remote asked again after every reload and started in its first folder.
+The first slice stored nothing for a remote so that one machine's values could never appear on
+another. Storing them per machine keeps that guarantee and removes the difference.
+
+- Every machine's keys sit under `piano.machine.<id>.` in this browser's storage: `catalogs` and
+  `lastDir` in localStorage, `surface` in sessionStorage. Local is `piano.machine.local.`, with no
+  special case. `web/src/lib/machineMemory.ts` owns the rule.
+- The ID is the configured one, and the only identity the browser has for a machine. Renaming an
+  ID starts that machine with nothing remembered; pointing an ID at another Piano would show the
+  former one's catalog until the new one answers. Keep an ID bound to one Piano.
+- When the server answers the machine list, the browser deletes the keys of every machine no
+  longer in it, and Local's keys from before the prefix. A failed read deletes nothing, and an
+  unavailable machine is still configured.
+- A remote starts only in its open folders, so a remembered directory that is no longer one gives
+  way to the first folder once the peer's list arrives. The peer still refuses any other path.
+- This is memory in one browser, not synchronization. A stored catalog is shown until the
+  machine's own answer replaces it, as on Local.
 
 ## Folder trust: a registered directory only
 
