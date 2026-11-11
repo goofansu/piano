@@ -226,6 +226,22 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       } else respond();
       return;
     }
+    // The remote publishes with its own Radius sign-in, and refuses when it has none.
+    if (req.url?.startsWith("/api/session/share")) {
+      if (state.mode === "share-signed-out")
+        res
+          .writeHead(409)
+          .end(JSON.stringify({ error: "Sign in to Radius in Providers before sharing." }));
+      else
+        res.end(
+          JSON.stringify({
+            url: `https://radius.pi.dev/a/${spec.id}`,
+            expiresAt: "2027-01-01T00:00:00.000Z",
+            visibility: "organization",
+          }),
+        );
+      return;
+    }
     // The remote's own settings endpoint: it refuses a model its catalog does not offer.
     if (req.url === "/api/settings/defaults") {
       const defaults = JSON.parse(body);

@@ -393,9 +393,8 @@ test(
           "/peer/local/ws",
           "/peer/missing/ws",
           "/peer/eng-1/api/folders",
-          // Browsing the remote's directories and sharing a session stay on its own Piano.
+          // Browsing the remote's directories stays on its own Piano.
           "/peer/eng-1/api/ls",
-          "/peer/eng-1/api/session/share",
           "/peer/eng-1/ws/extra",
         ]) {
           const response = await fetch(`${f.base}${path}`);
@@ -700,6 +699,52 @@ test(
         assert.equal((await ask("POST", JSON.stringify({ scope: "everything" }))).status, 400);
         assert.equal((await ask("POST", "{}", { "Sec-Fetch-Site": "cross-site" })).status, 403);
         assert.equal((await ask("DELETE", "{}")).status, 405);
+        assert.equal(f.state.requests.length, refused, "refused requests never reach the remote");
+      },
+    );
+
+    await t.test(
+      "a session is shared by the remote, and its sign-in refusal comes back",
+      async () => {
+        const sharePath = `/peer/eng-1/api/session/share?workspaceId=${identity.workspaceId}&sessionId=${identity.sessionId}`;
+        const share = (extra: Record<string, string> = {}, path = sharePath) =>
+          fetch(`${f.base}${path}`, {
+            method: "POST",
+            headers: { Origin: f.base, ...headers, ...extra },
+          });
+        const before = f.state.requests.length;
+        const response = await share();
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("cache-control"), "no-store");
+        assert.deepEqual(await response.json(), {
+          url: "https://radius.pi.dev/a/eng-1",
+          expiresAt: "2027-01-01T00:00:00.000Z",
+          visibility: "organization",
+        });
+        const sent = f.state.requests.slice(before);
+        assert.deepEqual(
+          sent.map(({ url, method }) => `${method} ${url}`),
+          [
+            `POST /api/session/share?workspaceId=${identity.workspaceId}&sessionId=${identity.sessionId}`,
+          ],
+        );
+        // Main's own sign-ins never travel: the remote publishes with its own.
+        assert.equal(sent[0]!.headers.origin, f.config.origin);
+        assert.equal(sent[0]!.headers.cookie, undefined);
+        assert.equal(sent[0]!.headers.authorization, undefined);
+
+        f.state.mode = "share-signed-out";
+        const signedOut = await share();
+        f.state.mode = "ready";
+        assert.equal(signedOut.status, 409);
+        assert.deepEqual(await signedOut.json(), {
+          error: "Sign in to Radius in Providers before sharing.",
+        });
+
+        const refused = f.state.requests.length;
+        assert.equal((await share({}, "/peer/eng-1/api/session/share")).status, 400);
+        assert.equal((await share({ "Sec-Fetch-Site": "cross-site" })).status, 403);
+        assert.equal((await fetch(`${f.base}${sharePath}`, { headers })).status, 405);
         assert.equal(f.state.requests.length, refused, "refused requests never reach the remote");
       },
     );

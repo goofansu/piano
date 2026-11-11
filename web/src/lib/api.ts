@@ -265,8 +265,8 @@ export const sessionPullRequest = (
       )
     : call(Endpoints.sessionPullRequest, { query: { workspaceId, sessionId } }, options);
 
-export const shareSession = (workspaceId: string, sessionId: string) =>
-  call(Endpoints.shareSession, { query: { workspaceId, sessionId } });
+export const shareSession = (workspaceId: string, sessionId: string, options?: RequestOptions) =>
+  call(Endpoints.shareSession, { query: { workspaceId, sessionId } }, options);
 
 // Composer
 

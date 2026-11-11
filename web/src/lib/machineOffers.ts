@@ -2,7 +2,7 @@
  * What a machine offers in this browser, decided once (ADR 0004). Local offers everything; a
  * remote offers the slice: its registered sessions, their conversation, a new session with a
  * text/image first message in a folder or worktree it already registered, its projects, and a
- * session's rename, pin, archive and delete, with its Changes, files and session rail, and a
+ * session's rename, pin, share, archive and delete, with its Changes, files and session rail, and a
  * registered folder's trust.
  * Whatever else would manage the remote, run its apps or follow its accounts stays on the
  * remote's own Piano.
@@ -15,7 +15,8 @@ export interface MachineOffers {
   attachments: boolean;
   /** The selected session's preview, observed for its commands. */
   previews: boolean;
-  /** Provider accounts, followed for the commands that need a sign-in. */
+  /** Provider accounts, followed for the commands that need a sign-in. Where they are not
+   * followed, the machine itself answers whether it is signed in when the command runs. */
   providerAccounts: boolean;
   /** Git's checkout facts kept fresh, worktree creation and Git status on the New page. */
   worktrees: boolean;
@@ -67,8 +68,9 @@ const REMOTE_OFFERS: MachineOffers = {
     switch (command.intent.kind) {
       case "send":
         return SENT_CHANGES.has(command.intent.command._tag);
-      // A session's own life. Sharing publishes through the remote's Radius sign-in: not here.
+      // A session's own life. Sharing publishes there, through the remote's Radius sign-in.
       case "rename":
+      case "share":
       case "archive":
       case "delete":
       // The session's surfaces: Changes with its pull request, the session rail, the Agent area

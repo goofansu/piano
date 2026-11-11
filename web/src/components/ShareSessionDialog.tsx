@@ -27,6 +27,7 @@ export function ShareSessionDialog({
   phase,
   allowed,
   signedIn,
+  machine,
   submit,
   close,
 }: {
@@ -34,6 +35,8 @@ export function ShareSessionDialog({
   phase: SharePhase;
   allowed: boolean;
   signedIn: boolean;
+  /** The remote machine that publishes, with its own Radius sign-in; absent on Local. */
+  machine?: string;
   submit: () => void;
   close: () => void;
 }) {
@@ -51,7 +54,8 @@ export function ShareSessionDialog({
           <DialogTitle>{result ? "Session shared" : "Share session"}</DialogTitle>
           {!result && (
             <DialogDescription id="share-session-description">
-              Share a snapshot with your Radius organization. Reuses the same link when available.
+              Share a snapshot with {machine ? `${machine}'s` : "your"} Radius organization. Reuses
+              the same link when available.
             </DialogDescription>
           )}
         </DialogHeader>

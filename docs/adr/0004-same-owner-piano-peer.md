@@ -154,14 +154,14 @@ sessions there, and a prompt can run anything the directory holds (INV-11).
 
 ## Session surfaces: Changes, files and the session rail
 
-A remote session shows what a Local one does, except its managed app preview and sharing: the
+A remote session shows what a Local one does, except its managed app preview: the
 session rail (Environment and Outputs), Changes with its comparison and pull request, and files
 opened from the transcript, Changes or Outputs. This supersedes the earlier limit that a remote
 grants no workspace file access.
 
 - Git, GitHub and the files stay on the peer (INV-01). Main relays the peer's own endpoints for
   the Changes read, one file's patch, the saved comparison, written paths, the pull request read
-  and change, and a file's preview and download. `RemoteRequests` in `shared/http.ts` lists them
+  and change, sharing, and a file's preview and download. `RemoteRequests` in `shared/http.ts` lists them
   with their limits. The peer resolves workspace and session IDs in its own database, as for its
   own browser; main checks IDs, method, body shape and size before dialing, and nothing else.
 - A file read follows the peer's own rule: a path may leave the workspace, including an absolute

@@ -219,7 +219,11 @@ See [resource budgets](runtime-input-limits.md#remote-session-surfaces).
 
 A remote session's menu, in the sidebar and in its header, offers **Rename**, **Pin**,
 **Archive** and **Delete** as on Local. Archive and Delete stop the session on the remote, and
-Delete removes its history there. **Share** is on the remote's own Piano.
+Delete removes its history there. **Share** publishes from the remote with the remote's Radius
+sign-in, to that account's organization, and the remote keeps the link, so sharing the session
+again from either Piano updates the same link. Only the link reaches this computer. If the remote
+is signed out, the dialog says so: sign in to Radius in **Settings › Providers** on the remote's
+own Piano.
 
 ### Artifacts and pull request
 

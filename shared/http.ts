@@ -706,6 +706,9 @@ export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
   // The pull request: GitHub answers the remote within 15 seconds.
   sessionSurface(Endpoints.sessionPullRequest, { requestMs: 30_000 }),
   sessionSurface(Endpoints.changeSessionPullRequest, { requestMs: 30_000 }),
+  // Share: the remote exports and publishes with its own Radius sign-in and saves the link in
+  // its database; only the link comes back. Its publication deadline is 60 seconds.
+  sessionSurface(Endpoints.shareSession, { requestMs: 90_000 }),
   // A file as the remote's own browser reads it: the largest preview is a 32 MiB video, in a
   // multipart answer with its metadata.
   sessionSurface(Endpoints.workspaceFile, {

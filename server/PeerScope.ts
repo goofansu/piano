@@ -7,8 +7,9 @@
  * its worktrees, sends text/prepared raster images, answers dialogs and stops. It also manages this
  * machine's projects: create, rename, instruct, mark done, delete, and file a listed session in
  * one; a listed session's own life: rename, pin, archive and delete; and Pi's trust decision for
- * a directory registered here, which lets its project extensions run on this machine. Sharing,
- * worktree creation, registering folders and other settings are not offered.
+ * a directory registered here, which lets its project extensions run on this machine. Worktree
+ * creation, registering folders and other settings are not offered. Sharing a listed session is
+ * not a socket request: the gateway relays the share endpoint (`RemoteRequests`).
  */
 import { type ClientMessage, sameSession } from "../shared/wire.ts";
 import type { Selection } from "./ClientSessions.ts";

@@ -276,7 +276,11 @@ export function CommandHost({
   const machineScope = useMachine();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [codeWrap, setCodeWrap] = useCodeWrap();
-  const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
+  const accounts = useProviderAccounts();
+  // A remote's accounts are not followed here: it answers Share itself, refusing when signed out.
+  const radiusSignedIn = offers.providerAccounts
+    ? signedInToRadius(accounts, state.connected)
+    : state.connected;
   const { view, setView } = useSidebarView();
   const { theme, setTheme } = useTheme();
   const sidebar = useSidebarLayout();
@@ -371,6 +375,7 @@ export function CommandHost({
         phase={forms.share}
         allowed={answer.allowed}
         signedIn={radiusSignedIn}
+        machine={offers.providerAccounts ? undefined : machineScope?.machine.name}
         submit={forms.submit}
         close={close}
       />

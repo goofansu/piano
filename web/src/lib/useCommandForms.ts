@@ -9,6 +9,7 @@ import {
   createCommandForms,
   type FormPage,
 } from "./commandForms.ts";
+import { useMachineId } from "./useMachine.ts";
 
 /**
  * The command host's forms, answered against the latest render's state. `state`, `radiusSignedIn`,
@@ -22,14 +23,17 @@ export function useCommandForms(deps: {
   openPage: (page: FormPage) => void;
   listen: (listener: (message: ServerMessage) => void) => () => void;
 }): CommandForms & CommandFormsState {
-  const latest = useRef(deps);
-  latest.current = deps;
+  const machineId = useMachineId();
+  const latest = useRef({ ...deps, machineId });
+  latest.current = { ...deps, machineId };
   const [forms] = useState(() =>
     createCommandForms({
       getState: () => latest.current.state,
       radiusSignedIn: () => latest.current.radiusSignedIn,
       send: (command) => latest.current.send(command),
-      share: shareSession,
+      // The machine that owns the session publishes it, captured when Share is confirmed.
+      share: (workspaceId, sessionId) =>
+        shareSession(workspaceId, sessionId, { machineId: latest.current.machineId }),
       openPage: (page) => latest.current.openPage(page),
     }),
   );

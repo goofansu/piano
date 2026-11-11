@@ -898,16 +898,28 @@ await run(
         await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
         await page.click("button", "Send");
         await page.see("echo: PROJECT-ONCE");
-        // Its menu is Local's, without Share, which publishes through the peer's Radius sign-in.
+        // Its menu is Local's. Share publishes on the peer, through the peer's Radius sign-in:
+        // this peer has none, so its own refusal is what the dialog shows.
+        await page.click("button", "Session information and actions");
+        await page.until(`!!document.querySelector('[role="menu"]')`);
+        await page.click("menuitem", "Share");
+        await page.until(
+          `/'s Radius organization/.test(document.querySelector('[role="dialog"]')?.textContent ?? '')`,
+        );
+        await page.capture("9h-remote-share-confirm");
+        await page.click("button", "Share");
+        await page.see("Sign in to Radius in Providers before sharing.");
+        await page.capture("9h-remote-share-refused");
+        await page.click("button", "Done");
+        await page.until(`!document.querySelector('[role="dialog"]')`);
         await page.click("button", "Session information and actions");
         await page.until(`!!document.querySelector('[role="menu"]')`);
         const actions = await page.evaluate(
           `[...document.querySelectorAll('[role="menu"] [role^="menuitem"]')].map(e => e.getAttribute('aria-label') ?? e.textContent.trim())`,
         );
         assert.ok(actions.includes("Move to project"), JSON.stringify(actions));
-        for (const label of ["Rename", "Pin", "Archive", "Delete"])
+        for (const label of ["Rename", "Pin", "Share", "Archive", "Delete"])
           assert.ok(actions.includes(label), `remote session menu offers ${label}`);
-        assert.ok(!actions.includes("Share"), "remote session menu does not offer Share");
         await page.capture("9h-remote-session-menu");
         await page.click("menuitem", "Rename");
         await page.ab("fill", '[aria-label="Session name"]', "Renamed on peer");
