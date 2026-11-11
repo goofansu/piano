@@ -32,6 +32,9 @@ export const registry = {
   ],
 };
 
+/** A cookie the fake remote sets, as a real one would, so tests can show the gateway never forwards it. */
+const upstreamCookie = "upstream-secret=never-forward; HttpOnly; Secure; SameSite=Strict";
+
 type PeerSpec = { id: string; name?: string; vmToken?: string; commandName?: string };
 
 /** Independent fake network boundary; every peer may intentionally reuse the same session identity. */
@@ -123,7 +126,7 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
     }
     if (req.url?.startsWith("/api/peer/image-preview")) {
       res.setHeader("content-type", state.mode === "image-mime" ? "text/html" : "image/png");
-      res.setHeader("set-cookie", "upstream-secret=never-forward");
+      res.setHeader("set-cookie", upstreamCookie);
       if (state.mode === "image-large") {
         res.setHeader("content-length", 64 * 1024 * 1024 + 1);
         res.end();
@@ -196,7 +199,7 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
         res.writeHead(400).end(JSON.stringify({ error: "File not found." }));
         return;
       }
-      res.setHeader("set-cookie", "upstream-secret=never-forward");
+      res.setHeader("set-cookie", upstreamCookie);
       const respond = () => {
         if (state.mode === "file-large") {
           res.setHeader("content-type", "multipart/form-data; boundary=x");
