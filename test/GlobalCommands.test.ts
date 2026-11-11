@@ -123,7 +123,7 @@ test("exactly the current grouping and sort are checked", () => {
   assert.deepEqual(checked("sort-by", other), ["Sort by name"]);
 });
 
-test("on a remote machine the View options and New session stay, and nothing that manages the remote does", () => {
+test("on a remote machine the View options, New session and Projects stay, and nothing else that manages the remote does", () => {
   const remote = globalCommands(onNewPage, ctx).filter(
     machineOffers({ id: "eng-1", name: "eng-1" }).command,
   );
@@ -148,8 +148,12 @@ test("on a remote machine the View options and New session stay, and nothing tha
     remote.some((command) => command.label === "New session"),
     "New session offered",
   );
-  for (const label of ["Projects", "Settings"])
-    assert.ok(!remote.some((command) => command.label === label), `${label} not offered`);
+  // The remote's projects are managed from here; its settings stay on its own Piano.
+  assert.ok(
+    remote.some((command) => command.label === "Projects"),
+    "Projects offered",
+  );
+  assert.ok(!remote.some((command) => command.label === "Settings"), "Settings not offered");
 });
 
 test("one list of appearances serves the palette and the View menu", () => {

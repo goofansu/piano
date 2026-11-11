@@ -159,12 +159,11 @@ export function useSessionCommands(target?: SessionTarget) {
 
 /**
  * The selected session's project membership (`sessionProjectMenu`), for the header's phone sheet
- * and the palette; none until the session has a Pi session ID, or where projects are not offered.
+ * and the palette; none until the session has a Pi session ID.
  */
 export function useSessionProjectMenu() {
   const { state } = useCommands();
-  const offers = useOffers();
-  const session = offers.projects ? state.session : null;
+  const session = state.session;
   return session?.sessionId
     ? sessionProjectMenu(state, { cwd: session.cwd, sessionId: session.sessionId })
     : undefined;

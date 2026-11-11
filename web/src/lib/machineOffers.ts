@@ -1,9 +1,9 @@
-import type { AppState } from "../store.ts";
 /**
  * What a machine offers in this browser, decided once (ADR 0004). Local offers everything; a
- * remote offers the slice: its registered sessions, their conversation, and a new session with a
- * text/image first message in a folder or worktree it already registered. Whatever would manage the
- * remote, read its files or follow its accounts stays on the remote's own Piano.
+ * remote offers the slice: its registered sessions, their conversation, a new session with a
+ * text/image first message in a folder or worktree it already registered, and its projects.
+ * Whatever else would manage the remote, read its files or follow its accounts stays on the
+ * remote's own Piano.
  */
 import type { Command } from "./commands.ts";
 import { isLocalId, type Machine } from "./machine.ts";
@@ -29,16 +29,10 @@ export interface MachineOffers {
   trust: boolean;
   /** A folder row's New session and folder menu. */
   folders: boolean;
-  /** Projects: the sidebar's way to the index, the index, a project's home, a session's membership and the New page's choice. */
-  projects: boolean;
-  /** Session menus in the sidebar row and the session header. */
-  sessionManagement: boolean;
   /** Settings, and the sidebar's way to it. */
   settings: boolean;
   /** The New page starting in the last directory this browser used. */
   lastDirectory: boolean;
-  /** Whether `kind`, a page or the session pane, is shown rather than "Select a session". */
-  view: (kind: AppState["view"]["kind"]) => boolean;
   /** Whether a palette, menu or button command runs here. */
   command: (command: Command) => boolean;
 }
@@ -54,13 +48,18 @@ const LOCAL_OFFERS: MachineOffers = {
   browse: true,
   trust: true,
   folders: true,
-  projects: true,
-  sessionManagement: true,
   settings: true,
   lastDirectory: true,
-  view: () => true,
   command: () => true,
 };
+
+/** `save_project` leaves through the New project dialog, which sends it itself. */
+const PROJECT_CHANGES: ReadonlySet<string> = new Set([
+  "update_project",
+  "delete_project",
+  "set_project_done",
+  "assign_project",
+]);
 
 const REMOTE_OFFERS: MachineOffers = {
   files: false,
@@ -74,13 +73,18 @@ const REMOTE_OFFERS: MachineOffers = {
   trust: false,
   // The palette's New session here starts one in a registered folder; the folder row does not.
   folders: false,
-  projects: false,
-  sessionManagement: false,
   settings: false,
   lastDirectory: false,
-  view: (kind) => kind === "session" || kind === "new",
   command: (command) => {
     switch (command.intent.kind) {
+      // A registry change: only a project's, or a session's place in one.
+      case "send":
+        return PROJECT_CHANGES.has(command.intent.command._tag);
+      case "projects":
+      case "open-project":
+      case "project-dialog":
+      case "project-settings":
+      case "delete-project":
       case "machine":
       case "copy":
       case "wrap-code":

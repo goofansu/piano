@@ -67,7 +67,8 @@ turn Piano into a fleet manager.
 The slice lists the peer's existing registered sessions, opens history/state, sends text and raster
 images, streams, answers dialogs and stops. It also starts a session with text, images or both in
 a folder open on the peer or one of its worktrees (a closed folder stays closed): the peer admits
-that creation without a worktree, project, name or dispatch ancestry, and its selection then takes
+that creation without a worktree, name or dispatch ancestry, optionally joining one of the peer's
+[projects](#projects-the-peers-own-managed-from-main), and its selection then takes
 the slice's actions. The model picker saves the peer's default model and effort for new sessions
 through the peer's own settings
 endpoint, which checks the model against the peer's catalog; Pi on the peer owns the file. Registering
@@ -76,6 +77,29 @@ files/Changes/managed app previews and other remote settings/accounts are out. V
 main-origin composer utility defined below, not a remote service. Parallel worktree sessions
 come from a remote session's own dispatch, which runs on the peer.
 [Setup and limits](../remote-piano.md) describe the exact startup configuration.
+
+## Projects: the peer's own, managed from main
+
+Switching machines shows that machine's sessions and its projects. Each Piano's projects live in
+its own database, and the peer already sends them with its session list, so the Projects index, a
+project's home and the sidebar's project groups are the views Local shows, read from the peer's
+list. There are no cross-machine projects: a project names sessions of one machine, and two
+machines' projects with the same name are unrelated (INV-01/07).
+
+- The peer admits creating, renaming, instructing, marking done and deleting a project, moving
+  one of its listed sessions into or out of one, and starting a session that joins one. Its
+  registry checks each as it does for its own browser: an unknown project is refused, and deleting
+  a project keeps its sessions. Dispatch's inherited membership stays on the peer, where the parent
+  session is.
+- This widens what main may write on the peer beyond starting sessions and saving the default
+  model. Project instructions join Pi's system prompt for the project's later sessions, including
+  ones started on the peer itself. The trust boundary is unchanged: the same owner already sends
+  prompts to those sessions from main.
+- A session's own life (rename, pin, share, archive, delete) stays with the peer's Piano. Session
+  menus on a remote hold the project rows and this browser's display choices only.
+- The session header is Local's. Its Artifacts menu and the phone sheet's Pull request row are
+  links out of Piano to URLs the peer already sent with the session and its list; they add no
+  request to the peer. The app preview, which needs the peer's status read and Stop, stays out.
 
 ## Raster images: separate preparation, unchanged conversation ownership
 

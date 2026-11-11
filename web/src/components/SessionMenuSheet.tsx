@@ -38,6 +38,7 @@ import { pullRequestView } from "@/lib/pullRequestView";
 import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { type PreviewClaim, previewClaim, previewFace, previewHost } from "@/lib/sessionPreview";
+import { useOffers } from "@/lib/useMachine";
 
 type Page = "actions" | "projects" | "preview";
 
@@ -211,8 +212,11 @@ export function SessionMenuSheet({
   const { state } = useCommands();
   const { commands, run } = useSessionCommands();
   const { pullRequest } = sessionContext(state);
+  // The saved link opens GitHub from any machine; the app is shown only where previews are offered.
+  const offers = useOffers();
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
-  const preview = useSeenPreview(state);
+  const seen = useSeenPreview(state);
+  const preview = offers.previews ? seen : undefined;
   const openPreview = useOpenPreview();
   const [previewPage, setPreviewPage] = useState<PreviewClaim | null>(null);
   const pagePreview = useClaimedPreview(state, previewPage);

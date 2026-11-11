@@ -4,6 +4,12 @@ import { folderCommands } from "../web/src/lib/folderCommands.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import { LOCAL } from "../web/src/lib/machine.ts";
 import { type MachineOffers, machineOffers } from "../web/src/lib/machineOffers.ts";
+import {
+  assignProjectCommand,
+  newProjectCommand,
+  projectCommands,
+} from "../web/src/lib/projectCommands.ts";
+import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
 
 const state: AppState = {
@@ -13,34 +19,43 @@ const state: AppState = {
   trusts: { "/repo": { required: true, trusted: false } },
 };
 const folder = { path: "/repo", name: "repo" };
-const views = ["session", "new", "projects", "project", "missing-session"] as const;
+const project = { id: "p1", name: "Launch" };
+const session = { cwd: "/repo", sessionId: "s1" };
 const surfaces = (offers: MachineOffers) =>
   Object.entries(offers)
     .filter(([, value]) => typeof value === "boolean")
     .map(([name, value]) => [name, value] as const);
 
-test("Local offers every surface, page and command", () => {
+test("Local offers every surface and command", () => {
   const offers = machineOffers(LOCAL);
   for (const [name, offered] of surfaces(offers)) assert.equal(offered, true, name);
-  for (const kind of views) assert.ok(offers.view(kind), kind);
   assert.ok(offers.command(trustCommand(state, "/repo")!));
   assert.ok(offers.command(folderCommands(state, folder).close));
 });
 
-test("a remote offers the conversation slice: sessions, the New page and New session, nothing that manages it", () => {
+test("a remote offers the conversation slice and its projects, nothing else that manages it", () => {
   const remote = { id: "eng-1", name: "eng-1" };
   const offers = machineOffers(remote);
   assert.deepEqual(
     surfaces(offers).filter(([, offered]) => offered),
     [["attachments", true]],
-    "files, rail, pull requests, previews, accounts, worktrees, browse, trust, folders, projects, session menus, settings and last directory stay on the remote",
-  );
-  assert.deepEqual(
-    views.filter((kind) => offers.view(kind)),
-    ["session", "new"],
+    "files, rail, pull requests, previews, accounts, worktrees, browse, trust, folders, settings and last directory stay on the remote",
   );
   assert.ok(offers.command(folderCommands(state, folder).create), "New session here");
+  for (const command of [
+    ...projectCommands(state, project),
+    newProjectCommand(state),
+    assignProjectCommand(state, session, project.id),
+    assignProjectCommand(state, session, null),
+  ])
+    assert.ok(offers.command(command), command.label);
   // Trusting a folder runs its project extensions on the remote.
   assert.ok(!offers.command(trustCommand(state, "/repo")!), "folder trust");
   assert.ok(!offers.command(folderCommands(state, folder).close), "Close folder");
+  // A session's own life stays with the remote's Piano; only its place in a project changes here.
+  const commands = sessionCommands(state, { ...session, title: "Session" });
+  for (const id of ["rename", "pin", "archive", "delete"]) {
+    const command = commands.find((c) => c.id === id);
+    assert.ok(command && !offers.command(command), id);
+  }
 });

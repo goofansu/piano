@@ -72,9 +72,9 @@ const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-(--glyph-pad) text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 /**
- * The sidebar any machine shows, holding what its offers allow: Projects leads the list and
- * Settings closes it only where they are offered, so a remote's sidebar lists its catalog and New
- * session alone while the remote's own Piano manages it.
+ * The sidebar any machine shows, holding what its offers allow: Projects leads the list, and
+ * Settings closes it only where it is offered, so a remote's sidebar lists its projects, catalog
+ * and New session while the remote's own Piano manages the rest.
  */
 export function Sidebar({ state }: Props) {
   const { openNew, openProjects, openSettings, setPalette } = useNavigation();
@@ -97,30 +97,25 @@ export function Sidebar({ state }: Props) {
         </IconButton>
       </LayoutHeader>
       {/* The way to the Projects index leads the list; it is the current row while the index is open, as a selected session row is. */}
-      {offers.projects && (
-        <div className="px-(--row-inset) py-2">
-          <Button
-            variant="ghost"
-            leading
-            className={cn(
-              row,
-              "w-full text-ink-2",
-              state.view.kind === "projects" &&
-                "bg-(--selected) font-medium text-ink hover:bg-(--selected)",
-            )}
-            aria-current={state.view.kind === "projects" ? "page" : undefined}
-            onClick={() => openProjects()}
-          >
-            <TargetIcon data-icon="inline-start" /> Projects
-          </Button>
-        </div>
-      )}
-      <ScrollArea className="min-h-0 flex-1">
-        {/* The list starts 8px below the Projects row, or below the header without one, and ends 16px above the footer or the sidebar's end. */}
-        <nav
-          className={cn("relative px-(--row-inset) pb-4", !offers.projects && "pt-2")}
-          aria-label="Sessions"
+      <div className="px-(--row-inset) py-2">
+        <Button
+          variant="ghost"
+          leading
+          className={cn(
+            row,
+            "w-full text-ink-2",
+            state.view.kind === "projects" &&
+              "bg-(--selected) font-medium text-ink hover:bg-(--selected)",
+          )}
+          aria-current={state.view.kind === "projects" ? "page" : undefined}
+          onClick={() => openProjects()}
         >
+          <TargetIcon data-icon="inline-start" /> Projects
+        </Button>
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        {/* The list starts 8px below the Projects row and ends 16px above the footer or the sidebar's end. */}
+        <nav className="relative px-(--row-inset) pb-4" aria-label="Sessions">
           <SidebarSessions state={state} />
         </nav>
       </ScrollArea>
@@ -496,11 +491,13 @@ function ProjectGroup({
   details,
   state,
   select,
-}: GroupProps & { project: Project | null; done: boolean; sessions: readonly SessionEntry[] }) {
+}: GroupProps & {
+  project: Project | null;
+  done: boolean;
+  sessions: readonly SessionEntry[];
+}) {
   const { run } = useCommands();
-  // Where projects are not offered, a project is presentation, not something to manage.
-  const offers = useOffers();
-  const commands = project && offers.projects ? projectCommands(state, project) : [];
+  const commands = project ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
   // The group's name only folds it; its New session in project button opens the project's home.
   // A done project reads as quietly as No project: its sessions are listed, the project is set aside.
@@ -526,7 +523,7 @@ function ProjectGroup({
             <ProjectCommandIconView icon={create.icon} />
           </IconButton>
         ),
-        project && offers.projects && (
+        project && (
           <ProjectCommandsMenu
             key="menu"
             project={project}
