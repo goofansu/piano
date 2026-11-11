@@ -50,6 +50,10 @@ implementations and recommends federating existing Piano backends through system
 Herdr integration or separate runner framework, following the user's minimal-dependency constraint.
 [ADR 0004](adr/0004-same-owner-piano-peer.md) supersedes that transport recommendation for the
 same-owner exe.dev peer slice; [remote Piano](remote-piano.md) documents its bounded setup and use.
+The [Pi Durable reassessment](research/2026-11-11-pi-durable-adoption.md) separates published 1.5.2
+from unreleased orchestration primitives, records the removed experimental host and p2's unsupported
+status, and compares a bounded recovery prototype with ordinary RPC plus persisted job records.
+It retains the current runtime decision; its acceptance gates are proposals, not verification results.
 The [MCP management research](research/2026-10-09-mcp-management.md) documents setup through Pi,
 current RPC/browser limitations and a proposed management surface; it does not claim that surface exists.
 [Radius setup](radius-setup.md) describes the implemented, narrower Radius section of the
