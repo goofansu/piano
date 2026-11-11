@@ -417,8 +417,14 @@ export const McpSetupLive = Layer.effect(
     // Stored tokens are keyed by name and endpoint, whatever the entry authenticates with now: an
     // entry switched to a header after signing in keeps them, and a reinstall would reuse them.
     // Removal and a change of name or endpoint drop them, since Piano has no other place to.
-    const dropCredentials = (entry: McpServerEntry) => {
-      if ("url" in entry.config) credentials.remove(entry.name, entry.config.url);
+    // `after` is the saved edit, undefined on removal.
+    const dropUnreachable = (before: McpServerEntry, after?: McpServerEntry) => {
+      if (!("url" in before.config)) return;
+      const kept =
+        after?.name === before.name &&
+        "url" in after.config &&
+        after.config.url === before.config.url;
+      if (!kept) credentials.remove(before.name, before.config.url);
     };
 
     /** Saves `entry` with `save` once Pi's client has connected to it. A URL server that asks for
@@ -529,11 +535,7 @@ export const McpSetupLive = Layer.effect(
                   .pipe(
                     Effect.tap((saved) =>
                       Effect.sync(() => {
-                        // Tokens for the old name or endpoint can never be found again.
-                        const was = before && oauthUrl(before);
-                        const is = oauthUrl(saved);
-                        if (before && was && (saved.name !== before.name || is !== was))
-                          dropCredentials(before);
+                        if (before) dropUnreachable(before, saved);
                       }),
                     ),
                   );
@@ -548,7 +550,9 @@ export const McpSetupLive = Layer.effect(
               }).pipe(
                 // Credentials go first, so a failure leaves the entry installed to remove again.
                 Effect.flatMap(() =>
-                  entries.removeNamed(request.name, request.removalKey, dropCredentials),
+                  entries.removeNamed(request.name, request.removalKey, (entry) =>
+                    dropUnreachable(entry),
+                  ),
                 ),
               ),
               "Could not remove this MCP server. Its configuration may have changed. Refresh and confirm again.",
