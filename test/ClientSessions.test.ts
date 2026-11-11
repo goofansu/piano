@@ -18,6 +18,7 @@ import { Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effec
 import { PreviewAdapter } from "../scripts/PreviewAdapter.ts";
 import { ownerRequest } from "../scripts/PreviewClient.ts";
 import { makeClientSessions } from "../server/ClientSessions.ts";
+import { CreationAttempts, CreationAttemptsLive } from "../server/CreationAttempt.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { type PiSession, PiSessionsLive, PreviewOwnerOptions } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
@@ -35,7 +36,7 @@ after(() => rmSync(root, { recursive: true, force: true }));
 
 let databases = 0;
 const run = <A, E>(
-  effect: Effect.Effect<A, E, SessionHosts | Registry | Scope.Scope>,
+  effect: Effect.Effect<A, E, SessionHosts | CreationAttempts | Registry | Scope.Scope>,
   path = join(root, `registry-${++databases}.db`),
   pi: { readonly cli: string; readonly extraArgs: ReadonlyArray<string> } = {
     cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
@@ -44,6 +45,7 @@ const run = <A, E>(
 ) => {
   const layer = SessionHostsLive({ idleMs: 0 }).pipe(
     Layer.provide(PiSessionsLive),
+    Layer.provideMerge(CreationAttemptsLive),
     Layer.provideMerge(RegistryLive),
     Layer.provide(NodeServices.layer),
   );
@@ -1096,15 +1098,10 @@ test("INV-02: a durable claim interrupted before startup stays uncertain after r
   };
   await run(
     Effect.gen(function* () {
-      const hosts = yield* SessionHosts,
-        registry = yield* Registry;
+      const hosts = yield* SessionHosts;
       // The server stops right after writing the claim, before its creation does anything.
       const { sessions } = yield* client.pipe(
-        Effect.provideService(SessionHosts, {
-          ...hosts,
-          begin: (spec) =>
-            registry.claimCreation(spec.attempt).pipe(Effect.orDie, Effect.as(Effect.never)),
-        }),
+        Effect.provideService(SessionHosts, { ...hosts, create: () => Effect.never }),
       );
       yield* sessions.create(request);
       assert.deepEqual(yield* hosts.list, []);
@@ -1120,7 +1117,7 @@ test("INV-02: a durable claim interrupted before startup stays uncertain after r
       );
       assert.deepEqual(yield* (yield* SessionHosts).list, []);
       assert.deepEqual((yield* (yield* Registry).get).sessions, []);
-      assert.equal((yield* (yield* Registry).creationAttempt("abandoned"))?.state, "starting");
+      assert.equal((yield* (yield* CreationAttempts).outcome("abandoned"))._tag, "uncertain");
     }),
     path,
   );

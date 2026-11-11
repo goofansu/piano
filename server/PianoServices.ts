@@ -12,6 +12,7 @@
  * RegistryDatabasePath, ...). Tests replace those, never the wiring.
  */
 import { Layer } from "effect";
+import { CreationAttemptsLive } from "./CreationAttempt.ts";
 import { DirectoryFactsLive } from "./DirectoryFacts.ts";
 import { GitHubPullRequestsLive } from "./GitHubPullRequests.ts";
 import { McpSetupLive } from "./McpSetup.ts";
@@ -38,14 +39,15 @@ export interface PianoServicesOptions extends SidebarViewOptions {
 }
 
 /**
- * Workspaces and sessions: the registry, Pi, the session hosts over them, directory facts,
- * the sidebar view and the workspace commands. Every service in the graph is exposed.
+ * Workspaces and sessions: the registry, Pi, the session hosts over them, creation attempts,
+ * directory facts, the sidebar view and the workspace commands. Every service in the graph is exposed.
  */
 export const PianoCoreLive = (options: PianoServicesOptions) =>
   WorkspaceCommandsLive.pipe(
     Layer.provideMerge(SidebarViewLive({ discover: options.discover })),
     Layer.provideMerge(DirectoryFactsLive),
     Layer.provideMerge(SessionHostsLive({ idleMs: options.idleMs })),
+    Layer.provideMerge(CreationAttemptsLive),
     Layer.provideMerge(RegistryLive),
     Layer.provideMerge(PiSessionsLive),
     Layer.provideMerge(PreparedImagesLive),

@@ -9,6 +9,7 @@
 import { Cause, Effect, Stream } from "effect";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
 import { type ClientOutput, InputNotSent, makeClientSessions } from "./ClientSessions.ts";
+import { CreationAttempts } from "./CreationAttempt.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
@@ -125,6 +126,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   const facts = yield* DirectoryFacts;
   const sidebar = yield* SidebarView;
   const registry = yield* Registry;
+  const attempts = yield* CreationAttempts;
   const commands = yield* WorkspaceCommands;
   const status = yield* SessionStatus;
   const prepared = yield* PreparedImages;
@@ -436,8 +438,12 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     // Refusing this delivery does not undo an older request with the same durable identity.
     // This also covers an expired image capability on a duplicate remote start.
     if (request._tag === "create_session" && request.attemptId && reason._tag !== "failed") {
-      const known = yield* registry.creationAttempt(request.attemptId).pipe(Effect.result);
-      if (known._tag === "Failure" || (known.success && known.success.state !== "failed")) {
+      // As recorded now: an unanswered delivery never waits for the original's start.
+      const known = yield* attempts.outcome(request.attemptId, { wait: false }).pipe(Effect.result);
+      if (
+        known._tag === "Failure" ||
+        (known.success._tag !== "failed" && known.success._tag !== "unclaimed")
+      ) {
         yield* send({
           _tag: "error",
           selectionId: request.selectionId,
