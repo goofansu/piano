@@ -93,6 +93,23 @@ Module tests (`npm test`) run against a fake Pi and need no model credentials. O
 real Worktrunk and needs `wt` 0.80.0 or later on `PATH`. The critical-path browser journeys in
 `test/browser/` run with `npm run test:browser`.
 
+## Model-facing tool schemas
+
+A schema Pi can validate locally is not necessarily accepted by a model provider. Keep bundled
+tools' registered `parameters` portable: avoid known-rejected keywords such as `uniqueItems`,
+and describe the constraint while enforcing it locally before any side effect or dialog. For
+`ask_user`, the shared argument reader checks exact choice uniqueness **after Pi's coercion**
+(`8080` and `"8080"` collide), and the extension rejects the whole batch before asking anything.
+Removing a schema keyword must not relax the runtime rule.
+
+Test the actual definition captured at `registerTool`, not just a separately constructed schema.
+Pair a bounded check for the known unsupported keyword with execution tests proving the local
+rule, including coercion and pre-side-effect rejection. `test/AskUser.test.ts` demonstrates this
+boundary. Such checks prevent known regressions in our tools; they do not certify arbitrary
+provider compatibility or tools supplied by installed extensions/MCP servers. For provider errors,
+inspect the effective registered tools and serialized request before attributing a numbered tool
+to its owner; disabling strict sampling does not imply unsupported keywords are removed.
+
 ## CI and merging
 
 [Quality CI](../.github/workflows/quality.yml) runs on every pull request, every push to `main` and
