@@ -39,7 +39,7 @@ test("a remote offers the conversation slice, its projects and its sessions' men
   assert.deepEqual(
     surfaces(offers).filter(([, offered]) => offered),
     [],
-    "previews, accounts, worktrees, browse, folders and settings stay on the remote",
+    "accounts, worktrees, browse, folders and settings stay on the remote",
   );
   assert.ok(offers.command(folderCommands(state, folder).create), "New session here");
   for (const command of [

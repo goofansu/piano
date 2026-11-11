@@ -7,7 +7,7 @@ import {
   ScrollTextIcon,
   SquareIcon,
 } from "lucide-react";
-import { useRef, useSyncExternalStore } from "react";
+import { useRef } from "react";
 import {
   CommandLink,
   useCommands,
@@ -36,12 +36,7 @@ import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
-import {
-  claimedPreview,
-  previewObservation,
-  seenDetails,
-  seenPreview,
-} from "@/lib/previewObservation";
+import { claimedPreview, seenDetails, seenPreview } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
   type PreviewClaim,
@@ -49,6 +44,7 @@ import {
   previewAccess,
   previewFace,
 } from "@/lib/sessionPreview";
+import { usePreviewObservation, usePreviews } from "@/lib/useMachine";
 import type { AppState } from "@/store";
 
 /** The app's state in the status dot's vocabulary; work in progress breathes. */
@@ -59,18 +55,19 @@ export const dotTone: Record<PreviewTone, StatusTone> = {
   idle: "muted",
 };
 
-function usePreviewObservation() {
-  return useSyncExternalStore(previewObservation.subscribe, previewObservation.getState);
-}
-
-/** The selected session's app as this page sees it; see `seenPreview`. */
+/**
+ * The selected session's app as this page sees it; see `seenPreview`. None where the machine
+ * observes no previews: a remote's snapshot carries its peer's app, which stays on the peer.
+ */
 export function useSeenPreview(state: AppState) {
-  return seenPreview(state, usePreviewObservation());
+  const observed = usePreviewObservation();
+  return observed && seenPreview(state, observed);
 }
 
 /** The app the user chose to inspect, while `claim` holds; see `claimedPreview`. */
 export function useClaimedPreview(state: AppState, claim: PreviewClaim | null) {
-  return claimedPreview(state, usePreviewObservation(), claim);
+  const observed = usePreviewObservation();
+  return observed && claimedPreview(state, observed, claim);
 }
 
 /** The selected session's preview commands, run through the host like any other surface's. */
@@ -106,6 +103,7 @@ export function PreviewStatus({
 /** One owned app in the rail; opening it never changes session navigation. */
 export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
   const commands = usePreviewCommands();
+  const previews = usePreviews();
   const openPreview = useOpenPreview();
   const handOff = useRef(false);
   return (
@@ -142,7 +140,7 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
             onOpenChange={(open) => {
               if (open) {
                 handOff.current = false;
-                previewObservation.refresh();
+                previews?.refresh();
               }
             }}
           >
@@ -248,10 +246,12 @@ export function PreviewDetailsDialog({
   const { state } = useCommands();
   const commands = usePreviewCommands();
   const openPreview = useOpenPreview();
+  const previews = usePreviews();
   const observed = usePreviewObservation();
+  const refreshing = !!observed?.refreshing;
   const openRef = useRef<HTMLAnchorElement>(null);
-  const preview = claimedPreview(state, observed, claim);
-  const details = seenDetails(state, observed);
+  const preview = useClaimedPreview(state, claim);
+  const details = observed && seenDetails(state, observed);
   return (
     <Dialog open={!!preview} onOpenChange={(o) => !o && close()}>
       <DialogContent
@@ -281,13 +281,13 @@ export function PreviewDetailsDialog({
                 <Button
                   variant="ghost"
                   size="xs"
-                  aria-busy={observed.refreshing}
-                  disabled={observed.refreshing || !sessionReady(state)}
-                  onClick={previewObservation.refresh}
+                  aria-busy={refreshing}
+                  disabled={refreshing || !sessionReady(state)}
+                  onClick={previews?.refresh}
                 >
                   <RefreshCwIcon
                     data-icon="inline-start"
-                    className={observed.refreshing ? "animate-spin" : undefined}
+                    className={refreshing ? "animate-spin" : undefined}
                     aria-hidden
                   />
                   Refresh
@@ -301,7 +301,7 @@ export function PreviewDetailsDialog({
               <div className="max-h-[min(16rem,40dvh)] min-h-16 overflow-auto rounded-md border border-line bg-fill">
                 <pre className="p-3 font-mono text-xs whitespace-pre-wrap break-words">
                   {details?.logs.trim() ||
-                    (observed.refreshing || !details ? "Reading output…" : "No output yet.")}
+                    (refreshing || !details ? "Reading output…" : "No output yet.")}
                 </pre>
               </div>
             </section>

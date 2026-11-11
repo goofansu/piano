@@ -201,6 +201,18 @@ test("same cwd/session IDs retain separate drafts, questions and model catalogs,
   assert.equal(reloaded("local").catalogs.seed()["/same"].fetchedAt, "local");
 });
 
+test("only Local's stores observe previews; a remote's apps stay on its own Piano", () => {
+  const forMachine = createMachineStores(
+    () => {},
+    () => ({ read: () => ({}), write: () => {} }),
+  );
+  const local = forMachine("local");
+  assert.ok(local.previews, "Local observes its sessions' apps");
+  assert.equal(forMachine("local").previews, local.previews, "one observation per machine");
+  for (const id of ["eng-1", "eng-2"])
+    assert.equal(forMachine(id).previews, undefined, `${id}'s apps stay on its own Piano`);
+});
+
 test("Local's stores are built as a remote's are: each saves Pi's defaults on its own machine and reports at the level given", async (t) => {
   const urls: string[] = [];
   const original = globalThis.fetch;

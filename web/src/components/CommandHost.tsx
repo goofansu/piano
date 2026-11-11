@@ -52,7 +52,6 @@ import type { SessionLayout } from "@/lib/navigation";
 import { openLink } from "@/lib/openLink";
 import { openPageEditor, pageAvailability } from "@/lib/pageEditor";
 import { pointerLast } from "@/lib/pointerClose";
-import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import {
   type SessionCommand,
@@ -63,7 +62,7 @@ import {
 import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
 import { useCodeWrap } from "@/lib/useCodeWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
-import { useMachineScope, useOffers } from "@/lib/useMachine";
+import { useMachineScope, useOffers, usePreviewObservation } from "@/lib/useMachine";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
@@ -137,13 +136,13 @@ export function useCommands() {
 export function useSessionCommands(target?: SessionTarget) {
   const offers = useOffers();
   const { state, run, messagesOnly, codeWrap, layout } = useCommands();
-  const observed = useSyncExternalStore(previewObservation.subscribe, previewObservation.getState);
+  const observed = usePreviewObservation();
   return {
     commands: sessionCommands(state, target, {
       messagesOnly,
       codeWrap,
       layout,
-      previewObservation: offers.previews ? observed : undefined,
+      previewObservation: observed,
     }).filter(offers.command),
     run,
     messagesOnly,
@@ -267,6 +266,7 @@ export function CommandHost({
   } = useNavigation();
   const offers = useOffers();
   const machineScope = useMachineScope();
+  const previews = machineScope.previews;
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [codeWrap, setCodeWrap] = useCodeWrap();
   const { view, setView } = useSidebarView();
@@ -327,13 +327,13 @@ export function CommandHost({
     openForm: (form) => {
       stopFocus.current = form.kind === "stop-preview" ? previewFocusReturn() : undefined;
       forms.open(form);
-      if (form.kind === "stop-preview") previewObservation.refresh();
+      if (form.kind === "stop-preview") previews?.refresh();
     },
     openUrl: openLink,
     openPreviewDetails: () => {
       detailsFocus.current = previewFocusReturn();
       setPreviewDetails(previewClaim(state) ?? null);
-      previewObservation.refresh();
+      previews?.refresh();
     },
     openPageEditor,
   };
