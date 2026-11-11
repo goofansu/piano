@@ -23,6 +23,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -53,6 +54,7 @@ import { projectCommands } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import type { SessionRowDetails, SidebarSection } from "@/lib/sidebarList";
 import { useOffers } from "@/lib/useMachine";
+import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarList } from "@/lib/useSidebarList";
 import { useSidebarView } from "@/lib/useSidebarView";
@@ -260,6 +262,7 @@ export function SidebarSessions({ state }: Props) {
 /** One menu for grouping, sorting and what each row shows; appearance lives here too. Each choice is a global command, as the palette offers it. */
 export function ViewMenu() {
   const { commands, run } = useGlobalCommands();
+  const narrow = useNarrowViewport();
   const groupBy = radioChoice(commands, "group-by");
   const sortBy = radioChoice(commands, "sort-by");
   const appearance = radioChoice(commands, "appearance");
@@ -285,6 +288,19 @@ export function ViewMenu() {
       {items.map(item)}
     </DropdownMenuRadioGroup>
   );
+  // These bounded choices fit one scrollable menu; a side-opening submenu cannot fit a phone.
+  const section = (label: string, items: React.ReactNode, current?: RadioChoice<GlobalCommand>) =>
+    narrow ? (
+      <DropdownMenuGroup aria-label={label}>
+        <DropdownMenuLabel>{label}</DropdownMenuLabel>
+        {items}
+      </DropdownMenuGroup>
+    ) : (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>{current ? choice(label, current) : label}</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>{items}</DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
   return (
     <DropdownMenu>
       <Tooltip>
@@ -297,54 +313,54 @@ export function ViewMenu() {
         </TooltipTrigger>
         <TooltipContent>View options</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="min-w-48">
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>{choice("Group by", groupBy)}</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            {/* No grouping comes last, set apart from the groupings. */}
-            {radio(groupBy, (c) => (
-              <Fragment key={c.id}>
-                {c.id === "group-none" && <DropdownMenuSeparator />}
-                <DropdownMenuRadioItem value={c.id}>{c.menuLabel}</DropdownMenuRadioItem>
-              </Fragment>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>{choice("Sort by", sortBy)}</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            {radio(sortBy, (c) => (
-              <DropdownMenuRadioItem key={c.id} value={c.id}>
-                {c.menuLabel}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        {folderAndBranch && (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Show</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuCheckboxItem
-                checked={!!folderAndBranch.pressed}
-                onCheckedChange={() => run(folderAndBranch)}
-              >
-                <GlobalCommandIcon icon={folderAndBranch.icon} /> {folderAndBranch.menuLabel}
-              </DropdownMenuCheckboxItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+      <DropdownMenuContent
+        align="end"
+        className={cn(
+          "min-w-48",
+          narrow && "max-h-(--radix-dropdown-menu-content-available-height) overflow-y-auto",
         )}
+      >
+        {section(
+          "Group by",
+          // No grouping comes last, set apart from the groupings.
+          radio(groupBy, (c) => (
+            <Fragment key={c.id}>
+              {c.id === "group-none" && <DropdownMenuSeparator />}
+              <DropdownMenuRadioItem value={c.id}>{c.menuLabel}</DropdownMenuRadioItem>
+            </Fragment>
+          )),
+          groupBy,
+        )}
+        {section(
+          "Sort by",
+          radio(sortBy, (c) => (
+            <DropdownMenuRadioItem key={c.id} value={c.id}>
+              {c.menuLabel}
+            </DropdownMenuRadioItem>
+          )),
+          sortBy,
+        )}
+        {folderAndBranch &&
+          section(
+            "Show",
+            <DropdownMenuCheckboxItem
+              checked={!!folderAndBranch.pressed}
+              onCheckedChange={() => run(folderAndBranch)}
+            >
+              <GlobalCommandIcon icon={folderAndBranch.icon} /> {folderAndBranch.menuLabel}
+            </DropdownMenuCheckboxItem>,
+          )}
         <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>{choice("Appearance", appearance)}</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            {/* The chosen mode carries the check; the icons say what each one does. */}
-            {radio(appearance, (c) => (
-              <DropdownMenuRadioItem key={c.id} value={c.id}>
-                <GlobalCommandIcon icon={c.icon} /> {c.menuLabel}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        {section(
+          "Appearance",
+          // The chosen mode carries the check; the icons say what each one does.
+          radio(appearance, (c) => (
+            <DropdownMenuRadioItem key={c.id} value={c.id}>
+              <GlobalCommandIcon icon={c.icon} /> {c.menuLabel}
+            </DropdownMenuRadioItem>
+          )),
+          appearance,
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
