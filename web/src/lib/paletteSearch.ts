@@ -1,4 +1,4 @@
-import { type PaletteGroup, paletteFilter, RECENT_SESSION_LIMIT } from "./commandPalette.ts";
+import { beforeSearch, type PaletteGroup, paletteFilter, paletteScope } from "./commandPalette.ts";
 
 export const PALETTE_PAGE_SIZE = 50;
 export type PalettePages = Partial<Record<PaletteGroup["id"], number>>;
@@ -15,25 +15,15 @@ export interface PalettePage<G extends PaletteDocuments = PaletteGroup> {
   total: number;
 }
 
-/** One relevance policy for the worker and module checks. Stable ties retain catalog order. */
+/** One relevance policy for the worker and module checks. Stable ties retain catalog order; the
+ * scope and what a group shows before a search are the catalog's (`commandPalette.ts`). */
 export function searchPalette<G extends PaletteDocuments>(
   groups: readonly G[],
   search: string,
 ): G[] {
-  const trimmed = search.trim();
-  // Only the leading, standalone lowercase token is syntax; other text stays a normal query.
-  const projectsOnly = /^!p(?:\s|$)/.test(trimmed);
-  const query = projectsOnly ? trimmed.slice(2).trim() : trimmed;
-  const scoped = projectsOnly ? groups.filter((group) => group.id === "projects") : groups;
-  if (!query)
-    return scoped.map((group) => {
-      const limit = group.id === "sessions" ? RECENT_SESSION_LIMIT : Infinity;
-      return {
-        ...group,
-        heading: group.id === "sessions" ? "Recent sessions" : group.heading,
-        rows: group.rows.filter((row) => !row.searchOnly).slice(0, limit),
-      } as G;
-    });
+  const { query, group: only } = paletteScope(search);
+  const scoped = only ? groups.filter((group) => group.id === only) : groups;
+  if (!query) return scoped.map(beforeSearch);
   return scoped
     .map((group) => {
       const matches = group.rows

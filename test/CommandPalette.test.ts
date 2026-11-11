@@ -4,7 +4,9 @@ import type { SessionState, WorktreeView } from "../shared/wire.ts";
 import {
   commandPalette,
   createPaletteCatalog,
+  PROJECTS_ONLY,
   paletteFilter,
+  paletteScope,
 } from "../web/src/lib/commandPalette.ts";
 import { type GlobalCommandContext, globalCommands } from "../web/src/lib/globalCommands.ts";
 import {
@@ -231,14 +233,21 @@ test("!p browses and searches only active project navigation, not related sessio
   assert.ok(palette(state, "projects").some((g) => g.id === "global"));
 });
 
-test("only a leading standalone lowercase !p token scopes the palette", () => {
-  for (const query of ["!pizza", "embedded !p", "!P", "!p-launch", "!s", "!c"]) {
-    const state = {
-      ...home,
-      sessionReferences: [sessionReference("/repo", "literal", { title: query })],
-    };
-    assert.deepEqual(sessionIds(state, query), ["literal"], query);
-  }
+test("only a leading standalone lowercase !p token scopes the palette, as the footer shortcut types it", () => {
+  for (const query of ["!pizza", "embedded !p", "!P", "!p-launch", "!s", "!c"])
+    assert.deepEqual(paletteScope(query), { query }, query);
+  for (const [search, query] of [
+    ["!p", ""],
+    ["  !p\tLAU  ", "LAU"],
+    [PROJECTS_ONLY.text, ""],
+    [`${PROJECTS_ONLY.text}launch`, "launch"],
+  ])
+    assert.deepEqual(paletteScope(search), { query, group: "projects" }, search);
+  const state = {
+    ...home,
+    sessionReferences: [sessionReference("/repo", "literal", { title: "!pizza" })],
+  };
+  assert.deepEqual(sessionIds(state, "!pizza"), ["literal"], "a plain query reaches sessions");
 });
 
 test("worker project-only browsing keeps bounded pages and switches back to ordinary search", () => {

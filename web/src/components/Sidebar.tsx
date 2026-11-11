@@ -46,6 +46,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PALETTE_NAME } from "@/lib/commandPalette";
 import type { RadioChoice } from "@/lib/commands";
 import { folderCommands } from "@/lib/folderCommands";
 import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
@@ -86,8 +87,8 @@ export function Sidebar({ state }: Props) {
       <LayoutHeader title={<MachineSwitcher />}>
         <IconButton
           size="header"
-          label="Search sessions, projects and commands"
-          tooltip={<Hint of={["mod", "K"]}>Search sessions, projects and commands</Hint>}
+          label={PALETTE_NAME}
+          tooltip={<Hint of={["mod", "K"]}>{PALETTE_NAME}</Hint>}
           onClick={() => setPalette(true)}
         >
           <SearchIcon />
