@@ -67,7 +67,7 @@ const REMOTE_OFFERS: MachineOffers = {
     switch (command.intent.kind) {
       case "send":
         return SENT_CHANGES.has(command.intent.command._tag);
-      // A session's own life. Sharing publishes through the remote's Radius sign-in: not here.
+      // A session's own life.
       case "rename":
       case "archive":
       case "delete":

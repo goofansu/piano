@@ -30,7 +30,6 @@ const schema = `
     archived INTEGER NOT NULL CHECK (archived IN (0, 1)),
     pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
     stats TEXT CHECK (stats IS NULL OR json_valid(stats)),
-    radius_share TEXT CHECK (radius_share IS NULL OR json_valid(radius_share)),
     pull_request_state TEXT NOT NULL CHECK (pull_request_state IN ('discover', 'removed', 'linked')),
     pull_request_url TEXT, pull_request_source TEXT, pull_request_api_host TEXT CHECK (pull_request_api_host IS NULL OR pull_request_api_host = 'github.int.exe.xyz'), position INTEGER NOT NULL,
     pull_request_head TEXT, pull_request_base TEXT,
@@ -128,7 +127,6 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       "archived",
       "pinned",
       "stats",
-      "radius_share",
       "pull_request_state",
       "pull_request_url",
       "pull_request_source",
@@ -152,7 +150,6 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       Number(s.archived),
       Number(!!s.pinned),
       s.stats === undefined ? null : JSON.stringify(s.stats),
-      s.radiusShare === undefined ? null : JSON.stringify(s.radiusShare),
       pullRequestState(s.pullRequest),
       s.pullRequest?.url ?? null,
       s.pullRequest?.source ?? null,
@@ -177,7 +174,6 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       ...(r.project_id === null ? {} : { projectId: r.project_id as string }),
       ...(r.title === null ? {} : { title: r.title as string }),
       ...(r.stats === null ? {} : { stats: JSON.parse(r.stats as string) }),
-      ...(r.radius_share === null ? {} : { radiusShare: JSON.parse(r.radius_share as string) }),
       ...(r.pull_request_state === "discover"
         ? {}
         : {
@@ -334,7 +330,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 12 &&
         version !== 13 &&
         version !== 14 &&
-        version !== 15
+        version !== 15 &&
+        version !== 16
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -417,6 +414,16 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         db.exec(`CREATE TABLE IF NOT EXISTS creation_attempts (
           id TEXT PRIMARY KEY NOT NULL, record TEXT NOT NULL CHECK (json_valid(record))
         ) STRICT; PRAGMA user_version = 15;`);
+      // Version 16 retires session sharing: the saved Radius link goes with it. Published
+      // artifacts stay in Radius; Piano no longer knows them. A database created since never had
+      // the column.
+      if (Number(version) < 16) {
+        const share = db
+          .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'radius_share'")
+          .get();
+        if (share) db.exec("ALTER TABLE sessions DROP COLUMN radius_share;");
+        db.exec("PRAGMA user_version = 16;");
+      }
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");

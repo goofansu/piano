@@ -1,6 +1,6 @@
 /** One running session from start to close: its Pi child, input admission (activity recorded
- * before Pi sees it, checkout required, in-flight actions counted), the single "busy" rule that
- * idle release and branch export share, the registry mirror of Pi's name and statistics, and
+ * before Pi sees it, checkout required, in-flight actions counted), the single "busy" rule idle
+ * release follows, the registry mirror of Pi's name and statistics, and
  * closing itself when its child exits. SessionHosts keys hosts by checkout and owns their locks.
  */
 import { Clock, Deferred, Effect, Exit, Fiber, Scope, Semaphore, Stream } from "effect";

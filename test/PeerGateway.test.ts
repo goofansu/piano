@@ -393,9 +393,8 @@ test(
           "/peer/local/ws",
           "/peer/missing/ws",
           "/peer/eng-1/api/folders",
-          // Browsing the remote's directories and sharing a session stay on its own Piano.
+          // Browsing the remote's directories stays on its own Piano.
           "/peer/eng-1/api/ls",
-          "/peer/eng-1/api/session/share",
           "/peer/eng-1/ws/extra",
         ]) {
           const response = await fetch(`${f.base}${path}`);

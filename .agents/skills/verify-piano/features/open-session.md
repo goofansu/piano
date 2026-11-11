@@ -21,7 +21,7 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 - `phone-menu`: one area at a time, the header shows folder and branch (or a ten-character detached commit) below the title;
   "Session information and actions" opens the "Session" sheet. It holds the linked "Pull request
   #222", Rename, Pin, Move to project (Add to project for a loose session), Messages only,
-  Archive and Delete; Share is conditional on Radius sign-in. Preview appears only when one is known and pushes a pane in the same sheet:
+  Archive and Delete. Preview appears only when one is known and pushes a pane in the same sheet:
   Back, status/hostname, Open preview in new tab (dismisses the sheet), Preview details and Stop
   preview (confirmation). The app is never embedded. This also applies on wide viewports when the
   measured session area is too narrow for side-by-side. It has no Outputs, Links,

@@ -52,17 +52,10 @@ test("a remote offers the conversation slice, its projects and its sessions' men
   // A registered folder's trust is decided from here; the remote refuses any other directory.
   assert.ok(offers.command(trustCommand(state, "/repo")!), "folder trust");
   assert.ok(!offers.command(folderCommands(state, folder).close), "Close folder");
-  // A session's own life is managed from here too, except sharing, which publishes through the
-  // remote's Radius sign-in.
-  const commands = sessionCommands(
-    state,
-    { ...session, title: "Session" },
-    { radiusSignedIn: true },
-  );
+  // A session's own life is managed from here too.
+  const commands = sessionCommands(state, { ...session, title: "Session" });
   for (const id of ["rename", "pin", "archive", "delete"]) {
     const command = commands.find((c) => c.id === id);
     assert.ok(command && offers.command(command), id);
   }
-  const share = commands.find((c) => c.id === "share");
-  assert.ok(share && !offers.command(share), "share");
 });

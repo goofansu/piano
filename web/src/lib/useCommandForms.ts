@@ -2,7 +2,6 @@ import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { SendDisposition } from "@/lib/ws";
 import type { AppState } from "@/store";
-import { shareSession } from "./api.ts";
 import {
   type CommandForms,
   type CommandFormsState,
@@ -11,13 +10,12 @@ import {
 } from "./commandForms.ts";
 
 /**
- * The command host's forms, answered against the latest render's state. `state`, `radiusSignedIn`,
+ * The command host's forms, answered against the latest render's state. `state`,
  * `send` and `openPage` may change between renders. Each rendered state settles the
  * page a submit waits on before it is painted, and `listen` hands every server frame to the forms.
  */
 export function useCommandForms(deps: {
   state: AppState;
-  radiusSignedIn: boolean;
   send: (command: ClientCommand) => SendDisposition;
   openPage: (page: FormPage) => void;
   listen: (listener: (message: ServerMessage) => void) => () => void;
@@ -27,9 +25,7 @@ export function useCommandForms(deps: {
   const [forms] = useState(() =>
     createCommandForms({
       getState: () => latest.current.state,
-      radiusSignedIn: () => latest.current.radiusSignedIn,
       send: (command) => latest.current.send(command),
-      share: shareSession,
       openPage: (page) => latest.current.openPage(page),
     }),
   );

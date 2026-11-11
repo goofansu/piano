@@ -898,7 +898,7 @@ await run(
         await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
         await page.click("button", "Send");
         await page.see("echo: PROJECT-ONCE");
-        // Its menu is Local's, without Share, which publishes through the peer's Radius sign-in.
+        // Its menu is Local's.
         await page.click("button", "Session information and actions");
         await page.until(`!!document.querySelector('[role="menu"]')`);
         const actions = await page.evaluate(
@@ -907,7 +907,6 @@ await run(
         assert.ok(actions.includes("Move to project"), JSON.stringify(actions));
         for (const label of ["Rename", "Pin", "Archive", "Delete"])
           assert.ok(actions.includes(label), `remote session menu offers ${label}`);
-        assert.ok(!actions.includes("Share"), "remote session menu does not offer Share");
         await page.capture("9h-remote-session-menu");
         await page.click("menuitem", "Rename");
         await page.ab("fill", '[aria-label="Session name"]', "Renamed on peer");

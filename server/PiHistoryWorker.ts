@@ -5,7 +5,7 @@ import { parentPort } from "node:worker_threads";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import { artifactPublications } from "../shared/radiusArtifacts.ts";
 import type { Snapshot, SessionState } from "../shared/wire.ts";
-import { compileRedaction, projectSnapshot } from "./DisplayProjection.ts";
+import { projectSnapshot } from "./DisplayProjection.ts";
 import { getImagePreview, type ImagePreview } from "./ImagePreviews.ts";
 import { savedSession } from "./PiHistoryFile.ts";
 import { dispatchedFromOf, type PiSessionFacts, type RawMessage, snapshotOf } from "./PiRecords.ts";
@@ -16,13 +16,13 @@ export type HistoryMetadata = {
 };
 
 export type HistoryRequest = {
-  readonly operation: "peek" | "export" | "metadata";
+  readonly operation: "peek" | "metadata";
   readonly path: string;
   readonly sessionId: string;
 };
 export type HistoryReply =
   | {
-      readonly value: Snapshot | HistoryMetadata | string | undefined;
+      readonly value: Snapshot | HistoryMetadata | undefined;
       readonly images?: ReadonlyArray<ImagePreview>;
     }
   | { readonly error: true };
@@ -69,21 +69,12 @@ parentPort!.on("message", ({ operation, path, sessionId }: HistoryRequest) => {
         return image ? [{ id, ...image }] : [];
       });
       reply = { value, images };
-    } else if (operation === "metadata") {
+    } else {
       reply = {
         value: {
           dispatchedFrom: dispatchedFromOf(manager.getEntries()),
           artifacts: artifactPublications(manager.getBranch()),
         },
-      };
-    } else {
-      const header = manager.getHeader();
-      const branch = manager.getBranch();
-      if (header?.id !== sessionId || !branch.some((entry) => entry.type === "message"))
-        throw new Error("No saved conversation");
-      const redaction = compileRedaction();
-      reply = {
-        value: `${[header, ...branch].map((entry) => JSON.stringify(redaction.value(entry))).join("\n")}\n`,
       };
     }
   } catch {

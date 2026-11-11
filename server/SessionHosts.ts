@@ -171,11 +171,6 @@ export class SessionHosts extends Context.Service<
     ) => Effect.Effect<SessionReadback, PiSessionError>;
     /** Whether the checkout at `cwd` is gone now: one filesystem check, no lock and no Pi. */
     readonly checkoutMissing: (cwd: string) => Effect.Effect<boolean, PiSessionError>;
-    /** Capture Pi's saved branch under the ownership lock, without starting a child. */
-    readonly exportBranch: (
-      cwd: string,
-      sessionId: string,
-    ) => Effect.Effect<string, PiSessionError>;
     /** Stop, then change retention under the same ownership lock. Stale opens fail. */
     readonly archive: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly delete: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
@@ -764,14 +759,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         get,
         read,
         checkoutMissing: (cwd) => Effect.map(references.checkout(cwd), ({ missing }) => missing),
-        exportBranch: (cwd, id) =>
-          resolved(cwd, id, ({ ref, host }) =>
-            Effect.gen(function* () {
-              if (host && (yield* host.busy))
-                return yield* rejected("Wait for this session to finish before sharing.");
-              return yield* references.exportBranch(ref);
-            }),
-          ),
         archive: (cwd, id) => retire(cwd, id, false),
         delete: (cwd, id) => retire(cwd, id, true),
         list,

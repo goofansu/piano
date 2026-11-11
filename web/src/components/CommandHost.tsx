@@ -13,7 +13,6 @@ import {
   PinOffIcon,
   ScrollTextIcon,
   ShapesIcon,
-  ShareIcon,
   SquareIcon,
   SquarePenIcon,
   TextCursorInputIcon,
@@ -38,7 +37,6 @@ import { ProjectDialogView } from "@/components/Projects";
 import { ProjectSettingsDialog } from "@/components/ProjectSettings";
 import { RemovalDialog } from "@/components/RemovalDialog";
 import { PreviewDetailsDialog } from "@/components/SessionPreview";
-import { ShareSessionDialog } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -56,7 +54,6 @@ import { openPageEditor, pageAvailability } from "@/lib/pageEditor";
 import { pointerLast } from "@/lib/pointerClose";
 import { previewObservation } from "@/lib/previewObservation";
 import { sessionProjectMenu } from "@/lib/projectCommands";
-import { signedInToRadius } from "@/lib/providerAccounts";
 import {
   type SessionCommand,
   type SessionCommandIcon,
@@ -69,7 +66,6 @@ import { useCommandForms } from "@/lib/useCommandForms";
 import { useMachine, useOffers } from "@/lib/useMachine";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
-import { useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
 import type { SendDisposition } from "@/lib/ws";
@@ -109,7 +105,6 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   rename: TextCursorInputIcon,
   pin: PinIcon,
   unpin: PinOffIcon,
-  share: ShareIcon,
   archive: ArchiveIcon,
   delete: Trash2Icon,
   new: SquarePenIcon,
@@ -127,7 +122,6 @@ interface CommandsValue {
   layout: SessionLayout;
   codeWrap: boolean;
   state: AppState;
-  radiusSignedIn: boolean;
   global: GlobalCommandContext;
 }
 const CommandsContext = createContext<CommandsValue | null>(null);
@@ -142,13 +136,12 @@ export function useCommands() {
 /** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
   const offers = useOffers();
-  const { state, run, messagesOnly, codeWrap, radiusSignedIn, layout } = useCommands();
+  const { state, run, messagesOnly, codeWrap, layout } = useCommands();
   const observed = useSyncExternalStore(previewObservation.subscribe, previewObservation.getState);
   return {
     commands: sessionCommands(state, target, {
       messagesOnly,
       codeWrap,
-      radiusSignedIn,
       layout,
       previewObservation: offers.previews ? observed : undefined,
     }).filter(offers.command),
@@ -244,7 +237,7 @@ export function CommandLink({
 /**
  * The one owner of command effects and their forms: whichever surface asked, running a command goes
  * through `runCommand`, which refuses a disabled one, and there is a single Rename, Archive, Delete, Close
- * folder, Share, New project and Project settings dialog. The forms (`useCommandForms`) own submitting; the dialogs only render.
+ * folder, New project and Project settings dialog. The forms (`useCommandForms`) own submitting; the dialogs only render.
  */
 export function CommandHost({
   state,
@@ -276,7 +269,6 @@ export function CommandHost({
   const machineScope = useMachine();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [codeWrap, setCodeWrap] = useCodeWrap();
-  const radiusSignedIn = signedInToRadius(useProviderAccounts(), state.connected);
   const { view, setView } = useSidebarView();
   const { theme, setTheme } = useTheme();
   const sidebar = useSidebarLayout();
@@ -289,7 +281,6 @@ export function CommandHost({
   useSyncExternalStore(pageAvailability.subscribe, pageAvailability.getState);
   const forms = useCommandForms({
     state,
-    radiusSignedIn,
     // A form known not sent stays open with its input; say why, as the composer does.
     send: (command) => {
       const disposition = send(command);
@@ -307,7 +298,6 @@ export function CommandHost({
   // Archive, delete, close folder and delete project share one confirm dialog; `confirmation` decides its wording.
   // The dialog animates closed on a copy of its last open face (useExitFace), so it needs no latch.
   const asking = form ? confirmation(state, form) : undefined;
-  const sharing = form?.kind === "share-session";
   const project = form?.kind === "project" ? form.dialog : undefined;
   const projectSettings = form?.kind === "project-settings";
   // The app whose details are open; another app, even in the same session, never reopens them.
@@ -360,20 +350,11 @@ export function CommandHost({
         layout,
         codeWrap,
         state,
-        radiusSignedIn,
         // The one global command context; "system" is next-themes' default before it reads storage.
         global: { settings, view, theme: theme ?? "system", sidebarHidden },
       }}
     >
       {children}
-      <ShareSessionDialog
-        open={sharing}
-        phase={forms.share}
-        allowed={answer.allowed}
-        signedIn={radiusSignedIn}
-        submit={forms.submit}
-        close={close}
-      />
       <FormDialog
         open={!!renaming}
         close={close}
