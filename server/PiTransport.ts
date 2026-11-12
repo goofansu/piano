@@ -129,6 +129,14 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     Cause.Done
   >(inboundLimits.records.messages);
   let recordBytes = 0;
+  // Set by the first take from `records`; `space` is the stdout reader waiting for room.
+  let consuming = false;
+  let space: Deferred.Deferred<void> | undefined;
+  const freeSpace = () => {
+    const waiting = space;
+    space = undefined;
+    if (waiting) Deferred.doneUnsafe(waiting, Effect.void);
+  };
   const requestCapacity = makeInboundCapacity(inboundLimits.requests);
   const writeCapacity = makeInboundCapacity(inboundLimits.writes);
   const writes = new Map<Deferred.Deferred<void, PiSessionError>, () => void>();
@@ -214,15 +222,26 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       return;
     }
     const bytes = Buffer.byteLength(line);
-    if (
-      recordBytes + bytes > inboundLimits.records.bytes ||
-      !Queue.offerUnsafe(records, { record, receivedAt: yield* Clock.currentTimeMillis, bytes })
-    ) {
-      return yield* new PiSessionError({
-        reason: "protocol",
-        detail:
-          "Pi output exceeded the pending record limit. Reopen history before continuing; do not automatically resend input.",
-      });
+    const item = { record, receivedAt: yield* Clock.currentTimeMillis, bytes };
+    // One line never exceeds the byte limit, so an empty queue always admits it.
+    while (recordBytes + bytes > inboundLimits.records.bytes || !Queue.offerUnsafe(records, item)) {
+      if (closed) return;
+      // Nothing takes records before the session is ready, and the readiness reply is behind
+      // this line: waiting could only end in a timeout.
+      if (!consuming) {
+        const limit =
+          recordBytes + bytes > inboundLimits.records.bytes
+            ? `${inboundLimits.records.bytes / MiB} MiB`
+            : `${inboundLimits.records.messages} records`;
+        return yield* new PiSessionError({
+          reason: "protocol",
+          detail: `Pi output exceeded the pending record limit of ${limit}. Reopen history before continuing; do not automatically resend input.`,
+        });
+      }
+      // Stop reading stdout until a record is taken. Pi waits on its full pipe, so a burst
+      // costs time instead of the session.
+      space = Deferred.makeUnsafe<void>();
+      yield* Deferred.await(space);
     }
     recordBytes += bytes;
     observationVersion += 1;
@@ -268,6 +287,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     pending.clear();
     // Queue.end preserves accepted records; PiSessions projects them before closure.
     yield* Queue.end(records);
+    freeSpace();
   });
 
   const failOutput = Effect.fn("PiTransport.failOutput")(function* (detail: string) {
@@ -585,9 +605,15 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     return yield* exchange(readback, { lane: "ordinary", readback: true });
   });
 
-  const recordStream = Stream.fromEffectRepeat(Queue.take(records)).pipe(
+  const recordStream = Stream.fromEffectRepeat(
+    Effect.suspend(() => {
+      consuming = true;
+      return Queue.take(records);
+    }),
+  ).pipe(
     Stream.map((item) => {
       recordBytes -= item.bytes;
+      freeSpace();
       return item;
     }),
   );

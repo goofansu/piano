@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Option, Stream } from "effect";
 import { inboundLimits } from "../server/InboundCapacity.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiRequestTimeoutMs, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
@@ -222,6 +222,38 @@ for (const sessionId of ["capacity-records", "capacity-record-bytes"]) {
     );
   });
 }
+
+test("INV-03: a burst of more records than the pending limit streams the whole reply", async () => {
+  // The fake Pi echoes a prompt as one message_update per character, written in one burst.
+  const text = "x".repeat(8 * inboundLimits.records.messages);
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "record-burst",
+      });
+      const subscribed = yield* Deferred.make<void>();
+      const ended = yield* session.events.pipe(
+        Stream.tap((event) =>
+          event._tag === "snapshot" ? Deferred.succeed(subscribed, undefined) : Effect.void,
+        ),
+        Stream.filter(
+          (event) =>
+            event._tag === "closed" ||
+            (event._tag === "message_end" && event.message.role === "assistant"),
+        ),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      yield* Deferred.await(subscribed);
+      yield* session.act({ _tag: "prompt", text });
+      const event = Option.getOrThrow(yield* Fiber.join(ended));
+      assert.ok(event._tag === "message_end", JSON.stringify(event));
+      assert.equal(event.message.text, `echo: ${text}`);
+      assert.equal((yield* session.state).closure, undefined);
+    }).pipe(Effect.scoped, Effect.timeout("10 seconds")),
+  );
+});
 
 test("INV-03: oversized newline-free stdout closes a session and settles pending input", async () => {
   await run(
