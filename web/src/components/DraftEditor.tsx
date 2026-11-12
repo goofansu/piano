@@ -248,7 +248,7 @@ export function ComposerSend({
   hint?: ControlHint;
   disabled: boolean;
   onClick: () => void;
-  variant?: "default" | "outline";
+  variant?: "default" | "secondary";
   className?: string;
   children?: ReactNode;
 }) {

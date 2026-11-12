@@ -254,7 +254,7 @@ export function Composer({
         actions={
           // Send and Stop are one control; its face cross-fades so the key never jumps.
           <ComposerSend
-            variant={showStop ? "outline" : "default"}
+            variant={showStop ? "secondary" : "default"}
             className="relative"
             label={control.label}
             hint={control.hint}
