@@ -25,7 +25,7 @@
     "prepare": "node .husky/install.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-claude-code": "https://codeload.github.com/earendil-works/pi-claude-code/tar.gz/d5b5e04c314d3452d357174d16d10dda34daa2d2",
+    "@earendil-works/pi-claude-code": "https://codeload.github.com/goofansu/pi-claude-code/tar.gz/ed0c824bdd987fac7fe5c6ee58ae840a315ff56f",
     "@earendil-works/pi-coding-agent": "^1.5.2",
     "@earendil-works/pi-schema": "^1.5.2",
     "@effect/platform-node": "^4.1.2",
