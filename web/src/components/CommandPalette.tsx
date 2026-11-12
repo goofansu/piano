@@ -257,7 +257,7 @@ const PaletteInput = memo(function PaletteInput({
             commit(event.currentTarget.value);
           }
         }}
-        placeholder="Search… · ! for filters"
+        placeholder={`${PALETTE_NAME}…`}
         aria-label={PALETTE_NAME}
       />
       {children((value) => {
