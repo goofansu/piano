@@ -233,7 +233,7 @@ test("!p browses and searches only active project navigation, not related sessio
   assert.ok(palette(state, "projects").some((g) => g.id === "global"));
 });
 
-test("standalone ! discovers only the project filter, without searching any catalog rows", () => {
+test("standalone ! answers with only the project filter row, selected, without searching any catalog rows", () => {
   const groups = commandPalette(inSession, {
     globalCommands: globalCommands(inSession, ctx),
     sessionCommands: sessionCommands(inSession),
@@ -244,16 +244,37 @@ test("standalone ! discovers only the project filter, without searching any cata
   sessions.rows[0].value = "!";
   const worker = createPaletteSearch();
   for (const query of ["!", "  ! \t"]) {
-    assert.deepEqual(paletteScope(query), {
-      query: "",
-      filters: [{ label: "Projects only", token: "!p", text: "!p " }],
-    });
-    assert.deepEqual(searchPalette(groups, query), []);
-    assert.deepEqual(worker({ id: 1, groups, query, pages: {} }).pages, []);
+    assert.deepEqual(paletteScope(query), { query: "", filters: true });
+    const filters = [
+      {
+        id: "filters",
+        heading: "Filters",
+        rows: [
+          {
+            key: "!p",
+            value: "Projects only",
+            keywords: undefined,
+            label: "Projects only",
+            token: "!p",
+            text: "!p ",
+          },
+        ],
+      },
+    ];
+    assert.deepEqual(searchPalette(groups, query), filters);
+    const answer = worker({ id: 1, groups, query, pages: {} }).pages;
+    assert.deepEqual(
+      answer.map((p) => p.group),
+      filters,
+    );
+    // The filter row is chosen by default, as the first row of any answer is.
+    assert.equal(paletteSelection(answerPalette(groups, query), "", true), "filters:!p");
+    assert.equal(paletteSelection(answerPalette(groups, query), "sessions:x", false), "filters:!p");
   }
-  const inserted = paletteScope("!").filters![0].text;
+  const filter = answerPalette(groups, "!")[0].group.rows[0];
+  assert.ok("text" in filter);
   assert.deepEqual(
-    worker({ id: 2, query: inserted, pages: {} }).pages.map((p) => p.group.id),
+    worker({ id: 2, query: filter.text, pages: {} }).pages.map((p) => p.group.id),
     ["projects"],
   );
   assert.ok(worker({ id: 3, query: "", pages: {} }).pages.some((p) => p.group.id === "global"));

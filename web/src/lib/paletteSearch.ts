@@ -1,4 +1,10 @@
-import { beforeSearch, type PaletteGroup, paletteFilter, paletteScope } from "./commandPalette.ts";
+import {
+  beforeSearch,
+  PALETTE_FILTER_GROUP,
+  type PaletteGroup,
+  paletteFilter,
+  paletteScope,
+} from "./commandPalette.ts";
 
 export const PALETTE_PAGE_SIZE = 50;
 export type PalettePages = Partial<Record<PaletteGroup["id"], number>>;
@@ -15,15 +21,18 @@ export interface PalettePage<G extends PaletteDocuments = PaletteGroup> {
   total: number;
 }
 
+/** The filters page: the one group a search answers with that is not the catalog's. */
+type PaletteFilterGroup = typeof PALETTE_FILTER_GROUP;
+
 /** One relevance policy for the worker and module checks. Stable ties retain catalog order; the
  * scope and what a group shows before a search are the catalog's (`commandPalette.ts`). */
 export function searchPalette<G extends PaletteDocuments>(
   groups: readonly G[],
   search: string,
-): G[] {
+): (G | PaletteFilterGroup)[] {
   const { query, group: only, filters } = paletteScope(search);
   // Filter discovery edits the input; none of the searchable catalog is offered in that mode.
-  if (filters) return [];
+  if (filters) return [PALETTE_FILTER_GROUP];
   const scoped = only ? groups.filter((group) => group.id === only) : groups;
   if (!query) return scoped.map(beforeSearch);
   return scoped
@@ -108,13 +117,13 @@ export function answerPalette<G extends PaletteDocuments>(
   groups: readonly G[],
   query: string,
   pages: PalettePages = {},
-): PalettePage<G>[] {
+): PalettePage<G | PaletteFilterGroup>[] {
   let ranking = rankings.get(groups);
   if (ranking?.query !== query) {
     ranking = { query, ranked: searchPalette(groups, query) };
     rankings.set(groups, ranking);
   }
-  return pagePalette(ranking.ranked as G[], pages);
+  return pagePalette(ranking.ranked as (G | PaletteFilterGroup)[], pages);
 }
 
 /** Worker-owned catalog: sent only when it changes, not with each keystroke or page. */

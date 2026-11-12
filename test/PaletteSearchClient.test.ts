@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { PaletteGroup } from "../web/src/lib/commandPalette.ts";
+import { PALETTE_FILTER_GROUP, type PaletteGroup } from "../web/src/lib/commandPalette.ts";
 import type { GlobalCommand } from "../web/src/lib/globalCommands.ts";
 import {
   createPaletteSearch,
@@ -100,6 +100,22 @@ test("search coalesces queued queries and delivers only the latest catalog's ori
     latest[0].rows[0],
     "retain action and display metadata",
   );
+  client.dispose();
+});
+
+test("the filters page crosses the worker as its own rows, for a catalog sent or already held", () => {
+  const { client, worker, received, accept } = fixture();
+  const groups = catalog("file");
+  client.search(groups, "!", {}, accept);
+  worker.deliver();
+  client.search(groups, " ! ", {}, accept);
+  assert.equal(worker.requests[1].groups, undefined);
+  worker.deliver();
+  for (const pages of received)
+    assert.deepEqual(
+      pages.map(({ group }) => [group.id, group.rows]),
+      [["filters", PALETTE_FILTER_GROUP.rows]],
+    );
   client.dispose();
 });
 

@@ -1,4 +1,4 @@
-import type { PaletteGroup } from "./commandPalette.ts";
+import { PALETTE_FILTER_GROUP, type PaletteGroup } from "./commandPalette.ts";
 import type {
   PaletteDocuments,
   PalettePage,
@@ -73,8 +73,9 @@ export function createPaletteSearchClient(
           ...("searchOnly" in row && row.searchOnly ? { searchOnly: true } : {}),
         })),
       }));
+      // The filters page is the lib's own, so its rows come back as the same objects too.
       rows = new Map(
-        job.groups.flatMap((group) =>
+        [...job.groups, PALETTE_FILTER_GROUP].flatMap((group) =>
           group.rows.map((row) => [`${group.id}:${row.key}`, row] as const),
         ),
       );
