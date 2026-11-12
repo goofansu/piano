@@ -10,8 +10,14 @@ import { test } from "node:test";
 import type { Selection } from "../server/ClientSessions.ts";
 import { peerVerdict } from "../server/PeerScope.ts";
 import type { RegistryData } from "../server/Registry.ts";
-import { isLocalId, type Machine } from "../shared/machine.ts";
-import type { Attachment, ClientMessage, Dialog, ModelCatalog } from "../shared/wire.ts";
+import type { Machine } from "../shared/machine.ts";
+import type {
+  ClientCommand,
+  ClientMessage,
+  Dialog,
+  ModelCatalog,
+  StartOptions,
+} from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { answerForm } from "../web/src/lib/commandForms.ts";
 import {
@@ -21,9 +27,15 @@ import {
   STOP,
 } from "../web/src/lib/composerControl.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
+import { createImageSender } from "../web/src/lib/imageSender.ts";
 import { LOCAL } from "../web/src/lib/machine.ts";
 import { machineOffers } from "../web/src/lib/machineOffers.ts";
-import { draftMessage, EMPTY_DRAFT } from "../web/src/lib/messageDraft.ts";
+import {
+  createDrafts,
+  type DraftMessage,
+  NEW_SESSION_DRAFT,
+  sessionDraftKey,
+} from "../web/src/lib/messageDraft.ts";
 import { emptyChoice, type ModelTarget, modelChoice } from "../web/src/lib/modelChoice.ts";
 import { createDialogAnswer } from "../web/src/lib/piDialogs.ts";
 import {
@@ -31,7 +43,6 @@ import {
   newProjectCommand,
   projectCommands,
 } from "../web/src/lib/projectCommands.ts";
-import { preparedImageCommand } from "../web/src/lib/remoteImages.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
@@ -78,12 +89,7 @@ const catalog: ModelCatalog = {
     },
   ],
 };
-const image: Attachment = {
-  kind: "image",
-  name: "a.png",
-  mimeType: "image/png",
-  data: "iVBORw0KGgo=",
-};
+const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
 const question: Dialog = {
   id: "q1",
   generation: "g1",
@@ -95,7 +101,7 @@ const question: Dialog = {
 };
 
 /** Everything the browser sends while a person works on `machine`, as sent. */
-function browserSends(machine: Machine): ClientMessage[] {
+async function browserSends(machine: Machine): Promise<ClientMessage[]> {
   const offers = machineOffers(machine);
   const sent: ClientMessage[] = [];
   let handlers: ConnectionHandlers | undefined;
@@ -118,26 +124,45 @@ function browserSends(machine: Machine): ClientMessage[] {
   });
   client.start();
   handlers!.onStatus(true);
+  const send = client.send;
+  // The composers' send, through the real image sender: on a remote it prepares the images (HTTP
+  // preparation has its own boundary tests, so this models its successful reference) and sends the
+  // reference instead of the bytes.
   let preparations = 0;
-  const send: typeof client.send = (command) => {
-    const input =
-      command._tag === "act"
-        ? command.action
-        : command._tag === "create_session"
-          ? command
-          : undefined;
-    // HTTP preparation has its own boundary tests. Model its successful reference here, then
-    // use the same post-preparation builder as useImageSend, not an inline remote upload.
-    if (!isLocalId(machine.id) && input && "attachments" in input && input.attachments?.length)
-      return client.send(preparedImageCommand(command, { id: `prepared-${++preparations}` }));
-    return client.send(command);
-  };
-  // A message as the composer drafts it, with an image: every machine offers the attach button.
-  const message = draftMessage({
-    ...EMPTY_DRAFT,
-    text: "Reply with exactly: X",
-    images: { ...EMPTY_DRAFT.images, items: [image] },
+  const sender = createImageSender({
+    prepare: async () => ({ id: `prepared-${++preparations}` }),
+    discard: () => {},
   });
+  const drafts = createDrafts();
+  const compose = async (
+    target: { cwd: string; sessionId?: string },
+    start: StartOptions,
+    command: (message: DraftMessage, inputId: string, start: StartOptions) => ClientCommand,
+  ) => {
+    // A message as the composer drafts it, with an image: every machine offers the attach button.
+    const key = target.sessionId
+      ? sessionDraftKey({ cwd: target.cwd, sessionId: target.sessionId })
+      : NEW_SESSION_DRAFT;
+    drafts.setText(key, "Reply with exactly: X");
+    await drafts.addImages(key, [new File([png], "a.png", { type: "image/png" })], async () =>
+      Buffer.from(png).toString("base64"),
+    );
+    await sender.send(
+      {
+        machineId: machine.id,
+        target,
+        editor: {
+          attachments: drafts.get(key).images,
+          preparing: drafts.get(key).preparing,
+          submit: (deliver) => drafts.submit(key, deliver),
+          prepareSubmit: (deliver) => drafts.prepareSubmit(key, deliver),
+        },
+        captureSend: client.captureSend,
+        choice: { start, consume: () => {} },
+      },
+      command,
+    );
+  };
 
   // Open a listed session; the remote answers, so actions have an attachment.
   client.select(CWD, SESSION);
@@ -166,10 +191,11 @@ function browserSends(machine: Machine): ClientMessage[] {
     catalog,
     target,
   );
-  for (const start of [hosted.start, picked.start]) {
-    send(messageCommand("steering", message, start, "input-1"));
-    send(messageCommand("follow-up", message, start, "input-2"));
-  }
+  for (const start of [hosted.start, picked.start])
+    for (const kind of ["steering", "follow-up"] as const)
+      await compose({ cwd: CWD, sessionId: SESSION }, start, (message, inputId, start) =>
+        messageCommand(kind, message, start, inputId),
+      );
   send(STOP);
   send(RESTORE_QUEUE);
   // The model picker on a running session.
@@ -237,12 +263,13 @@ function browserSends(machine: Machine): ClientMessage[] {
   // The New page's first message, joining the page's project (NewSessionComposer), with the
   // picker's start options for the directory.
   const fresh: ModelTarget = { kind: "new", cwd: CWD };
-  send(
-    newSessionCommand(
-      { cwd: CWD, projectId: project.id },
-      message,
-      modelChoice(emptyChoice(fresh), catalog, fresh).start,
-    ),
+  await compose(
+    { cwd: CWD },
+    modelChoice(emptyChoice(fresh), catalog, fresh).start,
+    (m, attemptId, start) => ({
+      ...newSessionCommand({ cwd: CWD, projectId: project.id }, m, start),
+      attemptId,
+    }),
   );
   return sent;
 }
@@ -266,8 +293,8 @@ function verdicts(sent: readonly ClientMessage[]) {
 const kinds = (sent: readonly ClientMessage[]) =>
   sent.map((m) => (m._tag === "act" ? `act:${m.action._tag}` : m._tag));
 
-test("every message the browser builds for a remote is one the remote admits", () => {
-  const sent = browserSends({ id: "eng-1", name: "Eng" });
+test("every message the browser builds for a remote is one the remote admits", async () => {
+  const sent = await browserSends({ id: "eng-1", name: "Eng" });
   const inputs = sent.filter(
     (m) =>
       m._tag === "create_session" ||
@@ -311,8 +338,8 @@ test("every message the browser builds for a remote is one the remote admits", (
     assert.equal(verdict, "admit", JSON.stringify(message));
 });
 
-test("what Local adds to the same journey, the remote refuses", () => {
-  const refused = verdicts(browserSends(LOCAL))
+test("what Local adds to the same journey, the remote refuses", async () => {
+  const refused = verdicts(await browserSends(LOCAL))
     .filter(({ verdict }) => verdict === "refuse")
     .map(({ message }) => message);
   const prompts = refused.filter(

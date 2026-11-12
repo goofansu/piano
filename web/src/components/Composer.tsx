@@ -110,6 +110,7 @@ export function Composer({
     captureSend,
     { cwd: t?.cwd ?? "", sessionId: t?.sessionId },
     selectionId,
+    choice,
   );
   const [queueMode, setQueueMode] = usePreference(queueModePreference);
   const control = composerControl({
@@ -128,14 +129,7 @@ export function Composer({
   const send = (alt: boolean) => {
     const kind = control.delivery(alt);
     if (!kind) return;
-    // Capture the model choice with the draft, not after upload or a later picker change.
-    const start = choice.start;
-    imageSend.send(
-      (message, inputId) => messageCommand(kind, message, start, inputId),
-      (consumed) => {
-        if (consumed) choice.consume();
-      },
-    );
+    imageSend.send((message, inputId, start) => messageCommand(kind, message, start, inputId));
   };
   // Stopping Pi also abandons an image upload still on its way to the draft's message.
   const stop = () => {
