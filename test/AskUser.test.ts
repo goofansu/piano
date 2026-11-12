@@ -183,6 +183,10 @@ test("Piano reads a call's questions only when Pi accepts the call, with the arg
   const duplicate = { questions: [question, question] };
   assert.ok(piReads(duplicate), "Pi accepts duplicate IDs; the tool refuses them itself");
   assert.equal(askUserQuestions(duplicate), undefined);
+  // A blank choice is the tool's refusal too, so Piano never tracks a batch the tool will not ask.
+  const blankChoice = { questions: [{ ...question, options: ["Yes", "  "] }] };
+  assert.ok(piReads(blankChoice), "Pi accepts a whitespace choice; the tool refuses it itself");
+  assert.equal(askUserQuestions(blankChoice), undefined);
 });
 
 test("ask_user validates the whole batch before opening a dialog and requires a UI", async () => {
