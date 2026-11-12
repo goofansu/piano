@@ -13,6 +13,7 @@ import {
   answerPalette,
   createPaletteSearch,
   pagePalette,
+  paletteItems,
   paletteSelection,
   searchPalette,
 } from "../web/src/lib/paletteSearch.ts";
@@ -640,6 +641,28 @@ test("search pages replace rows, preserve stable ties and reach the oldest match
     "a choice no longer on the page is replaced",
   );
   assert.equal(paletteSelection([], "sessions:next", false), "");
+  // The list draws what selection reads: the range heading and the controls around the rows.
+  const drawn = (page: number) => {
+    const { heading, items } = paletteItems(pagePalette(ranked, { sessions: page })[0]);
+    return [heading, items[0].value, items.length, items.at(-1)!.value];
+  };
+  const id = (n: number) => `sessions:${sessionKey({ cwd: "/closed", sessionId: `id-${n}` })}`;
+  assert.deepEqual(drawn(0), ["Sessions · 1–50 of 123", id(122), 51, "sessions:next"]);
+  assert.deepEqual(drawn(1), [
+    "Sessions · 51–100 of 123",
+    "sessions:previous",
+    52,
+    "sessions:next",
+  ]);
+  assert.deepEqual(drawn(2), ["Sessions · 101–123 of 123", "sessions:previous", 24, id(0)]);
+  assert.deepEqual(
+    paletteItems(pagePalette(ranked, { sessions: 1 })[0]).items.filter((i) => i.kind !== "row"),
+    [
+      { kind: "previous", value: "sessions:previous", label: "Previous sessions", page: 0 },
+      { kind: "next", value: "sessions:next", label: "Next sessions", page: 2 },
+    ],
+  );
+  assert.equal(paletteItems(pagePalette(searchPalette(groups, "id-0"))[0]).heading, "Sessions");
   const second = search({ id: 2, query: "Repeated", pages: { sessions: 1 } });
   const last = search({ id: 3, query: "Repeated", pages: { sessions: 2 } });
   const keys = [first, second, last].flatMap((reply) =>
