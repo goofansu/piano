@@ -64,14 +64,15 @@ const parameters = compile(AskUserParameters, { coerce: true });
 /** A call's questions, from its raw or converted arguments, read as Pi reads them: Pi's records
  * keep the model's raw arguments, so `id: 1` is announced as a number but asked and stored as "1",
  * `options: null` drops the choices and a lone choice becomes a list of one. Undefined for a call
- * Pi rejects, or unless every ID and question is non-blank and every ID unique, the rule the tool
- * checks before asking anything. */
+ * Pi rejects, or unless every ID, question and choice is non-blank and every ID unique: the one rule
+ * the tool checks before asking anything. */
 export function askUserQuestions(args: unknown): AskUserQuestion[] | undefined {
   const parsed = parameters.parse(args);
   if (!parsed.ok) return;
   const ids = new Set<string>();
-  for (const { id, question } of parsed.value.questions) {
+  for (const { id, question, options } of parsed.value.questions) {
     if (!id.trim() || !question.trim() || ids.has(id)) return;
+    if (options?.some((option) => !option.trim())) return;
     ids.add(id);
   }
   return parsed.value.questions;
