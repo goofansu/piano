@@ -214,81 +214,81 @@ export function Composer({
             </section>
           )
         }
+        delivery={
+          showDelivery && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  data-motion="fade"
+                  variant="ghost"
+                  size="sm"
+                  className={cn(footerPicker, "shrink-0")}
+                  aria-label={`Delivery: ${DELIVERY[queueMode].label}`}
+                  disabled={disabled}
+                >
+                  {DELIVERY[queueMode].label}
+                  <ChevronDownIcon className="text-ink-3" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className={cn("w-56", footerPickerMenu)}>
+                <DropdownMenuRadioGroup
+                  value={queueMode}
+                  onValueChange={(mode) => setQueueMode(mode as DeliveryMode)}
+                >
+                  {DELIVERY_MODES.map((mode) => (
+                    <DropdownMenuRadioItem key={mode} value={mode}>
+                      <span className="flex min-w-0 flex-1 items-center gap-2">
+                        {DELIVERY[mode].label}
+                        <KbdGroup className="ml-auto">
+                          {mode !== queueMode && <Kbd>Alt</Kbd>}
+                          <Kbd>Enter</Kbd>
+                        </KbdGroup>
+                      </span>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )
+        }
         actions={
-          <>
-            {showDelivery && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    data-motion="fade"
-                    variant="ghost"
-                    size="sm"
-                    className={cn(footerPicker, "shrink-0")}
-                    aria-label={`Delivery: ${DELIVERY[queueMode].label}`}
-                    disabled={disabled}
-                  >
-                    {DELIVERY[queueMode].label}
-                    <ChevronDownIcon className="text-ink-3" aria-hidden />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className={cn("w-56", footerPickerMenu)}>
-                  <DropdownMenuRadioGroup
-                    value={queueMode}
-                    onValueChange={(mode) => setQueueMode(mode as DeliveryMode)}
-                  >
-                    {DELIVERY_MODES.map((mode) => (
-                      <DropdownMenuRadioItem key={mode} value={mode}>
-                        <span className="flex min-w-0 flex-1 items-center gap-2">
-                          {DELIVERY[mode].label}
-                          <KbdGroup className="ml-auto">
-                            {mode !== queueMode && <Kbd>Alt</Kbd>}
-                            <Kbd>Enter</Kbd>
-                          </KbdGroup>
-                        </span>
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {/* Send and Stop are one control; its face cross-fades so the key never jumps. */}
-            <ComposerSend
-              variant={showStop ? "outline" : "default"}
-              className="relative"
-              label={control.label}
-              hint={control.hint}
-              disabled={!control.enabled}
-              onClick={
-                showStop
-                  ? () => {
-                      imageSend.cancel();
-                      sendCommand(STOP);
-                    }
-                  : () => send(false)
-              }
+          // Send and Stop are one control; its face cross-fades so the key never jumps.
+          <ComposerSend
+            variant={showStop ? "outline" : "default"}
+            className="relative"
+            label={control.label}
+            hint={control.hint}
+            disabled={!control.enabled}
+            onClick={
+              showStop
+                ? () => {
+                    imageSend.cancel();
+                    sendCommand(STOP);
+                  }
+                : () => send(false)
+            }
+          >
+            <span
+              aria-hidden
+              data-motion="swap"
+              className={cn(
+                "absolute inset-0 grid place-items-center",
+                showStop ? "scale-75 opacity-0 blur-[2px]" : "scale-100 opacity-100",
+              )}
             >
-              <span
-                aria-hidden
-                data-motion="swap"
-                className={cn(
-                  "absolute inset-0 grid place-items-center",
-                  showStop ? "scale-75 opacity-0 blur-[2px]" : "scale-100 opacity-100",
-                )}
-              >
-                <ArrowUpIcon />
-              </span>
-              <span
-                aria-hidden
-                data-motion="swap"
-                className={cn(
-                  "absolute inset-0 grid place-items-center",
-                  showStop ? "scale-100 opacity-100" : "scale-75 opacity-0 blur-[2px]",
-                )}
-              >
-                <SquareIcon className="fill-current" />
-              </span>
-            </ComposerSend>
-          </>
+              <ArrowUpIcon />
+            </span>
+            <span
+              aria-hidden
+              data-motion="swap"
+              className={cn(
+                "absolute inset-0 grid place-items-center",
+                showStop ? "scale-100 opacity-100" : "scale-75 opacity-0 blur-[2px]",
+              )}
+            >
+              <SquareIcon className="fill-current" />
+            </span>
+          </ComposerSend>
         }
       />
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums">

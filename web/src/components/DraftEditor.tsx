@@ -15,8 +15,8 @@ import {
   attachmentDraft,
   attachmentEvents,
 } from "@/components/Attachments";
+import { ComposerActionButton } from "@/components/ComposerActionButton";
 import { ModelSelect } from "@/components/ModelSelect";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { QuoteChips, type QuoteDraft } from "@/components/Quotes";
 import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -28,7 +28,7 @@ import type { ControlHint } from "@/lib/composerControl";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
 import { type DraftKey, type DraftMessage, draftMessage } from "@/lib/messageDraft";
 import { modelPickerEnabled } from "@/lib/modelPicker";
-import { composerAction, composerCard, composerToolbar } from "@/lib/styles";
+import { composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
 import { useDrafts } from "@/lib/useMachine";
@@ -92,12 +92,14 @@ interface Props {
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   /** Between the attached images and the textarea. */
   above?: ReactNode;
-  /** The toolbar's end, after the model picker: the page's send control and its options. */
+  /** Delivery options sit after Model, before the Mic/Send group. */
+  delivery?: ReactNode;
+  /** The toolbar's end, immediately after Mic: the page's send control. */
   actions: ReactNode;
   cancelUpload?: () => void;
   /**
    * Where the message is spoken, read when a recording stops: the names voice input spells by.
-   * The mic shows beside Attach in every composer while voice input is on.
+   * The mic shows immediately before Send in every composer while voice input is on.
    */
   voice?: () => VoiceHints;
 }
@@ -120,6 +122,7 @@ export function DraftEditor({
   onKeyDown,
   above,
   actions,
+  delivery,
   voice,
   cancelUpload,
 }: Props) {
@@ -207,8 +210,6 @@ export function DraftEditor({
       />
       <div className={composerToolbar}>
         <AttachButton draft={attachments} disabled={attachmentsDisabled} />
-        {/* Main-origin on every machine: the main machine's preference decides whether it shows. */}
-        <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
         <ModelSelect
           open={modelOpen}
           onOpenChange={setModelOpen}
@@ -216,7 +217,12 @@ export function DraftEditor({
           control={model}
           disabled={disabled}
         />
-        {actions}
+        {delivery}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {/* Main-origin on every machine: the main machine's preference decides whether it shows. */}
+          <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
+          {actions}
+        </div>
       </div>
     </div>
   );
@@ -247,24 +253,20 @@ export function ComposerSend({
   children?: ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          size="icon"
-          data-motion="press"
-          variant={variant}
-          className={cn(composerAction, className)}
-          aria-label={label}
-          disabled={disabled}
-          onClick={onClick}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>
-        {hint.lead} <Kbd>{hint.key}</Kbd>
-        {hint.tail}
-      </TooltipContent>
-    </Tooltip>
+    <ComposerActionButton
+      label={label}
+      tooltip={
+        <>
+          {hint.lead} <Kbd>{hint.key}</Kbd>
+          {hint.tail}
+        </>
+      }
+      variant={variant}
+      className={className}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </ComposerActionButton>
   );
 }

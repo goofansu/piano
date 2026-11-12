@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import type { DraftKey, Drafts, ImageDraft } from "@/lib/messageDraft";
 import { remoteImageUrl } from "@/lib/remoteImages";
+import { composerIcon } from "@/lib/styles";
 import { useMachineId } from "@/lib/useMachine";
 
 export const ImageSessionContext = createContext<
@@ -69,7 +70,7 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
       <IconButton
         size="icon-sm"
         type="button"
-        className="shrink-0"
+        className={composerIcon}
         label="Attach images"
         tooltip={`Attach images (${IMAGE_TYPE_NAMES.join(", ")})`}
         aria-controls={id}

@@ -1,8 +1,8 @@
 import type { VoiceHints } from "@shared/voiceInput";
 import { MicIcon, SquareIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { ComposerActionButton } from "@/components/ComposerActionButton";
 import type { DraftEditorState } from "@/components/DraftEditor";
-import { IconButton } from "@/components/IconButton";
 import { Spinner } from "@/components/ui/spinner";
 import { dictation } from "@/lib/browserDictation";
 import { useDrafts } from "@/lib/useMachine";
@@ -39,10 +39,9 @@ export function VoiceInputButton({
     });
   };
   return (
-    <IconButton
-      size="icon-sm"
+    <ComposerActionButton
       type="button"
-      className={recordingNow ? "shrink-0 text-destructive hover:text-destructive" : "shrink-0"}
+      variant={recordingNow ? "destructive" : "secondary"}
       label={
         phase === "transcribing"
           ? "Cancel transcription"
@@ -60,6 +59,6 @@ export function VoiceInputButton({
       }
     >
       {busy ? <Spinner /> : recordingNow ? <SquareIcon className="fill-current" /> : <MicIcon />}
-    </IconButton>
+    </ComposerActionButton>
   );
 }
