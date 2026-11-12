@@ -255,6 +255,26 @@ test("INV-03: a burst of more records than the pending limit streams the whole r
   );
 });
 
+test("INV-03: a line at the RPC limit with invalid UTF-8 is admitted, not waited on forever", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "invalid-utf8",
+      });
+      const notice = yield* session.events.pipe(
+        Stream.filter((e) => e._tag === "notice" && e.message === "After invalid UTF-8"),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* session.act({ _tag: "prompt", text: "capacity invalid-utf8" });
+      assert.equal((yield* Fiber.join(notice)).length, 1);
+      assert.equal((yield* session.state).closure, undefined);
+    }).pipe(Effect.scoped, Effect.timeout("10 seconds")),
+  );
+});
+
 test("INV-03: oversized newline-free stdout closes a session and settles pending input", async () => {
   await run(
     Effect.gen(function* () {

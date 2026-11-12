@@ -542,6 +542,19 @@ function handle(cmd) {
           });
         return capacityCount();
       }
+      if (cmd.message === "capacity invalid-utf8") {
+        // A line of exactly the RPC line limit with one invalid UTF-8 byte, which decodes to
+        // U+FFFD (three bytes): its decoded string is longer than the line Pi wrote.
+        const head = Buffer.from('{"type":"future_event","padding":"');
+        const tail = Buffer.from('"}\n');
+        const line = Buffer.alloc(inboundLimits.rpcLineBytes + 1, "x");
+        head.copy(line);
+        line[head.length] = 0xff;
+        tail.copy(line, line.length - tail.length);
+        process.stdout.write(line);
+        out({ type: "extension_ui_request", method: "notify", message: "After invalid UTF-8" });
+        return respond(cmd, { disposition: "handled" });
+      }
       if (cmd.message === "capacity oversized-line") {
         process.stdout.write("x".repeat(inboundLimits.rpcLineBytes + 1));
         return; // Intentionally no newline and no response.
