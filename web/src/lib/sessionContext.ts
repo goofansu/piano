@@ -44,8 +44,9 @@ export interface DirectoryRoot {
 export interface DirectoryChoices {
   trigger: DirectoryTrigger;
   /**
-   * Every registered folder's root checkout still on disk. A missing root is left out rather than
-   * shown disabled: the folder stays registered and returns once its directory does.
+   * Every registered folder's root checkout Pi can be asked about (`checkoutMissingAt`). A missing
+   * root is left out rather than shown disabled: the folder stays registered and returns once its
+   * directory does.
    */
   roots: DirectoryRoot[];
   /** The folder whose worktrees the picker offers: only when `cwd` is one of its checkouts. */
@@ -86,7 +87,7 @@ export function directoryChoices(state: AppState, cwd: string): DirectoryChoices
       : { kind: "path", label: abbrevHome(cwd) };
   const roots = state.folders.flatMap((f) =>
     f.worktrees
-      .filter((w) => w.root && w.status !== "missing")
+      .filter((w) => w.root && !checkoutMissingAt(state, w.path))
       .map((w) => ({
         path: w.path,
         label: f.name,
@@ -106,27 +107,34 @@ export function workspaceFor(state: AppState, cwd: string | undefined): Workspac
 }
 
 /**
- * Pi cannot be asked about `cwd`: the selected session there reports its checkout gone, or the
- * registry marks a session reference in that directory's checkout unavailable. The one rule behind
- * Trust, New session here, Rename, the focused directory, the composer and the announced status.
+ * Pi cannot be asked about `cwd`: the selected session there reports its checkout gone, the
+ * registry marks a session reference in that directory's checkout unavailable, or the folder list
+ * reports that registered directory missing. Only "missing" counts: an "unknown" or "non-git"
+ * directory is not known to be gone (INV-06). The one rule behind the Directory picker, the folder
+ * row's and the session's New session here, Trust, Rename, the focused directory, both composers
+ * and the announced status.
  */
 export function checkoutMissingAt(state: AppState, cwd: string): boolean {
   return (
     (state.session?.cwd === cwd && !!state.session.state.checkoutMissing) ||
-    state.sessionReferences.some((r) => r.cwd === cwd && r.unavailable === "checkout")
+    state.sessionReferences.some((r) => r.cwd === cwd && r.unavailable === "checkout") ||
+    state.folders.some((f) => f.worktrees.some((w) => w.path === cwd && w.status === "missing"))
   );
 }
 
 export interface FocusedDirectory {
   cwd: string;
-  /** The selected session's checkout is gone, so Pi cannot be asked about it. */
+  /** The directory's checkout is gone (`checkoutMissingAt`), so Pi cannot be asked about it. */
   checkoutMissing: boolean;
 }
 
 /** The directory the main pane is about: the New page's or project home's, else the selected session's. */
 export function focusedDirectory(state: AppState): FocusedDirectory | undefined {
   const page = startPage(state.view);
-  if (page) return page.cwd ? { cwd: page.cwd, checkoutMissing: false } : undefined;
+  if (page)
+    return page.cwd
+      ? { cwd: page.cwd, checkoutMissing: checkoutMissingAt(state, page.cwd) }
+      : undefined;
   const session = state.view.kind === "session" ? state.session : null;
   return session
     ? { cwd: session.cwd, checkoutMissing: checkoutMissingAt(state, session.cwd) }

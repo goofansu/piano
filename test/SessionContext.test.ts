@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import { directoryTrust } from "../web/src/lib/directoryTrust.ts";
+import { folderCommands } from "../web/src/lib/folderCommands.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
@@ -636,6 +637,46 @@ test("the New session directory picker offers only folders whose root is on disk
     ["repo", "research", "notes", "probe"],
     "a restored folder is offered again",
   );
+});
+
+test("one rule answers whether a folder with no sessions can start one when its root is missing", () => {
+  const research = (status: WorktreeView["status"]): FolderView => ({
+    ...folder,
+    path: "/research",
+    name: "research",
+    worktrees: [worktree("/research", "main", { root: true, status })],
+  });
+  const state = (status: WorktreeView["status"]): AppState => ({
+    ...base,
+    session: null,
+    sessionReferences: [],
+    view: { kind: "new", cwd: "/research" },
+    folders: [folder, research(status)],
+  });
+  const gone = state("missing");
+  assert.equal(checkoutMissingAt(gone, "/research"), true);
+  assert.deepEqual(
+    directoryChoices(gone, "/research").roots.map((r) => r.label),
+    ["repo"],
+    "the picker leaves the missing root out",
+  );
+  assert.equal(folderCommands(gone, research("missing")).create.enabled, false);
+  assert.deepEqual(focusedDirectory(gone), { cwd: "/research", checkoutMissing: true });
+  assert.equal(trustCommand(gone, "/research"), undefined, "Pi cannot be asked about its trust");
+
+  assert.equal(checkoutMissingAt(gone, "/repo"), false, "a current folder beside it is unaffected");
+  assert.equal(folderCommands(gone, folder).create.enabled, true);
+  assert.deepEqual(focusedDirectory({ ...gone, view: { kind: "new", cwd: "/repo" } }), {
+    cwd: "/repo",
+    checkoutMissing: false,
+  });
+
+  for (const status of ["current", "unknown", "non-git"] as const) {
+    const s = state(status);
+    assert.equal(checkoutMissingAt(s, "/research"), false, `${status} is not evidence of absence`);
+    assert.equal(folderCommands(s, research(status)).create.enabled, true);
+    assert.equal(focusedDirectory(s)?.checkoutMissing, false);
+  }
 });
 
 test("the New session directory picker labels a branchless worktree", () => {
