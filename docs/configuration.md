@@ -55,7 +55,7 @@ dependencies and shared protocol.
 ### Claude Code
 
 Piano bundles [`@earendil-works/pi-claude-code`](https://github.com/earendil-works/pi-claude-code)
-as a dependency pinned to commit `02f28650bc3553e8508e474a577f1f53bb367ca5` of the
+as a dependency pinned to commit `ed0c824bdd987fac7fe5c6ee58ae840a315ff56f` of the
 [goofansu/pi-claude-code](https://github.com/goofansu/pi-claude-code) fork (version 0.1.0):
 upstream `d5b5e04c314d3452d357174d16d10dda34daa2d2` plus a fix that keeps every request within
 Anthropic's limit of four cache breakpoints
