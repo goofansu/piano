@@ -10,8 +10,13 @@
  * session's commands come from that session, not from here.
  */
 import { homedir } from "node:os";
-import { Context, Data, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
-import type { ModelCatalog, ProjectTrust, SlashCommand } from "../shared/wire.ts";
+import { Context, Data, Effect, Fiber, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
+import {
+  type ModelCatalog,
+  type ProjectTrust,
+  SLASH_COMMANDS_TIMEOUT_MS,
+  type SlashCommand,
+} from "../shared/wire.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiSessions } from "./PiSessions.ts";
 import { type ProjectTrustError, projectTrust, setProjectTrust } from "./ProjectTrust.ts";
@@ -39,7 +44,8 @@ export class DirectoryFacts extends Context.Service<
     ) => Effect.Effect<ModelCatalog>;
     /** Global resources only, for machine-wide settings. */
     readonly global: Effect.Effect<ModelCatalog>;
-    /** Slash commands from a fresh probe, for a session not yet started; it also refreshes the catalog. */
+    /** Slash commands from a fresh probe, for a session not yet started; it also refreshes the
+     * catalog. Refused past SLASH_COMMANDS_TIMEOUT_MS, while the probe runs on to refresh it. */
     readonly commands: (
       raw: string,
     ) => Effect.Effect<ReadonlyArray<SlashCommand>, DirectoryCommandsError>;
@@ -60,6 +66,7 @@ export const DirectoryFactsLive = Layer.effect(
   DirectoryFacts,
   Effect.gen(function* () {
     const sessions = yield* PiSessions;
+    const scope = yield* Effect.scope;
     // null is the global catalog, separate even from a probe of the same cwd.
     const cache = new Map<string | null, ModelCatalog>();
     const locks = new Map<string | null, Semaphore.Semaphore>();
@@ -147,7 +154,20 @@ export const DirectoryFactsLive = Layer.effect(
       catalog,
       global: locked(null),
       commands: Effect.fn("DirectoryFacts.commands")(function* (raw) {
-        const probed = yield* locked(directoryPath(raw), true);
+        // The probe belongs to the directory, not the requester: one that gives up waiting leaves
+        // it to finish, so the next request queues behind it rather than starting over.
+        const probe = yield* Effect.forkIn(locked(directoryPath(raw), true), scope);
+        const probed = yield* Fiber.join(probe).pipe(
+          Effect.timeoutOrElse({
+            duration: SLASH_COMMANDS_TIMEOUT_MS,
+            orElse: () =>
+              Effect.fail(
+                new DirectoryCommandsError({
+                  detail: `Pi did not list its commands within ${SLASH_COMMANDS_TIMEOUT_MS / 1000} seconds. Try again.`,
+                }),
+              ),
+          }),
+        );
         if (probed.error) return yield* new DirectoryCommandsError({ detail: probed.error });
         return probed.commands ?? [];
       }),

@@ -8,7 +8,7 @@
  * and a GET has no body.
  */
 import { Schema } from "effect";
-import { FileDownload, FilePreview } from "./files.ts";
+import { FileDownload, FilePreview, LARGEST_PREVIEW_BYTES } from "./files.ts";
 import { LIBRARY_KINDS, type LibraryKind, type LibraryKindWords } from "./library.ts";
 import { Machines } from "./machine.ts";
 import { McpSetupChange, McpSetupRequest, McpSetupState } from "./mcp.ts";
@@ -33,9 +33,11 @@ import {
   FolderView,
   OAuthProvider,
   ProviderLoginState,
+  PULL_REQUEST_TIMEOUT_MS,
   SessionDefaults,
   SessionPullRequest,
   SessionPullRequestAction,
+  SLASH_COMMANDS_TIMEOUT_MS,
   SlashCommand,
   WorkspaceChanges,
   WorkspaceWrittenFiles,
@@ -633,8 +635,9 @@ export interface RemoteRequest {
   /** The 400 answer for a request outside `browser`'s query or body. */
   readonly invalid: string;
   /**
-   * The remote's refusal (`upstream.refused`) reaches the browser as its own `{ error, field? }`,
-   * for a check only the remote can make. Otherwise any answer but 200 is the remote unavailable.
+   * The remote's refusal (`upstream.refused`) reaches the browser as its own `{ error, field? }`
+   * at `browser.refused`, for a check only the remote can make. Otherwise any answer but 200 is
+   * the remote unavailable.
    */
   readonly passRefusal: boolean;
   /**
@@ -647,7 +650,10 @@ export interface RemoteRequest {
   readonly bodyBytes?: number;
   /** The largest answer, where one conversation frame (the gateway's default) is too small. */
   readonly answerBytes?: number;
-  /** How long the remote may take, where Git or GitHub outlasts the gateway's default. */
+  /**
+   * How long the gateway waits for the remote's answer, where the remote may take longer than the
+   * gateway's default: `outlasting` the limit the remote enforces on its own answer.
+   */
   readonly requestMs?: number;
 }
 
@@ -663,13 +669,27 @@ const MiB = 1024 * 1024;
  */
 const changesAnswerBytes = CHANGES_ANSWER_BYTES + 64 * 1024;
 /**
- * A remote's Git observation answers within CHECKOUT_TIMEOUT_MS, as `{ status: "error" }` when Git
- * outlasts it. The gateway's deadline starts first (before dialing; the remote's only once it holds
- * one of its Changes permits), so it adds a margin for the dial, the answer and the remote's own
- * work around Git; with no margin the gateway always loses and the remote's error never arrives.
- * A wait for a permit on a busy remote is still unbounded: this covers Git's timeout, not a queue.
+ * The gateway's deadline starts first (before dialing; the remote's only once it starts the work it
+ * bounds), so a request the remote bounds at `remoteMs` waits that plus this margin for the dial,
+ * the answer and the remote's own work around the bounded part. With no margin the gateway always
+ * loses and the remote's own answer (an error naming what timed out) never arrives.
  */
-const checkoutRequestMs = CHECKOUT_TIMEOUT_MS + 5_000;
+const REMOTE_MARGIN_MS = 5_000;
+/** The gateway's deadline for a request the remote answers within `remoteMs`. */
+const outlasting = (remoteMs: number) => remoteMs + REMOTE_MARGIN_MS;
+/**
+ * A remote's Git observation answers within CHECKOUT_TIMEOUT_MS, as `{ status: "error" }` when Git
+ * outlasts it. Its clock starts once the remote holds one of its Changes permits: a wait for a
+ * permit on a busy remote is still unbounded. This covers Git's timeout, not a queue.
+ */
+const checkoutRequestMs = outlasting(CHECKOUT_TIMEOUT_MS);
+/**
+ * A file read has no deadline on the remote, only a size (LARGEST_PREVIEW_BYTES): this is the
+ * gateway's own allowance to receive the largest one, not a bound the remote enforces.
+ */
+const fileTransferMs = 60_000;
+/** The largest file in a multipart answer with its metadata. */
+const fileAnswerBytes = LARGEST_PREVIEW_BYTES + 2 * MiB;
 /** A session's own surfaces: the remote resolves both IDs in its registry, as for its own browser. */
 const sessionSurface = (
   endpoint: Endpoint,
@@ -683,20 +703,29 @@ const sessionSurface = (
   ...limits,
 });
 
+/**
+ * Each request the remote bounds waits `outlasting` that bound. Saving defaults keeps the gateway's
+ * default: the remote checks a new model against its cached global catalog, and only an uncached
+ * catalog starts a Pi probe, whose reads have their own deadlines but no total one.
+ */
 export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
-  // The remote resolves the IDs in its own registry and refuses what it does not list.
+  // The remote resolves the IDs in its own registry and refuses what it does not list, or a
+  // stopped session; a running one answers within SLASH_COMMANDS_TIMEOUT_MS.
   {
     browser: Endpoints.sessionCommands,
     upstream: Endpoints.sessionCommands,
     invalid: "Remote workspace and session IDs are required.",
-    passRefusal: false,
+    passRefusal: true,
+    requestMs: outlasting(SLASH_COMMANDS_TIMEOUT_MS),
   },
-  // Its peer folder read answers only for a folder registered there.
+  // Its peer folder read answers only for a folder registered there, from a fresh Pi probe that
+  // answers or refuses within SLASH_COMMANDS_TIMEOUT_MS.
   {
     browser: Endpoints.slashCommands,
     upstream: Endpoints.peerSlashCommands,
     invalid: "A remote folder is required.",
-    passRefusal: false,
+    passRefusal: true,
+    requestMs: outlasting(SLASH_COMMANDS_TIMEOUT_MS),
   },
   // The remote checks the model against its own catalog ("Choose an available model.").
   {
@@ -722,19 +751,23 @@ export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
   // Outputs: up to WRITTEN_PATHS_LIMIT paths as the session's tool calls named them, checked in
   // one Git observation.
   sessionSurface(Endpoints.workspaceWrittenFiles, { bodyBytes: MiB, requestMs: checkoutRequestMs }),
-  // The pull request: GitHub answers the remote within 15 seconds.
-  sessionSurface(Endpoints.sessionPullRequest, { requestMs: 30_000 }),
-  sessionSurface(Endpoints.changeSessionPullRequest, { requestMs: 30_000 }),
-  // A file as the remote's own browser reads it: the largest preview is a 32 MiB video, in a
-  // multipart answer with its metadata.
+  // The pull request: Git and GitHub answer the remote, or it refuses, within
+  // PULL_REQUEST_TIMEOUT_MS.
+  sessionSurface(Endpoints.sessionPullRequest, {
+    requestMs: outlasting(PULL_REQUEST_TIMEOUT_MS),
+  }),
+  sessionSurface(Endpoints.changeSessionPullRequest, {
+    requestMs: outlasting(PULL_REQUEST_TIMEOUT_MS),
+  }),
+  // A file as the remote's own browser reads it.
   sessionSurface(Endpoints.workspaceFile, {
     answer: "bytes",
-    answerBytes: 34 * MiB,
-    requestMs: 60_000,
+    answerBytes: fileAnswerBytes,
+    requestMs: fileTransferMs,
   }),
   sessionSurface(Endpoints.workspaceFileDownload, {
     answer: "bytes",
-    answerBytes: 34 * MiB,
-    requestMs: 60_000,
+    answerBytes: fileAnswerBytes,
+    requestMs: fileTransferMs,
   }),
 ];
