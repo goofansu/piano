@@ -8,7 +8,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
-import { SessionPullRequests, SessionPullRequestsLive } from "../server/SessionPullRequests.ts";
+import {
+  PullRequestTimeoutMs,
+  SessionPullRequests,
+  SessionPullRequestsLive,
+} from "../server/SessionPullRequests.ts";
 import { GhCommand } from "../server/Subprocess.ts";
 import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
@@ -92,6 +96,37 @@ async function fixture(t: TestContext, cwd?: string) {
     );
   return { root, repo, path, git, control, runtime, registry, prs, get, getIn, change, layer };
 }
+
+// A remote relays this answer under a deadline derived from the bound, so the bound must hold
+// even when GitHub stalls: the refusal names a retry rather than the browser seeing "unavailable".
+test("a pull request lookup that outlasts its bound answers its own error within it, saving nothing", async (t) => {
+  const f = await fixture(t);
+  const started = join(f.root, "stalled-started");
+  // gh stalls until a release that never comes (the fake gives up after about 5 s).
+  f.control({ prs: [candidate(42)], gate: { started, release: join(f.root, "never") } });
+  const boundMs = 1_000;
+  const begun = Date.now();
+  const outcome = await f.runtime
+    .runPromise(
+      Effect.gen(function* () {
+        const s = (yield* f.registry.get).sessions.find((s) => s.sessionId === "one");
+        return yield* f.prs.get(s!);
+      }).pipe(Effect.provideService(PullRequestTimeoutMs, boundMs)),
+    )
+    .then(
+      (value) => ({ value }),
+      (error) => ({ error: String(error) }),
+    );
+  const elapsed = Date.now() - begun;
+  assert.ok("error" in outcome, "a stalled lookup is refused");
+  assert.match(outcome.error, /within 1 seconds\. Retry\./);
+  assert.ok(existsSync(started), "the lookup reached GitHub");
+  assert.ok(elapsed < 4_000, `answered after ${elapsed} ms, before gh gave up`);
+  const saved = (await f.runtime.runPromise(f.registry.get)).sessions.find(
+    (s) => s.sessionId === "one",
+  );
+  assert.ok(!saved?.pullRequest);
+});
 
 test("INV-01/07: discovers by branch AND head repository, pins identity across branch changes/restart, scopes manual links/removal to a session", async (t) => {
   const f = await fixture(t);

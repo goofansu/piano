@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { socketLimits } from "../server/BoundedDelivery.ts";
 import { loadPeerConfigs } from "../server/PeerConfig.ts";
-import { Endpoints, RemoteRequests } from "../shared/http.ts";
+import { LARGEST_PREVIEW_BYTES } from "../shared/files.ts";
+import { type Endpoint, Endpoints, RemoteRequests } from "../shared/http.ts";
 import { PEER_FRAME_BYTES } from "../shared/machine.ts";
 import {
   IMAGE_CANCEL_PATH,
@@ -15,7 +16,13 @@ import {
   IMAGE_UPLOAD_TYPE,
   remoteImageLimits,
 } from "../shared/remoteImages.ts";
-import { CHANGES_ANSWER_BYTES, CHECKOUT_TIMEOUT_MS, CloseCode } from "../shared/wire.ts";
+import {
+  CHANGES_ANSWER_BYTES,
+  CHECKOUT_TIMEOUT_MS,
+  CloseCode,
+  PULL_REQUEST_TIMEOUT_MS,
+  SLASH_COMMANDS_TIMEOUT_MS,
+} from "../shared/wire.ts";
 import { imageUploadBody } from "../web/src/lib/remoteImages.ts";
 import { gatewayFixture, identity, registry } from "./fixtures/peer-gateway.ts";
 import { readRegistry } from "./fixtures/registry.ts";
@@ -315,23 +322,41 @@ test("peer startup configuration is explicit, bounded and fail-closed", (t) => {
   assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
 });
 
-// The remote answers a Git observation that outlasts its checkout timeout as a 200 with
-// `{ status: "error", detail }`. The gateway's own deadline starts earlier (before dialing), so it
-// must be longer, or the browser gets "machine unavailable" in place of the remote's error.
-test("the gateway waits out the remote's checkout timeout for Changes and written files", () => {
-  const checkoutBacked = [
-    Endpoints.sessionChanges,
-    Endpoints.sessionChangedFile,
-    Endpoints.setSessionChangesScope,
-    Endpoints.workspaceWrittenFiles,
-  ];
-  for (const endpoint of checkoutBacked) {
+// The remote answers work that outlasts its own bound with its own error (a 200 with
+// `{ status: "error" }` for Git observations, a refusal otherwise). The gateway's own deadline
+// starts earlier (before dialing), so it must be longer, or the browser gets "machine
+// unavailable" in place of the remote's error.
+test("the gateway waits out every bound the remote enforces on a relayed answer", () => {
+  const bounds = new Map<Endpoint, number>([
+    [Endpoints.sessionChanges, CHECKOUT_TIMEOUT_MS],
+    [Endpoints.sessionChangedFile, CHECKOUT_TIMEOUT_MS],
+    [Endpoints.setSessionChangesScope, CHECKOUT_TIMEOUT_MS],
+    [Endpoints.workspaceWrittenFiles, CHECKOUT_TIMEOUT_MS],
+    [Endpoints.sessionPullRequest, PULL_REQUEST_TIMEOUT_MS],
+    [Endpoints.changeSessionPullRequest, PULL_REQUEST_TIMEOUT_MS],
+    [Endpoints.slashCommands, SLASH_COMMANDS_TIMEOUT_MS],
+    [Endpoints.sessionCommands, SLASH_COMMANDS_TIMEOUT_MS],
+  ]);
+  for (const [endpoint, bound] of bounds) {
     const relayed = RemoteRequests.find((request) => request.browser === endpoint);
     assert.ok(relayed, `${endpoint.path} is relayed`);
     assert.ok(
-      (relayed.requestMs ?? 0) > CHECKOUT_TIMEOUT_MS,
-      `${endpoint.path}: ${relayed.requestMs} ms must outlast ${CHECKOUT_TIMEOUT_MS} ms`,
+      (relayed.requestMs ?? 0) > bound,
+      `${endpoint.path}: ${relayed.requestMs} ms must outlast ${bound} ms`,
     );
+    // A refused answer is the remote's own error, not "machine unavailable".
+    if (relayed.upstream.refused !== undefined)
+      assert.ok(relayed.passRefusal, `${endpoint.path} passes the remote's refusal`);
+  }
+});
+
+// The remote refuses a file past its preview limit; the gateway must relay any file it allows,
+// in a multipart answer with its metadata.
+test("the gateway relays any file the remote's preview limit allows", () => {
+  for (const endpoint of [Endpoints.workspaceFile, Endpoints.workspaceFileDownload]) {
+    const relayed = RemoteRequests.find((request) => request.browser === endpoint);
+    assert.ok(relayed, `${endpoint.path} is relayed`);
+    assert.ok((relayed.answerBytes ?? 0) > LARGEST_PREVIEW_BYTES, endpoint.path);
   }
 });
 

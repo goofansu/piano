@@ -15,6 +15,7 @@ import {
   type Snapshot,
   type StartOptions,
   sameSession,
+  SLASH_COMMANDS_TIMEOUT_MS,
   sessionKey,
   type WorktreeRequest,
 } from "../shared/wire.ts";
@@ -114,7 +115,7 @@ export class SessionHosts extends Context.Service<
      * was already running ignores them. */
     readonly start: (spec: OpenSpec) => Effect.Effect<Opened, PiSessionError>;
     /** A running session's slash commands, from its own child. A stopped session is refused,
-     * never started to answer (INV-02). */
+     * never started to answer (INV-02), as is an answer past SLASH_COMMANDS_TIMEOUT_MS. */
     readonly commands: (
       cwd: string,
       sessionId: string,
@@ -582,7 +583,18 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
             return yield* new SessionCommandsError({
               detail: "Session is no longer running. Reopen the suggestions.",
             });
-          return yield* session.commands;
+          // Pi's own read deadline is shorter; this keeps the answer within the named bound.
+          return yield* session.commands.pipe(
+            Effect.timeoutOrElse({
+              duration: SLASH_COMMANDS_TIMEOUT_MS,
+              orElse: () =>
+                Effect.fail(
+                  new SessionCommandsError({
+                    detail: "Could not load commands. Reopen the suggestions to retry.",
+                  }),
+                ),
+            }),
+          );
         },
         // Pi's own error text is not for people here; they can only retry.
         Effect.catchTag("PiSessionError", () =>

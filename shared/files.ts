@@ -1,5 +1,20 @@
 import { Schema } from "effect";
 
+const MiB = 1024 * 1024;
+/**
+ * The largest file the server previews or downloads, by kind (text covers every text kind);
+ * docs/file-previews.md lists them. Past it, the server refuses the file.
+ */
+export const PREVIEW_LIMIT_BYTES = {
+  text: MiB,
+  image: 10 * MiB,
+  audio: 20 * MiB,
+  video: 32 * MiB,
+  pdf: 20 * MiB,
+} as const;
+/** The largest of PREVIEW_LIMIT_BYTES. */
+export const LARGEST_PREVIEW_BYTES = Math.max(...Object.values(PREVIEW_LIMIT_BYTES));
+
 const identity = { workspaceId: Schema.String, path: Schema.String };
 export const FilePreview = Schema.Union([
   Schema.Struct({

@@ -7,11 +7,12 @@ import {
   pullRequestBranches,
   pullRequestBranchesKey,
 } from "../shared/pullRequestBranches.ts";
-import type {
-  PullRequest,
-  SessionPullRequest,
-  SessionPullRequestAction,
-  SessionPullRequestLink,
+import {
+  PULL_REQUEST_TIMEOUT_MS,
+  type PullRequest,
+  type SessionPullRequest,
+  type SessionPullRequestAction,
+  type SessionPullRequestLink,
 } from "../shared/wire.ts";
 import { GitHubPullRequests, observeBranchRemote, PullRequestError } from "./GitHubPullRequests.ts";
 import { Registry, type RegistryError, type SessionEntry } from "./Registry.ts";
@@ -19,6 +20,28 @@ import { Registry, type RegistryError, type SessionEntry } from "./Registry.ts";
 export { PullRequestError };
 
 const failure = (detail: string) => new PullRequestError({ detail });
+
+/** How long one answer may take, Git and GitHub together; PULL_REQUEST_TIMEOUT_MS unless a test
+ * shortens it. */
+export const PullRequestTimeoutMs = Context.Reference<number>("piano/PullRequestTimeoutMs", {
+  defaultValue: () => PULL_REQUEST_TIMEOUT_MS,
+});
+
+/** Answers within PullRequestTimeoutMs, else refuses with a retry. A registry write already begun
+ * finishes first, so the saved link is never half-written. */
+const bounded = <A, E, R>(answer: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const ms = yield* PullRequestTimeoutMs;
+    return yield* Effect.timeoutOrElse(answer, {
+      duration: ms,
+      orElse: () =>
+        Effect.fail(
+          failure(
+            `Could not look up the pull request within ${Math.ceil(ms / 1000)} seconds. Retry.`,
+          ),
+        ),
+    });
+  });
 
 /** The checkout's branch on GitHub, or null outside Git, without a remote or when detached.
  * Discovery needs a GitHub remote. */
@@ -32,7 +55,8 @@ const checkout = Effect.fn("SessionPullRequests.checkout")(function* (cwd: strin
   return remote.head && { ...remote.head, apiHost: remote.apiHost };
 });
 
-/** Callers pass the session entry they resolved by ID; this module never looks a session up by path. */
+/** Callers pass the session entry they resolved by ID; this module never looks a session up by path.
+ * Each answer comes within PullRequestTimeoutMs or is refused with a retry. */
 export class SessionPullRequests extends Context.Service<
   SessionPullRequests,
   {
@@ -56,7 +80,9 @@ export const SessionPullRequestsLive = Layer.effect(
       expected: SessionEntry,
       link: SessionEntry["pullRequest"],
     ) {
-      const saved = yield* registry.setSessionLink(expected, "pullRequest", link);
+      const saved = yield* Effect.uninterruptible(
+        registry.setSessionLink(expected, "pullRequest", link),
+      );
       if (!saved)
         return yield* failure(
           "The session's pull request changed during lookup. Refresh and try again.",
@@ -81,7 +107,9 @@ export const SessionPullRequestsLive = Layer.effect(
       // head repository).
       const branches = pullRequestBranches(branchesOf(pr));
       if (pullRequestBranchesKey(link) === pullRequestBranchesKey(branches)) return link;
-      const saved = yield* registry.setSessionLink(s, "pullRequest", { ...link, ...branches });
+      const saved = yield* Effect.uninterruptible(
+        registry.setSessionLink(s, "pullRequest", { ...link, ...branches }),
+      );
       return saved?.pullRequest ?? link;
     });
     const result: (
@@ -140,7 +168,7 @@ export const SessionPullRequestsLive = Layer.effect(
       return { link, pullRequest: found.success.pullRequest };
     });
     return SessionPullRequests.of({
-      get: (s) => result(s),
+      get: (s) => bounded(result(s)),
       change: Effect.fn("SessionPullRequests.change")(function* (s, action) {
         if (action.action === "link") {
           // Explicit association is the user's choice, not a claim that GitHub is reachable.
@@ -154,7 +182,7 @@ export const SessionPullRequestsLive = Layer.effect(
         if (action.action === "discover") return yield* result(s, true);
         yield* save(s, null);
         return { link: null, pullRequest: null };
-      }),
+      }, bounded),
     });
   }),
 );

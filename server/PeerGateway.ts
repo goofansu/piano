@@ -29,6 +29,7 @@ const imagePaths: ReadonlySet<string> = new Set(IMAGE_PATHS);
 
 const limits = {
   connectMs: 5_000,
+  /** A remote request the remote does not bound itself (`RemoteRequest.requestMs` says otherwise). */
   requestMs: 10_000,
   /** The browser's own frames (`machineFrameBytes`, which the browser checks before sending). */
   clientBytes: PEER_FRAME_BYTES,
@@ -301,12 +302,13 @@ const json = (body: unknown, status = 200) =>
 const Refusal = Schema.Struct({ error: Schema.String, field: Schema.optional(Schema.String) });
 
 /**
- * Ask the remote's upstream endpoint once, without redirect or retry. Its answer must decode as
- * that endpoint's response; its refusal comes back re-encoded only where the request passes it.
+ * Ask the remote's upstream endpoint once, without redirect or retry, for at most `requestMs`. Its
+ * answer must decode as that endpoint's response; its refusal comes back re-encoded only where the
+ * request passes it.
  */
 const relay = Effect.fn("PeerGateway.relay")(function* (
   peer: PeerConfig,
-  { upstream, passRefusal, answer, answerBytes, requestMs }: RemoteRequest,
+  { browser, upstream, passRefusal, answer, answerBytes, requestMs }: RemoteRequest,
   query: ReadonlyArray<readonly [string, string]>,
   body: string | undefined,
 ) {
@@ -332,7 +334,11 @@ const relay = Effect.fn("PeerGateway.relay")(function* (
       if (refusal) {
         const text = (await readBounded(response, limits.clientBytes)).toString("utf8");
         const { error, field } = Schema.decodeUnknownSync(Schema.fromJsonString(Refusal))(text);
-        return json(field === undefined ? { error } : { error, field }, response.status);
+        // At the browser's own refusal status: a peer-only upstream may declare another.
+        return json(
+          field === undefined ? { error } : { error, field },
+          browser.refused ?? response.status,
+        );
       }
       if (answer === "bytes") {
         // A file as the remote sent it. Only its type and attachment name come with it: no

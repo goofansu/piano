@@ -517,6 +517,18 @@ export const CHANGES_ANSWER_BYTES = 4 * 1024 * 1024;
  * files): past it, the server answers `{ status: "error", detail }` rather than failing the request.
  */
 export const CHECKOUT_TIMEOUT_MS = 30_000;
+/**
+ * How long the server spends answering a session's pull request (Git reads of the checkout, then
+ * GitHub; a change first links or saves): past it, the server refuses with a message to retry.
+ * Each step has its own shorter timeout; this bounds the chain.
+ */
+export const PULL_REQUEST_TIMEOUT_MS = 45_000;
+/**
+ * How long the server spends answering slash commands, whether from a fresh Pi probe of a folder
+ * (after any probe already running there) or from a running session: past it, the server refuses
+ * with a message to retry. A probe it stops waiting for still finishes and refreshes the catalog.
+ */
+export const SLASH_COMMANDS_TIMEOUT_MS = 45_000;
 
 /** Live Git observations, not immutable revisions or verification evidence. */
 export const ChangeFile = Schema.Struct({

@@ -3,7 +3,12 @@ import { access, open, realpath } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Data, Effect } from "effect";
 import { fileTypeFromBuffer } from "file-type";
-import { type FileDownload, type FilePreview, previewKindByName } from "../shared/files.ts";
+import {
+  type FileDownload,
+  type FilePreview,
+  PREVIEW_LIMIT_BYTES,
+  previewKindByName,
+} from "../shared/files.ts";
 import type { Workspace } from "../shared/wire.ts";
 
 class FileRefusal extends Data.TaggedError("FileRefusal")<{ readonly detail: string }> {}
@@ -22,18 +27,18 @@ interface BinaryFormat {
 /** The one list of binary formats Piano previews; docs/file-previews.md describes it. Which
  * names claim them is `previewKindsByExtension` in shared/files.ts. */
 const binaryFormats: BinaryFormat[] = [
-  { kind: "image", limit: 10 * MiB, mime: "image/png", aliases: ["image/apng"] },
-  { kind: "image", limit: 10 * MiB, mime: "image/jpeg" },
-  { kind: "image", limit: 10 * MiB, mime: "image/gif" },
-  { kind: "image", limit: 10 * MiB, mime: "image/webp" },
-  { kind: "audio", limit: 20 * MiB, mime: "audio/mpeg" },
-  { kind: "audio", limit: 20 * MiB, mime: "audio/wav" },
-  { kind: "audio", limit: 20 * MiB, mime: "audio/ogg" },
-  { kind: "audio", limit: 20 * MiB, mime: "audio/flac" },
-  { kind: "audio", limit: 20 * MiB, mime: "audio/mp4", aliases: ["audio/x-m4a"] },
-  { kind: "video", limit: 32 * MiB, mime: "video/mp4" },
-  { kind: "video", limit: 32 * MiB, mime: "video/webm" },
-  { kind: "pdf", limit: 20 * MiB, mime: "application/pdf" },
+  { kind: "image", limit: PREVIEW_LIMIT_BYTES.image, mime: "image/png", aliases: ["image/apng"] },
+  { kind: "image", limit: PREVIEW_LIMIT_BYTES.image, mime: "image/jpeg" },
+  { kind: "image", limit: PREVIEW_LIMIT_BYTES.image, mime: "image/gif" },
+  { kind: "image", limit: PREVIEW_LIMIT_BYTES.image, mime: "image/webp" },
+  { kind: "audio", limit: PREVIEW_LIMIT_BYTES.audio, mime: "audio/mpeg" },
+  { kind: "audio", limit: PREVIEW_LIMIT_BYTES.audio, mime: "audio/wav" },
+  { kind: "audio", limit: PREVIEW_LIMIT_BYTES.audio, mime: "audio/ogg" },
+  { kind: "audio", limit: PREVIEW_LIMIT_BYTES.audio, mime: "audio/flac" },
+  { kind: "audio", limit: PREVIEW_LIMIT_BYTES.audio, mime: "audio/mp4", aliases: ["audio/x-m4a"] },
+  { kind: "video", limit: PREVIEW_LIMIT_BYTES.video, mime: "video/mp4" },
+  { kind: "video", limit: PREVIEW_LIMIT_BYTES.video, mime: "video/webm" },
+  { kind: "pdf", limit: PREVIEW_LIMIT_BYTES.pdf, mime: "application/pdf" },
 ];
 const binaryTypes = new Map(
   binaryFormats.flatMap((format) =>
@@ -208,7 +213,7 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
       refuse(
         "This file is malformed or its content does not match a supported format. Check or convert the original file.",
       );
-    const limit = binary?.limit ?? MiB;
+    const limit = binary?.limit ?? PREVIEW_LIMIT_BYTES.text;
     const tooLarge = () =>
       refuse(
         "This file is too large. Choose a " +
