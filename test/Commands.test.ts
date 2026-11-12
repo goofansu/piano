@@ -4,6 +4,8 @@ import type { Project, SessionState } from "../shared/wire.ts";
 import { type Command, type CommandEffects, runCommand } from "../web/src/lib/commands.ts";
 import { folderCommands } from "../web/src/lib/folderCommands.ts";
 import { globalCommands, trustCommand } from "../web/src/lib/globalCommands.ts";
+import { LOCAL } from "../web/src/lib/machine.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import {
   assignProjectCommand,
   newProjectCommand,
@@ -86,6 +88,8 @@ function effectsOf(command: Command) {
   return { ran: runCommand(command, effects), calls };
 }
 
+const { startsSessionIn: startsLocally } = machineOffers(LOCAL);
+
 test("a disabled command does nothing, whichever surface offers it", () => {
   const offline = { ...online, connected: false };
   const disabled: Command[] = [
@@ -93,7 +97,7 @@ test("a disabled command does nothing, whichever surface offers it", () => {
     ...projectCommands(offline, launch).filter((c) => c.id === "delete"),
     newProjectCommand(offline),
     assignProjectCommand(offline, other, "p1"),
-    folderCommands(offline, folder).close,
+    folderCommands(offline, folder, startsLocally).close,
     ...sessionCommands(offline, other),
   ];
   for (const command of disabled) {
@@ -144,8 +148,11 @@ test("enabled commands reach the effect their intent names", () => {
       assignProjectCommand(online, other, null),
       ["send", { _tag: "assign_project", cwd: "/repo", sessionId: "s2", projectId: null }],
     ],
-    [folderCommands(online, folder).create, ["openNew", "/repo"]],
-    [folderCommands(online, folder).close, ["openForm", { kind: "close-folder", folder }]],
+    [folderCommands(online, folder, startsLocally).create, ["openNew", "/repo"]],
+    [
+      folderCommands(online, folder, startsLocally).close,
+      ["openForm", { kind: "close-folder", folder }],
+    ],
     [
       byId(sessionCommands(online, other), "rename"),
       ["openForm", { kind: "rename-session", target: other }],

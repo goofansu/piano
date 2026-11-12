@@ -12,7 +12,9 @@ import { refusedAttempt } from "../../../shared/creationVerdict.ts";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
+import { LOCAL } from "./machine.ts";
 import { machineMemory } from "./machineMemory.ts";
+import { machineOffers } from "./machineOffers.ts";
 import { projectStartDirectory } from "./projectHome.ts";
 import { focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
@@ -78,9 +80,10 @@ export interface ClientOptions {
    */
   lastDirectory?: LastDirectory;
   /**
-   * Where the machine starts a new session (`MachineOffers.startsSessionIn`); anywhere by default.
-   * A New page directory it would refuse, such as a remembered one in a folder closed since,
-   * gives way to the first folder once the registry says so.
+   * Where the machine starts a new session (`MachineOffers.startsSessionIn`); Local's rule when
+   * none is given. A New page directory it would refuse, such as a remembered one in a folder
+   * closed since or a folder whose root checkout is gone, gives way to a startable one once the
+   * registry says so.
    */
   startsSessionIn?: (state: AppState, cwd: string) => boolean;
 }
@@ -114,24 +117,28 @@ export function createClient({
   notify,
   newSelectionId = () => crypto.randomUUID(),
   lastDirectory = { read: () => null, write: () => {} },
-  startsSessionIn = () => true,
+  startsSessionIn = machineOffers(LOCAL).startsSessionIn,
 }: ClientOptions): Client {
   /**
    * A New page opened without a directory or project starts in the last one used, else the first
    * folder; a project's home starts in its most recent member's folder once the registry says which.
+   * Each is taken only where a session may start (`startsSessionIn`), so a directory the machine
+   * refuses or whose checkout is gone gives way to the next; until the registry loads, nothing is
+   * known to refuse.
    */
   const withNewPageDirectory = (s: AppState) => {
     const page = startPage(s.view);
     if (!page) return s;
-    const closed = s.registryLoaded && !!page.cwd && !startsSessionIn(s, page.cwd);
-    if (page.cwd && !closed) return s;
-    const remembered = closed ? undefined : lastDirectory.read();
+    const startable = (cwd: string) => !s.registryLoaded || startsSessionIn(s, cwd);
+    if (page.cwd && startable(page.cwd)) return s;
     const cwd =
       page.kind === "project"
-        ? projectStartDirectory(s, page.projectId)
+        ? projectStartDirectory(s, page.projectId, startable)
         : page.projectId
           ? undefined
-          : remembered || s.folders[0]?.path;
+          : [lastDirectory.read(), ...s.folders.map((f) => f.path)].find(
+              (c): c is string => !!c && startable(c),
+            );
     return cwd ? reduce(s, { type: "new_directory", cwd }) : s;
   };
 

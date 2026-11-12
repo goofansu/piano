@@ -4,7 +4,6 @@
  */
 import type { FolderView } from "@shared/wire";
 import type { AppState } from "../store.ts";
-import { checkoutMissingAt } from "./sessionContext.ts";
 
 export type FolderCommandId = "new-session" | "close";
 
@@ -24,20 +23,22 @@ export interface FolderCommand {
 }
 
 /**
- * The row's button creates a session there; its menu closes the folder. Enablement: create unless
- * the folder's checkout is missing (`checkoutMissingAt`), since no session can start there (the New
- * session page's send waits for a connection); close when connected, since it changes the registry.
+ * The row's button creates a session there; its menu closes the folder. Enablement: create where
+ * the machine starts a session (`MachineOffers.startsSessionIn`), so not while the folder's
+ * checkout is missing (the New session page's send waits for a connection); close when connected,
+ * since it changes the registry.
  */
 export function folderCommands(
   state: AppState,
   folder: Pick<FolderView, "path" | "name">,
+  startsSessionIn: (state: AppState, cwd: string) => boolean,
 ): { create: FolderCommand; close: FolderCommand } {
   return {
     create: {
       id: "new-session",
       label: "New session here",
       ariaLabel: `New session in ${folder.name}`,
-      enabled: !checkoutMissingAt(state, folder.path),
+      enabled: startsSessionIn(state, folder.path),
       intent: { kind: "new-session", cwd: folder.path },
     },
     close: {

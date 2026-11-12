@@ -11,16 +11,24 @@ import { folderFor, type SessionEntry, sessionCatalog } from "./sessionCatalog.t
 
 /**
  * Where a session started on a project's home runs by default: the folder of the member session
- * active most recently, at the folder's own checkout rather than that session's worktree. None
- * when no member's folder is open; a project spans repositories, so nothing else is guessed.
+ * active most recently among those whose folder a session may start in (`startable`, the machine's
+ * `startsSessionIn`), at the folder's own checkout rather than that session's worktree. A member
+ * whose folder's root is gone gives way to the next newest. None when no such folder is open; a
+ * project spans repositories, so nothing else is guessed.
  */
-export function projectStartDirectory(state: AppState, projectId: string): string | undefined {
-  let newest: { cwd: string; updatedAt: string } | undefined;
+export function projectStartDirectory(
+  state: AppState,
+  projectId: string,
+  startable: (cwd: string) => boolean,
+): string | undefined {
+  let newest: { path: string; updatedAt: string } | undefined;
   for (const ref of state.sessionReferences) {
-    if (ref.projectId !== projectId || ref.archived || !folderFor(state, ref.cwd)) continue;
-    if (!newest || ref.updatedAt > newest.updatedAt) newest = ref;
+    if (ref.projectId !== projectId || ref.archived) continue;
+    const path = folderFor(state, ref.cwd)?.path;
+    if (!path || !startable(path)) continue;
+    if (!newest || ref.updatedAt > newest.updatedAt) newest = { path, updatedAt: ref.updatedAt };
   }
-  return newest && folderFor(state, newest.cwd)?.path;
+  return newest?.path;
 }
 
 export interface ProjectHomeSession extends SessionEntry {

@@ -566,7 +566,7 @@ function FolderGroup({
   const { run } = useCommands();
   // Where folders are not offered, a folder is presentation, not something to manage.
   const offers = useOffers();
-  const { create, close } = folderCommands(state, folder);
+  const { create, close } = folderCommands(state, folder, offers.startsSessionIn);
 
   return (
     <SidebarGroup

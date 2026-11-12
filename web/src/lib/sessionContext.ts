@@ -44,9 +44,9 @@ export interface DirectoryRoot {
 export interface DirectoryChoices {
   trigger: DirectoryTrigger;
   /**
-   * Every registered folder's root checkout Pi can be asked about (`checkoutMissingAt`). A missing
-   * root is left out rather than shown disabled: the folder stays registered and returns once its
-   * directory does.
+   * Every registered folder's root checkout a session may start in (`MachineOffers.startsSessionIn`).
+   * A missing root is left out rather than shown disabled: the folder stays registered and returns
+   * once its directory does.
    */
   roots: DirectoryRoot[];
   /** The folder whose worktrees the picker offers: only when `cwd` is one of its checkouts. */
@@ -72,7 +72,11 @@ export function startPlace(
 }
 
 /** The New session directory picker: its trigger, folder roots and the folder its Worktrees open. */
-export function directoryChoices(state: AppState, cwd: string): DirectoryChoices {
+export function directoryChoices(
+  state: AppState,
+  cwd: string,
+  startsSessionIn: (state: AppState, cwd: string) => boolean,
+): DirectoryChoices {
   const { folder, checkout } = sessionDirectories(state)(cwd || undefined);
   const trigger: DirectoryTrigger = !cwd
     ? { kind: "none" }
@@ -87,7 +91,7 @@ export function directoryChoices(state: AppState, cwd: string): DirectoryChoices
       : { kind: "path", label: abbrevHome(cwd) };
   const roots = state.folders.flatMap((f) =>
     f.worktrees
-      .filter((w) => w.root && !checkoutMissingAt(state, w.path))
+      .filter((w) => w.root && startsSessionIn(state, w.path))
       .map((w) => ({
         path: w.path,
         label: f.name,
@@ -112,8 +116,8 @@ export function workspaceFor(state: AppState, cwd: string | undefined): Workspac
  * reports a folder's root missing. Only a root's "missing" counts: an "unknown" or "non-git"
  * directory is not known to be gone (INV-06), and a linked worktree is "missing" also when Git
  * merely stops listing it, which leaves its directory, and the sessions there, usable. The one
- * rule behind the Directory picker, the folder row's and the session's New session here, Trust,
- * Rename, the focused directory, both composers and the announced status.
+ * rule behind Trust, Rename, the focused directory, both composers and the announced status, and
+ * the checkout half of where a session may start (`MachineOffers.startsSessionIn`).
  */
 export function checkoutMissingAt(state: AppState, cwd: string): boolean {
   return (

@@ -12,6 +12,7 @@ import type { AppState } from "../store.ts";
 import type { Command } from "./commands.ts";
 import { isLocalId, type Machine } from "./machine.ts";
 import { folderFor } from "./sessionCatalog.ts";
+import { checkoutMissingAt } from "./sessionContext.ts";
 
 export interface MachineOffers {
   /** Provider accounts, followed for the commands that need a sign-in. */
@@ -27,10 +28,12 @@ export interface MachineOffers {
   /** Whether a palette, menu or button command runs here. */
   command: (command: Command) => boolean;
   /**
-   * Whether a new session may start in `cwd` here, as the machine itself decides: Local anywhere
-   * (a closed folder's directory reopens the folder); a remote only in a folder open there or one
-   * of its worktrees, the directories its `PeerScope` admits. The New page and New session here
-   * both ask this one question.
+   * Whether a new session may start in `cwd` here: the one rule, both halves together. The
+   * machine must admit the directory: Local anywhere (a closed folder's directory reopens the
+   * folder); a remote only in a folder open there or one of its worktrees, the directories its
+   * `PeerScope` admits. And its checkout must not be gone (`checkoutMissingAt`). The New page's
+   * default directory and Send, the Directory picker's roots, the folder row's and the session's
+   * New session here all ask this one question.
    */
   startsSessionIn: (state: AppState, cwd: string) => boolean;
 }
@@ -42,7 +45,7 @@ const LOCAL_OFFERS: MachineOffers = {
   folders: true,
   settings: true,
   command: () => true,
-  startsSessionIn: () => true,
+  startsSessionIn: (state, cwd) => !checkoutMissingAt(state, cwd),
 };
 
 /**
@@ -102,7 +105,7 @@ const REMOTE_OFFERS: MachineOffers = {
         return false;
     }
   },
-  startsSessionIn: (state, cwd) => !!folderFor(state, cwd),
+  startsSessionIn: (state, cwd) => !!folderFor(state, cwd) && !checkoutMissingAt(state, cwd),
 };
 
 export const machineOffers = (machine: Machine): MachineOffers =>
