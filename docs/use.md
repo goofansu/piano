@@ -9,6 +9,16 @@ Open **Settings** at the bottom of the sidebar, then click **Sign in** next to a
 **Providers**. Start a new session afterwards, because a running session keeps the models it started
 with. For remote sign-in and limits, see [provider sign-in](provider-sign-in.md).
 
+## Search sessions, projects and commands
+
+Click the sidebar’s **Search sessions, projects and commands** button or press **Cmd+K / Ctrl+K**
+to open search. Type `!p` to browse active projects, or `!p <name>` to search project names.
+Press **Enter** to open the selected project.
+
+Type `!` on its own to list available filters: currently only **Projects only · !p**. Selecting it
+with Enter or a click inserts `!p` followed by a space, keeping the dialog open and the search
+field focused so you can type a project name.
+
 ## Preview local files
 
 Click a local file link in a session to read it beside the conversation. Markdown offers

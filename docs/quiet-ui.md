@@ -137,10 +137,11 @@ navigation and view commands, grouped as Sessions (Recent sessions before search
 Global commands and Session commands (only with a selected session). Projects lists active projects
 by name and opens their pages; done projects remain reachable through the Projects index. A leading,
 standalone lowercase `!p` scopes results to active project navigation (`!p` browses, `!p launch`
-searches names). The placeholder is **Search… · ! for filters**, while the field and dialog keep
-the full accessible name **Search sessions, projects and commands**. A standalone `!` (ignoring
-surrounding whitespace) offers only **Projects only · !p** in the results. Enter or a click inserts
-`!p `, retaining input focus and the open palette; there is no footer shortcut. Other tokens such
+searches names). The placeholder is **Search sessions, projects and commands…**, while the field
+and dialog keep the full accessible name **Search sessions, projects and commands**. There is no
+persistent filter hint, filter button or footer. A standalone `!` (ignoring surrounding whitespace)
+offers only **Projects only · !p** in the results. Enter or a click inserts `!p `, retaining input
+focus and the open palette. Other tokens such
 as `!s`, `!c`, `!P` and `!pizza` are ordinary queries, not filters. A session's outputs are read in its
 session rail, not searched from the palette. A feature that adds an action the sidebar or header offers also adds
 a row in the appropriate command group, named as its button is, including a toggle, whose row
