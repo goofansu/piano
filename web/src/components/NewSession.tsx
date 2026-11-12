@@ -474,7 +474,6 @@ function DirectorySelect({
                       key={root.path}
                       value={root.path}
                       keywords={[root.label]}
-                      disabled={root.disabled}
                       onSelect={() => {
                         onChange(root.path);
                         setOpen(false);

@@ -38,14 +38,15 @@ export interface DirectoryRoot {
   path: string;
   /** The folder's name. */
   label: string;
-  /** The root checkout is gone, so no session can start there. */
-  disabled: boolean;
   selected: boolean;
 }
 
 export interface DirectoryChoices {
   trigger: DirectoryTrigger;
-  /** Every registered folder's root checkout. */
+  /**
+   * Every registered folder's root checkout still on disk. A missing root is left out rather than
+   * shown disabled: the folder stays registered and returns once its directory does.
+   */
   roots: DirectoryRoot[];
   /** The folder whose worktrees the picker offers: only when `cwd` is one of its checkouts. */
   worktreesFolder: FolderView | undefined;
@@ -85,11 +86,10 @@ export function directoryChoices(state: AppState, cwd: string): DirectoryChoices
       : { kind: "path", label: abbrevHome(cwd) };
   const roots = state.folders.flatMap((f) =>
     f.worktrees
-      .filter((w) => w.root)
+      .filter((w) => w.root && w.status !== "missing")
       .map((w) => ({
         path: w.path,
         label: f.name,
-        disabled: w.status === "missing",
         selected: w.path === cwd,
       })),
   );
