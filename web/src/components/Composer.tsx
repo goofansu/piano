@@ -137,6 +137,11 @@ export function Composer({
       },
     );
   };
+  // Stopping Pi also abandons an image upload still on its way to the draft's message.
+  const stop = () => {
+    imageSend.cancel();
+    sendCommand(STOP);
+  };
   const figures = contextFigures(usage?.context, catalog, choice.model);
   const queue = queuePanel(queuedMessages, streaming);
 
@@ -166,8 +171,8 @@ export function Composer({
         onKeyDown={(e) => {
           if (e.key === "Escape" && control.escape) {
             e.preventDefault();
-            if (control.escape === STOP) imageSend.cancel();
-            sendCommand(control.escape);
+            if (control.escape === STOP) stop();
+            else sendCommand(control.escape);
           }
         }}
         above={
@@ -254,19 +259,12 @@ export function Composer({
         actions={
           // Send and Stop are one control; its face cross-fades so the key never jumps.
           <ComposerSend
-            variant={showStop ? "secondary" : "default"}
+            face={showStop ? "neutral" : "primary"}
             className="relative"
             label={control.label}
             hint={control.hint}
             disabled={!control.enabled}
-            onClick={
-              showStop
-                ? () => {
-                    imageSend.cancel();
-                    sendCommand(STOP);
-                  }
-                : () => send(false)
-            }
+            onClick={showStop ? stop : () => send(false)}
           >
             <span
               aria-hidden

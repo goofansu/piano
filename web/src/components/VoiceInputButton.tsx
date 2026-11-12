@@ -41,7 +41,7 @@ export function VoiceInputButton({
   return (
     <ComposerActionButton
       type="button"
-      variant={recordingNow ? "destructive" : "secondary"}
+      face={recordingNow ? "recording" : "neutral"}
       label={
         phase === "transcribing"
           ? "Cancel transcription"

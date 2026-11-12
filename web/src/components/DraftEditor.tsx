@@ -15,7 +15,7 @@ import {
   attachmentDraft,
   attachmentEvents,
 } from "@/components/Attachments";
-import { ComposerActionButton } from "@/components/ComposerActionButton";
+import { ComposerActionButton, type ComposerActionFace } from "@/components/ComposerActionButton";
 import { ModelSelect } from "@/components/ModelSelect";
 import { QuoteChips, type QuoteDraft } from "@/components/Quotes";
 import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
@@ -240,7 +240,7 @@ export function ComposerSend({
   hint = SEND_HINT,
   disabled,
   onClick,
-  variant,
+  face,
   className,
   children = <ArrowUpIcon />,
 }: {
@@ -248,7 +248,7 @@ export function ComposerSend({
   hint?: ControlHint;
   disabled: boolean;
   onClick: () => void;
-  variant?: "default" | "secondary";
+  face?: ComposerActionFace;
   className?: string;
   children?: ReactNode;
 }) {
@@ -261,7 +261,7 @@ export function ComposerSend({
           {hint.tail}
         </>
       }
-      variant={variant}
+      face={face}
       className={className}
       disabled={disabled}
       onClick={onClick}

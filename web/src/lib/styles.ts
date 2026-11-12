@@ -22,11 +22,6 @@ export const composerToolbar =
 /** The real target stays 44px on phones/touch; its separate face stays desktop-sized. */
 export const composerAction =
   "size-11 shrink-0 rounded-full border-0 p-0 md:size-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11";
-// The outer button owns press motion; the decorative span must not translate a second time.
-// Fills reach the border box: clipped to padding, a borderless face paints 2px smaller than Stop's outlined one.
-// A neutral face (mic, Stop) takes the stronger fill: at the base 6% its edge fades beside solid Send.
-export const composerActionFace =
-  "relative size-9 rounded-full bg-clip-border [--secondary:var(--fill-active)] active:not-aria-[haspopup]:translate-none";
 
 /** Attach keeps its small ghost icon while reserving a nonoverlapping touch target. */
 export const composerIcon = "shrink-0 pointer-coarse:size-11";
