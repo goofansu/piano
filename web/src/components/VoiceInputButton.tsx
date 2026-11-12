@@ -1,5 +1,5 @@
 import type { VoiceHints } from "@shared/voiceInput";
-import { MicIcon, SquareIcon } from "lucide-react";
+import { MicIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { ComposerActionButton } from "@/components/ComposerActionButton";
 import type { DraftEditorState } from "@/components/DraftEditor";
@@ -58,7 +58,8 @@ export function VoiceInputButton({
         busy ? dictation.cancel(target, true) : recordingNow ? dictation.stop(target) : start()
       }
     >
-      {busy ? <Spinner /> : recordingNow ? <SquareIcon className="fill-current" /> : <MicIcon />}
+      {/* Recording keeps the mic on a red face: the square belongs to the turn's Stop beside it. */}
+      {busy ? <Spinner /> : <MicIcon />}
     </ComposerActionButton>
   );
 }
