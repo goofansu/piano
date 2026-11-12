@@ -97,7 +97,10 @@ a header or toolbar (a pane's, the sidebar's, a picker's, a Settings group's) an
 action outside the sidebar are 32px, 44px on touch; a sidebar row's are 24px, 36px on touch;
 a control inside content (a code block, a quote, the PDF toolbar) is 24px. A one-off (the
 composer's Attach and Send, Scroll to bottom, the session menu sheet's) and a button inside a field
-(`InputGroupButton`) keep their own sizes. A row's actions are `RowActions`: over the row's end,
+(`InputGroupButton`) keep their own sizes. A control that is 44px on a phone as well as on touch
+(a picker, a view toggle, the composer's actions) writes that size, and its mouse size under
+`compact:` (a wide screen without a coarse pointer), never under `md:` alone, which would shrink it on a
+wide touch screen. A row's actions are `RowActions`: over the row's end,
 revealed while it is pointed at, focused or has its menu open, its text fading or its value
 stepping aside beneath them, so the row reserves no empty slot. A list row is `ListRow`, which
 places them (its ⋯ ends where an in-flow action would, on the row's padding) and decides the fade

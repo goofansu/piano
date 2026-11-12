@@ -31,6 +31,10 @@
 }
 
 @custom-variant dark (&:is(.dark *));
+/* Where a control may drop below a 44px target: a wide screen whose pointer is not coarse. A phone
+   or any touch screen keeps the target, so a control writes its touch size and `compact:` its mouse
+   one. */
+@custom-variant compact (@media (width >= 48rem) and (not (pointer: coarse)));
 
 .slash-textarea {
   position: relative;
