@@ -73,6 +73,53 @@ export function pagePalette<G extends PaletteDocuments>(
   });
 }
 
+/** An item's one name, for selection, for the list and for the worker client's row lookup. */
+export function paletteItemValue(group: PaletteGroup["id"], key: string): string {
+  return `${group}:${key}`;
+}
+
+/** A row item, typed by its group so a renderer can narrow `row` by `group`. */
+type PaletteRowItem<G> = G extends PaletteGroup
+  ? { kind: "row"; group: G["id"]; row: G["rows"][number]; value: string; enabled: boolean }
+  : never;
+export type PaletteItem =
+  | { kind: "previous" | "next"; value: string; label: string; page: number }
+  | PaletteRowItem<PaletteGroup>;
+
+/**
+ * A page as the list draws it: its heading (with the range when the group has more than one
+ * page) and its items in order, Previous, the rows, Next. Selection reads the same items, so it
+ * never rests on one that is not drawn.
+ */
+export function paletteItems({ group, page, total }: PalettePage): {
+  heading: string;
+  items: PaletteItem[];
+} {
+  const control = (kind: "previous" | "next", to: number) => ({
+    kind,
+    value: paletteItemValue(group.id, kind),
+    label: `${kind === "previous" ? "Previous" : "Next"} ${group.heading.toLowerCase()}`,
+    page: to,
+  });
+  const items: PaletteItem[] = [];
+  if (page > 0) items.push(control("previous", page - 1));
+  for (const row of group.rows)
+    items.push({
+      kind: "row",
+      group: group.id,
+      row,
+      value: paletteItemValue(group.id, row.key),
+      enabled: !("enabled" in row) || row.enabled,
+    } as PaletteItem);
+  const end = (page + 1) * PALETTE_PAGE_SIZE;
+  if (end < total) items.push(control("next", page + 1));
+  const heading =
+    total > PALETTE_PAGE_SIZE
+      ? `${group.heading} · ${page * PALETTE_PAGE_SIZE + 1}–${Math.min(end, total)} of ${total}`
+      : group.heading;
+  return { heading, items };
+}
+
 /** Background catalog refreshes keep a still-valid keyboard choice, including paging controls. */
 export function paletteSelection(
   pages: readonly PalettePage[],
@@ -81,16 +128,12 @@ export function paletteSelection(
 ): string {
   const valid = new Set<string>();
   let first = "";
-  for (const { group, page, total } of pages) {
-    for (const row of group.rows) {
-      if ("enabled" in row && !row.enabled) continue;
-      const value = `${group.id}:${row.key}`;
-      valid.add(value);
-      first ||= value;
+  for (const page of pages)
+    for (const item of paletteItems(page).items) {
+      if (item.kind === "row" && !item.enabled) continue;
+      valid.add(item.value);
+      if (item.kind === "row") first ||= item.value;
     }
-    if (page > 0) valid.add(`${group.id}:previous`);
-    if ((page + 1) * PALETTE_PAGE_SIZE < total) valid.add(`${group.id}:next`);
-  }
   return !reset && valid.has(selected) ? selected : first;
 }
 

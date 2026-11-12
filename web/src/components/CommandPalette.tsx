@@ -30,7 +30,12 @@ import { ProjectCommandIconView } from "@/components/Projects";
 import { createPaletteCatalog, PALETTE_NAME } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod, isImeKey } from "@/lib/keys";
-import { PALETTE_PAGE_SIZE, type PalettePage, paletteSelection } from "@/lib/paletteSearch";
+import {
+  type PaletteItem,
+  type PalettePage,
+  paletteItems,
+  paletteSelection,
+} from "@/lib/paletteSearch";
 import { useNavigation } from "@/lib/useNavigation";
 import { usePaletteSearch } from "@/lib/usePaletteSearch";
 import type { AppState } from "@/store";
@@ -283,125 +288,131 @@ const PaletteResults = memo(function PaletteResults({
   runCommand: ReturnType<typeof useGlobalCommands>["run"];
   page: (group: PalettePage["group"]["id"], page: number) => void;
 }) {
+  const row = (item: Extract<PaletteItem, { kind: "row" }>) => {
+    const { value, enabled } = item;
+    switch (item.group) {
+      case "sessions": {
+        const r = item.row;
+        return (
+          <CommandItem
+            key={value}
+            value={value}
+            title={r.hint}
+            onSelect={() => run(() => select(r.session.cwd, r.session.sessionId))}
+          >
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate",
+                r.untitled && "text-ink-3",
+                r.selected && "font-medium",
+              )}
+            >
+              {r.label}
+            </span>
+            {r.folder && (
+              <span className="ml-1 min-w-0 max-w-[45%] shrink-0 truncate text-xs text-ink-3">
+                <span className="sr-only">Folder: </span>
+                {r.folder}
+              </span>
+            )}
+            {r.hint && <span className="sr-only">{r.hint}</span>}
+          </CommandItem>
+        );
+      }
+      case "projects": {
+        const r = item.row;
+        return (
+          <CommandItem
+            key={value}
+            value={value}
+            disabled={!enabled}
+            onSelect={() => run(() => runCommand(r.command))}
+          >
+            <ProjectCommandIconView icon={r.command.icon} /> {r.label}
+          </CommandItem>
+        );
+      }
+      case "filters": {
+        const r = item.row;
+        return (
+          <CommandItem key={value} value={value} onSelect={() => edit(r.text)}>
+            {r.label} · <span className="text-muted-foreground">{r.token}</span>
+          </CommandItem>
+        );
+      }
+      case "global": {
+        const r = item.row;
+        return (
+          <CommandItem
+            key={value}
+            value={value}
+            disabled={!enabled}
+            data-checked={r.checked}
+            onSelect={() => run(() => runCommand(r.command))}
+          >
+            <GlobalCommandIcon icon={r.command.icon} /> {r.label}
+            {r.checked && <Current />}
+          </CommandItem>
+        );
+      }
+      case "session": {
+        const r = item.row;
+        return (
+          <CommandItem
+            key={value}
+            value={value}
+            disabled={!enabled}
+            data-checked={r.checked}
+            variant={r.kind === "session" && r.command.destructive ? "destructive" : "default"}
+            onSelect={() => run(() => runCommand(r.command))}
+          >
+            {r.kind === "session" ? (
+              <CommandIcon icon={r.command.icon} />
+            ) : (
+              <ProjectCommandIconView icon={r.command.icon} />
+            )}{" "}
+            {r.detail ? (
+              <>
+                <span className="shrink-0">{r.label}</span>{" "}
+                <span className="min-w-0 truncate font-mono text-xs text-ink-3">
+                  {abbrevPath(r.detail)}
+                </span>
+              </>
+            ) : (
+              r.label
+            )}
+            {r.checked && <Current />}
+          </CommandItem>
+        );
+      }
+    }
+  };
   return (
     <>
-      {pages.map(({ group, page: current, total }, index) => (
-        <Fragment key={group.id}>
-          {index > 0 && <CommandSeparator />}
-          <CommandGroup
-            heading={
-              total > PALETTE_PAGE_SIZE
-                ? `${group.heading} · ${current * PALETTE_PAGE_SIZE + 1}–${Math.min((current + 1) * PALETTE_PAGE_SIZE, total)} of ${total}`
-                : group.heading
-            }
-          >
-            {current > 0 && (
-              <CommandItem
-                value={`${group.id}:previous`}
-                onSelect={() => page(group.id, current - 1)}
-              >
-                Previous {group.heading.toLowerCase()}
-              </CommandItem>
-            )}
-            {group.id === "sessions"
-              ? group.rows.map((r) => (
+      {pages.map((current, index) => {
+        const { group } = current;
+        const { heading, items } = paletteItems(current);
+        return (
+          <Fragment key={group.id}>
+            {index > 0 && <CommandSeparator />}
+            <CommandGroup heading={heading}>
+              {items.map((item) =>
+                item.kind === "row" ? (
+                  row(item)
+                ) : (
                   <CommandItem
-                    key={r.key}
-                    value={`${group.id}:${r.key}`}
-                    title={r.hint}
-                    onSelect={() => run(() => select(r.session.cwd, r.session.sessionId))}
+                    key={item.value}
+                    value={item.value}
+                    onSelect={() => page(group.id, item.page)}
                   >
-                    <span
-                      className={cn(
-                        "min-w-0 flex-1 truncate",
-                        r.untitled && "text-ink-3",
-                        r.selected && "font-medium",
-                      )}
-                    >
-                      {r.label}
-                    </span>
-                    {r.folder && (
-                      <span className="ml-1 min-w-0 max-w-[45%] shrink-0 truncate text-xs text-ink-3">
-                        <span className="sr-only">Folder: </span>
-                        {r.folder}
-                      </span>
-                    )}
-                    {r.hint && <span className="sr-only">{r.hint}</span>}
+                    {item.label}
                   </CommandItem>
-                ))
-              : group.id === "projects"
-                ? group.rows.map((r) => (
-                    <CommandItem
-                      key={r.key}
-                      value={`${group.id}:${r.key}`}
-                      disabled={!r.enabled}
-                      onSelect={() => run(() => runCommand(r.command))}
-                    >
-                      <ProjectCommandIconView icon={r.command.icon} /> {r.label}
-                    </CommandItem>
-                  ))
-                : group.id === "filters"
-                  ? group.rows.map((r) => (
-                      <CommandItem
-                        key={r.key}
-                        value={`${group.id}:${r.key}`}
-                        onSelect={() => edit(r.text)}
-                      >
-                        {r.label} · <span className="text-muted-foreground">{r.token}</span>
-                      </CommandItem>
-                    ))
-                  : group.id === "global"
-                    ? group.rows.map((r) => (
-                        <CommandItem
-                          key={r.key}
-                          value={`${group.id}:${r.key}`}
-                          disabled={!r.enabled}
-                          data-checked={r.checked}
-                          onSelect={() => run(() => runCommand(r.command))}
-                        >
-                          <GlobalCommandIcon icon={r.command.icon} /> {r.label}
-                          {r.checked && <Current />}
-                        </CommandItem>
-                      ))
-                    : group.rows.map((r) => (
-                        <CommandItem
-                          key={r.key}
-                          value={`${group.id}:${r.key}`}
-                          disabled={!r.enabled}
-                          data-checked={r.checked}
-                          variant={
-                            r.kind === "session" && r.command.destructive
-                              ? "destructive"
-                              : "default"
-                          }
-                          onSelect={() => run(() => runCommand(r.command))}
-                        >
-                          {r.kind === "session" ? (
-                            <CommandIcon icon={r.command.icon} />
-                          ) : (
-                            <ProjectCommandIconView icon={r.command.icon} />
-                          )}{" "}
-                          {r.detail ? (
-                            <>
-                              <span className="shrink-0">{r.label}</span>{" "}
-                              <span className="min-w-0 truncate font-mono text-xs text-ink-3">
-                                {abbrevPath(r.detail)}
-                              </span>
-                            </>
-                          ) : (
-                            r.label
-                          )}
-                          {r.checked && <Current />}
-                        </CommandItem>
-                      ))}
-            {(current + 1) * PALETTE_PAGE_SIZE < total && (
-              <CommandItem value={`${group.id}:next`} onSelect={() => page(group.id, current + 1)}>
-                Next {group.heading.toLowerCase()}
-              </CommandItem>
-            )}
-          </CommandGroup>
-        </Fragment>
-      ))}
+                ),
+              )}
+            </CommandGroup>
+          </Fragment>
+        );
+      })}
     </>
   );
 });

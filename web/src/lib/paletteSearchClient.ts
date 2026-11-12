@@ -1,10 +1,11 @@
 import { PALETTE_FILTER_GROUP, type PaletteGroup } from "./commandPalette.ts";
-import type {
-  PaletteDocuments,
-  PalettePage,
-  PalettePages,
-  PaletteSearchReply,
-  PaletteSearchRequest,
+import {
+  type PaletteDocuments,
+  type PalettePage,
+  type PalettePages,
+  type PaletteSearchReply,
+  type PaletteSearchRequest,
+  paletteItemValue,
 } from "./paletteSearch.ts";
 
 /** Browser worker in production; a controlled message transport in contract tests. */
@@ -76,7 +77,7 @@ export function createPaletteSearchClient(
       // The filters page is the lib's own, so its rows come back as the same objects too.
       rows = new Map(
         [...job.groups, PALETTE_FILTER_GROUP].flatMap((group) =>
-          group.rows.map((row) => [`${group.id}:${row.key}`, row] as const),
+          group.rows.map((row) => [paletteItemValue(group.id, row.key), row] as const),
         ),
       );
     }
@@ -103,7 +104,7 @@ export function createPaletteSearchClient(
             ...page,
             group: {
               ...group,
-              rows: group.rows.map((row) => rows.get(`${group.id}:${row.key}`)!),
+              rows: group.rows.map((row) => rows.get(paletteItemValue(group.id, row.key))!),
             } as PaletteGroup,
           })),
         );
