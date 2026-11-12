@@ -102,7 +102,10 @@ every merge-queue candidate, on Node 24. Independent jobs run:
 - **Module tests (1–4/4):** each runs `npm ci` and one native Node test shard, using the same
   preload and file glob as `npm test`. Every shard installs the latest Worktrunk release, checked
   against its published checksum. All shards finish even if another fails.
-- **Critical paths:** `npm ci` and `npm run test:browser`, retaining journey screenshots.
+- **Critical paths (local, remote):** each runs `npm ci` and one group of browser journeys,
+  retaining its screenshots. `npm run test:browser:remote` is the multi-peer journey, which takes
+  longer than the rest together; `npm run test:browser:local` is the other three. Both finish even
+  if one fails.
 
 **Quality gates** keeps its existing check name and passes only when static checks and every module
 shard succeed; failed, cancelled or skipped dependencies cannot pass it. CI gets no model secrets.
@@ -117,7 +120,7 @@ Keep the preload and glob aligned with `npm test`. Options must precede the glob
 `--test-shard` with `npm test --` does not shard the suite. `npm test` still runs the whole suite locally.
 
 No branch protection enforces these jobs: the owner canceled it (PIN-17). Before you merge, check
-that **Quality gates** and **Critical paths** passed on the latest commit.
+that **Quality gates** and both **Critical paths** jobs passed on the latest commit.
 
 The Piano host must be private: reachable only by its trusted developer, on loopback or through a
 private authenticated proxy such as exe.dev's (INV-11). Development has no privacy requirement;
