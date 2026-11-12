@@ -27,7 +27,7 @@ import {
   CommandSeparator,
 } from "@/components/PianoCommand";
 import { ProjectCommandIconView } from "@/components/Projects";
-import { createPaletteCatalog, PALETTE_NAME, paletteScope } from "@/lib/commandPalette";
+import { createPaletteCatalog, PALETTE_NAME } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod, isImeKey } from "@/lib/keys";
 import { PALETTE_PAGE_SIZE, type PalettePage, paletteSelection } from "@/lib/paletteSearch";
@@ -111,7 +111,6 @@ function PaletteContents({
     sessionCommands: sessionCommandList,
     sessionProject,
   });
-  const { filters } = paletteScope(search);
   const results = usePaletteSearch(groups, search, editing || !open);
   const pending = editing || results.pending;
   const allowed = useRef(false);
@@ -126,69 +125,66 @@ function PaletteContents({
   }, []);
   const settled = useRef(search);
   if (allowed.current) settled.current = search;
+  // Whether the shown results answer the live input: a pointer/Enter event must not race the next
+  // React commit. Every row's action (run, page, input edit) checks it.
+  const ready = useCallback(() => allowed.current && input.current?.value === settled.current, []);
   const run = useCallback(
     (action: () => void) => {
-      // Check the live input too: a pointer/Enter event must not race the next React commit.
-      if (!allowed.current || input.current?.value !== settled.current) return;
+      if (!ready()) return;
       onOpenChange(false);
       action();
     },
-    [onOpenChange],
+    [onOpenChange, ready],
   );
   const changePage = useCallback(
     (group: PalettePage["group"]["id"], page: number) => {
-      if (allowed.current && input.current?.value === settled.current) results.page(group, page);
+      if (ready()) results.page(group, page);
     },
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- page is the only member read.
-    [results.page],
+    [results.page, ready],
+  );
+  // The input's own edit, so a filter row can write it; the gate keeps PaletteResults' props stable.
+  const replaceText = useRef<(text: string) => void>(() => {});
+  const editInput = useCallback(
+    (text: string) => {
+      if (ready()) replaceText.current(text);
+    },
+    [ready],
   );
   const selectionContext = useRef(results.selectionKey);
   useLayoutEffect(() => {
     if (pending) return;
     const reset = selectionContext.current !== results.selectionKey;
     selectionContext.current = results.selectionKey;
-    const next = filters?.[0]?.token ?? paletteSelection(results.result, selected, reset);
+    const next = paletteSelection(results.result, selected, reset);
     if (next !== selected) setSelected(next);
     if (reset || next !== selected) list.current?.scrollTo({ top: 0, behavior: "instant" });
-  }, [results.result, results.selectionKey, filters, pending, selected, setSelected]);
+  }, [results.result, results.selectionKey, pending, selected, setSelected]);
 
   return (
     <PaletteInput input={input} active={open} pending={pending} edit={edit} commit={commit}>
-      {(replaceText) => (
-        <CommandList ref={list} aria-busy={pending} className="max-h-[min(24rem,60dvh)]">
-          <CommandEmpty>
-            {results.error
-              ? "Search unavailable. Close and reopen to retry."
-              : pending
-                ? "Searching…"
-                : "No sessions, projects or commands match."}
-          </CommandEmpty>
-          {filters && !results.error ? (
-            <CommandGroup heading="Filters">
-              {filters.map((filter) => (
-                <CommandItem
-                  key={filter.token}
-                  value={filter.token}
-                  onSelect={() => {
-                    if (!allowed.current || input.current?.value !== settled.current) return;
-                    replaceText(filter.text);
-                  }}
-                >
-                  {filter.label} · <span className="text-muted-foreground">{filter.token}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ) : (
+      {(replace) => {
+        replaceText.current = replace;
+        return (
+          <CommandList ref={list} aria-busy={pending} className="max-h-[min(24rem,60dvh)]">
+            <CommandEmpty>
+              {results.error
+                ? "Search unavailable. Close and reopen to retry."
+                : pending
+                  ? "Searching…"
+                  : "No sessions, projects or commands match."}
+            </CommandEmpty>
             <PaletteResults
               pages={results.result}
               run={run}
+              edit={editInput}
               select={select}
               runCommand={executeCommand}
               page={changePage}
             />
-          )}
-        </CommandList>
-      )}
+          </CommandList>
+        );
+      }}
     </PaletteInput>
   );
 }
@@ -274,12 +270,15 @@ const PaletteInput = memo(function PaletteInput({
 const PaletteResults = memo(function PaletteResults({
   pages,
   run,
+  edit,
   select,
   runCommand,
   page,
 }: {
   pages: PalettePage[];
   run: (action: () => void) => void;
+  /** Write a filter row's text into the input; the palette stays open. */
+  edit: (text: string) => void;
   select: ReturnType<typeof useNavigation>["select"];
   runCommand: ReturnType<typeof useGlobalCommands>["run"];
   page: (group: PalettePage["group"]["id"], page: number) => void;
@@ -341,48 +340,60 @@ const PaletteResults = memo(function PaletteResults({
                       <ProjectCommandIconView icon={r.command.icon} /> {r.label}
                     </CommandItem>
                   ))
-                : group.id === "global"
+                : group.id === "filters"
                   ? group.rows.map((r) => (
                       <CommandItem
                         key={r.key}
                         value={`${group.id}:${r.key}`}
-                        disabled={!r.enabled}
-                        data-checked={r.checked}
-                        onSelect={() => run(() => runCommand(r.command))}
+                        onSelect={() => edit(r.text)}
                       >
-                        <GlobalCommandIcon icon={r.command.icon} /> {r.label}
-                        {r.checked && <Current />}
+                        {r.label} · <span className="text-muted-foreground">{r.token}</span>
                       </CommandItem>
                     ))
-                  : group.rows.map((r) => (
-                      <CommandItem
-                        key={r.key}
-                        value={`${group.id}:${r.key}`}
-                        disabled={!r.enabled}
-                        data-checked={r.checked}
-                        variant={
-                          r.kind === "session" && r.command.destructive ? "destructive" : "default"
-                        }
-                        onSelect={() => run(() => runCommand(r.command))}
-                      >
-                        {r.kind === "session" ? (
-                          <CommandIcon icon={r.command.icon} />
-                        ) : (
-                          <ProjectCommandIconView icon={r.command.icon} />
-                        )}{" "}
-                        {r.detail ? (
-                          <>
-                            <span className="shrink-0">{r.label}</span>{" "}
-                            <span className="min-w-0 truncate font-mono text-xs text-ink-3">
-                              {abbrevPath(r.detail)}
-                            </span>
-                          </>
-                        ) : (
-                          r.label
-                        )}
-                        {r.checked && <Current />}
-                      </CommandItem>
-                    ))}
+                  : group.id === "global"
+                    ? group.rows.map((r) => (
+                        <CommandItem
+                          key={r.key}
+                          value={`${group.id}:${r.key}`}
+                          disabled={!r.enabled}
+                          data-checked={r.checked}
+                          onSelect={() => run(() => runCommand(r.command))}
+                        >
+                          <GlobalCommandIcon icon={r.command.icon} /> {r.label}
+                          {r.checked && <Current />}
+                        </CommandItem>
+                      ))
+                    : group.rows.map((r) => (
+                        <CommandItem
+                          key={r.key}
+                          value={`${group.id}:${r.key}`}
+                          disabled={!r.enabled}
+                          data-checked={r.checked}
+                          variant={
+                            r.kind === "session" && r.command.destructive
+                              ? "destructive"
+                              : "default"
+                          }
+                          onSelect={() => run(() => runCommand(r.command))}
+                        >
+                          {r.kind === "session" ? (
+                            <CommandIcon icon={r.command.icon} />
+                          ) : (
+                            <ProjectCommandIconView icon={r.command.icon} />
+                          )}{" "}
+                          {r.detail ? (
+                            <>
+                              <span className="shrink-0">{r.label}</span>{" "}
+                              <span className="min-w-0 truncate font-mono text-xs text-ink-3">
+                                {abbrevPath(r.detail)}
+                              </span>
+                            </>
+                          ) : (
+                            r.label
+                          )}
+                          {r.checked && <Current />}
+                        </CommandItem>
+                      ))}
             {(current + 1) * PALETTE_PAGE_SIZE < total && (
               <CommandItem value={`${group.id}:next`} onSelect={() => page(group.id, current + 1)}>
                 Next {group.heading.toLowerCase()}

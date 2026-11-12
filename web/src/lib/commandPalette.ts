@@ -49,18 +49,41 @@ export const PROJECTS_ONLY = {
 } as const;
 const PALETTE_FILTERS = [PROJECTS_ONLY] as const;
 
+/** A filter row: choosing it writes its `text` into the input, never runs a command. */
+export interface PaletteFilterRow {
+  key: string;
+  value: string;
+  keywords: undefined;
+  label: string;
+  token: string;
+  text: string;
+}
+
+/** The palette's answer to a trimmed `!`: the filters, as rows like any other group's. */
+export const PALETTE_FILTER_GROUP: Extract<PaletteGroup, { id: "filters" }> = {
+  id: "filters",
+  heading: "Filters",
+  rows: PALETTE_FILTERS.map((filter) => ({
+    key: filter.token,
+    value: filter.label,
+    keywords: undefined,
+    ...filter,
+  })),
+};
+
 /**
  * What the input asks for. A trimmed `!` discovers filters; a leading, standalone lowercase
  * `!p` scopes to Projects and the rest is the query. Any other text, `!pizza` or `!P` included,
- * is a plain query over every group. Discovery offers input edits, never navigation commands.
+ * is a plain query over every group. Discovery answers with `PALETTE_FILTER_GROUP`, whose rows
+ * edit the input, never navigation commands.
  */
 export function paletteScope(search: string): {
   query: string;
   group?: "projects";
-  filters?: readonly (typeof PROJECTS_ONLY)[];
+  filters?: true;
 } {
   const trimmed = search.trim();
-  if (trimmed === "!") return { query: "", filters: PALETTE_FILTERS };
+  if (trimmed === "!") return { query: "", filters: true };
   const rest = trimmed.slice(PROJECTS_TOKEN.length);
   if (!trimmed.startsWith(PROJECTS_TOKEN) || /^\S/.test(rest)) return { query: trimmed };
   return { query: rest.trim(), group: "projects" };
@@ -125,6 +148,7 @@ export type PaletteGroup =
   | { id: "sessions"; heading: "Recent sessions" | "Sessions"; rows: PaletteSessionRow[] }
   | { id: "projects"; heading: "Projects"; rows: PaletteCommandRow<ProjectCommand>[] }
   | { id: "global"; heading: "Global commands"; rows: PaletteCommandRow<GlobalCommand>[] }
+  | { id: "filters"; heading: "Filters"; rows: PaletteFilterRow[] }
   | {
       id: "session";
       heading: "Session commands";
