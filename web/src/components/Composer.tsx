@@ -182,7 +182,7 @@ export function Composer({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-11 shrink-0 md:h-8"
+                  className="h-11 shrink-0 md:h-8 pointer-coarse:min-h-11"
                   aria-label={queue.editAriaLabel}
                   title="Move queued messages back to the draft without stopping Pi (Esc)"
                   disabled={!control.canRestoreQueue}
