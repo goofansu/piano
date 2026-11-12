@@ -134,7 +134,6 @@ export function NewSessionComposer({
   const cwd = page?.cwd ?? "";
   const projectId = page?.projectId;
   const editor = useDraftEditor(NEW_SESSION_DRAFT);
-  const imageSend = useImageSend(editor, client.captureSend, { cwd }, state.selectionId);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const folder = folderFor(state, cwd);
@@ -152,6 +151,7 @@ export function NewSessionComposer({
       ? state.pendingCreate.options
       : undefined,
   );
+  const imageSend = useImageSend(editor, client.captureSend, { cwd }, state.selectionId, choice);
   // No session can start where the checkout is gone; the draft waits for another directory.
   const checkoutMissing = !!cwd && checkoutMissingAt(state, cwd);
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
@@ -173,16 +173,10 @@ export function NewSessionComposer({
     if (!ready) return;
     // A project deleted while it was chosen is no longer joined.
     const join = findProject(state, projectId)?.id;
-    const start = choice.start;
-    imageSend.send(
-      (message, attemptId) => ({
-        ...newSessionCommand({ cwd, projectId: join }, message, start),
-        attemptId,
-      }),
-      (consumed) => {
-        if (consumed) choice.consume();
-      },
-    );
+    imageSend.send((message, attemptId, start) => ({
+      ...newSessionCommand({ cwd, projectId: join }, message, start),
+      attemptId,
+    }));
   };
 
   return (
