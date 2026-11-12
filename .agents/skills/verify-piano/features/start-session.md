@@ -10,6 +10,12 @@ the session without sending the message again; a message that cannot be sent kee
 - `choose-folder`: combobox "Directory" lists registered folders and "Browse…", plus "Worktrees"
   for a registered checkout. `/new` defaults to the last-used directory, otherwise the first
   registered folder; a fresh `/projects/<id>/new` needs a directory choice.
+- `directory-trust`: a directory with `.pi` resources or `.agents/skills` shows "Directory trust"
+  beside Directory: Untrusted / Trusted. Toggling changes that machine's decision about loading
+  those resources, not another machine's decision for the same path.
+- `remote-new`: `/m/<machine>/new` uses the configured peer's registered directories, with trust
+  where needed, but no Browse… or worktree creation. A remembered directory no longer open on
+  that peer falls back to an open folder; it must not start on Local instead.
 - `model-effort`: the "Model: <model>; effort: <level>" button picks a model and effort, passed to
   Pi as `--model` and `--thinking`.
 - `model-defaults`: the model picker shows New sessions' default, Refresh models, Use default
@@ -56,6 +62,22 @@ project and reload on its own scratch instance, with its own folders and models 
     (selected), `Browse…`, `Worktrees`. `ab find role option click --name "repo" --exact`.
     Capture `01-new`, then wait for the directory picker to close before using another control:
     `ab wait --fn "!document.querySelector('[aria-label=\"Choose a directory\"]')"`.
+- `directory-trust` (scratch resources only)
+  - Preconditions: put a harmless skill at `$REPO/.agents/skills/demo/SKILL.md` before opening
+    New: front matter `name: demo`, `description: Verification fixture.`, body `Reply briefly.`.
+    Reload `/new` to obtain a fresh catalog if the directory was already visited. This creates
+    a scratch input fixture, not a trust decision or a claim that fake Pi loaded the skill.
+  - Action: `ab open "$WEB_URL/new"; ab wait '[aria-label="Directory trust"]'`;
+    capture `14-untrusted`, then `ab find role button click --name 'Directory trust' --exact;
+    ab wait --fn "document.querySelector('[aria-label=\"Directory trust\"]').getAttribute('aria-pressed') === 'true'"`.
+  - Result: Trusted replaces Untrusted. Capture `15-trusted`; click again and wait for
+    `aria-pressed=false` to return to Untrusted. The seed without resources need not show this
+    control. Cross-machine trust isolation requires the peer prerequisite below.
+- `remote-new` prerequisite
+  - Action: `ab open "$WEB_URL/m/not-configured/new"; ab wait --text 'Machine unavailable'`;
+    capture `16-peer-prerequisite`. Report `verified-unreachable` with that route and a
+    configured, reachable peer, never a local send as remote proof. See
+    [Open a session](./open-session.md#gotchas) for the multi-instance and authentication limits.
 - `model-defaults` (before sending, with the seed's default browser fake)
   - Action: `ab click '[aria-label^="Model:"]'; ab wait '[aria-label="Model and effort"]';
     ab find role option click --name "fake/gamma" --exact`;

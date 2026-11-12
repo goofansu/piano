@@ -21,8 +21,18 @@ only what the browser already holds.
   sessions. Expand "Done <n>" to open its home or use Reopen project to return it to the open list.
 - `sidebar-row`: the sidebar's "Projects" row under New session opens the index and reads as the
   current row (`aria-current=page`) while it is open.
-- `palette-row`: Mod+K offers "Projects" under Global commands on every screen, Settings included;
-  on `/projects` it also offers the header's "New project", which opens the same dialog.
+- `palette-row`: Mod+K (or "Search sessions, projects and commands" in the sidebar) offers
+  "Projects" under Global commands on every screen, Settings included; on `/projects` it also
+  offers the header's "New project", which opens the same dialog.
+- `palette-projects`: a separate Projects group lists active projects by name, including empty
+  ones, opening their homes. Done projects are omitted here, not deleted from the index.
+  The search field is "Search sessions, projects and commands", with an ellipsis in its placeholder.
+- `palette-filter`: type `!` to discover Filters → "Projects only · !p". Choosing it keeps the
+  palette open and replaces the input with `!p `; only Projects remain. A leading standalone
+  lowercase `!p` scopes the remaining query (`!p Verify`); `!P` and `!pizza` are ordinary queries.
+  Groups with more than 50 matches have Next / Previous rows and a displayed range.
+- `peer-projects`: Machine → a configured peer → Projects opens `/m/<machine>/projects`.
+  Its index, New project, menus and Done group act on that peer, not Local.
 - `new-project`: the header's "New project" opens the New project dialog, shaped as Project
   settings is: Name and Instructions (optional), with a live count under Instructions
   ("0 / 20,000") that turns red past the limit while Create stays off. "Create project" saves both
@@ -37,7 +47,7 @@ only what the browser already holds.
 
 - Sidebar: the "Projects" row under "New session".
 - Palette: Mod+K, type `projects`, choose "Projects".
-- Address bar: `/projects`.
+- Address bar: `/projects`, or `/m/<configured-machine>/projects` on a peer.
 
 ## Driving it with agent-browser
 
@@ -75,6 +85,34 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     ab find role option click --name "Projects" --exact;
     ab wait --url "**/projects"`
   - Result: `/projects`, Settings closed, `main h1` reads `Projects`.
+- `palette-projects` and `palette-filter` (before marking the seed done)
+  - Action: `ab press Control+k; ab wait '[cmdk-input]'` shows active Verify Project and Empty
+    Project in Projects. Capture `08-active-projects`. Then `ab fill '[cmdk-input]' '!';
+    ab wait '[cmdk-list][aria-busy="false"]'`; capture `09-filter-discovery`.
+    `ab find role option click --name 'Projects only · !p' --exact;
+    ab wait --fn "document.querySelector('[cmdk-input]').value === '!p '";
+    ab wait '[cmdk-list][aria-busy="false"]'`.
+  - Result: the palette stays open with only the Projects group. Capture `10-projects-only`.
+    `ab fill '[cmdk-input]' '!p Verify'; ab wait '[cmdk-list][aria-busy="false"]';
+    ab find role option click --name 'Verify Project' --exact;
+    ab wait --url '**/projects/verify'` opens the home.
+  - Done/reopen: after the `done` action, query `!p Verify` and wait for settled results:
+    `No sessions, projects or commands match.` appears. Escape and reopen the project through
+    its menu; the same query offers Verify Project again. Capture both results.
+  - Paging prerequisite: more than 50 active projects, created through New project (or an
+    explicitly identified pre-launch scratch fixture), not an edited live database. Query `!p`,
+    wait for settled results, then `ab find role option click --name 'Next projects' --exact`.
+    The range changes and Previous projects appears; choosing it returns to the first page
+    without navigation or closing the palette. Capture both pages. The two-project seed cannot
+    prove paging; report this branch separately when it is not exercised.
+- `peer-projects` prerequisite (safe on the default launch)
+  - Action: `ab open "$WEB_URL/m/not-configured/projects";
+    ab wait --text 'Machine unavailable'`; capture `11-peer-prerequisite`.
+  - Result: Local recovery, no fallback index. Report `verified-unreachable` with this route
+    and the configured, reachable peer prerequisite. The committed remote journey starts three
+    Pianos and exceeds the Run limit; see [Open a session](./open-session.md#gotchas).
+    If permitted peers are available, repeat New project on the peer, capture its prefixed home,
+    then switch to Local and confirm that project is absent there.
 - `new-project`
   - Action: on `/projects`, `ab find role button click --name "New project" --exact;
     ab wait "[role=dialog]"; ab find role textbox fill --name "Name" --exact "Launch subscriptions";
