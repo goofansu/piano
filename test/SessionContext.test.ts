@@ -568,7 +568,7 @@ test("the New session directory picker names a root by folder, a worktree by fol
   const root = directoryChoices(base, "/repo");
   assert.deepEqual(root.trigger, { kind: "checkout", folder: "repo" });
   assert.equal(root.worktreesFolder?.path, "/repo");
-  assert.deepEqual(root.roots, [{ path: "/repo", label: "repo", disabled: false, selected: true }]);
+  assert.deepEqual(root.roots, [{ path: "/repo", label: "repo", selected: true }]);
   const feature = directoryChoices(base, "/work/repo.feature");
   assert.deepEqual(feature.trigger, { kind: "checkout", folder: "repo", branchLabel: "feature" });
   assert.equal(
@@ -605,7 +605,40 @@ test("the New page names its place for voice input as the session it starts will
   });
 });
 
-test("the New session directory picker disables a missing root and labels a branchless worktree", () => {
+test("the New session directory picker offers only folders whose root is on disk", () => {
+  const other = (name: string, status: WorktreeView["status"]): FolderView => ({
+    ...folder,
+    path: `/${name}`,
+    name,
+    worktrees: [worktree(`/${name}`, "main", { root: true, status })],
+  });
+  const withResearch = (status: WorktreeView["status"]): AppState => ({
+    ...base,
+    folders: [
+      folder,
+      other("research", status),
+      other("notes", "non-git"),
+      other("probe", "unknown"),
+    ],
+  });
+  const labels = (state: AppState, cwd: string) =>
+    directoryChoices(state, cwd).roots.map((r) => r.label);
+  const gone = withResearch("missing");
+  assert.deepEqual(labels(gone, "/repo"), ["repo", "notes", "probe"]);
+  assert.deepEqual(
+    directoryChoices(gone, "/research").trigger,
+    { kind: "checkout", folder: "research" },
+    "a selected directory stays selected when its root goes missing",
+  );
+  assert.equal(gone.folders.length, 4, "the folder stays registered");
+  assert.deepEqual(
+    labels(withResearch("current"), "/repo"),
+    ["repo", "research", "notes", "probe"],
+    "a restored folder is offered again",
+  );
+});
+
+test("the New session directory picker labels a branchless worktree", () => {
   const facts = (detached: boolean) => ({
     path: "/work/repo.x",
     branch: null,
@@ -614,10 +647,9 @@ test("the New session directory picker disables a missing root and labels a bran
   });
   const withWorktree = (w: WorktreeView): AppState => ({
     ...base,
-    folders: [{ ...folder, worktrees: [worktree("/repo", "main", { status: "missing" }), w] }],
+    folders: [{ ...folder, worktrees: [worktree("/repo", "main"), w] }],
   });
   const detached = withWorktree(worktree("/work/repo.x", null, { facts: facts(true) }));
-  assert.equal(directoryChoices(detached, "/repo").roots[0]?.disabled, true);
   assert.deepEqual(directoryChoices(detached, "/work/repo.x").trigger, {
     kind: "checkout",
     folder: "repo",
