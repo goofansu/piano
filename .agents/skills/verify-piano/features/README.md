@@ -19,8 +19,10 @@ matching feature file. How to launch, check, drive, capture and clean up is in
 
 ## Driving conventions
 
-- Start every recipe from the baseline unless its preconditions say otherwise; relaunch rather
-  than undo a mutation by hand.
+- Plan recipes serially from their stated preconditions, reusing the run and browser. Use newly
+  created scratch entries for destructive checks so later recipes keep their prerequisites.
+  A recipe needing a fresh baseline or another fake requires confirmed Cleanup before relaunch;
+  follow the skill's Run limits, rather than undoing database mutations by hand.
 - Prefer role plus accessible name (`.agents/skills/verify-piano/scripts/ab.sh "$RUN" find role button click --name "..." --exact`),
   then `aria-label` and `data-slot` selectors, then routes. Never coordinates or tab order.
 - Treat quoted names and commands as literal.
@@ -51,26 +53,32 @@ Keep implementation details out; name user paths, handles, required state, comma
 
 ## Features
 
-- [Start a session](./start-session.md): the New page, its directory, model, effort and project
-  choices, restoring model defaults, the first message and reply, reload without resending,
+- [Start a session](./start-session.md): the New page, its directory, directory trust, model,
+  effort and project choices, the peer-New prerequisite, restoring model defaults, the first
+  message and reply, reload without resending,
   navigation-retained drafts, confirmed failed-start recovery, image attachment/refusal/preview,
   and a kept draft when not sent.
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
   home; read history and cost; follow up; stop a running reply; archive and delete from the row's
-  menu; responsive sidebar controls; the narrow session-menu sheet and its project picker;
+  menu; responsive sidebar controls and narrow inline View options; the narrow session-menu
+  sheet and its project picker;
   the published-artifact menu, including codemode receipts; unavailable-history recovery and
-  the configured-peer prerequisite, including peer image/voice coverage limits.
+  the configured-peer prerequisite for session actions, trust and machine memory, including
+  peer image/voice coverage limits.
 - [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
   per project with folders, count, last activity and the project menu; New project in the header;
-  Done / Reopen and the folded Done group; empty and phone.
+  Done / Reopen and the folded Done group; active-project palette navigation, `!` filter
+  discovery, `!p` project-only search and paging; empty, phone and peer-index prerequisite.
 - [Project home](./project-home.md): `/projects/<id>` from the sidebar, palette and session
   header; member rows and their Archive / Delete, order, PR number, new session in the project,
-  settings, Done badge / Reopen and sidebar grouping; empty, deleted and missing projects.
+  settings, Done badge / Reopen and sidebar grouping; empty, deleted and missing projects;
+  peer-home prerequisite.
 - [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
   `follow-up`, `status` and `list --project`, project inheritance/opt-out, its refusals,
   and a dialog that needs input.
 - [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and its
-  pull request, and the desktop session rail's Environment and Outputs (no Links section or narrow rail).
+  pull request, and the desktop session rail's Environment and Outputs (no Links section or
+  narrow rail); peer-owned surfaces and their prerequisite.
 - [Settings › Skills and Prompts](./settings-skills-prompts.md): `/settings/skills` and
   `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
   empty states; the separate agent-authored approval path's real-Pi prerequisite.
@@ -99,8 +107,9 @@ Keep these prerequisites visible when using the default launch:
 - Voice input requires the setup described in
   [Providers and Preferences](./settings-other.md#gotchas). A fake echo or an unsigned-in page
   does not establish transcription or secret checking.
-- Remote sessions, image preparation/preview isolation and peer voice checks need configured,
-  reachable peers. The default launch has none; use the explicit prerequisite route in
+- Remote sessions, projects, session actions, Changes/files/rail, directory trust, machine-memory
+  isolation, image preparation/preview isolation and peer voice checks need configured, reachable
+  peers. The default launch has none; use the explicit prerequisite routes in the feature files and
   [Open a session](./open-session.md). The committed remote journey needs three Piano instances,
   exceeding the one-instance limit. Its voice helper is not independently runnable.
 - Managed Preview (external tabs, rail actions and the same-sheet Preview pane) needs the isolated real-Pi/native

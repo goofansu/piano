@@ -30,6 +30,9 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 - `artifacts`: when the session has confirmed Radius publications, the header's "Artifacts: <n>"
   button lists their titles as new-tab links. Updating an artifact keeps one entry with its latest
   title. The palette's "Artifacts" opens the same menu; plain URLs are not publications.
+- `view-options-phone`: on a narrow viewport, View options is one scrollable menu with inline
+  Group by, Sort by, Show and Appearance sections; there are no side-opening submenus.
+  Desktop keeps the submenus. These choices belong to the browser, across machines.
 - `row-details`: View options → Show → "Folder and branch" (off by default, remembered per
   browser; the palette's "Show folder and branch" / "Hide folder and branch") adds a line under
   each sidebar row with its folder and branch (only the branch where the group names the folder).
@@ -43,8 +46,15 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
   "Restore the Pi session file to open it." The disabled sidebar row keeps its recovery menu
   on phones too: Rename is disabled, but Archive and Delete remain available while connected.
 - `remote`: a configured Machine opens its own catalog and `/m/<machine>/s/<id>` conversation.
-  Remote New uses only that machine's registered directories. Projects, Settings, Changes,
-  files, session management and managed Preview stay on the remote's own Piano, not this slice.
+  It offers its Projects index/home and project CRUD, session Rename / Pin / project membership /
+  Archive / Delete, Changes (including pull requests), files and the desktop session rail.
+  Remote New uses that machine's open registered folders/worktrees, with Directory trust where
+  needed, but no Browse… or worktree creation. Settings, folder management and managed Preview
+  stay on the remote's own Piano; a peer's transcript link is not a locally managed app.
+- `machine-memory`: switching machines restores each one's last page, also after reload and
+  back/forward navigation. Model catalogs, last-used directory and open sidebar groups are
+  remembered per machine; page location and Surface tabs belong to this browser tab. Drafts
+  and question replies last only for the page load. Removed machine IDs are forgotten on load.
 - `follow-up`: "Message" plus Enter sends to the same Pi session. Image controls are shared
   with New; see [Start a session](./start-session.md) `images`.
 - `stop`: "Stop" aborts a running reply.
@@ -115,6 +125,18 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-loose"; ab wait --text "Answer 4."`
     restores desktop and the session for the following steps. This is viewport emulation, not
     real-phone proof.
+- `view-options-phone`
+  - Action: `ab set viewport 390 844; ab find role button click --name 'Show sidebar' --exact;
+    ab wait '[role=dialog]'` (omit Show sidebar if its sheet is already open). Wait for the
+    sheet's animations as in `unavailable-history`, then
+    `ab find role button click --name 'View options' --exact; ab wait '[role=menu]'`.
+  - Result: Group by, Sort by, Show and Appearance are inline sections; Date / Folder / Project /
+    None, Activity / Name, Folder and branch, Light / Dark / System are directly reachable.
+    Capture `23-narrow-view-options`, then
+    `ab find role menuitemradio click --name Project --exact;
+    ab wait --fn "!document.querySelector('[role=menu]')"`. The sidebar groups by project;
+    capture `24-narrow-project-groups`. Escape closes the sidebar sheet; widen to 1280×800.
+    The desktop `row-details` recipe below still uses the Show submenu.
 - `row-details`
   - Action: `ab find role button click --name "View options" --exact;
     ab find role menuitem click --name "Show" --exact;
@@ -186,8 +208,24 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab wait --text 'Machine unavailable'`; capture `22-peer-prerequisite`.
   - Result: Local recovery button, no Message composer and no fallback to the local session.
     `ab find role button click --name Local --exact` returns to Local. Report the remote
-    conversation/image/voice paths as `verified-unreachable`, naming this attempted route and
-    the missing configured, reachable peer. An unknown-machine page is not a peer success check.
+    conversation, session actions, Changes/files/rail, trust, memory, image and voice paths as
+    `verified-unreachable`, naming this attempted route and the missing configured, reachable
+    peer. An unknown-machine page is not a peer success check.
+  - With that prerequisite available in an allowed run: Machine → peer → a session →
+    Session information and actions offers Rename, Pin, project membership, Archive and Delete;
+    the same peer session offers Changes and the desktop rail. Use that peer's throwaway data,
+    capture before/after, and read back only its audit/files. Peer Projects routes and recipes
+    are in [Projects index](./projects-index.md) and [Project home](./project-home.md).
+- `machine-memory` (configured-peer prerequisite above)
+  - Action: open `/m/<machine>/s/<id>`, switch to Local, reload, then Machine → that peer.
+    Result: its previous session address and history return, not Local's. Repeat after a
+    back/forward arrival on a different peer page; capture the arrival and switch-back.
+    Starting in a peer directory and returning to its New page restores that directory;
+    choosing a model there must not alter Local's choice at the same path.
+  - Read-only evidence: `ab eval "({local:Object.keys(localStorage).filter(k=>k.startsWith('piano.machine.')), tab:Object.keys(sessionStorage).filter(k=>k.startsWith('piano.machine.'))})"`.
+    `catalogs`, `lastDir`, `openGroups` use localStorage; `location`, `surface` use sessionStorage,
+    under `piano.machine.<id>.`. Local's ID is `local`. A storage read is supporting evidence,
+    not a substitute for switching. Never seed storage to make the journey pass.
 - `artifacts` (separate `--fake-pi dialogs` launch, from `/new`)
   - Action: `ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
     ab fill '[aria-label="First message"]' 'artifact verify confirmed Verification report';
@@ -221,8 +259,10 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 
 ## Gotchas
 
-- Remote conversation, draft isolation, prepared image upload/refusal/cancellation and peer
-  previews require another Piano with its own database/history and a configured peer connection.
+- Remote conversation, projects, session actions, Changes/files/rail, folder-trust and browser-memory
+  isolation, and prepared image upload/refusal/cancellation require another Piano with its own
+  database/history and a configured peer connection. Image previews are supported; managed app
+  Preview remains on the peer's own Piano.
   The committed `test/browser/remote-session.mjs` covers those boundaries with main plus two
   independent peers; it cannot run under this skill's one-instance limit. Its imported
   `voice-input.mjs` helper also needs those peers. Record that unmet prerequisite rather than

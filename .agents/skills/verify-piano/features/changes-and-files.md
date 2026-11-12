@@ -84,6 +84,10 @@ the palette (Mod+K) does not search individual outputs.
   rows also offer "Open repository" / "Open branch" when their URLs are known. The rail shows no row for the working directory itself.
 - `files-list`: The rail's "Outputs" lists files written in the session by name only, and
   appears only once it has a row. There is no Links section.
+- `peer-surfaces`: a configured peer's session offers Changes, comparison/PR controls, files
+  and the desktop Environment/Outputs rail through this browser. Reads and actions belong to
+  that peer's workspace/session IDs; Local success does not prove peer routing. Managed app
+  Preview still belongs on the peer's own Piano.
 - `file-viewer`: an Outputs row opens the file in a tab of its own at the strip's end (tab = file
   name, toolbar = path, "Close <file name>" on the tab, or in the toolbar where one area shows at
   a time); opening it again shows the same tab. While source text shows (a text file, or a
@@ -155,8 +159,22 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     sheet or Outputs picker. Phone viewport evidence is emulation, not a real-device keyboard,
     safe-area or touch-scroll check.
 
+- `peer-surfaces` prerequisite (default launch has no peer)
+  - Action: `ab open "$WEB_URL/m/not-configured/s/verify-plan";
+    ab wait --text 'Machine unavailable'`; capture `06-peer-prerequisite`.
+  - Result: no local Changes/file fallback. Report `verified-unreachable` with this route and
+    the configured, reachable peer prerequisite ([Open a session](./open-session.md#gotchas)).
+    When an allowed peer fixture exists, repeat Changes and open a file from its transcript or
+    Outputs, capturing the prefixed route and `/peer/<machine>/api/session/changes` /
+    `/peer/<machine>/api/workspace/file` requests, never Local's corresponding endpoints.
+
 ## Gotchas
 
+- Peer Changes reads allow the remote's Git timeout plus a transport margin. Oversized lists
+  report "Changes are too large to list; no partial file list is shown." rather than a partial
+  list. A small local diff proves neither boundary: remote deadline/size recovery needs a
+  configured peer and controlled slow-Git/oversized scratch fixtures, separately from the
+  ordinary Changes recipe.
 - Fake Pi makes no tool calls, so Outputs is only reachable through the seeded, hand-written
   history; report it as such. A real Pi write is not exercised.
 - After a successful workspace observation, Outputs filters ignored, removed and outside-workspace

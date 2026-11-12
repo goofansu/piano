@@ -15,7 +15,8 @@ All paths below are relative to the repository root, and every script is written
 worktree-isolated session refuses a command whose name comes from a variable. The scripts run on
 Linux and macOS alike: `lib.sh` reads processes and ports from whatever the host has (`/proc`,
 `ss` and `setsid`, or `ps` and `lsof`), so no step below changes with the platform. On exe.dev they
-put `~/node/bin` and `~/.local/bin` (Node 24, `wt`) on `PATH` themselves. The feature map in
+put `~/node/bin` and `~/.local/bin` (Node, `wt`) on `PATH` themselves; record `node --version`
+rather than assuming those paths pin a version. The feature map in
 [`features/README.md`](features/README.md) says what to drive; this file says how.
 
 ## Run limits
@@ -149,8 +150,9 @@ after `web/dist` was built (then the running backend or UI predates the checkout
 
    `test/browser/remote-session.mjs` starts main plus two peers, so it exceeds these Run limits
    even when invoked alone. `test/browser/voice-input.mjs` exports a helper used by that journey;
-   running it directly performs no checks. Record peer conversation, image and voice isolation
-   as unreachable under this limit, with the configured-peer prerequisite and route attempted
+   running it directly performs no checks. Record peer conversation, projects, session actions,
+   Changes/files/rail, trust, browser memory, image and voice isolation as unreachable under this
+   limit, with the configured-peer prerequisite and route attempted
    (see [Open a session](features/open-session.md)). Do not count a helper's exit 0 as coverage.
 
 2. **Then launch once and reuse `agent-browser`** for anything the harness does not cover,
