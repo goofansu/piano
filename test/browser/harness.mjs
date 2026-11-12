@@ -243,18 +243,6 @@ export async function run(name, setup, journey, options = {}) {
     );
     return result.stdout.trim();
   };
-  // agent-browser's own wait re-checks about every 200ms, which a journey of a few hundred waits
-  // pays in full. Poll the page directly instead, with the same 15s limit.
-  const until = async (js, waitingFor = js) => {
-    const check = `(() => { try { return Boolean(${js}); } catch { return false; } })()`;
-    const deadline = performance.now() + 15000;
-    while ((await ab("eval", check)) !== "true") {
-      assert.ok(performance.now() < deadline, `timed out after 15s waiting for ${waitingFor}`);
-      await delay(25);
-    }
-  };
-  const see = (text) =>
-    until(`document.body.innerText.includes(${JSON.stringify(text)})`, `the text ${text}`);
   let mod;
   const page = {
     ab,
@@ -291,9 +279,9 @@ export async function run(name, setup, journey, options = {}) {
     /** Open a picker, pick one option, and wait until the picker has closed. */
     choose: async (picker, option) => {
       await ab("find", "role", "combobox", "click", "--name", picker, "--exact");
-      await see(option);
+      await ab("wait", "--text", option);
       await ab("find", "role", "option", "click", "--name", option, "--exact");
-      await until("!document.querySelector('[data-radix-popper-content-wrapper]')");
+      await ab("wait", "--fn", "!document.querySelector('[data-radix-popper-content-wrapper]')");
     },
     /** Press a key; a leading `Mod+` is the platform's primary modifier, as `web/src/lib/keys.ts` reads it. */
     press: async (key) => {
@@ -305,8 +293,8 @@ export async function run(name, setup, journey, options = {}) {
       }
       return ab("press", key);
     },
-    see,
-    until,
+    see: (text) => ab("wait", "--text", text),
+    until: (js) => ab("wait", "--fn", js),
     capture: (step) => ab("screenshot", join(evidence, `${step}.png`)),
     /** Keep a page CDP session attached for the whole observation (emulation resets on detach). */
     cdp: async (observe) => {
