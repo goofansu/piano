@@ -157,7 +157,7 @@ export function NewSessionComposer({
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
   const ready =
     !editor.preparing &&
-    !checkoutMissing &&
+    (!cwd || offers.startsSessionIn(state, cwd)) &&
     newSessionReady({
       text: editor.message,
       images: editor.attachments,
@@ -420,7 +420,7 @@ function DirectorySelect({
   // A pending worktree operation keeps the picker open until its receipt, timeout or disconnect.
   const wtPending = worktrees.request.status === "pending";
   const search = useRef<HTMLInputElement>(null);
-  const choices = directoryChoices(state, value);
+  const choices = directoryChoices(state, value, useOffers().startsSessionIn);
   const { trigger, roots } = choices;
   const worktreesFolder = worktreesOffered ? choices.worktreesFolder : undefined;
   return (

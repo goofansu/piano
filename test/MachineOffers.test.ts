@@ -30,7 +30,7 @@ test("Local offers every surface and command", () => {
   const offers = machineOffers(LOCAL);
   for (const [name, offered] of surfaces(offers)) assert.equal(offered, true, name);
   assert.ok(offers.command(trustCommand(state, "/repo")!));
-  assert.ok(offers.command(folderCommands(state, folder).close));
+  assert.ok(offers.command(folderCommands(state, folder, offers.startsSessionIn).close));
 });
 
 test("a remote offers the conversation slice, its projects and its sessions' menus, nothing else that manages it", () => {
@@ -41,7 +41,10 @@ test("a remote offers the conversation slice, its projects and its sessions' men
     [],
     "accounts, worktrees, browse, folders and settings stay on the remote",
   );
-  assert.ok(offers.command(folderCommands(state, folder).create), "New session here");
+  assert.ok(
+    offers.command(folderCommands(state, folder, offers.startsSessionIn).create),
+    "New session here",
+  );
   for (const command of [
     ...projectCommands(state, project),
     newProjectCommand(state),
@@ -51,7 +54,10 @@ test("a remote offers the conversation slice, its projects and its sessions' men
     assert.ok(offers.command(command), command.label);
   // A registered folder's trust is decided from here; the remote refuses any other directory.
   assert.ok(offers.command(trustCommand(state, "/repo")!), "folder trust");
-  assert.ok(!offers.command(folderCommands(state, folder).close), "Close folder");
+  assert.ok(
+    !offers.command(folderCommands(state, folder, offers.startsSessionIn).close),
+    "Close folder",
+  );
   // A session's own life is managed from here too.
   const commands = sessionCommands(state, { ...session, title: "Session" });
   for (const id of ["rename", "pin", "archive", "delete"]) {

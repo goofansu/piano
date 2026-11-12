@@ -5,12 +5,13 @@
  */
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
+import { LOCAL } from "./machine.ts";
+import { machineOffers } from "./machineOffers.ts";
 import type { SessionLayout } from "./navigation.ts";
 import { type PreviewObservationState, seenPreview } from "./previewObservation.ts";
 import { pullRequestView } from "./pullRequestView.ts";
 import { sessionArtifacts } from "./sessionArtifacts.ts";
 import {
-  checkoutMissingAt,
   isSelectedSession,
   sessionCheckoutMissing,
   sessionContext,
@@ -264,7 +265,7 @@ export function sessionCommands(
     layout?: SessionLayout;
     /** The page's preview observation (`seenPreview`); without it no preview command is listed. */
     previewObservation?: Pick<PreviewObservationState, "unconfirmed">;
-    /** Where the machine starts a new session (`MachineOffers.startsSessionIn`); anywhere by default. */
+    /** Where the machine starts a new session (`MachineOffers.startsSessionIn`); Local's by default. */
     startsSessionIn?: (state: AppState, cwd: string) => boolean;
   } = {},
 ): SessionCommand[] {
@@ -481,9 +482,10 @@ export function sessionCommands(
       id: "new-session-here",
       label: "New session here",
       icon: "new",
-      enabled:
-        !checkoutMissingAt(state, session.cwd) &&
-        (options.startsSessionIn?.(state, session.cwd) ?? true),
+      enabled: (options.startsSessionIn ?? machineOffers(LOCAL).startsSessionIn)(
+        state,
+        session.cwd,
+      ),
       keywords: ["directory"],
       detail: session.cwd,
       intent: { kind: "new-session", cwd: session.cwd },

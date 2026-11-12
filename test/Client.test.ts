@@ -954,3 +954,66 @@ test("a project's home starts in its most recent member's folder, at the folder'
     "with no member in an open folder, nothing is guessed",
   );
 });
+
+test("a New page or project home never lands on a folder whose root checkout is gone", () => {
+  const rooted = (path: string, status: "current" | "missing") =>
+    ({
+      path,
+      name: path.slice(1),
+      worktrees: [
+        { workspace: { id: `ws:${path}`, folder: path, path }, path, root: true, status },
+      ],
+      discovery: { status: "ready", observedAt: "", currentPath: path, worktrees: [] },
+    }) as never;
+  const folders = [rooted("/gone", "missing"), rooted("/two", "current")];
+
+  const fresh = focusHarness();
+  fresh.server({ _tag: "registry", folders });
+  assert.deepEqual(
+    fresh.client.getState().view,
+    { kind: "new", cwd: "/two" },
+    "the first folder's root is gone, so the next startable folder",
+  );
+
+  const remembered = focusHarness({ remembered: "/gone" });
+  remembered.server({ _tag: "registry", folders });
+  assert.deepEqual(
+    remembered.client.getState().view,
+    { kind: "new", cwd: "/two" },
+    "a remembered directory whose root is gone is not used",
+  );
+
+  // On a remote the same one rule decides: its machine half admits /gone, its checkout half refuses.
+  const { startsSessionIn } = machineOffers({ id: "eng-1", name: "Eng" });
+  const remote = focusHarness({ remembered: "/gone", startsSessionIn });
+  remote.server({ _tag: "registry", folders });
+  assert.deepEqual(remote.client.getState().view, { kind: "new", cwd: "/two" });
+
+  // A project home skips a member whose folder's root is gone for the next newest member's folder;
+  // with none left, it starts without a directory, as when no member's folder is open.
+  const at = (minute: number) => `2026-10-21T08:0${minute}:00Z`;
+  const registry = (refs: ReturnType<typeof sessionReference>[]): ServerMessage => ({
+    _tag: "registry",
+    folders,
+    projects: [{ id: "p1", name: "Perf" }],
+    sessionReferences: refs,
+  });
+  const home = focusHarness({
+    initial: { ...initialState, view: { kind: "project", projectId: "p1" } },
+  });
+  home.server(
+    registry([
+      sessionReference("/two", "older", { projectId: "p1", updatedAt: at(1) }),
+      sessionReference("/gone", "newest", { projectId: "p1", updatedAt: at(9) }),
+    ]),
+  );
+  assert.deepEqual(home.client.getState().view, { kind: "project", projectId: "p1", cwd: "/two" });
+
+  const only = focusHarness({
+    initial: { ...initialState, view: { kind: "project", projectId: "p1" } },
+  });
+  only.server(
+    registry([sessionReference("/gone", "newest", { projectId: "p1", updatedAt: at(9) })]),
+  );
+  assert.deepEqual(only.client.getState().view, { kind: "project", projectId: "p1" });
+});
