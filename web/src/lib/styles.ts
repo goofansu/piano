@@ -23,8 +23,9 @@ export const composerToolbar =
 export const composerAction =
   "size-11 shrink-0 rounded-full border-0 p-0 md:size-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11";
 // The outer button owns press motion; the decorative span must not translate a second time.
+// Fills reach the border box: clipped to padding, a borderless face paints 2px smaller than Stop's outlined one.
 export const composerActionFace =
-  "relative size-9 rounded-full active:not-aria-[haspopup]:translate-none";
+  "relative size-9 rounded-full bg-clip-border active:not-aria-[haspopup]:translate-none";
 
 /** Attach keeps its small ghost icon while reserving a nonoverlapping touch target. */
 export const composerIcon = "shrink-0 pointer-coarse:size-11";
