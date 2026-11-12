@@ -109,16 +109,19 @@ export function workspaceFor(state: AppState, cwd: string | undefined): Workspac
 /**
  * Pi cannot be asked about `cwd`: the selected session there reports its checkout gone, the
  * registry marks a session reference in that directory's checkout unavailable, or the folder list
- * reports that registered directory missing. Only "missing" counts: an "unknown" or "non-git"
- * directory is not known to be gone (INV-06). The one rule behind the Directory picker, the folder
- * row's and the session's New session here, Trust, Rename, the focused directory, both composers
- * and the announced status.
+ * reports a folder's root missing. Only a root's "missing" counts: an "unknown" or "non-git"
+ * directory is not known to be gone (INV-06), and a linked worktree is "missing" also when Git
+ * merely stops listing it, which leaves its directory, and the sessions there, usable. The one
+ * rule behind the Directory picker, the folder row's and the session's New session here, Trust,
+ * Rename, the focused directory, both composers and the announced status.
  */
 export function checkoutMissingAt(state: AppState, cwd: string): boolean {
   return (
     (state.session?.cwd === cwd && !!state.session.state.checkoutMissing) ||
     state.sessionReferences.some((r) => r.cwd === cwd && r.unavailable === "checkout") ||
-    state.folders.some((f) => f.worktrees.some((w) => w.path === cwd && w.status === "missing"))
+    state.folders.some((f) =>
+      f.worktrees.some((w) => w.root && w.path === cwd && w.status === "missing"),
+    )
   );
 }
 

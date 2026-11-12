@@ -677,6 +677,17 @@ test("one rule answers whether a folder with no sessions can start one when its 
     assert.equal(folderCommands(s, research(status)).create.enabled, true);
     assert.equal(focusedDirectory(s)?.checkoutMissing, false);
   }
+
+  const linked = worktree("/work/research.x", "x", { status: "missing" });
+  const unlisted: AppState = {
+    ...state("current"),
+    folders: [{ ...research("current"), worktrees: [...research("current").worktrees, linked] }],
+  };
+  assert.equal(
+    checkoutMissingAt(unlisted, "/work/research.x"),
+    false,
+    "a linked worktree Git stops listing may still be on disk; only session evidence marks it gone",
+  );
 });
 
 test("the New session directory picker labels a branchless worktree", () => {
