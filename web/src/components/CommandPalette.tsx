@@ -17,7 +17,6 @@ import {
   useSessionProjectMenu,
 } from "@/components/CommandHost";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
-import { PianoButton } from "@/components/PianoButton";
 import {
   CommandDialog,
   CommandEmpty,
@@ -28,7 +27,7 @@ import {
   CommandSeparator,
 } from "@/components/PianoCommand";
 import { ProjectCommandIconView } from "@/components/Projects";
-import { createPaletteCatalog, PALETTE_NAME, PROJECTS_ONLY } from "@/lib/commandPalette";
+import { createPaletteCatalog, PALETTE_NAME, paletteScope } from "@/lib/commandPalette";
 import { abbrevPath } from "@/lib/format";
 import { hasMod, isImeKey } from "@/lib/keys";
 import { PALETTE_PAGE_SIZE, type PalettePage, paletteSelection } from "@/lib/paletteSearch";
@@ -112,6 +111,7 @@ function PaletteContents({
     sessionCommands: sessionCommandList,
     sessionProject,
   });
+  const { filters } = paletteScope(search);
   const results = usePaletteSearch(groups, search, editing || !open);
   const pending = editing || results.pending;
   const allowed = useRef(false);
@@ -147,34 +147,54 @@ function PaletteContents({
     if (pending) return;
     const reset = selectionContext.current !== results.selectionKey;
     selectionContext.current = results.selectionKey;
-    const next = paletteSelection(results.result, selected, reset);
+    const next = filters?.[0]?.token ?? paletteSelection(results.result, selected, reset);
     if (next !== selected) setSelected(next);
     if (reset || next !== selected) list.current?.scrollTo({ top: 0, behavior: "instant" });
-  }, [results.result, results.selectionKey, pending, selected, setSelected]);
+  }, [results.result, results.selectionKey, filters, pending, selected, setSelected]);
 
   return (
     <PaletteInput input={input} active={open} pending={pending} edit={edit} commit={commit}>
-      <CommandList ref={list} aria-busy={pending} className="max-h-[min(24rem,60dvh)]">
-        <CommandEmpty>
-          {results.error
-            ? "Search unavailable. Close and reopen to retry."
-            : pending
-              ? "Searching…"
-              : "No sessions, projects or commands match."}
-        </CommandEmpty>
-        <PaletteResults
-          pages={results.result}
-          run={run}
-          select={select}
-          runCommand={executeCommand}
-          page={changePage}
-        />
-      </CommandList>
+      {(replaceText) => (
+        <CommandList ref={list} aria-busy={pending} className="max-h-[min(24rem,60dvh)]">
+          <CommandEmpty>
+            {results.error
+              ? "Search unavailable. Close and reopen to retry."
+              : pending
+                ? "Searching…"
+                : "No sessions, projects or commands match."}
+          </CommandEmpty>
+          {filters && !results.error ? (
+            <CommandGroup heading="Filters">
+              {filters.map((filter) => (
+                <CommandItem
+                  key={filter.token}
+                  value={filter.token}
+                  onSelect={() => {
+                    if (!allowed.current || input.current?.value !== settled.current) return;
+                    replaceText(filter.text);
+                  }}
+                >
+                  {filter.label} ·{" "}
+                  <span className="font-mono text-muted-foreground">{filter.token}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          ) : (
+            <PaletteResults
+              pages={results.result}
+              run={run}
+              select={select}
+              runCommand={executeCommand}
+              page={changePage}
+            />
+          )}
+        </CommandList>
+      )}
     </PaletteInput>
   );
 }
 
-/** Urgent text and the empty-input shortcut stay outside the catalog/results render path. */
+/** Urgent text stays outside catalog preparation; results can request an input edit, not a run. */
 const PaletteInput = memo(function PaletteInput({
   input,
   active,
@@ -188,7 +208,7 @@ const PaletteInput = memo(function PaletteInput({
   pending: boolean;
   edit: () => void;
   commit: (query: string) => void;
-  children: ReactNode;
+  children: (replaceText: (value: string) => void) => ReactNode;
 }) {
   const [text, setText] = useState("");
   const composing = useRef(false);
@@ -237,33 +257,17 @@ const PaletteInput = memo(function PaletteInput({
             commit(event.currentTarget.value);
           }
         }}
-        placeholder={`${PALETTE_NAME}…`}
+        placeholder="Search… · ! for filters"
         aria-label={PALETTE_NAME}
       />
-      {children}
-      {text === "" && (
-        <div className="flex px-2 pb-2">
-          <PianoButton
-            variant="ghost"
-            size="sm"
-            // Enter here activates this button, not cmdk's selected result.
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.stopPropagation();
-            }}
-            onClick={() => {
-              clearTimeout(timer.current);
-              composing.current = false;
-              edit();
-              setText(PROJECTS_ONLY.text);
-              commit(PROJECTS_ONLY.text);
-              input.current?.focus();
-            }}
-          >
-            {PROJECTS_ONLY.label}{" "}
-            <span className="font-mono text-muted-foreground">{PROJECTS_ONLY.token}</span>
-          </PianoButton>
-        </div>
-      )}
+      {children((value) => {
+        clearTimeout(timer.current);
+        composing.current = false;
+        edit();
+        setText(value);
+        commit(value);
+        input.current?.focus();
+      })}
     </>
   );
 });

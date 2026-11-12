@@ -41,20 +41,26 @@ export function paletteFilter(value: string, search: string, keywords?: string[]
 export const PALETTE_NAME = "Search sessions, projects and commands";
 
 const PROJECTS_TOKEN = "!p";
-/** The footer shortcut: its name, the scope token it shows, and the text it puts in the input. */
+/** The project filter: its name, scope token and replacement input text. */
 export const PROJECTS_ONLY = {
   label: "Projects only",
   token: PROJECTS_TOKEN,
   text: `${PROJECTS_TOKEN} `,
 } as const;
+const PALETTE_FILTERS = [PROJECTS_ONLY] as const;
 
 /**
- * What the input asks for. Only a leading, standalone lowercase `!p` is syntax: it scopes the
- * palette to Projects and the rest is the query. Any other text, `!pizza` or `!P` included, is a
- * plain query over every group.
+ * What the input asks for. A trimmed `!` discovers filters; a leading, standalone lowercase
+ * `!p` scopes to Projects and the rest is the query. Any other text, `!pizza` or `!P` included,
+ * is a plain query over every group. Discovery offers input edits, never navigation commands.
  */
-export function paletteScope(search: string): { query: string; group?: "projects" } {
+export function paletteScope(search: string): {
+  query: string;
+  group?: "projects";
+  filters?: readonly (typeof PROJECTS_ONLY)[];
+} {
   const trimmed = search.trim();
+  if (trimmed === "!") return { query: "", filters: PALETTE_FILTERS };
   const rest = trimmed.slice(PROJECTS_TOKEN.length);
   if (!trimmed.startsWith(PROJECTS_TOKEN) || /^\S/.test(rest)) return { query: trimmed };
   return { query: rest.trim(), group: "projects" };

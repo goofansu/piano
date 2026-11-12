@@ -233,8 +233,44 @@ test("!p browses and searches only active project navigation, not related sessio
   assert.ok(palette(state, "projects").some((g) => g.id === "global"));
 });
 
-test("only a leading standalone lowercase !p token scopes the palette, as the footer shortcut types it", () => {
-  for (const query of ["!pizza", "embedded !p", "!P", "!p-launch", "!s", "!c"])
+test("standalone ! discovers only the project filter, without searching any catalog rows", () => {
+  const groups = commandPalette(inSession, {
+    globalCommands: globalCommands(inSession, ctx),
+    sessionCommands: sessionCommands(inSession),
+    sessionProject: sessionProjectMenu(inSession, { cwd: "/repo", sessionId: "s1" }),
+  });
+  // A literal bang in a title must not leak into discovery.
+  const sessions = groups.find((g) => g.id === "sessions")!;
+  sessions.rows[0].value = "!";
+  const worker = createPaletteSearch();
+  for (const query of ["!", "  ! \t"]) {
+    assert.deepEqual(paletteScope(query), {
+      query: "",
+      filters: [{ label: "Projects only", token: "!p", text: "!p " }],
+    });
+    assert.deepEqual(searchPalette(groups, query), []);
+    assert.deepEqual(worker({ id: 1, groups, query, pages: {} }).pages, []);
+  }
+  const inserted = paletteScope("!").filters![0].text;
+  assert.deepEqual(
+    worker({ id: 2, query: inserted, pages: {} }).pages.map((p) => p.group.id),
+    ["projects"],
+  );
+  assert.ok(worker({ id: 3, query: "", pages: {} }).pages.some((p) => p.group.id === "global"));
+});
+
+test("only a leading standalone lowercase !p token scopes the palette, as filter discovery inserts it", () => {
+  for (const query of [
+    "!pizza",
+    "embedded !p",
+    "!P",
+    "!p-launch",
+    "!s",
+    "!c",
+    "!!",
+    "! launch",
+    "launch !",
+  ])
     assert.deepEqual(paletteScope(query), { query }, query);
   for (const [search, query] of [
     ["!p", ""],
