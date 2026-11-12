@@ -174,8 +174,7 @@ function PaletteContents({
                     replaceText(filter.text);
                   }}
                 >
-                  {filter.label} ·{" "}
-                  <span className="font-mono text-muted-foreground">{filter.token}</span>
+                  {filter.label} · <span className="text-muted-foreground">{filter.token}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
