@@ -21,7 +21,9 @@ export function searchPalette<G extends PaletteDocuments>(
   groups: readonly G[],
   search: string,
 ): G[] {
-  const { query, group: only } = paletteScope(search);
+  const { query, group: only, filters } = paletteScope(search);
+  // Filter discovery edits the input; none of the searchable catalog is offered in that mode.
+  if (filters) return [];
   const scoped = only ? groups.filter((group) => group.id === only) : groups;
   if (!query) return scoped.map(beforeSearch);
   return scoped
