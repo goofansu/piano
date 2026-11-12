@@ -20,6 +20,7 @@ import { childEnvironment } from "./ChildEnvironment.ts";
 import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { inputBytes } from "./InputBytes.ts";
+import { makePendingRecords } from "./PendingRecords.ts";
 import { PiCli } from "./PiCli.ts";
 import type { PiExchange, PiReadback, PiRecord } from "./PiRecords.ts";
 
@@ -124,19 +125,9 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     { bytes: Uint8Array; done: Deferred.Deferred<void, PiSessionError> },
     Cause.Done
   >(inboundLimits.writes.messages + inboundLimits.control.messages);
-  const records = yield* Queue.dropping<
-    { record: PiRecord; receivedAt: number; bytes: number },
-    Cause.Done
-  >(inboundLimits.records.messages);
-  let recordBytes = 0;
-  // Set by the first take from `records`; `space` is the stdout reader waiting for room.
-  let consuming = false;
-  let space: Deferred.Deferred<void> | undefined;
-  const freeSpace = () => {
-    const waiting = space;
-    space = undefined;
-    if (waiting) Deferred.doneUnsafe(waiting, Effect.void);
-  };
+  const records = yield* makePendingRecords<{ record: PiRecord; receivedAt: number }>(
+    inboundLimits.records,
+  );
   const requestCapacity = makeInboundCapacity(inboundLimits.requests);
   const writeCapacity = makeInboundCapacity(inboundLimits.writes);
   const writes = new Map<Deferred.Deferred<void, PiSessionError>, () => void>();
@@ -189,7 +180,9 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
   ).pipe(Effect.mapError((e) => new PiSessionError({ reason: "spawn", detail: String(e) })));
   debug("spawned pid", handle.pid);
 
-  const onLine = Effect.fnUntraced(function* (line: string) {
+  /** `bytes` is the line's framed size on stdout, not its decoded length: invalid UTF-8 grows on
+   * decode, and admission must agree with the RPC line limit that framing enforced. */
+  const onLine = Effect.fnUntraced(function* (line: string, bytes: number) {
     if (closed) return;
     const record: unknown = yield* Effect.try({
       try: () => JSON.parse(line),
@@ -221,30 +214,24 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       }
       return;
     }
-    const bytes = Buffer.byteLength(line);
-    const item = { record, receivedAt: yield* Clock.currentTimeMillis, bytes };
-    // One line never exceeds the byte limit, so an empty queue always admits it.
-    while (recordBytes + bytes > inboundLimits.records.bytes || !Queue.offerUnsafe(records, item)) {
-      if (closed) return;
-      // Nothing takes records before the session is ready, and the readiness reply is behind
-      // this line: waiting could only end in a timeout.
-      if (!consuming) {
-        const limit =
-          recordBytes + bytes > inboundLimits.records.bytes
-            ? `${inboundLimits.records.bytes / MiB} MiB`
-            : `${inboundLimits.records.messages} records`;
-        return yield* new PiSessionError({
-          reason: "protocol",
-          detail: `Pi output exceeded the pending record limit of ${limit}. Reopen history before continuing; do not automatically resend input.`,
-        });
-      }
-      // Stop reading stdout until a record is taken. Pi waits on its full pipe, so a burst
-      // costs time instead of the session.
-      space = Deferred.makeUnsafe<void>();
-      yield* Deferred.await(space);
-    }
-    recordBytes += bytes;
-    observationVersion += 1;
+    // Once the session takes records, a full queue stops reading stdout until one is taken: Pi
+    // waits on its full pipe, so a burst costs time instead of the session. Before readiness
+    // nothing takes records and the readiness reply is behind this line, so a full queue fails.
+    const item = { record, receivedAt: yield* Clock.currentTimeMillis };
+    const admitted = yield* records.offer(item, bytes).pipe(
+      Effect.mapError(
+        ({ limit }) =>
+          new PiSessionError({
+            reason: "protocol",
+            detail: `Pi output exceeded the pending record limit of ${
+              limit === "bytes"
+                ? `${inboundLimits.records.bytes / MiB} MiB`
+                : `${inboundLimits.records.messages} records`
+            }. Reopen history before continuing; do not automatically resend input.`,
+          }),
+      ),
+    );
+    if (admitted) observationVersion += 1;
   });
 
   yield* handle.stderr.pipe(
@@ -285,9 +272,8 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       yield* Deferred.fail(d, new PiSessionError({ reason: "exited", detail: closure.detail }));
     }
     pending.clear();
-    // Queue.end preserves accepted records; PiSessions projects them before closure.
-    yield* Queue.end(records);
-    freeSpace();
+    // Ending preserves accepted records; PiSessions projects them before closure.
+    yield* records.end;
   });
 
   const failOutput = Effect.fn("PiTransport.failOutput")(function* (detail: string) {
@@ -337,7 +323,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       partial.set(chunk.subarray(start, end), partialLength);
       partialLength = length;
       if (end < chunk.length) {
-        yield* onLine(partial.toString("utf8", 0, partialLength));
+        yield* onLine(partial.toString("utf8", 0, partialLength), partialLength);
         partialLength = 0;
         retainPartial(length);
       }
@@ -349,7 +335,9 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       Stream.runForEach(onChunk),
       Effect.andThen(
         Effect.suspend(() =>
-          partialLength ? onLine(partial.toString("utf8", 0, partialLength)) : Effect.void,
+          partialLength
+            ? onLine(partial.toString("utf8", 0, partialLength), partialLength)
+            : Effect.void,
         ),
       ),
     )
@@ -605,23 +593,11 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     return yield* exchange(readback, { lane: "ordinary", readback: true });
   });
 
-  const recordStream = Stream.fromEffectRepeat(
-    Effect.suspend(() => {
-      consuming = true;
-      return Queue.take(records);
-    }),
-  ).pipe(
-    Stream.map((item) => {
-      recordBytes -= item.bytes;
-      freeSpace();
-      return item;
-    }),
-  );
   const child: PiTransport = {
     request,
     read,
     write,
-    records: recordStream,
+    records: records.items,
     exited,
     // `exitCode` fails for a child a signal ended, which shutdown's own kill does to one that
     // outlives its closed stdin. That is still an exit: wait for either outcome, then ask the OS.
