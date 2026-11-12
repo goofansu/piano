@@ -11,6 +11,12 @@ await run(
     projects: [{ id: "launch", name: "Launch" }],
   }),
   async (page) => {
+    // Include the optional Mic in the composer's tightest layout. No recording/provider call.
+    await page.open("/settings/preferences");
+    await page.click("switch", "Voice input");
+    await page.ab("fill", 'input[type="password"]', "sk-fixture-no-provider-call");
+    await page.click("button", "Save");
+    await page.see("Voice input turned on");
     await page.open("/new");
 
     await page.choose("Directory", "web");
@@ -44,7 +50,43 @@ await run(
           );
         }
         await page.capture("wide-coarse-targets");
+        // Compact faces must not shrink the real hit areas or crowd out neighboring controls.
+        for (const width of [390, 414]) {
+          await page.ab("set", "viewport", String(width), "844");
+          const controls = await page.evaluate(`(() => {
+            const box = e => {
+              const r = e.getBoundingClientRect();
+              return { x: r.x, right: r.right, width: r.width, height: r.height };
+            };
+            const send = document.querySelector('[aria-label="Send"]');
+            const mic = document.querySelector('[aria-label="Voice input"]');
+            return {
+              targets: ['[aria-label="Attach images"]', '[aria-label^="Model:"]',
+                '[aria-label="Voice input"]', '[aria-label="Send"]'].map(s => box(document.querySelector(s))),
+              face: box(send.firstElementChild),
+              micFace: box(mic.firstElementChild),
+              adjacent: mic.nextElementSibling === send,
+            };
+          })()`);
+          for (const target of controls.targets) {
+            assert.ok(target.width >= 44 && target.height >= 44, "phone target is at least 44px");
+            assert.ok(target.x >= 0 && target.right <= width, "target stays on screen");
+          }
+          for (let i = 1; i < controls.targets.length; i++) {
+            assert.ok(
+              controls.targets[i - 1].right <= controls.targets[i].x,
+              "targets do not overlap",
+            );
+          }
+          assert.equal(controls.face.width, 36, "Send face stays compact");
+          assert.equal(controls.face.height, 36, "Send face stays compact");
+          assert.equal(controls.micFace.width, 36, "Mic matches Send");
+          assert.equal(controls.micFace.height, 36, "Mic matches Send");
+          assert.equal(controls.adjacent, true, "Mic immediately precedes Send in DOM/tab order");
+          await page.capture(`phone-${width}-targets`);
+        }
       } finally {
+        await page.ab("set", "viewport", "1280", "800");
         await call("Emulation.setTouchEmulationEnabled", { enabled: false });
       }
       await page.until("!matchMedia('(pointer: coarse)').matches");
@@ -68,6 +110,13 @@ await run(
     await page.ab("fill", '[aria-label="First message"]', "Plan the launch");
     await page.click("button", "Send");
     await page.see("echo: Plan the launch");
+    assert.equal(
+      await page.evaluate(
+        `document.querySelector('[aria-label="Voice input"]').nextElementSibling === document.querySelector('[aria-label="Send"]')`,
+      ),
+      true,
+      "the existing session keeps Mic immediately before Send",
+    );
     await page.capture("2-first-reply");
 
     const start = page.received().find((r) => r.command === "start" && r.sessionId !== "probe");
