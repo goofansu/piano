@@ -98,8 +98,9 @@ real Worktrunk and needs `wt` 0.80.0 or later on `PATH`. The critical-path brows
 [Quality CI](../.github/workflows/quality.yml) runs on every pull request, every push to `main` and
 every merge-queue candidate, on Node 24. Independent jobs run:
 
-- **Static checks:** `npm ci`, `npm run typecheck`, `npm run lint` and `npm run build`.
-- **Module tests (1–4/4):** each runs `npm ci` and one native Node test shard, using the same
+- **Static checks:** `npm ci`, `npm run typecheck` and `npm run lint`.
+- **Build:** `npm ci` and `npm run build`.
+- **Module tests (1–8/8):** each runs `npm ci` and one native Node test shard, using the same
   preload and file glob as `npm test`. Every shard installs the latest Worktrunk release, checked
   against its published checksum. All shards finish even if another fails.
 - **Critical paths (local, remote):** each runs `npm ci` and one group of browser journeys,
@@ -107,13 +108,13 @@ every merge-queue candidate, on Node 24. Independent jobs run:
   longer than the rest together; `npm run test:browser:local` is the other three. Both finish even
   if one fails.
 
-**Quality gates** keeps its existing check name and passes only when static checks and every module
-shard succeed; failed, cancelled or skipped dependencies cannot pass it. CI gets no model secrets.
+**Quality gates** keeps its existing check name and passes only when static checks, the build and every
+module shard succeed; failed, cancelled or skipped dependencies cannot pass it. CI gets no model secrets.
 The extra runners trade aggregate runner time for a shorter feedback path; no test selection or
 result caching is used. New test files join the shards automatically. To reproduce a shard locally:
 
 ```sh
-node --test --test-shard=1/4 --import ./test/setup.ts 'test/**/*.test.ts'
+node --test --test-shard=1/8 --import ./test/setup.ts 'test/**/*.test.ts'
 ```
 
 Keep the preload and glob aligned with `npm test`. Options must precede the glob; appending
