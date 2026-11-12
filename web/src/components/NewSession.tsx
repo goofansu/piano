@@ -46,7 +46,12 @@ import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
 import { NEW_SESSION_DRAFT } from "@/lib/messageDraft";
 import { findProject, newProjectCommand, projectDestinations } from "@/lib/projectCommands";
 import { folderFor } from "@/lib/sessionCatalog";
-import { completionTarget, directoryChoices, startPlace } from "@/lib/sessionContext";
+import {
+  checkoutMissingAt,
+  completionTarget,
+  directoryChoices,
+  startPlace,
+} from "@/lib/sessionContext";
 import { startPage } from "@/lib/startPage";
 import { composerInput, picker } from "@/lib/styles";
 import { useImageSend } from "@/lib/useImageSend";
@@ -147,9 +152,12 @@ export function NewSessionComposer({
       ? state.pendingCreate.options
       : undefined,
   );
+  // No session can start where the checkout is gone; the draft waits for another directory.
+  const checkoutMissing = !!cwd && checkoutMissingAt(state, cwd);
   // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
   const ready =
     !editor.preparing &&
+    !checkoutMissing &&
     newSessionReady({
       text: editor.message,
       images: editor.attachments,
@@ -241,7 +249,14 @@ export function NewSessionComposer({
           voice={() => place}
           actions={<ComposerSend disabled={!ready} onClick={submit} />}
         />
-        {offers.worktrees && folder?.discovery.status === "error" && (
+        {checkoutMissing && (
+          <Alert data-motion="fade" className="mt-2">
+            <AlertDescription>
+              Checkout removed. Restore it at its path or choose another directory.
+            </AlertDescription>
+          </Alert>
+        )}
+        {offers.worktrees && !checkoutMissing && folder?.discovery.status === "error" && (
           <Alert data-motion="fade" variant="destructive" className="mt-2">
             <AlertDescription>
               Git status unavailable. Open Worktrees to inspect and refresh.

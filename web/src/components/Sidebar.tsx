@@ -578,7 +578,8 @@ function FolderGroup({
       details={details}
       select={select}
       actions={[
-        offers.folders && (
+        // Left out, not disabled, while the checkout is missing, as the Directory picker leaves it out.
+        offers.folders && create.enabled && (
           <IconButton
             key="new"
             size="row"

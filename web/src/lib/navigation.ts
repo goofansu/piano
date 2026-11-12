@@ -757,6 +757,7 @@ export function createNavigation({
       c.sessionReferences,
       c.session?.cwd,
       c.session?.state.checkoutMissing,
+      c.folders,
     ];
     // Streaming projections do not change filesystem availability or scan the session catalog.
     if (inputs.some((input, i) => input !== fileContext[i])) {

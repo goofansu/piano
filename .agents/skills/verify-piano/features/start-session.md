@@ -9,7 +9,9 @@ the session without sending the message again; a message that cannot be sent kee
 
 - `choose-folder`: combobox "Directory" lists registered folders and "Browse…", plus "Worktrees"
   for a registered checkout. A folder whose directory is missing stays registered but is left out
-  until its directory returns. `/new` defaults to the last-used directory, otherwise the first
+  until its directory returns; its sidebar row drops "New session in <folder>", and `/new` already
+  in it reads "Checkout removed. Restore it at its path or choose another directory." with Send
+  disabled. `/new` defaults to the last-used directory, otherwise the first
   registered folder; a fresh `/projects/<id>/new` needs a directory choice.
 - `directory-trust`: a directory with `.pi` resources or `.agents/skills` shows "Directory trust"
   beside Directory: Untrusted / Trusted. Toggling changes that machine's decision about loading
