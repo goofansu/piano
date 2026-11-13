@@ -96,15 +96,14 @@ export function Sidebar({ state }: Props) {
         >
           <SearchIcon />
         </IconButton>
-        <ViewMenu />
+        <InboxToggle />
         {/* The sidebar's one primary action, filled, at the header's end. */}
         <IconButton size="header" label="New session" variant="default" onClick={() => openNew()}>
           <SquarePenIcon />
         </IconButton>
       </LayoutHeader>
-      {/* The Inbox switch and the way to the Projects index lead the list. Projects is the current row while the index is open, as a selected session row is. */}
+      {/* The way to the Projects index leads the list. Projects is the current row while the index is open, as a selected session row is. */}
       <div className="flex flex-col gap-0.5 px-(--row-inset) py-2">
-        <InboxToggle />
         <Button
           variant="ghost"
           leading
@@ -130,22 +129,26 @@ export function Sidebar({ state }: Props) {
           {view.inbox ? <SidebarInbox state={state} /> : <SidebarSessions state={state} />}
         </nav>
       </ScrollArea>
-      {offers.settings && (
-        <LayoutFooter>
+      {/* View options close the sidebar on every machine; Settings joins them where it is offered. */}
+      <LayoutFooter>
+        {offers.settings && (
           <Button variant="ghost" leading className="flex-1" onClick={() => openSettings()}>
             <SettingsIcon data-icon="inline-start" />
             Settings
           </Button>
-        </LayoutFooter>
-      )}
+        )}
+        <div className="ml-auto flex">
+          <ViewMenu />
+        </div>
+      </LayoutFooter>
     </div>
   );
 }
 
 /**
  * The switch between this machine's list and the Inbox, the global command the palette lists too.
- * It stays in place either way, pressed while the Inbox is shown, with the number of sessions that
- * need the person, on any machine.
+ * It stays in place either way, pressed while the Inbox is shown; while the list is shown it
+ * carries a dot when a session needs the person, on any machine.
  */
 function InboxToggle() {
   const { commands, run } = useGlobalCommands();
@@ -153,27 +156,21 @@ function InboxToggle() {
   const command = commands.find((c) => c.id === "inbox");
   if (!command) return null;
   return (
-    <Button
-      variant="ghost"
-      leading
-      className={cn(
-        row,
-        "w-full text-ink-2",
-        command.pressed && "bg-fill-hover font-medium text-ink",
-      )}
-      aria-pressed={command.pressed}
+    <IconButton
+      size="header"
+      label={command.label}
+      className={cn("relative", command.pressed && "bg-fill-hover text-ink")}
+      aria-pressed={!!command.pressed}
       onClick={() => run(command)}
     >
-      <InboxIcon data-icon="inline-start" /> Inbox
-      {count > 0 && (
+      <InboxIcon />
+      {count > 0 && !command.pressed && (
         <span
-          data-slot="inbox-count"
-          className="ml-auto pr-2 text-xs font-normal text-ink-3 tabular-nums"
-        >
-          {count}
-        </span>
+          data-slot="inbox-dot"
+          className="absolute top-1 right-1 size-1.5 rounded-full bg-warn"
+        />
       )}
-    </Button>
+    </IconButton>
   );
 }
 

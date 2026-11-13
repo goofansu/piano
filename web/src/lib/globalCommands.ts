@@ -278,7 +278,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
     },
     {
       id: "inbox",
-      // The sidebar's Inbox row, which this presses.
+      // Named as the sidebar header's button is.
       label: ctx.view.inbox ? "Hide inbox" : "Show inbox",
       icon: "inbox",
       group: "sidebar",

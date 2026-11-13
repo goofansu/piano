@@ -3,7 +3,6 @@ import { PanelLeftCloseIcon } from "lucide-react";
 import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import { IconButton } from "@/components/IconButton";
 import { paneHeaderRow } from "@/components/Pane";
-import { PianoMark } from "@/components/PianoMark";
 import { PianoSidebarReveal } from "@/components/PianoSidebarReveal";
 import { SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 import { trackPointerDrag } from "@/lib/pointerDrag";
@@ -178,12 +177,7 @@ export function LayoutHeader({ title, children }: { title?: ReactNode; children?
   );
 }
 
-/** The sidebar's footer: its one plain action and the mark, which marks the app once, at rest. */
+/** The sidebar's footer: its one plain action, then what the sidebar ends with. */
 export function LayoutFooter({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex shrink-0 items-center gap-2 px-(--row-inset) py-3">
-      {children}
-      <PianoMark className="mr-1 size-6 rounded-md shadow-none" />
-    </div>
-  );
+  return <div className="flex shrink-0 items-center gap-2 px-(--row-inset) py-3">{children}</div>;
 }

@@ -190,13 +190,13 @@ credentials, history and database remain remote.
 
 ### Inbox
 
-**Inbox**, above **Projects** in the sidebar (**Show inbox** in Cmd+K), turns the sidebar's list
-into the Inbox: sessions
+**Show inbox** in the sidebar's header (and in Cmd+K) turns the sidebar's list into the Inbox:
+sessions
 from Local and every configured machine at once, whichever machine is selected, grouped as
 **Needs input**, **Pi stopped**, **Done** and **Working**, newest first in each. Each row names
-its machine and folder; opening it switches to that machine and opens the session. Pressing
-**Inbox** again returns to the selected machine's list. Either way the row shows how many
-sessions need you, and the choice is remembered in this browser.
+its machine and folder; opening it switches to that machine and opens the session. **Hide inbox**
+returns to the selected machine's list; while the Inbox is hidden its button carries a dot when a
+session needs you. The choice is remembered in this browser.
 
 **Done** is a session whose turn finished while it was not on screen; **Pi stopped** is one whose
 Pi exited or was interrupted. Opening the session clears either. Both are for this page load: a

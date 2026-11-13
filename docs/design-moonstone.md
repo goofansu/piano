@@ -360,9 +360,9 @@ offers New session, per project, and the sidebar toggle without shortcuts of the
   and New session controls. The header is the one header shape and no heavier: hide at its left on
   the rows' edge and where each pane's show control appears once the sidebar is collapsed (on desktop
   the sidebar column keeps the pane's frame, `--pane-frame`, and its header is the pane header's
-  row, `paneHeaderRow`, so every leading glyph sits `--gutter` in), then search, View options
-  and New session as the filled primary action at its end; no mark and no wordmark, so the one
-  accent in the strip is the primary action. The mark sits in the footer beside Settings. Collapsed,
+  row, `paneHeaderRow`, so every leading glyph sits `--gutter` in), then search, the Inbox
+  switch and New session as the filled primary action at its end; no mark and no wordmark, so the one
+  accent in the strip is the primary action. View options sit in the footer beside Settings. Collapsed,
   the column is gone rather than a rail: the pane takes the width, and its header's show control
   brings the sidebar back.
 - **Transcript.** A skeleton in the transcript's layout is on screen within a frame of a switch

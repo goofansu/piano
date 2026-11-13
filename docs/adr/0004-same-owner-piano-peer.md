@@ -85,7 +85,7 @@ come from a remote session's own dispatch, which runs on the peer.
 ## Inbox: every machine's sessions that need the person
 
 With several peers, finding the session that waits for an answer meant switching to each machine
-in turn. The Inbox is the sidebar's other view, switched by its Inbox row: sessions from Local and
+in turn. The Inbox is the sidebar's other view, switched in its header: sessions from Local and
 every peer at once, grouped by state (needs input, Pi stopped, done since last opened, then
 working), in place of the selected machine's list. A Piano without peers has it too, for Local
 alone. This amends the
