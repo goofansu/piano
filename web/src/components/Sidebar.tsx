@@ -9,7 +9,6 @@ import {
   TargetIcon,
   XIcon,
 } from "lucide-react";
-import { Fragment } from "react";
 import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
 import { useCommands, useGlobalCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
@@ -193,15 +192,6 @@ export function SidebarSessions({ state }: Props) {
             select={select}
           />
         );
-      case "list":
-        return (
-          <SidebarSessionList
-            key={s.key}
-            sessions={s.sessions}
-            details={s.details}
-            select={select}
-          />
-        );
     }
   };
   const empty = (text: string) => (
@@ -323,15 +313,14 @@ export function ViewMenu() {
       >
         {section(
           "Group by",
-          // No grouping comes last, set apart from the groupings.
           radio(groupBy, (c) => (
-            <Fragment key={c.id}>
-              {c.id === "group-none" && <DropdownMenuSeparator />}
-              <DropdownMenuRadioItem value={c.id}>{c.menuLabel}</DropdownMenuRadioItem>
-            </Fragment>
+            <DropdownMenuRadioItem key={c.id} value={c.id}>
+              {c.menuLabel}
+            </DropdownMenuRadioItem>
           )),
           groupBy,
         )}
+        {narrow && <DropdownMenuSeparator />}
         {section(
           "Sort by",
           radio(sortBy, (c) => (
@@ -341,16 +330,20 @@ export function ViewMenu() {
           )),
           sortBy,
         )}
-        {folderAndBranch &&
-          section(
-            "Show",
-            <DropdownMenuCheckboxItem
-              checked={!!folderAndBranch.pressed}
-              onCheckedChange={() => run(folderAndBranch)}
-            >
-              <GlobalCommandIcon icon={folderAndBranch.icon} /> {folderAndBranch.menuLabel}
-            </DropdownMenuCheckboxItem>,
-          )}
+        {folderAndBranch && (
+          <>
+            {narrow && <DropdownMenuSeparator />}
+            {section(
+              "Show",
+              <DropdownMenuCheckboxItem
+                checked={!!folderAndBranch.pressed}
+                onCheckedChange={() => run(folderAndBranch)}
+              >
+                <GlobalCommandIcon icon={folderAndBranch.icon} /> {folderAndBranch.menuLabel}
+              </DropdownMenuCheckboxItem>,
+            )}
+          </>
+        )}
         <DropdownMenuSeparator />
         {section(
           "Appearance",

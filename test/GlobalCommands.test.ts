@@ -117,9 +117,9 @@ test("exactly the current grouping and sort are checked", () => {
   assert.deepEqual(checked("sort-by", ctx), ["Sort by activity"]);
   const other = {
     ...ctx,
-    view: { groupBy: "none", sortBy: "name", folderAndBranch: false },
+    view: { groupBy: "project", sortBy: "name", folderAndBranch: false },
   } as const;
-  assert.deepEqual(checked("group-by", other), ["No grouping"]);
+  assert.deepEqual(checked("group-by", other), ["Group by project"]);
   assert.deepEqual(checked("sort-by", other), ["Sort by name"]);
 });
 
@@ -138,7 +138,6 @@ test("on a remote machine the View options, New session and Projects stay, and n
     "Group by date",
     "Group by folder",
     "Group by project",
-    "No grouping",
     "Sort by activity",
     "Sort by name",
     "Show folder and branch",
@@ -190,11 +189,7 @@ test("each View-menu radio reports exactly one current choice, by its short labe
     assert.equal(items.filter((c) => c.checked).length, 1, group);
     return [value, currentLabel, items.map((c) => c.menuLabel)];
   };
-  assert.deepEqual(report("group-by"), [
-    "group-folder",
-    "Folder",
-    ["Date", "Folder", "Project", "None"],
-  ]);
+  assert.deepEqual(report("group-by"), ["group-folder", "Folder", ["Date", "Folder", "Project"]]);
   assert.deepEqual(report("sort-by"), ["sort-name", "Name", ["Activity", "Name"]]);
   assert.deepEqual(report("appearance"), [
     "appearance-light",

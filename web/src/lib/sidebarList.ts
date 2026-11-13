@@ -65,8 +65,6 @@ export type SidebarSection = { details: SessionRowDetails | undefined } & (
     }
   /** Date groups start open; the rest start closed. */
   | { kind: "date"; key: string; open: boolean; label: string; sessions: SessionEntry[] }
-  /** No grouping: every listed session in one section. */
-  | { kind: "list"; key: string; sessions: SessionEntry[] }
 );
 
 export type ProjectSection = Extract<SidebarSection, { kind: "project" }>;
@@ -165,8 +163,7 @@ function selectedKey(list: SidebarList): string | undefined {
   const section = [...list.body.sections, ...list.body.done].find((s) =>
     s.sessions.some((row) => row.selected),
   );
-  // No grouping has nothing to open.
-  return section && section.kind !== "list" ? section.key : undefined;
+  return section?.key;
 }
 
 /**
@@ -270,13 +267,6 @@ function buildList(
           return { kind: "date", key, open: isOpen(key), label, sessions, details };
         }),
       );
-    }
-    default: {
-      // No grouping; a stored view is not validated, so an unknown grouping lists the same way.
-      const sessions = sortSessions(listed, view.sortBy);
-      if (sessions.length === 0) return empty(NO_SESSIONS);
-      const details = rowDetails(view, sessions);
-      return sections([{ kind: "list", key: "list", sessions, details }]);
     }
   }
 }
