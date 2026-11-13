@@ -21,15 +21,17 @@ expires after 15 minutes or when Piano stops.
 
 ## API keys
 
-Under **Settings → Providers → API Keys**, choose **Add key** for DeepSeek or Vercel AI Gateway,
-paste the key and **Save**. The row shows **Saved** after Pi stores it; this does not validate the
-key with the provider. Its menu offers **Replace key** and **Remove key**, with confirmation before
-removal and a toast after each change. Keys are never read back into the browser.
+Under **Settings → Providers → API Keys**, choose **Add key** for DeepSeek, Fireworks, Google
+(a Gemini API key) or Vercel AI Gateway, paste the key and **Save**. The row shows **Saved** after
+Pi stores it; this does not validate the key with the provider. Its menu offers **Replace key** and
+**Remove key**, with confirmation before removal and a toast after each change. Keys are never read
+back into the browser.
 
 Removal deletes only the saved key on this machine. It does not revoke it at the provider or
 remove keys from the environment or `models.json`. Command-backed keys (`!command`) cannot be
 entered here; configure them through Pi. Adding another single-key provider requires a catalog
-entry in `shared/providerApiKeys.ts` and a bundled logo, not another settings flow.
+entry in `shared/providerApiKeys.ts` and a bundled logo, not another settings flow. Rows follow
+the catalog's order, which is kept alphabetical.
 
 ## Limits
 
