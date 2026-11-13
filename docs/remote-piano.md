@@ -190,16 +190,18 @@ credentials, history and database remain remote.
 
 ### Inbox
 
-**Inbox**, above **Projects** in the sidebar and in Cmd+K, lists sessions from Local and every
-configured machine at once, whichever machine is selected: first the ones that need you (**Needs
-input**, **Pi stopped**, **Done**), newest first, then the ones **Working**. Each row names its
-machine, folder and branch; opening it switches to that machine and opens the session. The
-sidebar shows how many sessions need you.
+**Inbox**, above **Projects** in the sidebar (**Show inbox** in Cmd+K), turns the sidebar's list
+into the Inbox: sessions
+from Local and every configured machine at once, whichever machine is selected, grouped as
+**Needs input**, **Pi stopped**, **Done** and **Working**, newest first in each. Each row names
+its machine and folder; opening it switches to that machine and opens the session. Pressing
+**Inbox** again returns to the selected machine's list. Either way the row shows how many
+sessions need you, and the choice is remembered in this browser.
 
 **Done** is a session whose turn finished while it was not on screen; **Pi stopped** is one whose
 Pi exited or was interrupted. Opening the session clears either. Both are for this page load: a
 reload starts from what each machine reports now. A machine that cannot be reached is listed
-under **Unavailable** with the rows it last sent.
+under **Unavailable**, and keeps the rows it last sent.
 
 ### Projects
 

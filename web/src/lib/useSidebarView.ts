@@ -22,10 +22,11 @@ const sidebarView = createPreference<SidebarView>({
         typeof fields.folderAndBranch === "boolean"
           ? fields.folderAndBranch
           : DEFAULT_SIDEBAR_VIEW.folderAndBranch,
+      inbox: typeof fields.inbox === "boolean" ? fields.inbox : DEFAULT_SIDEBAR_VIEW.inbox,
     };
   },
-  encode: ({ groupBy, sortBy, folderAndBranch }) =>
-    JSON.stringify({ groupBy, sortBy, folderAndBranch }),
+  encode: ({ groupBy, sortBy, folderAndBranch, inbox }) =>
+    JSON.stringify({ groupBy, sortBy, folderAndBranch, inbox }),
 });
 const setView = (change: Partial<SidebarView>) =>
   sidebarView.set({ ...sidebarView.get(), ...change });

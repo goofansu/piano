@@ -3,7 +3,6 @@ import { AppLayout, LayoutView } from "@/components/AppLayout";
 import { CommandHost } from "@/components/CommandHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
-import { Inbox } from "@/components/Inbox";
 import { MachineHost } from "@/components/MachineHost";
 import { NewSession } from "@/components/NewSession";
 import { PaneNotFound } from "@/components/Pane";
@@ -135,8 +134,6 @@ function MachineApp() {
                           chooseDirectory={chooseDirectory}
                           onProjectChange={(id) => openNew(undefined, id)}
                         />
-                      ) : state.view.kind === "inbox" ? (
-                        <Inbox />
                       ) : state.view.kind === "projects" ? (
                         <ProjectsIndex state={state} />
                       ) : state.view.kind === "project" ? (

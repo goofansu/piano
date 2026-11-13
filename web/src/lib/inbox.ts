@@ -133,7 +133,7 @@ export function observe(o: MachineObservation, event: Observed): MachineObservat
 }
 
 export interface InboxState {
-  /** The machines observed, in the switcher's order. Empty until there is more than one. */
+  /** The machines observed, in the switcher's order. */
   machines: readonly Machine[];
   observations: Readonly<Record<string, MachineObservation>>;
 }
@@ -210,8 +210,7 @@ export interface Inbox {
   subscribe: (listener: () => void) => () => void;
   /**
    * The machines to observe: one connection each, opened for a machine new to the list and closed
-   * for one that left it. Fewer than two machines observe nothing: the sidebar already lists the
-   * only machine there is.
+   * for one that left it.
    */
   setMachines: (machines: readonly Machine[]) => void;
   /** The session on screen on `machineId`, by its `sessionKey`; null when it shows none. */
@@ -256,7 +255,7 @@ export function createInbox({
       };
     },
     setMachines: (list) => {
-      const machines = list.length > 1 ? list : [];
+      const machines = list;
       const observations: Record<string, MachineObservation> = {};
       for (const machine of machines)
         observations[machine.id] = state.observations[machine.id] ?? {

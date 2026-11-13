@@ -74,8 +74,6 @@ export interface AppState {
 export type Page =
   | { kind: "new"; cwd?: string; projectId?: string }
   | { kind: "projects" }
-  /** The Inbox: every machine's sessions that need the person. */
-  | { kind: "inbox" }
   | { kind: "project"; projectId: string; cwd?: string }
   /** A session address nothing opens: unknown to Piano's database, or (`reason`) its history is gone. */
   | { kind: "missing-session"; sessionId: string; reason?: "history" };

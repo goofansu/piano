@@ -85,8 +85,10 @@ come from a remote session's own dispatch, which runs on the peer.
 ## Inbox: every machine's sessions that need the person
 
 With several peers, finding the session that waits for an answer meant switching to each machine
-in turn. The Inbox lists, from Local and every peer at once, the sessions that need the person
-(needs input, Pi stopped, done since last opened) and then the ones working. This amends the
+in turn. The Inbox is the sidebar's other view, switched by its Inbox row: sessions from Local and
+every peer at once, grouped by state (needs input, Pi stopped, done since last opened, then
+working), in place of the selected machine's list. A Piano without peers has it too, for Local
+alone. This amends the
 earlier limit that nothing is read across machines; search, projects and orchestration across
 machines stay out.
 
@@ -106,8 +108,10 @@ machines stay out.
 - Nothing is stored on main, and no peer's list is copied into another's database. An unavailable
   machine is named under Unavailable and keeps the rows it last sent; it never borrows another
   machine's.
-- Cost: one more socket per machine while the page is open, each carrying the sidebar frames a
-  selected machine already receives. Only a main with a peer opens them.
+- Cost: one more socket per machine while the page is open, Local's included, each carrying the
+  sidebar frames a selected machine already receives.
+- Which view the sidebar shows is this browser's preference, kept with its other view options
+  (`piano.sidebarView`), not a machine's.
 - Main and peers deploy together (INV-12). An older peer sends neither fact: its sessions list as
   working or done only.
 

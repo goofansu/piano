@@ -135,6 +135,8 @@ test("on a remote machine the View options, New session and Projects stay, and n
     .filter((command) => command.intent.kind === "view")
     .map((command) => command.label);
   assert.deepEqual(changes, [
+    // The Inbox lists every machine, so it is offered whichever one is selected.
+    "Show inbox",
     "Group by date",
     "Group by folder",
     "Group by project",

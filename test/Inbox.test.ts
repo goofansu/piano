@@ -164,10 +164,10 @@ test("a machine whose connection is down is named, and keeps what it last said",
   assert.deepEqual(inboxList(inbox.getState()).unavailable, []);
 });
 
-test("one machine alone is not observed; a machine removed from the list is disconnected", () => {
+test("Local alone is observed too; a machine removed from the list is disconnected", () => {
   const alone = inboxOf([LOCAL]);
-  assert.equal(alone.handlers.size, 0);
-  assert.equal(inboxList(alone.inbox.getState()).loading, false);
+  alone.says(LOCAL.id, registry(reference("a", "Asks")), hosts([host("a", { needsInput: true })]));
+  assert.deepEqual(alone.rows().attention, ["Local/Asks: needs_input"]);
 
   const { inbox, says, rows, closed } = inboxOf([LOCAL, ENG1, ENG2]);
   says(ENG2.id, registry(reference("a", "Asks")), hosts([host("a", { needsInput: true })]));

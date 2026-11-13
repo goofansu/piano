@@ -88,8 +88,6 @@ export type GlobalCommandIntent =
   | { kind: "settings"; section?: SettingsSection }
   /** Open the New session page. */
   | { kind: "new-session" }
-  /** Open the Inbox. */
-  | { kind: "inbox" }
   /** Open the Projects index. */
   | { kind: "projects" }
   /** The open page's header action (New project, a project's menu row), as the page runs it. */
@@ -133,8 +131,6 @@ export interface GlobalCommandContext {
   theme?: string;
   /** The sidebar is out of sight (collapsed, or a closed sheet), so its toggle reads Show sidebar. */
   sidebarHidden?: boolean;
-  /** More than one machine is configured, so the Inbox lists them together. */
-  inbox?: boolean;
 }
 
 /** One of the View menu's choices (appearance, grouping or sorting) as a radio group. */
@@ -220,8 +216,8 @@ export function pageCommands(
 
 /**
  * Global commands, in the palette's order: Home or Settings (whichever is not open), each Settings
- * page, New session, Inbox (with more than one machine), Projects, the open page's header actions (`pageCommands`), trust for the
- * directory the main pane is about, Hide or Show sidebar, the appearances, then each sidebar grouping and sort, with the current one of each checked.
+ * page, New session, Projects, the open page's header actions (`pageCommands`), trust for the
+ * directory the main pane is about, Hide or Show sidebar, Show or Hide inbox, the appearances, then each sidebar grouping and sort, with the current one of each checked.
  */
 export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
   const trust = trustCommand(state, focusedDirectory(state)?.cwd);
@@ -261,18 +257,6 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       enabled: true,
       intent: { kind: "new-session" },
     },
-    ...(ctx.inbox
-      ? [
-          {
-            id: "inbox",
-            label: "Inbox",
-            icon: "inbox",
-            group: "navigate",
-            enabled: true,
-            intent: { kind: "inbox" },
-          } satisfies GlobalCommand,
-        ]
-      : []),
     {
       id: "projects",
       label: "Projects",
@@ -291,6 +275,16 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       group: "sidebar",
       enabled: true,
       intent: { kind: "toggle-sidebar" },
+    },
+    {
+      id: "inbox",
+      // The sidebar's Inbox row, which this presses.
+      label: ctx.view.inbox ? "Hide inbox" : "Show inbox",
+      icon: "inbox",
+      group: "sidebar",
+      enabled: true,
+      pressed: !!ctx.view.inbox,
+      intent: { kind: "view", change: { inbox: !ctx.view.inbox } },
     },
     ...APPEARANCES.map((a): GlobalCommand => ({
       id: `appearance-${a.value}`,

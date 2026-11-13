@@ -9,11 +9,14 @@ export interface SidebarView {
   sortBy: SortBy;
   /** Each session row adds a line with its branch, and its folder unless its group names it. */
   folderAndBranch: boolean;
+  /** The sidebar shows the Inbox (every machine's sessions by state) in place of this machine's list. */
+  inbox?: boolean;
 }
 export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
   groupBy: "date",
   sortBy: "recent",
   folderAndBranch: false,
+  inbox: false,
 };
 export const GROUP_BY: ReadonlyArray<{ value: GroupBy; label: string }> = [
   { value: "date", label: "Date" },

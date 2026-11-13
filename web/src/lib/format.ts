@@ -106,6 +106,16 @@ export function timeAgo(iso: string, now: number): string {
   return "just now";
 }
 
+/** How long ago `iso` was, as short as a sidebar row's end allows: "now", "8m", "3h", "2d", "5w". */
+export function timeAgoShort(iso: string, now: number): string {
+  const seconds = Math.max(0, (now - new Date(iso).getTime()) / 1000);
+  if (seconds < 60 || Number.isNaN(seconds)) return "now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d`;
+  return `${Math.floor(seconds / 604800)}w`;
+}
+
 /** How a checkout Git lists on no branch is named wherever a branch label would be. */
 export const DETACHED_HEAD = "Detached HEAD";
 

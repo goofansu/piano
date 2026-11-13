@@ -1,7 +1,6 @@
 /**
  * Routes, kept in the address bar so refresh, back and forward work:
  *   /new             the New page (which directory it starts in is not part of the address)
- *   /inbox           the Inbox: every machine's sessions that need the person
  *   /projects        the Projects index: every project, newest activity first
  *   /projects/<id>   one project's home: its branches and other member sessions
  *   /projects/<id>/new the New page for one project: a session started there joins it
@@ -36,7 +35,6 @@ export const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id
 
 export type Route =
   | { kind: "new"; projectId?: string }
-  | { kind: "inbox" }
   | { kind: "projects" }
   | { kind: "project"; projectId: string }
   | { kind: "session"; sessionId: string }
@@ -51,7 +49,6 @@ export function parseRoute(loc: { pathname: string }): Route {
   const settings = loc.pathname.match(/^\/settings(?:\/([^/]+))?\/?$/);
   const section = settings && settingsSection(settings[1]);
   if (section) return { kind: "settings", section };
-  if (/^\/inbox\/?$/.test(loc.pathname)) return { kind: "inbox" };
   if (/^\/projects\/?$/.test(loc.pathname)) return { kind: "projects" };
   const project = loc.pathname.match(/^\/projects\/([^/]+)(\/new)?\/?$/);
   if (project)
@@ -66,7 +63,6 @@ export function parseRoute(loc: { pathname: string }): Route {
 export function routePath(r: Route): string {
   if (r.kind === "settings") return `/settings/${r.section}`;
   if (r.kind === "session") return sessionPath(r.sessionId);
-  if (r.kind === "inbox") return "/inbox";
   if (r.kind === "projects") return "/projects";
   if (r.kind === "project") return `/projects/${encodeURIComponent(r.projectId)}`;
   return r.projectId ? `/projects/${encodeURIComponent(r.projectId)}/new` : "/new";

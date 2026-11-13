@@ -54,7 +54,6 @@ export interface CommandEffects {
   closeSettings: () => void;
   openSettings: (section?: SettingsSection) => void;
   openNew: (cwd?: string, projectId?: string) => void;
-  openInbox: () => void;
   openProjects: () => void;
   openProject: (projectId: string) => void;
   openChanges: () => void;
@@ -98,9 +97,6 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "new-session":
       effects.openNew("cwd" in intent ? intent.cwd : undefined);
-      break;
-    case "inbox":
-      effects.openInbox();
       break;
     case "projects":
       effects.openProjects();

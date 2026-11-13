@@ -16,7 +16,6 @@ import { useCommands, useGlobalCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { IconButton } from "@/components/IconButton";
-import { useInboxCount } from "@/components/Inbox";
 import { MachineSwitcher } from "@/components/MachineSwitcher";
 import { PianoButton as Button } from "@/components/PianoButton";
 import {
@@ -38,6 +37,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoToolt
 import { ProjectCommandIconView, ProjectCommandsMenu } from "@/components/Projects";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
 import { Hint } from "@/components/Shortcut";
+import { SidebarInbox, useInboxCount } from "@/components/SidebarInbox";
 import {
   sidebarRowClassName as row,
   sidebarRowGapClassName as rowGap,
@@ -56,7 +56,7 @@ import type { Navigation } from "@/lib/navigation";
 import { projectCommands } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import type { SessionRowDetails, SidebarSection } from "@/lib/sidebarList";
-import { useMachineScope, useOffers } from "@/lib/useMachine";
+import { useOffers } from "@/lib/useMachine";
 import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarList } from "@/lib/useSidebarList";
@@ -82,10 +82,9 @@ const groupTrigger =
  * and New session while the remote's own Piano manages the rest.
  */
 export function Sidebar({ state }: Props) {
-  const { openNew, openInbox, openProjects, openSettings, setPalette } = useNavigation();
+  const { openNew, openProjects, openSettings, setPalette } = useNavigation();
   const offers = useOffers();
-  const scope = useMachineScope();
-  const inboxCount = useInboxCount();
+  const { view } = useSidebarView();
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
       <LayoutHeader title={<MachineSwitcher />}>
@@ -103,29 +102,9 @@ export function Sidebar({ state }: Props) {
           <SquarePenIcon />
         </IconButton>
       </LayoutHeader>
-      {/* The ways to the Inbox and the Projects index lead the list; each is the current row while its page is open, as a selected session row is. */}
+      {/* The Inbox switch and the way to the Projects index lead the list. Projects is the current row while the index is open, as a selected session row is. */}
       <div className="flex flex-col gap-0.5 px-(--row-inset) py-2">
-        {scope.machines.length > 1 && (
-          <Button
-            variant="ghost"
-            leading
-            className={cn(
-              row,
-              "w-full text-ink-2",
-              state.view.kind === "inbox" &&
-                "bg-(--selected) font-medium text-ink hover:bg-(--selected)",
-            )}
-            aria-current={state.view.kind === "inbox" ? "page" : undefined}
-            onClick={() => openInbox()}
-          >
-            <InboxIcon data-icon="inline-start" /> Inbox
-            {inboxCount > 0 && (
-              <span className="ml-auto pr-2 text-xs font-normal text-ink-3 tabular-nums">
-                {inboxCount}
-              </span>
-            )}
-          </Button>
-        )}
+        <InboxToggle />
         <Button
           variant="ghost"
           leading
@@ -142,9 +121,13 @@ export function Sidebar({ state }: Props) {
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        {/* The list starts 8px below the Projects row and ends 16px above the footer or the sidebar's end. */}
-        <nav className="relative px-(--row-inset) pb-4" aria-label="Sessions">
-          <SidebarSessions state={state} />
+        {/* The list starts 8px below the Projects row and ends 16px above the footer or the sidebar's end.
+            The Inbox takes its place whole: every machine's sessions by state. */}
+        <nav
+          className="relative px-(--row-inset) pb-4"
+          aria-label={view.inbox ? "Inbox" : "Sessions"}
+        >
+          {view.inbox ? <SidebarInbox state={state} /> : <SidebarSessions state={state} />}
         </nav>
       </ScrollArea>
       {offers.settings && (
@@ -156,6 +139,41 @@ export function Sidebar({ state }: Props) {
         </LayoutFooter>
       )}
     </div>
+  );
+}
+
+/**
+ * The switch between this machine's list and the Inbox, the global command the palette lists too.
+ * It stays in place either way, pressed while the Inbox is shown, with the number of sessions that
+ * need the person, on any machine.
+ */
+function InboxToggle() {
+  const { commands, run } = useGlobalCommands();
+  const count = useInboxCount();
+  const command = commands.find((c) => c.id === "inbox");
+  if (!command) return null;
+  return (
+    <Button
+      variant="ghost"
+      leading
+      className={cn(
+        row,
+        "w-full text-ink-2",
+        command.pressed && "bg-fill-hover font-medium text-ink",
+      )}
+      aria-pressed={command.pressed}
+      onClick={() => run(command)}
+    >
+      <InboxIcon data-icon="inline-start" /> Inbox
+      {count > 0 && (
+        <span
+          data-slot="inbox-count"
+          className="ml-auto pr-2 text-xs font-normal text-ink-3 tabular-nums"
+        >
+          {count}
+        </span>
+      )}
+    </Button>
   );
 }
 
