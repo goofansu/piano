@@ -287,7 +287,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
     })),
     ...GROUP_BY.map((g): GlobalCommand => ({
       id: `group-${g.value}`,
-      label: g.value === "none" ? "No grouping" : `Group by ${g.label.toLowerCase()}`,
+      label: `Group by ${g.label.toLowerCase()}`,
       menuLabel: g.label,
       icon: "group",
       group: "group-by",

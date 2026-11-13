@@ -40,7 +40,7 @@ const view = (groupBy: GroupBy): SidebarView => ({
   sortBy: "name",
   folderAndBranch: false,
 });
-const GROUPINGS: GroupBy[] = ["folder", "project", "date", "none"];
+const GROUPINGS: GroupBy[] = ["folder", "project", "date"];
 const titles = (items: ReadonlyArray<{ title?: string }>) => items.map((s) => s.title);
 const selecting = (state: AppState, cwd: string, sessionId: string | null): AppState => ({
   ...state,
@@ -254,7 +254,7 @@ test("sidebar list: cached rows still follow every catalog fact", () => {
   ];
   for (const { name, patch, check } of cases) {
     const { model } = sidebar();
-    const chosen = view("none");
+    const chosen = view("date");
     const before = model.list(state, chosen);
     const after = model.list({ ...state, ...patch }, chosen);
     assert.notEqual(after, before, name);
@@ -264,7 +264,7 @@ test("sidebar list: cached rows still follow every catalog fact", () => {
 
 test("sidebar list: selection follows cwd and session id, not the snapshot or selecting object", () => {
   const { model } = sidebar();
-  const chosen = view("none");
+  const chosen = view("date");
   const state = {
     ...registry,
     sessionReferences: [
@@ -322,7 +322,7 @@ test("sidebar list: view and open preferences invalidate an otherwise unchanged 
       sessionReference("/repo", "p", { title: "Pinned", pinned: true }),
     ],
   };
-  const byName = view("none");
+  const byName = view("date");
   const names = (chosen: SidebarView) => {
     const list = model.list(state, chosen);
     return list.body?.kind === "sections" ? titles(list.body.sections[0]!.sessions) : [];
@@ -362,7 +362,6 @@ test("sidebar list: an empty registry says what to do next, per grouping; pinned
     folder: "No folders yet. Start a session in any folder and it appears here.",
     project: noSessions,
     date: noSessions,
-    none: noSessions,
   };
   for (const groupBy of GROUPINGS)
     assert.deepEqual(model.list(loaded, view(groupBy)), {
@@ -411,7 +410,6 @@ test("sidebar list: a pinned session shows only under Pinned, even when its fold
     pinned: ["Pinned closed", "Pinned open"],
     sections: [["/repo", ["Unfiled"]]],
   });
-  assert.deepEqual(rows("none").sections, [["list", ["Unfiled"]]]);
   assert.deepEqual(rows("date").sections, [["date:2026-10-01", ["Unfiled"]]]);
 });
 
@@ -447,7 +445,7 @@ test("sidebar list: folder and branch adds a line only where a row has something
       ["/repo", "branch"],
     ],
   });
-  assert.deepEqual(details("none").sections, [["list", "folder-and-branch"]]);
+  assert.deepEqual(details("date").sections, [["date:2026-10-01", "folder-and-branch"]]);
   assert.deepEqual(details("folder", false), {
     pinned: undefined,
     sections: [
@@ -508,7 +506,7 @@ test("sidebar list: selecting a session opens the section holding it: its folder
   );
   assert.equal(items.get("piano.pinnedOpen"), "true", "and stays open on the next load");
 
-  // Under date or no grouping Pinned is still the session's section.
+  // Under date grouping Pinned is still the session's section.
   model.toggle(PINNED, false);
   model.sync(pinnedSelected, view("date"));
   assert.equal(model.list(pinnedSelected, view("date")).pinned?.open, true);
@@ -586,8 +584,7 @@ test("sidebar list: a registry refresh never reopens a section the user collapse
   model.sync(refreshed, view("folder"));
   assert.equal(isOpen(model.list(refreshed, view("folder")), "/repo"), false);
   assert.equal(changes(), seen, "a repeat changes nothing, so nothing is stored or rendered again");
-  // Leaving for a grouping without an owner, or an unregistered folder, and back does not reopen it.
-  model.sync(refreshed, view("none"));
+  // Leaving for an unregistered folder and back does not reopen it.
   model.sync(selecting(registry, "/unregistered", "s3"), view("folder"));
   model.sync(refreshed, view("folder"));
   assert.equal(isOpen(model.list(refreshed, view("folder")), "/repo"), false);
@@ -630,8 +627,7 @@ test("sidebar list: keys stay the same across a grouping switch, so sections kee
   model.toggle("/other", false);
   const byFolder = openness(model.list(state, view("folder")));
   const byProject = openness(model.list(state, view("project")));
-  for (const groupBy of ["date", "none", "project", "folder"] as const)
-    model.list(state, view(groupBy));
+  for (const groupBy of ["date", "project", "folder"] as const) model.list(state, view(groupBy));
   assert.deepEqual(openness(model.list(state, view("folder"))), byFolder);
   assert.deepEqual(openness(model.list(state, view("project"))), byProject);
   assert.deepEqual(byFolder, [
@@ -710,7 +706,7 @@ test("sidebar list: done projects' groups sit apart, A–Z, under project groupi
   });
   const reopened = { ...state, projects: projects.map(({ doneAt: _, ...p }) => p) };
   assert.deepEqual(parts(reopened, "project")?.done, [], "no done part when no project is done");
-  for (const groupBy of ["folder", "date", "none"] as const)
+  for (const groupBy of ["folder", "date"] as const)
     assert.deepEqual(parts(state, groupBy)?.done, [], `${groupBy} grouping has no done part`);
 });
 

@@ -1,8 +1,8 @@
 import type { FolderView, Project } from "@shared/wire";
 import { isProjectDone } from "./projectCommands.ts";
 
-/** How the sidebar lists sessions: by folder, project, date, or as one list. */
-export type GroupBy = "folder" | "project" | "date" | "none";
+/** How the sidebar lists sessions: by folder, project or date. */
+export type GroupBy = "folder" | "project" | "date";
 export type SortBy = "name" | "recent";
 export interface SidebarView {
   groupBy: GroupBy;
@@ -19,9 +19,8 @@ export const GROUP_BY: ReadonlyArray<{ value: GroupBy; label: string }> = [
   { value: "date", label: "Date" },
   { value: "folder", label: "Folder" },
   { value: "project", label: "Project" },
-  { value: "none", label: "None" },
 ];
-/** Choices are alphabetical by label, with no grouping last. */
+/** Choices are alphabetical by label. */
 export const SORT_BY: ReadonlyArray<{ value: SortBy; label: string }> = [
   { value: "recent", label: "Activity" },
   { value: "name", label: "Name" },

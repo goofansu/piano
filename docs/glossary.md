@@ -55,7 +55,7 @@ Earlier documents call a project an "outcome project".
 A repository can support multiple projects, and a project can span repositories.
 A task is a narrower intended outcome that may contribute to a project; neither tasks nor a task
 hierarchy are required for grouping sessions. Workspaces still identify where execution happens.
-The sidebar groups sessions by folder, by project or not at all. Code, wire and SQLite use the same
+The sidebar groups sessions by date, folder or project. Code, wire and SQLite use the same
 names: `folders` for added directories and `projects` for groupings. Pi's own "project trust" keeps
 Pi's name; it is unrelated to Piano projects.
 
