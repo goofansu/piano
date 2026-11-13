@@ -1,8 +1,13 @@
 import { Schema } from "effect";
 
-/** Piano's API-key setup catalog. Add a single-key Pi provider and its local logo here. */
+/**
+ * Piano's API-key setup catalog, shown in this order: keep it alphabetical by name. Add a
+ * single-key Pi provider and its local logo here.
+ */
 export const API_KEY_PROVIDERS = [
   { id: "deepseek", name: "DeepSeek", logo: "deepseek" },
+  { id: "fireworks", name: "Fireworks", logo: "fireworks" },
+  { id: "google", name: "Google", logo: "google" },
   { id: "vercel-ai-gateway", name: "Vercel AI Gateway", logo: "vercel" },
 ] as const;
 
