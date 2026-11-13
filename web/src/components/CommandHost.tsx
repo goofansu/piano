@@ -171,7 +171,10 @@ export function useGlobalCommands() {
   const { state, run, global } = useCommands();
   const scope = useMachineScope();
   const offers = useOffers();
-  const commands = globalCommands(state, global).filter(offers.command);
+  const commands = globalCommands(state, {
+    ...global,
+    inbox: scope.machines.length > 1,
+  }).filter(offers.command);
   if (scope.machines.length > 1)
     commands.push(
       ...scope.machines.map((machine): GlobalCommand => ({
@@ -254,6 +257,7 @@ export function CommandHost({
   const {
     openPage,
     openNew,
+    openInbox,
     openProjects,
     openProject,
     openChanges,
@@ -312,6 +316,7 @@ export function CommandHost({
     closeSettings,
     openSettings,
     openNew,
+    openInbox,
     openProjects,
     openProject,
     openChanges,

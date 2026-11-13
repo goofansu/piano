@@ -3,11 +3,20 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { listMachines } from "@/lib/api";
 import { observeDictationPage } from "@/lib/browserDictation";
-import { LOCAL, type Machine, machineLocation, machinePath } from "@/lib/machine";
+import { createInbox } from "@/lib/inbox";
+import {
+  LOCAL,
+  type Machine,
+  machineFrameBytes,
+  machineLocation,
+  machinePath,
+  machineSocketUrl,
+} from "@/lib/machine";
 import { forgetUnconfiguredMachines, machineLocationMemory } from "@/lib/machineMemory";
 import { createMachineStores } from "@/lib/machineStores";
 import { toastNotify } from "@/lib/toastNotify";
 import { MachineContext } from "@/lib/useMachine";
+import { browserSocketEnvironment, openConnection } from "@/lib/ws";
 
 /** Drafts and question replies live for this page load; a machine switch disposes its connection, not them. */
 export function MachineHost({ children }: { children: React.ReactNode }) {
@@ -16,6 +25,18 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [storesFor] = useState(() => createMachineStores(toastNotify));
+  // The Inbox outlives a machine switch: it lists every machine, whichever one is selected.
+  const [inbox] = useState(() =>
+    createInbox({
+      connect: (machineId, handlers) =>
+        openConnection(handlers, {
+          ...browserSocketEnvironment,
+          url: () => machineSocketUrl(machineId),
+          frameBytes: machineFrameBytes(machineId),
+        }),
+    }),
+  );
+  useEffect(() => inbox.stop, [inbox]);
   useEffect(observeDictationPage, []);
   useEffect(() => {
     const controller = new AbortController();
@@ -24,6 +45,7 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
         // Only a list the server answered: a failed read forgets nothing.
         forgetUnconfiguredMachines(list);
         setMachines([...list]);
+        inbox.setMachines(list);
         setLoaded(true);
       })
       .catch(() => {
@@ -37,10 +59,14 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
       controller.abort();
       window.removeEventListener("popstate", pop);
     };
-  }, []);
-  const switchMachine = (next: string) => {
+  }, [inbox]);
+  const switchMachine = (next: string, path?: string) => {
     if (next === id || !machines.some((m) => m.id === next)) return;
-    history.pushState(null, "", machinePath(next, machineLocationMemory(next).read() ?? "/new"));
+    history.pushState(
+      null,
+      "",
+      machinePath(next, path ?? machineLocationMemory(next).read() ?? "/new"),
+    );
     setId(next);
   };
   const machine = machines.find((m) => m.id === id);
@@ -60,7 +86,7 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
       </Empty>
     );
   return (
-    <MachineContext key={id} value={{ machine, machines, switchMachine, ...storesFor(id) }}>
+    <MachineContext key={id} value={{ machine, machines, switchMachine, inbox, ...storesFor(id) }}>
       {children}
     </MachineContext>
   );

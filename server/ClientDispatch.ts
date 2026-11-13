@@ -591,7 +591,11 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     Effect.forkScoped,
   );
   yield* running.pipe(
-    Stream.runForEach((list) => send({ _tag: "hosts", hosts: list })),
+    Stream.runForEach((list) =>
+      hosts.stopped.pipe(
+        Effect.flatMap((stopped) => send({ _tag: "hosts", hosts: list, stopped })),
+      ),
+    ),
     Effect.ignore,
     Effect.forkScoped,
   );

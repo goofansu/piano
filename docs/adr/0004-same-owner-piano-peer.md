@@ -82,6 +82,35 @@ main-origin composer utility defined below, not a remote service. Parallel workt
 come from a remote session's own dispatch, which runs on the peer.
 [Setup and limits](../remote-piano.md) describe the exact startup configuration.
 
+## Inbox: every machine's sessions that need the person
+
+With several peers, finding the session that waits for an answer meant switching to each machine
+in turn. The Inbox lists, from Local and every peer at once, the sessions that need the person
+(needs input, Pi stopped, done since last opened) and then the ones working. This amends the
+earlier limit that nothing is read across machines; search, projects and orchestration across
+machines stay out.
+
+- The browser keeps one listing-only connection per machine, the selected one's included, through
+  the same gateway and `/ws/peer` as a switch uses. It reads the two frames every connection
+  already receives, the registry and `hosts`, and sends nothing but acknowledgements and
+  heartbeats: no selection, action or status read. The gateway stays a pipe and the peer's scope is
+  unchanged (INV-01/11).
+- `hosts` gains two facts each machine reads from Pi (INV-03): `needsInput` on a running session
+  whose dialog waits, and `stopped`, the sessions whose Pi stopped needing attention
+  (`closureNeedsAttention`) and has not run since. Stops are remembered for the peer's server
+  process only, as its closures already are.
+- "Done" is observed, as the sidebar's dot is: a session that stopped working while it was not on
+  screen, until it is opened. It lasts for this page load and is not shared between browsers.
+- Rows are keyed by machine, directory and session ID, so identical paths and IDs on two machines
+  stay two sessions (INV-07). Opening a row switches to its machine at that session's address.
+- Nothing is stored on main, and no peer's list is copied into another's database. An unavailable
+  machine is named under Unavailable and keeps the rows it last sent; it never borrows another
+  machine's.
+- Cost: one more socket per machine while the page is open, each carrying the sidebar frames a
+  selected machine already receives. Only a main with a peer opens them.
+- Main and peers deploy together (INV-12). An older peer sends neither fact: its sessions list as
+  working or done only.
+
 ## Projects: the peer's own, managed from main
 
 Switching machines shows that machine's sessions and its projects. Each Piano's projects live in

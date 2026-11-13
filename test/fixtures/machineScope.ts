@@ -1,4 +1,5 @@
 import { LOCAL } from "../../shared/machine.ts";
+import { createInbox } from "../../web/src/lib/inbox.ts";
 import { createMachineStores } from "../../web/src/lib/machineStores.ts";
 import type { MachineScope } from "../../web/src/lib/useMachine.ts";
 
@@ -7,5 +8,6 @@ export const localMachineScope = (): MachineScope => ({
   machine: LOCAL,
   machines: [LOCAL],
   switchMachine: () => {},
+  inbox: createInbox({ connect: () => ({ send: () => "not-sent", close: () => {} }) }),
   ...createMachineStores(() => {})(LOCAL.id),
 });

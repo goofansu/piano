@@ -188,6 +188,19 @@ in this browser under that machine alone, so the model picker opens at once and 
 starts where you last worked there; neither is ever taken from another machine. Remote files,
 credentials, history and database remain remote.
 
+### Inbox
+
+**Inbox**, above **Projects** in the sidebar and in Cmd+K, lists sessions from Local and every
+configured machine at once, whichever machine is selected: first the ones that need you (**Needs
+input**, **Pi stopped**, **Done**), newest first, then the ones **Working**. Each row names its
+machine, folder and branch; opening it switches to that machine and opens the session. The
+sidebar shows how many sessions need you.
+
+**Done** is a session whose turn finished while it was not on screen; **Pi stopped** is one whose
+Pi exited or was interrupted. Opening the session clears either. Both are for this page load: a
+reload starts from what each machine reports now. A machine that cannot be reached is listed
+under **Unavailable** with the rows it last sent.
+
 ### Projects
 
 **Projects** lists the selected machine's projects, kept in that machine's database. Create one,
@@ -282,7 +295,8 @@ No peer voice settings or transcription endpoints are proxied, and no peer crede
 - Only configured peers, the remote's `/ws/peer`, slash-command reads, defaults save, the
   session's Changes, pull request, Outputs and file reads, and fixed image
   preparation/cancellation/preview routes are routed. There is
-  no arbitrary URL proxy, redirect following, mutation retry or cross-machine search. The browser never contacts the
+  no arbitrary URL proxy, redirect following, mutation retry or cross-machine search; the Inbox
+  reads each machine's own list over its own connection. The browser never contacts the
   integration hostname.
 - The configured destination is trusted, not an authenticated instance-ID handshake. A remote
   without `/ws/peer` fails closed as unavailable; there is no version negotiation. Deploy main and

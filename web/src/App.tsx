@@ -3,6 +3,7 @@ import { AppLayout, LayoutView } from "@/components/AppLayout";
 import { CommandHost } from "@/components/CommandHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
+import { Inbox } from "@/components/Inbox";
 import { MachineHost } from "@/components/MachineHost";
 import { NewSession } from "@/components/NewSession";
 import { PaneNotFound } from "@/components/Pane";
@@ -29,7 +30,7 @@ import { providerAccounts } from "@/lib/useProviderAccounts";
 import { SessionFilesContext, useSessionFilesController } from "@/lib/useSessionFiles";
 import { SidebarLayoutContext, useSidebarLayoutController } from "@/lib/useSidebarLayout";
 import { browserSocketEnvironment, type ConnectionHandlers, openConnection } from "@/lib/ws";
-import { type AppState, initialState } from "@/store";
+import { type AppState, initialState, sessionKey } from "@/store";
 
 export default function App() {
   return (
@@ -81,6 +82,15 @@ function MachineApp() {
   useEffect(() => drafts.follow(client), [client, drafts]);
   useEffect(() => questionReplies.follow(client), [client, questionReplies]);
   useEffect(() => previews?.follow(client, notify), [client, previews]);
+  // The Inbox counts a turn that finished, or a Pi that stopped, only while its session is not
+  // the one on screen here; leaving this machine leaves none of its sessions on screen.
+  const onScreen = state.view.kind === "session" ? (state.session ?? state.selecting) : null;
+  const viewing = onScreen?.sessionId ? sessionKey(onScreen) : null;
+  const { inbox } = scope;
+  useEffect(() => {
+    inbox.viewing(machine.id, viewing);
+    return () => inbox.viewing(machine.id, null);
+  }, [inbox, machine.id, viewing]);
   const layout = useSidebarLayoutController();
   // Details' Outputs reads this one answer, filtered by Git once per change.
   const sessionFiles = useSessionFilesController(state);
@@ -125,6 +135,8 @@ function MachineApp() {
                           chooseDirectory={chooseDirectory}
                           onProjectChange={(id) => openNew(undefined, id)}
                         />
+                      ) : state.view.kind === "inbox" ? (
+                        <Inbox />
                       ) : state.view.kind === "projects" ? (
                         <ProjectsIndex state={state} />
                       ) : state.view.kind === "project" ? (

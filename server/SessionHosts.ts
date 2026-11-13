@@ -7,13 +7,26 @@
  */
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { Context, Data, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  Data,
+  Effect,
+  Fiber,
+  Layer,
+  PubSub,
+  Scope,
+  Semaphore,
+  Stream,
+} from "effect";
+import { closureNeedsAttention } from "../shared/sessionStatus.ts";
 import {
   type HostInfo,
   type SessionClosure,
   type SlashCommand,
   type Snapshot,
   type StartOptions,
+  type StoppedSession,
   sameSession,
   SLASH_COMMANDS_TIMEOUT_MS,
   sessionKey,
@@ -150,6 +163,9 @@ export class SessionHosts extends Context.Service<
     readonly archive: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly delete: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly list: Effect.Effect<ReadonlyArray<HostInfo>>;
+    /** Sessions whose Pi stopped needing the person's attention and has not run since, as this
+     * server process remembers them. Current whenever `subscribe` publishes. */
+    readonly stopped: Effect.Effect<ReadonlyArray<StoppedSession>>;
     /** The running sessions, then every later change to them. Subscribes now, so nothing published
      * after this returns is missed. */
     readonly subscribe: Effect.Effect<Stream.Stream<ReadonlyArray<HostInfo>>, never, Scope.Scope>;
@@ -179,6 +195,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       // Runtime diagnostics, not a competing history. Retained across child reopen,
       // not across server restart; no execution records are written into registry.
       const exits = new Map<string, SessionClosure>();
+      /** Where and when each remembered closure happened, for `stopped`. */
+      const exitedAt = new Map<string, Omit<StoppedSession, "detail">>();
       const changed = yield* PubSub.sliding<ReadonlyArray<HostInfo>>(1);
       const lifecycle = yield* PubSub.sliding<void>(1);
       // Never await observers under ownership's lock. Even a whole create/retire lifetime can
@@ -222,8 +240,17 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           out.push({
             cwd: h.session.spec.cwd,
             sessionId: h.session.spec.sessionId,
-            ...listedFacts(state),
+            ...listedFacts(state, h.needsInput),
           });
+        }
+        return out;
+      });
+      const stopped = Effect.sync(() => {
+        const out: StoppedSession[] = [];
+        for (const [key, closure] of exits) {
+          const where = exitedAt.get(key);
+          if (where && !hosts.has(key) && closureNeedsAttention(closure))
+            out.push({ ...where, detail: closure.detail });
         }
         return out;
       });
@@ -240,6 +267,11 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       ) {
         if (hosts.get(key) !== host) return;
         exits.set(key, yield* host.close(how));
+        exitedAt.set(key, {
+          cwd: host.session.spec.cwd,
+          sessionId: host.session.spec.sessionId,
+          at: new Date(yield* Clock.currentTimeMillis).toISOString(),
+        });
         hosts.delete(key);
         yield* invalidateHistory;
         yield* announce;
@@ -683,6 +715,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         archive: (cwd, id) => retire(cwd, id, false),
         delete: (cwd, id) => retire(cwd, id, true),
         list,
+        stopped,
         // Subscribed before the list is read: a change in between arrives after it, not never.
         subscribe: Effect.gen(function* () {
           const subscription = yield* PubSub.subscribe(changed);

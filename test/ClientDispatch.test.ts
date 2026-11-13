@@ -1464,3 +1464,46 @@ test("INV-03: a first message its new session refuses before Pi sees it reads no
     }),
   );
 });
+
+test("INV-03: the hosts frame says which session waits for an answer and which Pi stopped", async () => {
+  await run(
+    Effect.gen(function* () {
+      const asks = yield* registered("hosts-asks");
+      const crashes = yield* registered("hosts-crashes");
+      const queue = yield* Queue.unbounded<ServerMessage>();
+      yield* makeClientDispatch({
+        send: (m) => Queue.offer(queue, m).pipe(Effect.asVoid),
+        overflow: (e) => Effect.die(e),
+      });
+      type Hosts = Extract<ServerMessage, { _tag: "hosts" }>;
+      /** The first hosts frame from here on that `holds`. */
+      const hostsWhere = (holds: (m: Hosts) => boolean) =>
+        Effect.gen(function* () {
+          for (;;) {
+            const m = yield* Queue.take(queue);
+            if (m._tag === "hosts" && holds(m)) return m;
+          }
+        });
+      const of = (m: Hosts, sessionId: string) => m.hosts.find((h) => h.sessionId === sessionId);
+
+      const idle = yield* hostsWhere((m) => m.hosts.length === 2);
+      assert.equal(of(idle, "hosts-asks")?.needsInput, undefined);
+      assert.deepEqual(idle.stopped, []);
+
+      yield* asks.act({ _tag: "prompt", text: "ask" }).pipe(Effect.forkChild);
+      const waiting = yield* hostsWhere((m) => !!of(m, "hosts-asks")?.needsInput);
+      assert.equal(of(waiting, "hosts-crashes")?.needsInput, undefined);
+
+      yield* crashes
+        .act({ _tag: "prompt", text: "crash now" })
+        .pipe(Effect.ignore, Effect.forkChild);
+      const stopped = yield* hostsWhere((m) => (m.stopped?.length ?? 0) > 0);
+      assert.equal(of(stopped, "hosts-crashes"), undefined, "a stopped Pi is no longer running");
+      assert.deepEqual(
+        stopped.stopped?.map((s) => [s.cwd, s.sessionId]),
+        [[cwd, "hosts-crashes"]],
+      );
+      assert.ok(of(stopped, "hosts-asks")?.needsInput, "the other session still waits");
+    }),
+  );
+});

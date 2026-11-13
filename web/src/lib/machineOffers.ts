@@ -84,6 +84,7 @@ const REMOTE_OFFERS: MachineOffers = {
       case "session-rail":
       case "agent":
       case "artifacts":
+      case "inbox":
       case "projects":
       case "open-project":
       case "project-dialog":

@@ -1,4 +1,5 @@
 import { createContext, useContext, useSyncExternalStore } from "react";
+import type { Inbox } from "./inbox.ts";
 import type { Machine } from "./machine.ts";
 import { type MachineOffers, machineOffers } from "./machineOffers.ts";
 import type { MachineStores } from "./machineStores.ts";
@@ -7,7 +8,10 @@ import type { PreviewObservationState } from "./previewObservation.ts";
 export interface MachineScope extends MachineStores {
   machine: Machine;
   machines: readonly Machine[];
-  switchMachine: (id: string) => void;
+  /** Opens another machine at `path` within it, else at the page this tab last had there. */
+  switchMachine: (id: string, path?: string) => void;
+  /** Every machine's sessions that need the person; it outlives a machine switch. */
+  inbox: Inbox;
 }
 export const MachineContext = createContext<MachineScope | null>(null);
 

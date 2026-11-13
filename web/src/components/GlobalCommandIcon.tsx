@@ -2,6 +2,7 @@ import {
   ArrowUpDownIcon,
   FolderGit2Icon,
   HomeIcon,
+  InboxIcon,
   LayoutListIcon,
   type LucideIcon,
   MonitorIcon,
@@ -23,6 +24,7 @@ import type { SettingsSectionIconName } from "@/lib/routes";
 const ICONS: Record<Exclude<IconId, SettingsSectionIconName | ProjectCommandIcon>, LucideIcon> = {
   machine: MonitorIcon,
   home: HomeIcon,
+  inbox: InboxIcon,
   projects: TargetIcon,
   trusted: ShieldCheckIcon,
   untrusted: ShieldOffIcon,

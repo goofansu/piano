@@ -885,8 +885,24 @@ export const HostInfo = Schema.Struct({
   starting: Schema.optional(Schema.Boolean),
   /** This generation owns an app that may still be running; ending Pi stops it. */
   preview: Schema.optional(Schema.Boolean),
+  /** A dialog waits for the person's answer (`liveActivityOf`'s `needs_input`). */
+  needsInput: Schema.optional(Schema.Boolean),
 });
 export type HostInfo = typeof HostInfo.Type;
+
+/**
+ * A session whose Pi stopped in a way that needs the person (`closureNeedsAttention`) and has not
+ * run since. Remembered for this server process only, as the closure itself is.
+ */
+export const StoppedSession = Schema.Struct({
+  cwd: Schema.String,
+  sessionId: Schema.String,
+  /** The closure's own words. */
+  detail: Schema.String,
+  /** ISO time Pi stopped. */
+  at: Schema.String,
+});
+export type StoppedSession = typeof StoppedSession.Type;
 
 // ── WebSocket protocol ──────────────────────────────────────────────────────
 
@@ -1127,7 +1143,11 @@ export const ServerMessage = Schema.Union([
   }),
   /** A set_trust that ended without its `trust` reply, for the path the request named. */
   Schema.TaggedStruct("trust_failed", { cwd: Schema.String, message: Schema.String }),
-  Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),
+  /** The running sessions, and with them the ones that stopped needing attention. */
+  Schema.TaggedStruct("hosts", {
+    hosts: Schema.Array(HostInfo),
+    stopped: Schema.optional(Schema.Array(StoppedSession)),
+  }),
   /** Result of `select`: the session now shown. `hosted` false means a read-only peek of the session file. */
   Schema.TaggedStruct("selected", {
     selectionId: Schema.String,

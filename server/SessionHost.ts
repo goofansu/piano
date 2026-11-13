@@ -30,6 +30,8 @@ export interface SessionHost {
   readonly session: PiSession;
   /** Set once close begins; a closing host rejects new input and never mirrors again. */
   readonly closing: boolean;
+  /** A dialog waits for the person's answer, as this host last observed its session. */
+  readonly needsInput: boolean;
   /** Busy as of now: an admitted action is in flight or Pi is not quiescent (INV-02/03). */
   readonly busy: Effect.Effect<boolean>;
   /** Not closing, not busy, and without activity for `idleMs`. */
@@ -56,9 +58,13 @@ const notSent = (error: PiSessionError) => refusedUnsent(error.reason, error.det
 
 /** What the hosts list says of a running session. The host announces a change whenever these
  * facts differ from those it last announced, whichever event changed them. */
-export const listedFacts = (state: SessionState): Pick<HostInfo, "working" | "preview"> => ({
+export const listedFacts = (
+  state: SessionState,
+  needsInput: boolean,
+): Pick<HostInfo, "working" | "preview" | "needsInput"> => ({
   working: workUnderWay(state),
   ...(state.preview && { preview: true }),
+  ...(needsInput && { needsInput: true }),
 });
 
 /** Pi owns the session name and statistics; the registry only mirrors them for the sidebar. */
@@ -177,11 +183,17 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
   });
   const session: PiSession = { ...raw, act };
 
+  // The session's live view, folded from its events for Webhooks, which decides what it sends,
+  // and for the dialog the hosts list reports.
+  let observed: Snapshot | undefined;
   const busy = Effect.map(raw.state, (state) => actions > 0 || !state.isQuiescent);
   const host: SessionHost = {
     session,
     get closing() {
       return closing;
+    },
+    get needsInput() {
+      return (observed?.dialogs.length ?? 0) > 0;
     },
     busy,
     idle: Effect.fn("SessionHost.idle")(function* (idleMs: number) {
@@ -215,8 +227,6 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
 
   yield* mirrorStats;
   const ready = yield* Deferred.make<void>();
-  // The session's live view, folded from its events for Webhooks, which decides what it sends.
-  let observed: Snapshot | undefined;
   let announced: ReturnType<typeof listedFacts> | undefined;
   yield* session.events.pipe(
     Stream.runForEach((event) =>
@@ -248,8 +258,13 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
               : undefined;
         if (closure) yield* options.onExit(closure);
         else if (observed) {
-          const facts = listedFacts(observed.state);
-          if (facts.working === announced?.working && facts.preview === announced.preview) return;
+          const facts = listedFacts(observed.state, observed.dialogs.length > 0);
+          if (
+            facts.working === announced?.working &&
+            facts.preview === announced.preview &&
+            facts.needsInput === announced.needsInput
+          )
+            return;
           announced = facts;
           yield* options.onChange;
         }

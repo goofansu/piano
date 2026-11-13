@@ -222,6 +222,8 @@ export interface Navigation {
   openPage: (page: Page) => void;
   /** The New page, optionally in a directory or for a project. */
   openNew: (cwd?: string, projectId?: string) => void;
+  /** The Inbox. */
+  openInbox: () => void;
   /** The Projects index. */
   openProjects: () => void;
   /** A project's home. */
@@ -266,6 +268,8 @@ function routePage(route: PageRoute): Page {
   switch (route.kind) {
     case "new":
       return { kind: "new", projectId: route.projectId };
+    case "inbox":
+      return { kind: "inbox" };
     case "projects":
       return { kind: "projects" };
     case "project":
@@ -281,6 +285,8 @@ function pageAddress(state: AppState, page: Page): { route: Route; title: string
         route: { kind: "new", projectId: page.projectId },
         title: findProject(state, page.projectId)?.name || "New session",
       };
+    case "inbox":
+      return { route: { kind: "inbox" }, title: "Inbox" };
     case "projects":
       return { route: { kind: "projects" }, title: "Projects" };
     case "project":
@@ -884,6 +890,7 @@ export function createNavigation({
     select,
     openPage: open,
     openNew: (cwd, projectId) => open({ kind: "new", cwd, projectId }),
+    openInbox: () => open({ kind: "inbox" }),
     openProjects: () => open({ kind: "projects" }),
     openProject: (projectId) => open({ kind: "project", projectId }),
     openSettings: (section = DEFAULT_SETTINGS_SECTION) =>

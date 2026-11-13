@@ -1,6 +1,7 @@
 import type { FolderView, Project } from "@shared/wire";
 import { cn } from "cn";
 import {
+  InboxIcon,
   MoreHorizontalIcon,
   SearchIcon,
   SettingsIcon,
@@ -15,6 +16,7 @@ import { useCommands, useGlobalCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { IconButton } from "@/components/IconButton";
+import { useInboxCount } from "@/components/Inbox";
 import { MachineSwitcher } from "@/components/MachineSwitcher";
 import { PianoButton as Button } from "@/components/PianoButton";
 import {
@@ -54,7 +56,7 @@ import type { Navigation } from "@/lib/navigation";
 import { projectCommands } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import type { SessionRowDetails, SidebarSection } from "@/lib/sidebarList";
-import { useOffers } from "@/lib/useMachine";
+import { useMachineScope, useOffers } from "@/lib/useMachine";
 import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useNavigation } from "@/lib/useNavigation";
 import { useSidebarList } from "@/lib/useSidebarList";
@@ -80,8 +82,10 @@ const groupTrigger =
  * and New session while the remote's own Piano manages the rest.
  */
 export function Sidebar({ state }: Props) {
-  const { openNew, openProjects, openSettings, setPalette } = useNavigation();
+  const { openNew, openInbox, openProjects, openSettings, setPalette } = useNavigation();
   const offers = useOffers();
+  const scope = useMachineScope();
+  const inboxCount = useInboxCount();
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
       <LayoutHeader title={<MachineSwitcher />}>
@@ -99,8 +103,29 @@ export function Sidebar({ state }: Props) {
           <SquarePenIcon />
         </IconButton>
       </LayoutHeader>
-      {/* The way to the Projects index leads the list; it is the current row while the index is open, as a selected session row is. */}
-      <div className="px-(--row-inset) py-2">
+      {/* The ways to the Inbox and the Projects index lead the list; each is the current row while its page is open, as a selected session row is. */}
+      <div className="flex flex-col gap-0.5 px-(--row-inset) py-2">
+        {scope.machines.length > 1 && (
+          <Button
+            variant="ghost"
+            leading
+            className={cn(
+              row,
+              "w-full text-ink-2",
+              state.view.kind === "inbox" &&
+                "bg-(--selected) font-medium text-ink hover:bg-(--selected)",
+            )}
+            aria-current={state.view.kind === "inbox" ? "page" : undefined}
+            onClick={() => openInbox()}
+          >
+            <InboxIcon data-icon="inline-start" /> Inbox
+            {inboxCount > 0 && (
+              <span className="ml-auto pr-2 text-xs font-normal text-ink-3 tabular-nums">
+                {inboxCount}
+              </span>
+            )}
+          </Button>
+        )}
         <Button
           variant="ghost"
           leading
