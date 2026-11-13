@@ -122,7 +122,7 @@ has the New page's composer: a session started there joins the project, and runs
 folder of the member session active most recently (at the folder's own checkout), else wherever
 the person picks. `/projects/<id>/new` is its New page, where a session started joins it too. Closed-directory and archived-session references remain reachable
 from the group and from session search. `/projects` is the Projects index above the homes: one row per project with its folders, session
-count and last activity, newest first, reached from the sidebar's Projects row and Mod+K; see
+count and last activity, newest first, reached from the sidebar header's Projects button and Mod+K; see
 [the project-centered UX](project-centered-ux.md).
 
 ## Step 2 — Shared context and instructions, later

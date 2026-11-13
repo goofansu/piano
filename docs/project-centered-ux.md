@@ -27,7 +27,7 @@ thing the index lists.
 | Breadcrumb header: Projects / owner / repo / Threads. | The one header shape: title line "Projects / Verify Project" where "Projects" is the link up, context beneath it. |
 | Project home: Recent Threads, Commits with Verified badges, Files behind a GitHub connection. | Project home: the composer, then Sessions as hairline rows. Pull requests as a later group, from the links Piano already saves. No file browser: Changes belong to a session's workspace (INV-07). |
 | Threads page with Status and Users facets. | Not now. One user, few sessions per project; the sidebar's Sort by covers ordering. |
-| Bottom tabs Puck, Activity, Projects. | One "Projects" row at the top of the sidebar's list, and the same row in the palette's Global commands. |
+| Bottom tabs Puck, Activity, Projects. | One "Projects" button in the sidebar's header, and a row of the same name in the palette's Global commands. |
 | Snoozed, Inactive, Archived sections. | Pinned and archived sessions as they are. |
 | A project is a repository, found from the Git remote. | A project is a named outcome grouping sessions from any folder; a session may have none. |
 
@@ -98,7 +98,7 @@ One row "Projects", with the project icon the New page's Project picker uses, fi
 header, where the list begins. The header itself takes the one header shape and stays light: the
 hide control at its left, on the rows' left edge and at the point where each pane's show control
 appears once the sidebar is collapsed, since on desktop the sidebar keeps the pane's frame and
-its header is the pane header's row; then search, View options and New session as the
+its header is the pane header's row; then search, Projects and New session as the
 filled primary action at the end, the strip's one accent, which frees the row the full-width New
 session button took; a hairline under it is level with the pane header's, so the two headers read
 as one band. The mark sits in the footer beside Settings. Collapsed, there is no rail: the
@@ -118,7 +118,7 @@ The project's name in the context line already opens the home. Together with the
 
 ### Command palette
 
-Global commands gains "Projects", named as the sidebar row is, and on the index the header's
+Global commands gains "Projects", named as the sidebar's button is, and on the index the header's
 "New project" (Global commands lists the open page's header actions). "Open project: X" exists
 already. No new global shortcut.
 
@@ -130,7 +130,7 @@ already. No new global shortcut.
 
 | Item | Kind | Note |
 | --- | --- | --- |
-| Projects (sidebar row, palette row, page title, breadcrumb link) | control's name / title | One name everywhere. |
+| Projects (sidebar button, palette row, page title, breadcrumb link) | control's name / title | One name everywhere. |
 | New project | control's name | Exists in the sidebar menu already. |
 | piano, api · 3 sessions | value | Once per screen: in the index row, or in the home's header. |
 | No sessions yet | empty state's one line | As the sidebar group says it. |

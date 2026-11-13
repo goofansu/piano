@@ -75,9 +75,10 @@ const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-(--glyph-pad) text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 /**
- * The sidebar any machine shows, holding what its offers allow: Projects leads the list, and
- * Settings closes it only where it is offered, so a remote's sidebar lists its projects, catalog
- * and New session while the remote's own Piano manages the rest.
+ * The sidebar any machine shows, holding what its offers allow: the header reaches search, the
+ * Projects index and New session, and the footer holds View options, with Settings only where it
+ * is offered, so a remote's sidebar lists its projects, catalog and New session while the remote's
+ * own Piano manages the rest.
  */
 export function Sidebar({ state }: Props) {
   const { openNew, openProjects, openSettings, setPalette } = useNavigation();
@@ -93,43 +94,41 @@ export function Sidebar({ state }: Props) {
         >
           <SearchIcon />
         </IconButton>
-        <ViewMenu />
+        {/* The way to the Projects index; it reads as current while the index is open, as a selected session row does. */}
+        <IconButton
+          size="header"
+          label="Projects"
+          className={cn(
+            state.view.kind === "projects" && "bg-(--selected) text-ink hover:bg-(--selected)",
+          )}
+          aria-current={state.view.kind === "projects" ? "page" : undefined}
+          onClick={() => openProjects()}
+        >
+          <TargetIcon />
+        </IconButton>
         {/* The sidebar's one primary action, filled, at the header's end. */}
         <IconButton size="header" label="New session" variant="default" onClick={() => openNew()}>
           <SquarePenIcon />
         </IconButton>
       </LayoutHeader>
-      {/* The way to the Projects index leads the list; it is the current row while the index is open, as a selected session row is. */}
-      <div className="px-(--row-inset) py-2">
-        <Button
-          variant="ghost"
-          leading
-          className={cn(
-            row,
-            "w-full text-ink-2",
-            state.view.kind === "projects" &&
-              "bg-(--selected) font-medium text-ink hover:bg-(--selected)",
-          )}
-          aria-current={state.view.kind === "projects" ? "page" : undefined}
-          onClick={() => openProjects()}
-        >
-          <TargetIcon data-icon="inline-start" /> Projects
-        </Button>
-      </div>
       <ScrollArea className="min-h-0 flex-1">
-        {/* The list starts 8px below the Projects row and ends 16px above the footer or the sidebar's end. */}
-        <nav className="relative px-(--row-inset) pb-4" aria-label="Sessions">
+        {/* The list starts 8px below the header and ends 16px above the footer. */}
+        <nav className="relative px-(--row-inset) pt-2 pb-4" aria-label="Sessions">
           <SidebarSessions state={state} />
         </nav>
       </ScrollArea>
-      {offers.settings && (
-        <LayoutFooter>
+      {/* View options close the sidebar on every machine; Settings joins them where it is offered. */}
+      <LayoutFooter>
+        {offers.settings && (
           <Button variant="ghost" leading className="flex-1" onClick={() => openSettings()}>
             <SettingsIcon data-icon="inline-start" />
             Settings
           </Button>
-        </LayoutFooter>
-      )}
+        )}
+        <div className="ml-auto flex">
+          <ViewMenu />
+        </div>
+      </LayoutFooter>
     </div>
   );
 }

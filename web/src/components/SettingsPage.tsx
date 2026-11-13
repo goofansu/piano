@@ -8,6 +8,7 @@ import { LibrarySettings } from "@/components/LibrarySettings";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoButton } from "@/components/PianoButton";
 import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
+import { PianoMark } from "@/components/PianoMark";
 import { PianoSidebarMenuButton as SidebarMenuButton } from "@/components/PianoSidebarMenuButton";
 import { PreferencesSettings } from "@/components/PreferencesSettings";
 import { ProviderLoginDialog } from "@/components/ProviderLoginDialog";
@@ -82,6 +83,7 @@ export function SettingsNavigation({
           <HomeIcon data-icon="inline-start" />
           Home
         </PianoButton>
+        <PianoMark className="mr-1 size-6 rounded-md shadow-none" />
       </LayoutFooter>
     </div>
   );

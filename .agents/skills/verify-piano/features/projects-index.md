@@ -19,8 +19,8 @@ only what the browser already holds.
   `delete`); deleting from here keeps the index open.
 - `done`: Mark project done moves the row into the folded Done group without archiving its
   sessions. Expand "Done <n>" to open its home or use Reopen project to return it to the open list.
-- `sidebar-row`: the sidebar's "Projects" row under New session opens the index and reads as the
-  current row (`aria-current=page`) while it is open.
+- `sidebar-row`: the sidebar header's "Projects" button, before New session, opens the index and
+  reads as current (`aria-current=page`) while it is open.
 - `palette-row`: Mod+K (or "Search sessions, projects and commands" in the sidebar) offers
   "Projects" under Global commands on every screen, Settings included; on `/projects` it also
   offers the header's "New project", which opens the same dialog.
@@ -45,7 +45,7 @@ only what the browser already holds.
 
 ## How to get to it (user POV)
 
-- Sidebar: the "Projects" row under "New session".
+- Sidebar: the header's "Projects" button, before "New session".
 - Palette: Mod+K, type `projects`, choose "Projects".
 - Address bar: `/projects`, or `/m/<configured-machine>/projects` on a peer.
 
