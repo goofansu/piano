@@ -110,7 +110,7 @@ export interface PiTransport {
 }
 
 const debug = (...a: unknown[]) => {
-  if (process.env.PIANO_DEBUG) console.error("[PiTransport]", ...projectDisplay(a));
+  if (process.env.PIANO_DEBUG) console.error("[PiTransport]", Date.now(), ...projectDisplay(a));
 };
 
 const spawn = Effect.fn("PiTransport.spawn")(function* (
@@ -198,7 +198,11 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
         detail: "Pi protocol failure: invalid RPC envelope on stdout.",
       });
     }
-    debug("record", record.type); // Never log unprojected protocol content.
+    debug(
+      "record",
+      record.type,
+      record.type === "response" && "command" in record ? record.command : "",
+    ); // Never log unprojected protocol content.
     if (record.type === "response") {
       // Late/unmatched acknowledgements must not become session activity.
       if (typeof record.id !== "string" || !pending.has(record.id)) return;
