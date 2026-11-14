@@ -58,6 +58,7 @@ import { useImageSend } from "@/lib/useImageSend";
 import { useOffers } from "@/lib/useMachine";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
+import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useWorktreeOperation } from "@/lib/useWorktreeOperation";
 import type { WorktreeOperationOptions } from "@/lib/worktreeOperation";
 import type { AppState } from "@/store";
@@ -128,6 +129,7 @@ export function NewSessionComposer({
 }) {
   const { run } = useCommands();
   const offers = useOffers();
+  const sidebarLayout = useSidebarLayout();
   // The client starts a fresh New page in the last directory used, else the first folder; a
   // project's New page starts without one, and its home in its most recent member's folder.
   const page = startPage(state.view);
@@ -231,7 +233,10 @@ export function NewSessionComposer({
           cancelUpload={imageSend.cancel}
           completion={completionTarget(state)}
           attachmentsDisabled={!state.connected}
-          autoFocus={!window.matchMedia("(pointer: coarse)").matches}
+          // Not under an open sidebar, as after a machine switch: focus stays with the sidebar.
+          autoFocus={
+            !window.matchMedia("(pointer: coarse)").matches && !sidebarLayout.getState().mobileOpen
+          }
           label="First message"
           inputClassName={cn(
             composerInput,

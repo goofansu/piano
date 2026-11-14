@@ -1,5 +1,12 @@
 import { Dialog } from "radix-ui";
-import { type CSSProperties, type ReactNode, type RefObject, useEffect } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Sheet, SheetTitle } from "@/components/PianoSheet";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 
@@ -24,6 +31,19 @@ export function PianoSidebarReveal({
   children: ReactNode;
 }) {
   const { restoreFocus } = useSidebarLayout();
+  // Mounted already open (a machine switch remounts the page under a sidebar the layout keeps
+  // open), the sidebar is simply there: no entrance. Once closed, the next open enters again.
+  const [restored, setRestored] = useState(open);
+  if (restored && !open) setRestored(false);
+  // Radix runs the close handler after unmount too; a replaced sidebar did not close, so the
+  // focus it saved stays for the one that replaced it.
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   useEffect(() => {
     if (open && !dragging && !content.current?.contains(document.activeElement)) {
       content.current?.focus({ preventScroll: true });
@@ -37,6 +57,7 @@ export function PianoSidebarReveal({
           data-slot="mobile-sidebar"
           data-motion="drawer"
           data-dragging={dragging}
+          data-restored={restored || undefined}
           style={style}
           aria-describedby={undefined}
           onOpenAutoFocus={(event) => {
@@ -46,7 +67,7 @@ export function PianoSidebarReveal({
           onCloseAutoFocus={(event) => {
             // The layout knows what had focus before the sheet opened, and which control to fall back to.
             event.preventDefault();
-            restoreFocus();
+            if (mounted.current) restoreFocus();
           }}
         >
           <SheetTitle className="sr-only">{title}</SheetTitle>

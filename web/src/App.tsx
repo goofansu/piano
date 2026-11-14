@@ -31,6 +31,7 @@ import {
   SidebarLayoutContext,
   useSidebarLayout,
   useSidebarLayoutController,
+  useSidebarShortcut,
 } from "@/lib/useSidebarLayout";
 import { browserSocketEnvironment, type ConnectionHandlers, openConnection } from "@/lib/ws";
 import { type AppState, initialState } from "@/store";
@@ -90,6 +91,7 @@ function MachineApp() {
   useEffect(() => questionReplies.follow(client), [client, questionReplies]);
   useEffect(() => previews?.follow(client, notify), [client, previews]);
   const layout = useSidebarLayout();
+  useSidebarShortcut();
   // Details' Outputs reads this one answer, filtered by Git once per change.
   const sessionFiles = useSessionFilesController(state);
 

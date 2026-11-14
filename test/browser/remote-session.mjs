@@ -112,7 +112,9 @@ const send = async (page, text) => {
   await page.click("button", "Send");
 };
 const machine = async (page, name, capture) => {
-  // Use the accessible button: a narrow viewport also keeps a hidden desktop sidebar mounted.
+  // Find it in the accessibility tree, which skips the hidden desktop sidebar a narrow viewport
+  // keeps mounted. MachineSwitcher's trigger is a button, and the pane copy renders only while the
+  // sidebar is hidden, so exactly one visible "Machine" button exists at a time.
   await page.click("button", "Machine");
   await page.until(
     `[...document.querySelectorAll('[role="menu"], [role="listbox"]')].some(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))`,

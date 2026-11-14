@@ -8,6 +8,7 @@ import { forgetUnconfiguredMachines, machineLocationMemory } from "@/lib/machine
 import { createMachineStores } from "@/lib/machineStores";
 import { toastNotify } from "@/lib/toastNotify";
 import { MachineContext } from "@/lib/useMachine";
+import { useSidebarLayout } from "@/lib/useSidebarLayout";
 
 /** Drafts and question replies live for this page load; a machine switch disposes its connection, not them. */
 export function MachineHost({ children }: { children: React.ReactNode }) {
@@ -44,6 +45,11 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
     setId(next);
   };
   const machine = machines.find((m) => m.id === id);
+  const { closeMobile } = useSidebarLayout();
+  // Without a machine no sidebar is drawn; an open reveal must not spring back on the next one.
+  useEffect(() => {
+    if (!machine) closeMobile();
+  }, [machine, closeMobile]);
   if (!machine)
     return (
       <Empty className="h-full" role="status">

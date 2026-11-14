@@ -421,12 +421,15 @@
     border-radius var(--sidebar-duration) var(--sidebar-easing);
   will-change: transform, opacity;
 }
-/* Opened by a tap, the sidebar enters from closed; a drag already painted its start. */
+/* Opened by a tap, the sidebar enters from closed; a drag already painted its start, and a
+ * sidebar restored open across a machine switch is already there. */
 @starting-style {
-  [data-slot="mobile-sidebar"][data-dragging="false"] [data-slot="sidebar-reveal-navigation"] {
+  [data-slot="mobile-sidebar"][data-dragging="false"]:not([data-restored])
+    [data-slot="sidebar-reveal-navigation"] {
     clip-path: inset(0 100% 0 0);
   }
-  [data-slot="mobile-sidebar"][data-dragging="false"] [data-slot="sidebar-scrim"] {
+  [data-slot="mobile-sidebar"][data-dragging="false"]:not([data-restored])
+    [data-slot="sidebar-scrim"] {
     transform: translateX(0);
     opacity: 0;
     border-radius: 0;
