@@ -9,7 +9,6 @@ import { defaultFilter } from "cmdk";
 import { type AppState, sessionKey } from "../store.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
 import {
-  isProjectDone,
   openProjectCommand,
   type ProjectCommand,
   projectDestinations,
@@ -265,9 +264,7 @@ export function commandPalette(
       heading: "Sessions",
       rows: sessions,
     });
-  const projects = projectDestinations(state, undefined, { keepCurrent: true }).filter(
-    (project) => !isProjectDone(project),
-  );
+  const projects = projectDestinations(state, undefined, { keepCurrent: true });
   if (projects.length > 0)
     groups.push({
       id: "projects",

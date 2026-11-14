@@ -43,6 +43,25 @@ test("the sidebar's menu leaves out the current project; the New page keeps it",
   assert.deepEqual(newPage(launch), ["Billing", "Launch"], "the current project is not repeated");
 });
 
+test("pickers leave out done projects, except the New page's current choice", () => {
+  const archive: Project = { id: "p3", name: "Archive", doneAt: "2026-11-05T09:00:00Z" };
+  const s = { ...state, projects: [...state.projects, archive] };
+  assert.deepEqual(names(projectDestinations(s, undefined, { keepCurrent: true })), [
+    "Billing",
+    "Launch",
+  ]);
+  assert.deepEqual(names(projectDestinations(s, launch, { keepCurrent: false })), ["Billing"]);
+  assert.deepEqual(names(projectDestinations(s, archive, { keepCurrent: true })), [
+    "Archive",
+    "Billing",
+    "Launch",
+  ]);
+  assert.deepEqual(names(projectDestinations(s, archive, { keepCurrent: false })), [
+    "Billing",
+    "Launch",
+  ]);
+});
+
 test("a project offers New session in project, Project settings, Mark project done and Delete; New session opens its home", () => {
   assert.deepEqual(
     projectCommands(state, launch).map((c) => c.label),

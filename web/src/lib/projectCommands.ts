@@ -20,16 +20,19 @@ export function findProject(state: AppState, id: string | null | undefined): Pro
 }
 
 /**
- * What a project picker offers, by name as the sidebar lists projects. The sidebar's menu moves a
- * session away from `current`, so it leaves `current` out; the New page names its choice, so it
- * keeps `current` and can move away from it.
+ * What a project picker offers, by name as the sidebar lists projects. A done project is set aside,
+ * so pickers leave it out. The sidebar's menu moves a session away from `current`, so it leaves
+ * `current` out; the New page names its choice, so it keeps `current`, even a done one, and can move
+ * away from it.
  */
 export function projectDestinations(
   state: AppState,
   current: Project | undefined,
   { keepCurrent }: { keepCurrent: boolean },
 ): Project[] {
-  const choices = state.projects.filter((p) => keepCurrent || p.id !== current?.id);
+  const choices = state.projects.filter((p) =>
+    p.id === current?.id ? keepCurrent : !isProjectDone(p),
+  );
   return choices.sort((a, b) => byName(a.name, b.name));
 }
 
