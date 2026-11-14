@@ -66,7 +66,7 @@ export function PaneShowSidebar() {
         "pointer-events-none absolute inset-x-0 top-0 border-transparent",
       )}
     >
-      <ShowSidebarButton className="pointer-events-auto -ml-(--glyph-pad)" />
+      <ShowSidebarButton className="pointer-events-auto -ml-(--glyph-pad) pointer-coarse:-mr-2" />
       <div className="pointer-events-auto">
         <PaneMachineSwitcher />
       </div>
