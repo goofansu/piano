@@ -112,8 +112,10 @@ const send = async (page, text) => {
   await page.click("button", "Send");
 };
 const machine = async (page, name, capture) => {
-  // The Machine control can be a dropdown button or combobox; both use real pointer clicks.
-  await page.ab("click", '[aria-label="Machine"]');
+  // Find it in the accessibility tree, which skips the hidden desktop sidebar a narrow viewport
+  // keeps mounted. MachineSwitcher's trigger is a button, and the pane copy renders only while the
+  // sidebar is hidden, so exactly one visible "Machine" button exists at a time.
+  await page.click("button", "Machine");
   await page.until(
     `[...document.querySelectorAll('[role="menu"], [role="listbox"]')].some(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))`,
   );
@@ -391,6 +393,81 @@ await run(
         await page.see(`echo: ${echo}`);
         assert.equal(await draft(page), "REMOTE-DRAFT", "forward retains first peer ownership");
         await catalog(page, "remote", "second", "REMOTE-DRAFT");
+
+        // Sidebar reveal is browser-owned; machine-local sessions and drafts still remount.
+        await page.ab("set", "viewport", "700", "850");
+        const revealOpen = `document.querySelector('[data-slot="mobile-sidebar"]')?.getAttribute('data-state') === 'open'`;
+        await page.click("button", "Show sidebar");
+        await page.until(revealOpen);
+        await page.until(
+          `document.querySelector('[data-slot="mobile-sidebar"]').getAnimations({subtree:true}).every(a => a.playState !== 'running')`,
+        );
+        await page.evaluate(`window.sidebarDocumentMarker = 'same-document'`);
+        // A sidebar restored open across a remount is simply there: its entrance never runs and
+        // focus never leaves it (the machine menu aside). Polling for the end state would miss both.
+        await page.evaluate(`(() => {
+          const reveal = () => document.querySelector('[data-slot="mobile-sidebar"]');
+          window.sidebarFocusLeft = [];
+          document.addEventListener('focusin', (e) => {
+            if (!reveal()?.contains(e.target) && !e.target.closest('[role="menu"]'))
+              window.sidebarFocusLeft.push(e.target.getAttribute('aria-label') ?? e.target.localName);
+          });
+          window.sidebarEntrances = [];
+          document.addEventListener('transitionstart', (e) => {
+            const slot = e.target.dataset?.slot;
+            if (slot === 'sidebar-reveal-navigation' || slot === 'sidebar-scrim')
+              window.sidebarEntrances.push(slot + ':' + e.propertyName);
+          }, true);
+        })()`);
+        await machine(page, "eng-2");
+        await page.see("echo: SECOND-ECHO-ONCE");
+        assert.equal(await page.evaluate(revealOpen), true, "peer switch keeps sidebar expanded");
+        assert.equal(await draft(page), "SECOND-DRAFT");
+        await page.capture("3b-narrow-peer-sidebar");
+        await page.ab("back");
+        await page.see(`echo: ${echo}`);
+        assert.equal(
+          await page.evaluate(revealOpen),
+          true,
+          "Back restores a session without dismissing sidebar",
+        );
+        await page.ab("forward");
+        await page.see("echo: SECOND-ECHO-ONCE");
+        assert.equal(await page.evaluate(revealOpen), true, "Forward keeps sidebar expanded");
+        assert.equal(
+          await page.evaluate(`window.sidebarDocumentMarker`),
+          "same-document",
+          "no document reload",
+        );
+        assert.deepEqual(
+          await page.evaluate(`window.sidebarEntrances`),
+          [],
+          "peer switches and Back/Forward do not replay the sidebar's entrance",
+        );
+        assert.deepEqual(
+          await page.evaluate(`window.sidebarFocusLeft`),
+          [],
+          "focus stays in the sidebar across peer switches and Back/Forward",
+        );
+        await page.until(
+          `document.querySelector('[data-slot="mobile-sidebar"]')?.contains(document.activeElement)`,
+        );
+        await page.press("Escape");
+        await page.until(`!(${revealOpen})`);
+        await page.until(`document.activeElement?.getAttribute('aria-label') === 'Show sidebar'`);
+        await page.click("button", "Show sidebar");
+        await page.until(revealOpen);
+        await page.until(
+          `document.querySelector('[data-slot="mobile-sidebar"]').getAnimations({subtree:true}).every(a => a.playState !== 'running')`,
+        );
+        await page.click("button", "Second collision session");
+        await page.until(`!document.querySelector('[data-slot="mobile-sidebar"]')`);
+        await machine(page, "eng-1");
+        await page.see(`echo: ${echo}`);
+        assert.equal(await page.evaluate(revealOpen), false, "switching while closed stays closed");
+        assert.equal(await draft(page), "REMOTE-DRAFT");
+        await page.ab("set", "viewport", "1280", "900");
+
         // Pause preparation before it reaches main. Switching cancels the send, restoring its
         // source draft ahead of newer typing, even with identical identities on the other peer.
         await imageEvent(page, "paste", "cancelled.png");
@@ -1059,6 +1136,67 @@ await run(
         );
         assert.deepEqual(localRequestsFromRemote, [], "an unknown machine cannot mount Local");
         await page.capture("10-unknown-machine");
+        // Without a machine no sidebar is drawn, so Cmd+B must not change one the user cannot see.
+        await page.ab("set", "viewport", "1280", "800");
+        const collapsedPreference = `localStorage.getItem('piano.sidebar')`;
+        const preferenceBefore = await page.evaluate(collapsedPreference);
+        await page.press("Meta+b");
+        await page.click("button", "Local");
+        await page.until(`!document.body.innerText.includes('Machine unavailable')`);
+        assert.equal(
+          await page.evaluate(collapsedPreference),
+          preferenceBefore,
+          "Cmd+B without a machine keeps the desktop sidebar preference",
+        );
+        await page.press("Meta+b");
+        await page.until(`${collapsedPreference} !== ${JSON.stringify(preferenceBefore)}`);
+        // An open narrow sidebar closes with its machine and does not spring back on the next one.
+        await page.ab("set", "viewport", "700", "850");
+        const narrowOpen = `document.querySelector('[data-slot="mobile-sidebar"]')?.getAttribute('data-state') === 'open'`;
+        await page.click("button", "Show sidebar");
+        await page.until(narrowOpen);
+        await page.ab("back");
+        await page.see("Machine unavailable");
+        await page.until(`!(${narrowOpen})`);
+        await page.press("Meta+b");
+        await page.ab("forward");
+        await page.until(`!document.body.innerText.includes('Machine unavailable')`);
+        await page.until(`!!document.querySelector('[aria-label="Show sidebar"]')`);
+        assert.equal(
+          await page.evaluate(narrowOpen),
+          false,
+          "the sidebar stays closed after leaving an unavailable machine",
+        );
+        await page.capture("10b-after-unknown-machine");
+        // Back across machines to a New page keeps the sidebar open over it, so the composer
+        // beneath must not take focus from the sidebar.
+        await page.open("/new");
+        await page.until(`!!document.querySelector('[aria-label="First message"]')`);
+        await page.click("button", "Show sidebar");
+        await page.until(narrowOpen);
+        await page.until(
+          `document.querySelector('[data-slot="mobile-sidebar"]').getAnimations({subtree:true}).every(a => a.playState !== 'running')`,
+        );
+        await machine(page, "eng-2");
+        await page.until(`location.pathname.startsWith('/m/eng-2/')`);
+        await page.evaluate(`(() => {
+          window.focusOutsideSidebar = [];
+          document.addEventListener('focusin', (e) => {
+            if (!document.querySelector('[data-slot="mobile-sidebar"]')?.contains(e.target))
+              window.focusOutsideSidebar.push(e.target.getAttribute('aria-label') ?? e.target.localName);
+          });
+        })()`);
+        await page.ab("back");
+        await page.until(`!!document.querySelector('[aria-label="First message"]')`);
+        await page.until(
+          `document.querySelector('[data-slot="mobile-sidebar"]')?.contains(document.activeElement)`,
+        );
+        assert.equal(await page.evaluate(narrowOpen), true, "Back to Local keeps the sidebar open");
+        assert.deepEqual(
+          await page.evaluate(`window.focusOutsideSidebar`),
+          [],
+          "the New page composer does not take focus under the open sidebar",
+        );
         const result = {
           generation,
           pid,

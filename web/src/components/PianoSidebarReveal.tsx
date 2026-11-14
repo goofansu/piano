@@ -1,5 +1,5 @@
 import { Dialog } from "radix-ui";
-import { type CSSProperties, type ReactNode, type RefObject, useEffect } from "react";
+import { type CSSProperties, type ReactNode, type RefObject, useEffect, useState } from "react";
 import { Sheet, SheetTitle } from "@/components/PianoSheet";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 
@@ -24,6 +24,10 @@ export function PianoSidebarReveal({
   children: ReactNode;
 }) {
   const { restoreFocus } = useSidebarLayout();
+  // Mounted already open (a machine switch remounts the page under a sidebar the layout keeps
+  // open), the sidebar is simply there: no entrance. Once closed, the next open enters again.
+  const [restored, setRestored] = useState(open);
+  if (restored && !open) setRestored(false);
   useEffect(() => {
     if (open && !dragging && !content.current?.contains(document.activeElement)) {
       content.current?.focus({ preventScroll: true });
@@ -37,6 +41,7 @@ export function PianoSidebarReveal({
           data-slot="mobile-sidebar"
           data-motion="drawer"
           data-dragging={dragging}
+          data-restored={restored || undefined}
           style={style}
           aria-describedby={undefined}
           onOpenAutoFocus={(event) => {

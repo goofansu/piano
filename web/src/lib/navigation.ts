@@ -207,7 +207,8 @@ export interface NavigationOptions {
   /**
    * Called on every move the user or history makes, e.g. to close the sidebar reveal: once per
    * request, whether or not it changed anything, so asking for the Agent area reveals it even
-   * when it is already the area shown.
+   * when it is already the area shown. Restoring the address this navigation started on is no
+   * move, so a machine switch, which starts a new navigation, leaves the reveal as it was.
    */
   moved?: () => void;
 }
@@ -610,14 +611,19 @@ export function createNavigation({
     if (depth === 0 && (state !== before || moving || wanted)) settle();
   };
 
+  /** Selects through the client; only the user's selection, not a restored address, is a move. */
+  const selectSession = (cwd: string, sessionId: string | null) => {
+    set({ settings: null });
+    // A move through the client re-checks the address even when nothing here changed.
+    moving = true;
+    client.select(cwd, sessionId);
+  };
+
   const select = (cwd: string, sessionId: string | null) =>
     batch(() => {
       wanted = null;
       moved();
-      set({ settings: null });
-      // A move through the client re-checks the address even when nothing here changed.
-      moving = true;
-      client.select(cwd, sessionId);
+      selectSession(cwd, sessionId);
     });
 
   const applyWanted = () => {
@@ -627,7 +633,9 @@ export function createNavigation({
     wanted = null;
     if (decision.kind === "settings") set({ settings: decision.section });
     else if (decision.kind === "open") client.dispatch({ type: "open", page: decision.page });
-    else if (decision.kind === "select") select(decision.cwd, decision.sessionId);
+    // Restoring the address on mount is not a user's selection. In particular, switching
+    // machines must not dismiss the browser-owned sidebar. Pop navigation calls moved itself.
+    else if (decision.kind === "select") selectSession(decision.cwd, decision.sessionId);
   };
 
   function settle() {

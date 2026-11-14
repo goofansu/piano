@@ -175,6 +175,20 @@ function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
   };
 }
 
+test("restoring a session address leaves navigation open; explicit selection and history dismiss it", (t) => {
+  const p = page("/s/a");
+  t.after(p.stopNavigation);
+  p.registry();
+  p.selected("a");
+  assert.equal(p.moves(), 0, "mount restores the session without dismissing the sidebar");
+  p.navigation.select("/scratch", "b");
+  p.selected("b");
+  assert.equal(p.moves(), 1, "a user's selection dismisses the sidebar");
+  p.back();
+  p.selected("a");
+  assert.equal(p.moves(), 2, "history within the machine dismisses once");
+});
+
 test("100 transcript frames leave a 2k-session navigation catalog and title untouched", (t) => {
   const p = page("/s/s1999");
   let titleReads = 0;

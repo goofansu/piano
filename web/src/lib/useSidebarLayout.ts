@@ -12,6 +12,16 @@ export const SidebarLayoutContext = createContext<SidebarLayout | null>(null);
 export function useSidebarLayoutController(): SidebarLayout {
   const [layout] = useState(() => createSidebarLayout(browserSidebarEnvironment));
   useEffect(() => layout.start(), [layout]);
+  return layout;
+}
+
+/**
+ * Cmd+B toggles the sidebar, but only while one is drawn: on a screen without it, such as a
+ * machine that is connecting or unavailable, the shortcut would change a sidebar the user
+ * cannot see.
+ */
+export function useSidebarShortcut(): void {
+  const layout = useSidebarLayout();
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Cmd+B alone, including repeated keydowns, as in the patched stock provider.
@@ -30,7 +40,6 @@ export function useSidebarLayoutController(): SidebarLayout {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [layout]);
-  return layout;
 }
 
 /** Show, hide and toggle the sidebar from anywhere under the provider, without re-rendering on its state. */
