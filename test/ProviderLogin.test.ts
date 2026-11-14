@@ -292,7 +292,8 @@ test("INV-01/11/12: API keys persist through Pi, replace and remove without expo
           { id: "deepseek", name: "DeepSeek", logo: "deepseek", saved: false },
           { id: "fireworks", name: "Fireworks", logo: "fireworks", saved: false },
           { id: "google", name: "Google", logo: "google", saved: false },
-          { id: "opencode", name: "OpenCode", logo: "opencode", saved: false },
+          { id: "opencode-go", name: "OpenCode Go", logo: "opencode", saved: false },
+          { id: "opencode", name: "OpenCode Zen", logo: "opencode", saved: false },
           { id: "vercel-ai-gateway", name: "Vercel AI Gateway", logo: "vercel", saved: false },
         ]);
         const cwd = "/nonexistent/piano-api-key-catalog";
@@ -302,6 +303,7 @@ test("INV-01/11/12: API keys persist through Pi, replace and remove without expo
           "deepseek",
           "fireworks",
           "google",
+          "opencode-go",
           "opencode",
           "vercel-ai-gateway",
         ]) {

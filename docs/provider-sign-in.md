@@ -22,9 +22,9 @@ expires after 15 minutes or when Piano stops.
 ## API keys
 
 Under **Settings → Providers → API Keys**, choose **Add key** for DeepSeek, Fireworks, Google
-(a Gemini API key), OpenCode (Pi's OpenCode Zen provider; OpenCode Go is configured through Pi) or
-Vercel AI Gateway, paste the key and **Save**. The row shows **Saved** after Pi stores it; this does
-not validate the key with the provider. Its menu offers **Replace key** and **Remove key**, with
+(a Gemini API key), OpenCode Go, OpenCode Zen or Vercel AI Gateway, paste the key and **Save**. The
+row shows **Saved** after Pi stores it; this does not validate the key with the provider. Pi keeps a
+saved key per provider, so an OpenCode key used for both Go and Zen is saved in each row. Its menu offers **Replace key** and **Remove key**, with
 confirmation before removal and a toast after each change. Keys are never read back into the
 browser.
 
