@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/PianoSelect";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -207,14 +208,17 @@ function SignInDialog({
 /** Copies the device code, its icon turning to a check while the copy is confirmed. */
 function CopyDeviceCode({ code }: { code: string }) {
   const { copied, copy } = useCopy(code, "Could not copy. Select the code to copy it.");
+  const label = copied ? "Device code copied" : "Copy device code";
+  // A field's own button, not an `IconButton`, so it composes the tooltip every copy control shows.
   return (
-    <InputGroupButton
-      size="icon-sm"
-      aria-label={copied ? "Device code copied" : "Copy device code"}
-      onClick={copy}
-    >
-      {copied ? <CheckIcon /> : <CopyIcon />}
-    </InputGroupButton>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <InputGroupButton size="icon-sm" aria-label={label} onClick={copy}>
+          {copied ? <CheckIcon /> : <CopyIcon />}
+        </InputGroupButton>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 

@@ -109,6 +109,20 @@ switch), its ⋯ stays in the row's flow. The only thing that steps aside is the
 `time`; interactive controls go in `ListRow.actions`, so their hit targets stay stationary and
 separate from the menu.
 
+Hover text follows from whether the control shows its own words. An icon-only button is an
+`IconButton`: its styled tooltip says its accessible name, plus its shortcut when it has one, and
+opens on keyboard focus as well as hover. A trigger that nests a menu or popover trigger composes
+`PianoTooltip` itself, with the same words as its `aria-label`. An icon-only button whose glyph is
+a convention where it sits (⋯ for a menu, × to remove, ✓ and × beside a field, ↓ to scroll to the
+end, ← back) needs no tooltip; its `aria-label` still names it. A control or text that shows its
+own words puts the full value that text shortens (a path, branch, URL or model ID) in its native
+`title`, one per element, absent while its menu is open; a value longer than a line (a quote chip's
+quote) may wait in a styled tooltip instead, which can wrap it. A `title` reaches only a mouse, so
+nothing in it may be the only way to learn what a control does or why it is disabled: an
+explanation the user needs (what Trusted means, what Edit does to the queue) is a styled tooltip,
+which opens on keyboard focus too, and a reason or error is said where keyboard and touch reach it,
+such as the row's menu or a popover from its badge.
+
 ## Components
 
 Build UI from shadcn/ui components (the `shadcn` skill: search the registry, add with

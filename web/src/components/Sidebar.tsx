@@ -31,6 +31,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { ProjectCommandIconView, ProjectCommandsMenu } from "@/components/Projects";
 import { RowActions, rowActionsWidth } from "@/components/RowActions";
@@ -602,9 +603,20 @@ function FolderGroup({
       ]}
       notice={
         folder.discovery.status === "error" && (
-          <Badge variant="destructive" className="ml-7" title={folder.discovery.detail}>
-            Git status unavailable
-          </Badge>
+          // The detail is the error itself, what the user needs to fix it, so a click shows it.
+          <Popover>
+            <PopoverTrigger asChild>
+              <Badge asChild variant="destructive" className="ml-7 cursor-pointer">
+                <button type="button">Git status unavailable</button>
+              </Badge>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-auto max-w-sm text-xs break-words whitespace-pre-wrap"
+            >
+              {folder.discovery.detail}
+            </PopoverContent>
+          </Popover>
         )
       }
     />

@@ -13,6 +13,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/PianoPopover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
+import { Hint } from "@/components/Shortcut";
 import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -178,21 +180,29 @@ export function Composer({
             >
               <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-1">
                 <h2 className="font-medium text-ink-2">{queue.heading}</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-11 shrink-0 compact:h-8"
-                  aria-label={queue.editAriaLabel}
-                  title="Move queued messages back to the draft without stopping Pi (Esc)"
-                  disabled={!control.canRestoreQueue}
-                  onClick={() => {
-                    sendCommand(RESTORE_QUEUE);
-                    editor.ref.current?.focus();
-                  }}
-                >
-                  <PencilIcon data-icon="inline-start" aria-hidden />
-                  {queue.editLabel}
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-11 shrink-0 compact:h-8"
+                      aria-label={queue.editAriaLabel}
+                      disabled={!control.canRestoreQueue}
+                      onClick={() => {
+                        sendCommand(RESTORE_QUEUE);
+                        editor.ref.current?.focus();
+                      }}
+                    >
+                      <PencilIcon data-icon="inline-start" aria-hidden />
+                      {queue.editLabel}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <Hint of={["Esc"]}>
+                      Move queued messages back to the draft without stopping Pi
+                    </Hint>
+                  </TooltipContent>
+                </Tooltip>
               </div>
               <ol className="flex min-h-0 max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
                 {queuedMessages.map((message, index) => (
