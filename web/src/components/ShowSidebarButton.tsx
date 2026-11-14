@@ -11,10 +11,9 @@ export const SidebarActivityContext = createContext(false);
 /**
  * A page's way to the sidebar while it is out of sight: below the breakpoint, where the sidebar is
  * a sheet, and on desktop once it is collapsed. It sits where the sidebar's hide control was (both
- * in the pane's frame), so the toggle stands still across the collapse. On touch its glyph centres
- * in the target, keeping the machine name visually close without overlapping hit areas. While any
- * session works it carries the busy dot, since the rows that would say so are hidden. Its tooltip
- * names it, as Hide sidebar's does. It offers itself as where focus returns when the sheet closes
+ * in the pane's frame), so the toggle stands still across the collapse; it leads, so its glyph stays
+ * there when the touch target grows. While any session works it carries the busy dot, since the
+ * rows that would say so are hidden. Its tooltip names it, as Hide sidebar's does. It offers itself as where focus returns when the sheet closes
  * and nothing better is left to focus.
  */
 export function ShowSidebarButton({
@@ -39,20 +38,16 @@ export function ShowSidebarButton({
       ref={register}
       size="header"
       leading
-      className={cn(
-        "relative pointer-coarse:justify-center pointer-coarse:pl-0",
-        !collapsed && "md:hidden",
-        className,
-      )}
+      className={cn("relative", !collapsed && "md:hidden", className)}
       label={label}
       onClick={layout.show}
     >
       {children}
-      {/* Follow the glyph when it centres in the touch target. */}
+      {/* At the glyph's top-right corner, which `leading` keeps put at any target size. */}
       {working && (
         <StatusDot
           tone="busy"
-          className="absolute top-[calc(50%-9px)] left-[calc(var(--glyph-pad)+10px)] pointer-coarse:left-[calc(50%+2px)]"
+          className="absolute top-[calc(50%-9px)] left-[calc(var(--glyph-pad)+10px)]"
         />
       )}
     </IconButton>

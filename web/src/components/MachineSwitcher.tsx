@@ -52,7 +52,7 @@ export function MachineSwitcher({ place = "sidebar" }: { place?: "sidebar" | "pa
           variant="ghost"
           size="sm"
           className={cn(
-            // Bring the name toward the centred sidebar glyph, not the hit target toward it.
+            // Bring the name toward the sidebar glyph without moving either hit target.
             "min-w-0 font-medium text-ink pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:pl-1",
             place === "pane" ? "max-w-40 shrink-0" : "max-w-full",
           )}
