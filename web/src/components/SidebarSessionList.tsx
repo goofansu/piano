@@ -7,6 +7,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
@@ -97,7 +98,7 @@ const SessionRow = memo(
     count: number;
     onMenuChange: (key: string, open: boolean) => void;
   } & Pick<Navigation, "select">) {
-    const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title };
+    const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title, hint: t.hint };
     const { selected, disabled, hint, activity } = t;
     // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
     const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
@@ -205,13 +206,22 @@ const SessionRow = memo(
 export function SessionMenu({
   target,
 }: {
-  target: { cwd: string; sessionId: string; title: string | undefined };
+  target: { cwd: string; sessionId: string; title: string | undefined; hint?: string | undefined };
 }) {
   const { state } = useCommands();
   const { commands, run } = useSessionCommands(target);
   const { sections } = sessionRowMenu(commands);
   return (
     <>
+      {/* Why the row cannot open, or what it lacks: its title says it only to a mouse. */}
+      {target.hint && (
+        <>
+          <DropdownMenuLabel className="max-w-72 font-normal text-ink-3">
+            {target.hint}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+        </>
+      )}
       {sections.map((section, i) => (
         <Fragment key={section === "project" ? section : section[0]?.id}>
           {i > 0 && <DropdownMenuSeparator />}

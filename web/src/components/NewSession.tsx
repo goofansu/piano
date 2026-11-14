@@ -427,42 +427,38 @@ function DirectorySelect({
         if (next) setWtOpen(false);
       }}
     >
-      <Tooltip>
-        {/* The full path waits in a tooltip; with no directory chosen there is none to show. */}
-        <TooltipTrigger asChild>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              // oxlint-disable-next-line jsx-a11y/role-has-required-aria-props -- PopoverTrigger sets aria-controls.
-              role="combobox"
-              aria-expanded={open}
-              aria-label="Directory"
-              className={cn(
-                picker,
-                "w-full min-w-0 max-w-none justify-start",
-                trigger.kind === "none" && "text-ink-3",
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          // oxlint-disable-next-line jsx-a11y/role-has-required-aria-props -- PopoverTrigger sets aria-controls.
+          role="combobox"
+          aria-expanded={open}
+          aria-label="Directory"
+          // The full path, which the trigger's text shortens; with no directory chosen there is none.
+          title={value || undefined}
+          className={cn(
+            picker,
+            "w-full min-w-0 max-w-none justify-start",
+            trigger.kind === "none" && "text-ink-3",
+          )}
+        >
+          <FolderIcon className="text-ink-3" />
+          {trigger.kind === "none" ? (
+            <span>Directory</span>
+          ) : trigger.kind === "checkout" ? (
+            <>
+              {/* The folder keeps its name; a long branch truncates first, as in the session header. */}
+              <span className="max-w-[12rem] shrink-0 truncate">{trigger.folder}</span>
+              {trigger.branchLabel && (
+                <BranchLabel branch={trigger.branchLabel} className="text-ink-3" />
               )}
-            >
-              <FolderIcon className="text-ink-3" />
-              {trigger.kind === "none" ? (
-                <span>Directory</span>
-              ) : trigger.kind === "checkout" ? (
-                <>
-                  {/* The folder keeps its name; a long branch truncates first, as in the session header. */}
-                  <span className="max-w-[12rem] shrink-0 truncate">{trigger.folder}</span>
-                  {trigger.branchLabel && (
-                    <BranchLabel branch={trigger.branchLabel} className="text-ink-3" />
-                  )}
-                </>
-              ) : (
-                <span className="truncate font-mono">{trigger.label}</span>
-              )}
-            </Button>
-          </PopoverTrigger>
-        </TooltipTrigger>
-        {value && <TooltipContent className="max-w-md break-all">{value}</TooltipContent>}
-      </Tooltip>
+            </>
+          ) : (
+            <span className="truncate font-mono">{trigger.label}</span>
+          )}
+        </Button>
+      </PopoverTrigger>
       {wtOpen ? (
         <WorktreesPopover operation={worktrees} state={state} currentCwd={value} />
       ) : (
