@@ -433,6 +433,47 @@ test("INV-01: history discovery reads headers, not neighboring transcript bodies
   }
 });
 
+test("large-store revisits reuse headers without hiding new conflicts or rewrites", async (t) => {
+  const store = mkdtempSync(join(root, "wide-store-"));
+  const count = 5000;
+  let last = "";
+  for (let i = 0; i < count; i++) last = seed(cwd, `wide-${i}`, `wide-${i}`, store);
+  await settleHistoryWrite(last);
+  const previous = process.env.PI_CODING_AGENT_SESSION_DIR;
+  process.env.PI_CODING_AGENT_SESSION_DIR = store;
+  const read = fs.read;
+  let reads = 0;
+  t.mock.method(fs, "read", (...args: unknown[]) => {
+    const callback = args.pop() as (...result: unknown[]) => void;
+    return Reflect.apply(read, fs, [
+      ...args,
+      (...result: unknown[]) => {
+        if (Number(result[1] ?? 0) > 0) reads++;
+        callback(...result);
+      },
+    ]);
+  });
+  try {
+    assert.equal((await run(history.sessionIds(cwd))).size, count);
+    for (let revisit = 0; revisit < 3; revisit++) {
+      reads = 0;
+      assert.equal((await run(history.sessionIds(cwd))).size, count);
+      assert.ok(reads < count / 2, `a warm scan reread ${reads} of ${count} headers`);
+    }
+    const duplicate = seed(cwd, "wide-0", "duplicate", store);
+    const conflict = await run(history.locate("wide-0", [cwd]));
+    assert.equal(conflict._tag, "conflict", "new duplicates are not hidden by cache reuse");
+    rmSync(duplicate);
+    const first = join(store, "wide-0.jsonl");
+    writeFileSync(first, readFileSync(first, "utf8").replace('"wide-0"', '"edited"'));
+    assert.deepEqual(await run(history.locate("wide-0", [cwd])), { _tag: "missing" });
+    assert.deepEqual(await run(history.locate("edited", [cwd])), { _tag: "file", path: first });
+  } finally {
+    process.env.PI_CODING_AGENT_SESSION_DIR = previous;
+    rmSync(store, { recursive: true, force: true });
+  }
+});
+
 test("INV-01: warmed discovery refreshes rewrites, replacements and partial headers", async () => {
   const folder = join(root, "changing");
   const file = seed(folder, "before", "changing history");

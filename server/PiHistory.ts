@@ -138,11 +138,11 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
   });
 
   const headers = new Map<string, { version: string; info: Pick<SessionHeader, "id" | "cwd"> }>();
-  const header = async (path: string) => {
+  const header = async (path: string, scanHeaders: typeof headers) => {
     try {
       const before = await stat(path, { bigint: true });
       const version = fileVersion(before);
-      const cached = headers.get(path);
+      const cached = headers.get(path) ?? scanHeaders.get(path);
       // Refresh insertion order for LRU eviction. A failed/unstable read never enters the cache.
       headers.delete(path);
       if (cached?.version === version) {
@@ -186,13 +186,17 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
       },
       catch: (error) => rejected(`Cannot inspect Pi history ${dir}: ${String(error)}`),
     });
+    // Keep this scan's bounded starting cache available even when earlier misses evict its
+    // entries. Otherwise a store larger than the LRU capacity rereads every header on every
+    // scan. Each reused entry still requires the current file version, including across scans.
+    const scanHeaders = new Map(headers);
     const infos = yield* Effect.forEach(
       names.filter((name) => name.endsWith(".jsonl")),
       (name) =>
         Effect.tryPromise({
           try: async () => {
             const path = join(dir, name);
-            const info = await header(path);
+            const info = await header(path, scanHeaders);
             if (strict && !info) throw new Error(`Unreadable session header: ${path}`);
             if (
               !info ||
