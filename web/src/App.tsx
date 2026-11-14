@@ -27,15 +27,23 @@ import { useMachineScope, useOffers, usePreviews } from "@/lib/useMachine";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
 import { providerAccounts } from "@/lib/useProviderAccounts";
 import { SessionFilesContext, useSessionFilesController } from "@/lib/useSessionFiles";
-import { SidebarLayoutContext, useSidebarLayoutController } from "@/lib/useSidebarLayout";
+import {
+  SidebarLayoutContext,
+  useSidebarLayout,
+  useSidebarLayoutController,
+} from "@/lib/useSidebarLayout";
 import { browserSocketEnvironment, type ConnectionHandlers, openConnection } from "@/lib/ws";
 import { type AppState, initialState } from "@/store";
 
 export default function App() {
+  // Layout belongs to the browser, outside the keyed machine-local state and connections.
+  const layout = useSidebarLayoutController();
   return (
-    <MachineHost>
-      <MachineApp />
-    </MachineHost>
+    <SidebarLayoutContext.Provider value={layout}>
+      <MachineHost>
+        <MachineApp />
+      </MachineHost>
+    </SidebarLayoutContext.Provider>
   );
 }
 
@@ -81,7 +89,7 @@ function MachineApp() {
   useEffect(() => drafts.follow(client), [client, drafts]);
   useEffect(() => questionReplies.follow(client), [client, questionReplies]);
   useEffect(() => previews?.follow(client, notify), [client, previews]);
-  const layout = useSidebarLayoutController();
+  const layout = useSidebarLayout();
   // Details' Outputs reads this one answer, filtered by Git once per change.
   const sessionFiles = useSessionFilesController(state);
 
@@ -96,88 +104,86 @@ function MachineApp() {
   const anyWorking = state.hosts.some((h) => h.working);
 
   return (
-    <SidebarLayoutContext.Provider value={layout}>
-      <SidebarActivityContext.Provider value={anyWorking}>
-        <NavigationContext.Provider value={navigation}>
-          <SessionFilesContext value={sessionFiles}>
-            <CommandHost state={state} send={send} listen={client.listen}>
-              <AppLayout
-                navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
-                navigation={
-                  offers.settings && settings ? (
-                    <SettingsNavigation
-                      section={settings}
-                      onSelect={openSettings}
-                      onHome={closeSettings}
-                    />
-                  ) : (
-                    <Sidebar state={state} />
-                  )
-                }
-                content={
-                  <>
-                    {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
-                    <LayoutView key={state.view.kind} active={!offers.settings || !settings}>
-                      {state.view.kind === "new" ? (
-                        <NewSession
-                          state={state}
-                          client={client}
-                          chooseDirectory={chooseDirectory}
-                          onProjectChange={(id) => openNew(undefined, id)}
-                        />
-                      ) : state.view.kind === "projects" ? (
-                        <ProjectsIndex state={state} />
-                      ) : state.view.kind === "project" ? (
-                        <ProjectHome
-                          state={state}
-                          client={client}
-                          chooseDirectory={chooseDirectory}
-                          projectId={state.view.projectId}
-                        />
-                      ) : state.view.kind === "missing-session" ? (
-                        <PaneNotFound
-                          {...(state.view.reason === "history"
-                            ? HISTORY_UNAVAILABLE
-                            : {
-                                title: "Session not found",
-                                description: "This session is not in Piano's database.",
-                              })}
-                          action={
-                            <Button variant="outline" onClick={() => openNew()}>
-                              New session
-                            </Button>
-                          }
-                        />
-                      ) : (
-                        <SessionView state={state} send={send} captureSend={client.captureSend} />
-                      )}
-                    </LayoutView>
-                    {offers.settings && settings && (
-                      <LayoutView>
-                        <SettingsPage section={settings} />
-                      </LayoutView>
+    <SidebarActivityContext.Provider value={anyWorking}>
+      <NavigationContext.Provider value={navigation}>
+        <SessionFilesContext value={sessionFiles}>
+          <CommandHost state={state} send={send} listen={client.listen}>
+            <AppLayout
+              navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
+              navigation={
+                offers.settings && settings ? (
+                  <SettingsNavigation
+                    section={settings}
+                    onSelect={openSettings}
+                    onHome={closeSettings}
+                  />
+                ) : (
+                  <Sidebar state={state} />
+                )
+              }
+              content={
+                <>
+                  {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
+                  <LayoutView key={state.view.kind} active={!offers.settings || !settings}>
+                    {state.view.kind === "new" ? (
+                      <NewSession
+                        state={state}
+                        client={client}
+                        chooseDirectory={chooseDirectory}
+                        onProjectChange={(id) => openNew(undefined, id)}
+                      />
+                    ) : state.view.kind === "projects" ? (
+                      <ProjectsIndex state={state} />
+                    ) : state.view.kind === "project" ? (
+                      <ProjectHome
+                        state={state}
+                        client={client}
+                        chooseDirectory={chooseDirectory}
+                        projectId={state.view.projectId}
+                      />
+                    ) : state.view.kind === "missing-session" ? (
+                      <PaneNotFound
+                        {...(state.view.reason === "history"
+                          ? HISTORY_UNAVAILABLE
+                          : {
+                              title: "Session not found",
+                              description: "This session is not in Piano's database.",
+                            })}
+                        action={
+                          <Button variant="outline" onClick={() => openNew()}>
+                            New session
+                          </Button>
+                        }
+                      />
+                    ) : (
+                      <SessionView state={state} send={send} captureSend={client.captureSend} />
                     )}
-                  </>
-                }
-              >
-                {/* Top-right, just below the pane's header row, so a toast never covers a title or its controls.
+                  </LayoutView>
+                  {offers.settings && settings && (
+                    <LayoutView>
+                      <SettingsPage section={settings} />
+                    </LayoutView>
+                  )}
+                </>
+              }
+            >
+              {/* Top-right, just below the pane's header row, so a toast never covers a title or its controls.
           Above dialogs and sheets (z-50) but below menus, popovers and tooltips (z-[60]), so an open menu is never covered. */}
-                <Toaster
-                  position="top-right"
-                  className="toaster group !absolute !z-[55]"
-                  offset={{ top: 88, right: 24 }}
-                  mobileOffset={{ top: 68, left: 16, right: 16 }}
-                  visibleToasts={4}
-                  duration={4000}
-                  closeButton
-                />
-                <CommandPalette state={state} />
-                <DialogHost pending={pendingDialogs(state)} send={send} />
-              </AppLayout>
-            </CommandHost>
-          </SessionFilesContext>
-        </NavigationContext.Provider>
-      </SidebarActivityContext.Provider>
-    </SidebarLayoutContext.Provider>
+              <Toaster
+                position="top-right"
+                className="toaster group !absolute !z-[55]"
+                offset={{ top: 88, right: 24 }}
+                mobileOffset={{ top: 68, left: 16, right: 16 }}
+                visibleToasts={4}
+                duration={4000}
+                closeButton
+              />
+              <CommandPalette state={state} />
+              <DialogHost pending={pendingDialogs(state)} send={send} />
+            </AppLayout>
+          </CommandHost>
+        </SessionFilesContext>
+      </NavigationContext.Provider>
+    </SidebarActivityContext.Provider>
   );
 }

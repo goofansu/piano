@@ -112,8 +112,8 @@ const send = async (page, text) => {
   await page.click("button", "Send");
 };
 const machine = async (page, name, capture) => {
-  // The Machine control can be a dropdown button or combobox; both use real pointer clicks.
-  await page.ab("click", '[aria-label="Machine"]');
+  // Use the accessible button: a narrow viewport also keeps a hidden desktop sidebar mounted.
+  await page.click("button", "Machine");
   await page.until(
     `[...document.querySelectorAll('[role="menu"], [role="listbox"]')].some(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))`,
   );
@@ -391,6 +391,55 @@ await run(
         await page.see(`echo: ${echo}`);
         assert.equal(await draft(page), "REMOTE-DRAFT", "forward retains first peer ownership");
         await catalog(page, "remote", "second", "REMOTE-DRAFT");
+
+        // Sidebar reveal is browser-owned; machine-local sessions and drafts still remount.
+        await page.ab("set", "viewport", "700", "850");
+        const revealOpen = `document.querySelector('[data-slot="mobile-sidebar"]')?.getAttribute('data-state') === 'open'`;
+        await page.click("button", "Show sidebar");
+        await page.until(revealOpen);
+        await page.until(
+          `document.querySelector('[data-slot="mobile-sidebar"]').getAnimations({subtree:true}).every(a => a.playState !== 'running')`,
+        );
+        await page.evaluate(`window.sidebarDocumentMarker = 'same-document'`);
+        await machine(page, "eng-2");
+        await page.see("echo: SECOND-ECHO-ONCE");
+        assert.equal(await page.evaluate(revealOpen), true, "peer switch keeps sidebar expanded");
+        assert.equal(await draft(page), "SECOND-DRAFT");
+        await page.capture("3b-narrow-peer-sidebar");
+        await page.ab("back");
+        await page.see(`echo: ${echo}`);
+        assert.equal(
+          await page.evaluate(revealOpen),
+          true,
+          "Back restores a session without dismissing sidebar",
+        );
+        await page.ab("forward");
+        await page.see("echo: SECOND-ECHO-ONCE");
+        assert.equal(await page.evaluate(revealOpen), true, "Forward keeps sidebar expanded");
+        assert.equal(
+          await page.evaluate(`window.sidebarDocumentMarker`),
+          "same-document",
+          "no document reload",
+        );
+        await page.until(
+          `document.querySelector('[data-slot="mobile-sidebar"]')?.contains(document.activeElement)`,
+        );
+        await page.press("Escape");
+        await page.until(`!(${revealOpen})`);
+        await page.until(`document.activeElement?.getAttribute('aria-label') === 'Show sidebar'`);
+        await page.click("button", "Show sidebar");
+        await page.until(revealOpen);
+        await page.until(
+          `document.querySelector('[data-slot="mobile-sidebar"]').getAnimations({subtree:true}).every(a => a.playState !== 'running')`,
+        );
+        await page.click("button", "Second collision session");
+        await page.until(`!document.querySelector('[data-slot="mobile-sidebar"]')`);
+        await machine(page, "eng-1");
+        await page.see(`echo: ${echo}`);
+        assert.equal(await page.evaluate(revealOpen), false, "switching while closed stays closed");
+        assert.equal(await draft(page), "REMOTE-DRAFT");
+        await page.ab("set", "viewport", "1280", "900");
+
         // Pause preparation before it reaches main. Switching cancels the send, restoring its
         // source draft ahead of newer typing, even with identical identities on the other peer.
         await imageEvent(page, "paste", "cancelled.png");

@@ -627,7 +627,13 @@ export function createNavigation({
     wanted = null;
     if (decision.kind === "settings") set({ settings: decision.section });
     else if (decision.kind === "open") client.dispatch({ type: "open", page: decision.page });
-    else if (decision.kind === "select") select(decision.cwd, decision.sessionId);
+    else if (decision.kind === "select") {
+      // Restoring the address on mount is not a user's selection. In particular, switching
+      // machines must not dismiss the browser-owned sidebar. Pop navigation calls moved itself.
+      set({ settings: null });
+      moving = true;
+      client.select(decision.cwd, decision.sessionId);
+    }
   };
 
   function settle() {
