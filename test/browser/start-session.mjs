@@ -13,6 +13,8 @@ await run(
   async (page) => {
     // Include the optional Mic in the composer's tightest layout. No recording/provider call.
     await page.open("/settings/preferences");
+    // find does not wait: the switch renders only after the voice input settings load.
+    await page.see("Voice input");
     await page.click("switch", "Voice input");
     await page.ab("fill", 'input[type="password"]', "sk-fixture-no-provider-call");
     await page.click("button", "Save");
