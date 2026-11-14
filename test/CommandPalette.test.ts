@@ -403,8 +403,9 @@ test("a search ranks groups by their best row; blank input keeps the declared or
 });
 
 test("Session commands offer the session's project membership, named as the menu's buttons", () => {
-  const billing = { id: "billing", name: "Billing", doneAt: "2026-01-01T00:00:00Z" };
-  const loose: AppState = { ...inSession, projects: [...inSession.projects, billing] };
+  const billing = { id: "billing", name: "Billing" };
+  const finished = { id: "finished", name: "Finished", doneAt: "2026-01-01T00:00:00Z" };
+  const loose: AppState = { ...inSession, projects: [...inSession.projects, billing, finished] };
   const member: AppState = {
     ...loose,
     sessionReferences: references.map((r) =>
@@ -433,6 +434,7 @@ test("Session commands offer the session's project membership, named as the menu
     "Remove from project",
   ]);
   assert.deepEqual(membership(member, "billing"), ["Move to project: Billing"]);
+  assert.deepEqual(membership(member, "finished"), [], "a done project is not a destination");
   const group = palette(member, "remove").find((g) => g.id === "session");
   assert.ok(group?.id === "session");
   const remove = group.rows.find((r) => r.label === "Remove from project")!;
