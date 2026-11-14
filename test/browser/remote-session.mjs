@@ -9,6 +9,15 @@ import { setTimeout as delay } from "node:timers/promises";
 import { run } from "./harness.mjs";
 import { voiceInputs } from "./voice-input.mjs";
 
+// The voice input checks clear the composer with Meta+A, which headless Chrome on macOS does not
+// treat as Select All when agent-browser sends it. CI runs this journey on Linux.
+if (process.platform === "darwin") {
+  console.log(
+    "SKIP remote-session: needs Select All by keyboard, which headless Chrome on macOS lacks",
+  );
+  process.exit(0);
+}
+
 const sessionId = "same-session";
 const workspaceId = "same-workspace";
 const echo = "REMOTE-ECHO-ONCE";
