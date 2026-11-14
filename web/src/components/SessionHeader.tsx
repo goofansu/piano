@@ -126,9 +126,10 @@ export function SessionHeader({
           <SessionIdDetails className="px-2" sessionId={sessionId} />
           {menu.details.map((c) => (
             <DropdownMenuItem key={c.id} asChild disabled={!c.enabled} onSelect={() => run(c)}>
-              <PianoButton variant="ghost" size="row" className="shrink-0" aria-label={c.label}>
+              {/* Beside the session ID, the glyph alone could read as "copy ID": the tooltip names it. */}
+              <IconButton variant="ghost" size="row" className="shrink-0" label={c.label}>
                 <CommandIcon icon={c.icon} />
-              </PianoButton>
+              </IconButton>
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>
