@@ -165,7 +165,7 @@ export function LayoutHeader({ title, children }: { title?: ReactNode; children?
       <IconButton
         size="header"
         leading
-        className="-ml-(--glyph-pad)"
+        className="-ml-(--glyph-pad) pointer-coarse:justify-center pointer-coarse:pl-0"
         label="Hide sidebar"
         onClick={hide}
       >
