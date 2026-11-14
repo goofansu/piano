@@ -8,6 +8,7 @@ export const API_KEY_PROVIDERS = [
   { id: "deepseek", name: "DeepSeek", logo: "deepseek" },
   { id: "fireworks", name: "Fireworks", logo: "fireworks" },
   { id: "google", name: "Google", logo: "google" },
+  { id: "opencode", name: "OpenCode", logo: "opencode" },
   { id: "vercel-ai-gateway", name: "Vercel AI Gateway", logo: "vercel" },
 ] as const;
 

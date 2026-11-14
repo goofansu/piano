@@ -292,12 +292,19 @@ test("INV-01/11/12: API keys persist through Pi, replace and remove without expo
           { id: "deepseek", name: "DeepSeek", logo: "deepseek", saved: false },
           { id: "fireworks", name: "Fireworks", logo: "fireworks", saved: false },
           { id: "google", name: "Google", logo: "google", saved: false },
+          { id: "opencode", name: "OpenCode", logo: "opencode", saved: false },
           { id: "vercel-ai-gateway", name: "Vercel AI Gateway", logo: "vercel", saved: false },
         ]);
         const cwd = "/nonexistent/piano-api-key-catalog";
         yield* catalog.catalog(cwd);
         let expectedProbes = 1;
-        for (const provider of ["deepseek", "fireworks", "google", "vercel-ai-gateway"]) {
+        for (const provider of [
+          "deepseek",
+          "fireworks",
+          "google",
+          "opencode",
+          "vercel-ai-gateway",
+        ]) {
           for (const key of ["private-first-key", "private-replacement-key"]) {
             yield* login.changeApiKey({ action: "save", provider, key });
             assert.equal(JSON.parse(readFileSync(authPath, "utf8"))[provider].key, key);
