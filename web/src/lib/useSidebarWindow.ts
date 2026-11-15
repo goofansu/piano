@@ -10,13 +10,16 @@ const buffer = 5;
  * Measure the list's row CSS so touch, phone and rem sizing stay owned by SidebarSessionList.
  * Group headers remain ordinary flow; observing the nav catches groups above opening/closing.
  */
-export function useSidebarWindow(sessions: readonly SessionEntry[]) {
+export function useSidebarWindow(sessions: readonly SessionEntry[], selectionId: string | null) {
   const list = useRef<HTMLUListElement>(null);
   const measure = useRef<HTMLLIElement>(null);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [window, setWindow] = useState({ start: 0, end: 0, step: 40, padding: 0, gap: 4 });
   const [focused, setFocused] = useState<string>();
   const [menu, setMenu] = useState<string>();
+  const revealed = useRef<{ key: string; selectionId: string | null } | undefined>(undefined);
+  const selected = sessions.find((s) => s.selected);
+  const selectedKey = selected && sessionKey(selected);
   const { positions, firstEnabled, lastEnabled } = useMemo(
     () => ({
       positions: new Map(sessions.map((s, i) => [sessionKey(s), i])),
@@ -37,7 +40,28 @@ export function useSidebarWindow(sessions: readonly SessionEntry[]) {
     const padding = parseFloat(css.paddingTop) || 0;
     const step = probe.getBoundingClientRect().height + gap;
     if (!step) return;
-    const top = viewport.getBoundingClientRect().top - ul.getBoundingClientRect().top - padding;
+    if (!selectedKey) revealed.current = undefined;
+    const index = selectedKey === undefined ? undefined : positions.get(selectedKey);
+    // The model chooses/opens the destination. Geometry reveals it even before its row mounts.
+    // Wait for the measured list height to commit; an initial ruler or expanded group may have
+    // changed the available scroll range. Hidden sidebars keep this intent until shown.
+    const height = Math.max(0, sessions.length * step - gap) + 2 * padding;
+    const box = viewport.getBoundingClientRect();
+    if (
+      index !== undefined &&
+      selectedKey !== undefined &&
+      (revealed.current?.key !== selectedKey || revealed.current.selectionId !== selectionId) &&
+      box.height > 0 &&
+      !ul.closest("[inert]") &&
+      Math.abs(ul.getBoundingClientRect().height - height) < 1
+    ) {
+      const rowTop = ul.getBoundingClientRect().top + padding + index * step;
+      const rowBottom = rowTop + step - gap;
+      const delta = rowTop < box.top ? rowTop - box.top : Math.max(0, rowBottom - box.bottom);
+      viewport.scrollTop += delta;
+      revealed.current = { key: selectedKey, selectionId };
+    }
+    const top = box.top - ul.getBoundingClientRect().top - padding;
     const start = Math.min(sessions.length, Math.max(0, Math.floor(top / step) - buffer));
     const end = Math.min(
       sessions.length,
@@ -52,7 +76,7 @@ export function useSidebarWindow(sessions: readonly SessionEntry[]) {
         ? old
         : { start, end, step, padding, gap },
     );
-  }, [sessions.length]);
+  }, [sessions.length, selectedKey, selectionId, positions]);
   useLayoutEffect(update);
   useLayoutEffect(() => {
     const ul = list.current;
@@ -63,6 +87,10 @@ export function useSidebarWindow(sessions: readonly SessionEntry[]) {
     observer.observe(viewport);
     observer.observe(nav);
     observer.observe(measure.current);
+    // Desktop hiding preserves the inner viewport's dimensions and scroll. Its outer column,
+    // not the viewport, changes size when the user shows it again.
+    const column = ul?.closest('[data-slot="layout-sidebar"]');
+    if (column) observer.observe(column);
     viewport.addEventListener("scroll", update, { passive: true });
     return () => {
       observer.disconnect();

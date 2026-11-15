@@ -114,11 +114,32 @@ await run(
       history({ sessionId: name, cwd: path, messages: exchange(1) });
       return { folder: cwd, path, branch: `feat-${name}` };
     });
+    // Enough rows to put a destination outside the virtual window, in a separate date group.
+    const navigation = Array.from({ length: 80 }, (_, n) => {
+      const sessionId = `nav-${String(n).padStart(3, "0")}`;
+      history({
+        sessionId,
+        cwd,
+        messages: [{ role: "user", content: `History ${sessionId}`, timestamp }],
+      });
+      return {
+        ...reference(sessionId, sessionId, 0),
+        createdAt: "2023-11-14T12:00:00Z",
+        updatedAt: "2023-11-14T12:00:00Z",
+      };
+    });
+    history({
+      sessionId: "nav-pin",
+      cwd,
+      messages: [{ role: "user", content: "Pinned history", timestamp }],
+    });
     return {
       folders: [cwd],
       worktrees,
       projects: [{ id: "qa", name: "QA Project" }],
       sessions: [
+        ...navigation,
+        { ...reference("nav-pin", "Navigation pin", 0), pinned: true },
         reference("login-bug", "Fix the login bug", 0.063),
         reference("release-notes", "Release notes", 0.63),
         ...worktrees.map((w, i) => ({
@@ -212,6 +233,85 @@ await run(
     assert.deepEqual(page.prompts(), [], "sidebar chords never submit the composer draft");
     await page.ab("fill", '[aria-label="Message"]', "");
     await page.ab("set", "viewport", "1280", "900");
+
+    // Reveal is independent of mounting, conversation loading and focus. Scrolling away from
+    // the current row is allowed; the next navigation, not every render, reveals once.
+    const selectedVisible = `(() => {
+      const nav = document.querySelector('nav[aria-label="Sessions"]');
+      const row = nav.querySelector('[aria-current="page"]')?.getBoundingClientRect();
+      const box = nav.closest('[data-radix-scroll-area-viewport]').getBoundingClientRect();
+      return !!row && row.top >= box.top - 1 && row.bottom <= box.bottom + 1;
+    })()`;
+    await page.open("/s/nav-050");
+    await page.see("History nav-050");
+    await page.until(selectedVisible);
+    await page.evaluate(
+      `document.querySelector('nav[aria-label="Sessions"]').closest('[data-radix-scroll-area-viewport]').scrollTop = 0`,
+    );
+    await page.until(`!document.querySelector('nav[aria-label="Sessions"] [aria-current="page"]')`);
+    await page.ab("fill", '[aria-label="Message"]', "Offscreen draft");
+    await page.press("Alt+ArrowDown");
+    await page.until(`location.pathname === '/s/nav-051' && ${selectedVisible}`);
+    await page.see("History nav-051");
+    assert.equal(
+      await page.evaluate(`document.activeElement?.getAttribute('aria-label')`),
+      "Message",
+    );
+    assert.ok(await page.evaluate(`document.querySelectorAll('[data-session-key]').length < 45`));
+    await page.capture("sidebar-alt-virtual-destination");
+    await page.click("button", "Session menu for nav-051");
+    await page.until(`!!document.querySelector('[role="menu"]')`);
+    await page.press("Alt+ArrowDown");
+    assert.equal(await page.evaluate("location.pathname"), "/s/nav-051", "menu owns its keys");
+    await page.press("Escape");
+    await page.until(`!document.querySelector('[role="menu"]')`);
+    await page.ab("focus", '[aria-label="Message"]');
+    await page.press("Meta+b");
+    await page.evaluate(`(() => {
+      for (const key of ['ArrowDown', 'ArrowDown', 'ArrowUp'])
+        window.dispatchEvent(new KeyboardEvent('keydown', { key, altKey: true, repeat: true, cancelable: true }));
+    })()`);
+    await page.see("History nav-052");
+    assert.equal(await page.evaluate(`${sidebarColumn}.getBoundingClientRect().width`), 0);
+    await page.press("Meta+b");
+    await page.until(selectedVisible);
+    await page.press("Alt+ArrowUp");
+    await page.press("Alt+ArrowUp");
+    await page.until(
+      `location.pathname === '/s/nav-050' && document.querySelector('[aria-label="Message"]')?.value === 'Offscreen draft' && ${selectedVisible}`,
+    );
+    await page.capture("sidebar-alt-hidden-return");
+    // Even A → B → A in one render is a new reveal intent, not the old satisfied A.
+    await page.evaluate(
+      `document.querySelector('nav[aria-label="Sessions"]').closest('[data-radix-scroll-area-viewport]').scrollTop = 0`,
+    );
+    await page.until(`!document.querySelector('nav[aria-label="Sessions"] [aria-current="page"]')`);
+    await page.press("Meta+b");
+    await page.evaluate(`(() => {
+      for (const key of ['ArrowDown', 'ArrowUp'])
+        window.dispatchEvent(new KeyboardEvent('keydown', { key, altKey: true, repeat: true, cancelable: true }));
+    })()`);
+    await page.see("History nav-050");
+    await page.press("Meta+b");
+    await page.until(selectedVisible);
+    // Collapsed contents stay excluded, including Pinned. Boundary keys make no navigation.
+    await page.click("button", "Older");
+    await page.press("Alt+ArrowUp");
+    await page.until(`location.pathname === '/s/release-notes'`);
+    await page.press("Alt+ArrowDown");
+    assert.equal(await page.evaluate("location.pathname"), "/s/release-notes");
+    await page.click("button", "Navigation pin");
+    await page.click("button", "Pinned");
+    await page.press("Alt+ArrowDown");
+    await page.until(`location.pathname === '/s/login-bug'`);
+    assert.equal(
+      await page.evaluate(
+        `[...document.querySelectorAll('nav[aria-label="Sessions"] button[aria-expanded="false"]')].map(b=>b.textContent.trim()).filter(Boolean).sort().join(',')`,
+      ),
+      "Older,Pinned",
+    );
+    await page.see("Answer 6.");
+    await page.ab("fill", '[aria-label="Message"]', "");
 
     // Opening a tool reads it from its header: the output grows below the header the reader
     // clicked. A fresh transcript follows the bottom, and used to follow this growth too, so the
@@ -323,6 +423,8 @@ await run(
 
     // Switching through the palette must not execute a stale row while a new query is pending.
     await page.press("Mod+k");
+    await page.press("Alt+ArrowDown");
+    assert.equal(await page.evaluate("location.pathname"), "/s/login-bug", "palette owns its keys");
     await page.ab("fill", "[cmdk-input]", "release notes");
     await page.until(
       "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",

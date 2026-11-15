@@ -173,4 +173,6 @@ either end without wrapping. With no displayed selection, ↓ chooses the first 
 the last. It works from the session composer without losing drafts, but not from Settings, other
 editable controls, or while a dialog, palette, menu or listbox is open. Selection uses the same
 immediate path as a row click, with no added fetch or delay. The composer alone binds Mod+/ to its
-model picker. Other actions are reached through the palette or their control.
+model picker. Other actions are reached through the palette or their control. The
+[session navigation contract](sidebar-session-navigation.md) covers nearest reveal, focus,
+hidden sidebars and bounded selection reads.

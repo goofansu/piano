@@ -238,6 +238,8 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   const show = Effect.fn("ClientSessions.show")(function* (
     selection: Selection,
   ): Effect.fn.Return<void, PiSessionError> {
+    // A pending read may have been superseded by creation or another selection before it ran.
+    if (!current(selection)) return;
     if (selection.attemptId) return yield* reconcile(selection);
     const { cwd, sessionId, selectionId } = selection;
     const view = sessionId
