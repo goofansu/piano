@@ -2,7 +2,7 @@ import { cn } from "cn";
 import { PanelLeftCloseIcon } from "lucide-react";
 import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import { IconButton } from "@/components/IconButton";
-import { paneHeaderRow } from "@/components/Pane";
+import { HeaderLead, paneHeaderRow } from "@/components/Pane";
 import { PianoMark } from "@/components/PianoMark";
 import { PianoSidebarReveal } from "@/components/PianoSidebarReveal";
 import { SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
@@ -162,17 +162,17 @@ export function LayoutHeader({ title, children }: { title?: ReactNode; children?
     // The pane header's row in the same frame, so Hide sits where a pane's Show appears; without
     // its hairline, so the sidebar reads as one column.
     <SidebarHeader className={cn(paneHeaderRow, "flex-row gap-1 border-b-0")}>
-      <IconButton
-        size="header"
-        leading
-        className="-ml-(--glyph-pad)"
-        label="Hide sidebar"
-        onClick={hide}
-      >
-        <PanelLeftCloseIcon />
-      </IconButton>
       {/* The sidebar's title takes the free width and gives it up first, ahead of the controls. */}
-      <div className="flex min-w-0 flex-1">{title}</div>
+      <HeaderLead
+        className="min-w-0 flex-1"
+        toggle={
+          <IconButton size="header" leading label="Hide sidebar" onClick={hide}>
+            <PanelLeftCloseIcon />
+          </IconButton>
+        }
+      >
+        {title}
+      </HeaderLead>
       {children}
     </SidebarHeader>
   );
