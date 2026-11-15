@@ -54,6 +54,26 @@ rather than a bag of functions, so the boundary has one owner and readback tests
 one. PiRecords is not split by size. These are explicit ownership choices, not deferred mechanical
 file splitting.
 
+## Saved-history SDK compatibility
+
+`PiHistoryFile` loads Pi's shipped `dist/core/session-manager.js` relative to its resolved public
+entry point. In Pi 1.5.2, the public root re-exports that same parser and `SessionManager`, but
+also initializes interactive/runtime modules unnecessary in `PiHistoryWorker`. Pi still parses,
+migrates in memory, and selects context/compaction/branches; Piano adds no parser or history cache.
+Other server modules still load the full SDK: this is a cold history-worker optimization, not a
+claim about daemon startup. `fileVersion` stays in the same small internal module.
+
+This path is **not a public export** and is an explicit upgrade cost (INV-12). A missing module
+or missing parser/`inMemory` export falls back to the public SDK. Missing transitive dependencies,
+module initialization failures, and history parsing/projection errors do not trigger fallback;
+the existing unreadable-history/recovery policy remains in force. No installed Pi files change.
+
+On each Pi upgrade, check the root's re-exports and package layout; prefer a public history subpath
+when available. Run `HistorySdkCompatibility.test.ts` (real worker and installed Pi, with module
+availability faults), `SessionHistory.test.ts`, and the production scratch open/continue journey.
+Recheck cold-worker latency and memory: fallback preserves behavior but can lose the optimization.
+These checks protect the supported semantics, not arbitrary future SDK releases (INV-01/12).
+
 ## Failed creation and reconnect
 
 A `create_session` claims its durable `attemptId` before checkout creation, session registration

@@ -3,7 +3,41 @@
  * for. Free of Effect and the job queue, so the worker can import it.
  */
 import type { BigIntStats } from "node:fs";
-import { parseSessionEntries, SessionManager } from "@earendil-works/pi-coding-agent";
+
+// Pi 1.5.2's public root re-exports these exact implementations, but also initializes the
+// interactive/runtime graph in every read-only worker. No public history subpath exists yet.
+// Keep this version-dependent path here; recheck it on Pi upgrades (INV-01/12).
+const loadHistorySdk = async () => {
+  const url = new URL(
+    "./core/session-manager.js",
+    import.meta.resolve("@earendil-works/pi-coding-agent"),
+  );
+  try {
+    const sdk = (await import(url.href)) as Pick<
+      typeof import("@earendil-works/pi-coding-agent"),
+      "parseSessionEntries" | "SessionManager"
+    >;
+    if (
+      typeof sdk.parseSessionEntries === "function" &&
+      typeof sdk.SessionManager?.inMemory === "function"
+    )
+      return sdk;
+  } catch (cause) {
+    // Only a missing entry point is a compatibility fallback. A broken dependency or module
+    // initialization must still fail, as must parsing/migration/projection below.
+    if (
+      !(cause instanceof Error) ||
+      !("code" in cause) ||
+      cause.code !== "ERR_MODULE_NOT_FOUND" ||
+      !("url" in cause) ||
+      cause.url !== url.href
+    )
+      throw cause;
+  }
+  return import("@earendil-works/pi-coding-agent");
+};
+
+const { parseSessionEntries, SessionManager } = await loadHistorySdk();
 
 /**
  * The saved session, if this file's content is session `sessionId`. Pi parses and migrates only in
