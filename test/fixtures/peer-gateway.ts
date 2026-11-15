@@ -349,7 +349,7 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
 export async function gatewayFixture(
   t: TestContext,
   /** `checkout`: also register a folder that exists on disk, where a session can start. */
-  options: { vmToken?: string; peers?: PeerSpec[]; checkout?: boolean } = {},
+  options: { vmToken?: string; peers?: PeerSpec[]; checkout?: boolean; nodeArgs?: string[] } = {},
 ) {
   const root = mkdtempSync(join(tmpdir(), "piano-peer-"));
   for (const name of ["home", "agent", "sessions", "checkout"]) mkdirSync(join(root, name));
@@ -389,7 +389,7 @@ export async function gatewayFixture(
   );
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ["server/main.ts"], {
+  const child = spawn(process.execPath, [...(options.nodeArgs ?? []), "server/main.ts"], {
     cwd: new URL("../..", import.meta.url),
     env: {
       PATH: process.env.PATH,
@@ -493,5 +493,6 @@ export async function gatewayFixture(
     database,
     checkout,
     logs: () => log,
+    pid: child.pid!,
   };
 }

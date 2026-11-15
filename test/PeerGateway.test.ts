@@ -912,6 +912,23 @@ test(
       );
     });
 
+    await t.test(
+      "initial delivery IDs constrain later frames and binary output is refused",
+      async () => {
+        for (const deliveryId of [2, 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+          const connection = await f.open();
+          const text = JSON.stringify({ _tag: "pong", nonce: "invalid-id", deliveryId });
+          for (const ws of f.wss.clients) ws.send(text);
+          assert.equal((await connection.closed).code, CloseCode.ended);
+          assert.ok(!connection.messages.includes(text));
+        }
+        const binary = await f.open();
+        for (const ws of f.wss.clients)
+          ws.send(Buffer.from(JSON.stringify({ _tag: "pong", nonce: "binary", deliveryId: 3 })));
+        assert.equal((await binary.closed).code, CloseCode.ended);
+      },
+    );
+
     await t.test("the remote's close meaning reaches the browser", async () => {
       for (const code of [CloseCode.tooLarge, CloseCode.tryAgainLater]) {
         const connection = await f.open();
