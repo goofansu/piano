@@ -15,7 +15,7 @@ export function useMarkdownImages(
   document = "",
 ): ReadonlyMap<string, string> {
   const machineId = useMachineId();
-  const paths = useMemo(() => markdownImages(text), [text]);
+  const paths = useMemo(() => (workspaceId ? markdownImages(text) : []), [workspaceId, text]);
   const [owner, setOwner] = useState<{
     workspaceId: string;
     document: string;

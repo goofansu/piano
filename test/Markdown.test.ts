@@ -41,7 +41,7 @@ test("excessive input falls back to readable escaped source without resource dis
     `|head|\n|---|\n${"|".repeat(20001)}`,
     `${"> ".repeat(30)}${"x".repeat(150000)}`,
   ]) {
-    const source = `[before](https://example.test)\n\n${tail}`;
+    const source = `[before](https://example.test) ![image](before.png)\n\n${tail}`;
     const html = renderMarkdown(source, true);
     assert.ok(html.includes("<pre><code>[before](https://example.test)"));
     assert.ok(!html.includes("<script>"));
@@ -232,9 +232,33 @@ test("code excludes links and images for nested lists, quotes, tilde and long fe
 });
 
 test("references share the same grammar for rendering and image discovery", () => {
-  const source = "[docs][d] ![shot][i]\n\n[d]: https://example.test/docs\n[i]: ./shot.png";
-  assert.match(renderMarkdown(source, true), /href="https:\/\/example.test\/docs"/);
-  assert.deepEqual(markdownImages(source), ["./shot.png"]);
+  for (const image of ["![shot][i]", "![i][]", "![i]"]) {
+    const source = `[docs][d] ${image}\n\n[d]: https://example.test/docs\n[i]: ./shot.png`;
+    const images = markdownImages(source);
+    assert.deepEqual(images, ["./shot.png"], image);
+    const html = renderMarkdown(source, new Map(images.map((path) => [path, "blob:loaded"])));
+    assert.match(html, /href="https:\/\/example.test\/docs"/);
+    assert.match(html, /<img[^>]*src="blob:loaded"/);
+  }
+});
+
+test("image discovery leaves escaped, encoded and incomplete syntax to the Markdown grammar", () => {
+  for (const source of [
+    "Image-free **prose** with a [link](./shot.png).",
+    String.raw`\![shot](./shot.png)`,
+    String.raw`!\[shot](./shot.png)`,
+    "&#33;[shot](./shot.png)",
+    "!&#91;shot](./shot.png)",
+    "! [shot](./shot.png)",
+    "!\n[shot](./shot.png)",
+    "![shot]",
+    "![shot](",
+  ]) {
+    assert.deepEqual(markdownImages(source), [], source);
+    assert.ok(!renderMarkdown(source, true).includes("data-local-image"), source);
+  }
+  // An escaped backslash does not escape the image that follows it.
+  assert.deepEqual(markdownImages(String.raw`\\![shot](./shot.png)`), ["./shot.png"]);
 });
 
 test("GFM tables, lists and quoted blocks preserve their semantic structure", () => {

@@ -107,6 +107,9 @@ function parse(source: string): Root {
 
 /** Only local document images may be fetched, through the workspace-scoped file API. */
 export function markdownImages(source: string): string[] {
+  // Inline and reference images both require this opener. Escapes, code and references
+  // still belong to the parser; this only rejects prose that cannot contain an image.
+  if (!source.includes("![")) return [];
   try {
     const tree = parse(source);
     const paths = new Set<string>();
