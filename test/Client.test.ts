@@ -726,6 +726,8 @@ function focusHarness(
     initial?: typeof initialState;
     startsSessionIn?: (state: typeof initialState, cwd: string) => boolean;
     pending?: boolean;
+    /** Deliver no registry frame on connect, as before the server's first one arrives. */
+    unregistered?: boolean;
   } = {},
 ) {
   const sent: ClientMessage[] = [];
@@ -772,7 +774,11 @@ function focusHarness(
     return out;
   };
   const server = (m: ServerMessage) => handlers!.onMessage(m);
-  const status = (connected: boolean) => handlers!.onStatus(connected);
+  /** Like the server, a connection's first frame is the registry, once the socket has opened. */
+  const status = (connected: boolean) => {
+    handlers!.onStatus(connected);
+    if (connected && !options.unregistered) server({ _tag: "registry", folders: [] });
+  };
   const folder = (path: string) =>
     ({
       path,
@@ -926,6 +932,7 @@ test("INV-02/05: reconnect and separate machines cannot settle each other's dire
 test("an unsent automatic observation does not block a later connection or replay input", () => {
   const h = harness();
   h.status(true);
+  h.server({ _tag: "registry", folders: [] });
   h.transport("not-sent");
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
   h.transport("sent");
@@ -1045,6 +1052,40 @@ test("on a remote, which starts only in open folders, a remembered directory no 
   const anywhere = focusHarness({ remembered: "/closed" });
   anywhere.server(registry);
   assert.deepEqual(anywhere.client.getState().view, { kind: "new", cwd: "/closed" });
+});
+
+test("INV-05: a focus is observed only once the registry says which directories exist", () => {
+  // A remote refuses to read a directory it has not registered; the socket opens before the
+  // registry frame, so a remembered directory the remote no longer has must not be asked about.
+  const { startsSessionIn } = machineOffers({ id: "eng-1", name: "Eng" });
+  const h = focusHarness({
+    remembered: "/closed",
+    startsSessionIn,
+    pending: true,
+    unregistered: true,
+  });
+  h.status(true);
+  const refuse = (request: Extract<ClientMessage, { _tag: "directory" }>) =>
+    h.server({
+      ...request,
+      result: { status: "error", message: "Not available from another machine" },
+    });
+  for (const request of h.observations()) if (request.cwd === "/closed") refuse(request);
+  assert.deepEqual(h.asked(), [], "nothing is asked before the registry arrives");
+  h.server({
+    _tag: "registry",
+    folders: [
+      {
+        path: "/one",
+        name: "one",
+        worktrees: [{ path: "/one" }],
+        discovery: { status: "ready", observedAt: "", currentPath: "/one", worktrees: [] },
+      } as never,
+    ],
+  });
+  assert.deepEqual(h.asked(), ["directory /one"]);
+  h.complete();
+  assert.deepEqual(h.notes, [], "no error for a directory the person never asked about");
 });
 
 test("a project's home starts in its most recent member's folder, at the folder's own checkout", () => {
