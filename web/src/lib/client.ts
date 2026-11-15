@@ -156,6 +156,9 @@ export function createClient({
    * itself holds the latest intent: no per-key queue, debounce or cancellation of accepted work.
    * Its terminal reply rechecks the current focus/revision, so A → B → A does not repeat A and
    * invalidation is not lost. Explicit refreshes and trust decisions bypass this coordinator.
+   * Nothing is observed until the registry loads: the socket opens before its first frame, and
+   * until then the focus may be a remembered directory this machine no longer has (a remote
+   * refuses to read one it has not registered).
    */
   const askAboutFocus = () => {
     if (!state.connected) {
@@ -163,7 +166,7 @@ export function createClient({
       observing = null;
       return;
     }
-    if (observing) return;
+    if (observing || !state.registryLoaded) return;
     const focus = focusedDirectory(state);
     if (!focus || focus.checkoutMissing) return;
     const key = `${focus.cwd}\0${state.catalogRevision}`;
