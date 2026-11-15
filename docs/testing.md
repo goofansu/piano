@@ -148,6 +148,12 @@ assert what a user sees and what Pi receives, not markup. Add a journey only for
 path; cover rules and edge cases with module tests. Earlier documents cite `test/browser-*.mjs`
 scripts as the evidence of their time; those scripts were removed for these two journeys.
 
+For production startup observations, first run `npm run build` in the checkout being tested, then
+prefix a journey with `PIANO_BROWSER_PRODUCTION=1`. The same isolated backend serves that
+`web/dist` build through `server/main.ts`; no Vite process runs. The harness records this mode in
+`run.json`. Rebuild after source changes: this opt-in mode deliberately does not build for you.
+For example, `PIANO_BROWSER_PRODUCTION=1 node test/browser/open-session.mjs /tmp/piano-open`.
+
 ### Managed preview host journey
 
 `node test/browser/preview.mjs <evidence-directory>` is an opt-in journey on macOS (launchd, in a
