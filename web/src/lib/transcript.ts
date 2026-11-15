@@ -518,8 +518,60 @@ const turnLabel = (m: RenderMsg) =>
  */
 export function transcriptRows(
   messages: ReadonlyArray<RenderMsg>,
-  { pending = null, tools = {}, showTools = true, working = false }: TranscriptOptions = {},
+  options: TranscriptOptions = {},
 ): TranscriptRow[] {
+  const projection = projectHistory(messages, options);
+  const pending = projection.pending(options.pending);
+  return pending ? [...projection.rows, pending] : projection.rows;
+}
+
+/** History and the optional live tail share row rules, but have different update lifetimes. */
+export interface TranscriptProjection {
+  history: readonly TranscriptRow[];
+  pending: TranscriptRow | undefined;
+}
+
+/** One mounted transcript's current immutable inputs only; never a session/history store.
+ * Any authoritative input change rebuilds everything, including context replacement and tool
+ * updates. Pending-only updates reuse history and its lookup tables, not just its row keys. */
+export function createTranscriptProjector() {
+  let current:
+    | {
+        messages: ReadonlyArray<RenderMsg>;
+        tools: TranscriptOptions["tools"];
+        showTools: boolean;
+        working: boolean;
+        projection: ReturnType<typeof projectHistory>;
+      }
+    | undefined;
+  return (
+    messages: ReadonlyArray<RenderMsg>,
+    { pending, tools, showTools = true, working = false }: TranscriptOptions = {},
+  ): TranscriptProjection => {
+    if (
+      !current ||
+      current.messages !== messages ||
+      current.tools !== tools ||
+      current.showTools !== showTools ||
+      current.working !== working
+    ) {
+      current = {
+        messages,
+        tools,
+        showTools,
+        working,
+        projection: projectHistory(messages, { tools, showTools, working }),
+      };
+    }
+    return { history: current.projection.rows, pending: current.projection.pending(pending) };
+  };
+}
+
+function projectHistory(
+  messages: ReadonlyArray<RenderMsg>,
+  { tools = {}, showTools = true, working = false }: Omit<TranscriptOptions, "pending">,
+) {
+  const messageIds = new Set<string>();
   const results = new Map<string, RenderMsg>();
   const callIds = new Set<string>();
   const briefs = dispatchBriefs(messages);
@@ -537,6 +589,7 @@ export function transcriptRows(
     nextTurn = m.role;
   }
   for (const m of messages) {
+    messageIds.add(m.id);
     if (m.role === "tool_result" && m.toolCallId) results.set(m.toolCallId, m);
     for (const call of m.toolCalls ?? []) callIds.add(call.id);
   }
@@ -602,20 +655,19 @@ export function transcriptRows(
       .map((t) => t.id),
   );
 
-  const rows: TranscriptRow[] = [];
-  const add = (
+  const row = (
     m: RenderMsg,
     key: string,
     jump: string | undefined,
     streaming: boolean,
     preceding: () => readonly RenderMsg[],
-  ) => {
+  ): TranscriptRow | undefined => {
     if (!showTools && (m.role === "tool_result" || m.role === "context")) return;
     const text = showTools || jump ? m.text : "";
     if (m.role === "context") {
-      rows.push({ kind: "context", key, msg: m });
+      return { kind: "context", key, msg: m };
     } else if (m.role === "user") {
-      rows.push({ kind: "user", key, msg: m, text, ...(jump ? { jump } : {}) });
+      return { kind: "user", key, msg: m, text, ...(jump ? { jump } : {}) };
     } else if (m.role === "assistant") {
       const error = m.errorMessage
         ? messageError(
@@ -635,7 +687,7 @@ export function transcriptRows(
           active.has(call.id) || (streaming && !results.has(call.id) && !tools[call.id]),
         ),
       );
-      rows.push({
+      return {
         kind: "reply",
         key,
         msg: m,
@@ -644,28 +696,34 @@ export function transcriptRows(
         ...(error ? { error } : {}),
         streaming,
         ...(jump ? { jump } : {}),
-      });
+      };
     } else {
-      rows.push({
+      return {
         kind: "orphan",
         key,
         msg: m,
         tool: toolRow({ id: m.toolCallId ?? m.id, name: m.toolName ?? "tool", args: "" }, m, false),
-      });
+      };
     }
   };
+  const rows: TranscriptRow[] = [];
   messages.forEach((m, index) => {
     // A result that found its call is shown under the call.
     if (m.role === "tool_result" && m.toolCallId && callIds.has(m.toolCallId)) return;
     const jump = destinations.get(m.id);
     if (!showTools && !jump && !m.errorMessage) return;
-    add(m, m.id, jump, false, () => messages.slice(0, index));
+    const projected = row(m, m.id, jump, false, () => messages.slice(0, index));
+    if (projected) rows.push(projected);
   });
-  // The server gives a partial reply the id of the message it becomes, so its row keeps its key
-  // (and its open folds) when it ends. Once that message is in history, it is the reply.
-  if (pending && !messages.some((m) => m.id === pending.id))
-    add(pending, pending.id, undefined, true, () => messages);
-  return rows;
+  return {
+    rows,
+    // The server gives a partial reply the id of the message it becomes, so its row keeps its
+    // key (and its open folds) when it ends. History wins even when that row is hidden.
+    pending: (pending: TranscriptOptions["pending"]) =>
+      pending && !messageIds.has(pending.id)
+        ? row(pending, pending.id, undefined, true, () => messages)
+        : undefined,
+  };
 }
 
 /** The end of the conversation: a jump there leaves the reader pinned to it. */
