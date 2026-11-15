@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Fiber, Layer, Queue, type Scope } from "effect";
+import { Deferred, Effect, Fiber, Layer, Queue, type Scope } from "effect";
 import { type ClientRequest, makeClientDispatch } from "../server/ClientDispatch.ts";
 import type { CreationAttempts } from "../server/CreationAttempts.ts";
 import { DirectoryFacts } from "../server/DirectoryFacts.ts";
@@ -151,6 +151,84 @@ test("directory selection reports trust remembered by an extension during the mo
       );
     }),
     ["--remember-project-trust"],
+  );
+});
+
+test("INV-02/05: superseded navigation is bounded during startup and the latest selection opens", async () => {
+  await run(
+    Effect.gen(function* () {
+      const first = yield* registered("navigation-first");
+      const last = yield* registered("navigation-last");
+      const showing = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const replies: ServerMessage[] = [];
+      const { receive } = yield* makeClientDispatch({
+        send: (m) =>
+          Effect.gen(function* () {
+            replies.push(m);
+            if (m._tag === "selected" && m.selectionId === "first") {
+              yield* Deferred.succeed(showing, undefined);
+              yield* Deferred.await(release);
+            }
+          }),
+        overflow: (e) => Effect.die(e),
+      });
+      // Hold real startup reads at their admission boundary, not by wall-clock sleeps.
+      const startup = [];
+      for (let n = 0; n < 3; n++) {
+        startup.push(yield* receive({ _tag: "models", cwd }));
+        startup.push(yield* receive({ _tag: "trust", cwd }));
+      }
+      const opening = yield* (yield* receive({
+        _tag: "select",
+        cwd,
+        sessionId: first.spec.sessionId,
+        selectionId: "first",
+      })).pipe(Effect.forkChild);
+      yield* Deferred.await(showing);
+      const pending = [];
+      for (let n = 0; n < 32; n++)
+        pending.push(
+          yield* receive({
+            _tag: "select",
+            cwd,
+            sessionId: last.spec.sessionId,
+            selectionId: `next-${n}`,
+          }),
+        );
+      // An unrelated mutation still gets an explicit refusal; it is never replayed.
+      yield* yield* receive({ _tag: "save_project", project: { id: "refused", name: "Refused" } });
+      assert.equal(replies.filter((m) => m._tag === "selection_rejected").length, 0);
+      assert.ok(replies.some((m) => m._tag === "error" && /capacity/.test(m.message)));
+      yield* yield* receive({ _tag: "ping", nonce: "during-navigation" });
+      assert.ok(replies.some((m) => m._tag === "pong" && m.nonce === "during-navigation"));
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(opening);
+      for (const work of pending) yield* work;
+      for (const work of startup) yield* work;
+      assert.deepEqual(
+        replies.filter((m) => m._tag === "selected").map((m) => m.selectionId),
+        ["first", "next-31"],
+      );
+      assert.equal(replies.filter((m) => m._tag === "selection_failed").length, 0);
+      assert.equal(
+        (yield* (yield* Registry).get).projects.some((p) => p.id === "refused"),
+        false,
+      );
+      yield* yield* receive({
+        _tag: "act",
+        selectionId: "next-31",
+        action: { _tag: "set_thinking_level", level: "high" },
+      });
+      assert.equal((yield* last.state).thinkingLevel, "high");
+      assert.notEqual((yield* first.state).thinkingLevel, "high");
+      // Superseded pending leases and the completed drain leave the whole ordinary lane usable.
+      const available = [];
+      for (let n = 0; n < inboundLimits.client.messages; n++)
+        available.push(yield* receive({ _tag: "registry" }));
+      assert.equal(replies.filter((m) => m._tag === "error").length, 1);
+      for (const work of available) yield* work;
+    }),
   );
 });
 

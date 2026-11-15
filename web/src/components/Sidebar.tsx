@@ -188,6 +188,7 @@ function SidebarSessions({ state, list: { pinned, body }, toggle }: SessionsProp
           <SidebarGroup
             key={s.key}
             label={s.label}
+            selectionId={state.selectionId}
             aria-label={s.label}
             sessions={s.sessions}
             open={s.open}
@@ -240,6 +241,7 @@ function SidebarSessions({ state, list: { pinned, body }, toggle }: SessionsProp
       {pinned && (
         <SidebarGroup
           label="Pinned"
+          selectionId={state.selectionId}
           aria-label="Pinned"
           sessions={pinned.sessions}
           open={pinned.open}
@@ -423,6 +425,7 @@ const Chevron = ({ open }: { open: boolean }) => (
  */
 function SidebarGroup({
   label,
+  selectionId,
   muted = false,
   done = false,
   title,
@@ -437,6 +440,7 @@ function SidebarGroup({
   select,
 }: Omit<GroupProps, "state"> & {
   label: string;
+  selectionId: string | null;
   /** A group that stands for the absence of one (No project) reads quieter. */
   muted?: boolean;
   /** A done project's group: its name drops to regular weight, quieter without losing contrast. */
@@ -488,7 +492,13 @@ function SidebarGroup({
         {sessions.length === 0 ? (
           <ListEmpty>No sessions yet</ListEmpty>
         ) : (
-          <SidebarSessionList grouped sessions={sessions} details={details} select={select} />
+          <SidebarSessionList
+            grouped
+            sessions={sessions}
+            selectionId={selectionId}
+            details={details}
+            select={select}
+          />
         )}
       </CollapsibleContent>
     </Collapsible>
@@ -518,6 +528,7 @@ function ProjectGroup({
   return (
     <SidebarGroup
       label={project?.name ?? "No project"}
+      selectionId={state.selectionId}
       muted={!project || done}
       done={done}
       sessions={sessions}
@@ -568,6 +579,7 @@ function FolderGroup({
   return (
     <SidebarGroup
       label={folder.name}
+      selectionId={state.selectionId}
       title={folder.path}
       sessions={sessions}
       open={open}

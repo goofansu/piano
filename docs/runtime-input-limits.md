@@ -55,6 +55,15 @@ without acquiring ordinary-work capacity, so a pending prompt cannot starve them
   about 4.5 s and a 67 MiB one about 23 s, inside its 96 s deadline. Requests under 1 MiB
   keep the base deadline. A maximum prompt is therefore not reported uncertain merely
   because Pi was still reading it.
+- **Session navigation:** `select` is a latest-value read. Per connection, at most one
+  selection read runs and one pending selection waits; both consume the ordinary lane's
+  existing count and serialized-byte capacity. An admitted newer selection replaces the
+  pending read in receive order, releasing its lease without reading its history. The active
+  read finishes normally; selection IDs reject stale results. Creation, prompts and other
+  mutations are never coalesced, cancelled or replayed this way. A replacement that cannot
+  fit the byte budget is explicitly refused and leaves the prior selection/lease intact.
+  This prevents held navigation keys during cold history loading from filling the lane with
+  obsolete reads; it does not bypass genuine saturation by unrelated work.
 - **Excess ordinary/control work:** reject immediately, without changing selection,
   queuing for later, or sending that input to Pi. The browser receives an error;
   there is no automatic resend. Capacity is released when the work finishes, not

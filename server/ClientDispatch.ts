@@ -31,6 +31,8 @@ export interface ClientDispatch {
    * Claims a selection at once when the request makes one, so selections take effect in receive
    * order. The returned effect does the work and delivers its answers or its failure; it never
    * fails, and may wait on Pi (a prompt that opens a dialog), so run each in its own fiber.
+   * Read-only selections share one drain: a newer pending selection replaces the prior one,
+   * returning no extra work while that drain is owned. Creation and mutations never coalesce.
    */
   readonly receive: (request: ClientRequest) => Effect.Effect<Effect.Effect<void>>;
   /** Tells the client about a failure that has no request to answer, such as an undecodable message. */
@@ -483,6 +485,39 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       );
 
   const capacity = makeInboundCapacity(inboundLimits.client);
+  // Navigation is a latest-value read, not a queue of user inputs. Keep at most one read
+  // running and one pending, both charged to the unchanged ordinary lane. Never interrupt
+  // the active read: history may be in a shared worker, and attachment has its own lifetime.
+  let pendingSelection:
+    | { bytes: number; release: () => void; work: Effect.Effect<void> }
+    | undefined;
+  let selectionReader: symbol | undefined;
+  const readSelections = Effect.fn("ClientDispatch.readSelections")(
+    function* (_owner: symbol) {
+      for (;;) {
+        const next = pendingSelection;
+        if (!next) {
+          selectionReader = undefined;
+          return;
+        }
+        pendingSelection = undefined;
+        yield* next.work.pipe(Effect.ensuring(Effect.sync(() => next.release())));
+      }
+    },
+    (work, owner) =>
+      work.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            // A completed drain may already have handed off to another. Its cleanup must not
+            // discard that reader's pending selection; interruption only releases our own work.
+            if (selectionReader !== owner) return;
+            selectionReader = undefined;
+            pendingSelection?.release();
+            pendingSelection = undefined;
+          }),
+        ),
+      ),
+  );
   const receive = Effect.fn("ClientDispatch.receive")(function* (request: ClientRequest) {
     const selection = peer ? yield* sessions.selection : null;
     if (peer) {
@@ -551,8 +586,20 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       yield* answered(request)(yield* admitted);
       return Effect.void;
     }
-    const release = capacity.acquire(inputBytes(request), admission === "control");
+    const bytes = inputBytes(request);
+    const replaced = request._tag === "select" ? pendingSelection : undefined;
+    if (replaced) {
+      pendingSelection = undefined;
+      replaced.release();
+    }
+    const release = capacity.acquire(bytes, admission === "control");
     if (!release) {
+      // Replacing a pending read must still fit the byte budget. Restore the old lease
+      // atomically if it does not; a genuinely refused request changes no selection.
+      if (replaced) {
+        replaced.release = capacity.acquire(replaced.bytes)!;
+        pendingSelection = replaced;
+      }
       // Reject before claiming a selection or mutating anything. The receive loop
       // remains available for acknowledgements, dialog answers and cancellation.
       releaseImages();
@@ -560,7 +607,14 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       yield* settle(request, { _tag: "refused" });
       return Effect.void;
     }
-    const work = (yield* admitted).pipe(
+    const admittedWork = yield* admitted;
+    if (request._tag === "select") {
+      pendingSelection = { bytes, release, work: answered(request)(admittedWork) };
+      if (selectionReader) return Effect.void;
+      selectionReader = Symbol();
+      return readSelections(selectionReader);
+    }
+    const work = admittedWork.pipe(
       answered(request),
       Effect.ensuring(
         Effect.sync(() => {

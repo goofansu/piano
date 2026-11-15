@@ -38,15 +38,18 @@ export const sidebarRowGapClassName = "gap-1 md:gap-0.5";
  */
 export function SidebarSessionList({
   sessions,
+  selectionId,
   grouped = false,
   details,
   select,
 }: Pick<Navigation, "select"> & {
   sessions: readonly SessionEntry[];
+  /** Selection intent, so A → B → A in one render still reveals the latest A. */
+  selectionId: string | null;
   grouped?: boolean;
   details?: SessionRowDetails;
 }) {
-  const window = useSidebarWindow(sessions);
+  const window = useSidebarWindow(sessions, selectionId);
   const rowClassName = details ? detailedRowClassName : sidebarRowClassName;
   return (
     <ul
