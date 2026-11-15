@@ -4,11 +4,8 @@
  * (`extensions/radius-artifacts`) whose result its shared contract (`shared/radiusArtifacts.ts`)
  * reads as confirmed, so a failed or unconfirmed publication is never listed.
  */
-import {
-  type ArtifactPublication,
-  isPublishingTool,
-  publishedArtifact,
-} from "../../../shared/radiusArtifacts.ts";
+import type { ArtifactPublication } from "../../../shared/radiusArtifacts.ts";
+import { isPublishingTool, publishedArtifact } from "../../../shared/radiusArtifactTools.ts";
 import type { RenderMsg } from "../../../shared/wire.ts";
 
 export interface SessionArtifact {

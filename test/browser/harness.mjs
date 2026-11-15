@@ -1,5 +1,6 @@
 // Runs one critical-path journey against a scratch Piano: its own folders, registry, Pi history
 // and fake Pi (no model calls), a backend and the Vite UI on free ports, and an agent-browser session.
+// PIANO_BROWSER_PRODUCTION=1 serves the existing web/dist build from the backend instead.
 // The real registry, Pi config and ports 8000/8001 are never touched.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -91,11 +92,15 @@ async function fixture(root, setup) {
 export async function run(name, setup, journey, options = {}) {
   const evidence = resolve(process.argv[2] ?? join(ROOT, ".scratch/browser", name));
   mkdirSync(evidence, { recursive: true });
+  const production = process.env.PIANO_BROWSER_PRODUCTION === "1";
+  if (production)
+    assert.ok(existsSync(join(ROOT, "web/dist/index.html")), "run npm run build first");
   const root = mkdtempSync(join(tmpdir(), `piano-${name}-`));
   const local = await fixture(root, setup);
   const peers = [];
   const specs = options.peers ?? (options.remote ? [options.remote] : []);
-  const [backendPort, webPort, ...peerPorts] = await freePorts(2 + specs.length);
+  const [backendPort, vitePort, ...peerPorts] = await freePorts(2 + specs.length);
+  const webPort = production ? backendPort : vitePort;
   for (const [index, spec] of specs.entries()) {
     const machine = await fixture(join(root, `peer-${index}`), spec.setup);
     const port = peerPorts[index];
@@ -172,21 +177,25 @@ export async function run(name, setup, journey, options = {}) {
         ? { PIANO_PEER_CONFIG: peerConfig, PIANO_TEST_HTTP_LOOPBACK_PEERS: "1" }
         : {}),
     }),
-    start(
-      "web",
-      [
-        join(ROOT, "node_modules/vite/bin/vite.js"),
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(webPort),
-        "--strictPort",
-      ],
-      {
-        cwd: join(ROOT, "web"),
-        env: { ...env, PIANO_DEV_BACKEND: `http://127.0.0.1:${backendPort}` },
-      },
-    ),
+    ...(!production
+      ? [
+          start(
+            "web",
+            [
+              join(ROOT, "node_modules/vite/bin/vite.js"),
+              "--host",
+              "127.0.0.1",
+              "--port",
+              String(webPort),
+              "--strictPort",
+            ],
+            {
+              cwd: join(ROOT, "web"),
+              env: { ...env, PIANO_DEV_BACKEND: `http://127.0.0.1:${backendPort}` },
+            },
+          ),
+        ]
+      : []),
   ];
   for (const peer of peers) {
     peer.child = backend(`${peer.config.id}-backend`, peer.machine, peer.port, peer.backendEnv);
@@ -365,6 +374,7 @@ export async function run(name, setup, journey, options = {}) {
   const started = Date.now();
   const provenance = {
     name,
+    production,
     revision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim(),
     dirty: execFileSync("git", ["status", "--short"], { cwd: ROOT, encoding: "utf8" }).trim(),
     node: process.version,
