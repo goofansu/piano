@@ -20,10 +20,17 @@ export const isImeKey = (e: ImeFields | { nativeEvent: ImeFields }) => {
   return key.isComposing || key.keyCode === 229;
 };
 
-/** Alt+Up/Down alone steps through sidebar sessions; holding the key may keep stepping. */
-export function sessionNavigationDirection(e: KeyboardEvent): -1 | 1 | undefined {
-  if (e.defaultPrevented || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || isImeKey(e))
-    return undefined;
+const MODIFIERS = new Set(["Alt", "AltGraph", "Control", "Meta", "Shift"]);
+
+/**
+ * What a keydown means for sidebar session navigation. Alt+Up/Down alone steps through sidebar
+ * sessions (holding the key may keep stepping). A modifier pressed on its own, as on the way to the
+ * next chord, is `"modifier"`: not another action. Anything else is `undefined`.
+ */
+export function sessionNavigationKey(e: KeyboardEvent): -1 | 1 | "modifier" | undefined {
+  if (isImeKey(e)) return undefined;
+  if (MODIFIERS.has(e.key)) return "modifier";
+  if (e.defaultPrevented || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return undefined;
   if (e.key === "ArrowUp") return -1;
   if (e.key === "ArrowDown") return 1;
   return undefined;

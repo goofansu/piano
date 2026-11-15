@@ -230,6 +230,26 @@ await run(
       `location.pathname === '/s/login-bug' && document.querySelector('[aria-label="Message"]')?.value === ${JSON.stringify(sidebarDraft)}`,
     );
     await page.capture("sidebar-alt-arrows-draft-restored");
+    // Releasing Alt and pressing it again for the next chord is not another action: a chord that
+    // arrives while the first destination still loads keeps the composer's focus to restore.
+    await page.ab("focus", '[aria-label="Message"]');
+    await page.evaluate(`(() => {
+      const composer = document.querySelector('[aria-label="Message"]');
+      const key = (target, key) =>
+        target.dispatchEvent(new KeyboardEvent('keydown', { key, altKey: true, bubbles: true, cancelable: true }));
+      key(composer, 'ArrowDown');
+      key(document.body, 'Alt');
+      key(document.body, 'ArrowDown');
+    })()`);
+    await page.until(`location.pathname === '/s/live'`);
+    await page.until(
+      `document.querySelector('[aria-label="Message"]')?.disabled === false && document.activeElement?.getAttribute('aria-label') === 'Message'`,
+    );
+    await page.press("Alt+ArrowUp");
+    await page.press("Alt+ArrowUp");
+    await page.until(
+      `location.pathname === '/s/login-bug' && document.querySelector('[aria-label="Message"]')?.value === ${JSON.stringify(sidebarDraft)}`,
+    );
     assert.deepEqual(page.prompts(), [], "sidebar chords never submit the composer draft");
     await page.ab("fill", '[aria-label="Message"]', "");
     await page.ab("set", "viewport", "1280", "900");
