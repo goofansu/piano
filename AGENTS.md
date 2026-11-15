@@ -99,12 +99,15 @@ Investigate in the current session before dispatching implementation. Inspect th
 checks until you can name the observed problem, implementation scope, and acceptance check. Include
 those findings in the child’s brief. Explicitly delegated research may start directly in a child.
 
+For a new worktree, fetch `origin` and use `origin/main` as the base unless the task explicitly
+requires another base.
+
 Develop each new change in a dedicated branch and worktree. A session already assigned the change
 in its dedicated worktree performs the work there. Otherwise, use `piano_start_session` when
 available to dispatch the change into a new worktree. When unavailable, or when the user asks to
 keep the work in the current session, create the worktree with `/worktrunk:wt-switch-create` in
-Claude Code or `wt switch -c <branch>` elsewhere (`wt switch -h` lists the options). Run every
-later command from that worktree's directory.
+Claude Code or `wt switch -c <branch> --base origin/main` elsewhere (`wt switch -h` lists the options).
+Run every later command from that worktree's directory.
 
 A worktree ends in one of two outcomes:
 
