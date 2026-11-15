@@ -58,7 +58,6 @@ export function SettingsNavigation({
               isActive={section === item.id}
               aria-current={section === item.id ? "page" : undefined}
               aria-label={item.label}
-              tooltip={item.label}
               onClick={() => onSelect(item.id)}
             >
               <SettingsSectionIcon icon={item.icon} />
