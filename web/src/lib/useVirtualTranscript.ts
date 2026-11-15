@@ -1,6 +1,6 @@
 import { elementScroll, useVirtualizer } from "@tanstack/react-virtual";
 import { type RefObject, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { messageAnchorId, type TranscriptRow } from "./transcript";
+import { messageAnchorId, type TranscriptProjection } from "./transcript";
 import {
   domViewportElement,
   TRANSCRIPT_JUMP_MARGIN,
@@ -10,7 +10,7 @@ import {
 /** Geometry is a projection, never history. The viewport owns reader intent; the virtualizer
  * owns measured offsets and refines index jumps as the destination's neighbours mount. */
 export function useVirtualTranscript(
-  rows: readonly TranscriptRow[],
+  { history, pending }: TranscriptProjection,
   container: RefObject<HTMLDivElement | null>,
   list: RefObject<HTMLDivElement | null>,
   viewport: TranscriptViewport,
@@ -18,12 +18,23 @@ export function useVirtualTranscript(
   const [margin, setMargin] = useState(0);
   const [target, setTarget] = useState<{ id: string; animate: boolean } | null>(null);
   const highlight = useRef<Animation | null>(null);
-  const getItemKey = useCallback((index: number) => rows[index].key, [rows]);
-  const indexes = useMemo(() => new Map(rows.map((row, index) => [row.msg.id, index])), [rows]);
+  const pendingKey = pending?.key;
+  const pendingId = pending?.msg.id;
+  // Text deltas change neither keys nor destinations. Keep the virtualizer's measurement
+  // dependencies and the jump index stable until history or the live tail's identity changes.
+  const getItemKey = useCallback(
+    (index: number) => history[index]?.key ?? pendingKey!,
+    [history, pendingKey],
+  );
+  const indexes = useMemo(() => {
+    const result = new Map(history.map((row, index) => [row.msg.id, index]));
+    if (pendingId !== undefined) result.set(pendingId, history.length);
+    return result;
+  }, [history, pendingId]);
   const indexRef = useRef(indexes);
   indexRef.current = indexes;
   const virtual = useVirtualizer({
-    count: rows.length,
+    count: history.length + (pending ? 1 : 0),
     useFlushSync: true,
     getScrollElement: () => container.current,
     getItemKey,

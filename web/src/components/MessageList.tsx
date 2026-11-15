@@ -53,6 +53,7 @@ import {
   BOTTOM_ENTRY,
   type ContextFacts,
   contextFacts,
+  createTranscriptProjector,
   type DispatchFacts,
   messageAnchorId,
   type NestedCall as NestedCallLine,
@@ -61,7 +62,6 @@ import {
   type ToolOutcome,
   type ToolRow,
   type TranscriptRow,
-  transcriptRows,
 } from "@/lib/transcript";
 import { domFoldEdges } from "@/lib/transcriptViewport";
 import { useMarkdownImages } from "@/lib/useMarkdownImages";
@@ -158,11 +158,15 @@ export function MessageList({
   const own = useNewTranscriptViewport();
   const viewport = useTranscriptViewport() ?? own;
   const atBottom = useSyncExternalStore(viewport.subscribe, viewport.atBottom, () => true);
-  const rows = useMemo(
-    () => transcriptRows(messages, { pending, tools, showTools, working }),
-    [messages, pending, tools, showTools, working],
+  const [project] = useState(createTranscriptProjector);
+  const projection = useMemo(
+    () => project(messages, { pending, tools, showTools, working }),
+    [project, messages, pending, tools, showTools, working],
   );
-  const { virtual, jumping } = useVirtualTranscript(rows, ref, list, viewport);
+  const rowAt = (index: number) =>
+    projection.history[index] ??
+    (index === projection.history.length ? projection.pending : undefined);
+  const { virtual, jumping } = useVirtualTranscript(projection, ref, list, viewport);
   const measureRow = useCallback(
     (row: HTMLElement) => {
       // After the commit that asked: Radix removes closed content in a nested commit right after
@@ -230,8 +234,8 @@ export function MessageList({
                     style={{ height: virtual.getTotalSize() }}
                   >
                     {window.map((item) => {
-                      const row = rows[item.index];
-                      const next = rows[item.index + 1];
+                      const row = rowAt(item.index)!;
+                      const next = rowAt(item.index + 1);
                       const adjacentTools =
                         row.kind === "reply" &&
                         row.tools.length > 0 &&
