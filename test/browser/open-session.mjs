@@ -188,6 +188,27 @@ await run(
         await cdp("Page.setFontSizes", { fontSizes: { standard: 16 } });
       }
     });
+    // Alt arrows share the sidebar's default order (equal activity falls back to names).
+    // Gone worktree still opens its saved history; only missing history is unopenable.
+    await page.press("Alt+ArrowDown");
+    await page.until(`location.pathname === '/s/gone'`);
+    await page.press("Alt+ArrowUp");
+    await page.until(
+      `location.pathname === '/s/login-bug' && document.querySelector('[aria-label="Message"]')?.value === ${JSON.stringify(sidebarDraft)}`,
+    );
+    // One browser task, with no render/server completion between keys, catches stale selection
+    // closures. After three steps Down, one step Up must land at Live, not repeat Gone.
+    await page.evaluate(`(() => {
+      for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp'])
+        window.dispatchEvent(new KeyboardEvent('keydown', { key, altKey: true, cancelable: true }));
+    })()`);
+    await page.until(`location.pathname === '/s/live'`);
+    await page.press("Alt+ArrowUp");
+    await page.press("Alt+ArrowUp");
+    await page.until(
+      `location.pathname === '/s/login-bug' && document.querySelector('[aria-label="Message"]')?.value === ${JSON.stringify(sidebarDraft)}`,
+    );
+    await page.capture("sidebar-alt-arrows-draft-restored");
     assert.deepEqual(page.prompts(), [], "sidebar chords never submit the composer draft");
     await page.ab("fill", '[aria-label="Message"]', "");
     await page.ab("set", "viewport", "1280", "900");

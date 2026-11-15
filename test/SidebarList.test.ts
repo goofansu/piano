@@ -5,6 +5,7 @@ import type { FolderView, SessionEvent } from "../shared/wire.ts";
 import type { PreferenceStorage } from "../web/src/lib/preference.ts";
 import type { SessionEntry } from "../web/src/lib/sessionCatalog.ts";
 import {
+  adjacentSidebarSession,
   createSidebarList,
   PINNED,
   type SidebarClock,
@@ -339,6 +340,70 @@ test("sidebar list: view and open preferences invalidate an otherwise unchanged 
   assert.equal(model.list(state, byFolder).pinned?.open, true);
   model.toggle(PINNED, false);
   assert.equal(model.list(state, byFolder).pinned?.open, false);
+});
+
+test("sidebar navigation follows Pinned, expanded sections and Done in the chosen order", () => {
+  const { model } = sidebar();
+  const ref = (id: string, title: string, hour: number, extra = {}) =>
+    sessionReference("/repo", id, {
+      title,
+      updatedAt: `2026-10-02T0${hour}:00:00Z`,
+      ...extra,
+    });
+  const state: AppState = {
+    ...registry,
+    projects: [
+      { id: "p1", name: "Launch" },
+      { id: "done", name: "Earlier", doneAt: "2026-10-01T00:00:00Z" },
+    ],
+    sessionReferences: [
+      ref("pin", "Z pin", 1, { pinned: true }),
+      ref("a", "Alpha", 2, { projectId: "p1" }),
+      ref("b", "Beta", 3, { projectId: "p1" }),
+      ref("missing", "Between", 4, { projectId: "p1", unavailable: "history" }),
+      ref("starting", "Booting", 5, { projectId: "p1" }),
+      ref("loose", "Loose", 6),
+      ref("done", "Done", 7, { projectId: "done" }),
+    ],
+    hosts: [{ cwd: "/repo", sessionId: "starting", starting: true, working: false }],
+  };
+  for (const key of ["/repo", "project:p1", "project:", "project:done"]) model.toggle(key, true);
+  const walk = (list: SidebarList, direction: -1 | 1) => {
+    const ids: string[] = [];
+    let current = adjacentSidebarSession(list, null, direction);
+    // The list stays the same through the walk, as during repeated keys before a render.
+    while (current && ids.length < 10) {
+      ids.push(current.sessionId);
+      current = adjacentSidebarSession(list, current, direction);
+    }
+    return ids;
+  };
+  for (const [groupBy, sortBy, expected] of [
+    ["project", "name", ["pin", "a", "b", "loose", "done"]],
+    ["project", "recent", ["pin", "b", "a", "loose", "done"]],
+    ["folder", "name", ["pin", "a", "b", "done", "loose"]],
+    ["date", "recent", ["pin", "done", "loose", "b", "a"]],
+  ] as const) {
+    const list = model.list(state, { ...view(groupBy), sortBy });
+    assert.deepEqual(walk(list, 1), expected);
+    assert.deepEqual(walk(list, -1), [...expected].reverse());
+  }
+  const chosen = view("project");
+  model.toggle("project:p1", false);
+  assert.deepEqual(walk(model.list(state, chosen), 1), ["pin", "loose", "done"]);
+  model.toggle(PINNED, false);
+  const list = model.list(state, chosen);
+  assert.deepEqual(walk(list, 1), ["loose", "done"]);
+  // A collapsed or unlisted selection is not a displayed row. Treat it as no selection.
+  assert.equal(
+    adjacentSidebarSession(list, { cwd: "/repo", sessionId: "a" }, 1)?.sessionId,
+    "loose",
+  );
+  assert.equal(
+    adjacentSidebarSession(list, { cwd: "/other", sessionId: "loose" }, -1)?.sessionId,
+    "done",
+  );
+  assert.equal(adjacentSidebarSession(model.list(initialState, chosen), null, 1), undefined);
 });
 
 test("sidebar list: before the registry arrives every grouping is loading, with no Pinned section", () => {
