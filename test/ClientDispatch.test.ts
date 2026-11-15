@@ -302,10 +302,8 @@ test("INV-02/05: superseded navigation is bounded during startup and the latest 
       });
       // Hold real startup reads at their admission boundary, not by wall-clock sleeps.
       const startup = [];
-      for (let n = 0; n < 3; n++) {
-        startup.push(yield* receive({ _tag: "models", cwd }));
-        startup.push(yield* receive({ _tag: "trust", cwd }));
-      }
+      for (let n = 0; n < 6; n++)
+        startup.push(yield* receive({ _tag: "directory", cwd, requestId: `startup-${n}` }));
       const opening = yield* (yield* receive({
         _tag: "select",
         cwd,
@@ -884,8 +882,7 @@ function worktreePicker(receive: (m: ClientRequest) => Effect.Effect<Effect.Effe
   let ids = 0;
   const operation = createWorktreeOperation({ client: page, newRequestId: () => `r${++ids}` });
   operation.start();
-  const sentByPicker = () =>
-    commands.filter((m) => m._tag !== "models" && m._tag !== "trust" && m._tag !== "ping");
+  const sentByPicker = () => commands.filter((m) => m._tag !== "models" && m._tag !== "ping");
   const exchange = Effect.gen(function* () {
     const command = sentByPicker().at(-1);
     assert.ok(command, "the picker sent a command");
@@ -1000,8 +997,8 @@ const refusals: {
     { _tag: "directory", cwd, requestId: "focus", result: { status: "error", message: "REFUSED" } },
   ],
   models: [
-    { _tag: "models", cwd },
-    { _tag: "models_failed", cwd, message: "REFUSED" },
+    { _tag: "models", cwd, requestId: "m" },
+    { _tag: "models_failed", cwd, requestId: "m", message: "REFUSED" },
   ],
   save_project: [
     { _tag: "save_project", project: { id: "p", name: "P" } },
@@ -1025,10 +1022,6 @@ const refusals: {
   ],
   remove_folder: [
     { _tag: "remove_folder", path: cwd },
-    { _tag: "error", message: "REFUSED" },
-  ],
-  trust: [
-    { _tag: "trust", cwd },
     { _tag: "error", message: "REFUSED" },
   ],
   set_trust: [

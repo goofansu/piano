@@ -947,11 +947,14 @@ export const ClientMessage = Schema.Union([
     folder: Schema.String,
     requestId: Schema.optional(Schema.String),
   }),
-  /** The cached catalog for `cwd`; explicit refreshes use `requestId` for terminal replies. */
+  /**
+   * An explicit catalog read for `cwd`, answered once by `models` or `models_failed` with
+   * `requestId`. Automatic focus reads use `directory`.
+   */
   Schema.TaggedStruct("models", {
     cwd: Schema.String,
     refresh: Schema.optional(Schema.Boolean),
-    requestId: Schema.optional(Schema.String),
+    requestId: Schema.String,
   }),
   /**
    * Create a project, with its instructions when given; with `assign`, that session joins it in
@@ -991,8 +994,6 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("set_trust", { path: Schema.String, trusted: Schema.Boolean }),
   /** Automatic focus observation: one catalog probe followed by trust, with one terminal reply. */
   Schema.TaggedStruct("directory", { cwd: Schema.String, requestId: Schema.String }),
-  /** Pi's trust outcome for any directory, registered or not. */
-  Schema.TaggedStruct("trust", { cwd: Schema.String }),
   Schema.TaggedStruct("create_worktree", {
     requestId: Schema.String,
     folder: Schema.String,

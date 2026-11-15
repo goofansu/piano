@@ -297,19 +297,17 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     models: {
       admission: "ordinary",
       run: ({ cwd, refresh, requestId }) =>
-        facts.catalog(cwd, { refresh }).pipe(
-          Effect.flatMap((catalog) =>
-            send(
-              requestId !== undefined && catalog.error
-                ? { _tag: "models_failed", cwd, requestId, message: catalog.error }
-                : {
-                    _tag: "models",
-                    catalog: requestId === undefined ? catalog : { ...catalog, cwd },
-                    requestId,
-                  },
+        facts
+          .catalog(cwd, { refresh })
+          .pipe(
+            Effect.flatMap((catalog) =>
+              send(
+                catalog.error
+                  ? { _tag: "models_failed", cwd, requestId, message: catalog.error }
+                  : { _tag: "models", catalog: { ...catalog, cwd }, requestId },
+              ),
             ),
           ),
-        ),
       unanswered: ({ cwd, requestId }, reason) => ({
         _tag: "models_failed",
         cwd,
@@ -363,17 +361,6 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       unanswered: plainError,
       // The folder's action is Close.
       confirmed: "Folder closed",
-    },
-    trust: {
-      admission: "ordinary",
-      run: Effect.fn("ClientDispatch.trust")(function* ({ cwd }) {
-        // Standalone trust reads also wait for the catalog: personal extensions can remember
-        // a trust decision while that probe starts, so read Pi's store only afterwards.
-        yield* facts.catalog(cwd);
-        yield* send({ _tag: "trust", ...(yield* facts.trust(cwd)) });
-      }),
-      unanswered: plainError,
-      confirmed: null,
     },
     set_trust: {
       admission: "ordinary",
@@ -544,7 +531,6 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     const selection = peer ? yield* sessions.selection : null;
     if (peer) {
       const verdict = peerVerdict(yield* registry.get, request, selection);
-      if (verdict === "skip") return Effect.void;
       if (verdict === "refuse") {
         yield* settle(request, { _tag: "unsupported" });
         return Effect.void;

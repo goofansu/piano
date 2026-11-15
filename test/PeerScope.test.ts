@@ -337,22 +337,6 @@ test(
       assert.doesNotMatch(String(selection.message ?? ""), notAvailable);
     });
 
-    await t.test("reads about a folder no longer registered are skipped quietly", async () => {
-      const from = peer.frames.length;
-      peer.ws.send(JSON.stringify({ _tag: "models", cwd: "/different" }));
-      peer.ws.send(JSON.stringify({ _tag: "trust", cwd: "/different" }));
-      peer.ws.send(JSON.stringify({ _tag: "trust", cwd: identity.cwd }));
-      // Requests run in arrival order of admission; the registered read's answer shows the others had their turn.
-      await peer.next((frame) => frame._tag === "trust" && frame.cwd === identity.cwd, from);
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      assert.deepEqual(
-        peer.frames
-          .slice(from)
-          .filter((frame) => frame.cwd === "/different" || frame._tag === "error"),
-        [],
-      );
-    });
-
     await t.test("a requested read about an unregistered folder is answered", async () => {
       const from = peer.frames.length;
       peer.ws.send(
