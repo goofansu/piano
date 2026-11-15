@@ -14,12 +14,7 @@ import { type RemoteRequest, RemoteRequests } from "../shared/http.ts";
 import { PEER_FRAME_BYTES } from "../shared/machine.ts";
 import { IMAGE_PATHS } from "../shared/remoteImages.ts";
 import { URL_ID } from "../shared/urlId.ts";
-import {
-  ClientMessageJson,
-  CloseCode,
-  decodeServerMessage,
-  disconnectReason,
-} from "../shared/wire.ts";
+import { ClientMessageJson, CloseCode, ServerMessage, disconnectReason } from "../shared/wire.ts";
 import { socketLimits } from "./BoundedDelivery.ts";
 import { AllowedOrigins, fromOwnPage } from "./OriginPolicy.ts";
 import { ConfiguredPeers, type PeerConfig } from "./PeerConfig.ts";
@@ -99,13 +94,12 @@ function peerFailure(error: unknown): PeerFailure {
   });
 }
 const envelope = Schema.decodeUnknownSync(
-  Schema.fromJsonString(
-    Schema.Struct({
-      _tag: Schema.String,
-      deliveryId: Schema.Number,
-    }),
-  ),
+  Schema.Struct({
+    _tag: Schema.String,
+    deliveryId: Schema.Number,
+  }),
 );
+const decodePayload = Schema.decodeUnknownSync(ServerMessage);
 const decodeInput = Schema.decodeUnknownSync(ClientMessageJson);
 
 /**
@@ -113,16 +107,16 @@ const decodeInput = Schema.decodeUnknownSync(ClientMessageJson);
  * read, to bound unacknowledged frames, and the first registry is decoded once as the remote's
  * compatibility check (INV-12).
  */
-function inspectFrame(text: string) {
-  const frame = envelope(text);
+function inspectFrame(text: string, checkRegistry = false) {
+  const value: unknown = JSON.parse(text);
+  const frame = envelope(value);
   if (!Number.isSafeInteger(frame.deliveryId) || frame.deliveryId <= 0) throw unavailable();
+  if (checkRegistry && frame._tag === "registry") {
+    const registry = decodePayload(value);
+    if (registry._tag !== "registry" || !registry.sessionReferences || !registry.workspaces)
+      throw unavailable();
+  }
   return { deliveryId: frame.deliveryId, registry: frame._tag === "registry" };
-}
-
-function checkRegistry(text: string) {
-  const registry = decodeServerMessage(text);
-  if (registry._tag !== "registry" || !registry.sessionReferences || !registry.workspaces)
-    throw unavailable();
 }
 
 /** Only startup configuration can supply upstream authentication. Never forward caller headers. */
@@ -155,7 +149,7 @@ const connect = Effect.fn("PeerGateway.connect")(
     );
     const socket = yield* Socket.fromWebSocket(Effect.succeed(ws), { highWaterMark: 64 * 1024 });
     const reader = yield* socket.reader;
-    const initial: string[] = [];
+    const initial: { text: string; frame: ReturnType<typeof inspectFrame> }[] = [];
     let initialBytes = 0;
     let registry = false;
     // The remote may send hosts before registry. Hold that bounded prelude, not a second
@@ -166,12 +160,13 @@ const connect = Effect.fn("PeerGateway.connect")(
         initialBytes += Buffer.byteLength(chunk);
         if (initialBytes > limits.window.bytes || initial.length >= limits.window.frames)
           return yield* Effect.fail(overflow());
-        const frame = yield* Effect.try({ try: () => inspectFrame(chunk), catch: unavailable });
-        if (frame.registry) {
-          yield* Effect.try({ try: () => checkRegistry(chunk), catch: unavailable });
-          registry = true;
-        }
-        initial.push(chunk);
+        const frame = yield* Effect.try({
+          try: () => inspectFrame(chunk, true),
+          catch: unavailable,
+        });
+        if (frame.registry) registry = true;
+        // Retain only the envelope beside the original bytes, not the decoded registry.
+        initial.push({ text: chunk, frame });
       }
     }
     // `tryAgainLater` when this pipe's outgoing buffer is full; `ended` when the remote is closing
@@ -208,10 +203,14 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
   let lastDeliveryId = 0;
   let pendingBytes = 0;
   const pending = new Map<number, { bytes: number; at: number }>();
-  const forward = Effect.fnUntraced(function* (text: string) {
+  const forward = Effect.fnUntraced(function* (
+    text: string,
+    inspected?: ReturnType<typeof inspectFrame>,
+  ) {
     const bytes = Buffer.byteLength(text);
     if (bytes > limits.serverBytes) return yield* Effect.fail(tooLarge());
-    const frame = yield* Effect.try({ try: () => inspectFrame(text), catch: unavailable });
+    const frame =
+      inspected ?? (yield* Effect.try({ try: () => inspectFrame(text), catch: unavailable }));
     if (frame.deliveryId <= lastDeliveryId) return yield* Effect.fail(unavailable());
     if (pendingBytes + bytes > limits.window.bytes || pending.size >= limits.window.frames)
       return yield* Effect.fail(overflow());
@@ -221,7 +220,7 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
     yield* writer.write(text);
   });
   const fromPeer = Effect.gen(function* () {
-    for (const text of upstream.initial) yield* forward(text);
+    for (const { text, frame } of upstream.initial) yield* forward(text, frame);
     yield* Effect.gen(function* () {
       for (const chunk of yield* upstream.reader.pull) {
         if (typeof chunk !== "string") return yield* Effect.fail(unavailable());
