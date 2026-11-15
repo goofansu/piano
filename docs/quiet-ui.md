@@ -165,5 +165,12 @@ a row in the appropriate command group, named as its button is, including a togg
 reads its state ("Hide sidebar" while the sidebar is shown, "Show sidebar" while it is hidden). An
 icon button's label, its tooltip and the palette's name for the same surface are one string
 ("Search sessions, projects and commands").
-Global shortcuts are Mod+K (palette) and Sidebar's ⌘B (not Ctrl+B); the composer alone binds Mod+/ to
-its model picker. Other actions are reached through the palette or their control.
+Global shortcuts are Mod+K (palette), Sidebar's ⌘B (not Ctrl+B), and Alt+↑ / Alt+↓ (previous / next
+session in the sidebar's displayed order on the current machine). Session navigation follows the
+chosen grouping and sort: Pinned first, then expanded groups, including Done. It skips collapsed
+groups and disabled rows, includes offscreen rows, works with the sidebar hidden, and stops at
+either end without wrapping. With no displayed selection, ↓ chooses the first openable row and ↑
+the last. It works from the session composer without losing drafts, but not from Settings, other
+editable controls, or while a dialog, palette, menu or listbox is open. Selection uses the same
+immediate path as a row click, with no added fetch or delay. The composer alone binds Mod+/ to its
+model picker. Other actions are reached through the palette or their control.

@@ -151,7 +151,10 @@ export function Composer({
   }
 
   return (
-    <div className="px-(--gutter) pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-3">
+    <div
+      data-slot="session-composer"
+      className="px-(--gutter) pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-3"
+    >
       <DraftEditor
         editor={editor}
         cancelUpload={imageSend.cancel}

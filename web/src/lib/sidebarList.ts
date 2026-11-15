@@ -82,6 +82,32 @@ export interface SidebarList {
   body: SidebarBody | null;
 }
 
+/**
+ * Adjacent openable row in the displayed order, including virtualized rows but not collapsed
+ * groups. No wrap: without a displayed selection, Down starts at the first row and Up at the last.
+ * The caller supplies the live selection so repeated keys need not wait for a render or an open.
+ */
+export function adjacentSidebarSession(
+  list: SidebarList,
+  current: { cwd: string; sessionId: string | null } | null,
+  direction: -1 | 1,
+): SessionEntry | undefined {
+  const rows = [
+    ...(list.pinned?.open ? list.pinned.sessions : []),
+    ...(list.body?.kind === "sections"
+      ? [...list.body.sections, ...list.body.done].flatMap((s) => (s.open ? s.sessions : []))
+      : []),
+  ];
+  const selected = rows.findIndex(
+    (row) => row.cwd === current?.cwd && row.sessionId === current.sessionId,
+  );
+  const start = selected < 0 && direction === -1 ? rows.length : selected;
+  for (let i = start + direction; i >= 0 && i < rows.length; i += direction) {
+    if (!rows[i].disabled) return rows[i];
+  }
+  return undefined;
+}
+
 /** Local time and its wake-ups, behind a seam so the date rollover runs in Node. */
 export interface SidebarClock {
   now: () => Date;

@@ -33,6 +33,9 @@ import {
   useSidebarLayoutController,
   useSidebarShortcut,
 } from "@/lib/useSidebarLayout";
+import { useSidebarList } from "@/lib/useSidebarList";
+import { useSidebarSessionNavigation } from "@/lib/useSidebarSessionNavigation";
+import { useSidebarView } from "@/lib/useSidebarView";
 import { browserSocketEnvironment, type ConnectionHandlers, openConnection } from "@/lib/ws";
 import { type AppState, initialState } from "@/store";
 
@@ -98,6 +101,10 @@ function MachineApp() {
   const navigation = useNavigationController(client, layout.closeMobile);
   const { settings } = useSyncExternalStore(navigation.subscribe, navigation.getState);
   const { openNew, openSettings, closeSettings } = navigation;
+  // One cached list for both sidebar mounts and keyboard navigation, even when the column is hidden.
+  const { view: sidebarView } = useSidebarView();
+  const sidebar = useSidebarList(state, sidebarView);
+  useSidebarSessionNavigation(sidebar.list, client, navigation);
 
   const chooseDirectory = useCallback(
     (cwd: string) => dispatch({ type: "new_directory", cwd }),
@@ -120,7 +127,7 @@ function MachineApp() {
                     onHome={closeSettings}
                   />
                 ) : (
-                  <Sidebar state={state} />
+                  <Sidebar state={state} {...sidebar} />
                 )
               }
               content={
