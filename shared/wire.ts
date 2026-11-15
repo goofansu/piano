@@ -989,6 +989,8 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("remove_folder", { path: Schema.String }),
   /** Save Pi's project-trust decision for a directory; Pi applies it when a session starts there. */
   Schema.TaggedStruct("set_trust", { path: Schema.String, trusted: Schema.Boolean }),
+  /** Automatic focus observation: one catalog probe followed by trust, with one terminal reply. */
+  Schema.TaggedStruct("directory", { cwd: Schema.String, requestId: Schema.String }),
   /** Pi's trust outcome for any directory, registered or not. */
   Schema.TaggedStruct("trust", { cwd: Schema.String }),
   Schema.TaggedStruct("create_worktree", {
@@ -1114,6 +1116,18 @@ export const ServerMessage = Schema.Union([
     message: Schema.String,
   }),
   Schema.TaggedStruct("catalogs_invalidated", {}),
+  Schema.TaggedStruct("directory", {
+    cwd: Schema.String,
+    requestId: Schema.String,
+    result: Schema.Union([
+      Schema.Struct({
+        status: Schema.Literal("ready"),
+        catalog: ModelCatalog,
+        trust: ProjectTrust,
+      }),
+      Schema.Struct({ status: Schema.Literal("error"), message: Schema.String }),
+    ]),
+  }),
   Schema.TaggedStruct("worktrees", {
     folder: Schema.String,
     requestId: Schema.optional(Schema.String),

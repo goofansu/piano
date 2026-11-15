@@ -141,16 +141,143 @@ test("directory selection reports trust remembered by an extension during the mo
       assert.equal((yield* facts.trust(directory)).trust.trusted, false);
       const { receive } = yield* client;
       const from = sent.length;
-      const models = yield* receive({ _tag: "models", cwd: directory });
-      const trust = yield* receive({ _tag: "trust", cwd: directory });
-      yield* Effect.all([models, trust], { concurrency: "unbounded" });
+      yield* yield* receive({ _tag: "directory", cwd: directory, requestId: "focus" });
       assert.equal((yield* facts.trust(directory)).trust.trusted, true);
-      assert.deepEqual(
-        answers(from).filter((m) => m._tag === "trust"),
-        [{ _tag: "trust", cwd: directory, trust: { required: true, trusted: true } }],
-      );
+      const reply = answers(from).find((m) => m._tag === "directory")!;
+      assert.equal(reply.requestId, "focus");
+      assert.equal(reply.result.status, "ready");
+      if (reply.result.status === "ready") {
+        assert.equal(reply.result.catalog.error, undefined);
+        assert.deepEqual(reply.result.trust, { required: true, trusted: true });
+      }
     }),
     ["--remember-project-trust"],
+  );
+});
+
+test("a failed automatic catalog still answers with trust and releases admission", async () => {
+  await run(
+    Effect.gen(function* () {
+      const { receive } = yield* client;
+      const from = sent.length;
+      yield* yield* receive({
+        _tag: "directory",
+        cwd: join(root, "absent"),
+        requestId: "failed-probe",
+      });
+      const reply = answers(from).find((m) => m._tag === "directory")!;
+      assert.equal(reply.requestId, "failed-probe");
+      assert.equal(reply.result.status, "ready");
+      if (reply.result.status === "ready") {
+        assert.ok(reply.result.catalog.error);
+        assert.deepEqual(reply.result.catalog.models, []);
+        assert.equal(typeof reply.result.trust.trusted, "boolean");
+      }
+      const held = [];
+      for (let n = 0; n < inboundLimits.client.messages; n++)
+        held.push(yield* receive({ _tag: "registry" }));
+      for (const work of held) yield* work;
+      assert.equal(
+        answers(from).some((m) => m._tag === "error"),
+        false,
+      );
+    }),
+  );
+});
+
+test("INV-02/05: cold cross-directory focus cannot fill admission while saved selections advance", async () => {
+  await run(
+    Effect.gen(function* () {
+      const directories = Array.from({ length: 5 }, (_, n) => join(root, `cold-focus-${n}`));
+      for (const [n, directory] of directories.entries()) {
+        mkdirSync(directory);
+        const sessionId = `cold-${n}`;
+        writeFileSync(
+          join(root, "sessions", `${sessionId}.jsonl`),
+          [
+            {
+              type: "session",
+              version: 3,
+              id: sessionId,
+              cwd: directory,
+              timestamp: "2026-10-05T00:00:00Z",
+            },
+            {
+              type: "message",
+              id: "m",
+              parentId: null,
+              timestamp: "2026-10-05T00:00:01Z",
+              message: { role: "user", content: `History ${sessionId}`, timestamp: 1 },
+            },
+          ]
+            .map((entry) => JSON.stringify(entry))
+            .join("\n") + "\n",
+        );
+        yield* (yield* Registry).addSession(directory, sessionId);
+      }
+      const requests: ClientRequest[] = [];
+      const replies: ServerMessage[] = [];
+      let handlers: ConnectionHandlers | undefined;
+      const browser = createClient({
+        initial: initialState,
+        connect: (h) => {
+          handlers = h;
+          return {
+            send: (m) => {
+              if (m._tag !== "ack") requests.push(m);
+              return "sent";
+            },
+            close: () => {},
+          };
+        },
+        notify: () => {},
+      });
+      browser.start();
+      handlers!.onStatus(true);
+      const dispatch = yield* makeClientDispatch({
+        send: (m) =>
+          Effect.sync(() => {
+            replies.push(m);
+            handlers!.onMessage(m);
+          }),
+        overflow: (e) => Effect.die(e),
+      });
+      // Hold admitted automatic reads before running their real DirectoryFacts/fake-Pi work.
+      // Saved history can finish while cold probes wait; no sleeps or mocked domain services.
+      const held: Effect.Effect<void>[] = [];
+      for (const n of [0, 1, 0, 2, 3, 4, 1]) {
+        browser.select(directories[n], `cold-${n}`);
+        while (requests.length) {
+          const request = requests.shift()!;
+          const work = yield* dispatch.receive(request);
+          if (request._tag === "select") yield* work;
+          else held.push(work);
+        }
+        assert.equal(
+          browser.getState().session?.sessionId,
+          `cold-${n}`,
+          "latest saved conversation opens despite pending focus reads",
+        );
+      }
+      assert.equal(
+        replies.some((m) => "message" in m && /capacity is full/.test(m.message)),
+        false,
+      );
+      assert.equal(held.length, 1, "one active automatic observation, not one pair per key");
+      yield* held[0];
+      assert.equal(requests.length, 1, "only the latest unsent directory is observed");
+      yield* yield* dispatch.receive(requests.shift()!);
+      assert.equal(requests.length, 0);
+      assert.equal(browser.getState().session?.sessionId, "cold-1");
+      assert.match(JSON.stringify(browser.getState().session?.messages), /History cold-1/);
+      assert.ok(browser.getState().catalogs[directories[1]]?.models.length);
+      assert.ok(browser.getState().trusts[directories[1]]);
+      assert.equal(
+        Object.keys(browser.getState().catalogs).length,
+        2,
+        "obsolete directories never probe",
+      );
+    }),
   );
 });
 
@@ -868,6 +995,10 @@ const refusals: {
     },
   ],
   registry: [{ _tag: "registry" }, { _tag: "error", message: "REFUSED" }],
+  directory: [
+    { _tag: "directory", cwd, requestId: "focus" },
+    { _tag: "directory", cwd, requestId: "focus", result: { status: "error", message: "REFUSED" } },
+  ],
   models: [
     { _tag: "models", cwd },
     { _tag: "models_failed", cwd, message: "REFUSED" },

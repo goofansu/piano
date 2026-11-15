@@ -147,26 +147,35 @@ export function createClient({
   let navigationEpoch = 0;
   /** The focused directory and catalog revision last asked about on this connection. */
   let asked: string | null = null;
+  let observing: string | null = null;
   const listeners = new Set<(update: ClientUpdate) => void>();
   const messageListeners = new Set<(message: ServerMessage) => void>();
 
   /**
-   * One models and trust request per focused directory, catalog revision and connection: a
-   * reconnect or `catalogs_invalidated` asks again, and only for the directory on screen.
-   * A removed checkout has nothing to ask about.
+   * One automatic directory observation in flight per connection. While it runs, the state
+   * itself holds the latest intent: no per-key queue, debounce or cancellation of accepted work.
+   * Its terminal reply rechecks the current focus/revision, so A → B → A does not repeat A and
+   * invalidation is not lost. Explicit refreshes and trust decisions bypass this coordinator.
    */
   const askAboutFocus = () => {
     if (!state.connected) {
       asked = null;
+      observing = null;
       return;
     }
+    if (observing) return;
     const focus = focusedDirectory(state);
     if (!focus || focus.checkoutMissing) return;
     const key = `${focus.cwd}\0${state.catalogRevision}`;
     if (key === asked) return;
     asked = key;
-    connection?.send({ _tag: "models", cwd: focus.cwd });
-    connection?.send({ _tag: "trust", cwd: focus.cwd });
+    const requestId = crypto.randomUUID();
+    observing = requestId;
+    const disposition =
+      connection?.send({ _tag: "directory", cwd: focus.cwd, requestId }) ?? "not-sent";
+    // A known-unsent read must not wedge later focus changes. Do not retry this intent in a
+    // loop; a new focus, invalidation or reconnect can ask again, as with a server refusal.
+    if (disposition === "not-sent" && observing === requestId) observing = null;
   };
 
   const apply = (action: Action) => {
@@ -259,6 +268,23 @@ export function createClient({
   };
 
   const onMessage = (m: ServerMessage) => {
+    if (m._tag === "directory") {
+      // Reconnect abandons the old connection's observation; other request outcomes cannot
+      // release this one. Project through the existing catalog/trust rules (including notices
+      // and pending trust decisions), then let only the latest focus ask next.
+      if (m.requestId !== observing) return;
+      if (m.result.status === "ready") {
+        const trust = { _tag: "trust" as const, cwd: m.cwd, trust: m.result.trust };
+        const notice = trustNotice(state, focusedDirectory(state)?.cwd, trust);
+        apply({ type: "server", message: { _tag: "models", catalog: m.result.catalog } });
+        apply({ type: "server", message: trust });
+        if (notice) notify(notice, "info");
+      } else notify(m.result.message, "error");
+      if (observing === m.requestId) {
+        observing = null;
+        askAboutFocus();
+      }
+    }
     // Decide before applying: a frame the projection rejects must not notify either.
     const notifySession = m._tag === "session" && sessionDelivery(state, m) === "apply";
     const wasResync = state.resync;

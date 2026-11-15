@@ -272,6 +272,28 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       }),
       confirmed: null,
     },
+    directory: {
+      admission: "ordinary",
+      run: Effect.fn("ClientDispatch.directory")(function* ({ cwd, requestId }) {
+        const catalog = yield* facts.catalog(cwd);
+        // Extensions can remember trust while the probe starts. Even a failed catalog must
+        // finish before reading trust; unlike two independent reads it cannot start a second probe.
+        const { trust } = yield* facts.trust(cwd);
+        yield* send({
+          _tag: "directory",
+          cwd,
+          requestId,
+          result: { status: "ready", catalog: { ...catalog, cwd }, trust },
+        });
+      }),
+      unanswered: ({ cwd, requestId }, reason) => ({
+        _tag: "directory",
+        cwd,
+        requestId,
+        result: { status: "error", message: unansweredText(reason) },
+      }),
+      confirmed: null,
+    },
     models: {
       admission: "ordinary",
       run: ({ cwd, refresh, requestId }) =>
@@ -345,8 +367,8 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     trust: {
       admission: "ordinary",
       run: Effect.fn("ClientDispatch.trust")(function* ({ cwd }) {
-        // Directory selection asks for models and trust concurrently. Personal extensions can
-        // remember a trust decision while that probe starts, so read Pi's store only afterwards.
+        // Standalone trust reads also wait for the catalog: personal extensions can remember
+        // a trust decision while that probe starts, so read Pi's store only afterwards.
         yield* facts.catalog(cwd);
         yield* send({ _tag: "trust", ...(yield* facts.trust(cwd)) });
       }),

@@ -101,6 +101,8 @@ export function peerVerdict(
     case "models":
       if (registered(data, request.cwd)) return "admit";
       return request.requestId === undefined ? "skip" : "refuse";
+    case "directory":
+      return registered(data, request.cwd) ? "admit" : "refuse";
     case "trust":
       return registered(data, request.cwd) ? "admit" : "skip";
     // Trusting a directory runs its project extensions here: only one this machine registered.

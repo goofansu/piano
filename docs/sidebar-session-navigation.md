@@ -29,6 +29,14 @@ Superseded read-only navigation must not exhaust client admission and leave the 
 destination unable to open. Admission stays bounded; mutations, creation, controls and
 their explicit refusals are not silently retried or cancelled as navigation.
 
+Cold navigation across directories also bounds automatic catalog/trust observations, not
+only history selections. One observation may finish while the client retains just the
+latest unsent focus and catalog revision. Trust is read after that directory's probe;
+the latest directory eventually receives both facts, even after invalidation or reconnect.
+A slow obsolete observation can delay a cold model picker, but never delays selection or
+starts a probe for each intervening key. Explicit refreshes and trust decisions remain
+independent. See [runtime input limits](runtime-input-limits.md).
+
 ## Verification plan (recorded before implementation)
 
 Affected invariants: INV-01/02 (history and runtime ownership), INV-04/05 (control safety,
