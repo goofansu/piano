@@ -14,10 +14,49 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { useSidebarLayoutState } from "@/lib/useSidebarLayout";
 
 /** The one header row, shared by every pane and the sidebar (`LayoutHeader`). */
 export const paneHeaderRow =
   "flex h-12 shrink-0 items-center gap-3 border-b border-line px-(--gutter) py-0";
+
+/**
+ * A header's leading cluster: the sidebar toggle, its glyph on the gutter, then the machine picker
+ * beside it. What follows the toggle sits 4px from its target, for every pointer: the picker by
+ * this gap; without one, a pane's title, by closing the header row's wider gap. Set here alone, so
+ * the toggle and the picker stand still between the sidebar, a session and the New page.
+ */
+export function HeaderLead({
+  toggle,
+  children,
+  className,
+}: {
+  toggle: React.ReactNode;
+  children?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "-ml-(--glyph-pad) flex shrink-0 items-center gap-1 [&>:only-child]:-mr-2",
+        className,
+      )}
+    >
+      {toggle}
+      {children}
+    </div>
+  );
+}
+
+/** The pane's leading cluster, gone with both its controls while the sidebar shows them. */
+function PaneLead({ className }: { className?: string }) {
+  const { collapsed } = useSidebarLayoutState();
+  return (
+    <HeaderLead toggle={<ShowSidebarButton />} className={cn(!collapsed && "md:hidden", className)}>
+      <PaneMachineSwitcher />
+    </HeaderLead>
+  );
+}
 
 /**
  * The pane's header: Show sidebar, the title block, then the controls at the end. Every pane's
@@ -34,8 +73,7 @@ export function PaneHeader({
   return (
     // No shadcn component is a page header; this row is Piano's own.
     <header className={paneHeaderRow}>
-      <ShowSidebarButton className="-ml-(--glyph-pad) -mr-2" />
-      <PaneMachineSwitcher />
+      <PaneLead />
       {children}
       {actions}
     </header>
@@ -66,10 +104,7 @@ export function PaneShowSidebar() {
         "pointer-events-none absolute inset-x-0 top-0 border-transparent",
       )}
     >
-      <ShowSidebarButton className="pointer-events-auto -ml-(--glyph-pad) pointer-coarse:-mr-2" />
-      <div className="pointer-events-auto">
-        <PaneMachineSwitcher />
-      </div>
+      <PaneLead className="pointer-events-auto" />
     </div>
   );
 }
