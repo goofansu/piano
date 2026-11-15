@@ -4,6 +4,7 @@ import type { ClientMessage, Dialog, ServerMessage, SessionClosure } from "../sh
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import { machineOffers } from "../web/src/lib/machineOffers.ts";
+import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import { createDialogAnswer, pendingDialogs } from "../web/src/lib/piDialogs.ts";
 import type { ConnectionHandlers, DisconnectReason, SendDisposition } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
@@ -724,10 +725,22 @@ function focusHarness(
     remembered?: string | null;
     initial?: typeof initialState;
     startsSessionIn?: (state: typeof initialState, cwd: string) => boolean;
+    pending?: boolean;
   } = {},
 ) {
   const sent: ClientMessage[] = [];
   const written: string[] = [];
+  const notes: string[] = [];
+  const directoryReply = (
+    request: Extract<ClientMessage, { _tag: "directory" }>,
+  ): ServerMessage => ({
+    ...request,
+    result: {
+      status: "ready",
+      catalog: { cwd: request.cwd, models: [], fetchedAt: "now" },
+      trust: { required: true, trusted: true },
+    },
+  });
   let handlers: ConnectionHandlers | undefined;
   let ids = 0;
   const client = createClient({
@@ -737,12 +750,13 @@ function focusHarness(
       return {
         send: (m) => {
           sent.push(m);
+          if (!options.pending && m._tag === "directory") h.onMessage(directoryReply(m));
           return "sent";
         },
         close: () => {},
       };
     },
-    notify: () => {},
+    notify: (message) => notes.push(message),
     newSelectionId: () => `sel${++ids}`,
     lastDirectory: { read: () => options.remembered ?? null, write: (cwd) => written.push(cwd) },
     startsSessionIn: options.startsSessionIn,
@@ -752,7 +766,7 @@ function focusHarness(
   const asked = () => {
     const out = sent
       .slice(seen)
-      .filter((m) => m._tag === "models" || m._tag === "trust")
+      .filter((m) => m._tag === "directory")
       .map((m) => `${m._tag} ${m.cwd}`);
     seen = sent.length;
     return out;
@@ -779,7 +793,21 @@ function focusHarness(
       dialogs: [],
     },
   });
-  return { client, asked, server, status, folder, selected, written };
+  const observations = () => sent.filter((m) => m._tag === "directory");
+  const complete = (request = observations().at(-1)!) => server(directoryReply(request));
+  return {
+    client,
+    asked,
+    server,
+    status,
+    folder,
+    selected,
+    written,
+    observations,
+    complete,
+    sent,
+    notes,
+  };
 }
 
 test("INV-05: picking a New-page directory asks for its models and trust exactly once", () => {
@@ -787,7 +815,7 @@ test("INV-05: picking a New-page directory asks for its models and trust exactly
   h.status(true);
   assert.deepEqual(h.asked(), [], "no directory, nothing to ask");
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
-  assert.deepEqual(h.asked(), ["models /a", "trust /a"]);
+  assert.deepEqual(h.asked(), ["directory /a"]);
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
   h.client.dispatch({ type: "open", page: { kind: "new", projectId: "p1" } });
   assert.deepEqual(
@@ -798,7 +826,7 @@ test("INV-05: picking a New-page directory asks for its models and trust exactly
   h.client.dispatch({ type: "open", page: { kind: "new", projectId: "p2" } });
   assert.deepEqual(h.asked(), [], "another project in the same directory asks nothing again");
   h.client.dispatch({ type: "new_directory", cwd: "/b" });
-  assert.deepEqual(h.asked(), ["models /b", "trust /b"]);
+  assert.deepEqual(h.asked(), ["directory /b"]);
 });
 
 test("INV-05: catalogs_invalidated and reconnect re-ask only for the focused directory", () => {
@@ -809,21 +837,151 @@ test("INV-05: catalogs_invalidated and reconnect re-ask only for the focused dir
   h.server(h.selected("/b"));
   assert.deepEqual(
     h.asked(),
-    ["models /a", "trust /a", "models /b", "trust /b"],
+    ["directory /a", "directory /b"],
     "the selected session becomes the focus",
   );
   h.server({ _tag: "catalogs_invalidated" });
-  assert.deepEqual(h.asked(), ["models /b", "trust /b"]);
+  assert.deepEqual(h.asked(), ["directory /b"]);
   h.status(false);
   assert.deepEqual(h.asked(), [], "nothing is sent while disconnected");
   h.status(true);
   assert.deepEqual(
     h.asked(),
-    ["models /b", "trust /b"],
+    ["directory /b"],
     "a reconnect asks once for the session still on screen",
   );
   h.server(h.selected("/b"));
   assert.deepEqual(h.asked(), [], "the re-selection's snapshot does not ask again");
+});
+
+test("INV-05: slow focus reads coalesce A/B/A and observe only the latest directory", () => {
+  const h = focusHarness({ pending: true });
+  h.status(true);
+  const focus = (cwd: string) => h.client.dispatch({ type: "new_directory", cwd });
+  focus("/a");
+  focus("/b");
+  focus("/a");
+  assert.deepEqual(h.asked(), ["directory /a"]);
+  h.complete();
+  assert.deepEqual(h.asked(), [], "returning to the in-flight directory needs no duplicate");
+  focus("/b");
+  focus("/c");
+  focus("/d");
+  assert.deepEqual(h.asked(), ["directory /b"]);
+  h.complete();
+  assert.deepEqual(h.asked(), ["directory /d"]);
+  h.complete();
+  assert.deepEqual(Object.keys(h.client.getState().catalogs), ["/a", "/b", "/d"]);
+  assert.equal(h.client.getState().trusts["/d"]?.trusted, true);
+});
+
+test("INV-05: invalidation during a slow observation is retained; refusal releases without retrying it", () => {
+  const h = focusHarness({ pending: true });
+  h.status(true);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  h.server({ _tag: "catalogs_invalidated" });
+  h.server({ _tag: "catalogs_invalidated" });
+  assert.deepEqual(h.asked(), ["directory /a"]);
+  h.complete();
+  assert.deepEqual(h.asked(), ["directory /a"], "one read of the latest revision");
+  const request = h.observations().at(-1)!;
+  h.server({ ...request, result: { status: "error", message: "capacity refused" } });
+  assert.deepEqual(h.asked(), [], "no automatic retry of a refused intent");
+  assert.deepEqual(h.notes, ["capacity refused"]);
+  h.client.dispatch({ type: "new_directory", cwd: "/b" });
+  const failing = h.observations().at(-1)!;
+  h.client.dispatch({ type: "new_directory", cwd: "/c" });
+  h.server({ ...failing, result: { status: "error", message: "probe failed" } });
+  assert.deepEqual(
+    h.asked(),
+    ["directory /b", "directory /c"],
+    "failure does not strand newer focus",
+  );
+  h.complete();
+  assert.ok(h.client.getState().trusts["/c"]);
+});
+
+test("INV-02/05: reconnect and separate machines cannot settle each other's directory observations", () => {
+  const a = focusHarness({ pending: true });
+  const b = focusHarness({ pending: true });
+  for (const h of [a, b]) {
+    h.status(true);
+    h.client.dispatch({ type: "new_directory", cwd: "/same" });
+  }
+  const old = a.observations()[0];
+  b.complete(old);
+  assert.equal(b.client.getState().catalogs["/same"], undefined);
+  a.status(false);
+  a.client.dispatch({ type: "new_directory", cwd: "/latest" });
+  a.status(true);
+  a.complete(old);
+  assert.equal(a.client.getState().catalogs["/same"], undefined);
+  assert.deepEqual(a.asked(), ["directory /same", "directory /latest"]);
+  a.complete();
+  b.complete();
+  assert.deepEqual(Object.keys(a.client.getState().catalogs), ["/latest"]);
+  assert.deepEqual(Object.keys(b.client.getState().catalogs), ["/same"]);
+});
+
+test("an unsent automatic observation does not block a later connection or replay input", () => {
+  const h = harness();
+  h.status(true);
+  h.transport("not-sent");
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  h.transport("sent");
+  h.status(true);
+  const observations = h.sent.filter((m) => m._tag === "directory");
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].cwd, "/a");
+});
+
+test("explicit refresh and trust outcomes neither release nor get consumed by a focus observation", () => {
+  const h = focusHarness({ pending: true });
+  h.status(true);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  const first = h.observations()[0];
+  const catalogs = createModelCatalogs({
+    storage: { read: () => ({}), write: () => {} },
+    notify: () => {},
+    saveDefaults: async () => {},
+  });
+  const unfollow = catalogs.follow(h.client);
+  catalogs.refresh("/a");
+  const manual = h.sent.find((m) => m._tag === "models")!;
+  h.client.send({ _tag: "set_trust", path: "/a", trusted: false });
+  h.client.dispatch({ type: "new_directory", cwd: "/b" });
+  assert.deepEqual(h.asked(), ["directory /a"]);
+  h.complete(first);
+  assert.equal(
+    catalogs.getState().refreshing["/a"],
+    manual.requestId,
+    "automatic observation cannot settle an explicit refresh",
+  );
+  h.server({
+    _tag: "models_failed",
+    cwd: "/a",
+    requestId: manual.requestId,
+    message: "manual failed",
+  });
+  assert.equal(catalogs.getState().refreshing["/a"], undefined);
+  assert.equal(
+    h.client.getState().pendingTrust.length,
+    1,
+    "automatic trust is not a decision receipt",
+  );
+  assert.deepEqual(h.asked(), ["directory /b"]);
+  h.server({
+    _tag: "trust",
+    cwd: "/a",
+    requested: false,
+    trust: { required: true, trusted: false },
+  });
+  assert.equal(h.client.getState().pendingTrust.length, 0);
+  assert.deepEqual(h.asked(), []);
+  h.complete();
+  assert.equal(h.sent.filter((m) => m._tag === "models").length, 1);
+  assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
+  unfollow();
 });
 
 test("a session whose checkout was removed asks Pi nothing", () => {
@@ -839,7 +997,7 @@ test("a fresh New page starts in the last directory used, else the first folder,
   const remembered = focusHarness({ remembered: "/last" });
   assert.deepEqual(remembered.client.getState().view, { kind: "new", cwd: "/last" });
   remembered.status(true);
-  assert.deepEqual(remembered.asked(), ["models /last", "trust /last"]);
+  assert.deepEqual(remembered.asked(), ["directory /last"]);
   remembered.client.send({ _tag: "create_session", cwd: "/next", options: {}, text: "hi" });
   assert.deepEqual(remembered.written, ["/next"], "creating a session remembers its directory");
 
@@ -921,7 +1079,7 @@ test("a project's home starts in its most recent member's folder, at the folder'
   assert.deepEqual(home.asked(), [], "nothing to ask before the registry names the members");
   home.server(registry);
   assert.deepEqual(home.client.getState().view, { kind: "project", projectId: "p1", cwd: "/repo" });
-  assert.deepEqual(home.asked(), ["models /repo", "trust /repo"]);
+  assert.deepEqual(home.asked(), ["directory /repo"]);
   home.client.dispatch({ type: "new_directory", cwd: "/repo.sort" });
   home.server(registry);
   assert.deepEqual(

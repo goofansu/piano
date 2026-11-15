@@ -366,6 +366,33 @@ test(
       assert.match(String(failed.message), notAvailable);
     });
 
+    await t.test(
+      "automatic directory observations answer both registered and refused peer targets",
+      async () => {
+        for (const cwd of [identity.cwd, "/different"]) {
+          const from = peer.frames.length;
+          peer.ws.send(JSON.stringify({ _tag: "directory", cwd, requestId: `focus:${cwd}` }));
+          const reply = await peer.next(
+            (frame) => frame._tag === "directory" && frame.requestId === `focus:${cwd}`,
+            from,
+          );
+          assert.equal(reply.cwd, cwd);
+          const result = reply.result as {
+            status: string;
+            message?: string;
+            catalog?: { cwd: string };
+            trust?: object;
+          };
+          assert.equal(result.status, cwd === identity.cwd ? "ready" : "error");
+          if (result.status === "error") assert.match(result.message!, notAvailable);
+          else {
+            assert.equal(result.catalog?.cwd, cwd);
+            assert.ok(result.trust);
+          }
+        }
+      },
+    );
+
     await t.test("the peer folder-commands read answers only for registered folders", async () => {
       const read = (path: string, cwd: string) =>
         fetch(`${f.base}${path}`, {

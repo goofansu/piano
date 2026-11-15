@@ -64,6 +64,15 @@ without acquiring ordinary-work capacity, so a pending prompt cannot starve them
   fit the byte budget is explicitly refused and leaves the prior selection/lease intact.
   This prevents held navigation keys during cold history loading from filling the lane with
   obsolete reads; it does not bypass genuine saturation by unrelated work.
+- **Automatic directory observations:** each browser client (one per machine) sends at most
+  one unanswered `directory` request. It uses one ordinary lease to read the catalog, then
+  trust after the probe, and answers by request ID on success, failure or refusal. While it
+  waits, only the latest focus/revision in browser state is retained; obsolete unsent intent
+  does not take capacity or probe. A → B → A reuses the active A observation. Completion
+  checks the latest focus; invalidation and reconnect ask again without replaying mutations.
+  Explicit model refreshes and trust decisions keep their independent correlated outcomes.
+  Refusal does not retry the same intent. This bounds automatic navigation work, not all
+  clients or unrelated requests, and does not change either lane's limits.
 - **Excess ordinary/control work:** reject immediately, without changing selection,
   queuing for later, or sending that input to Pi. The browser receives an error;
   there is no automatic resend. Capacity is released when the work finishes, not
