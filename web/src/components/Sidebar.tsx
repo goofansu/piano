@@ -53,16 +53,24 @@ import { type GlobalCommand, radioChoice } from "@/lib/globalCommands";
 import type { Navigation } from "@/lib/navigation";
 import { projectCommands } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
-import type { SessionRowDetails, SidebarSection } from "@/lib/sidebarList";
+import type {
+  SessionRowDetails,
+  SidebarList,
+  SidebarListModel,
+  SidebarSection,
+} from "@/lib/sidebarList";
 import { useOffers } from "@/lib/useMachine";
 import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useNavigation } from "@/lib/useNavigation";
-import { useSidebarList } from "@/lib/useSidebarList";
-import { useSidebarView } from "@/lib/useSidebarView";
 import type { AppState } from "@/store";
 
 interface Props {
   state: AppState;
+}
+
+interface SessionsProps extends Props {
+  list: SidebarList;
+  toggle: SidebarListModel["toggle"];
 }
 
 /** Row actions sit over the row's end, inside its right padding (`RowActions`). */
@@ -79,7 +87,7 @@ const groupTrigger =
  * Settings closes it only where it is offered, so a remote's sidebar lists its projects, catalog
  * and New session while the remote's own Piano manages the rest.
  */
-export function Sidebar({ state }: Props) {
+export function Sidebar({ state, list, toggle }: SessionsProps) {
   const { openNew, openProjects, openSettings, setPalette } = useNavigation();
   const offers = useOffers();
   return (
@@ -119,7 +127,7 @@ export function Sidebar({ state }: Props) {
       <ScrollArea className="min-h-0 flex-1">
         {/* The list starts 8px below the Projects row and ends 16px above the footer or the sidebar's end. */}
         <nav className="relative px-(--row-inset) pb-4" aria-label="Sessions">
-          <SidebarSessions state={state} />
+          <SidebarSessions state={state} list={list} toggle={toggle} />
         </nav>
       </ScrollArea>
       {offers.settings && (
@@ -141,15 +149,10 @@ export function Sidebar({ state }: Props) {
  * so in place of the loading rows; where folders are not offered, the empty state names the fact
  * alone, since its hints lead to starting in a folder this browser does not manage.
  */
-export function SidebarSessions({ state }: Props) {
+function SidebarSessions({ state, list: { pinned, body }, toggle }: SessionsProps) {
   const { select } = useNavigation();
   const offers = useOffers();
   const unavailable = state.unreachable ? "Machine unavailable" : undefined;
-  const { view } = useSidebarView();
-  const {
-    list: { pinned, body },
-    toggle,
-  } = useSidebarList(state, view);
 
   const groupProps = { state, select };
   const section = (s: SidebarSection) => {

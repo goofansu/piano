@@ -56,7 +56,7 @@ function Current() {
 export function CommandPalette({ state }: Props) {
   const { palette: open, setPalette: onOpenChange } = useNavigation();
   const [selected, setSelected] = useState("");
-  // Mod+K, the only global shortcut, toggles the palette.
+  // Mod+K toggles the palette.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;

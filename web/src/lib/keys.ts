@@ -20,6 +20,15 @@ export const isImeKey = (e: ImeFields | { nativeEvent: ImeFields }) => {
   return key.isComposing || key.keyCode === 229;
 };
 
+/** Alt+Up/Down alone steps through sidebar sessions; holding the key may keep stepping. */
+export function sessionNavigationDirection(e: KeyboardEvent): -1 | 1 | undefined {
+  if (e.defaultPrevented || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || isImeKey(e))
+    return undefined;
+  if (e.key === "ArrowUp") return -1;
+  if (e.key === "ArrowDown") return 1;
+  return undefined;
+}
+
 /** A shortcut as a list of key labels, for a `KbdGroup`. */
 export const keys = (...parts: string[]) => parts.map((p) => (p === "mod" ? mod : p));
 
