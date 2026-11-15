@@ -1,8 +1,14 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { Client } from "./client.ts";
-import { sessionNavigationDirection } from "./keys.ts";
+import { sessionNavigationKey } from "./keys.ts";
 import type { Navigation } from "./navigation.ts";
 import { adjacentSidebarSession, type SidebarList } from "./sidebarList.ts";
+
+/** The session composer a key came from, if it came from one. */
+const sessionComposer = (target: EventTarget | null) =>
+  target instanceof HTMLTextAreaElement && target.closest('[data-slot="session-composer"]')
+    ? target
+    : null;
 
 /** One machine-local listener over the same list the desktop and mobile sidebars render. */
 export function useSidebarSessionNavigation(
@@ -32,9 +38,10 @@ export function useSidebarSessionNavigation(
   });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const direction = sessionNavigationDirection(event);
-      if (!direction) editing.current = null;
-      if (!direction || navigation.getState().settings || navigation.getState().palette) return;
+      const key = sessionNavigationKey(event);
+      if (key === "modifier") return;
+      if (!key) editing.current = null;
+      if (!key || navigation.getState().settings || navigation.getState().palette) return;
       if (
         document.querySelector(
           '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [cmdk-root]',
@@ -42,25 +49,22 @@ export function useSidebarSessionNavigation(
       )
         return;
       const target = event.target;
+      const composer = sessionComposer(target);
       if (
+        !composer &&
         target instanceof HTMLElement &&
         (target.isContentEditable ||
           /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) ||
-          target.closest('form, [role="textbox"]')) &&
-        !(target instanceof HTMLTextAreaElement && target.closest('[data-slot="session-composer"]'))
+          target.closest('form, [role="textbox"]'))
       )
         return;
       event.preventDefault();
       // select updates the client synchronously. Read it at the key, not from a render closure:
       // a second key can arrive before React commits or the first session finishes opening.
       const state = client.getState();
-      const next = adjacentSidebarSession(list, state.session ?? state.selecting, direction);
+      const next = adjacentSidebarSession(list, state.session ?? state.selecting, key);
       if (next) {
-        if (
-          target instanceof HTMLTextAreaElement &&
-          target.closest('[data-slot="session-composer"]')
-        )
-          editing.current = { element: target, selectionId: null };
+        if (composer) editing.current = { element: composer, selectionId: null };
         navigation.select(next.cwd, next.sessionId);
         if (editing.current) editing.current.selectionId = client.getState().selectionId;
       }
