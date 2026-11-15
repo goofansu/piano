@@ -251,7 +251,7 @@ export function SessionView({ state, send, captureSend }: Props) {
               {!state.connected && (
                 <div
                   role="status"
-                  className="late-enter pointer-events-none absolute inset-x-0 top-3 flex justify-center"
+                  className="late-enter pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center"
                 >
                   <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
                     <Spinner className="size-3.5" /> Reconnecting…
