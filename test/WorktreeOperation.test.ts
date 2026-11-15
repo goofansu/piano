@@ -70,7 +70,7 @@ function picker() {
   });
   const stop = operation.start();
   const server = (m: ServerMessage) => handlers!.onMessage(m);
-  const commands = () => sent.filter((m) => m._tag !== "models" && m._tag !== "trust");
+  const commands = () => sent.filter((m) => m._tag !== "models");
   return {
     client,
     server,

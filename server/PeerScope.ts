@@ -20,12 +20,9 @@ type Create = Extract<Request, { _tag: "create_session" }>;
 
 /**
  * - `admit`: run as for a browser on this machine;
- * - `skip`: drop silently: a quiet read (no `requestId`) about a folder not registered here,
- *   which a reconnecting browser may still ask about before the fresh registry refocuses it. A read
- *   that carries a `requestId` has a sender waiting on that ID, so it is refused instead;
  * - `refuse`: answer with the request's ordinary unanswered reply.
  */
-export type PeerVerdict = "admit" | "skip" | "refuse";
+export type PeerVerdict = "admit" | "refuse";
 
 /**
  * A folder or worktree registered on this machine: the only directories a peer may ask about.
@@ -99,12 +96,8 @@ export function peerVerdict(
     case "registry":
       return "admit";
     case "models":
-      if (registered(data, request.cwd)) return "admit";
-      return request.requestId === undefined ? "skip" : "refuse";
     case "directory":
       return registered(data, request.cwd) ? "admit" : "refuse";
-    case "trust":
-      return registered(data, request.cwd) ? "admit" : "skip";
     // Trusting a directory runs its project extensions here: only one this machine registered.
     case "set_trust":
       return registered(data, request.path) ? "admit" : "refuse";
