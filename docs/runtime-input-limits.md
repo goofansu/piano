@@ -60,7 +60,10 @@ without acquiring ordinary-work capacity, so a pending prompt cannot starve them
   selection read runs and one pending selection waits; both consume the ordinary lane's
   existing count and serialized-byte capacity. An admitted newer selection replaces the
   pending read in receive order, releasing its lease without reading its history. The active
-  read finishes normally; selection IDs reject stale results. Creation, prompts and other
+  selection stops waiting once a newer one is claimed: a wait for a creation's outcome or for a
+  session's lock (held while its Pi starts) ends without an answer, so the next selection runs
+  at once. A history read already under way finishes unanswered and is never interrupted, which
+  keeps one read per connection. Creation, prompts and other
   mutations are never coalesced, cancelled or replayed this way. A replacement that cannot
   fit the byte budget is explicitly refused and leaves the prior selection/lease intact.
   This prevents held navigation keys during cold history loading from filling the lane with

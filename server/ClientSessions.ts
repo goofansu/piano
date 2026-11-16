@@ -97,10 +97,21 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   const navigation = yield* Semaphore.make(1);
   const navigate = Semaphore.withPermits(navigation, 1);
   const current = (selection: Selection) => selected?.selectionId === selection.selectionId;
-  const claim = (selection: Selection) =>
-    Effect.sync(() => {
-      selected = selection;
-    });
+  let superseded = Deferred.makeUnsafe<void>();
+  const choose = (next: Selection | null) => {
+    if (next?.selectionId !== selected?.selectionId) {
+      Deferred.doneUnsafe(superseded, Effect.void);
+      superseded = Deferred.makeUnsafe<void>();
+    }
+    selected = next;
+  };
+  const claim = (selection: Selection) => Effect.sync(() => choose(selection));
+  const unlessSuperseded = <A, E>(selection: Selection, wait: Effect.Effect<A, E>) =>
+    Effect.suspend(() =>
+      current(selection)
+        ? Effect.raceFirst(wait, Deferred.await(superseded).pipe(Effect.as(undefined)))
+        : Effect.succeed(undefined),
+    );
 
   const detach = Effect.suspend(() => {
     const a = attachment;
@@ -171,7 +182,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       selectionId,
     };
     if (!current(selection)) return;
-    selected = selection;
+    choose(selection);
     if (attachment?.selectionId === selectionId && attachment.session === session) return;
     yield* attachTo(session, selection);
   });
@@ -188,8 +199,9 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     if (selection.attemptId) return yield* reconcile(selection);
     const { cwd, sessionId, selectionId } = selection;
     const view = sessionId
-      ? yield* hosts.read(cwd, sessionId)
+      ? yield* unlessSuperseded(selection, hosts.read(cwd, sessionId))
       : { _tag: "saved" as const, cwd, snapshot: emptySnapshot("") };
+    if (!view) return;
     yield* navigate(
       Effect.gen(function* () {
         if (!current(selection)) return;
@@ -227,8 +239,8 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   const reconcile = Effect.fn("ClientSessions.reconcile")(function* (
     selection: Selection,
   ): Effect.fn.Return<void, PiSessionError> {
-    const outcome = yield* attempts.outcome(selection.attemptId!);
-    if (!current(selection)) return;
+    const outcome = yield* unlessSuperseded(selection, attempts.outcome(selection.attemptId!));
+    if (!outcome || !current(selection)) return;
     switch (outcome._tag) {
       case "failed":
         return yield* send({
@@ -404,7 +416,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     );
     if (selected?.cwd === cwd && selected.sessionId === sessionId) {
       const selectionId = selected.selectionId;
-      selected = null;
+      choose(null);
       yield* send({
         _tag: "selected",
         selectionId,
@@ -480,7 +492,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
           )
             return;
           const { selectionId, cwd } = selected;
-          selected = null;
+          choose(null);
           shown = null;
           yield* detach;
           yield* send({
