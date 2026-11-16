@@ -87,11 +87,14 @@ export function createClient({
   lastDirectory = { read: () => null, write: () => {} },
   startsSessionIn = machineOffers(LOCAL).startsSessionIn,
 }: ClientOptions): Client {
+  let unverifiedDefault: string | undefined;
   const withNewPageDirectory = (s: AppState) => {
     const page = startPage(s.view);
+    const unverified = !!page?.cwd && page.cwd === unverifiedDefault;
+    if (s.registryLoaded) unverifiedDefault = undefined;
     if (!page) return s;
     const startable = (cwd: string) => !s.registryLoaded || startsSessionIn(s, cwd);
-    if (page.cwd && startable(page.cwd)) return s;
+    if (page.cwd && !(unverified && !startable(page.cwd))) return s;
     const cwd =
       page.kind === "project"
         ? projectStartDirectory(s, page.projectId, startable)
@@ -100,7 +103,9 @@ export function createClient({
           : [lastDirectory.read(), ...s.folders.map((f) => f.path)].find(
               (c): c is string => !!c && startable(c),
             );
-    return cwd ? reduce(s, { type: "new_directory", cwd }) : s;
+    if (!cwd) return s;
+    if (!s.registryLoaded) unverifiedDefault = cwd;
+    return reduce(s, { type: "new_directory", cwd });
   };
 
   let state = withNewPageDirectory(initial);

@@ -1200,3 +1200,42 @@ test("a New page or project home never lands on a folder whose root checkout is 
   );
   assert.deepEqual(only.client.getState().view, { kind: "project", projectId: "p1" });
 });
+
+test("a directory picked on a New page stays when its root checkout goes missing", () => {
+  const rooted = (path: string, status: "current" | "missing") =>
+    ({
+      path,
+      name: path.slice(1),
+      worktrees: [
+        { workspace: { id: `ws:${path}`, folder: path, path }, path, root: true, status },
+      ],
+      discovery: { status: "ready", observedAt: "", currentPath: path, worktrees: [] },
+    }) as never;
+
+  const picked = focusHarness();
+  picked.server({
+    _tag: "registry",
+    folders: [rooted("/one", "current"), rooted("/two", "current")],
+  });
+  picked.client.dispatch({ type: "new_directory", cwd: "/two" });
+  picked.server({
+    _tag: "registry",
+    folders: [rooted("/one", "current"), rooted("/two", "missing")],
+  });
+  assert.deepEqual(picked.client.getState().view, { kind: "new", cwd: "/two" });
+
+  const defaulted = focusHarness();
+  defaulted.server({
+    _tag: "registry",
+    folders: [rooted("/one", "current"), rooted("/two", "current")],
+  });
+  defaulted.server({
+    _tag: "registry",
+    folders: [rooted("/one", "missing"), rooted("/two", "current")],
+  });
+  assert.deepEqual(
+    defaulted.client.getState().view,
+    { kind: "new", cwd: "/one" },
+    "a default the registry accepted is the page's directory from then on",
+  );
+});
