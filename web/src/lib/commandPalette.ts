@@ -7,7 +7,12 @@ import {
   projectDestinations,
   type SessionProjectMenu,
 } from "./projectCommands.ts";
-import { recentSessions, type SessionEntry } from "./sessionCatalog.ts";
+import {
+  createSessionCatalog,
+  recentSessions,
+  type SessionEntry,
+  sessionCatalog,
+} from "./sessionCatalog.ts";
 import { type SessionCommand, type SessionMenuSection, sessionRowMenu } from "./sessionCommands.ts";
 
 export function paletteFilter(value: string, search: string, keywords?: string[]): number {
@@ -199,7 +204,7 @@ function sessionRows(input: PaletteInput): PaletteSessionCommandRow[] {
 export function commandPalette(
   state: AppState,
   input: PaletteInput,
-  sessions = recentSessions(state).map(sessionRow),
+  sessions = recentSessions(sessionCatalog(state)).map(sessionRow),
 ): PaletteGroup[] {
   const groups: PaletteGroup[] = [];
   if (sessions.length > 0)
@@ -248,21 +253,15 @@ function sameRows(a: readonly object[], b: readonly object[]): boolean {
 }
 
 export function createPaletteCatalog() {
-  let dependencies: unknown[] = [];
+  const sessionsOf = createSessionCatalog();
+  let entries: SessionEntry[] = [];
   let sessions: PaletteSessionRow[] = [];
   let previous: PaletteGroup[] = [];
   return (state: AppState, input: PaletteInput): PaletteGroup[] => {
-    const current = state.session ?? state.selecting;
-    const next = [
-      state.sessionReferences,
-      state.folders,
-      state.projects,
-      current?.cwd,
-      current?.sessionId,
-    ];
-    if (next.some((value, i) => value !== dependencies[i])) {
-      dependencies = next;
-      const updated = recentSessions(state).map(sessionRow);
+    const catalog = sessionsOf(state);
+    if (catalog !== entries) {
+      entries = catalog;
+      const updated = recentSessions(catalog).map(sessionRow);
       if (!sameRows(updated, sessions)) sessions = updated;
     }
     const groups = commandPalette(state, input, sessions).map((group) => {

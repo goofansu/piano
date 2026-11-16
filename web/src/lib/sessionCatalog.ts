@@ -181,8 +181,30 @@ export function inSidebarGroups(s: Pick<SessionEntry, "listed" | "pinned">): boo
   return s.listed && !s.pinned;
 }
 
-export function recentSessions(state: AppState): SessionEntry[] {
-  return sessionCatalog(state)
+export function createSessionCatalog(): (state: AppState) => SessionEntry[] {
+  let inputs: unknown[] = [];
+  let catalog: SessionEntry[] = [];
+  return (state) => {
+    const current = state.session ?? state.selecting;
+    const next = [
+      state.sessionReferences,
+      state.folders,
+      state.projects,
+      state.hosts,
+      state.done,
+      current?.cwd,
+      current?.sessionId,
+    ];
+    if (next.some((value, i) => value !== inputs[i])) {
+      inputs = next;
+      catalog = sessionCatalog(state);
+    }
+    return catalog;
+  };
+}
+
+export function recentSessions(catalog: readonly SessionEntry[]): SessionEntry[] {
+  return catalog
     .filter((s) => !s.disabled)
     .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
 }

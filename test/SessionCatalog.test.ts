@@ -336,7 +336,7 @@ test("the palette lists newest first by creation time, a closed folder's session
       }),
     ],
   };
-  const order = recentSessions(dated);
+  const order = recentSessions(sessionCatalog(dated));
   assert.deepEqual(
     order.map((s) => s.sessionId),
     ["newest-closed", "middle-open", "older-open"],
