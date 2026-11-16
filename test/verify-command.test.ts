@@ -103,8 +103,17 @@ test("cancelled baseline retains diagnostics and never runs remaining gates", as
       { cwd: f.root, stdio: "ignore" },
     );
     const closed = new Promise((done) => child!.once("close", done));
-    for (let attempt = 0; !existsSync(join(f.root, ".scratch/ready")); attempt++) {
-      assert.ok(attempt < 200, "baseline reached lint");
+    // The PID marker precedes stdout. Cancel only after the wrapper has retained the
+    // diagnostic we assert below, not merely when the fixture has started.
+    const lintLog = join(f.temp, "cancelled", "2-lint.log");
+    for (let attempt = 0; ; attempt++) {
+      if (
+        existsSync(join(f.root, ".scratch/ready")) &&
+        existsSync(lintLog) &&
+        readFileSync(lintLog, "utf8").includes("waiting")
+      )
+        break;
+      assert.ok(attempt < 200, "baseline retained the lint diagnostic");
       await delay(50);
     }
     assert.equal(f.record("cancelled").outcome, "running", "incomplete checks cannot be passes");
