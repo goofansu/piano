@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-/* WORKAROUND(shadcn 4.21): attachments need scrollbar-none; shadcn/tailwind.css only ships no-scrollbar. */
+/* shadcn attachments need scrollbar-none; shadcn/tailwind.css 4.21 only ships no-scrollbar. */
 @utility scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -409,7 +409,7 @@
   );
 }
 
-/* WORKAROUND(Radix): inline display: table defeats truncation; override it. */
+/* Override Radix's inline display: table, which defeats truncation. */
 [data-slot="scroll-area-viewport"] > div {
   display: block !important;
 }

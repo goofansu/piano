@@ -6,7 +6,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { Data, Effect } from "effect";
-// WORKAROUND(Pi): MCP config helpers are private imports; replace when a public API exists.
+// Pi's MCP config helpers are private imports; replace when a public API exists.
 import { validateMcpServerConfig } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/mcp-servers.js";
 import {
   addMcpServerConfig,

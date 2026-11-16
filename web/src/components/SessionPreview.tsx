@@ -278,7 +278,7 @@ export function PreviewDetailsDialog({
                 </Button>
               </div>
               {details?.error && <p className="text-sm text-err">{details.error}</p>}
-              {/* WORKAROUND(Firefox): a scrollable <pre> breaks drag selection; scroll its wrapper instead. */}
+              {/* A scrollable <pre> breaks drag selection in Firefox; scroll its wrapper instead. */}
               <div className="max-h-[min(16rem,40dvh)] min-h-16 overflow-auto rounded-md border border-line bg-fill">
                 <pre className="p-3 font-mono text-xs whitespace-pre-wrap break-words">
                   {details?.logs.trim() ||

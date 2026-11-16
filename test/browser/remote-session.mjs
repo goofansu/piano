@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { run } from "./harness.mjs";
 import { voiceInputs } from "./voice-input.mjs";
 
-// WORKAROUND(headless Chrome on macOS): ignores agent-browser's Meta+A; run this journey on Linux.
+// Headless Chrome on macOS ignores agent-browser's Meta+A; run this journey on Linux.
 if (process.platform === "darwin") {
   console.log(
     "SKIP remote-session: needs Select All by keyboard, which headless Chrome on macOS lacks",

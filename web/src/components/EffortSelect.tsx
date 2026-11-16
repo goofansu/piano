@@ -16,7 +16,7 @@ interface Props {
 export function EffortSelect({ value, onChange, onCommit, levels, defaultLevel, disabled }: Props) {
   const labelId = useId();
   return (
-    // WORKAROUND(Safari): avoid its fieldset/legend intrinsic-sizing issue.
+    // Avoid Safari's fieldset/legend intrinsic-sizing issue.
     <Field aria-label="Effort" className="min-w-0 gap-2">
       <FieldLabel asChild>
         <span id={labelId}>Reasoning effort</span>

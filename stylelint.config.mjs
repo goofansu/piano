@@ -13,9 +13,8 @@ const runtimeProperties = {
 
 /** @type {import("stylelint").Config} */
 export default {
-  plugins: ["stylelint-value-no-unknown-custom-properties", "./scripts/stylelint-comments.mjs"],
+  plugins: ["stylelint-value-no-unknown-custom-properties"],
   rules: {
-    "piano/comment-policy": true,
     "property-no-unknown": true,
     "csstools/value-no-unknown-custom-properties": [
       true,

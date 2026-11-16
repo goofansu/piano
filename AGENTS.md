@@ -13,10 +13,13 @@ registry").
 ## Code comments
 
 Keep authored source comments to concise notes about concrete hacks, workarounds or compatibility
-patches, naming the trigger or known removal condition. Preserve legal notices and tooling directives.
-Keep explanations in the owning docs, not module headers, API narration or test commentary. Leave
-upstream/vendor comments intact. Use `WORKAROUND(tool/platform): concrete problem or trigger`;
-see [comment lint](docs/development.md#code-comments) for scope and recognized exceptions.
+patches. Name the affected tool/platform and the problem or trigger; include a removal condition or
+issue link when known, without inventing one. Judge a comment by necessity and accuracy, not keywords:
+no fixed marker is required, and labeling narration a workaround does not justify it.
+
+Preserve required legal notices and functional tooling directives. Give lint/type suppressions a
+truthful, concise reason. Keep module overviews, API explanations and test narration in the owning
+docs rather than source comments. Leave upstream/vendor comments intact.
 
 ## Verification
 

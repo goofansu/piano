@@ -53,7 +53,7 @@ async function resolveHere(
       if (!within(skill.filePath, piano)) found.set(skill.name, skill.filePath);
     return [...found];
   }
-  // WORKAROUND(Pi): no exported prompt loader; replace this shim when one exists.
+  // Pi does not export its prompt loader; replace this shim when it does.
   for (const path of paths) {
     if (!path.endsWith(".md")) continue;
     const name = basename(path).slice(0, -3);

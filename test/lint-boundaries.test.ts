@@ -25,7 +25,6 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
     for (const file of [
       ".oxlintrc.json",
       "scripts/lint-boundaries.mjs",
-      "scripts/comment-policy.mjs",
       "tsconfig.json",
       "web/tsconfig.app.json",
       "web/src/components/ui/.oxlintrc.json",

@@ -273,7 +273,7 @@ function ownerGone(endpoint: string): Promise<boolean> {
 const loopbackOrigin = /^http:\/\/(localhost|127\.0\.0\.1)$/;
 const exeDevOrigin = /^https:\/\/[a-zA-Z0-9-]+\.exe\.xyz$/;
 
-/* WORKAROUND(macOS): can bind a wildcard over an occupied loopback port; probe both. */
+/* macOS can bind a wildcard over an occupied loopback port; probe both. */
 async function free(port: number) {
   const probes: Parameters<Server["listen"]>[0][] = [
     { host: "127.0.0.1", port },
@@ -742,7 +742,7 @@ class Launchd implements Supervisor {
     if (state.state !== "running" || !Number.isInteger(leader) || leader <= 1) return false;
     let output: string;
     try {
-      // WORKAROUND(lsof): -b avoids stalls on network mounts; -w suppresses the resulting warnings.
+      // lsof -b avoids stalls on network mounts; -w suppresses the resulting warnings.
       output = await this.run([
         "/usr/sbin/lsof",
         "-b",

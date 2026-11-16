@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { commentPolicyRule } from "./comment-policy.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const within = (path, dir) => path === dir || path.startsWith(`${dir}${sep}`);
@@ -33,7 +32,6 @@ function canonical(path) {
 export default {
   meta: { name: "piano" },
   rules: {
-    "comment-policy": commentPolicyRule,
     "layer-imports": {
       meta: {
         type: "problem",

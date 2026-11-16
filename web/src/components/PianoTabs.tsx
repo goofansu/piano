@@ -44,7 +44,7 @@ function ScrollingTabsList({ className, ...props }: ComponentProps<typeof TabsLi
   );
 }
 
-// WORKAROUND(Radix): scripted tab focus paints a spurious ring after reload; focus without it first.
+// Radix's scripted tab focus paints a spurious ring after reload; focus without it first.
 function focusPressedTab(event: React.MouseEvent<HTMLButtonElement>) {
   if (event.button === 0 && !event.ctrlKey && !event.currentTarget.disabled)
     event.currentTarget.focus({ focusVisible: false });
