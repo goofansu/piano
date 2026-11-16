@@ -206,14 +206,17 @@ out to save its row; Changes opens from the header or palette. Taking turns ther
 no rail control, in the header or the palette. The header says where the session runs on a second
 line under the title, the same folder and branch line as under a sidebar row (a detached HEAD
 shows its short commit as the branch), in 12px muted text that does nothing on tap. The session
-menu ("…", a bottom sheet whenever the areas take turns) is the desktop menu's actions and no
-more, one level deep. Before
-them, the linked pull request opens on GitHub in a new tab and ends with the external-link icon.
+menu ("…", a bottom sheet whenever the areas take turns) is the desktop menu's details and
+actions and no more, one level deep. It starts with the session ID in selectable mono text, as the
+desktop menu does, with 44px icon buttons beside it: "Copy session ID" (selecting text is no way
+to copy on a phone) and the desktop menu's "Copy session path"; each closes the sheet and
+answers with its toast. Then the linked pull request opens on GitHub in a new tab and ends with
+the external-link icon.
 Preview, while known, shows its state dot, name and host; tapping it pushes a Preview pane in the
 same sheet with Back, status/hostname, an external link, Preview details and Stop preview. The link
 dismisses the sheet; details and stop hand focus to their dialogs. No app is embedded. An observed
-app URL also has a direct external-link icon in the session header in every layout. Outputs,
-Environment's copy menus and the session ID stay in the side-by-side layout; links remain tappable
+app URL also has a direct external-link icon in the session header in every layout. Outputs and
+Environment's copy menus stay in the side-by-side layout; links remain tappable
 in the conversation, and Share hands a session to another device. Add to project pushes the project
 picker, with Back to return. Escape or a tap outside returns focus to "…", not the composer. Side
 by side the rail and its switch are unchanged. The transcript, composer draft and attachments
