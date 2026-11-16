@@ -734,7 +734,6 @@ export const ClientMessage = Schema.Union([
   }),
   Schema.TaggedStruct("models", {
     cwd: Schema.String,
-    refresh: Schema.optional(Schema.Boolean),
     requestId: Schema.String,
   }),
   Schema.TaggedStruct("save_project", {

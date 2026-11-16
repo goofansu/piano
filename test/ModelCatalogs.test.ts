@@ -55,7 +55,7 @@ function page(stored: Catalogs = {}, save: () => Promise<void> = async () => {})
     view,
     writes,
     notes,
-    refreshes: () => sent.filter((m) => m._tag === "models").filter((m) => m.refresh),
+    refreshes: () => sent.filter((m) => m._tag === "models"),
     status: (connected: boolean) => handlers!.onStatus(connected),
     server: (m: ServerMessage) => handlers!.onMessage(m),
   };

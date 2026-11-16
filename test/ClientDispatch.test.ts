@@ -859,8 +859,7 @@ for (const outcome of ["refused", "probe failure", "dispatch failure"] as const)
         if (outcome === "refused")
           for (let n = 0; n < inboundLimits.client.messages; n++)
             held.push(yield* dispatch.receive({ _tag: "registry" }));
-        const refreshes = () =>
-          requests.filter((m) => m._tag === "models").filter((m) => m.refresh);
+        const refreshes = () => requests.filter((m) => m._tag === "models");
         const view = () => catalogs.view(catalogs.getState(), cwd);
         catalogs.refresh(cwd);
         yield* yield* dispatch.receive(refreshes()[0]);
@@ -956,6 +955,23 @@ test("a trust decision answers the requester with a notice, the new trust and th
   } finally {
     rmSync(join(cwd, ".agents"), { recursive: true, force: true });
   }
+});
+
+test("a models request always asks Pi again, even after a directory read cached the catalog", async () => {
+  await run(
+    Effect.gen(function* () {
+      const { receive } = yield* client;
+      const from = sent.length;
+      yield* yield* receive({ _tag: "directory", cwd, requestId: "cached" });
+      yield* yield* receive({ _tag: "models", cwd, requestId: "fresh" });
+      const replies = answers(from);
+      const directory = replies.find((m) => m._tag === "directory");
+      const models = replies.find((m) => m._tag === "models");
+      assert.ok(directory?.result.status === "ready", JSON.stringify(directory));
+      assert.ok(models?._tag === "models" && models.requestId === "fresh", JSON.stringify(models));
+      assert.notEqual(models.catalog.fetchedAt, directory.result.catalog.fetchedAt);
+    }),
+  );
 });
 
 test("untrust reports the final outcome when a Pi extension remembers trust again", async () => {

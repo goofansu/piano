@@ -144,7 +144,7 @@ export function createModelCatalogs({
     if (!source || !state.connected || state.refreshing[cwd] !== undefined) return;
     const requestId = crypto.randomUUID();
     set({ ...state, refreshing: { ...state.refreshing, [cwd]: requestId } });
-    source.send({ _tag: "models", cwd, refresh: true, requestId });
+    source.send({ _tag: "models", cwd, requestId });
   };
 
   const saveDefaults = async (model: string | undefined, effort: ThinkingLevel) => {
