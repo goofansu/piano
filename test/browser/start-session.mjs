@@ -17,7 +17,8 @@ await run(
     await page.open("/new");
 
     await page.choose("Directory", "web");
-    await page.until("!document.querySelector('[aria-label^=\"Model:\"]')?.disabled");
+    await page.until("document.querySelector('[aria-label^=\"Model:\"]')?.disabled === false");
+    await page.until("!!document.querySelector('[aria-label=\"Voice input\"]')");
     await page.ab("fill", '[aria-label="First message"]', "Keep this draft");
 
     await page.cdp(async (call) => {
