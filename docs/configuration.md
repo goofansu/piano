@@ -161,14 +161,24 @@ and cancellation. It rejects overload instead of queueing it for retry. See
 
 `piano-ask-user` registers the model-callable `ask_user` tool, not a slash command. The model supplies a
 non-empty `questions` array, including for a single question. Each item has a unique `id`, a
-`question` containing essential context, and optionally an `options` array for a single choice;
-without options, the user can write a multiline answer. Batch independent questions; ask dependent
-questions only after reading the earlier answers.
+`question`, and optionally an `options` array for a single choice; without options, the user can
+write a multiline answer. Batch independent questions; ask dependent questions only after reading
+the earlier answers.
+
+The question renders as Markdown, and the tool's parameter description tells the model its shape:
+the question itself first, one short line ending in `?`; then a blank line and a bullet list of
+context, one fact per bullet (a candidate, a path in backticks, a count), never a paragraph; each
+option one short line, with reasoning in the bullets rather than the options; the whole question a
+few hundred characters at most, so it reads on a phone with the options still in view.
 
 ```json
 {
   "questions": [
-    { "id": "database", "question": "Which database?", "options": ["PostgreSQL", "SQLite"] },
+    {
+      "id": "database",
+      "question": "Which database?\n\n- Config: `config/database.yml`\n- Two migrations pending",
+      "options": ["PostgreSQL", "SQLite"]
+    },
     { "id": "requirements", "question": "What should change?" }
   ]
 }
