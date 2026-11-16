@@ -20,7 +20,7 @@ import { machineFrameBytes, machineLocation, machineSocketUrl } from "@/lib/mach
 import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
 import { parseRoute } from "@/lib/routes";
-import { HISTORY_UNAVAILABLE, SESSION_ARCHIVED } from "@/lib/sessionCatalog";
+import { type UnavailableSessionPage, unavailableSessionPage } from "@/lib/sessionCatalog";
 import { toastNotify as notify } from "@/lib/toastNotify";
 import { useClient } from "@/lib/useClient";
 import { useMachineScope, useOffers, usePreviews } from "@/lib/useMachine";
@@ -144,44 +144,11 @@ function MachineApp() {
                         projectId={state.view.projectId}
                       />
                     ) : state.view.kind === "missing-session" ? (
-                      state.view.reason === "archived" ? (
-                        <PaneNotFound
-                          title={SESSION_ARCHIVED}
-                          description={
-                            offers.settings
-                              ? "Unarchive it in Settings → Data controls to open it."
-                              : "Unarchive it in that machine's own Piano to open it."
-                          }
-                          action={
-                            offers.settings ? (
-                              <Button
-                                variant="outline"
-                                onClick={() => openSettings("data-controls")}
-                              >
-                                Data controls
-                              </Button>
-                            ) : (
-                              <Button variant="outline" onClick={() => openNew()}>
-                                New session
-                              </Button>
-                            )
-                          }
-                        />
-                      ) : (
-                        <PaneNotFound
-                          {...(state.view.reason === "history"
-                            ? HISTORY_UNAVAILABLE
-                            : {
-                                title: "Session not found",
-                                description: "This session is not in Piano's database.",
-                              })}
-                          action={
-                            <Button variant="outline" onClick={() => openNew()}>
-                              New session
-                            </Button>
-                          }
-                        />
-                      )
+                      <UnavailableSession
+                        page={unavailableSessionPage(state.view.reason ?? "missing", offers)}
+                        openDataControls={() => openSettings("data-controls")}
+                        openNew={() => openNew()}
+                      />
                     ) : (
                       <SessionView state={state} send={send} captureSend={client.captureSend} />
                     )}
@@ -210,5 +177,33 @@ function MachineApp() {
         </SessionFilesContext>
       </NavigationContext.Provider>
     </SidebarActivityContext.Provider>
+  );
+}
+
+function UnavailableSession({
+  page,
+  openDataControls,
+  openNew,
+}: {
+  page: UnavailableSessionPage;
+  openDataControls: () => void;
+  openNew: () => void;
+}) {
+  return (
+    <PaneNotFound
+      title={page.title}
+      description={page.description}
+      action={
+        page.action === "data-controls" ? (
+          <Button variant="outline" onClick={openDataControls}>
+            Data controls
+          </Button>
+        ) : (
+          <Button variant="outline" onClick={openNew}>
+            New session
+          </Button>
+        )
+      }
+    />
   );
 }

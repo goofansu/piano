@@ -11,12 +11,7 @@ import {
   routePath,
   type SettingsSection,
 } from "./routes.ts";
-import {
-  HISTORY_UNAVAILABLE,
-  SESSION_ARCHIVED,
-  sessionAddress,
-  sessionLabel,
-} from "./sessionCatalog.ts";
+import { sessionAddress, sessionLabel, unavailableSessionTitle } from "./sessionCatalog.ts";
 import { checkoutMissingAt, workspaceFor } from "./sessionContext.ts";
 
 export type SurfaceView = "changes";
@@ -192,12 +187,7 @@ function pageAddress(state: AppState, page: Page): { route: Route; title: string
     case "missing-session":
       return {
         route: { kind: "session", sessionId: page.sessionId },
-        title:
-          page.reason === "history"
-            ? HISTORY_UNAVAILABLE.title
-            : page.reason === "archived"
-              ? SESSION_ARCHIVED
-              : "Session not found",
+        title: unavailableSessionTitle(page.reason ?? "missing"),
       };
   }
 }

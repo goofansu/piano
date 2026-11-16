@@ -1,5 +1,6 @@
 import type { FolderView, Project, SessionReference, WorktreeView } from "@shared/wire";
 import { type AppState, isSession, sessionKey } from "../store.ts";
+import type { MachineOffers } from "./machineOffers.ts";
 import { findProject } from "./projectCommands.ts";
 
 export type SessionActivity = "working" | "done" | "idle" | "off";
@@ -39,11 +40,57 @@ export const HISTORY_UNAVAILABLE = {
   description: "Restore the Pi session file to open it.",
 } as const;
 
-export const SESSION_ARCHIVED = "Session archived";
+export type UnavailableSessionReason = "missing" | "history" | "archived";
 
 export type SessionAddress =
   | { kind: "select"; cwd: string; sessionId: string }
-  | { kind: "unavailable"; reason: "missing" | "history" | "archived" };
+  | { kind: "unavailable"; reason: UnavailableSessionReason };
+
+export interface UnavailableSessionPage {
+  title: string;
+  description: string;
+  action: "data-controls" | "new-session";
+}
+
+export function unavailableSessionTitle(reason: UnavailableSessionReason): string {
+  switch (reason) {
+    case "missing":
+      return "Session not found";
+    case "history":
+      return HISTORY_UNAVAILABLE.title;
+    case "archived":
+      return "Session archived";
+  }
+}
+
+export function unavailableSessionPage(
+  reason: UnavailableSessionReason,
+  offers: Pick<MachineOffers, "settings">,
+): UnavailableSessionPage {
+  const title = unavailableSessionTitle(reason);
+  switch (reason) {
+    case "missing":
+      return {
+        title,
+        description: "This session is not in Piano's database.",
+        action: "new-session",
+      };
+    case "history":
+      return { title, description: HISTORY_UNAVAILABLE.description, action: "new-session" };
+    case "archived":
+      return offers.settings
+        ? {
+            title,
+            description: "Unarchive it in Settings → Data controls to open it.",
+            action: "data-controls",
+          }
+        : {
+            title,
+            description: "Unarchive it in that machine's own Piano to open it.",
+            action: "new-session",
+          };
+  }
+}
 
 export function sessionAddress(
   state: Pick<AppState, "sessionReferences">,
