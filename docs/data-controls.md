@@ -44,16 +44,22 @@ server's reason; only a request that never left the browser reads plain **Could 
 - `server/ClientDispatch.ts`: ordinary admission, correlated failures and success feedback;
   `ClientSessions.clearArchived` clears the requesting client's selection after bulk archive.
 - `server/SessionHosts.ts`: `unarchive`, `archiveCount`, `archiveAll` own serialization.
-  Bulk groups canonical checkout/session keys, skips conflicting aliases, and takes only immediately
-  available locks. Those locks remain held through one batched write; a concurrent start either
-  already owns its lock (and is kept) or re-resolves after the archive (and is refused).
-- `server/SessionReferences.ts`: `unarchive` uses the same canonical reference resolution as
-  ordinary reads, without reading or rewriting history. Ordinary `resolve` still refuses archived
-  references. Missing directories retain their known canonical identity.
-- `server/Registry.ts`: `unarchiveSession` and `archiveSessions` mutate saved references only.
-  Pin, Changes scope and project assignment pass one gate that refuses an archived reference.
-  The batch rechecks generation and pinned state inside the write, returns the actual count and
-  emits one revision/change, or none for an empty batch. Retention generations protect delayed
+  Bulk skips live and starting sessions and takes only immediately available locks. Those locks
+  remain held through one batched write; a concurrent start either already owns its lock (and is
+  kept) or re-resolves after the archive (and is refused).
+- `server/SessionReferences.ts`: one grouping maps saved references to canonical checkout/session
+  keys. `reference` (used by `resolve` and `unarchive`) refuses a conflicting group;
+  `canonical` yields the non-conflicting entries Archive all may consider, so it skips conflicting
+  aliases. `unarchive` uses the same resolution as ordinary reads, without reading or rewriting
+  history. Ordinary `resolve` still refuses archived references. Missing directories retain their
+  known canonical identity.
+- `server/Registry.ts`: owns retention. `archiveSession`, `unarchiveSession` and `archiveSessions`
+  mutate saved references only, through one transition that flips `archived` and bumps the
+  retention generation. `archivable` (not archived, not pinned) is the one rule for bulk archive;
+  `archiveSessions` rechecks it and the generation inside the write, and `archivableCount` counts
+  what that write would archive for the same expected entries. Pin, Changes scope and project
+  assignment pass one gate that refuses an archived reference. The batch returns the actual count
+  and emits one revision/change, or none for an empty batch. Retention generations protect delayed
   integration writes across archive → unarchive (ABA); database migration 17 persists the generation.
   It is internal metadata, excluded from the sidebar projection.
 - `web/src/lib/sessionContext.ts`: `sessionReferenceChangeable` is the client's matching rule;
@@ -69,7 +75,7 @@ INV-05 (correlated completion without replay), and INV-11 (unchanged peer bounda
 restored refusal, stale writes across archive → unarchive and database reopen, and the gate's
 single refusal for every reference write.
 `test/SessionHosts.test.ts` covers live/working/idle and starting hosts, canonical alias locks,
-closed/missing checkouts, app ownership/cleanup, and read/reopen after unarchive without an implicit
+conflicting alias references skipped by both count and Archive all, closed/missing checkouts, app ownership/cleanup, and read/reopen after unarchive without an implicit
 start. `test/ClientDispatch.test.ts` covers count, confirmation, selection clearing and admission
 refusal. `test/PeerScope.test.ts` exercises refusal through `/ws/peer`.
 

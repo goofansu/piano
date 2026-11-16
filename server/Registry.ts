@@ -74,6 +74,14 @@ export const shownReference = ({
   ...shown
 }: SessionEntry): Omit<SessionEntry, "stats" | "changesScope" | "retentionVersion"> => shown;
 
+export const archivable = (entry: SessionEntry) => !entry.archived && !entry.pinned;
+
+const retained = (entry: SessionEntry, archived: boolean): SessionEntry => ({
+  ...entry,
+  archived,
+  retentionVersion: (entry.retentionVersion ?? 0) + 1,
+});
+
 const sameReference = (entry: SessionEntry, expected: SessionEntry, link?: SessionLinkKey) =>
   entry.createdAt === expected.createdAt &&
   (entry.retentionVersion ?? 0) === (expected.retentionVersion ?? 0) &&
@@ -312,6 +320,7 @@ export class Registry extends Context.Service<
     readonly archiveSessions: (
       expected: ReadonlyArray<SessionEntry>,
     ) => Effect.Effect<number, RegistryError>;
+    readonly archivableCount: (expected: ReadonlyArray<SessionEntry>) => Effect.Effect<number>;
     readonly removeSession: (
       cwd: string,
       sessionId: string,
@@ -378,6 +387,17 @@ export const RegistryLive = Layer.effect(
     const currentIn = (d: RegistryData, expected: SessionEntry, link?: SessionLinkKey) => {
       const entry = d.sessions.find(isSession(expected.cwd, expected.sessionId));
       return entry && sameReference(entry, expected, link) ? entry : undefined;
+    };
+    const archiveIn = (d: RegistryData, expected: ReadonlyArray<SessionEntry>) => {
+      let count = 0;
+      const candidates = new Map(expected.map((s) => [sessionKey(s.cwd, s.sessionId), s]));
+      const sessions = d.sessions.map((s) => {
+        const before = candidates.get(sessionKey(s.cwd, s.sessionId));
+        if (!before || !archivable(s) || !sameReference(s, before)) return s;
+        count++;
+        return retained(s, true);
+      });
+      return { data: { ...d, sessions }, count };
     };
     const changeableIn = (d: RegistryData, cwd: string, sessionId: string) => {
       const entry = d.sessions.find(isSession(cwd, sessionId));
@@ -686,9 +706,7 @@ export const RegistryLive = Layer.effect(
         update((d) => ({
           ...d,
           sessions: d.sessions.map((t) =>
-            isSession(cwd, sessionId)(t) && !t.archived
-              ? { ...t, archived: true, retentionVersion: (t.retentionVersion ?? 0) + 1 }
-              : t,
+            isSession(cwd, sessionId)(t) && !t.archived ? retained(t, true) : t,
           ),
         })),
       unarchiveSession: (cwd, sessionId) =>
@@ -700,27 +718,20 @@ export const RegistryLive = Layer.effect(
             });
           return {
             ...d,
-            sessions: d.sessions.map((s) =>
-              s === entry
-                ? { ...s, archived: false, retentionVersion: (s.retentionVersion ?? 0) + 1 }
-                : s,
-            ),
+            sessions: d.sessions.map((s) => (s === entry ? retained(s, false) : s)),
           };
         }),
       archiveSessions: Effect.fn("Registry.archiveSessions")(function* (expected) {
         let count = 0;
-        const candidates = new Map(expected.map((s) => [sessionKey(s.cwd, s.sessionId), s]));
-        yield* update((d) => ({
-          ...d,
-          sessions: d.sessions.map((s) => {
-            const before = candidates.get(sessionKey(s.cwd, s.sessionId));
-            if (!before || s.archived || s.pinned || !sameReference(s, before)) return s;
-            count++;
-            return { ...s, archived: true, retentionVersion: (s.retentionVersion ?? 0) + 1 };
-          }),
-        }));
+        yield* update((d) => {
+          const archived = archiveIn(d, expected);
+          count = archived.count;
+          return archived.data;
+        });
         return count;
       }),
+      archivableCount: (expected) =>
+        Effect.map(Ref.get(state), (d) => archiveIn(d, expected).count),
       removeSession: (cwd, sessionId, reopened) =>
         update((d) => {
           const at = d.sessions.findIndex(isSession(cwd, sessionId));
