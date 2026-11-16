@@ -14,9 +14,11 @@ export function useSessionPullRequest(
   {
     visible,
     dialog,
+    changeable,
   }: {
     visible: boolean;
     dialog: { open: boolean; onOpenChange: (open: boolean) => void };
+    changeable: boolean;
   },
 ) {
   const machineId = useMachineId();
@@ -54,7 +56,7 @@ export function useSessionPullRequest(
   const state = useSyncExternalStore(pr.subscribe, pr.getState);
   const current = state.key === pullRequestKey(workspaceId, sessionId);
   return {
-    addressable: !!target,
+    changeable: !!target && changeable,
     value: current ? state.value : undefined,
     linked: current && state.linked,
     registered: current ? state.link : undefined,

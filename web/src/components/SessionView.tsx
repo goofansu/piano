@@ -37,6 +37,7 @@ import {
   sessionContext,
   sessionPane,
   sessionProject,
+  sessionReferenceChangeable,
   sessionWorking,
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
@@ -127,6 +128,8 @@ export function SessionView({ state, send, captureSend }: Props) {
     {
       visible: changesVisible,
       dialog: { open: pullRequestOpen, onOpenChange: onPullRequestOpenChange },
+      changeable:
+        !!t?.sessionId && sessionReferenceChangeable(state, { cwd: t.cwd, sessionId: t.sessionId }),
     },
   );
   const { status, replyActivity } = sessionActivity(state, messagesOnly);

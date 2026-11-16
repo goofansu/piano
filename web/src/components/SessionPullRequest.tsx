@@ -201,10 +201,16 @@ function LinkedPullRequestRow({
               Open pull request <ExternalLinkIcon data-icon="inline-end" aria-hidden />
             </a>
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={pr.open}>Change link…</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void pr.discover()}>Find from branch</DropdownMenuItem>
+          <DropdownMenuItem disabled={!pr.changeable} onSelect={pr.open}>
+            Change link…
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!pr.changeable} onSelect={() => void pr.discover()}>
+            Find from branch
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => void pr.remove()}>Remove link</DropdownMenuItem>
+          <DropdownMenuItem disabled={!pr.changeable} onSelect={() => void pr.remove()}>
+            Remove link
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </section>
