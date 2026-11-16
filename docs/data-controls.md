@@ -23,11 +23,19 @@ rechecks eligibility and the success toast reports the actual count written.
 The initiating client's selected stopped session is cleared if archived. Other clients keep the
 existing Archived view, which refuses further input. Unarchive is one session at a time.
 
+A mutation keeps running on the server after the client disconnects. A lost connection or a
+missing reply (75 s) is therefore not reported as a failure: the warning says the change may have
+finished and to check Archived sessions. A refusal reads **Could not …:** followed by the
+server's reason; only a request that never left the browser reads plain **Could not …**.
+
 ## Ownership and interfaces
 
 - `web/src/components/DataControlsSettings.tsx`: the Settings page, neutral confirmation and row
   actions. The web view-model/controller in `web/src/lib/dataControls.ts` shares the catalog's
-  display projection rather than inventing title/folder formatting.
+  display projection rather than inventing title/folder formatting, and keeps only its state and
+  wording. `web/src/lib/correlatedRequest.ts` sends each request and decides its outcome: not
+  sent, failed with the server's detail, confirmed, or unconfirmed (connection lost or no reply).
+  The worktree picker (`web/src/lib/worktreeOperation.ts`) uses the same module.
 - `shared/wire.ts`: local `unarchive_session`, `archive_all_sessions`, and read-only
   `archive_sessions_count`; each carries `requestId`. `data_controls_result` correlates terminal
   success/count or failure. Mutations additionally emit one server-confirmed success toast.
@@ -59,7 +67,8 @@ closed/missing checkouts, app ownership/cleanup, and read/reopen after unarchive
 start. `test/ClientDispatch.test.ts` covers count, confirmation, selection clearing and admission
 refusal. `test/PeerScope.test.ts` exercises refusal through `/ws/peer`.
 
-Web tests cover archived row formatting/order, operation correlation and Settings navigation.
+Web tests cover archived row formatting/order, outcome wording and Settings navigation;
+`test/CorrelatedRequest.test.ts` covers the four request outcomes.
 Use [the Data controls verification entry](../.agents/skills/verify-piano/features/data-controls.md)
 for the scratch browser journey and Quiet UI comparison with Webhooks. These are observation
 instructions, not a claim that a particular revision passed. The recipe runs on fake Pi and Local
