@@ -671,7 +671,7 @@ export const RegistryLive = Layer.effect(
         let saved: SessionEntry | undefined;
         yield* update((d) => {
           const entry = currentIn(d, expected, link);
-          if (!entry) return d;
+          if (!entry || entry.archived) return d;
           const next: SessionEntry = { ...entry, [link]: value };
           saved = next;
           return { ...d, sessions: d.sessions.map((s) => (s === entry ? next : s)) };

@@ -230,6 +230,8 @@ test("an archived reference keeps read and copy commands but offers no change, p
     sessionReferences: base.sessionReferences.map((s) => ({ ...s, archived: true })),
   };
   assert.equal(enabled(archived)["copy-session-id"], true, "copying stays available");
+  assert.equal(enabled(base)["pull-request"], true);
+  assert.equal(enabled(archived)["pull-request"], false, "header Pull request");
   for (const target of [undefined, other]) {
     const commands = enabled(archived, target);
     for (const id of ["rename", "pin", "archive", "delete"] as const)
