@@ -57,13 +57,12 @@ Before adding or changing UI, including strings and controls, read [Quiet UI](do
 
 ## Server
 
-Keep Pi protocol details behind `server/PiSessions.ts`; extend `SessionAction` or `SessionEvent`
-in `shared/wire.ts` for new capabilities. Test through that interface, not its private helpers.
-Module files are PascalCase after their export; `main.ts` is the sole entry point.
+Keep Pi protocol details behind `server/PiSessions.ts`. Extend its public contract through
+`SessionAction`/`SessionEvent` in `shared/wire.ts`; test through that contract.
+Name modules in PascalCase after their export; `main.ts` is the sole entry point.
 
-Keep filesystem paths out of HTTP URLs, so access logs and proxies never record them. Address a
-registered workspace or session by its ID (`?workspaceId=`, `/s/<sessionId>`); send an arbitrary
-path, such as a directory that is not registered yet, in a POST JSON body.
+Use workspace/session IDs in URLs, never filesystem paths. Send arbitrary paths in POST JSON bodies
+to keep them out of URL logs.
 
 ## Effect
 
@@ -96,27 +95,15 @@ Before proposing module-deepening candidates, read [architecture reviews](docs/a
 
 ## Branches
 
-Investigate in the current session before dispatching implementation. Inspect the affected code and
-checks until you can name the observed problem, implementation scope, and acceptance check. Include
-those findings in the child’s brief. Explicitly delegated research may start directly in a child.
-
-For a new worktree, fetch `origin` and use `origin/main` as the base unless the task explicitly
-requires another base.
-
-Develop each new change in a dedicated branch and worktree. A session already assigned the change
-in its dedicated worktree performs the work there. Otherwise, use `piano_start_session` when
-available to dispatch the change into a new worktree. When unavailable, or when the user asks to
-keep the work in the current session, create the worktree with `/worktrunk:wt-switch-create` in
-Claude Code or `wt switch -c <branch> --base origin/main` elsewhere (`wt switch -h` lists the options).
-Run every later command from that worktree's directory.
-
-A worktree ends in one of two outcomes:
-
-- **Pull request:** once the work passes [Verification](#verification), commit, push and open a
-  pull request. Starting the worktree is the request for all three; the user reviews and merges.
-- **User's decision:** when the work cannot pass Verification, or the next step is the user's to
-  choose (scope, design, a trade-off), stop and ask, naming what stands between the work and its
-  pull request.
+- Investigate before dispatching implementation; give the child the observed problem, scope and
+  acceptance check. Explicitly delegated research may start directly in a child.
+- Use a dedicated branch and worktree; reuse the one already assigned to the task. Run subsequent
+  commands from that worktree.
+- Before creating a worktree, fetch `origin` and base it on `origin/main` unless the task explicitly
+  requires another base.
+- Complete worktree tasks by passing [Verification](#verification), committing, pushing and opening
+  a PR for the user's review and merge. If checks cannot pass or the next step needs a user decision,
+  stop and ask, naming the blocker.
 
 ## Deploy
 
