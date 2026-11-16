@@ -83,6 +83,15 @@ development invariants and roadmap it links, and cite affected invariant IDs in 
 form of INV-01: Pi owns history, Git owns repository facts, Worktrunk sits behind the lifecycle
 adapter, Piano owns workspace and integration policy.
 
+### Feature locality
+
+For a new or substantially changed feature, group what genuinely changes together within its
+runtime behind a small interface; preserve `web → shared ← server`. Give it one obvious starting
+place: a `docs/<feature>.md` page naming the owning modules per runtime, their exposed interface,
+module tests, and the `verify-piano` feature entry / browser journey. Link that page from the
+feature’s entry in the [verification map](.agents/skills/verify-piano/features/README.md#features).
+This is not a folder migration and does not apply retroactively.
+
 ## Architecture reviews
 
 Before proposing deepening candidates (`/mattpocock-skills:improve-codebase-architecture`), read
