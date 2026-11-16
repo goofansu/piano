@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -90,6 +90,7 @@ const run = <A, E>(
     | Scope.Scope
   >,
   extraArgs: string[] = [],
+  cli = new URL("./fake-pi.mjs", import.meta.url).pathname,
 ) => {
   sent.length = 0;
   discovered = undefined;
@@ -105,7 +106,7 @@ const run = <A, E>(
       Effect.provide(layer),
       Effect.provideService(PiCli, {
         node: process.execPath,
-        cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
+        cli,
         extraArgs,
       }),
       Effect.provideService(RegistryDatabasePath, join(root, `registry-${++databases}.db`)),
@@ -345,6 +346,156 @@ test("INV-02/05: superseded navigation is bounded during startup and the latest 
       assert.equal(replies.filter((m) => m._tag === "error").length, 1);
       for (const work of available) yield* work;
     }),
+  );
+});
+
+const holdingStarts = () => {
+  const audit = join(mkdtempSync(join(root, "holding-starts-")), "audit.jsonl");
+  writeFileSync(audit, "");
+  const spawned = () =>
+    readFileSync(audit, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { event: string; pid: number })
+      .filter((r) => r.event === "spawn");
+  return {
+    launched: Effect.gen(function* () {
+      for (let n = 0; spawned().length === 0; n++) {
+        if (n > 250) return yield* Effect.die(new Error("Pi never launched"));
+        yield* Effect.sleep("20 millis");
+      }
+    }),
+    release: Effect.sync(() => {
+      for (const { pid } of spawned()) {
+        try {
+          process.kill(pid, "SIGCONT");
+        } catch {}
+      }
+    }),
+    extraArgs: ["--audit", audit, "--hold-readiness"],
+    cli: new URL("./fake-host-pi.mjs", import.meta.url).pathname,
+  };
+};
+
+const shownBeforeRelease = (
+  replies: ReadonlyArray<ServerMessage>,
+  selectionId: string,
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    for (let n = 0; n < 100; n++) {
+      if (replies.some((m) => m._tag === "selected" && m.selectionId === selectionId)) return true;
+      yield* Effect.sleep("20 millis");
+    }
+    return false;
+  });
+
+test("INV-05: a reconnect's reconcile waiting on a held creation does not delay a newer selection", async () => {
+  const held = holdingStarts();
+  await run(
+    Effect.gen(function* () {
+      yield* (yield* Registry).addSession(cwd, "saved-b");
+      const creator = yield* makeClientDispatch({
+        send: () => Effect.void,
+        overflow: (e) => Effect.die(e),
+      });
+      const creating = yield* (yield* creator.receive({
+        _tag: "create_session",
+        selectionId: "creating",
+        cwd,
+        options: {},
+        attemptId: "held-attempt",
+      })).pipe(Effect.forkChild);
+      yield* held.launched;
+      const replies: ServerMessage[] = [];
+      const { receive } = yield* makeClientDispatch({
+        send: (m) => Effect.sync(() => void replies.push(m)),
+        overflow: (e) => Effect.die(e),
+      });
+      const reconciling = yield* (yield* receive({
+        _tag: "select",
+        cwd,
+        sessionId: null,
+        attemptId: "held-attempt",
+        selectionId: "reconcile",
+      })).pipe(Effect.forkChild);
+      yield* Effect.yieldNow;
+      const selecting = yield* (yield* receive({
+        _tag: "select",
+        cwd,
+        sessionId: "saved-b",
+        selectionId: "b",
+      })).pipe(Effect.forkChild);
+      assert.ok(
+        yield* shownBeforeRelease(replies, "b"),
+        "B was shown while the creation it superseded was still starting",
+      );
+      yield* held.release;
+      yield* Fiber.join(creating);
+      yield* Fiber.join(reconciling);
+      yield* Fiber.join(selecting);
+      assert.deepEqual(
+        replies
+          .filter((m) => "selectionId" in m && m.selectionId !== undefined)
+          .map((m) => [m._tag, "selectionId" in m && m.selectionId]),
+        [["selected", "b"]],
+        "the superseded reconcile answers nothing",
+      );
+    }).pipe(Effect.ensuring(held.release)),
+    held.extraArgs,
+    held.cli,
+  );
+});
+
+test("INV-05: selecting a session whose Pi is still starting does not delay a newer selection", async () => {
+  const held = holdingStarts();
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addSession(cwd, "starting-a");
+      yield* registry.addSession(cwd, "saved-b");
+      const starting = yield* (yield* SessionHosts)
+        .open({ cwd, sessionId: "starting-a" })
+        .pipe(Effect.forkChild);
+      yield* held.launched;
+      const replies: ServerMessage[] = [];
+      const { receive } = yield* makeClientDispatch({
+        send: (m) => Effect.sync(() => void replies.push(m)),
+        overflow: (e) => Effect.die(e),
+      });
+      const first = yield* (yield* receive({
+        _tag: "select",
+        cwd,
+        sessionId: "starting-a",
+        selectionId: "a",
+      })).pipe(Effect.forkChild);
+      yield* Effect.yieldNow;
+      const second = yield* (yield* receive({
+        _tag: "select",
+        cwd,
+        sessionId: "saved-b",
+        selectionId: "b",
+      })).pipe(Effect.forkChild);
+      assert.ok(
+        yield* shownBeforeRelease(replies, "b"),
+        "B was shown while A's Pi was still starting",
+      );
+      yield* held.release;
+      yield* Fiber.join(starting);
+      yield* Fiber.join(first);
+      yield* Fiber.join(second);
+      assert.deepEqual(
+        replies.filter((m) => m._tag === "selected").map((m) => m.selectionId),
+        ["b"],
+        "the superseded selection answers nothing",
+      );
+      yield* yield* receive({ _tag: "select", cwd, sessionId: "starting-a", selectionId: "a2" });
+      assert.ok(
+        replies.some((m) => m._tag === "selected" && m.selectionId === "a2" && m.hosted),
+        "A's lock was left usable",
+      );
+    }).pipe(Effect.ensuring(held.release)),
+    held.extraArgs,
+    held.cli,
   );
 });
 
