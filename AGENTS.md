@@ -1,14 +1,9 @@
 # piano
 
-Web UI that starts and continues pi sessions across folders and their worktrees. Server on
-Effect 4, client on React + shadcn/ui.
-
 ## Words
 
-Name things as [the glossary](docs/glossary.md) does in code, UI and docs: it is the source of
-truth for folder, worktree, workspace, project, session, registry and the planned task and evidence
-terms. When talking to the user, name what they see in the UI ("Piano's database", not "the
-registry").
+Use [the glossary](docs/glossary.md) for names in code, UI and docs. When talking to the user,
+name what they see in the UI ("Piano's database", not "the registry").
 
 ## Code comments
 
@@ -23,26 +18,23 @@ docs rather than source comments. Leave upstream/vendor comments intact.
 
 ## Verification
 
-Follow [evidence-based development and testing](docs/testing.md): before changing behavior, name
-the claim, the relevant invariant and the smallest useful check. Add a regression test only for a
-meaningful failure not already protected, testing observable contracts rather than private helpers
-or mock choreography. Documentation-only changes need document/link review, not tests or an app run.
+Before changing behavior, name the claim, relevant invariant and smallest useful check. Follow
+[the testing policy](docs/testing.md) for regression tests and evidence. Documentation-only changes
+need document/link review, not tests or an app run.
 
 - **Code or dependency changes:** run `npm run verify`, the thin wrapper over `npm run typecheck`,
   `npm run lint` and `npm test` (module tests against `test/fake-pi.mjs`, no credentials). All three
   must pass; focused checks and browser journeys remain explicit ([commands](docs/development.md#tests)).
 - **Application behavior:** observe the affected journey on a [scratch instance](#scratch-instance)
   and keep the output as PR evidence.
-- **UI changes:** apply the [quiet UI](docs/quiet-ui.md#checks) checks to changed strings,
-  controls and actions. Choose focused evidence for local cosmetic edits, affected journeys for
-  behavior changes, and cross-surface comparisons for shared styles or component upgrades:
-  [UI evidence scope](docs/testing.md#ui-evidence-scope) defines the completion check for each.
+- **UI changes:** apply the [quiet UI checks](docs/quiet-ui.md#checks) and choose evidence using
+  [UI evidence scope](docs/testing.md#ui-evidence-scope).
 - **Critical paths** (start a session; open and continue one) live in `test/browser/`; add a
   journey there only for a new critical path.
 - **Model calls** cost real credits: prompt "Reply with exactly: X" and read the reply back.
 - **Transcript rows:** a new row's gutter glyph centres on its first text line. Add the row kind
   to `test/browser/transcript-rows.mjs` and run it; the journey measures every row (see
-  [alignment](docs/testing.md#alignment)). Eyeballing a screenshot has missed a 4px offset twice.
+  [alignment](docs/testing.md#alignment)); a screenshot alone is insufficient.
 - **Radix menus and popovers** open on pointer events: use `agent-browser click`, not a DOM
   `.click()` from `eval`.
 
@@ -61,18 +53,13 @@ Follow Linear's design and interaction language (see [the Linear notes](docs/des
 and Linear's [agent interaction guidelines](https://linear.app/developers/aig)); Codex and T3 Code
 remain references for the web harness around Pi, not for how Piano looks.
 
-Before adding or changing UI (a screen, string, control, icon button, component or palette
-command), read [Quiet UI](docs/quiet-ui.md): the checks every addition passes and the structure
-every pane shares.
+Before adding or changing UI, including strings and controls, read [Quiet UI](docs/quiet-ui.md).
 
 ## Server
 
-`server/PiSessions.ts` is the deep module: `open`, `probe`, `history` (saved sessions read without
-Pi), and per session `events`, `act`, `state`, `commands`, all in the browser's wire vocabulary from
-`shared/wire.ts`. Add capabilities as new
-`SessionAction` or `SessionEvent` variants; everything pi-protocol-specific stays behind that seam.
-Tests go through that interface only. Module files are PascalCase after their export; `main.ts` is
-the sole entry point.
+Keep Pi protocol details behind `server/PiSessions.ts`; extend `SessionAction` or `SessionEvent`
+in `shared/wire.ts` for new capabilities. Test through that interface, not its private helpers.
+Module files are PascalCase after their export; `main.ts` is the sole entry point.
 
 Keep filesystem paths out of HTTP URLs, so access logs and proxies never record them. Address a
 registered workspace or session by its ID (`?workspaceId=`, `/s/<sessionId>`); send an arbitrary
@@ -105,14 +92,7 @@ This is not a folder migration and does not apply retroactively.
 
 ## Architecture reviews
 
-Before proposing deepening candidates (`/mattpocock-skills:improve-codebase-architecture`), read
-[architecture reviews](docs/architecture-reviews.md).
-
-## README
-
-`README.md` holds two guides and nothing else: **Use**, how a user sets up and uses Piano,
-and **Develop**, how a developer sets up the project and starts developing. Put reference and
-explanation in `docs/` and link to it from the guide that needs it.
+Before proposing module-deepening candidates, read [architecture reviews](docs/architecture-reviews.md).
 
 ## Branches
 
