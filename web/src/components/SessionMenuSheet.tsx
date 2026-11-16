@@ -178,10 +178,9 @@ function PreviewRow({ preview, onShow }: { preview: SessionPreview; onShow: () =
 }
 
 /**
- * The session ID, as the dropdown menu's details show it, with the copy commands beside it as 44px
- * icon buttons: the ID itself, since selecting text is no way to copy on a phone, then the
- * dropdown's own details (Copy session path). Running one closes the sheet and toasts, as choosing
- * the dropdown's icon does.
+ * The session ID with the dropdown menu's details beside it (Copy session path), as the dropdown
+ * shows them, its icon buttons 44px here. Running one closes the sheet and toasts, as choosing the
+ * dropdown's icon does.
  */
 function SessionIdRow({
   sessionId,
@@ -234,7 +233,7 @@ function PaneHeader({ title, onBack }: { title: string; onBack: () => void }) {
 /**
  * The session menu for one-area-at-a-time or a narrow viewport: a bottom sheet, one level deep.
  * The header's second line says where the session runs. The sheet starts with the dropdown menu's
- * session ID and copy controls, then includes the linked pull request and known Preview, not the
+ * session ID and its details, then includes the linked pull request and known Preview, not the
  * rail's Outputs or Environment copy menus. Project and Preview rows push panes within this
  * sheet. Opening details or a confirmation calls `onLeave`, closing the sheet and leaving focus
  * to that destination.
@@ -284,8 +283,6 @@ export function SessionMenuSheet({
 
   const menu = sessionHeaderMenu(commands);
   const { display } = menu;
-  // The ID's own copy first: the dropdown leaves the ID selectable instead, which a phone cannot use.
-  const details = [...commands.filter((c) => c.id === "copy-session-id"), ...menu.details];
   const rows = (section: SessionCommand[]) =>
     section.map((c) => <SessionCommandRow key={c.id} command={c} run={run} />);
   const facts = !!pr || !!preview;
@@ -324,7 +321,7 @@ export function SessionMenuSheet({
         {page === "actions" && (
           <>
             <SheetTitle className="sr-only">Session</SheetTitle>
-            <SessionIdRow sessionId={sessionId} details={details} run={run} />
+            <SessionIdRow sessionId={sessionId} details={menu.details} run={run} />
             <Separator className="my-1" />
             {/* The pull request opens in a browser tab, so the sheet closes as after an action. */}
             {pr && (
