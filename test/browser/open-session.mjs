@@ -511,7 +511,13 @@ await run(
     const collapsed = await promptSize();
     assert.ok(collapsed.height < collapsed.content, "collapsed prompt is capped again");
     await page.ab("set", "viewport", "800", "900");
-    await page.see("Show more");
+    // The label already exists before resize. Wait for the pinned transcript to follow its
+    // remeasured rows before the pointer driver reads the button's coordinates; otherwise the
+    // scroll correction can move it between that read and mouse-down, losing the click.
+    await page.until(`(() => {
+      const t = document.querySelector('[data-slot="transcript"]');
+      return t.scrollHeight - t.scrollTop - t.clientHeight < 2;
+    })()`);
     await page.click("button", "Show more");
     await page.see("Show less");
     const resized = await promptSize();
