@@ -39,6 +39,23 @@ export const HISTORY_UNAVAILABLE = {
   description: "Restore the Pi session file to open it.",
 } as const;
 
+export const SESSION_ARCHIVED = "Session archived";
+
+export type SessionAddress =
+  | { kind: "select"; cwd: string; sessionId: string }
+  | { kind: "unavailable"; reason: "missing" | "history" | "archived" };
+
+export function sessionAddress(
+  state: Pick<AppState, "sessionReferences">,
+  sessionId: string,
+): SessionAddress {
+  const ref = state.sessionReferences.find((r) => r.sessionId === sessionId);
+  if (!ref) return { kind: "unavailable", reason: "missing" };
+  if (ref.archived) return { kind: "unavailable", reason: "archived" };
+  if (!sessionOpenable(ref)) return { kind: "unavailable", reason: "history" };
+  return { kind: "select", cwd: ref.cwd, sessionId };
+}
+
 const HINTS = {
   history: `${HISTORY_UNAVAILABLE.title}. ${HISTORY_UNAVAILABLE.description}`,
   checkout: "Folder missing. History can be read; restore the folder to continue.",
@@ -137,6 +154,7 @@ export function sessionDestination(
   state: AppState,
   sessionId: string,
 ): SessionDestination | "unlisted" {
-  const entry = sessionCatalog(state).find((s) => s.sessionId === sessionId);
+  if (sessionAddress(state, sessionId).kind !== "select") return "unlisted";
+  const entry = catalogEntry(state, sessionId);
   return entry && !entry.disabled ? { sessionId, cwd: entry.cwd, label: entry.label } : "unlisted";
 }

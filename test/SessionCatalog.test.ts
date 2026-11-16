@@ -7,6 +7,7 @@ import {
   catalogEntry,
   folderFor,
   recentSessions,
+  sessionAddress,
   sessionCatalog,
   sessionDestination,
 } from "../web/src/lib/sessionCatalog.ts";
@@ -237,6 +238,26 @@ test("a session opens at the catalog's directory only while it is not archived a
     "the server refuses to open an archived session",
   );
   assert.equal(sessionDestination(state, "missing"), "unlisted");
+});
+
+test("a session's address selects it only while it is registered, unarchived and its history is there", () => {
+  assert.deepEqual(sessionAddress(state, "closed-member"), {
+    kind: "select",
+    cwd: "/closed/app",
+    sessionId: "closed-member",
+  });
+  assert.deepEqual(sessionAddress(state, "missing"), { kind: "unavailable", reason: "missing" });
+  assert.deepEqual(sessionAddress(state, "lost"), { kind: "unavailable", reason: "history" });
+  assert.deepEqual(sessionAddress(state, "archived"), { kind: "unavailable", reason: "archived" });
+  const archivedLost: AppState = {
+    ...state,
+    sessionReferences: [ref("/repo", "both", "Both", { archived: true, unavailable: "history" })],
+  };
+  assert.deepEqual(
+    sessionAddress(archivedLost, "both"),
+    { kind: "unavailable", reason: "archived" },
+    "the server refuses an archived session before it looks for history",
+  );
 });
 
 test("an untitled session is called Untitled in the sidebar, its header and the browser tab", () => {

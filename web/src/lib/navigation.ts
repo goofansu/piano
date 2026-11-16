@@ -11,7 +11,12 @@ import {
   routePath,
   type SettingsSection,
 } from "./routes.ts";
-import { HISTORY_UNAVAILABLE, sessionLabel, sessionOpenable } from "./sessionCatalog.ts";
+import {
+  HISTORY_UNAVAILABLE,
+  SESSION_ARCHIVED,
+  sessionAddress,
+  sessionLabel,
+} from "./sessionCatalog.ts";
 import { checkoutMissingAt, workspaceFor } from "./sessionContext.ts";
 
 export type SurfaceView = "changes";
@@ -186,7 +191,12 @@ function pageAddress(state: AppState, page: Page): { route: Route; title: string
     case "missing-session":
       return {
         route: { kind: "session", sessionId: page.sessionId },
-        title: page.reason === "history" ? HISTORY_UNAVAILABLE.title : "Session not found",
+        title:
+          page.reason === "history"
+            ? HISTORY_UNAVAILABLE.title
+            : page.reason === "archived"
+              ? SESSION_ARCHIVED
+              : "Session not found",
       };
   }
 }
@@ -213,15 +223,17 @@ export function decideRoute(route: Route, state: AppState): RouteDecision {
       : { kind: "open", page };
   }
   if (!state.registryLoaded) return { kind: "wait" };
-  const session = state.sessionReferences.find((ref) => ref.sessionId === route.sessionId);
-  if (!session)
-    return { kind: "open", page: { kind: "missing-session", sessionId: route.sessionId } };
-  return sessionOpenable(session)
-    ? { kind: "select", cwd: session.cwd, sessionId: session.sessionId }
-    : {
-        kind: "open",
-        page: { kind: "missing-session", sessionId: route.sessionId, reason: "history" },
-      };
+  const address = sessionAddress(state, route.sessionId);
+  if (address.kind === "select") return address;
+  const { reason } = address;
+  return {
+    kind: "open",
+    page: {
+      kind: "missing-session",
+      sessionId: route.sessionId,
+      ...(reason !== "missing" && { reason }),
+    },
+  };
 }
 
 export interface Address {
