@@ -143,7 +143,8 @@ Where to begin: where a session may start, `startsSessionIn` in
   gone, a remote only in a directory listed under one of its open folders. Its callers are the
   New page's default directory in [`client.ts`](../web/src/lib/client.ts), the Directory
   picker's roots (`directoryChoices`), a folder row's and a session's New session here
-  ([`folderCommands.ts`](../web/src/lib/folderCommands.ts),
+  ([`folderCommands.ts`](../web/src/lib/folderCommands.ts), which takes the machine's offers and
+  returns only the folder commands it offers, so the sidebar draws what it receives;
   [`sessionCommands.ts`](../web/src/lib/sessionCommands.ts)) and a project home's directory.
 - [`sessionContext.ts`](../web/src/lib/sessionContext.ts) exposes `checkoutMissingAt`, the one
   decision that a checkout is gone: the selected session's own `checkoutMissing` state, a session
