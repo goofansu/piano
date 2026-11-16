@@ -8,6 +8,12 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 ## Sub-features
 
 - `open-from-sidebar`: click the session's row in navigation "Sessions".
+- `session-arrows`: Alt+Up / Alt+Down opens the previous / next openable session in the sidebar's
+  displayed order, including offscreen rows but skipping collapsed groups and unavailable history.
+  It does not wrap. With no displayed selection, Down starts at the first row and Up at the last.
+  The selected row is revealed without taking focus from the composer; each session keeps its draft.
+  The shortcut works with the sidebar hidden, but not inside Settings, a palette, menu, dialog or
+  another form's input.
 - `sidebar-layout`: Hide sidebar / Show sidebar, the palette's Hide sidebar / Show sidebar row and Cmd+B toggle
   the sidebar. Cmd+B is `Meta+b` even on Linux, not Control+B. A narrow viewport uses a sheet;
   opening or dismissing that sheet preserves the desktop column preference on widening.
@@ -58,6 +64,11 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 - `follow-up`: "Message" plus Enter sends to the same Pi session. Image controls are shared
   with New; see [Start a session](./start-session.md) `images`.
 - `stop`: "Stop" aborts a running reply.
+- `queue-edit`: while Pi works, a nonempty draft changes Stop to `steer` or `follow-up`, chosen
+  through "Delivery: <mode>"; Enter uses that mode, Alt+Enter the other. "Queued messages (n)"
+  offers "Edit queued message" / "Edit all queued messages", restoring queued text to the draft
+  without stopping Pi. Escape in the composer restores the queue first, otherwise stops Pi.
+  The Edit target stays at least 44px tall on phones and coarse-pointer screens.
 - `nested-calls`: an opened codemode tool row lists the calls its script made, one line each
   (status dot, tool name, what it acted on) that opens to its arguments and output. More than 8
   fold to the last 8 behind "Show all <n> tool calls" (" · <k> failed" in red when any failed),
@@ -79,6 +90,7 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
 
 - Sidebar row (grouped by date by default: "Today").
 - A project home card, or Mod+K and the session's title.
+- Alt+Up / Alt+Down, following the open groups in the sidebar's current order.
 - Address bar: `/s/<sessionId>`, or `/m/<configured-machine>/s/<sessionId>` for a peer.
   The Machine picker requires a configured peer; a default launch lists only Local.
 
@@ -91,6 +103,9 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   - Command: `node test/browser/open-session.mjs "$EVIDENCE/open-session/harness"`
   - Result: exit 0 and `PASS open-session ...` (sidebar, long-history jumps, cost, follow-up,
     inline questions, stop, streaming scroll anchoring and persistent tool disclosure).
+    It also checks `session-arrows`: rapid/cold selection, offscreen-row reveal, hidden sidebar,
+    collapsed groups, boundaries, composer draft/focus restoration and menu/palette key ownership.
+    Its 80-row fixture proves offscreen navigation; the two-session seed does not.
 - `open-from-sidebar` and `history`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/"; ab wait --text "Loose session";
     ab find role button click --name "Loose session" --exact; ab wait --url "**/s/verify-loose";
@@ -130,8 +145,8 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab wait '[role=dialog]'` (omit Show sidebar if its sheet is already open). Wait for the
     sheet's animations as in `unavailable-history`, then
     `ab find role button click --name 'View options' --exact; ab wait '[role=menu]'`.
-  - Result: Group by, Sort by, Show and Appearance are inline sections; Date / Folder / Project /
-    None, Activity / Name, Folder and branch, Light / Dark / System are directly reachable.
+  - Result: Group by, Sort by, Show and Appearance are inline sections; Date / Folder / Project,
+    Activity / Name, Folder and branch, Light / Dark / System are directly reachable.
     Capture `23-narrow-view-options`, then
     `ab find role menuitemradio click --name Project --exact;
     ab wait --fn "!document.querySelector('[role=menu]')"`. The sidebar groups by project;
@@ -174,6 +189,23 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   - Result: `ab wait --fn "!document.querySelector('[aria-label=\"Stop\"]')"` passes; the audit has
     `prompt` `hold` then
     `{"command":"abort","sessionId":"verify-loose"}`. Capture `03-stopped`.
+- `queue-edit` (default browser fake, on a disposable session with an empty draft)
+  - Action: `ab fill '[aria-label="Message"]' hold; ab press Enter;
+    ab wait '[aria-label="Stop"]'; ab fill '[aria-label="Message"]' 'queue review';
+    ab press Enter; ab wait --text 'Queued messages (1)'`. Capture `25-queued`.
+    `ab set viewport 390 844;
+    ab eval "document.querySelector('[aria-label=\"Edit queued message\"]').getBoundingClientRect().toJSON()"`
+    records the target (at least 44px tall); capture it, then
+    `ab find role button click --name 'Edit queued message' --exact`.
+  - Result: `ab wait --fn "document.querySelector('[aria-label=Message]').value === 'queue review' && !document.querySelector('[aria-label=\"Queued messages\"]')"`.
+    Pi is still working: Delivery remains and the primary action queues the restored draft,
+    rather than showing Stop. Capture `26-restored-queue`. The audit records `clear_queue`,
+    not `abort`, for Edit.
+  - Finish: clear with keyboard input, `ab click '[aria-label="Message"]'; ab press Control+a;
+    ab press Backspace; ab wait '[aria-label="Stop"]'; ab find role button click --name Stop --exact;
+    ab wait '[aria-label="Send"]'` (Meta+a on macOS). Capture `27-stopped`, then widen to 1280×800.
+    An empty `ab fill` can clear the DOM value without updating the queued-action face; use the
+    keyboard sequence here. This checks text queues, not peer image or voice isolation.
 - `archive-delete`
   - Action: `ab find role button click --name "Session menu for Loose session" --exact;
     ab find role menuitem click --name "Archive" --exact`

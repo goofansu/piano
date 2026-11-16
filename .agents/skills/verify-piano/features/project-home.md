@@ -21,7 +21,8 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   `archive-delete`). Archive toasts "Session archived" and the row leaves, the count dropping;
   Delete asks "Delete session?" and toasts "Session deleted". The page stays.
 - `new-in-project`: the composer above the cards ("First message") defaults to the folder-root
-  checkout of the most recently active non-archived member whose folder is open; otherwise it
+  checkout of the most recently active non-archived member whose folder is open and can start a
+  session. A missing root gives way to the next eligible member's folder; with none it
   shows "Directory" until a folder is chosen. Sending opens the new session, which joins the project.
 - `header`: the pane header is one breadcrumb line, "Projects / <name>", the name being the `h1`,
   and ends with "Project menu for <name>" (see `project-menu`). A done project has a Done badge

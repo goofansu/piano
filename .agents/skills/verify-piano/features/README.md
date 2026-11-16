@@ -54,12 +54,14 @@ Keep implementation details out; name user paths, handles, required state, comma
 ## Features
 
 - [Start a session](./start-session.md): the New page, its directory, directory trust, model,
-  effort and project choices, the peer-New prerequisite, restoring model defaults, the first
+  effort and active-project choices, missing-root default fallback, the peer-New prerequisite,
+  restoring model defaults, compact touch targets, the first
   message and reply, reload without resending,
   navigation-retained drafts, confirmed failed-start recovery, image attachment/refusal/preview,
   and a kept draft when not sent.
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
-  home; read history and cost; follow up; stop a running reply; archive and delete from the row's
+  home or Alt+Up/Down; read history and cost; follow up; edit queued messages without stopping;
+  stop a running reply; archive and delete from the row's
   menu; responsive sidebar controls and narrow inline View options; the narrow session-menu
   sheet and its project picker;
   the published-artifact menu, including codemode receipts; unavailable-history recovery and
@@ -83,7 +85,8 @@ Keep implementation details out; name user paths, handles, required state, comma
   `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
   empty states; the separate agent-authored approval path's real-Pi prerequisite.
 - [Settings › Providers, Webhooks and Preferences](./settings-other.md): unsigned-in provider/Radius
-  setup, the main-owned voice-input preference, key prerequisite and cancellation, inactive webhook CRUD and URL refusal;
+  setup and API-key dialogs (including Fireworks and OpenCode), the main-owned voice-input
+  preference, key prerequisite and cancellation, inactive webhook CRUD and URL refusal;
   authenticated setup, transcription and webhook delivery remain separate checks.
 - [Settings › MCP](./settings-mcp.md): `/settings/mcp` over the scratch `mcp.json`; Connect,
   Add MCP server by form and JSON paste (URL/startup refusals and local command success),
