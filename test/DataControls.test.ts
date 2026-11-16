@@ -2,17 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
-import {
-  archiveConfirmation,
-  createDataControls,
-  DATA_CONTROLS_TIMEOUT_MS,
-} from "../web/src/lib/dataControls.ts";
+import { RECEIPT_TIMEOUT_MS } from "../web/src/lib/correlatedRequest.ts";
+import { archiveConfirmation, createDataControls } from "../web/src/lib/dataControls.ts";
 import type { ConnectionHandlers, SendDisposition } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
 function page() {
   const sent: ClientMessage[] = [];
   const notices: string[] = [];
+  const levels: (string | undefined)[] = [];
   let handlers!: ConnectionHandlers;
   let disposition: SendDisposition = "sent";
   const client = createClient({
@@ -40,12 +38,13 @@ function page() {
   const controls = createDataControls({
     client,
     newRequestId: () => `r${++nextId}`,
-    failure: (message) => {
+    notify: (message, level) => {
       notices.push(message);
+      levels.push(level);
     },
     timers: {
       setTimeout: (run, ms) => {
-        assert.equal(ms, DATA_CONTROLS_TIMEOUT_MS);
+        assert.equal(ms, RECEIPT_TIMEOUT_MS);
         timers.set(++nextTimer, run);
         return nextTimer;
       },
@@ -62,6 +61,7 @@ function page() {
   return {
     controls,
     notices,
+    levels,
     timers,
     result,
     state: controls.getState,
@@ -166,17 +166,21 @@ test("unarchive preserves the target directory and does not reopen a closed fold
   p.stop();
 });
 
-test("mutation failures show fixed feedback once, ignoring duplicate and late receipts", () => {
+test("mutation failures show the server's detail once, ignoring duplicate and late receipts", () => {
   const p = page();
   p.controls.unarchive({ cwd: "/repo", sessionId: "s1" });
-  p.result("r1", { status: "error", detail: "private diagnostic" });
+  p.result("r1", { status: "error", detail: "Session is not archived" });
   p.result("r1", { status: "error", detail: "duplicate" });
   p.controls.open();
   p.result("r2", { status: "ready", count: 4 });
   p.controls.archive();
-  p.result("r3", { status: "error", detail: "private diagnostic" });
+  p.result("r3", { status: "error", detail: "Client input capacity is full." });
   p.result("r3", { status: "ready", count: 4 });
-  assert.deepEqual(p.notices, ["Could not unarchive session", "Could not archive sessions"]);
+  assert.deepEqual(p.notices, [
+    "Could not unarchive session: Session is not archived",
+    "Could not archive sessions: Client input capacity is full.",
+  ]);
+  assert.deepEqual(p.levels, ["error", "error"]);
   assert.equal(p.state().request, undefined);
   assert.equal(p.view().open, false);
   p.stop();
@@ -210,7 +214,12 @@ test("disconnect clears busy and stale counts; reconnect never replays a mutatio
   p.connection(true);
   assert.equal(p.commands().length, 2);
   p.result("r2", { status: "ready", count: 1 });
-  assert.deepEqual(p.notices, ["Could not unarchive session"]);
+  assert.deepEqual(
+    p.notices,
+    ["Connection lost. Unarchive may have finished; check Archived sessions after reconnecting."],
+    "the server keeps running the mutation after a disconnect, so it is not reported as failed",
+  );
+  assert.deepEqual(p.levels, ["warning"]);
   assert.equal(p.timers.size, 0);
   p.stop();
 });
@@ -226,7 +235,11 @@ test("timeout, not-sent and uncertain sends settle without replay; unmount fence
   p.elapse();
   assert.equal(p.state().request, undefined);
   assert.equal(p.commands().length, 2);
-  assert.deepEqual(p.notices, ["Could not unarchive session", "Could not unarchive session"]);
+  assert.deepEqual(p.notices, [
+    "Could not unarchive session",
+    "No reply. Unarchive may have finished; check Archived sessions.",
+  ]);
+  assert.deepEqual(p.levels, ["error", "warning"]);
   p.disposition("sent");
   p.controls.open();
   p.stop();

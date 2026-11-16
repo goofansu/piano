@@ -1,5 +1,9 @@
-import type { ClientCommand, WorktreeDiscovery, WorktreeFacts } from "@shared/wire";
-import type { Client } from "./client.ts";
+import type { ClientCommand, ServerMessage, WorktreeDiscovery, WorktreeFacts } from "@shared/wire";
+import {
+  type CorrelatedRequestOptions,
+  correlatedRequests,
+  type RequestOutcome,
+} from "./correlatedRequest.ts";
 import { branchLabel } from "./format.ts";
 
 export type WorktreeRequestKind = "create" | "select";
@@ -16,17 +20,7 @@ export interface WorktreeOperationState {
   request: WorktreeRequestStatus;
 }
 
-export const RECEIPT_TIMEOUT_MS = 75_000;
-
-export interface WorktreeTimers {
-  setTimeout: (run: () => void, ms: number) => unknown;
-  clearTimeout: (timer: unknown) => void;
-}
-
-export interface WorktreeOperationOptions {
-  client: Pick<Client, "getState" | "subscribe" | "send" | "listen">;
-  newRequestId?: () => string;
-  timers?: WorktreeTimers;
+export interface WorktreeOperationOptions extends CorrelatedRequestOptions {
   ready?: (path: string) => void;
 }
 
@@ -45,20 +39,42 @@ const NO_RECEIPT =
   "No creation/selection receipt. Refresh discovery and inspect the checkout before retrying; it may already exist.";
 const CONNECTION_LOST =
   "Connection lost. Refresh discovery after reconnecting before retrying; the operation may have changed the checkout.";
+const NOT_SENT = "Request not sent. Retry when Piano reconnects.";
+
+type WorktreeResult = Extract<ServerMessage, { _tag: "worktree_result" }>["result"];
+
+const receipt = (message: ServerMessage) =>
+  message._tag === "worktree_result" ? message : undefined;
+
+const failure = (
+  outcome: Exclude<RequestOutcome<WorktreeResult>, { status: "confirmed" }>,
+): WorktreeRequestStatus => {
+  switch (outcome.status) {
+    case "not-sent":
+      return { status: "failed", detail: NOT_SENT, unconfirmed: false };
+    case "failed":
+      return {
+        status: "failed",
+        detail: outcome.error.detail,
+        unconfirmed: outcome.error.unconfirmed === true,
+      };
+    case "unconfirmed":
+      return {
+        status: "failed",
+        detail: outcome.reason === "connection-lost" ? CONNECTION_LOST : NO_RECEIPT,
+        unconfirmed: true,
+      };
+  }
+};
 
 const IDLE: WorktreeRequestStatus = { status: "idle" };
 
-const browserTimers: WorktreeTimers = {
-  setTimeout: (run, ms) => globalThis.setTimeout(run, ms),
-  clearTimeout: (timer) => globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>),
-};
-
 export function createWorktreeOperation({
-  client,
-  newRequestId = () => crypto.randomUUID(),
-  timers = browserTimers,
   ready = () => {},
+  ...options
 }: WorktreeOperationOptions): WorktreeOperation {
+  const { client } = options;
+  const requests = correlatedRequests(options);
   let state: WorktreeOperationState = {
     folder: undefined,
     discovery: undefined,
@@ -67,7 +83,7 @@ export function createWorktreeOperation({
   };
   const awaiting = new Map<string, { requestId: string; trailing: boolean }>();
   const discoveries = new Map<string, WorktreeDiscovery>();
-  let timer: unknown;
+  let active: { cancel: () => void } | undefined;
   const listeners = new Set<() => void>();
 
   const publish = (patch: Partial<Pick<WorktreeOperationState, "folder" | "request">> = {}) => {
@@ -87,12 +103,6 @@ export function createWorktreeOperation({
       return;
     state = next;
     for (const listener of listeners) listener();
-  };
-
-  const settle = (request: WorktreeRequestStatus) => {
-    if (timer !== undefined) timers.clearTimeout(timer);
-    timer = undefined;
-    publish({ request });
   };
 
   const pendingId = () =>
@@ -115,14 +125,20 @@ export function createWorktreeOperation({
 
   const begin = (kind: WorktreeRequestKind, command: (requestId: string) => ClientCommand) => {
     if (pendingId() !== undefined || !client.getState().connected) return;
-    const requestId = newRequestId();
-    publish({ request: { status: "pending", requestId, kind } });
-    timer = timers.setTimeout(() => {
-      timer = undefined;
-      if (pendingId() === requestId)
-        settle({ status: "failed", detail: NO_RECEIPT, unconfirmed: true });
-    }, RECEIPT_TIMEOUT_MS);
-    client.send(command(requestId));
+    active = requests.send({
+      command,
+      receipt,
+      pending: (requestId) => publish({ request: { status: "pending", requestId, kind } }),
+      settle: (outcome) => {
+        active = undefined;
+        if (outcome.status !== "confirmed") {
+          publish({ request: failure(outcome) });
+          return;
+        }
+        publish({ request: IDLE });
+        ready(outcome.result.path);
+      },
+    });
   };
 
   return {
@@ -141,9 +157,7 @@ export function createWorktreeOperation({
         connected = now;
         if (now) return;
         awaiting.clear();
-        if (pendingId() !== undefined)
-          settle({ status: "failed", detail: CONNECTION_LOST, unconfirmed: true });
-        else publish();
+        publish();
       });
       const stopMessages = client.listen((m) => {
         if (m._tag === "worktrees") {
@@ -155,24 +169,13 @@ export function createWorktreeOperation({
             awaiting.delete(m.folder);
             publish();
           }
-        } else if (m._tag === "worktree_result" && m.requestId === pendingId()) {
-          if (m.result.status === "error")
-            settle({
-              status: "failed",
-              detail: m.result.detail,
-              unconfirmed: m.result.unconfirmed === true,
-            });
-          else {
-            settle(IDLE);
-            ready(m.result.path);
-          }
         }
       });
       return () => {
         stopState();
         stopMessages();
-        if (timer !== undefined) timers.clearTimeout(timer);
-        timer = undefined;
+        active?.cancel();
+        active = undefined;
       };
     },
     open: (folder) => {

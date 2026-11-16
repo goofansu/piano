@@ -7,15 +7,15 @@ import type {
   WorktreeFacts,
 } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
+import { RECEIPT_TIMEOUT_MS } from "../web/src/lib/correlatedRequest.ts";
 import {
   createWorktreeOperation,
   filterWorktrees,
-  RECEIPT_TIMEOUT_MS,
   type WorktreeOperationState,
   worktreeLabel,
   worktreesView,
 } from "../web/src/lib/worktreeOperation.ts";
-import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
+import type { ConnectionHandlers, SendDisposition } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
 const NO_RECEIPT =
@@ -33,6 +33,7 @@ const discovered = (observedAt: string): WorktreeDiscovery => ({
 function picker() {
   const sent: ClientMessage[] = [];
   let handlers: ConnectionHandlers | undefined;
+  let disposition: SendDisposition = "sent";
   const client = createClient({
     initial: initialState,
     connect: (h) => {
@@ -40,7 +41,7 @@ function picker() {
       return {
         send: (m) => {
           sent.push(m);
-          return "sent";
+          return disposition;
         },
         close: () => {},
       };
@@ -81,6 +82,9 @@ function picker() {
     timers,
     stop,
     connection: (connected: boolean) => handlers!.onStatus(connected),
+    disposition: (value: SendDisposition) => {
+      disposition = value;
+    },
     answer: (folder: string, discovery: WorktreeDiscovery) =>
       server({
         _tag: "worktrees",
@@ -158,6 +162,20 @@ test("selecting sends one add_worktree; an error receipt fails with Worktrunk's 
   assert.deepEqual(p.opened, []);
   p.receipt("r1", { status: "ready", path: "/late" });
   assert.deepEqual(p.opened, [], "a settled request opens nothing");
+});
+
+test("a create that was not sent fails at once as definite, with no timeout left pending", () => {
+  const p = picker();
+  p.operation.open("/repo");
+  p.disposition("not-sent");
+  p.operation.create("feature", false);
+  assert.equal(failure(p.state()), "Request not sent. Retry when Piano reconnects.");
+  assert.equal(unconfirmed(p.state()), false, "nothing reached the server, so nothing changed");
+  assert.equal(p.timers.size, 0);
+  p.disposition("sent");
+  p.operation.dismiss();
+  p.operation.create("feature", false);
+  assert.equal(p.state().request.status, "pending", "a retry can start straight away");
 });
 
 test("losing the connection while pending fails with reconnect guidance and is never retried", () => {
