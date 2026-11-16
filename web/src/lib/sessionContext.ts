@@ -157,8 +157,16 @@ export function isSelectedSession(state: AppState, target: SessionRef): boolean 
   return isSession(current, target);
 }
 
+export function sessionReferenceChangeable(state: AppState, target: SessionRef): boolean {
+  const reference = sessionReference(state, target);
+  return state.connected && !!reference && !reference.archived;
+}
+
 export function sessionMutable(state: AppState, target: SessionRef): boolean {
-  return state.connected && (!isSelectedSession(state, target) || sessionReady(state));
+  return (
+    sessionReferenceChangeable(state, target) &&
+    (!isSelectedSession(state, target) || sessionReady(state))
+  );
 }
 
 export function hostOf(state: AppState, target: SessionRef): HostInfo | undefined {

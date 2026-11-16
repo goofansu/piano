@@ -379,6 +379,14 @@ export const RegistryLive = Layer.effect(
       const entry = d.sessions.find(isSession(expected.cwd, expected.sessionId));
       return entry && sameReference(entry, expected, link) ? entry : undefined;
     };
+    const changeableIn = (d: RegistryData, cwd: string, sessionId: string) => {
+      const entry = d.sessions.find(isSession(cwd, sessionId));
+      if (!entry || entry.archived)
+        throw new RegistryError({
+          detail: "Session reference is unavailable. Refresh and try again.",
+        });
+      return entry;
+    };
 
     const workspace = (id: string) =>
       Effect.flatMap(Ref.get(state), (d) => {
@@ -478,10 +486,7 @@ export const RegistryLive = Layer.effect(
         update((d) => {
           const parsed = Schema.decodeUnknownSync(Project)(project);
           if (!parsed.name.trim()) throw new RegistryError({ detail: "A project needs a name." });
-          if (assign && !d.sessions.some(isSession(assign.cwd, assign.sessionId)))
-            throw new RegistryError({
-              detail: "Session reference is unavailable. Refresh and try again.",
-            });
+          const assigned = assign && changeableIn(d, assign.cwd, assign.sessionId);
           if (d.projects.some((p) => p.id === parsed.id))
             throw new RegistryError({ detail: "Project already exists. Refresh and try again." });
           const instructions = parsed.instructions?.trim();
@@ -491,10 +496,8 @@ export const RegistryLive = Layer.effect(
             ...(instructions ? { instructions } : {}),
           };
           const projects = [...d.projects, next];
-          const sessions = assign
-            ? d.sessions.map((s) =>
-                isSession(assign.cwd, assign.sessionId)(s) ? { ...s, projectId: next.id } : s,
-              )
+          const sessions = assigned
+            ? d.sessions.map((s) => (s === assigned ? { ...s, projectId: next.id } : s))
             : d.sessions;
           return { ...d, projects, sessions };
         }),
@@ -540,16 +543,13 @@ export const RegistryLive = Layer.effect(
         }),
       assignProject: (cwd, sessionId, projectId) =>
         update((d) => {
-          if (!d.sessions.some(isSession(cwd, sessionId)))
-            throw new RegistryError({
-              detail: "Session reference is unavailable. Refresh and try again.",
-            });
+          const entry = changeableIn(d, cwd, sessionId);
           if (projectId !== null && !d.projects.some((p) => p.id === projectId))
             throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
           return {
             ...d,
             sessions: d.sessions.map((s) =>
-              isSession(cwd, sessionId)(s) ? { ...s, projectId: projectId ?? undefined } : s,
+              s === entry ? { ...s, projectId: projectId ?? undefined } : s,
             ),
           };
         }),
@@ -660,11 +660,7 @@ export const RegistryLive = Layer.effect(
       }),
       pinSession: Effect.fn("Registry.pinSession")(function* (cwd, sessionId, pinned) {
         yield* update((d) => {
-          const entry = d.sessions.find(isSession(cwd, sessionId));
-          if (!entry || entry.archived)
-            throw new RegistryError({
-              detail: "Session reference is unavailable. Refresh and try again.",
-            });
+          const entry = changeableIn(d, cwd, sessionId);
           if (!!entry.pinned === pinned) return d;
           return {
             ...d,
@@ -677,11 +673,7 @@ export const RegistryLive = Layer.effect(
       setSessionChangesScope: Effect.fn("Registry.setSessionChangesScope")(
         function* (cwd, sessionId, scope) {
           yield* update((d) => {
-            const entry = d.sessions.find(isSession(cwd, sessionId));
-            if (!entry || entry.archived)
-              throw new RegistryError({
-                detail: "Session reference is unavailable. Refresh and try again.",
-              });
+            const entry = changeableIn(d, cwd, sessionId);
             if (entry.changesScope === scope) return d;
             return {
               ...d,
