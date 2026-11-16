@@ -10,13 +10,10 @@ import {
 } from "@/components/PianoDropdownMenu";
 import { isLocalId, type Machine } from "@/lib/machine";
 import { useMachineScope } from "@/lib/useMachine";
-import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useSidebarLayoutState } from "@/lib/useSidebarLayout";
 
 export function PaneMachineSwitcher() {
-  const narrow = useNarrowViewport();
-  const { collapsed, mobileOpen } = useSidebarLayoutState();
-  if (narrow ? mobileOpen : !collapsed) return null;
+  if (!useSidebarLayoutState().hidden) return null;
   return <MachineSwitcher place="pane" />;
 }
 

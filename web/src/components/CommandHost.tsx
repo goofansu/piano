@@ -247,9 +247,7 @@ export function CommandHost({
   const { view, setView } = useSidebarView();
   const { theme, setTheme } = useTheme();
   const sidebar = useSidebarLayout();
-  const sidebarHidden = useSyncExternalStore(sidebar.subscribe, () =>
-    sidebar.desktop() ? sidebar.getState().collapsed : !sidebar.getState().mobileOpen,
-  );
+  const sidebarHidden = useSyncExternalStore(sidebar.subscribe, sidebar.getState).hidden;
   useSyncExternalStore(pageAvailability.subscribe, pageAvailability.getState);
   const forms = useCommandForms({
     state,
