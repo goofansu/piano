@@ -174,6 +174,34 @@ await run(
     writeFileSync(invalidFile, "not an image");
     await page.open("/");
     await page.see("Local collision session");
+    // Settings belongs to Local, so its header must not offer a misleading machine switch.
+    await page.click("button", "Hide sidebar");
+    for (const section of [
+      "providers",
+      "mcp",
+      "skills",
+      "prompts",
+      "webhooks",
+      "preferences",
+      "data-controls",
+    ]) {
+      await page.open(`/settings/${section}`);
+      await page.until(`!!document.querySelector('[aria-label="Settings"] header h1')`);
+      assert.equal(
+        await page.evaluate(
+          `!!document.querySelector('[aria-label="Settings"] header [aria-label="Machine"]')`,
+        ),
+        false,
+        `${section} header has no machine picker`,
+      );
+      await page.until(
+        `!!document.querySelector('[aria-label="Settings"] header [aria-label="Show sidebar"]')`,
+      );
+    }
+    await page.capture("0-settings-without-machine-picker");
+    await page.click("button", "Show sidebar");
+    await page.click("button", "Home");
+    await page.see("Local collision session");
     await page.click("button", "Local collision session");
     await page.see("Local collision session saved history");
     await ready(page);
@@ -363,11 +391,15 @@ await run(
           `document.querySelector('main header [aria-label="Machine"]')?.textContent.includes('eng-1')`,
         );
         await page.capture("3a-machine-with-sidebar-hidden");
+        // Switching from a non-Settings header still works while the sidebar is hidden.
+        await machine(page, "eng-2", "3b-machine-picker");
+        await page.until(
+          `document.querySelector('main header [aria-label="Machine"]')?.textContent.includes('eng-2')`,
+        );
         await page.click("button", "Show sidebar");
         await page.until(`!document.querySelector('main header [aria-label="Machine"]')`);
 
         // A second independent peer collides with both Local and the first peer by every ID/path.
-        await machine(page, "eng-2", "3b-machine-picker");
         await page.see("Second host-only session");
         await page.ab("find", "role", "button", "click", "--name", "Second collision session");
         await page.see("Second collision session saved history");

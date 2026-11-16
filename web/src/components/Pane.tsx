@@ -49,11 +49,17 @@ export function HeaderLead({
 }
 
 /** The pane's leading cluster, gone with both its controls while the sidebar shows them. */
-function PaneLead({ className }: { className?: string }) {
+function PaneLead({
+  className,
+  showMachineSwitcher = true,
+}: {
+  className?: string;
+  showMachineSwitcher?: boolean;
+}) {
   const { collapsed } = useSidebarLayoutState();
   return (
     <HeaderLead toggle={<ShowSidebarButton />} className={cn(!collapsed && "md:hidden", className)}>
-      <PaneMachineSwitcher />
+      {showMachineSwitcher && <PaneMachineSwitcher />}
     </HeaderLead>
   );
 }
@@ -66,14 +72,17 @@ function PaneLead({ className }: { className?: string }) {
 export function PaneHeader({
   children,
   actions,
+  showMachineSwitcher = true,
 }: {
   children: React.ReactNode;
   actions?: React.ReactNode;
+  /** Local-only pages such as Settings do not offer machine switching. */
+  showMachineSwitcher?: boolean;
 }) {
   return (
     // No shadcn component is a page header; this row is Piano's own.
     <header className={paneHeaderRow}>
-      <PaneLead />
+      <PaneLead showMachineSwitcher={showMachineSwitcher} />
       {children}
       {actions}
     </header>
