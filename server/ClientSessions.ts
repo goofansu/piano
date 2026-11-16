@@ -391,6 +391,32 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     ),
   );
 
+  const forget = (
+    matches: (selection: { readonly cwd: string; readonly sessionId: string }) => boolean,
+  ) =>
+    navigate(
+      Effect.gen(function* () {
+        const selection = selected;
+        if (
+          !selection?.sessionId ||
+          !matches({ cwd: selection.cwd, sessionId: selection.sessionId })
+        )
+          return;
+        choose(null);
+        shown = null;
+        yield* detach;
+        yield* send({
+          _tag: "selected",
+          selectionId: selection.selectionId,
+          cursor: null,
+          cwd: selection.cwd,
+          sessionId: null,
+          hosted: false,
+          snapshot: emptySnapshot(""),
+        });
+      }),
+    );
+
   const retire = Effect.fn("ClientSessions.retire")(function* (
     cwd: string,
     sessionId: string,
@@ -414,19 +440,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
           : Effect.void,
       ),
     );
-    if (selected?.cwd === cwd && selected.sessionId === sessionId) {
-      const selectionId = selected.selectionId;
-      choose(null);
-      yield* send({
-        _tag: "selected",
-        selectionId,
-        cursor: null,
-        cwd,
-        sessionId: null,
-        hosted: false,
-        snapshot: emptySnapshot(""),
-      });
-    }
+    yield* forget((selection) => sameSession(selection, { cwd, sessionId }));
   });
 
   const create = Effect.fn("ClientSessions.create")(function* (
@@ -482,30 +496,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     act,
     recheck,
     clearArchived: (references) =>
-      navigate(
-        Effect.gen(function* () {
-          if (
-            !selected?.sessionId ||
-            !references.some(
-              (r) => r.archived && r.cwd === selected?.cwd && r.sessionId === selected.sessionId,
-            )
-          )
-            return;
-          const { selectionId, cwd } = selected;
-          choose(null);
-          shown = null;
-          yield* detach;
-          yield* send({
-            _tag: "selected",
-            selectionId,
-            cursor: null,
-            cwd,
-            sessionId: null,
-            hosted: false,
-            snapshot: emptySnapshot(""),
-          });
-        }),
-      ),
+      forget((selection) => references.some((r) => r.archived && sameSession(r, selection))),
     retire,
   } satisfies ClientSessions as ClientSessions;
 });
