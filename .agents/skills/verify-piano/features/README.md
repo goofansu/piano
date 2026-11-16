@@ -51,6 +51,10 @@ POV)` (every entry point), `Driving it with agent-browser` (starts with `Precond
 labeled bullets pairing each action with an exact command and the observable result), `Gotchas`.
 Keep implementation details out; name user paths, handles, required state, commands and proof.
 
+In the Features list below, give each feature with an existing `docs/` page one short link to that
+page; keep file maps there, not in the feature files. New or substantially changed features follow
+the [feature-locality rule](../../../../AGENTS.md#feature-locality).
+
 ## Features
 
 - [Start a session](./start-session.md): the New page, its directory, directory trust, model,
@@ -67,31 +71,42 @@ Keep implementation details out; name user paths, handles, required state, comma
   the published-artifact menu, including codemode receipts; unavailable-history recovery and
   the configured-peer prerequisite for session actions, trust and machine memory, including
   peer image/voice coverage limits.
+  Docs: [Session navigation](../../../../docs/sidebar-session-navigation.md),
+  [Transcript performance](../../../../docs/session-performance.md).
 - [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
   per project with folders, count, last activity and the project menu; New project in the header;
   Done / Reopen and the folded Done group; active-project palette navigation, `!` filter
   discovery, `!p` project-only search and paging; empty, phone and peer-index prerequisite.
+  Docs: [Projects UX](../../../../docs/project-centered-ux.md).
 - [Project home](./project-home.md): `/projects/<id>` from the sidebar, palette and session
   header; member rows and their Archive / Delete, order, PR number, new session in the project,
   settings, Done badge / Reopen and sidebar grouping; empty, deleted and missing projects;
   peer-home prerequisite.
+  Docs: [Project grouping](../../../../docs/outcome-projects.md).
 - [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
   `follow-up`, `status` and `list --project`, project inheritance/opt-out, its refusals,
   and a dialog that needs input.
+  Docs: [Session dispatch](../../../../docs/session-dispatch.md).
 - [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and its
   pull request, and the desktop session rail's Environment and Outputs (no Links section or
   narrow rail); peer-owned surfaces and their prerequisite.
+  Docs: [File previews](../../../../docs/file-previews.md),
+  [Managed live previews](../../../../docs/live-previews.md).
 - [Settings › Skills and Prompts](./settings-skills-prompts.md): `/settings/skills` and
   `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
   empty states; the separate agent-authored approval path's real-Pi prerequisite.
+  Docs: [Prompts](../../../../docs/prompts.md).
 - [Settings › Providers, Webhooks and Preferences](./settings-other.md): unsigned-in provider/Radius
   setup and API-key dialogs (including Fireworks and OpenCode), the main-owned voice-input
   preference, key prerequisite and cancellation, inactive webhook CRUD and URL refusal;
   authenticated setup, transcription and webhook delivery remain separate checks.
+  Docs: [Provider sign-in](../../../../docs/provider-sign-in.md),
+  [Radius setup](../../../../docs/radius-setup.md).
 - [Settings › MCP](./settings-mcp.md): `/settings/mcp` over the scratch `mcp.json`; Connect,
   Add MCP server by form and JSON paste (URL/startup refusals and local command success),
   Manage → Edit / Delete, Connect cancellation, and Pi's MCP switch. Authenticated URL-server
   management is a separate prerequisite.
+  Docs: [MCP setup](../../../../docs/mcp-setup.md).
 
 ## Coverage boundaries
 
