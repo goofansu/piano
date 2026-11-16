@@ -337,7 +337,9 @@ installed direct dependency versions recorded; use `npm ci`, not hand-edited dep
 regenerates `web/public/pdfjs` from installed `pdfjs-dist`; this derived directory is excluded.
 Node/OS/architecture, npm/Git/Worktrunk and (for browsers) agent-browser/browser versions, cwd,
 argv, safe environment fields, journey name, process commands/isolated state paths and timestamps
-identify the execution. Journey-supplied backend overrides have a digest and key list, not secret
+identify the execution. Browser preflight requires Git and agent-browser; npm/Worktrunk versions
+are optional observations there, recorded as unavailable when absent. The baseline still requires
+Worktrunk for its lifecycle module test. Journey-supplied backend overrides have a digest and key list, not secret
 values; report external overrides needed for reproduction separately. This is not a full environment
 snapshot, a product evidence engine or implementation of all INV-08/09 target contracts.
 

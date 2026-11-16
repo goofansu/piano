@@ -71,7 +71,7 @@ export default {
             .filter((a) => (a.wildcard ? bare.startsWith(a.prefix) : bare === a.prefix))
             .sort((a, b) => b.prefix.length - a.prefix.length)[0];
           const targets = alias
-            ? alias.targets.map((t) => t.replace("*", bare.slice(alias.prefix.length)))
+            ? alias.targets.map((t) => t.replaceAll("*", () => bare.slice(alias.prefix.length)))
             : bare.startsWith(".") || isAbsolute(bare)
               ? [resolve(dirname(file), bare)]
               : [];

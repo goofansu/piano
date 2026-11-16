@@ -97,6 +97,14 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
       if (!allowed) assert.match(output, /piano\(layer-imports\)/, output);
       rmSync(join(root, file));
     }
+    // Alias suffixes are literal path text, not String.replace replacement patterns. A dollar
+    // sequence must not hide a valid symlink into the server behind a nonexistent '*' path.
+    symlinkSync(join(root, "server/Thing.ts"), join(root, "web/src/$&bridge.ts"));
+    put("web/src/check.ts", 'export type { Thing } from "@/$&bridge";');
+    const dollar = lint(["web/src/check.ts"]);
+    assert.equal(dollar.status, 1, dollar.stdout + dollar.stderr);
+    assert.match(dollar.stdout, /server\/Thing.ts/);
+
     // The browser's edge is legal; linting shared rejects the second hop. Not just spelling rules
     // at the web import site, and no claim about arbitrary third-party package internals.
     put("web/src/check.ts", 'export * from "@shared/bridge";');

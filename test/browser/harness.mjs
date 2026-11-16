@@ -255,8 +255,10 @@ async function runJourney(name, setup, journey, options, owned, record) {
   saveRun(evidence, record);
   const local = (owned.local = await fixture(root, setup));
   owned.check();
+  // Record npm/Worktrunk when present, but direct Node browser journeys only require Git and
+  // agent-browser. The baseline still requires Worktrunk for its real lifecycle module test.
   const missing = Object.entries(record.environment.tools).filter(
-    ([, version]) => typeof version !== "string",
+    ([tool, version]) => ["git", "agent-browser"].includes(tool) && typeof version !== "string",
   );
   if (missing.length) {
     record.outcome = "blocked";
