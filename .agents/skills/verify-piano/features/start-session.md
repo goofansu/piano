@@ -9,10 +9,11 @@ the session without sending the message again; a message that cannot be sent kee
 
 - `choose-folder`: combobox "Directory" lists registered folders and "Browse…", plus "Worktrees"
   for a registered checkout. A folder whose directory is missing stays registered but is left out
-  until its directory returns; its sidebar row drops "New session in <folder>", and `/new` already
-  in it reads "Checkout removed. Restore it at its path or choose another directory." with Send
-  disabled. `/new` defaults to the last-used directory, otherwise the first
-  registered folder; a fresh `/projects/<id>/new` needs a directory choice.
+  until its directory returns; its sidebar row drops "New session in <folder>". If New remains
+  on a missing checkout without an eligible replacement, it reads "Checkout removed. Restore it
+  at its path or choose another directory." with Send disabled. `/new` defaults to the last-used
+  directory where a session can start, otherwise the first eligible registered folder; a missing
+  remembered root is skipped. A fresh `/projects/<id>/new` needs a directory choice.
 - `directory-trust`: a directory with `.pi` resources or `.agents/skills` shows "Directory trust"
   beside Directory: Untrusted / Trusted. Toggling changes that machine's decision about loading
   those resources, not another machine's decision for the same path.
@@ -23,8 +24,9 @@ the session without sending the message again; a message that cannot be sent kee
   Pi as `--model` and `--thinking`.
 - `model-defaults`: the model picker shows New sessions' default, Refresh models, Use default
   and Make default / Default. Use default restores the current choice without saving a new default.
-- `project`: the "Project" button lists "New project" and the projects, filing the new session
-  in the one chosen ("No project" clears a choice).
+- `project`: the "Project" button lists "New project" and active projects, filing the new session
+  in the one chosen ("No project" clears a choice). Done projects are omitted as destinations;
+  an already-selected Done project remains named and checked, so the user can keep or clear it.
 - `first-message`: combobox "First message" plus "Send" starts the session and lands on it.
   Desktop Enter sends; on a coarse-pointer device Enter inserts a newline.
 - `reload`: reloading `/s/<id>` shows the same transcript and sends no second prompt.
@@ -58,6 +60,9 @@ project and reload on its own scratch instance, with its own folders and models 
 - Harness
   - Command: `node test/browser/start-session.mjs "$EVIDENCE/start-session/harness"`
   - Result: exit 0 and `PASS start-session (<s>s), evidence in <dir>` with its screenshots.
+    It also measures compact Send/Mic faces inside nonoverlapping 44px touch targets at 390px,
+    414px and wide coarse-pointer layouts, returning to mouse layout without sending the draft.
+    The Mic uses a dummy scratch key; this proves geometry, not recording or transcription.
 - `choose-folder`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
     ab find role combobox click --name "Directory" --exact`
@@ -88,6 +93,18 @@ project and reload on its own scratch instance, with its own folders and models 
   - Result: the trigger returns to `Model: fake/alpha; effort: medium`; the picker remains open,
     Use default is disabled and Default replaces Make default. Capture `01c-default`, then
     `ab press Escape`. This checks restoring the choice, not saving a new default.
+- `project` Done destinations (seeded run, before changing Empty Project)
+  - Action: `ab open "$WEB_URL/projects"; ab wait --text 'Empty Project';
+    ab click 'main [aria-label="Project menu for Empty Project"]';
+    ab find role menuitem click --name 'Mark project done' --exact;
+    ab wait --fn "!document.querySelector('[role=menu]')";
+    ab open "$WEB_URL/new"; ab wait --text 'What should we work on?';
+    ab find role button click --name Project --exact; ab wait '[role=menu]'`.
+  - Result: `ab wait --fn "!document.querySelector('[role=menu]').textContent.includes('Empty Project')"`;
+    Verify Project remains offered. Capture `17-done-destination`, then Escape. On
+    `/s/verify-plan`, Session information and actions → Move to project likewise omits Empty
+    Project; capture that menu separately. Reopen Empty Project through its home menu before
+    continuing recipes that need it active. Its Done home remains reachable from Projects → Done.
 - `first-message`
   - Action: `ab fill '[aria-label="First message"]' "hello verify";
     ab wait --fn "!document.querySelector('[aria-label=Send]').disabled"; ab press Enter;
@@ -175,3 +192,7 @@ project and reload on its own scratch instance, with its own folders and models 
   launch, an empty project's home); on the seed it already reads `repo`.
 - Count only non-`probe` audit entries: Piano starts a `probe` Pi for the composer's model and
   command lists.
+- The one-folder seed does not prove fallback from a missing remembered root to another folder,
+  or a project home's fallback to an older member's usable folder. Those branches need multiple
+  registered scratch folders and removal of only a run-owned root. `test/Client.test.ts` covers
+  the selection rule; report that as module evidence, not a live missing-folder journey.

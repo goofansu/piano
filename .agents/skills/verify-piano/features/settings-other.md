@@ -9,6 +9,9 @@ webhook without contacting its receiver. These observations do not prove sign-in
 
 - `providers`: Providers has Radius, Accounts and API keys groups. Unsigned-in Radius offers
   Sign in to Radius; Install Radius MCP and Install web search are disabled until setup permits them.
+- `api-key-setup`: the API keys group offers Add key for DeepSeek, Fireworks, Google, OpenCode
+  Go, OpenCode Zen and Vercel AI Gateway. Each opens its named API-key dialog; Cancel saves
+  nothing. A saved key instead offers Replace key / Remove key in the row's actions menu.
 - `preferences`: Voice input is off without a key. Turning it on opens OpenAI API key, explaining
   that recordings and session context go through this Piano to OpenAI; Cancel leaves it off.
   This main preference controls the idle microphone in both New and existing-session composers
@@ -35,6 +38,15 @@ Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
   - Result: Radius shows Account, Radius MCP and Web search; installation buttons are disabled
     on the unsigned-in scratch instance. Capture `01-providers`. Do not install or sign in to
     turn this read-only setup check into an authenticated claim.
+- `api-key-setup` (no credentials)
+  - Action: on Providers, `ab find role button click --name 'Add Fireworks API key' --exact;
+    ab wait '[role=dialog]'`; capture `11-fireworks-key`.
+  - Result: Add Fireworks API key explains "Saved in Pi on this machine. Start a new session
+    to use it." Cancel with `ab find role button click --name Cancel --exact;
+    ab wait --fn "!document.querySelector('[role=dialog]')"`; the row still offers Add key.
+    Repeat with `Add OpenCode Go API key` and `Add OpenCode Zen API key`, capturing each
+    dialog and cancellation. Google uses the bundled Gemini mark in the provider row.
+    This proves catalog/setup availability, not saved-key validation or provider access.
 - `preferences`
   - Action: `ab open "$WEB_URL/settings/preferences"; ab wait --text "Voice input"`;
     capture `02-preferences`, then `ab find role switch click --name "Voice input" --exact;
