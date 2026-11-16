@@ -55,12 +55,15 @@ dependencies and shared protocol.
 ### Claude Code
 
 Piano bundles [`@earendil-works/pi-claude-code`](https://github.com/earendil-works/pi-claude-code)
-as a dependency pinned to commit `ed0c824bdd987fac7fe5c6ee58ae840a315ff56f` of the
+as a dependency pinned to commit `dfb949333b9746df02bacbacbcbefd2b0138eff3` of the
 [goofansu/pi-claude-code](https://github.com/goofansu/pi-claude-code) fork (version 0.1.0):
-upstream `d5b5e04c314d3452d357174d16d10dda34daa2d2` plus a fix that keeps every request within
+upstream `d5b5e04c314d3452d357174d16d10dda34daa2d2` plus fixes that keep every request within
 Anthropic's limit of four cache breakpoints
-([upstream issue #40](https://github.com/earendil-works/pi-claude-code/issues/40)). It loads the installed extension directly, without installing a Pi package at
-startup or changing global Pi settings. Pi run outside Piano is unaffected.
+([upstream issue #40](https://github.com/earendil-works/pi-claude-code/issues/40)) and wait for
+captured Claude CLI output to close before reading the result
+([fork PR #2](https://github.com/goofansu/pi-claude-code/pull/2)). It loads the installed extension
+directly, without installing a Pi package at startup or changing global Pi settings. Pi run outside
+Piano is unaffected.
 
 **Avoid duplicate installations.** If the same plugin is also installed in user or project Pi
 settings, Pi can load both copies: paths are deduplicated, not package identity across separate
