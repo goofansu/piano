@@ -97,6 +97,20 @@ where boundaries matter, backed by focused lower-level tests for distinct logic.
 test validates Piano's contract handling, not the real Pi release; a real-runtime smoke check serves
 a different purpose.
 
+## Feature verification map
+
+For a new or substantially changed feature, give verification one starting place: a
+`docs/<feature>.md` page, or the existing owning page, linking:
+
+- the owning modules per runtime and their public interfaces;
+- the relevant module tests;
+- the `verify-piano` feature entry and browser journey or focused verification recipe.
+
+Link that page from the feature's entry in the [verification map](../.agents/skills/verify-piano/features/README.md#features).
+Keep implementation maps in the owning doc and user-facing steps in the feature recipe. Choose
+coverage by the risk rules above; the map does not itself require new tests, a folder migration or
+retroactive documentation of unchanged features.
+
 ## UI evidence scope
 
 Choose coverage by the changed contract:
@@ -387,8 +401,8 @@ behavior through `agent-browser` on a scratch instance that
 Documentation-only work needs document review and link checks, not a browser smoke test.
 
 In the PR, summarize what changed, what evidence supports it, the tested revision/environment and
-any material gaps. When the [feature-locality rule](../AGENTS.md#feature-locality) applies, also name
-the feature’s starting place (`docs/<feature>.md`). Mention whether a regression test was added or
+any material gaps. For new or substantially changed features, also name the starting document
+from the [feature verification map](#feature-verification-map). Mention whether a regression test was added or
 why existing coverage/inspection was sufficient. Short explanations are enough; do not create a
 second evidence database in the registry or a large ritual for small edits.
 

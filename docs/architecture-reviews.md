@@ -11,8 +11,8 @@ now:
 - consequential behavior (security, data, protocol, concurrency) that today's interface cannot test;
 - code the deletion test shows can go.
 
-For new or substantially changed features, apply the [feature-locality rule](../AGENTS.md#feature-locality):
-flag a missing starting place, including implementation spread across modules without one.
+For new or substantially changed features, flag scattered ownership or a missing
+[verification map](testing.md#feature-verification-map).
 
 Find hot spots in `feat` and `fix` commits since the last review; `refactor` commits mark settled
 ground. When no candidate qualifies, report "no useful candidates" and stop.

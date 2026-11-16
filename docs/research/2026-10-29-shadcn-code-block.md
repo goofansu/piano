@@ -162,7 +162,7 @@ tokenizes only new lines while text streams. [S2, S12]
 | --- | --- | --- |
 | Markdown code fences (`MarkdownPre` in `Markdown.tsx`) | `pre > code` styled by `.prose-chat pre`, an always-visible `CopyCode`, a Mermaid host for closed `mermaid` fences | **Good.** Its intended use; gains highlighting, focus ring and keyboard scrolling. |
 | Tool call arguments (`Tool` in `MessageList.tsx`) | Rounded `bg-fill` `<pre>`, unwrapped, scrolls sideways | **Acceptable.** `size="sm"` without a header looks nearly the same and adds keyboard scrolling. Only worth doing alongside fences. |
-| Tool output (`FoldedOutput`) | Text on a left rule, folded to five lines with "… N more lines" | **Poor.** A bordered block per tool row adds weight against [quiet UI](../../AGENTS.md#quiet-ui). ANSI highlighting does not apply: `transcript.ts` strips ANSI before rendering. |
+| Tool output (`FoldedOutput`) | Text on a left rule, folded to five lines with "… N more lines" | **Poor.** A bordered block per tool row adds weight against [quiet UI](../quiet-ui.md#checks). ANSI highlighting does not apply: `transcript.ts` strips ANSI before rendering. |
 | Context cards, error details, nested tool calls, dispatch parameters | Wrapped plain text inside a row | **None.** Prose-like output, not code; a block adds only chrome. |
 
 For fences, Piano keeps:
