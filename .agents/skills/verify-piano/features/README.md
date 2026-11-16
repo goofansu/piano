@@ -53,7 +53,7 @@ Keep implementation details out; name user paths, handles, required state, comma
 
 In the Features list below, give each feature with an existing `docs/` page one short link to that
 page; keep file maps there, not in the feature files. New or substantially changed features follow
-the [feature-locality rule](../../../../docs/architecture-reviews.md#feature-locality).
+the [feature verification mapping policy](../../../../docs/testing.md#feature-verification-map).
 
 ## Features
 

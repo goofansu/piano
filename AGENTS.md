@@ -50,7 +50,7 @@ Read the matching entry before working on that surface; follow its linked detail
 | Writing Effect code or upgrading Effect | [Effect](docs/effect.md) |
 | Adding, renaming or moving browser-storage keys | [Browser storage](docs/browser-storage.md) |
 | Changing architecture or workflow | [Development direction](docs/README.md), then its ADR, invariants and roadmap; cite affected invariant IDs in the PR |
-| Adding or substantially changing a feature | [Feature locality](docs/architecture-reviews.md#feature-locality): one starting document linking owners, interfaces and verification |
+| Adding or substantially changing a feature | [Feature verification map](docs/testing.md#feature-verification-map): connect owners and interfaces to tests and browser checks |
 | Proposing module-deepening candidates | [Architecture reviews](docs/architecture-reviews.md) |
 | User-authorized exe.dev deployment | [Deployment routes and policy](docs/hosted-development.md): `deploy-exe-dev` provisions a new VM; `sync-exe-dev` updates all tagged VMs. Both skills are user-invoked only. |
 | GitHub setup or permission failure on exe.dev | [GitHub integration](https://exe.dev/docs/integrations-github.md) |
