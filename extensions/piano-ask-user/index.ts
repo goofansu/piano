@@ -21,7 +21,7 @@ export default function pianoAskUser(pi: ExtensionAPI) {
         "Use ask_user when you need user decisions or missing information to proceed. Batch independent questions; wait for answers before asking dependent questions. Cancellation ends the batch and returns only answers already submitted; it is not an answer or approval for unanswered questions. Do not automatically ask again.",
       ],
       description:
-        "Ask questions sequentially in Piano's inline form, with no model turns between them. Supply a non-empty questions array with unique IDs, including for a single question. Each item has a question and optional options for a single choice; omit options for multiline free text. Returns answers keyed by ID and status answered when all are submitted, or cancelled with partial answers when the batch ends early. Include essential context in each question. Do not use this as a substitute for required permission or approval mechanisms.",
+        "Ask questions sequentially in Piano's inline form, with no model turns between them. Supply a non-empty questions array with unique IDs, including for a single question. Each item has a question and optional options for a single choice; omit options for multiline free text. Returns answers keyed by ID and status answered when all are submitted, or cancelled with partial answers when the batch ends early. Each question renders as Markdown: shape it as the question parameter describes. Do not use this as a substitute for required permission or approval mechanisms.",
       parameters: AskUserParameters,
       outputSchema: Output,
       executionMode: "sequential",

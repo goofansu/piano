@@ -40,12 +40,17 @@ export const AskUserParameters = obj({
   questions: arr(
     obj({
       id: str({ minLength: 1, description: "Unique ID used to key this question's answer" }),
-      question: str({ minLength: 1, description: "Question, including essential context" }),
+      question: str({
+        minLength: 1,
+        description:
+          "Rendered as Markdown. Lead with the question itself: one short line ending in ?. Then a blank line and a bullet list of context, one fact per bullet (a candidate, a `path` in backticks, a count); no paragraphs. Keep the whole question a few hundred characters at most, so it reads on a phone.",
+      }),
       options: opt(
         arr(str({ minLength: 1 }), {
           minItems: 1,
           uniqueItems: true,
-          description: "Choices for a single selection; omit for a free-text answer",
+          description:
+            "Choices for a single selection, one short line each; put reasoning in the question's bullets, not here. Omit for a free-text answer.",
         }),
       ),
     }),
