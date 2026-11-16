@@ -17,7 +17,13 @@ import { Directories } from "./Directories.ts";
 import { FolderWorktrees, FolderWorktreesLive } from "./FolderWorktrees.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
-import { archivable, Registry, RegistryError, type SessionEntry } from "./Registry.ts";
+import {
+  archivable,
+  inOpenFolder,
+  Registry,
+  RegistryError,
+  type SessionEntry,
+} from "./Registry.ts";
 import {
   type CloseHow,
   listedFacts,
@@ -589,9 +595,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           keyed(cwd, id, () =>
             Effect.gen(function* () {
               const owner = yield* references.unarchive(cwd, id);
-              const data = yield* registry.get;
-              const folder = data.workspaces.find((w) => w.path === owner)?.folder ?? owner;
-              return !data.folders.includes(folder);
+              return !inOpenFolder(yield* registry.get, owner);
             }),
           ),
         archiveAll: owned(archiveCandidates(true)),

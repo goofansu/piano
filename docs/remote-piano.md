@@ -345,7 +345,10 @@ owns the trust and scope decisions; [browser storage](browser-storage.md) and
   own remote sessions or inject/renumber their frames. [`Router.ts`](../server/Router.ts)
   wires the relay, `/ws/peer` and the public `/api/machines` list.
 - [`PeerScope.ts`](../server/PeerScope.ts)'s `peerVerdict(data, request, selection)`, `registered`
-  and `inputTarget` decide the owning peer's admitted operations and input targets.
+  and `inputTarget` decide the owning peer's admitted operations and input targets. A new session
+  starts only where [`Registry.ts`](../server/Registry.ts)'s `inOpenFolder(data, cwd)` holds: an
+  open folder or a worktree registered under one, the directories the sidebar lists. Unarchive's
+  closed-folder notice and a session's saved branch use the same rule.
   [`WsClient.ts`](../server/WsClient.ts) identifies peer connections;
   [`ClientDispatch.ts`](../server/ClientDispatch.ts) applies the verdict and sends ordinary
   refusals in the peer's delivery sequence. This is distinct from browser offers.

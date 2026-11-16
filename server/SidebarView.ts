@@ -13,7 +13,7 @@ import {
 } from "../shared/wire.ts";
 import { type CoalescedReader, makeCoalescedReader } from "./CoalescedReader.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
-import { Registry, type RegistryData, shownReference } from "./Registry.ts";
+import { inOpenFolder, Registry, type RegistryData, shownReference } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionReferences } from "./SessionReferences.ts";
 import { listWorktrees } from "./Worktrees.ts";
@@ -167,7 +167,6 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
           }),
         );
         const shown = new Map(folders.flatMap((f) => f.worktrees.map((w) => [w.path, w] as const)));
-        const open = new Set(data.folders);
         const registered = new Map(data.worktrees.map((w) => [w.path, w] as const));
         const branchOf = (cwd: string): string | null => {
           const saved = registered.get(cwd)?.branch || null;
@@ -178,7 +177,7 @@ export const SidebarViewLive = (options: SidebarViewOptions = {}) =>
               : view.status === "missing"
                 ? saved
                 : null;
-          return open.has(registered.get(cwd)?.folder ?? cwd) ? null : saved;
+          return inOpenFolder(data, cwd) ? null : saved;
         };
         const sessionReferences = data.sessions.map((s): SessionReference => ({
           ...shownReference(s),

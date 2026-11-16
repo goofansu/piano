@@ -111,6 +111,10 @@ export interface RegistryData {
   readonly sessions: ReadonlyArray<SessionEntry>;
 }
 
+export const inOpenFolder = (data: RegistryData, cwd: string): boolean =>
+  data.folders.includes(cwd) ||
+  data.worktrees.some((w) => w.path === cwd && data.folders.includes(w.folder));
+
 export const DEFAULT_DB_PATH = resolve(
   join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "piano", "piano.db"),
 );
