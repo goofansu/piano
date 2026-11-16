@@ -25,13 +25,15 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
   pull request is read in Changes. The session's state is the sidebar row's; the header only
   carries it as screen-reader `role=status` text ("Ready", "Not running").
 - `phone-menu`: one area at a time, the header shows folder and branch (or a ten-character detached commit) below the title;
-  "Session information and actions" opens the "Session" sheet. It holds the linked "Pull request
-  #222", Rename, Pin, Move to project (Add to project for a loose session), Messages only,
+  "Session information and actions" opens the "Session" sheet. It starts with the desktop
+  menu's details row: the session ID (`verify-plan`) in mono text with the "Copy session path"
+  icon button beside it (enabled only when saved history supplied a session file), then holds
+  the linked "Pull request #222", Rename, Pin, Move to project (Add to project for a loose session), Messages only,
   Archive and Delete. Preview appears only when one is known and pushes a pane in the same sheet:
   Back, status/hostname, Open preview in new tab (dismisses the sheet), Preview details and Stop
   preview (confirmation). The app is never embedded. This also applies on wide viewports when the
-  measured session area is too narrow for side-by-side. It has no Outputs, Links,
-  Environment copy menus or session ID. Escape returns focus to its trigger; widening closes it
+  measured session area is too narrow for side-by-side. It has no Outputs, Links or
+  Environment copy menus. Escape returns focus to its trigger; widening closes it
   and narrowing again does not reopen it.
 - `artifacts`: when the session has confirmed Radius publications, the header's "Artifacts: <n>"
   button lists their titles as new-tab links. Updating an artifact keeps one entry with its latest
@@ -125,8 +127,12 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab set viewport 700 800;
     ab find role button click --name "Session information and actions" --exact;
     ab wait '[role=dialog]'`
-  - Result: heading `Session`, link `Pull request #222` and the actions above, not rail sections.
-    Capture `05-phone-menu`. `ab find role button click --name "Move to project" --exact`
+  - Result: heading `Session`, the session ID `verify-plan` with "Copy session path" beside it,
+    link `Pull request #222` and the actions above, not rail sections. Capture `05-phone-menu`.
+    `ab find role button click --name "Copy session path" --exact` closes the sheet and toasts
+    `Session path copied` (`ab wait --text "Session path copied"`); a headless browser that
+    refuses the clipboard toasts `Could not copy the session path.` instead. Dismiss the toast and
+    reopen the sheet with the same trigger. `ab find role button click --name "Move to project" --exact`
     opens the project picker; capture `06-project-picker`, then
     `ab find role button click --name "Back" --exact` returns to actions.
     `ab find role switch click --name "Messages only" --exact` changes the switch; click it

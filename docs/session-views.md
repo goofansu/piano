@@ -54,8 +54,9 @@ One row in the 48px band, so Settings, the project home and the sidebar header s
   joins them in slice 2. Controls never shrink.
 - **Phones:** the same row with 44px controls. With no rail, where the session runs is a second
   line under the title (its sidebar row's folder and branch line, a detached HEAD's short commit
-  as the branch). The session menu, a bottom sheet, holds the desktop menu's actions, the linked
-  pull request and Preview, and nothing of the rail's lists.
+  as the branch). The session menu, a bottom sheet, holds the desktop menu's details row (the
+  session ID with "Copy session path" beside it), the linked pull request, Preview and the
+  desktop menu's actions, and nothing of the rail's lists.
 
 ### Tools area (slice 2)
 

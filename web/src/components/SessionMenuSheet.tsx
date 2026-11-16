@@ -18,8 +18,10 @@ import {
   useSessionCommands,
   useSessionProjectMenu,
 } from "@/components/CommandHost";
+import { IconButton } from "@/components/IconButton";
 import { SheetClose, SheetContent, SheetTitle } from "@/components/PianoSheet";
 import { ProjectCommandIconView } from "@/components/Projects";
+import { SessionIdDetails } from "@/components/SessionIdDetails";
 import {
   dotTone,
   PreviewStatus,
@@ -175,6 +177,41 @@ function PreviewRow({ preview, onShow }: { preview: SessionPreview; onShow: () =
   );
 }
 
+/**
+ * The session ID with the dropdown menu's details beside it (Copy session path), as the dropdown
+ * shows them, its icon buttons 44px here. Running one closes the sheet and toasts, as choosing the
+ * dropdown's icon does.
+ */
+function SessionIdRow({
+  sessionId,
+  details,
+  run,
+}: {
+  sessionId?: string;
+  details: SessionCommand[];
+  run: (command: SessionCommand) => void;
+}) {
+  return (
+    <div data-session-details className="flex min-h-11 items-center gap-1 pl-3">
+      <SessionIdDetails sessionId={sessionId} />
+      {details.map((c) => (
+        <SheetClose asChild key={c.id}>
+          <IconButton
+            variant="ghost"
+            size="icon-lg"
+            className="size-11 shrink-0"
+            label={c.label}
+            disabled={!c.enabled}
+            onClick={() => run(c)}
+          >
+            <CommandIcon icon={c.icon} />
+          </IconButton>
+        </SheetClose>
+      ))}
+    </div>
+  );
+}
+
 /** A pushed pane's header: Back, then its title. */
 function PaneHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
@@ -195,10 +232,11 @@ function PaneHeader({ title, onBack }: { title: string; onBack: () => void }) {
 
 /**
  * The session menu for one-area-at-a-time or a narrow viewport: a bottom sheet, one level deep.
- * The header's second line says where the session runs. The sheet includes the linked pull
- * request and known Preview, not the rail's Outputs or Environment copy menus, nor the dropdown
- * menu's session ID. Project and Preview rows push panes within this sheet. Opening details or
- * a confirmation calls `onLeave`, closing the sheet and leaving focus to that destination.
+ * The header's second line says where the session runs. The sheet starts with the dropdown menu's
+ * session ID and its details, then includes the linked pull request and known Preview, not the
+ * rail's Outputs or Environment copy menus. Project and Preview rows push panes within this
+ * sheet. Opening details or a confirmation calls `onLeave`, closing the sheet and leaving focus
+ * to that destination.
  */
 export function SessionMenuSheet({
   onLeave,
@@ -210,7 +248,7 @@ export function SessionMenuSheet({
 }) {
   const { state } = useCommands();
   const { commands, run } = useSessionCommands();
-  const { pullRequest } = sessionContext(state);
+  const { pullRequest, sessionId } = sessionContext(state);
   // The saved link opens GitHub from any machine; the app shows only where its machine observes it.
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const preview = useSeenPreview(state);
@@ -227,12 +265,20 @@ export function SessionMenuSheet({
   };
   const [page, setPage] = useState<Page>("actions");
   const pane = useRef<HTMLDivElement>(null);
+  // The first row, as a menu would focus its first item: the details' copy controls are reached
+  // by Tab, since a copy control's tooltip opens on keyboard focus and would take the first Escape.
+  const focusFirstRow = () =>
+    pane.current
+      ?.querySelector<HTMLElement>(
+        "a[href], button:not(:disabled):not([data-session-details] button)",
+      )
+      ?.focus();
   const previousPage = useRef(page);
   useLayoutEffect(() => {
     if (previousPage.current === page) return;
     previousPage.current = page;
     // Replacing the pressed row must not strand focus on the document body.
-    pane.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
+    focusFirstRow();
   }, [page]);
 
   const menu = sessionHeaderMenu(commands);
@@ -247,11 +293,13 @@ export function SessionMenuSheet({
       showCloseButton={false}
       aria-describedby={undefined}
       className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl p-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
-      onOpenAutoFocus={() => {
+      onOpenAutoFocus={(event) => {
         // Each opening starts on the first pane with nothing chosen yet.
         left.current = false;
         dismissed.current = false;
         setPage("actions");
+        event.preventDefault();
+        focusFirstRow();
       }}
       onEscapeKeyDown={() => {
         dismissed.current = true;
@@ -273,6 +321,8 @@ export function SessionMenuSheet({
         {page === "actions" && (
           <>
             <SheetTitle className="sr-only">Session</SheetTitle>
+            <SessionIdRow sessionId={sessionId} details={menu.details} run={run} />
+            <Separator className="my-1" />
             {/* The pull request opens in a browser tab, so the sheet closes as after an action. */}
             {pr && (
               <LinkRow
