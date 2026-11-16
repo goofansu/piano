@@ -577,6 +577,25 @@ test("a session without history keeps its URL, is not selected, and says so", ()
   assert.deepEqual(q.selects(), ["gone"]);
 });
 
+test("an archived session's address keeps its URL and says it is archived instead of selecting it", () => {
+  const p = page("/s/old");
+  p.server({
+    _tag: "registry",
+    folders: [],
+    projects: [],
+    sessionReferences: [sessionReference("/scratch", "old", { archived: true })],
+  });
+  assert.deepEqual(p.client.getState().view, {
+    kind: "missing-session",
+    sessionId: "old",
+    reason: "archived",
+  });
+  assert.deepEqual(p.selects(), [], "the server refuses to open an archived session");
+  assert.equal(p.client.getState().selectionFailure, null);
+  assert.deepEqual(p.entries, ["/s/old"]);
+  assert.equal(p.title(), "Session archived - Piano");
+});
+
 test("aliases are replaced and real moves are pushed, with a title for each screen", () => {
   const p = page("/");
   p.registry();

@@ -23,7 +23,9 @@ rechecks eligibility and the success toast reports the actual count written.
 The initiating client's selected stopped session is cleared if archived. Other clients keep the
 existing Archived view, which refuses further input: its menus keep read and copy actions but
 disable Rename, Pin, Archive, Delete and project assignment. An archived session cannot be deleted
-until it is unarchived. Unarchive is one session at a time.
+until it is unarchived. Unarchive is one session at a time. Opening an archived session's address
+(`/s/<id>`) shows **Session archived** instead of trying to open it; its **Data controls** button
+opens Settings → Data controls, or, on a remote machine, the page points to that machine's Piano.
 
 A mutation keeps running on the server after the client disconnects. A lost connection or a
 missing reply (75 s) is therefore not reported as a failure: the warning says the change may have

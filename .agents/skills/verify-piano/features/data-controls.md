@@ -9,6 +9,9 @@ instance; no credentials or model calls are needed. Keep one instance/browser at
 1. Open a seeded saved session. From its session menu choose Archive (an idle session archives at once), then open
    Settings → Data controls. Capture its title, small folder line (full path in `title`) and
    outline Unarchive button. Archived sessions is the last group; Sessions is first.
+   Then open the archived session's `/s/<sessionId>` address directly: it shows Session archived
+   with a Data controls button and no "Unable to open session." banner; the button opens Data
+   controls with the session under Archived sessions.
 2. Unarchive it. Observe Session unarchived, disappearance from Archived sessions and return to
    the sidebar. Open it and read the seeded history. Check the audit: neither Unarchive nor
    reading saved history started a non-probe Pi. Explicitly sending a follow-up may start it.
