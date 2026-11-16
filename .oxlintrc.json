@@ -1,10 +1,12 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y"],
+  "jsPlugins": ["./scripts/lint-boundaries.mjs"],
   "categories": {
     "correctness": "error"
   },
   "rules": {
+    "piano/layer-imports": "error",
     "react-hooks/exhaustive-deps": "error",
     // `const { omitted, ...rest } = value` is how Piano drops a field.
     "no-unused-vars": [
@@ -27,8 +29,6 @@
     // regions, virtualised list rows, splitters).
     "jsx-a11y/prefer-tag-over-role": "off"
   },
-  // Upstream shadcn source. web/src/components/ui has its own config.
-  "ignorePatterns": ["web/src/hooks/use-mobile.ts"],
   "overrides": [
     {
       // Effect's `HttpRouter.use` is not a React hook.

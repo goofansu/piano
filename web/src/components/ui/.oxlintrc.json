@@ -1,6 +1,6 @@
 {
   "$schema": "../../../../node_modules/oxlint/configuration_schema.json",
-  // Upstream shadcn source: only the Tailwind class check applies here.
+  // Upstream shadcn source: Tailwind classes plus the inherited Piano layer boundary.
   "plugins": [],
   "categories": { "correctness": "off" },
   "jsPlugins": ["@shadcn/lint"],
